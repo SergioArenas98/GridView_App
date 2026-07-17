@@ -8,10 +8,17 @@ Thumbs.db
 *.tmp
 *.temp
 
-# Environment and secrets
+# ==============================
+# Secrets - never commit
+# ==============================
+
 .env
 .env.*
 !.env.example
+key.properties
+*.jks
+*.keystore
+**/serviceAccount*.json
 
 # ==============================
 # IDEs and editors
@@ -19,59 +26,42 @@ Thumbs.db
 
 .idea/
 *.iml
-
 .vscode/
-.settings/
-.classpath
-.project
-
-# ==============================
-# Java / Spring Boot / Maven
-# ==============================
-
-backend/target/
-backend/bin/
-
-*.class
-*.jar
-*.war
-*.ear
-
-# Maven wrapper should remain tracked
-!backend/.mvn/wrapper/maven-wrapper.jar
 
 # ==============================
 # Flutter / Dart
 # ==============================
 
-frontend/.dart_tool/
-frontend/build/
-
-frontend/.flutter-plugins
-frontend/.flutter-plugins-dependencies
-frontend/.packages
-frontend/.pub-cache/
-frontend/.pub/
-
-frontend/doc/api/
-
-# Flutter generated files
-frontend/android/.gradle/
-frontend/android/local.properties
-frontend/android/app/debug/
-frontend/android/app/profile/
-frontend/android/app/release/
-
-# Generated plugin registrants
-frontend/ios/Flutter/.last_build_id
-frontend/ios/Flutter/Generated.xcconfig
-frontend/ios/Flutter/flutter_export_environment.sh
-frontend/macos/Flutter/GeneratedPluginRegistrant.swift
-
-# ==============================
-# Coverage
-# ==============================
-
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
 coverage/
-frontend/coverage/
-backend/coverage/
+doc/api/
+
+# FVM (Flutter Version Management)
+.fvm/
+
+# ==============================
+# Android
+# ==============================
+
+android/.gradle/
+android/.kotlin/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+**/.cxx/
+
+# ==============================
+# Edge API (Cloudflare Worker)
+# ==============================
+
+node_modules/
+services/edge-api/dist/
+.wrangler/
+.dev.vars
