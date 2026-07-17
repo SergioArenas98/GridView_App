@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "104059365305",
+    "project_id": "gridview-fb20f",
+    "storage_bucket": "gridview-fb20f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:104059365305:android:29658e3280e7e62faa7868",
+        "android_client_info": {
+          "package_name": "com.sejuma.gridview"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCzqVjZLnnsucnn1G2riXoft2ZKKdzEoko"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
