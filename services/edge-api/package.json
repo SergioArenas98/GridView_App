@@ -11,7 +11,7 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "test": "vitest run",
-    "validate:openapi": "npx --yes @redocly/cli@2 lint ../../docs/api/gridview-api-v1.yaml --config ../../redocly.yaml",
+    "validate:openapi": "redocly lint ../../docs/api/gridview-api-v1.yaml --config ../../redocly.yaml",
     "validate:content": "node scripts/validate-content.mjs",
     "validate:fixtures": "node scripts/validate-fixtures.mjs",
     "validate": "npm run validate:openapi && npm run validate:content && npm run validate:fixtures"
@@ -19,6 +19,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260718.1",
     "@eslint/js": "^10.0.1",
+    "@redocly/cli": "^2.39.0",
     "@types/js-yaml": "^4.0.9",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
