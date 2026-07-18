@@ -34,8 +34,20 @@ API is intentionally unauthenticated, so the `security-defined` rule is disabled
 npx @redocly/cli lint docs/api/gridview-api-v1.yaml
 ```
 
+## Fixtures and client models
+
+- Validated API fixtures live in `../../services/edge-api/test/fixtures/api/v1/`
+  with a `manifest.json` index; they back both the Worker and Flutter contract
+  tests. See `../testing/README.md`.
+- Curated-content JSON Schemas and mock data live in `../../content/`.
+- Worker contract types and runtime validation: `../../services/edge-api/src/contract/`.
+- Flutter DTOs, domain entities and mappers:
+  `../../lib/core/api/` and `../../lib/features/shared/`. Regenerate DTO code with
+  `dart run build_runner build`.
+
 ## Scope note
 
-Batch 2A delivers the contract and domain documentation only. Curated-content
-JSON Schemas, mock fixtures, Worker contract tests and Flutter DTOs are delivered
-in Batch 2B.
+Batch 2A delivered the contract and domain documentation. Batch 2B added the
+curated-content schemas, mock content, API fixtures, Worker contract validation
+and Flutter DTOs/entities/mappings. The OpenAPI file remains the source of truth
+and may evolve additively.

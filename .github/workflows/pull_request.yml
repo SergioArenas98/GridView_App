@@ -33,6 +33,11 @@ jobs:
           flutter gen-l10n
           git diff --exit-code
 
+      - name: Verify generated code is current
+        run: |
+          dart run build_runner build
+          git diff --exit-code
+
       - name: Check formatting
         run: dart format --output=none --set-exit-if-changed .
 
@@ -74,6 +79,9 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Validate contract (OpenAPI, curated content, API fixtures)
+        run: npm run validate
 
   secret-scan:
     name: Secret scan

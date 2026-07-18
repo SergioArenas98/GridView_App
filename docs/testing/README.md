@@ -1,9 +1,69 @@
 # Testing documentation
 
-This directory will contain the GridView test strategy and testing guides:
+Test strategy and coverage policy: `../technical/GridView_TRD.md` (section 32).
 
-- Test strategy (test pyramid, coverage policy).
-- Contract-test fixture inventory.
-- Migration and upgrade test procedures.
+## Contract fixtures
 
-See `../technical/GridView_TRD.md` (section 32) for the testing requirements.
+The single source of truth for contract fixtures is
+`services/edge-api/test/fixtures/api/v1/`, with a `manifest.json` index. The same
+fixtures are validated by the Worker (ajv, against the OpenAPI schemas) and by
+the Flutter client (DTO parsing + DTO→domain mapping), so both sides agree on one
+set of examples.
+
+### Naming
+
+- Group by resource: `status/`, `bootstrap/`, `home/`, `calendar/`,
+  `grand-prix/`, `results/`, `standings/`, `drivers/`, `constructors/`,
+  `circuits/`, `content/`, `errors/`, and `entities/` (raw entity arrays with no
+  envelope).
+- Name the file after the scenario: `standard-weekend.json`, `sprint-weekend.json`,
+  `unknown-enum-status.json`, `detail-missing-optional.json`, `stale.json`.
+- Response fixtures are the real `{ data, meta }` body. Error fixtures are the
+  `{ error }` body. Entity fixtures are a bare array of one entity type.
+
+### Manifest
+
+Each entry declares:
+
+| field | meaning |
+|---|---|
+| `file` | path under `api/v1/` |
+| `type` | `envelope`, `error` or `entity` |
+| `data` | OpenAPI component schema name for the payload |
+| `dataKind` | `single` or `array` |
+| `meta` | `BaseMeta`, `SnapshotMeta` or `SeasonSnapshotMeta` (envelope only) |
+| `expectValid` | `false` for deliberately out-of-contract fixtures (e.g. unknown enum) |
+
+### Mock-data status
+
+All fixtures and curated content are **non-authoritative mock data**: deterministic
+timestamps, GridView public IDs only, no provider IDs, no secrets, and clearly
+labelled `(mock)` values. They must not be presented as authoritative results.
+
+### Adding a fixture safely
+
+1. Add the JSON file under the right resource folder.
+2. Add a `manifest.json` entry (the fixture validator fails on any unlisted
+   fixture, and the Flutter parser test fails if no DTO parser is registered for
+   its `data` schema).
+3. If it introduces a new data shape, add or extend the OpenAPI schema first.
+4. Run `npm run validate` (from `services/edge-api`) and `flutter test`.
+5. Never include a provider ID; the fixture validator scans for and rejects them.
+
+## Validation and code generation
+
+```bash
+# Worker + contract data
+cd services/edge-api
+npm run validate        # OpenAPI lint + content schemas + fixtures
+npm test                # route + contract tests
+
+# Flutter
+flutter pub get
+dart run build_runner build   # regenerate DTO code (freezed/json_serializable)
+flutter analyze
+flutter test
+```
+
+CI runs all of the above, plus a generated-code-consistency check
+(`dart run build_runner build` then `git diff --exit-code`).

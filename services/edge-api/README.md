@@ -7,6 +7,9 @@ Architecture, endpoints, storage model and synchronization design:
 ## Current state
 
 - `GET|HEAD /v1/status` implemented with the GridView response envelopes.
+- Contract layer (`src/contract`), runtime validation and fixtures added in
+  Phase 2 Batch 2B. Production routing for the other endpoints arrives in Phase
+  5; contract tests use a fixture-backed test router.
 - Local development only: **no Cloudflare account resources are provisioned**
   (no KV, R2, routes, domains or secrets). Bindings arrive in Phase 5.
 - No Formula 1 provider integration.
@@ -15,11 +18,15 @@ Architecture, endpoints, storage model and synchronization design:
 
 ```text
 npm install
-npm run dev        # wrangler dev (local Miniflare, no account needed)
-npm test           # vitest
-npm run typecheck  # tsc --noEmit
-npm run lint       # eslint
-npm run format     # prettier --check
+npm run dev              # wrangler dev (local Miniflare, no account needed)
+npm test                 # vitest (routes + contract tests)
+npm run typecheck        # tsc --noEmit
+npm run lint             # eslint
+npm run format           # prettier --check
+npm run validate:openapi # redocly lint of docs/api/gridview-api-v1.yaml
+npm run validate:content # curated content vs JSON Schemas
+npm run validate:fixtures # API fixtures vs OpenAPI + provider-ID guard
+npm run validate         # all three
 ```
 
 `wrangler dev` serves http://localhost:8787/v1/status locally.
@@ -28,9 +35,23 @@ npm run format     # prettier --check
 
 ```text
 src/
-├── index.ts             Fetch handler and routing
+├── index.ts              Fetch handler and routing
 ├── config/environment.ts Environment validation (Env bindings)
-├── http/envelope.ts     Success/error response envelopes
-└── routes/status.ts     /v1/status handler
-test/                    Vitest suites
+├── http/envelope.ts      Success/error response envelopes
+├── routes/status.ts      /v1/status handler
+└── contract/             Contract types, enums, runtime validation, parsers
+scripts/                  ajv-based content/fixture validators (Node ESM)
+test/
+├── fixtures/api/v1/       API fixtures + manifest.json (shared source of truth)
+├── support/               fixture-backed test router
+├── contract/              contract tests (envelopes, meta variants, tolerance)
+└── status.test.ts         route tests
 ```
+
+## Fixtures
+
+`test/fixtures/api/v1/manifest.json` maps every fixture to its OpenAPI data
+schema, `dataKind` (single/array), metadata variant (BaseMeta / SnapshotMeta /
+SeasonSnapshotMeta) and whether it is expected to validate. The same fixtures
+back the Flutter parsing and mapping tests. See `../../docs/testing/README.md`
+for naming and how to add a fixture safely.
