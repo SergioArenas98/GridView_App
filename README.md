@@ -25,10 +25,20 @@ truth for the rebuild; see `AGENTS.md` for the non-negotiable constraints.
 ## Status
 
 Phase 1 (repository and project foundation) of
-`docs/technical/GridView_Implementation_Plan.md` is in progress. The Flutter
-source currently at the root is the sanitized legacy application; it will be
-replaced by the reconstructed app shell during this phase. Setup
-instructions (FVM pin, flavors, CI) arrive with the Flutter baseline work.
+`docs/technical/GridView_Implementation_Plan.md`: the legacy application has
+been replaced by the minimal reconstruction shell (offline, no Firebase, no
+ads, no backend dependency). Feature reconstruction starts in Phase 2+.
+
+## Development setup
+
+1. Install [FVM](https://fvm.app): `dart pub global activate fvm`
+2. Install the pinned Flutter SDK: `fvm install`
+3. Run the app: `fvm flutter run --flavor dev --dart-define=APP_ENV=development`
+4. Run checks: `fvm flutter analyze && fvm flutter test`
+
+Flavors, environment defines, Firebase/AdMob state and the edge API
+environments are documented in `docs/technical/GridView_Environments.md`.
+The edge API has its own instructions in `services/edge-api/README.md`.
 
 ## Release constraints
 
