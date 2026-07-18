@@ -65,3 +65,5 @@ node_modules/
 services/edge-api/dist/
 .wrangler/
 .dev.vars
+
+/backend/

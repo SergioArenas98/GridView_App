@@ -1,0 +1,1628 @@
+openapi: 3.1.0
+
+info:
+  title: GridView API
+  version: "1.0.0"
+  summary: Read-only Formula 1 data contract between the GridView edge API and the Flutter client.
+  description: >
+    GridView API v1 is a read-only, cache-first contract served by a Cloudflare
+    Worker. It exposes normalized, GridView-owned snapshots of Formula 1 season,
+    calendar, standings, driver, constructor, circuit and result data.
+
+
+    Only `GET` and `HEAD` are public. Every successful response uses the GridView
+    envelope (`data` + `meta`); every error uses the error envelope
+    (`error` with a stable machine-readable `code`). See
+    `docs/technical/GridView_Domain_Model.md` for entity semantics and
+    `docs/technical/GridView_Backend_Scheme.md` sections 11-12 for the envelope
+    and error contract.
+
+
+    Public rate limiting (HTTP 429 with `Retry-After`) is applied at the edge as
+    described in the Backend Scheme section 22; it is an infrastructure concern
+    and is not enumerated per operation in this version.
+
+
+    This document is the source of truth for the wire contract. Provider
+    identifiers never appear in any response.
+  contact:
+    name: GridView
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.gridview.example
+    description: Production placeholder (final domain resolved before launch)
+  - url: https://staging.api.gridview.example
+    description: Staging placeholder
+  - url: http://127.0.0.1:8787
+    description: Local Wrangler dev server
+
+tags:
+  - name: Health
+    description: Service health and metadata.
+  - name: Aggregate
+    description: Compact multi-resource payloads for the mobile client.
+  - name: Seasons
+    description: Season metadata and current-season resolution.
+  - name: Calendar
+    description: Season calendar and Grand Prix detail.
+  - name: Standings
+    description: Drivers' and constructors' championship standings.
+  - name: Drivers
+    description: Driver identity and season participation.
+  - name: Constructors
+    description: Constructor identity and season participation.
+  - name: Circuits
+    description: Circuit identity and season association.
+  - name: Content
+    description: Curated content and media manifest.
+
+paths:
+  /v1/status:
+    get:
+      operationId: getStatus
+      tags: [Health]
+      summary: Service health and metadata
+      description: >
+        Returns API availability, contract version, current season and snapshot
+        freshness. Never calls the data provider synchronously. Snapshot fields
+        remain null until KV snapshot storage exists (Phase 5).
+      responses:
+        "200":
+          description: Service is reachable.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/StatusData' }
+                  meta: { $ref: '#/components/schemas/BaseMeta' }
+        "405": { $ref: '#/components/responses/MethodNotAllowed' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/bootstrap:
+    get:
+      operationId: getBootstrap
+      tags: [Aggregate]
+      summary: First-launch aggregate payload
+      description: >
+        Compact, high-value collections for the first useful mobile
+        synchronization: season metadata, calendar summaries, driver, constructor
+        and circuit summaries, current standings, the Home snapshot and media
+        manifest versions. Excludes full biographies, per-round results and large
+        media payloads.
+      parameters:
+        - $ref: '#/components/parameters/SeasonQuery'
+      responses:
+        "200":
+          description: Bootstrap payload for the requested season.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/BootstrapData' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/SeasonNotFound' }
+        "503": { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/home:
+    get:
+      operationId: getHome
+      tags: [Aggregate]
+      summary: Precomputed Home view model
+      description: >
+        Returns a Home view model derived from other normalized snapshots:
+        current or next event and session, latest completed event, championship
+        leaders, upcoming-event summaries and freshness metadata.
+      parameters:
+        - $ref: '#/components/parameters/SeasonQuery'
+      responses:
+        "200":
+          description: Home view model for the requested season.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/HomeData' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/SeasonNotFound' }
+        "503": { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/seasons/current:
+    get:
+      operationId: getCurrentSeason
+      tags: [Seasons]
+      summary: Current active season
+      description: Returns the current active GridView season.
+      responses:
+        "200":
+          description: The current season.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/Season' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "404": { $ref: '#/components/responses/ResourceNotAvailable' }
+        "503": { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/seasons/{season}:
+    get:
+      operationId: getSeason
+      tags: [Seasons]
+      summary: Season metadata
+      parameters:
+        - $ref: '#/components/parameters/SeasonPath'
+      responses:
+        "200":
+          description: Season metadata.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/Season' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/SeasonNotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/seasons/{season}/calendar:
+    get:
+      operationId: getSeasonCalendar
+      tags: [Calendar]
+      summary: Ordered season calendar
+      description: Returns Grand Prix summaries ordered by round.
+      parameters:
+        - $ref: '#/components/parameters/SeasonPath'
+      responses:
+        "200":
+          description: Ordered event summaries.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/GrandPrixSummary' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/SeasonNotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/seasons/{season}/grand-prix/{round}:
+    get:
+      operationId: getGrandPrix
+      tags: [Calendar]
+      summary: Grand Prix detail
+      description: Returns Grand Prix identity, circuit reference, status, sessions and media.
+      parameters:
+        - $ref: '#/components/parameters/SeasonPath'
+        - $ref: '#/components/parameters/RoundPath'
+      responses:
+        "200":
+          description: Grand Prix detail.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/GrandPrix' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/seasons/{season}/grand-prix/{round}/results:
+    get:
+      operationId: getGrandPrixResults
+      tags: [Calendar]
+      summary: Grand Prix race results
+      description: >
+        Returns the race classification when available. A future or not-yet-run
+        session returns `status = unavailable` with an empty `entries` array,
+        never a fabricated empty classification.
+      parameters:
+        - $ref: '#/components/parameters/SeasonPath'
+        - $ref: '#/components/parameters/RoundPath'
+      responses:
+        "200":
+          description: Race result document.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/RaceResult' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/seasons/{season}/standings/drivers:
+    get:
+      operationId: getDriverStandings
+      tags: [Standings]
+      summary: Drivers' championship standings
+      parameters:
+        - $ref: '#/components/parameters/SeasonPath'
+      responses:
+        "200":
+          description: Ordered driver standings.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/DriverStanding' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/SeasonNotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/seasons/{season}/standings/constructors:
+    get:
+      operationId: getConstructorStandings
+      tags: [Standings]
+      summary: Constructors' championship standings
+      parameters:
+        - $ref: '#/components/parameters/SeasonPath'
+      responses:
+        "200":
+          description: Ordered constructor standings.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ConstructorStanding' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/SeasonNotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/seasons/{season}/drivers:
+    get:
+      operationId: getSeasonDrivers
+      tags: [Drivers]
+      summary: Season driver entries
+      description: Returns season-specific driver summaries (identity plus season entry).
+      parameters:
+        - $ref: '#/components/parameters/SeasonPath'
+      responses:
+        "200":
+          description: Season driver summaries.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/SeasonDriverSummary' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/SeasonNotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/drivers/{driverId}:
+    get:
+      operationId: getDriver
+      tags: [Drivers]
+      summary: Driver detail
+      description: >
+        Returns stable driver identity, biography, the current-season entry, the
+        constructor summary and the standing summary. Optional sections are null
+        when absent.
+      parameters:
+        - $ref: '#/components/parameters/DriverIdPath'
+        - $ref: '#/components/parameters/SeasonQuery'
+      responses:
+        "200":
+          description: Driver detail.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/DriverDetail' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/seasons/{season}/constructors:
+    get:
+      operationId: getSeasonConstructors
+      tags: [Constructors]
+      summary: Season constructor entries
+      parameters:
+        - $ref: '#/components/parameters/SeasonPath'
+      responses:
+        "200":
+          description: Season constructor summaries.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/SeasonConstructorSummary' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/SeasonNotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/constructors/{constructorId}:
+    get:
+      operationId: getConstructor
+      tags: [Constructors]
+      summary: Constructor detail
+      description: >
+        Returns stable constructor identity, seasonal branding, current line-up
+        and standing summary. Optional sections are null when absent.
+      parameters:
+        - $ref: '#/components/parameters/ConstructorIdPath'
+        - $ref: '#/components/parameters/SeasonQuery'
+      responses:
+        "200":
+          description: Constructor detail.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/ConstructorDetail' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/seasons/{season}/circuits:
+    get:
+      operationId: getSeasonCircuits
+      tags: [Circuits]
+      summary: Season circuits
+      parameters:
+        - $ref: '#/components/parameters/SeasonPath'
+      responses:
+        "200":
+          description: Circuits used in the season.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Circuit' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/SeasonNotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/circuits/{circuitId}:
+    get:
+      operationId: getCircuit
+      tags: [Circuits]
+      summary: Circuit detail
+      description: Returns circuit identity, location, physical facts and the related season Grand Prix.
+      parameters:
+        - $ref: '#/components/parameters/CircuitIdPath'
+        - $ref: '#/components/parameters/SeasonQuery'
+      responses:
+        "200":
+          description: Circuit detail.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/CircuitDetail' }
+                  meta: { $ref: '#/components/schemas/SeasonSnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "404": { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+  /v1/content/manifest:
+    get:
+      operationId: getContentManifest
+      tags: [Content]
+      summary: Curated content and media manifest
+      description: >
+        Returns content and media versions, supported seasons, attribution
+        version and the minimum compatible API schema. The app uses this to
+        decide whether long-lived profile content needs refreshing.
+      responses:
+        "200":
+          description: Content manifest.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/ContentManifest' }
+                  meta: { $ref: '#/components/schemas/SnapshotMeta' }
+        "304": { $ref: '#/components/responses/NotModified' }
+        "404": { $ref: '#/components/responses/ResourceNotAvailable' }
+        "503": { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/InternalError' }
+
+components:
+
+  parameters:
+    SeasonPath:
+      name: season
+      in: path
+      required: true
+      description: Four-digit championship year.
+      schema:
+        type: integer
+        minimum: 1950
+        maximum: 2100
+      example: 2026
+    RoundPath:
+      name: round
+      in: path
+      required: true
+      description: 1-based round number within the season.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 40
+      example: 13
+    DriverIdPath:
+      name: driverId
+      in: path
+      required: true
+      description: Stable driver slug.
+      schema:
+        $ref: '#/components/schemas/Slug'
+      example: max-verstappen
+    ConstructorIdPath:
+      name: constructorId
+      in: path
+      required: true
+      description: Stable constructor slug.
+      schema:
+        $ref: '#/components/schemas/Slug'
+      example: ferrari
+    CircuitIdPath:
+      name: circuitId
+      in: path
+      required: true
+      description: Stable circuit slug.
+      schema:
+        $ref: '#/components/schemas/Slug'
+      example: spa-francorchamps
+    SeasonQuery:
+      name: season
+      in: query
+      required: false
+      description: Season year or the literal `current`.
+      schema:
+        type: string
+        pattern: '^(current|[0-9]{4})$'
+        default: current
+      example: current
+
+  headers:
+    ETag:
+      description: Entity tag derived from snapshot content or version, for conditional requests.
+      schema:
+        type: string
+      example: '"2026.07.18.1"'
+    CacheControl:
+      description: Caching policy for this response.
+      schema:
+        type: string
+      example: public, max-age=60
+    XRequestId:
+      description: Correlates the response with server logs.
+      schema:
+        type: string
+      example: 01J8Z9K7M4Q0X2R6C1V3B5N7T9
+
+  responses:
+    NotModified:
+      description: Resource unchanged since the supplied `If-None-Match`.
+      headers:
+        ETag: { $ref: '#/components/headers/ETag' }
+        Cache-Control: { $ref: '#/components/headers/CacheControl' }
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+    BadRequest:
+      description: A path or query parameter failed validation.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            error:
+              code: INVALID_PARAMETER
+              message: The request contains an invalid parameter.
+              retryable: false
+              requestId: 01J8Z9K7M4Q0X2R6C1V3B5N7T9
+    NotFound:
+      description: The requested resource does not exist.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            error:
+              code: RESOURCE_NOT_FOUND
+              message: The requested resource does not exist.
+              retryable: false
+              requestId: 01J8Z9K7M4Q0X2R6C1V3B5N7T9
+    SeasonNotFound:
+      description: The requested season is not available.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            error:
+              code: SEASON_NOT_FOUND
+              message: The requested season is not available.
+              retryable: false
+              requestId: 01J8Z9K7M4Q0X2R6C1V3B5N7T9
+    ResourceNotAvailable:
+      description: >
+        The resource is defined but has no published snapshot yet (for example,
+        before the first synchronization publishes a current season or content
+        manifest).
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            error:
+              code: RESOURCE_NOT_AVAILABLE
+              message: The requested resource is not available.
+              retryable: false
+              requestId: 01J8Z9K7M4Q0X2R6C1V3B5N7T9
+    MethodNotAllowed:
+      description: Only GET and HEAD are supported.
+      headers:
+        Allow:
+          description: Supported methods.
+          schema:
+            type: string
+          example: GET, HEAD
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            error:
+              code: METHOD_NOT_ALLOWED
+              message: Only GET and HEAD requests are supported.
+              retryable: false
+              requestId: 01J8Z9K7M4Q0X2R6C1V3B5N7T9
+    ServiceUnavailable:
+      description: >
+        A snapshot is not yet ready, the upstream is unavailable, or the service
+        is in maintenance. A valid stale snapshot is normally served instead of
+        this response.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+          example: 30
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            error:
+              code: SNAPSHOT_NOT_READY
+              message: The requested data is temporarily unavailable.
+              retryable: true
+              requestId: 01J8Z9K7M4Q0X2R6C1V3B5N7T9
+    InternalError:
+      description: An unexpected server error occurred.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: An unexpected error occurred.
+              retryable: false
+              requestId: 01J8Z9K7M4Q0X2R6C1V3B5N7T9
+
+  schemas:
+
+    Slug:
+      type: string
+      description: >
+        Public stable identifier for an atomic entity (driver, constructor,
+        circuit, event slug). Lowercase ASCII kebab-case, no type prefix and no
+        colons.
+      pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+      minLength: 1
+      maxLength: 64
+
+    GridViewId:
+      type: string
+      description: >
+        Public stable identifier for a composite entity (Grand Prix edition,
+        session, result, media asset, season entry). Lowercase ASCII kebab-case,
+        no type prefix and no colons. Grand Prix edition IDs embed the season
+        year, e.g. `2026-belgian-grand-prix`.
+      pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+      minLength: 1
+      maxLength: 96
+
+    BaseMeta:
+      type: object
+      description: >
+        Metadata for status and other non-snapshot responses. Present on every
+        response.
+      required: [apiVersion, generatedAt, requestId]
+      properties:
+        apiVersion:
+          type: string
+          const: "1"
+        generatedAt:
+          type: string
+          format: date-time
+          description: When the response was generated, UTC.
+        requestId:
+          type: string
+          description: Correlation ID, also returned in the X-Request-Id header.
+
+    SnapshotMeta:
+      description: >
+        Metadata for responses served from a synchronized KV snapshot. Extends
+        BaseMeta with required snapshot-provenance fields. Used by non-season-
+        scoped snapshot responses such as the content manifest.
+      allOf:
+        - $ref: '#/components/schemas/BaseMeta'
+        - type: object
+          required: [schemaVersion, sourceUpdatedAt, staleAfter, contentVersion]
+          properties:
+            schemaVersion:
+              type: integer
+              description: Snapshot schema version.
+            sourceUpdatedAt:
+              type: string
+              format: date-time
+              description: When upstream source data last changed, UTC.
+            staleAfter:
+              type: string
+              format: date-time
+              description: When the payload should be treated as stale, UTC.
+            contentVersion:
+              type: string
+              description: Curated-content version identifier.
+
+    SeasonSnapshotMeta:
+      description: >
+        SnapshotMeta for season-scoped responses. Adds a required `season`.
+      allOf:
+        - $ref: '#/components/schemas/SnapshotMeta'
+        - type: object
+          required: [season]
+          properties:
+            season:
+              type: integer
+              description: Season the payload relates to.
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable, requestId]
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message:
+              type: string
+              description: Generic, safe, human-readable message.
+            retryable:
+              type: boolean
+              description: Whether retrying the same request may succeed.
+            requestId:
+              type: string
+
+    ErrorCode:
+      type: string
+      description: Stable machine-readable error code.
+      enum:
+        - INVALID_PARAMETER
+        - SEASON_NOT_FOUND
+        - RESOURCE_NOT_FOUND
+        - RESOURCE_NOT_AVAILABLE
+        - SNAPSHOT_NOT_READY
+        - UPSTREAM_UNAVAILABLE
+        - UPSTREAM_RATE_LIMITED
+        - MAINTENANCE
+        - METHOD_NOT_ALLOWED
+        - INTERNAL_ERROR
+
+    # ---- Enums -------------------------------------------------------------
+
+    SeasonStatus:
+      type: string
+      enum: [upcoming, active, completed, unknown]
+    WeekendFormat:
+      type: string
+      enum: [standard, sprint, unknown]
+    EventStatus:
+      type: string
+      enum: [scheduled, upcoming, in_progress, completed, postponed, cancelled, unknown]
+    SessionType:
+      type: string
+      enum: [practice_1, practice_2, practice_3, sprint_qualifying, sprint, qualifying, race, unknown]
+    SessionStatus:
+      type: string
+      enum: [scheduled, live, completed, cancelled, postponed, unknown]
+    DriverRole:
+      type: string
+      enum: [race, reserve, test, unknown]
+    ResultStatus:
+      type: string
+      enum: [provisional, final, unavailable, unknown]
+    FinishStatus:
+      type: string
+      enum: [finished, lapped, dnf, dns, dsq, dnq, unknown]
+    CircuitDirection:
+      type: string
+      enum: [clockwise, counter_clockwise, unknown]
+    MediaEntityType:
+      type: string
+      enum: [driver, constructor, circuit, grand_prix, placeholder, unknown]
+    MediaCategory:
+      type: string
+      enum: [portrait, logo, car, circuit_layout, hero, thumbnail, unknown]
+    MediaFormat:
+      type: string
+      enum: [webp, avif, png, jpeg, unknown]
+
+    # ---- Shared value objects ---------------------------------------------
+
+    ColorHex:
+      type: string
+      description: '`#RRGGBB` colour.'
+      pattern: '^#[0-9a-fA-F]{6}$'
+
+    CountryCode:
+      type: string
+      description: ISO 3166-1 alpha-2, uppercase.
+      pattern: '^[A-Z]{2}$'
+
+    MediaVariant:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        width:
+          type: [integer, "null"]
+        height:
+          type: [integer, "null"]
+
+    MediaAsset:
+      type: object
+      required: [id, entityType, category, format, variants, version]
+      properties:
+        id:
+          $ref: '#/components/schemas/GridViewId'
+          description: Media asset ID, e.g. `max-verstappen-portrait-v1`.
+        entityType: { $ref: '#/components/schemas/MediaEntityType' }
+        entityId:
+          type: [string, "null"]
+        category: { $ref: '#/components/schemas/MediaCategory' }
+        format: { $ref: '#/components/schemas/MediaFormat' }
+        variants:
+          type: object
+          properties:
+            thumbnail:
+              anyOf:
+                - $ref: '#/components/schemas/MediaVariant'
+                - type: "null"
+            card:
+              anyOf:
+                - $ref: '#/components/schemas/MediaVariant'
+                - type: "null"
+            detail:
+              anyOf:
+                - $ref: '#/components/schemas/MediaVariant'
+                - type: "null"
+            hero:
+              anyOf:
+                - $ref: '#/components/schemas/MediaVariant'
+                - type: "null"
+        aspectRatio:
+          type: [number, "null"]
+        version:
+          type: string
+        attribution:
+          type: [string, "null"]
+        license:
+          type: [string, "null"]
+        fallbackCategory:
+          type: [string, "null"]
+
+    DataFreshness:
+      type: object
+      required: [generatedAt]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        sourceUpdatedAt:
+          type: [string, "null"]
+          format: date-time
+        staleAfter:
+          type: [string, "null"]
+          format: date-time
+        contentVersion:
+          type: [string, "null"]
+        stale:
+          type: [boolean, "null"]
+
+    # ---- Core entities -----------------------------------------------------
+
+    Season:
+      type: object
+      required: [year, status, isCurrent]
+      properties:
+        year:
+          type: integer
+          minimum: 1950
+          maximum: 2100
+        label:
+          type: [string, "null"]
+        status: { $ref: '#/components/schemas/SeasonStatus' }
+        startDate:
+          type: [string, "null"]
+          format: date
+        endDate:
+          type: [string, "null"]
+          format: date
+        roundCount:
+          type: [integer, "null"]
+        currentRound:
+          type: [integer, "null"]
+        isCurrent:
+          type: boolean
+
+    Driver:
+      type: object
+      required: [id, fullName]
+      properties:
+        id: { $ref: '#/components/schemas/Slug' }
+        fullName:
+          type: string
+        givenName:
+          type: [string, "null"]
+        familyName:
+          type: [string, "null"]
+        shortCode:
+          type: [string, "null"]
+          description: Three-letter broadcast code, e.g. VER.
+        permanentNumber:
+          type: [integer, "null"]
+        nationality:
+          type: [string, "null"]
+        countryCode:
+          anyOf:
+            - $ref: '#/components/schemas/CountryCode'
+            - type: "null"
+        dateOfBirth:
+          type: [string, "null"]
+          format: date
+        placeOfBirth:
+          type: [string, "null"]
+        biography:
+          type: [string, "null"]
+        media:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/MediaAsset' }
+
+    Constructor:
+      type: object
+      required: [id, name]
+      properties:
+        id: { $ref: '#/components/schemas/Slug' }
+        name:
+          type: string
+        shortName:
+          type: [string, "null"]
+        nationality:
+          type: [string, "null"]
+        countryCode:
+          anyOf:
+            - $ref: '#/components/schemas/CountryCode'
+            - type: "null"
+        colorPrimary:
+          anyOf:
+            - $ref: '#/components/schemas/ColorHex'
+            - type: "null"
+        biography:
+          type: [string, "null"]
+        media:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/MediaAsset' }
+
+    LapRecord:
+      type: object
+      properties:
+        driverId:
+          anyOf:
+            - $ref: '#/components/schemas/Slug'
+            - type: "null"
+        timeMillis:
+          type: [integer, "null"]
+        year:
+          type: [integer, "null"]
+
+    Circuit:
+      type: object
+      required: [id, name]
+      properties:
+        id: { $ref: '#/components/schemas/Slug' }
+        name:
+          type: string
+        locality:
+          type: [string, "null"]
+        country:
+          type: [string, "null"]
+        countryCode:
+          anyOf:
+            - $ref: '#/components/schemas/CountryCode'
+            - type: "null"
+        latitude:
+          type: [number, "null"]
+        longitude:
+          type: [number, "null"]
+        lengthMeters:
+          type: [integer, "null"]
+        cornerCount:
+          type: [integer, "null"]
+        direction:
+          anyOf:
+            - $ref: '#/components/schemas/CircuitDirection'
+            - type: "null"
+        firstGrandPrixYear:
+          type: [integer, "null"]
+        lapRecord:
+          anyOf:
+            - $ref: '#/components/schemas/LapRecord'
+            - type: "null"
+        media:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/MediaAsset' }
+
+    Session:
+      type: object
+      required: [id, type, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/GridViewId'
+          description: Session ID, e.g. `2026-belgian-grand-prix-race`.
+        type: { $ref: '#/components/schemas/SessionType' }
+        name:
+          type: [string, "null"]
+        startTime:
+          type: [string, "null"]
+          format: date-time
+        endTime:
+          type: [string, "null"]
+          format: date-time
+        status: { $ref: '#/components/schemas/SessionStatus' }
+
+    GrandPrix:
+      type: object
+      required: [id, season, round, eventSlug, name, circuitId, status, format, sessions, hasResults]
+      properties:
+        id:
+          $ref: '#/components/schemas/GridViewId'
+          description: Grand Prix edition ID, e.g. `2026-belgian-grand-prix`.
+        season:
+          type: integer
+        round:
+          type: integer
+          minimum: 1
+        eventSlug:
+          $ref: '#/components/schemas/Slug'
+          description: Season-independent event key, e.g. `belgian-grand-prix`.
+        name:
+          type: string
+        officialName:
+          type: [string, "null"]
+        circuitId: { $ref: '#/components/schemas/Slug' }
+        status: { $ref: '#/components/schemas/EventStatus' }
+        format: { $ref: '#/components/schemas/WeekendFormat' }
+        startDate:
+          type: [string, "null"]
+          format: date
+        endDate:
+          type: [string, "null"]
+          format: date
+        timezone:
+          type: [string, "null"]
+          description: IANA time zone, e.g. Europe/Brussels.
+        sessions:
+          type: array
+          items: { $ref: '#/components/schemas/Session' }
+        hasResults:
+          type: boolean
+        media:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/MediaAsset' }
+
+    GrandPrixSummary:
+      type: object
+      required: [id, season, round, eventSlug, name, circuitId, status, format, hasResults]
+      properties:
+        id:
+          $ref: '#/components/schemas/GridViewId'
+          description: Grand Prix edition ID, e.g. `2026-belgian-grand-prix`.
+        season:
+          type: integer
+        round:
+          type: integer
+        eventSlug: { $ref: '#/components/schemas/Slug' }
+        name:
+          type: string
+        circuitId: { $ref: '#/components/schemas/Slug' }
+        circuitName:
+          type: [string, "null"]
+        status: { $ref: '#/components/schemas/EventStatus' }
+        format: { $ref: '#/components/schemas/WeekendFormat' }
+        startDate:
+          type: [string, "null"]
+          format: date
+        endDate:
+          type: [string, "null"]
+          format: date
+        timezone:
+          type: [string, "null"]
+        hasResults:
+          type: boolean
+
+    DriverSeasonEntry:
+      type: object
+      required: [id, season, driverId, constructorId]
+      properties:
+        id:
+          $ref: '#/components/schemas/GridViewId'
+          description: >
+            Composite participation ID, e.g. `2026-max-verstappen`. A split-season
+            seat appends the start round, e.g. `2026-franco-colapinto-7`.
+        season:
+          type: integer
+        driverId: { $ref: '#/components/schemas/Slug' }
+        constructorId: { $ref: '#/components/schemas/Slug' }
+        raceNumber:
+          type: [integer, "null"]
+        role:
+          anyOf:
+            - $ref: '#/components/schemas/DriverRole'
+            - type: "null"
+        shortCode:
+          type: [string, "null"]
+        startRound:
+          type: [integer, "null"]
+        endRound:
+          type: [integer, "null"]
+
+    ConstructorSeasonEntry:
+      type: object
+      required: [id, season, constructorId]
+      properties:
+        id:
+          $ref: '#/components/schemas/GridViewId'
+          description: Composite entry ID, e.g. `2026-red-bull`.
+        season:
+          type: integer
+        constructorId: { $ref: '#/components/schemas/Slug' }
+        fullName:
+          type: [string, "null"]
+        shortName:
+          type: [string, "null"]
+        colorPrimary:
+          anyOf:
+            - $ref: '#/components/schemas/ColorHex'
+            - type: "null"
+        colorSecondary:
+          anyOf:
+            - $ref: '#/components/schemas/ColorHex'
+            - type: "null"
+        powerUnit:
+          type: [string, "null"]
+        teamPrincipal:
+          type: [string, "null"]
+        base:
+          type: [string, "null"]
+        chassis:
+          type: [string, "null"]
+        driverLineup:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/Slug' }
+
+    DriverStanding:
+      type: object
+      required: [season, driverId, points]
+      properties:
+        season:
+          type: integer
+        driverId: { $ref: '#/components/schemas/Slug' }
+        constructorId:
+          anyOf:
+            - $ref: '#/components/schemas/Slug'
+            - type: "null"
+        position:
+          type: [integer, "null"]
+          minimum: 1
+        points:
+          type: number
+          description: Championship points; fractional values are valid.
+        wins:
+          type: [integer, "null"]
+        podiums:
+          type: [integer, "null"]
+        provisional:
+          type: [boolean, "null"]
+
+    ConstructorStanding:
+      type: object
+      required: [season, constructorId, points]
+      properties:
+        season:
+          type: integer
+        constructorId: { $ref: '#/components/schemas/Slug' }
+        position:
+          type: [integer, "null"]
+          minimum: 1
+        points:
+          type: number
+          description: Championship points; fractional values are valid.
+        wins:
+          type: [integer, "null"]
+        provisional:
+          type: [boolean, "null"]
+
+    FastestLap:
+      type: object
+      properties:
+        driverId:
+          anyOf:
+            - $ref: '#/components/schemas/Slug'
+            - type: "null"
+        timeMillis:
+          type: [integer, "null"]
+        lap:
+          type: [integer, "null"]
+
+    RaceResultEntry:
+      type: object
+      required: [driverId, constructorId, status]
+      properties:
+        driverId: { $ref: '#/components/schemas/Slug' }
+        constructorId: { $ref: '#/components/schemas/Slug' }
+        position:
+          type: [integer, "null"]
+          minimum: 1
+        gridPosition:
+          type: [integer, "null"]
+        points:
+          type: [number, "null"]
+          description: Points scored; fractional values are valid.
+        status: { $ref: '#/components/schemas/FinishStatus' }
+        laps:
+          type: [integer, "null"]
+        elapsedTimeMillis:
+          type: [integer, "null"]
+          description: Total elapsed race time for a classified finisher, in milliseconds.
+        gapToLeaderMillis:
+          type: [integer, "null"]
+          description: Gap to the leader for a same-lap finisher, in milliseconds.
+        lapsBehind:
+          type: [integer, "null"]
+          description: Whole laps behind the leader for a lapped finisher.
+        fastestLap:
+          type: [boolean, "null"]
+        dnfReason:
+          type: [string, "null"]
+        gapText:
+          type: [string, "null"]
+          description: >
+            Optional pre-formatted display fallback only. Never required, never
+            parsed by the client, and never the sole representation of a gap. The
+            client formats from the structured `gapToLeaderMillis` / `lapsBehind`
+            fields; this exists only when a provider supplies a display string the
+            structured fields cannot capture.
+
+    RaceResult:
+      type: object
+      required: [id, season, round, grandPrixId, sessionType, status, entries]
+      properties:
+        id:
+          $ref: '#/components/schemas/GridViewId'
+          description: Result document ID, e.g. `2026-belgian-grand-prix-race-results`.
+        season:
+          type: integer
+        round:
+          type: integer
+        grandPrixId:
+          $ref: '#/components/schemas/GridViewId'
+          description: Parent Grand Prix edition ID, e.g. `2026-belgian-grand-prix`.
+        sessionType: { $ref: '#/components/schemas/SessionType' }
+        status: { $ref: '#/components/schemas/ResultStatus' }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/RaceResultEntry' }
+        fastestLap:
+          anyOf:
+            - $ref: '#/components/schemas/FastestLap'
+            - type: "null"
+
+    # ---- Summaries and composites -----------------------------------------
+
+    DriverSummary:
+      type: object
+      required: [id, fullName]
+      properties:
+        id: { $ref: '#/components/schemas/Slug' }
+        fullName:
+          type: string
+        shortCode:
+          type: [string, "null"]
+        permanentNumber:
+          type: [integer, "null"]
+        countryCode:
+          anyOf:
+            - $ref: '#/components/schemas/CountryCode'
+            - type: "null"
+
+    ConstructorSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id: { $ref: '#/components/schemas/Slug' }
+        name:
+          type: string
+        shortName:
+          type: [string, "null"]
+        colorPrimary:
+          anyOf:
+            - $ref: '#/components/schemas/ColorHex'
+            - type: "null"
+
+    CircuitSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id: { $ref: '#/components/schemas/Slug' }
+        name:
+          type: string
+        locality:
+          type: [string, "null"]
+        countryCode:
+          anyOf:
+            - $ref: '#/components/schemas/CountryCode'
+            - type: "null"
+
+    SeasonDriverSummary:
+      type: object
+      required: [driverId, fullName, constructorId]
+      properties:
+        driverId: { $ref: '#/components/schemas/Slug' }
+        fullName:
+          type: string
+        shortCode:
+          type: [string, "null"]
+        permanentNumber:
+          type: [integer, "null"]
+        raceNumber:
+          type: [integer, "null"]
+        countryCode:
+          anyOf:
+            - $ref: '#/components/schemas/CountryCode'
+            - type: "null"
+        constructorId: { $ref: '#/components/schemas/Slug' }
+        role:
+          anyOf:
+            - $ref: '#/components/schemas/DriverRole'
+            - type: "null"
+
+    SeasonConstructorSummary:
+      type: object
+      required: [constructorId, name]
+      properties:
+        constructorId: { $ref: '#/components/schemas/Slug' }
+        name:
+          type: string
+        fullName:
+          type: [string, "null"]
+        shortName:
+          type: [string, "null"]
+        colorPrimary:
+          anyOf:
+            - $ref: '#/components/schemas/ColorHex'
+            - type: "null"
+        colorSecondary:
+          anyOf:
+            - $ref: '#/components/schemas/ColorHex'
+            - type: "null"
+        powerUnit:
+          type: [string, "null"]
+        driverLineup:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/Slug' }
+
+    DriverDetail:
+      type: object
+      required: [driver]
+      properties:
+        driver: { $ref: '#/components/schemas/Driver' }
+        seasonEntry:
+          anyOf:
+            - $ref: '#/components/schemas/DriverSeasonEntry'
+            - type: "null"
+        constructor:
+          anyOf:
+            - $ref: '#/components/schemas/ConstructorSummary'
+            - type: "null"
+        standing:
+          anyOf:
+            - $ref: '#/components/schemas/DriverStanding'
+            - type: "null"
+
+    ConstructorDetail:
+      type: object
+      required: [constructor]
+      properties:
+        constructor: { $ref: '#/components/schemas/Constructor' }
+        seasonEntry:
+          anyOf:
+            - $ref: '#/components/schemas/ConstructorSeasonEntry'
+            - type: "null"
+        standing:
+          anyOf:
+            - $ref: '#/components/schemas/ConstructorStanding'
+            - type: "null"
+        lineup:
+          type: [array, "null"]
+          items: { $ref: '#/components/schemas/DriverSummary' }
+
+    CircuitDetail:
+      type: object
+      required: [circuit]
+      properties:
+        circuit: { $ref: '#/components/schemas/Circuit' }
+        grandPrix:
+          anyOf:
+            - $ref: '#/components/schemas/GrandPrixSummary'
+            - type: "null"
+
+    # ---- View models -------------------------------------------------------
+
+    StatusData:
+      type: object
+      required: [status, service, environment, apiVersion, maintenance]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, maintenance]
+        service:
+          type: string
+          const: gridview-edge-api
+        environment:
+          type: string
+          enum: [development, staging, production]
+        apiVersion:
+          type: string
+          const: "1"
+        currentSeason:
+          type: [integer, "null"]
+        lastSuccessfulSyncAt:
+          type: [string, "null"]
+          format: date-time
+        snapshotAgeSeconds:
+          type: [integer, "null"]
+        maintenance:
+          type: boolean
+
+    HomeData:
+      type: object
+      required: [freshness, upcomingEvents]
+      properties:
+        freshness: { $ref: '#/components/schemas/DataFreshness' }
+        featuredEvent:
+          anyOf:
+            - $ref: '#/components/schemas/GrandPrixSummary'
+            - type: "null"
+        featuredSession:
+          anyOf:
+            - $ref: '#/components/schemas/Session'
+            - type: "null"
+        latestCompletedEvent:
+          anyOf:
+            - $ref: '#/components/schemas/GrandPrixSummary'
+            - type: "null"
+        driverLeader:
+          anyOf:
+            - $ref: '#/components/schemas/DriverStanding'
+            - type: "null"
+        constructorLeader:
+          anyOf:
+            - $ref: '#/components/schemas/ConstructorStanding'
+            - type: "null"
+        upcomingEvents:
+          type: array
+          items: { $ref: '#/components/schemas/GrandPrixSummary' }
+
+    BootstrapData:
+      type: object
+      required: [season, calendar, drivers, constructors, circuits, driverStandings, constructorStandings, home]
+      properties:
+        season: { $ref: '#/components/schemas/Season' }
+        calendar:
+          type: array
+          items: { $ref: '#/components/schemas/GrandPrixSummary' }
+        drivers:
+          type: array
+          items: { $ref: '#/components/schemas/SeasonDriverSummary' }
+        constructors:
+          type: array
+          items: { $ref: '#/components/schemas/SeasonConstructorSummary' }
+        circuits:
+          type: array
+          items: { $ref: '#/components/schemas/CircuitSummary' }
+        driverStandings:
+          type: array
+          items: { $ref: '#/components/schemas/DriverStanding' }
+        constructorStandings:
+          type: array
+          items: { $ref: '#/components/schemas/ConstructorStanding' }
+        home: { $ref: '#/components/schemas/HomeData' }
+        contentVersion:
+          type: [string, "null"]
+        mediaVersion:
+          type: [string, "null"]
+
+    ContentManifest:
+      type: object
+      required: [contentVersion, supportedSeasons, minimumApiSchemaVersion]
+      properties:
+        contentVersion:
+          type: string
+        mediaVersion:
+          type: [string, "null"]
+        supportedSeasons:
+          type: array
+          items:
+            type: integer
+        attributionVersion:
+          type: [string, "null"]
+        minimumApiSchemaVersion:
+          type: integer

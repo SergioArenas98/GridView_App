@@ -1,0 +1,19 @@
+# Redocly configuration for the GridView API contract.
+#
+# The public GridView API is intentionally read-only and unauthenticated: the
+# mobile client makes anonymous GET/HEAD requests and no credentials exist in the
+# app. Authentication applies only to administrative and synchronization routes,
+# which are deliberately NOT part of this public contract
+# (see docs/technical/GridView_Backend_Scheme.md sections 21-23). The
+# `security-defined` rule is therefore disabled for this contract.
+#
+# `info-license-strict` is disabled because the project uses a proprietary
+# license with no SPDX identifier or public URL.
+extends:
+  - recommended
+rules:
+  security-defined: off
+  info-license-strict: off
+apis:
+  gridview@v1:
+    root: docs/api/gridview-api-v1.yaml
