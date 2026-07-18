@@ -79,6 +79,8 @@ const orphans = collectFixtureFiles(fixturesRoot).filter((f) => !listed.has(f));
 
 heading('api fixtures');
 let failures = 0;
+let conforming = 0; // validate cleanly against strict OpenAPI
+let toleranceOnly = 0; // expectValid:false — MUST fail strict OpenAPI (unknown enum, etc.)
 
 for (const entry of manifest) {
   const file = join(fixturesRoot, entry.file.split('/').join(sep));
@@ -129,6 +131,11 @@ for (const entry of manifest) {
   }
 
   if (ok === expectValid) {
+    if (expectValid) {
+      conforming += 1;
+    } else {
+      toleranceOnly += 1;
+    }
     const tag = expectValid ? 'ok  ' : 'ok* ';
     console.log(
       `${tag} ${label}  (${entry.data ?? 'error'}${entry.note ? ' - ' + entry.note : ''})`,
@@ -154,4 +161,7 @@ if (orphans.length > 0) {
   }
 }
 
+console.log(
+  `  ${conforming} conform to OpenAPI, ${toleranceOnly} tolerance-only (expected to fail strict validation, e.g. unknown enum token)`,
+);
 process.exit(summarize('fixtures', manifest.length, failures));

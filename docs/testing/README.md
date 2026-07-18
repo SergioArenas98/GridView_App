@@ -34,6 +34,27 @@ Each entry declares:
 | `meta` | `BaseMeta`, `SnapshotMeta` or `SeasonSnapshotMeta` (envelope only) |
 | `expectValid` | `false` for deliberately out-of-contract fixtures (e.g. unknown enum) |
 
+### Strict conformance vs tolerance fixtures
+
+Fixtures fall into two categories, and the validator reports the split
+(`N conform to OpenAPI, M tolerance-only`):
+
+- **Conforming** (`expectValid` unset/true): a GridView-produced public response
+  must satisfy the strict OpenAPI schema. Public enums may emit only documented
+  wire values (including the documented `unknown`).
+- **Tolerance-only** (`expectValid: false`): simulates a *future undocumented*
+  wire token from an upstream provider. Such a fixture **must fail** strict
+  OpenAPI validation and exists only to prove the clients tolerate it. The
+  validator asserts it fails; if it ever validates (e.g. because someone widened
+  the enum), the check fails.
+
+The one tolerance-only fixture today is
+`grand-prix/unknown-enum-status.json`, which carries `status: "red_flagged"` and
+a session `type: "super_sprint"` (neither documented). The Worker
+(`src/contract/parse.ts`) and the Flutter mapper both map such tokens to the
+`unknown` enum value. Never widen a public OpenAPI enum to make a future token
+validate.
+
 ### Mock-data status
 
 All fixtures and curated content are **non-authoritative mock data**: deterministic
