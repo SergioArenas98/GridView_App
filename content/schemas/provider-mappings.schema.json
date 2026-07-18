@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/provider-mappings.schema.json",
+  "title": "GridView provider-ID mappings (INTERNAL ONLY)",
+  "description": "Maps external provider identifiers to GridView stable IDs. This file is internal: provider IDs must never appear in a public API fixture or response.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "provider", "drivers", "constructors", "circuits"],
+  "properties": {
+    "kind": { "const": "provider-mappings" },
+    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
+    "note": { "type": "string" },
+    "provider": {
+      "type": "string",
+      "description": "Provider key (internal), e.g. mock, apiSports.",
+      "minLength": 1
+    },
+    "season": { "anyOf": [{ "$ref": "common.schema.json#/$defs/season" }, { "type": "null" }] },
+    "drivers": { "type": "array", "items": { "$ref": "#/$defs/mapping" } },
+    "constructors": { "type": "array", "items": { "$ref": "#/$defs/mapping" } },
+    "circuits": { "type": "array", "items": { "$ref": "#/$defs/mapping" } }
+  },
+  "$defs": {
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gridviewId", "providerId"],
+      "properties": {
+        "gridviewId": { "$ref": "common.schema.json#/$defs/slug" },
+        "providerId": {
+          "description": "Opaque internal provider identifier; string or integer.",
+          "type": ["string", "integer"]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "_note": "Shortened race awarding half points, exercising fractional points plus the full structured-timing field set.",
+  "data": {
+    "id": "2026-italian-grand-prix-race-results",
+    "season": 2026,
+    "round": 12,
+    "grandPrixId": "2026-italian-grand-prix",
+    "sessionType": "race",
+    "status": "final",
+    "entries": [
+      {
+        "driverId": "max-verstappen",
+        "constructorId": "red-bull",
+        "position": 1,
+        "gridPosition": 1,
+        "points": 12.5,
+        "status": "finished",
+        "laps": 53,
+        "elapsedTimeMillis": 4512345,
+        "gapToLeaderMillis": null,
+        "lapsBehind": null,
+        "fastestLap": false,
+        "dnfReason": null,
+        "gapText": null
+      },
+      {
+        "driverId": "lando-norris",
+        "constructorId": "mclaren",
+        "position": 2,
+        "gridPosition": 3,
+        "points": 9.0,
+        "status": "finished",
+        "laps": 53,
+        "elapsedTimeMillis": null,
+        "gapToLeaderMillis": 3456,
+        "lapsBehind": null,
+        "fastestLap": true,
+        "dnfReason": null,
+        "gapText": "+3.456"
+      },
+      {
+        "driverId": "charles-leclerc",
+        "constructorId": "ferrari",
+        "position": 3,
+        "gridPosition": 2,
+        "points": 7.5,
+        "status": "finished",
+        "laps": 53,
+        "elapsedTimeMillis": null,
+        "gapToLeaderMillis": 8123,
+        "lapsBehind": null,
+        "fastestLap": false,
+        "dnfReason": null,
+        "gapText": "+8.123"
+      },
+      {
+        "driverId": "jack-doohan",
+        "constructorId": "alpine",
+        "position": 15,
+        "gridPosition": 16,
+        "points": null,
+        "status": "lapped",
+        "laps": 52,
+        "elapsedTimeMillis": null,
+        "gapToLeaderMillis": null,
+        "lapsBehind": 1,
+        "fastestLap": false,
+        "dnfReason": null,
+        "gapText": "+1 Lap"
+      },
+      {
+        "driverId": "lewis-hamilton",
+        "constructorId": "ferrari",
+        "position": null,
+        "gridPosition": 4,
+        "points": null,
+        "status": "dnf",
+        "laps": 30,
+        "elapsedTimeMillis": null,
+        "gapToLeaderMillis": null,
+        "lapsBehind": null,
+        "fastestLap": false,
+        "dnfReason": "Power unit (mock)",
+        "gapText": null
+      }
+    ],
+    "fastestLap": { "driverId": "lando-norris", "timeMillis": 81234, "lap": 41 }
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

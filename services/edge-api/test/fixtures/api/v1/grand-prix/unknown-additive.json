@@ -1,0 +1,42 @@
+{
+  "data": {
+    "id": "2026-italian-grand-prix",
+    "season": 2026,
+    "round": 12,
+    "eventSlug": "italian-grand-prix",
+    "name": "Italian Grand Prix",
+    "officialName": null,
+    "circuitId": "monza",
+    "status": "completed",
+    "format": "standard",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-12",
+    "timezone": "Europe/Rome",
+    "sessions": [
+      {
+        "id": "2026-italian-grand-prix-race",
+        "type": "race",
+        "name": "Race",
+        "startTime": "2026-07-12T13:00:00Z",
+        "endTime": "2026-07-12T15:00:00Z",
+        "status": "completed",
+        "weatherHint": "dry"
+      }
+    ],
+    "hasResults": true,
+    "media": [],
+    "experimentalRanking": 42,
+    "futureAdditiveObject": { "trackTemperatureC": 41 }
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001",
+    "futureMetaField": "ignored-by-tolerant-clients"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "data": {
+    "status": "ok",
+    "service": "gridview-edge-api",
+    "environment": "development",
+    "apiVersion": "1",
+    "currentSeason": 2026,
+    "lastSuccessfulSyncAt": "2026-07-18T11:55:00Z",
+    "snapshotAgeSeconds": 300,
+    "maintenance": false
+  },
+  "meta": {
+    "apiVersion": "1",
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "requestId": "req-mock-0001"
+  }
+}

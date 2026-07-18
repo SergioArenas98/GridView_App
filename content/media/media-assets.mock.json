@@ -1,0 +1,80 @@
+{
+  "$schema": "../schemas/media-assets.schema.json",
+  "kind": "media-assets",
+  "status": "mock",
+  "note": "NON-AUTHORITATIVE development data. Placeholder URLs on a non-routable mock host; no real licensed media.",
+  "assets": [
+    {
+      "id": "max-verstappen-portrait-v1",
+      "entityType": "driver",
+      "entityId": "max-verstappen",
+      "category": "portrait",
+      "format": "webp",
+      "variants": {
+        "thumbnail": { "url": "https://media.gridview.local/drivers/max-verstappen/v1/thumbnail.webp", "width": 160, "height": 160 },
+        "card": { "url": "https://media.gridview.local/drivers/max-verstappen/v1/card.webp", "width": 480, "height": 480 },
+        "detail": { "url": "https://media.gridview.local/drivers/max-verstappen/v1/detail.webp", "width": 960, "height": 960 },
+        "hero": null
+      },
+      "aspectRatio": 1.0,
+      "version": "v1",
+      "attribution": "Mock placeholder",
+      "license": "mock-internal",
+      "fallbackCategory": "portrait"
+    },
+    {
+      "id": "ferrari-logo-v1",
+      "entityType": "constructor",
+      "entityId": "ferrari",
+      "category": "logo",
+      "format": "png",
+      "variants": {
+        "thumbnail": { "url": "https://media.gridview.local/constructors/ferrari/v1/thumbnail.png", "width": 160, "height": 90 },
+        "card": { "url": "https://media.gridview.local/constructors/ferrari/v1/card.png", "width": 480, "height": 270 },
+        "detail": null,
+        "hero": null
+      },
+      "aspectRatio": 1.7778,
+      "version": "v1",
+      "attribution": null,
+      "license": "mock-internal",
+      "fallbackCategory": "logo"
+    },
+    {
+      "id": "monza-circuit-layout-v1",
+      "entityType": "circuit",
+      "entityId": "monza",
+      "category": "circuit_layout",
+      "format": "webp",
+      "variants": {
+        "thumbnail": null,
+        "card": { "url": "https://media.gridview.local/circuits/monza/v1/card.webp", "width": 480, "height": 320 },
+        "detail": { "url": "https://media.gridview.local/circuits/monza/v1/detail.webp", "width": 960, "height": 640 },
+        "hero": null
+      },
+      "aspectRatio": 1.5,
+      "version": "v1",
+      "attribution": null,
+      "license": "mock-internal",
+      "fallbackCategory": "circuit_layout"
+    },
+    {
+      "id": "placeholder-portrait-v1",
+      "entityType": "placeholder",
+      "entityId": null,
+      "category": "portrait",
+      "format": "webp",
+      "variants": {
+        "thumbnail": { "url": "https://media.gridview.local/placeholders/portrait/v1/thumbnail.webp", "width": 160, "height": 160 },
+        "card": null,
+        "detail": null,
+        "hero": null
+      },
+      "aspectRatio": 1.0,
+      "version": "v1",
+      "attribution": null,
+      "license": "mock-internal",
+      "fallbackCategory": "portrait"
+    }
+  ]
+}

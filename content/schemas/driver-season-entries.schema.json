@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/driver-season-entries.schema.json",
+  "title": "GridView driver season entries (season participation)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "season", "entries"],
+  "properties": {
+    "kind": { "const": "driver-season-entries" },
+    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
+    "note": { "type": "string" },
+    "season": { "$ref": "common.schema.json#/$defs/season" },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/driverSeasonEntry" }
+    }
+  },
+  "$defs": {
+    "driverSeasonEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "season", "driverId", "constructorId"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/gridviewId" },
+        "season": { "$ref": "common.schema.json#/$defs/season" },
+        "driverId": { "$ref": "common.schema.json#/$defs/slug" },
+        "constructorId": { "$ref": "common.schema.json#/$defs/slug" },
+        "raceNumber": { "type": ["integer", "null"] },
+        "role": { "enum": ["race", "reserve", "test", "unknown", null] },
+        "shortCode": { "type": ["string", "null"] },
+        "startRound": { "anyOf": [{ "$ref": "common.schema.json#/$defs/round" }, { "type": "null" }] },
+        "endRound": { "anyOf": [{ "$ref": "common.schema.json#/$defs/round" }, { "type": "null" }] }
+      }
+    }
+  }
+}

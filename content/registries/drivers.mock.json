@@ -1,0 +1,112 @@
+{
+  "$schema": "../schemas/driver-registry.schema.json",
+  "kind": "driver-registry",
+  "status": "mock",
+  "note": "NON-AUTHORITATIVE development data. Stable identities only; season-specific data lives in season entries. Not an official Formula 1 dataset.",
+  "drivers": [
+    {
+      "id": "max-verstappen",
+      "fullName": "Max Verstappen",
+      "givenName": "Max",
+      "familyName": "Verstappen",
+      "shortCode": "VER",
+      "permanentNumber": 1,
+      "nationality": "Dutch",
+      "countryCode": "NL",
+      "dateOfBirth": "1997-09-30",
+      "placeOfBirth": "Hasselt",
+      "biography": null
+    },
+    {
+      "id": "charles-leclerc",
+      "fullName": "Charles Leclerc",
+      "givenName": "Charles",
+      "familyName": "Leclerc",
+      "shortCode": "LEC",
+      "permanentNumber": 16,
+      "nationality": "Monegasque",
+      "countryCode": "MC",
+      "dateOfBirth": "1997-10-16",
+      "placeOfBirth": "Monte Carlo",
+      "biography": null
+    },
+    {
+      "id": "lewis-hamilton",
+      "fullName": "Lewis Hamilton",
+      "givenName": "Lewis",
+      "familyName": "Hamilton",
+      "shortCode": "HAM",
+      "permanentNumber": 44,
+      "nationality": "British",
+      "countryCode": "GB",
+      "dateOfBirth": "1985-01-07",
+      "placeOfBirth": "Stevenage",
+      "biography": null
+    },
+    {
+      "id": "lando-norris",
+      "fullName": "Lando Norris",
+      "givenName": "Lando",
+      "familyName": "Norris",
+      "shortCode": "NOR",
+      "permanentNumber": 4,
+      "nationality": "British",
+      "countryCode": "GB",
+      "dateOfBirth": "1999-11-13",
+      "placeOfBirth": "Bristol",
+      "biography": null
+    },
+    {
+      "id": "oscar-piastri",
+      "fullName": "Oscar Piastri",
+      "givenName": "Oscar",
+      "familyName": "Piastri",
+      "shortCode": "PIA",
+      "permanentNumber": 81,
+      "nationality": "Australian",
+      "countryCode": "AU",
+      "dateOfBirth": "2001-04-06",
+      "placeOfBirth": "Melbourne",
+      "biography": null
+    },
+    {
+      "id": "george-russell",
+      "fullName": "George Russell",
+      "givenName": "George",
+      "familyName": "Russell",
+      "shortCode": "RUS",
+      "permanentNumber": 63,
+      "nationality": "British",
+      "countryCode": "GB",
+      "dateOfBirth": "1998-02-15",
+      "placeOfBirth": "King's Lynn",
+      "biography": null
+    },
+    {
+      "id": "jack-doohan",
+      "fullName": "Jack Doohan",
+      "givenName": "Jack",
+      "familyName": "Doohan",
+      "shortCode": "DOO",
+      "permanentNumber": 7,
+      "nationality": "Australian",
+      "countryCode": "AU",
+      "dateOfBirth": "2003-01-20",
+      "placeOfBirth": "Gold Coast",
+      "biography": null
+    },
+    {
+      "id": "franco-colapinto",
+      "fullName": "Franco Colapinto",
+      "givenName": "Franco",
+      "familyName": "Colapinto",
+      "shortCode": "COL",
+      "permanentNumber": 43,
+      "nationality": "Argentine",
+      "countryCode": "AR",
+      "dateOfBirth": "2003-05-27",
+      "placeOfBirth": "Pilar",
+      "biography": null
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "INVALID_PARAMETER",
+    "message": "The request contains an invalid parameter.",
+    "retryable": false,
+    "requestId": "req-mock-0001"
+  }
+}

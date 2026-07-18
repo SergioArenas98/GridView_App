@@ -1,0 +1,94 @@
+{
+  "data": [
+    {
+      "driverId": "max-verstappen",
+      "fullName": "Max Verstappen",
+      "shortCode": "VER",
+      "permanentNumber": 1,
+      "raceNumber": 1,
+      "countryCode": "NL",
+      "constructorId": "red-bull",
+      "role": "race"
+    },
+    {
+      "driverId": "george-russell",
+      "fullName": "George Russell",
+      "shortCode": "RUS",
+      "permanentNumber": 63,
+      "raceNumber": 63,
+      "countryCode": "GB",
+      "constructorId": "mercedes",
+      "role": "race"
+    },
+    {
+      "driverId": "charles-leclerc",
+      "fullName": "Charles Leclerc",
+      "shortCode": "LEC",
+      "permanentNumber": 16,
+      "raceNumber": 16,
+      "countryCode": "MC",
+      "constructorId": "ferrari",
+      "role": "race"
+    },
+    {
+      "driverId": "lewis-hamilton",
+      "fullName": "Lewis Hamilton",
+      "shortCode": "HAM",
+      "permanentNumber": 44,
+      "raceNumber": 44,
+      "countryCode": "GB",
+      "constructorId": "ferrari",
+      "role": "race"
+    },
+    {
+      "driverId": "lando-norris",
+      "fullName": "Lando Norris",
+      "shortCode": "NOR",
+      "permanentNumber": 4,
+      "raceNumber": 4,
+      "countryCode": "GB",
+      "constructorId": "mclaren",
+      "role": "race"
+    },
+    {
+      "driverId": "oscar-piastri",
+      "fullName": "Oscar Piastri",
+      "shortCode": "PIA",
+      "permanentNumber": 81,
+      "raceNumber": 81,
+      "countryCode": "AU",
+      "constructorId": "mclaren",
+      "role": "race"
+    },
+    {
+      "driverId": "jack-doohan",
+      "fullName": "Jack Doohan",
+      "shortCode": "DOO",
+      "permanentNumber": 7,
+      "raceNumber": 7,
+      "countryCode": "AU",
+      "constructorId": "alpine",
+      "role": "race"
+    },
+    {
+      "driverId": "franco-colapinto",
+      "fullName": "Franco Colapinto",
+      "shortCode": "COL",
+      "permanentNumber": 43,
+      "raceNumber": 43,
+      "countryCode": "AR",
+      "constructorId": "alpine",
+      "role": "race"
+    }
+  ],
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

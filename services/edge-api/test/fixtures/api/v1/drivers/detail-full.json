@@ -1,0 +1,82 @@
+{
+  "data": {
+    "driver": {
+      "id": "max-verstappen",
+      "fullName": "Max Verstappen",
+      "givenName": "Max",
+      "familyName": "Verstappen",
+      "shortCode": "VER",
+      "permanentNumber": 1,
+      "nationality": "Dutch",
+      "countryCode": "NL",
+      "dateOfBirth": "1997-09-30",
+      "placeOfBirth": "Hasselt",
+      "biography": "Mock development biography, not authoritative.",
+      "media": [
+        {
+          "id": "max-verstappen-portrait-v1",
+          "entityType": "driver",
+          "entityId": "max-verstappen",
+          "category": "portrait",
+          "format": "webp",
+          "variants": {
+            "thumbnail": {
+              "url": "https://media.gridview.local/drivers/max-verstappen/v1/thumbnail.webp",
+              "width": 160,
+              "height": 160
+            },
+            "card": {
+              "url": "https://media.gridview.local/drivers/max-verstappen/v1/card.webp",
+              "width": 480,
+              "height": 480
+            },
+            "detail": null,
+            "hero": null
+          },
+          "aspectRatio": 1.0,
+          "version": "v1",
+          "attribution": "Mock placeholder",
+          "license": "mock-internal",
+          "fallbackCategory": "portrait"
+        }
+      ]
+    },
+    "seasonEntry": {
+      "id": "2026-max-verstappen",
+      "season": 2026,
+      "driverId": "max-verstappen",
+      "constructorId": "red-bull",
+      "raceNumber": 1,
+      "role": "race",
+      "shortCode": "VER",
+      "startRound": null,
+      "endRound": null
+    },
+    "constructor": {
+      "id": "red-bull",
+      "name": "Red Bull",
+      "shortName": "Red Bull",
+      "colorPrimary": "#1e41ff"
+    },
+    "standing": {
+      "season": 2026,
+      "driverId": "max-verstappen",
+      "constructorId": "red-bull",
+      "position": 1,
+      "points": 210.5,
+      "wins": 6,
+      "podiums": 9,
+      "provisional": false
+    }
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

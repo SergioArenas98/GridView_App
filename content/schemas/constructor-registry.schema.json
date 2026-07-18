@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/constructor-registry.schema.json",
+  "title": "GridView constructor registry (curated stable identity)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "constructors"],
+  "properties": {
+    "kind": { "const": "constructor-registry" },
+    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
+    "note": { "type": "string" },
+    "constructors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/registryConstructor" }
+    }
+  },
+  "$defs": {
+    "registryConstructor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/slug" },
+        "name": { "type": "string", "minLength": 1 },
+        "shortName": { "type": ["string", "null"] },
+        "nationality": { "type": ["string", "null"] },
+        "countryCode": { "anyOf": [{ "$ref": "common.schema.json#/$defs/countryCode" }, { "type": "null" }] },
+        "colorPrimary": { "anyOf": [{ "$ref": "common.schema.json#/$defs/colorHex" }, { "type": "null" }] },
+        "biography": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/circuit-registry.schema.json",
+  "title": "GridView circuit registry (curated stable identity)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "circuits"],
+  "properties": {
+    "kind": { "const": "circuit-registry" },
+    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
+    "note": { "type": "string" },
+    "circuits": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/registryCircuit" }
+    }
+  },
+  "$defs": {
+    "registryCircuit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/slug" },
+        "name": { "type": "string", "minLength": 1 },
+        "locality": { "type": ["string", "null"] },
+        "country": { "type": ["string", "null"] },
+        "countryCode": { "anyOf": [{ "$ref": "common.schema.json#/$defs/countryCode" }, { "type": "null" }] },
+        "latitude": { "type": ["number", "null"] },
+        "longitude": { "type": ["number", "null"] },
+        "lengthMeters": { "type": ["integer", "null"] },
+        "cornerCount": { "type": ["integer", "null"] },
+        "direction": { "enum": ["clockwise", "counter_clockwise", "unknown", null] },
+        "firstGrandPrixYear": { "type": ["integer", "null"] },
+        "lapRecord": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "driverId": { "anyOf": [{ "$ref": "common.schema.json#/$defs/slug" }, { "type": "null" }] },
+                "timeMillis": { "type": ["integer", "null"] },
+                "year": { "type": ["integer", "null"] }
+              }
+            },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}

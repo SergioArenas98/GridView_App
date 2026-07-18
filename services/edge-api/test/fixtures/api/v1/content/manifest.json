@@ -1,0 +1,18 @@
+{
+  "data": {
+    "contentVersion": "2026.07.18.1",
+    "mediaVersion": "2026.07.18.1",
+    "supportedSeasons": [2026],
+    "attributionVersion": "1",
+    "minimumApiSchemaVersion": 1
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T13:00:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

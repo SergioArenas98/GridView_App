@@ -1,0 +1,56 @@
+{
+  "_note": "Mid-season replacement: the driver's season entry starts at round 10 (startRound), preserving the participation span.",
+  "data": {
+    "driver": {
+      "id": "franco-colapinto",
+      "fullName": "Franco Colapinto",
+      "givenName": "Franco",
+      "familyName": "Colapinto",
+      "shortCode": "COL",
+      "permanentNumber": 43,
+      "nationality": "Argentine",
+      "countryCode": "AR",
+      "dateOfBirth": "2003-05-27",
+      "placeOfBirth": "Pilar",
+      "biography": null,
+      "media": null
+    },
+    "seasonEntry": {
+      "id": "2026-franco-colapinto-10",
+      "season": 2026,
+      "driverId": "franco-colapinto",
+      "constructorId": "alpine",
+      "raceNumber": 43,
+      "role": "race",
+      "shortCode": "COL",
+      "startRound": 10,
+      "endRound": null
+    },
+    "constructor": {
+      "id": "alpine",
+      "name": "Alpine",
+      "shortName": "Alpine",
+      "colorPrimary": "#0093cc"
+    },
+    "standing": {
+      "season": 2026,
+      "driverId": "franco-colapinto",
+      "constructorId": "alpine",
+      "position": null,
+      "points": 0.0,
+      "wins": 0,
+      "podiums": 0,
+      "provisional": true
+    }
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

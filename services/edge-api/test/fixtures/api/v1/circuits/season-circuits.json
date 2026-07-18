@@ -1,0 +1,93 @@
+{
+  "data": [
+    {
+      "id": "spa-francorchamps",
+      "name": "Circuit de Spa-Francorchamps",
+      "locality": "Stavelot",
+      "country": "Belgium",
+      "countryCode": "BE",
+      "latitude": 50.4372,
+      "longitude": 5.9714,
+      "lengthMeters": 7004,
+      "cornerCount": 19,
+      "direction": "clockwise",
+      "firstGrandPrixYear": 1950,
+      "lapRecord": {
+        "driverId": "max-verstappen",
+        "timeMillis": 106286,
+        "year": 2020
+      },
+      "media": null
+    },
+    {
+      "id": "monza",
+      "name": "Autodromo Nazionale Monza",
+      "locality": "Monza",
+      "country": "Italy",
+      "countryCode": "IT",
+      "latitude": 45.6156,
+      "longitude": 9.2811,
+      "lengthMeters": 5793,
+      "cornerCount": 11,
+      "direction": "clockwise",
+      "firstGrandPrixYear": 1950,
+      "lapRecord": null,
+      "media": null
+    },
+    {
+      "id": "silverstone",
+      "name": "Silverstone Circuit",
+      "locality": "Silverstone",
+      "country": "United Kingdom",
+      "countryCode": "GB",
+      "latitude": 52.0733,
+      "longitude": -1.0142,
+      "lengthMeters": 5891,
+      "cornerCount": 18,
+      "direction": "clockwise",
+      "firstGrandPrixYear": 1950,
+      "lapRecord": null,
+      "media": null
+    },
+    {
+      "id": "suzuka",
+      "name": "Suzuka International Racing Course",
+      "locality": "Suzuka",
+      "country": "Japan",
+      "countryCode": "JP",
+      "latitude": 34.8431,
+      "longitude": 136.541,
+      "lengthMeters": 5807,
+      "cornerCount": 18,
+      "direction": "clockwise",
+      "firstGrandPrixYear": 1987,
+      "lapRecord": null,
+      "media": null
+    },
+    {
+      "id": "albert-park",
+      "name": "Albert Park Circuit",
+      "locality": "Melbourne",
+      "country": "Australia",
+      "countryCode": "AU",
+      "latitude": -37.8497,
+      "longitude": 144.968,
+      "lengthMeters": 5278,
+      "cornerCount": 14,
+      "direction": "clockwise",
+      "firstGrandPrixYear": 1996,
+      "lapRecord": null,
+      "media": null
+    }
+  ],
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

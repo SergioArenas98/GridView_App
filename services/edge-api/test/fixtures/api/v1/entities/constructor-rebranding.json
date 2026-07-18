@@ -1,0 +1,30 @@
+[
+  {
+    "id": "2025-sauber",
+    "season": 2025,
+    "constructorId": "sauber",
+    "fullName": "Stake F1 Team Kick Sauber (mock)",
+    "shortName": "Kick Sauber",
+    "colorPrimary": "#52e252",
+    "colorSecondary": "#000000",
+    "powerUnit": "Ferrari (mock)",
+    "teamPrincipal": "Team Principal (mock)",
+    "base": "Hinwil, Switzerland",
+    "chassis": "C-mock-2025",
+    "driverLineup": []
+  },
+  {
+    "id": "2026-sauber",
+    "season": 2026,
+    "constructorId": "sauber",
+    "fullName": "Audi F1 Team (mock 2026 rebrand)",
+    "shortName": "Audi",
+    "colorPrimary": "#e30613",
+    "colorSecondary": "#000000",
+    "powerUnit": "Audi (mock)",
+    "teamPrincipal": "Team Principal (mock)",
+    "base": "Hinwil, Switzerland",
+    "chassis": "C-mock",
+    "driverLineup": []
+  }
+]

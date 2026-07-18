@@ -1,0 +1,89 @@
+{
+  "data": {
+    "constructor": {
+      "id": "ferrari",
+      "name": "Ferrari",
+      "shortName": "Ferrari",
+      "nationality": "Italian",
+      "countryCode": "IT",
+      "colorPrimary": "#e8002d",
+      "biography": null,
+      "media": [
+        {
+          "id": "ferrari-logo-v1",
+          "entityType": "constructor",
+          "entityId": "ferrari",
+          "category": "logo",
+          "format": "png",
+          "variants": {
+            "thumbnail": {
+              "url": "https://media.gridview.local/constructors/ferrari/v1/thumbnail.png",
+              "width": 160,
+              "height": 90
+            },
+            "card": {
+              "url": "https://media.gridview.local/constructors/ferrari/v1/card.png",
+              "width": 480,
+              "height": 270
+            },
+            "detail": null,
+            "hero": null
+          },
+          "aspectRatio": 1.7778,
+          "version": "v1",
+          "attribution": null,
+          "license": "mock-internal",
+          "fallbackCategory": "logo"
+        }
+      ]
+    },
+    "seasonEntry": {
+      "id": "2026-ferrari",
+      "season": 2026,
+      "constructorId": "ferrari",
+      "fullName": "Scuderia Ferrari (mock)",
+      "shortName": "Ferrari",
+      "colorPrimary": "#e8002d",
+      "colorSecondary": "#000000",
+      "powerUnit": "Ferrari (mock)",
+      "teamPrincipal": "Team Principal (mock)",
+      "base": "Maranello, Italy",
+      "chassis": "SF-mock",
+      "driverLineup": ["charles-leclerc", "lewis-hamilton"]
+    },
+    "standing": {
+      "season": 2026,
+      "constructorId": "ferrari",
+      "position": 3,
+      "points": 245.0,
+      "wins": 1,
+      "provisional": false
+    },
+    "lineup": [
+      {
+        "id": "charles-leclerc",
+        "fullName": "Charles Leclerc",
+        "shortCode": "LEC",
+        "permanentNumber": 16,
+        "countryCode": "MC"
+      },
+      {
+        "id": "lewis-hamilton",
+        "fullName": "Lewis Hamilton",
+        "shortCode": "HAM",
+        "permanentNumber": 44,
+        "countryCode": "GB"
+      }
+    ]
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

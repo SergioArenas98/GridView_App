@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "UPSTREAM_UNAVAILABLE",
+    "message": "The requested data is temporarily unavailable.",
+    "retryable": true,
+    "requestId": "req-mock-0001"
+  }
+}

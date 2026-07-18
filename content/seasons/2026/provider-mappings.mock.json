@@ -1,0 +1,34 @@
+{
+  "$schema": "../../schemas/provider-mappings.schema.json",
+  "kind": "provider-mappings",
+  "status": "mock",
+  "note": "INTERNAL ONLY. Opaque mock provider identifiers. These values must never appear in a public API fixture or response.",
+  "provider": "mock",
+  "season": 2026,
+  "drivers": [
+    { "gridviewId": "max-verstappen", "providerId": "mock-drv-001" },
+    { "gridviewId": "charles-leclerc", "providerId": "mock-drv-002" },
+    { "gridviewId": "lewis-hamilton", "providerId": "mock-drv-003" },
+    { "gridviewId": "lando-norris", "providerId": "mock-drv-004" },
+    { "gridviewId": "oscar-piastri", "providerId": "mock-drv-005" },
+    { "gridviewId": "george-russell", "providerId": "mock-drv-006" },
+    { "gridviewId": "jack-doohan", "providerId": "mock-drv-007" },
+    { "gridviewId": "franco-colapinto", "providerId": "mock-drv-008" }
+  ],
+  "constructors": [
+    { "gridviewId": "red-bull", "providerId": "mock-con-001" },
+    { "gridviewId": "ferrari", "providerId": "mock-con-002" },
+    { "gridviewId": "mercedes", "providerId": "mock-con-003" },
+    { "gridviewId": "mclaren", "providerId": "mock-con-004" },
+    { "gridviewId": "alpine", "providerId": "mock-con-005" },
+    { "gridviewId": "sauber", "providerId": "mock-con-006" }
+  ],
+  "circuits": [
+    { "gridviewId": "spa-francorchamps", "providerId": "mock-cir-001" },
+    { "gridviewId": "monza", "providerId": "mock-cir-002" },
+    { "gridviewId": "monaco", "providerId": "mock-cir-003" },
+    { "gridviewId": "silverstone", "providerId": "mock-cir-004" },
+    { "gridviewId": "albert-park", "providerId": "mock-cir-005" },
+    { "gridviewId": "suzuka", "providerId": "mock-cir-006" }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "data": [
+    {
+      "season": 2026,
+      "constructorId": "mclaren",
+      "position": 1,
+      "points": 390.5,
+      "wins": 7,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "constructorId": "red-bull",
+      "position": 2,
+      "points": 270.5,
+      "wins": 6,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "constructorId": "ferrari",
+      "position": 3,
+      "points": 245.0,
+      "wins": 1,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "constructorId": "mercedes",
+      "position": 4,
+      "points": 180.0,
+      "wins": 0,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "constructorId": "alpine",
+      "position": 5,
+      "points": 22.0,
+      "wins": 0,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "constructorId": "sauber",
+      "position": 6,
+      "points": 0.0,
+      "wins": 0,
+      "provisional": false
+    }
+  ],
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "_note": "Future round with no classification yet: status is `unavailable` and entries are empty, never a fabricated empty result.",
+  "data": {
+    "id": "2026-british-grand-prix-race-results",
+    "season": 2026,
+    "round": 14,
+    "grandPrixId": "2026-british-grand-prix",
+    "sessionType": "race",
+    "status": "unavailable",
+    "entries": [],
+    "fastestLap": null
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/overrides.schema.json",
+  "title": "GridView curated overrides",
+  "description": "Manual corrections applied on top of provider or registry data. Each override carries a stable id and a subset of overridable fields. Missing fields remain unchanged; never substitute zero or empty strings.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status"],
+  "properties": {
+    "kind": { "const": "overrides" },
+    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
+    "note": { "type": "string" },
+    "season": { "anyOf": [{ "$ref": "common.schema.json#/$defs/season" }, { "type": "null" }] },
+    "drivers": { "type": "array", "items": { "$ref": "#/$defs/driverOverride" } },
+    "constructors": { "type": "array", "items": { "$ref": "#/$defs/constructorOverride" } },
+    "circuits": { "type": "array", "items": { "$ref": "#/$defs/circuitOverride" } }
+  },
+  "$defs": {
+    "driverOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/slug" },
+        "fullName": { "type": ["string", "null"] },
+        "shortCode": { "type": ["string", "null"] },
+        "nationality": { "type": ["string", "null"] },
+        "countryCode": { "anyOf": [{ "$ref": "common.schema.json#/$defs/countryCode" }, { "type": "null" }] },
+        "biography": { "type": ["string", "null"] }
+      }
+    },
+    "constructorOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/slug" },
+        "name": { "type": ["string", "null"] },
+        "shortName": { "type": ["string", "null"] },
+        "colorPrimary": { "anyOf": [{ "$ref": "common.schema.json#/$defs/colorHex" }, { "type": "null" }] },
+        "biography": { "type": ["string", "null"] }
+      }
+    },
+    "circuitOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/slug" },
+        "name": { "type": ["string", "null"] },
+        "locality": { "type": ["string", "null"] },
+        "countryCode": { "anyOf": [{ "$ref": "common.schema.json#/$defs/countryCode" }, { "type": "null" }] },
+        "lengthMeters": { "type": ["integer", "null"] }
+      }
+    }
+  }
+}

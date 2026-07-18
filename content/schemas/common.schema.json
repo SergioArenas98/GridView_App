@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/common.schema.json",
+  "title": "GridView shared curated-content definitions",
+  "description": "Reusable definitions for IDs, country codes, seasons, rounds, dates, colours and media metadata. Aligned with docs/technical/GridView_Domain_Model.md.",
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "description": "Atomic public stable ID: lowercase ASCII kebab-case, no prefix, no colon.",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "gridviewId": {
+      "type": "string",
+      "description": "Composite public stable ID: lowercase ASCII kebab-case, no prefix, no colon.",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 96
+    },
+    "countryCode": {
+      "type": "string",
+      "description": "ISO 3166-1 alpha-2, uppercase, exactly two letters.",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "season": {
+      "type": "integer",
+      "minimum": 1950,
+      "maximum": 2100
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 40
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "colorHex": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "mockStatus": {
+      "description": "Marks a curated source file as non-authoritative development data.",
+      "enum": ["mock", "development"]
+    },
+    "mediaVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "width": { "type": ["integer", "null"] },
+        "height": { "type": ["integer", "null"] }
+      }
+    },
+    "mediaAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "entityType", "category", "format", "variants", "version"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/gridviewId" },
+        "entityType": {
+          "enum": ["driver", "constructor", "circuit", "grand_prix", "placeholder", "unknown"]
+        },
+        "entityId": {
+          "anyOf": [{ "$ref": "common.schema.json#/$defs/slug" }, { "type": "null" }]
+        },
+        "category": {
+          "enum": ["portrait", "logo", "car", "circuit_layout", "hero", "thumbnail", "unknown"]
+        },
+        "format": { "enum": ["webp", "avif", "png", "jpeg", "unknown"] },
+        "variants": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "thumbnail": { "anyOf": [{ "$ref": "common.schema.json#/$defs/mediaVariant" }, { "type": "null" }] },
+            "card": { "anyOf": [{ "$ref": "common.schema.json#/$defs/mediaVariant" }, { "type": "null" }] },
+            "detail": { "anyOf": [{ "$ref": "common.schema.json#/$defs/mediaVariant" }, { "type": "null" }] },
+            "hero": { "anyOf": [{ "$ref": "common.schema.json#/$defs/mediaVariant" }, { "type": "null" }] }
+          }
+        },
+        "aspectRatio": { "type": ["number", "null"] },
+        "version": { "type": "string", "minLength": 1 },
+        "attribution": { "type": ["string", "null"] },
+        "license": { "type": ["string", "null"] },
+        "fallbackCategory": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

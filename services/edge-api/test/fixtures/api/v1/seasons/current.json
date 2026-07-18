@@ -1,0 +1,22 @@
+{
+  "data": {
+    "year": 2026,
+    "label": "2026 FIA Formula One World Championship (mock)",
+    "status": "active",
+    "startDate": "2026-03-08",
+    "endDate": "2026-11-22",
+    "roundCount": 24,
+    "currentRound": 13,
+    "isCurrent": true
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

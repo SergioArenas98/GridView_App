@@ -1,0 +1,35 @@
+{
+  "_note": "Stale snapshot: meta.staleAfter is earlier than meta.generatedAt, signalling the client is viewing data past its freshness window.",
+  "data": [
+    {
+      "season": 2026,
+      "driverId": "max-verstappen",
+      "constructorId": "red-bull",
+      "position": 1,
+      "points": 210.5,
+      "wins": 6,
+      "podiums": 9,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "driverId": "lando-norris",
+      "constructorId": "mclaren",
+      "position": 2,
+      "points": 198.0,
+      "wins": 5,
+      "podiums": 8,
+      "provisional": false
+    }
+  ],
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T09:00:00Z",
+    "staleAfter": "2026-07-18T10:00:00Z",
+    "contentVersion": "2026.07.17.3",
+    "requestId": "req-mock-0001"
+  }
+}

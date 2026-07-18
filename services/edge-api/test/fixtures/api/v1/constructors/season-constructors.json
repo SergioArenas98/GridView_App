@@ -1,0 +1,74 @@
+{
+  "data": [
+    {
+      "constructorId": "red-bull",
+      "name": "Red Bull",
+      "fullName": "Oracle Red Bull Racing (mock)",
+      "shortName": "Red Bull",
+      "colorPrimary": "#1e41ff",
+      "colorSecondary": "#ffc906",
+      "powerUnit": "Red Bull Powertrains (mock)",
+      "driverLineup": ["max-verstappen"]
+    },
+    {
+      "constructorId": "ferrari",
+      "name": "Ferrari",
+      "fullName": "Scuderia Ferrari (mock)",
+      "shortName": "Ferrari",
+      "colorPrimary": "#e8002d",
+      "colorSecondary": "#000000",
+      "powerUnit": "Ferrari (mock)",
+      "driverLineup": ["charles-leclerc", "lewis-hamilton"]
+    },
+    {
+      "constructorId": "mercedes",
+      "name": "Mercedes",
+      "fullName": "Mercedes-AMG Petronas F1 Team (mock)",
+      "shortName": "Mercedes",
+      "colorPrimary": "#00a19c",
+      "colorSecondary": "#000000",
+      "powerUnit": "Mercedes (mock)",
+      "driverLineup": ["george-russell"]
+    },
+    {
+      "constructorId": "mclaren",
+      "name": "McLaren",
+      "fullName": "McLaren Formula 1 Team (mock)",
+      "shortName": "McLaren",
+      "colorPrimary": "#ff8000",
+      "colorSecondary": "#47c7fc",
+      "powerUnit": "Mercedes (mock)",
+      "driverLineup": ["lando-norris", "oscar-piastri"]
+    },
+    {
+      "constructorId": "alpine",
+      "name": "Alpine",
+      "fullName": "BWT Alpine F1 Team (mock)",
+      "shortName": "Alpine",
+      "colorPrimary": "#0093cc",
+      "colorSecondary": "#ff87bc",
+      "powerUnit": "Mercedes (mock)",
+      "driverLineup": ["jack-doohan", "franco-colapinto"]
+    },
+    {
+      "constructorId": "sauber",
+      "name": "Sauber",
+      "fullName": "Audi F1 Team (mock 2026 rebrand)",
+      "shortName": "Audi",
+      "colorPrimary": "#e30613",
+      "colorSecondary": "#000000",
+      "powerUnit": "Audi (mock)",
+      "driverLineup": []
+    }
+  ],
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

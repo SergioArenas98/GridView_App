@@ -1,0 +1,223 @@
+[
+  {
+    "file": "status/ok.json",
+    "type": "envelope",
+    "data": "StatusData",
+    "dataKind": "single",
+    "meta": "BaseMeta",
+    "note": "status uses BaseMeta"
+  },
+  {
+    "file": "bootstrap/empty-first-launch.json",
+    "type": "envelope",
+    "data": "BootstrapData",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "empty first-launch state"
+  },
+  {
+    "file": "home/pre-event.json",
+    "type": "envelope",
+    "data": "HomeData",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta"
+  },
+  {
+    "file": "seasons/current.json",
+    "type": "envelope",
+    "data": "Season",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta"
+  },
+  {
+    "file": "calendar/2026.json",
+    "type": "envelope",
+    "data": "GrandPrixSummary",
+    "dataKind": "array",
+    "meta": "SeasonSnapshotMeta",
+    "note": "mixed event statuses incl sprint"
+  },
+  {
+    "file": "grand-prix/standard-weekend.json",
+    "type": "envelope",
+    "data": "GrandPrix",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "standard weekend, completed"
+  },
+  {
+    "file": "grand-prix/sprint-weekend.json",
+    "type": "envelope",
+    "data": "GrandPrix",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "sprint weekend, in progress"
+  },
+  {
+    "file": "grand-prix/upcoming.json",
+    "type": "envelope",
+    "data": "GrandPrix",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "upcoming event"
+  },
+  {
+    "file": "grand-prix/cancelled-session.json",
+    "type": "envelope",
+    "data": "GrandPrix",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "cancelled session"
+  },
+  {
+    "file": "grand-prix/postponed.json",
+    "type": "envelope",
+    "data": "GrandPrix",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "postponed event/session"
+  },
+  {
+    "file": "grand-prix/unknown-additive.json",
+    "type": "envelope",
+    "data": "GrandPrix",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "unknown additive fields tolerated"
+  },
+  {
+    "file": "grand-prix/unknown-enum-status.json",
+    "type": "envelope",
+    "data": "GrandPrix",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "expectValid": false,
+    "note": "unknown enum value -> client maps to unknown"
+  },
+  {
+    "file": "results/race-timing.json",
+    "type": "envelope",
+    "data": "RaceResult",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "structured timing + fractional points"
+  },
+  {
+    "file": "results/unavailable.json",
+    "type": "envelope",
+    "data": "RaceResult",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "unavailable future result"
+  },
+  {
+    "file": "standings/drivers-fractional.json",
+    "type": "envelope",
+    "data": "DriverStanding",
+    "dataKind": "array",
+    "meta": "SeasonSnapshotMeta",
+    "note": "fractional points, unranked entry"
+  },
+  {
+    "file": "standings/constructors.json",
+    "type": "envelope",
+    "data": "ConstructorStanding",
+    "dataKind": "array",
+    "meta": "SeasonSnapshotMeta"
+  },
+  {
+    "file": "standings/stale.json",
+    "type": "envelope",
+    "data": "DriverStanding",
+    "dataKind": "array",
+    "meta": "SeasonSnapshotMeta",
+    "note": "stale snapshot metadata"
+  },
+  {
+    "file": "drivers/season-drivers.json",
+    "type": "envelope",
+    "data": "SeasonDriverSummary",
+    "dataKind": "array",
+    "meta": "SeasonSnapshotMeta"
+  },
+  {
+    "file": "drivers/detail-full.json",
+    "type": "envelope",
+    "data": "DriverDetail",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta"
+  },
+  {
+    "file": "drivers/detail-missing-optional.json",
+    "type": "envelope",
+    "data": "DriverDetail",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "missing optional biography and media"
+  },
+  {
+    "file": "drivers/detail-mid-season.json",
+    "type": "envelope",
+    "data": "DriverDetail",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta",
+    "note": "mid-season driver change (round span)"
+  },
+  {
+    "file": "constructors/season-constructors.json",
+    "type": "envelope",
+    "data": "SeasonConstructorSummary",
+    "dataKind": "array",
+    "meta": "SeasonSnapshotMeta"
+  },
+  {
+    "file": "constructors/detail.json",
+    "type": "envelope",
+    "data": "ConstructorDetail",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta"
+  },
+  {
+    "file": "circuits/season-circuits.json",
+    "type": "envelope",
+    "data": "Circuit",
+    "dataKind": "array",
+    "meta": "SeasonSnapshotMeta"
+  },
+  {
+    "file": "circuits/detail.json",
+    "type": "envelope",
+    "data": "CircuitDetail",
+    "dataKind": "single",
+    "meta": "SeasonSnapshotMeta"
+  },
+  {
+    "file": "content/manifest.json",
+    "type": "envelope",
+    "data": "ContentManifest",
+    "dataKind": "single",
+    "meta": "SnapshotMeta",
+    "note": "content manifest uses SnapshotMeta (no season)"
+  },
+  {
+    "file": "errors/upstream-unavailable.json",
+    "type": "error",
+    "note": "provider/upstream failure"
+  },
+  { "file": "errors/season-not-found.json", "type": "error" },
+  { "file": "errors/invalid-parameter.json", "type": "error" },
+  {
+    "file": "entities/constructor-rebranding.json",
+    "type": "entity",
+    "data": "ConstructorSeasonEntry",
+    "dataKind": "array",
+    "note": "constructor rebranding across seasons, stable id"
+  },
+  {
+    "file": "entities/driver-season-entries-alpine.json",
+    "type": "entity",
+    "data": "DriverSeasonEntry",
+    "dataKind": "array",
+    "note": "mid-season round spans"
+  }
+]

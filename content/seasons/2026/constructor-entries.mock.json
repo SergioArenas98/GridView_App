@@ -1,0 +1,93 @@
+{
+  "$schema": "../../schemas/constructor-season-entries.schema.json",
+  "kind": "constructor-season-entries",
+  "status": "mock",
+  "note": "NON-AUTHORITATIVE development data. The sauber entry uses a 2026 rebranded name to demonstrate cross-season rebranding against constructors.mock.json.",
+  "season": 2026,
+  "entries": [
+    {
+      "id": "2026-red-bull",
+      "season": 2026,
+      "constructorId": "red-bull",
+      "fullName": "Oracle Red Bull Racing (mock)",
+      "shortName": "Red Bull",
+      "colorPrimary": "#1e41ff",
+      "colorSecondary": "#ffc906",
+      "powerUnit": "Red Bull Powertrains (mock)",
+      "teamPrincipal": "Team Principal (mock)",
+      "base": "Milton Keynes, United Kingdom",
+      "chassis": "RB-mock",
+      "driverLineup": ["max-verstappen"]
+    },
+    {
+      "id": "2026-ferrari",
+      "season": 2026,
+      "constructorId": "ferrari",
+      "fullName": "Scuderia Ferrari (mock)",
+      "shortName": "Ferrari",
+      "colorPrimary": "#e8002d",
+      "colorSecondary": "#000000",
+      "powerUnit": "Ferrari (mock)",
+      "teamPrincipal": "Team Principal (mock)",
+      "base": "Maranello, Italy",
+      "chassis": "SF-mock",
+      "driverLineup": ["charles-leclerc", "lewis-hamilton"]
+    },
+    {
+      "id": "2026-mercedes",
+      "season": 2026,
+      "constructorId": "mercedes",
+      "fullName": "Mercedes-AMG Petronas F1 Team (mock)",
+      "shortName": "Mercedes",
+      "colorPrimary": "#00a19c",
+      "colorSecondary": "#000000",
+      "powerUnit": "Mercedes (mock)",
+      "teamPrincipal": "Team Principal (mock)",
+      "base": "Brackley, United Kingdom",
+      "chassis": "W-mock",
+      "driverLineup": ["george-russell"]
+    },
+    {
+      "id": "2026-mclaren",
+      "season": 2026,
+      "constructorId": "mclaren",
+      "fullName": "McLaren Formula 1 Team (mock)",
+      "shortName": "McLaren",
+      "colorPrimary": "#ff8000",
+      "colorSecondary": "#47c7fc",
+      "powerUnit": "Mercedes (mock)",
+      "teamPrincipal": "Team Principal (mock)",
+      "base": "Woking, United Kingdom",
+      "chassis": "MCL-mock",
+      "driverLineup": ["lando-norris", "oscar-piastri"]
+    },
+    {
+      "id": "2026-alpine",
+      "season": 2026,
+      "constructorId": "alpine",
+      "fullName": "BWT Alpine F1 Team (mock)",
+      "shortName": "Alpine",
+      "colorPrimary": "#0093cc",
+      "colorSecondary": "#ff87bc",
+      "powerUnit": "Mercedes (mock)",
+      "teamPrincipal": "Team Principal (mock)",
+      "base": "Enstone, United Kingdom",
+      "chassis": "A-mock",
+      "driverLineup": ["jack-doohan", "franco-colapinto"]
+    },
+    {
+      "id": "2026-sauber",
+      "season": 2026,
+      "constructorId": "sauber",
+      "fullName": "Audi F1 Team (mock 2026 rebrand)",
+      "shortName": "Audi",
+      "colorPrimary": "#e30613",
+      "colorSecondary": "#000000",
+      "powerUnit": "Audi (mock)",
+      "teamPrincipal": "Team Principal (mock)",
+      "base": "Hinwil, Switzerland",
+      "chassis": "C-mock",
+      "driverLineup": []
+    }
+  ]
+}

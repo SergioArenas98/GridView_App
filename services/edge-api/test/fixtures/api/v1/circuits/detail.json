@@ -1,0 +1,71 @@
+{
+  "data": {
+    "circuit": {
+      "id": "monza",
+      "name": "Autodromo Nazionale Monza",
+      "locality": "Monza",
+      "country": "Italy",
+      "countryCode": "IT",
+      "latitude": 45.6156,
+      "longitude": 9.2811,
+      "lengthMeters": 5793,
+      "cornerCount": 11,
+      "direction": "clockwise",
+      "firstGrandPrixYear": 1950,
+      "lapRecord": null,
+      "media": [
+        {
+          "id": "monza-circuit-layout-v1",
+          "entityType": "circuit",
+          "entityId": "monza",
+          "category": "circuit_layout",
+          "format": "webp",
+          "variants": {
+            "thumbnail": null,
+            "card": {
+              "url": "https://media.gridview.local/circuits/monza/v1/card.webp",
+              "width": 480,
+              "height": 320
+            },
+            "detail": {
+              "url": "https://media.gridview.local/circuits/monza/v1/detail.webp",
+              "width": 960,
+              "height": 640
+            },
+            "hero": null
+          },
+          "aspectRatio": 1.5,
+          "version": "v1",
+          "attribution": null,
+          "license": "mock-internal",
+          "fallbackCategory": "circuit_layout"
+        }
+      ]
+    },
+    "grandPrix": {
+      "id": "2026-italian-grand-prix",
+      "season": 2026,
+      "round": 12,
+      "eventSlug": "italian-grand-prix",
+      "name": "Italian Grand Prix",
+      "circuitId": "monza",
+      "circuitName": "Autodromo Nazionale Monza",
+      "status": "completed",
+      "format": "standard",
+      "startDate": "2026-07-10",
+      "endDate": "2026-07-12",
+      "timezone": "Europe/Rome",
+      "hasResults": true
+    }
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

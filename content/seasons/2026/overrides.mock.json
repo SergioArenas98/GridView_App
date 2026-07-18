@@ -1,0 +1,26 @@
+{
+  "$schema": "../../schemas/overrides.schema.json",
+  "kind": "overrides",
+  "status": "mock",
+  "note": "NON-AUTHORITATIVE development data. Illustrative manual corrections applied on top of registry/provider values.",
+  "season": 2026,
+  "drivers": [
+    {
+      "id": "franco-colapinto",
+      "shortCode": "COL",
+      "nationality": "Argentine"
+    }
+  ],
+  "constructors": [
+    {
+      "id": "sauber",
+      "colorPrimary": "#e30613"
+    }
+  ],
+  "circuits": [
+    {
+      "id": "monza",
+      "lengthMeters": 5793
+    }
+  ]
+}

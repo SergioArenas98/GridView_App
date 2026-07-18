@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/constructor-season-entries.schema.json",
+  "title": "GridView constructor season entries (season branding and line-up)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "season", "entries"],
+  "properties": {
+    "kind": { "const": "constructor-season-entries" },
+    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
+    "note": { "type": "string" },
+    "season": { "$ref": "common.schema.json#/$defs/season" },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/constructorSeasonEntry" }
+    }
+  },
+  "$defs": {
+    "constructorSeasonEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "season", "constructorId"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/gridviewId" },
+        "season": { "$ref": "common.schema.json#/$defs/season" },
+        "constructorId": { "$ref": "common.schema.json#/$defs/slug" },
+        "fullName": { "type": ["string", "null"] },
+        "shortName": { "type": ["string", "null"] },
+        "colorPrimary": { "anyOf": [{ "$ref": "common.schema.json#/$defs/colorHex" }, { "type": "null" }] },
+        "colorSecondary": { "anyOf": [{ "$ref": "common.schema.json#/$defs/colorHex" }, { "type": "null" }] },
+        "powerUnit": { "type": ["string", "null"] },
+        "teamPrincipal": { "type": ["string", "null"] },
+        "base": { "type": ["string", "null"] },
+        "chassis": { "type": ["string", "null"] },
+        "driverLineup": {
+          "anyOf": [
+            { "type": "array", "items": { "$ref": "common.schema.json#/$defs/slug" } },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}

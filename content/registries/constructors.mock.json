@@ -1,0 +1,62 @@
+{
+  "$schema": "../schemas/constructor-registry.schema.json",
+  "kind": "constructor-registry",
+  "status": "mock",
+  "note": "NON-AUTHORITATIVE development data. Stable identities only; season branding and line-up live in season entries.",
+  "constructors": [
+    {
+      "id": "red-bull",
+      "name": "Red Bull",
+      "shortName": "Red Bull",
+      "nationality": "Austrian",
+      "countryCode": "AT",
+      "colorPrimary": "#1e41ff",
+      "biography": null
+    },
+    {
+      "id": "ferrari",
+      "name": "Ferrari",
+      "shortName": "Ferrari",
+      "nationality": "Italian",
+      "countryCode": "IT",
+      "colorPrimary": "#e8002d",
+      "biography": null
+    },
+    {
+      "id": "mercedes",
+      "name": "Mercedes",
+      "shortName": "Mercedes",
+      "nationality": "German",
+      "countryCode": "DE",
+      "colorPrimary": "#00a19c",
+      "biography": null
+    },
+    {
+      "id": "mclaren",
+      "name": "McLaren",
+      "shortName": "McLaren",
+      "nationality": "British",
+      "countryCode": "GB",
+      "colorPrimary": "#ff8000",
+      "biography": null
+    },
+    {
+      "id": "alpine",
+      "name": "Alpine",
+      "shortName": "Alpine",
+      "nationality": "French",
+      "countryCode": "FR",
+      "colorPrimary": "#0093cc",
+      "biography": null
+    },
+    {
+      "id": "sauber",
+      "name": "Sauber",
+      "shortName": "Sauber",
+      "nationality": "Swiss",
+      "countryCode": "CH",
+      "colorPrimary": "#52e252",
+      "biography": "Stable constructor identity used to demonstrate cross-season rebranding in fixtures."
+    }
+  ]
+}

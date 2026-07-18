@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "SEASON_NOT_FOUND",
+    "message": "The requested season is not available.",
+    "retryable": false,
+    "requestId": "req-mock-0001"
+  }
+}

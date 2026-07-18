@@ -1,0 +1,47 @@
+{
+  "_note": "Optional biography, media, birth data and standing are absent (null). Nothing is substituted with zero or empty string.",
+  "data": {
+    "driver": {
+      "id": "jack-doohan",
+      "fullName": "Jack Doohan",
+      "givenName": "Jack",
+      "familyName": "Doohan",
+      "shortCode": null,
+      "permanentNumber": 7,
+      "nationality": null,
+      "countryCode": null,
+      "dateOfBirth": null,
+      "placeOfBirth": null,
+      "biography": null,
+      "media": null
+    },
+    "seasonEntry": {
+      "id": "2026-jack-doohan",
+      "season": 2026,
+      "driverId": "jack-doohan",
+      "constructorId": "alpine",
+      "raceNumber": 7,
+      "role": "race",
+      "shortCode": "DOO",
+      "startRound": 1,
+      "endRound": 9
+    },
+    "constructor": {
+      "id": "alpine",
+      "name": "Alpine",
+      "shortName": "Alpine",
+      "colorPrimary": "#0093cc"
+    },
+    "standing": null
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

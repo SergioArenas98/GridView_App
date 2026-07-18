@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
@@ -10,6 +11,13 @@ export default tseslint.config(
     rules: {
       // TypeScript already reports undefined identifiers with type info.
       'no-undef': 'off',
+    },
+  },
+  {
+    // Node ESM tooling scripts (schema/fixture validation).
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { ...globals.node },
     },
   },
 );

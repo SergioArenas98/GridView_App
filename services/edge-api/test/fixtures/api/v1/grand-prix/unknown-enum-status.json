@@ -1,0 +1,39 @@
+{
+  "_note": "Intentionally out-of-contract: `status` and a session `type` carry values absent from the closed enums. The fixture validator asserts this FAILS OpenAPI validation, while the client tolerance tests assert unknown enum values map to `unknown`.",
+  "data": {
+    "id": "2026-belgian-grand-prix",
+    "season": 2026,
+    "round": 13,
+    "eventSlug": "belgian-grand-prix",
+    "name": "Belgian Grand Prix",
+    "officialName": null,
+    "circuitId": "spa-francorchamps",
+    "status": "red_flagged",
+    "format": "sprint",
+    "startDate": "2026-07-24",
+    "endDate": "2026-07-26",
+    "timezone": "Europe/Brussels",
+    "sessions": [
+      {
+        "id": "2026-belgian-grand-prix-super-sprint",
+        "type": "super_sprint",
+        "name": "Super Sprint",
+        "startTime": "2026-07-25T09:00:00Z",
+        "endTime": null,
+        "status": "scheduled"
+      }
+    ],
+    "hasResults": false,
+    "media": []
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

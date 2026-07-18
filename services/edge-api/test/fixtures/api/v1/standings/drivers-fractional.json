@@ -1,0 +1,84 @@
+{
+  "data": [
+    {
+      "season": 2026,
+      "driverId": "max-verstappen",
+      "constructorId": "red-bull",
+      "position": 1,
+      "points": 210.5,
+      "wins": 6,
+      "podiums": 9,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "driverId": "lando-norris",
+      "constructorId": "mclaren",
+      "position": 2,
+      "points": 198.0,
+      "wins": 5,
+      "podiums": 8,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "driverId": "oscar-piastri",
+      "constructorId": "mclaren",
+      "position": 3,
+      "points": 192.5,
+      "wins": 2,
+      "podiums": 7,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "driverId": "charles-leclerc",
+      "constructorId": "ferrari",
+      "position": 4,
+      "points": 165.0,
+      "wins": 1,
+      "podiums": 5,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "driverId": "lewis-hamilton",
+      "constructorId": "ferrari",
+      "position": 5,
+      "points": 121.0,
+      "wins": 0,
+      "podiums": 3,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "driverId": "george-russell",
+      "constructorId": "mercedes",
+      "position": 6,
+      "points": 98.0,
+      "wins": 0,
+      "podiums": 2,
+      "provisional": false
+    },
+    {
+      "season": 2026,
+      "driverId": "franco-colapinto",
+      "constructorId": "alpine",
+      "position": null,
+      "points": 0.0,
+      "wins": 0,
+      "podiums": 0,
+      "provisional": true
+    }
+  ],
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

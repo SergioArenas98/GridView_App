@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/media-assets.schema.json",
+  "title": "GridView media asset registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "assets"],
+  "properties": {
+    "kind": { "const": "media-assets" },
+    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
+    "note": { "type": "string" },
+    "assets": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/mediaAsset" }
+    }
+  }
+}
