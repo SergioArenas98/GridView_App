@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Production AdMob application ID, preserved for the published app
+             identity. The ads SDK is not part of the reconstruction shell and
+             no advertisement is requested; dev/staging builds intentionally do
+             not carry this ID. See docs/technical/GridView_Environments.md. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-4763306780710624~5227286262"/>
+    </application>
+</manifest>

@@ -3,8 +3,17 @@ import java.io.FileInputStream
 
 plugins {
     id "com.android.application"
-    id "com.google.gms.google-services"
     id "dev.flutter.flutter-gradle-plugin"
+}
+
+// google-services.json is registered for the production application ID only
+// (com.sejuma.gridview), so the Google services plugin is applied exclusively
+// to production builds. Applying it to dev/staging would fail the build and
+// could point non-production builds at the production Firebase project.
+// Dev/staging Firebase configurations are pending; see
+// docs/technical/GridView_Environments.md.
+if (gradle.startParameter.taskRequests.toString().toLowerCase().contains("production")) {
+    apply plugin: "com.google.gms.google-services"
 }
 
 def keystoreProperties = new Properties()
@@ -33,6 +42,27 @@ android {
 
     buildFeatures {
         buildConfig true
+    }
+
+    flavorDimensions = ["environment"]
+
+    productFlavors {
+        dev {
+            dimension "environment"
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+            resValue "string", "app_name", "GridView Dev"
+        }
+        staging {
+            dimension "environment"
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-staging"
+            resValue "string", "app_name", "GridView Staging"
+        }
+        production {
+            dimension "environment"
+            resValue "string", "app_name", "GridView"
+        }
     }
 
     signingConfigs {
