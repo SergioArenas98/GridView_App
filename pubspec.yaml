@@ -1,58 +1,27 @@
 name: gridview
-description: "A Formula 1 app"
-publish_to: 'none'
+description: "GridView - a Formula 1 season companion for Android."
+publish_to: "none"
+
+# Google Play identity: versionName 1.2.1, versionCode 7.
+# Do not change without confirming the highest published versionCode in
+# Play Console first (docs/release/play-store-baseline.md).
 version: 1.2.1+7
 
 environment:
-  sdk: ^3.5.4
+  sdk: ^3.12.0
 
 dependencies:
   flutter:
     sdk: flutter
-  provider: ^6.1.2
-  path_provider: ^2.1.5
-  salomon_bottom_bar: ^3.3.2
-  http: 1.3.0
-  table_calendar: ^3.1.0
-  url_launcher: ^6.3.1
-  shared_preferences: ^2.5.4
-  hive: ^2.2.3
-  hive_flutter: ^1.1.0
-  google_mobile_ads: ^7.0.0
-  lottie: ^3.3.1
-  unity_ads_plugin: ^0.3.24
-  intl: any
-  retry: ^3.1.2
   flutter_localizations:
     sdk: flutter
+  intl: any
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true
   generate: true
-  assets:
-    - assets/images/flags/
-    - assets/images/circuits/
-    - assets/images/layouts/
-    - assets/images/logo/
-    - assets/images/cars/
-    - assets/images/drivers/
-    - assets/images/icons/
-    - assets/images/team_logos/
-    - assets/animations/
-    - assets/data/updates.json
-
-  fonts:
-    - family: F1Bold
-      fonts:
-        - asset: assets/fonts/f1_bold.ttf
-    - family: F1Wide
-      fonts:
-        - asset: assets/fonts/f1_wide.ttf
-    - family: F1Regular
-      fonts:
-        - asset: assets/fonts/f1_regular.ttf
