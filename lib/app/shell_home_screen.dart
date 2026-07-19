@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/dev/catalogue/component_catalogue_screen.dart';
 import '../l10n/app_localizations.dart';
 import 'environment/app_environment.dart';
 
@@ -34,6 +35,13 @@ class ShellHomeScreen extends StatelessWidget {
                 // Technical environment badge required for non-production
                 // builds (TRD section 31.1); intentionally not localized.
                 Chip(label: Text(environment.label)),
+                const SizedBox(height: 12),
+                // Dev/staging-only entry to the design-system catalogue; hidden
+                // in production so the catalogue is unreachable there.
+                OutlinedButton(
+                  onPressed: () => ComponentCatalogueScreen.open(context),
+                  child: const Text('Open component catalogue'),
+                ),
               ],
             ],
           ),
