@@ -33,7 +33,8 @@ void main() {
 
       await tapNav(tester, 'Standings');
       expect(find.byType(StandingsScreen), findsOneWidget);
-      expect(shellLocation(router), startsWith('/standings/'));
+      // The Standings destination opens the season-agnostic branch root.
+      expect(shellLocation(router), '/standings');
 
       await tapNav(tester, 'Explore');
       expect(find.byType(ExploreScreen), findsOneWidget);
@@ -104,6 +105,39 @@ void main() {
     });
   });
 
+  group('standings branch root', () {
+    testWidgets('/standings is the season-agnostic root showing drivers', (
+      WidgetTester tester,
+    ) async {
+      final GoRouter router = await pumpApp(
+        tester,
+        initialLocation: '/standings',
+      );
+      expect(find.byType(StandingsScreen), findsOneWidget);
+      expect(shellLocation(router), '/standings');
+      // Drivers view initially (a driver name is shown, not a constructor).
+      expect(find.text('Alex Driver'), findsWidgets);
+
+      // Switching segment resolves the mock active season into a season route.
+      await tester.tap(find.text('Constructors'));
+      await tester.pumpAndSettle();
+      expect(shellLocation(router), '/standings/constructors/2026');
+      expect(find.text('Scuderia Rossa'), findsWidgets);
+    });
+
+    testWidgets('season-specific standings deep links still resolve', (
+      WidgetTester tester,
+    ) async {
+      await pumpApp(tester, initialLocation: '/standings/constructors/2026');
+      expect(find.byType(StandingsScreen), findsOneWidget);
+      expect(find.text('Scuderia Rossa'), findsWidgets);
+
+      await pumpApp(tester, initialLocation: '/standings/drivers/2026');
+      expect(find.byType(StandingsScreen), findsOneWidget);
+      expect(find.text('Alex Driver'), findsWidgets);
+    });
+  });
+
   group('direct detail opening (deep-link ready)', () {
     testWidgets('valid detail routes open directly', (
       WidgetTester tester,
@@ -155,13 +189,11 @@ void main() {
         unawaited(router.push('/drivers/b-racer'));
         await tester.pumpAndSettle();
         expect(find.byType(DriverDetailScreen), findsOneWidget);
-        expect(pageStack(router).length, 2);
 
         // Forward navigation to the current team pushes a new page.
         await tester.tap(find.byType(GvTeamRow));
         await tester.pumpAndSettle();
         expect(find.byType(ConstructorDetailScreen), findsOneWidget);
-        expect(pageStack(router).length, 3);
 
         // Re-opening the driver that is directly below returns to it instead of
         // pushing a duplicate.
@@ -171,7 +203,14 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(ConstructorDetailScreen), findsNothing);
         expect(find.byType(DriverDetailScreen), findsOneWidget);
-        expect(pageStack(router).length, 2);
+
+        // Proof that nothing was duplicated: a single system back leaves the
+        // detail stack entirely and returns to the shell (Home). If a duplicate
+        // driver had been stacked, we would still be on a detail screen.
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byType(DriverDetailScreen), findsNothing);
+        expect(find.byType(HomeScreen), findsOneWidget);
       },
     );
   });

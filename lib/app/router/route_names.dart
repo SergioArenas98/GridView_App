@@ -9,6 +9,7 @@ abstract final class RouteNames {
   static const String grandPrix = 'grand-prix';
   static const String standingsDrivers = 'standings-drivers';
   static const String standingsConstructors = 'standings-constructors';
+  static const String standings = 'standings';
   static const String explore = 'explore';
   static const String exploreDrivers = 'explore-drivers';
   static const String exploreTeams = 'explore-teams';
@@ -19,7 +20,3 @@ abstract final class RouteNames {
   static const String settings = 'settings';
   static const String notFound = 'not-found';
 }
-
-/// Default season used where a concrete season is required but none is supplied
-/// (e.g. the Standings branch root). The curated content targets 2026.
-const int kDefaultSeason = 2026;

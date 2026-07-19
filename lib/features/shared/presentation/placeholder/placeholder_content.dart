@@ -1,7 +1,5 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../app/router/route_names.dart';
-
 /// Presentation-only placeholder models and deterministic mock values used by
 /// the Phase 3B screen skeletons.
 ///
@@ -130,7 +128,10 @@ class PlaceholderStanding {
 abstract final class Placeholders {
   Placeholders._();
 
-  static const int season = kDefaultSeason;
+  /// Mock "active season" for the skeletons. This is presentation-only mock
+  /// data — NOT a routing default. Phase 4 replaces it with the active season
+  /// resolved from the local database.
+  static const int season = 2026;
 
   // Restrained team accent colours (decorative only).
   static const Color _red = Color(0xFFE8002D);

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:gridview/app/router/app_router.dart';
-import 'package:gridview/app/router/entity_navigation.dart';
 import 'package:gridview/core/theme/gridview_theme.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/l10n/app_localizations.dart';
@@ -120,10 +119,7 @@ Future<void> tapNav(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
-/// The shell's current location (ignores imperatively-pushed detail routes).
+/// The router's current location, read via the public route-information
+/// provider (no dependency on internal routing-match types).
 String shellLocation(GoRouter router) =>
-    router.routerDelegate.currentConfiguration.uri.toString();
-
-/// The ordered locations of pages on the root navigator: shell + pushed details.
-List<String> pageStack(GoRouter router) =>
-    rootPageLocations(router.routerDelegate.currentConfiguration);
+    router.routeInformationProvider.value.uri.toString();

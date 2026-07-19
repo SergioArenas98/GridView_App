@@ -21,6 +21,7 @@ void main() {
     ('/', HomeScreen),
     ('/calendar', CalendarScreen),
     ('/calendar/2026/3', GrandPrixDetailScreen),
+    ('/standings', StandingsScreen),
     ('/standings/drivers/2026', StandingsScreen),
     ('/standings/constructors/2026', StandingsScreen),
     ('/explore', ExploreScreen),

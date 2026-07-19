@@ -20,11 +20,17 @@ hidden behind it.
 |---|---|---|---|
 | 1 | Home | `/` | Home |
 | 2 | Calendar | `/calendar` | Calendar, Grand Prix detail (rendered above the shell) |
-| 3 | Standings | `/standings/drivers/{season}` | Drivers & Constructors standings |
+| 3 | Standings | `/standings` | Drivers & Constructors standings |
 | 4 | Explore | `/explore` | Explore root, Drivers/Teams/Circuits lists |
 
 - Each branch preserves its **navigation stack** and **scroll position** when the
   user switches tabs (guaranteed by `indexedStack`).
+- The **Standings branch root is `/standings`** — deliberately season-agnostic.
+  No season is baked into the router; the screen shows the drivers view and
+  resolves the active season from presentation-only mock data
+  (`Placeholders.season`), and in later phases from the local database. The
+  `/standings/drivers/:season` and `/standings/constructors/:season` routes
+  remain for season-specific deep links.
 - **Re-selecting the active branch** returns it to its branch root
   (`goBranch(index, initialLocation: index == currentIndex)`); repeated taps do
   not stack duplicate routes.
@@ -41,6 +47,7 @@ in `lib/app/router/route_paths.dart`; names in `route_names.dart`.
 | `/` | `home` | Home branch | `HomeScreen` |
 | `/calendar` | `calendar` | Calendar branch | `CalendarScreen` |
 | `/calendar/:season/:round` | `grand-prix` | **root** (above shell) | `GrandPrixDetailScreen` |
+| `/standings` | `standings` | Standings branch | `StandingsScreen` (drivers) |
 | `/standings/drivers/:season` | `standings-drivers` | Standings branch | `StandingsScreen` |
 | `/standings/constructors/:season` | `standings-constructors` | Standings branch | `StandingsScreen` |
 | `/explore` | `explore` | Explore branch | `ExploreScreen` |
@@ -86,7 +93,10 @@ Rules (implemented in `lib/app/router/entity_navigation.dart`):
 - `context.openEntity(location)` opens a detail route. To prevent an endless
   `A → B → A → B` stack (App Flow §11.3 / §12.3), when the target route is the
   page **directly beneath** the current one, it returns to that page (`pop`)
-  instead of pushing a duplicate. Otherwise it pushes.
+  instead of pushing a duplicate. Otherwise it pushes. This uses only go_router's
+  **public API**: each push stamps the current location onto the child route's
+  `extra` (an `EntityNavigationOrigin`); the child recognises an immediate loop
+  back to its origin and pops. No internal routing-match types are used.
 - `context.openSettings()` pushes `/settings` above the current screen **without
   changing the active branch** (App Flow §13.3).
 - Branch switches (bottom nav, the Standings segmented control, "see all") use

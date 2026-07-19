@@ -112,10 +112,18 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
           ),
 
           // --- Standings branch ---
+          // The branch root is season-agnostic: no season is encoded in the
+          // router. The season-specific routes remain for deep links.
           StatefulShellBranch(
             navigatorKey: standingsNavigatorKey,
-            initialLocation: RoutePaths.standingsDrivers(kDefaultSeason),
+            initialLocation: RoutePaths.standings,
             routes: <RouteBase>[
+              GoRoute(
+                path: RoutePaths.standings,
+                name: RouteNames.standings,
+                builder: (_, _) =>
+                    const StandingsScreen(tab: StandingsTab.drivers),
+              ),
               GoRoute(
                 path: RoutePaths.standingsDriversPattern,
                 name: RouteNames.standingsDrivers,

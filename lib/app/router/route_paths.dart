@@ -10,6 +10,11 @@ abstract final class RoutePaths {
   static const String calendar = '/calendar';
   static const String explore = '/explore';
 
+  /// Standings branch root. Season-agnostic: the screen resolves the active
+  /// season from presentation data (and, in later phases, the local database).
+  /// No season is encoded here.
+  static const String standings = '/standings';
+
   // --- Patterns registered on the router ----------------------------------
   /// Relative to [calendar]; full pattern `/calendar/:season/:round`.
   static const String grandPrixRelative = ':season/:round';
