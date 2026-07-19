@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../../app/router/entity_navigation.dart';
 import '../../../app/router/route_paths.dart';
 import '../../../core/theme/tokens/tokens.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../shared/presentation/placeholder/placeholder_content.dart';
-import '../../shared/presentation/widgets/event_status.dart';
+import '../../shared/application/providers.dart';
+import '../../shared/domain/entities/grand_prix_view.dart';
+import '../../shared/presentation/domain_status.dart';
+import '../../shared/presentation/widgets/mock_data_banner.dart';
 import '../../shared/presentation/widgets/screen_scaffold.dart';
 import '../../shared/presentation/widgets/screen_sections.dart';
+import '../../shared/presentation/widgets/session_list.dart';
+import '../application/grand_prix_detail_providers.dart';
+import '../application/grand_prix_detail_state.dart';
 
-/// Grand Prix detail skeleton (App Flow §7.3): hero/header, circuit summary,
-/// ordered sessions, result-availability section, and navigation placeholders to
-/// circuit, driver and constructor detail. [season] and [round] are already
+/// Grand Prix detail. Wired to the same Drift-backed repository as Home: it
+/// renders cached content immediately and offline, refreshes without clearing
+/// content, and shows a controlled not-found state when a successful refresh
+/// determines the Grand Prix does not exist. [season] and [round] are already
 /// validated by the router.
-class GrandPrixDetailScreen extends StatelessWidget {
+class GrandPrixDetailScreen extends ConsumerWidget {
   const GrandPrixDetailScreen({
     super.key,
     required this.season,
@@ -25,137 +32,183 @@ class GrandPrixDetailScreen extends StatelessWidget {
   final int round;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final PlaceholderEvent? event = Placeholders.eventByRound(season, round);
-    final String name = event?.name ?? l10n.roundLabel('$round');
-    final PlaceholderCircuit circuit = event == null
-        ? Placeholders.circuits.first
-        : Placeholders.circuitById(event.circuitId) ??
-              Placeholders.circuits.first;
-    final List<PlaceholderStanding> results = Placeholders.driverStandings()
-        .take(3)
-        .toList();
+    final GrandPrixKey key = (season: season, round: round);
+    final GrandPrixDetailState state = ref.watch(grandPrixStateProvider(key));
 
     return GvScreenScaffold(
       title: l10n.grandPrixTitle,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          GvLayout.screenPaddingHorizontal,
-          GvSpacing.md,
-          GvLayout.screenPaddingHorizontal,
-          GvSpacing.xxl,
+      body: switch (state) {
+        GrandPrixLoading() => const _DetailSkeleton(),
+        GrandPrixNotFound() => GvErrorState(
+          title: l10n.grandPrixNotFoundTitle,
+          message: l10n.grandPrixNotFoundMessage,
+          icon: Icons.event_busy_outlined,
+          retryLabel: l10n.notFoundGoHome,
+          onRetry: () => context.go(RoutePaths.home),
         ),
-        children: <Widget>[
-          // Hero / header.
-          GvHeroCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
+        GrandPrixFirstLoadError(:final failure) => GvErrorState(
+          title: l10n.grandPrixErrorTitle,
+          message: failureMessage(l10n, failure),
+          retryLabel: l10n.retry,
+          onRetry: () =>
+              ref.read(grandPrixControllerProvider(key).notifier).refresh(),
+        ),
+        GrandPrixReady() => _DetailContent(
+          season: season,
+          round: round,
+          state: state,
+        ),
+      },
+    );
+  }
+}
+
+class _DetailContent extends ConsumerWidget {
+  const _DetailContent({
+    required this.season,
+    required this.round,
+    required this.state,
+  });
+
+  final int season;
+  final int round;
+  final GrandPrixReady state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AppLocalizations l10n = AppLocalizations.of(context);
+    final GrandPrixDetailView view = state.view;
+    final bool showMock = ref.watch(usesMockDataProvider);
+    final String? statusLabel = eventStatusLabel(l10n, view.grandPrix.status);
+    final String circuitName = view.circuit?.name ?? view.grandPrix.circuitId;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        GvLayout.screenPaddingHorizontal,
+        GvSpacing.md,
+        GvLayout.screenPaddingHorizontal,
+        GvSpacing.xxl,
+      ),
+      children: <Widget>[
+        if (showMock) ...<Widget>[
+          const MockDataBanner(),
+          const SizedBox(height: GvSpacing.md),
+        ],
+        if (state.isStale || state.refreshError != null) ...<Widget>[
+          GvOfflineNotice(
+            message: state.refreshError != null
+                ? l10n.refreshFailedNotice
+                : l10n.offlineStaleNotice,
+          ),
+          const SizedBox(height: GvSpacing.md),
+        ],
+
+        // Hero / identity.
+        GvHeroCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: <Widget>[
+              if (statusLabel != null)
+                GvStatusChip(
+                  label: statusLabel,
+                  tone: toneForEventStatus(view.grandPrix.status),
+                ),
+              const SizedBox(height: GvSpacing.sm),
+              Text(view.grandPrix.name, style: GvTypography.pageTitle),
+              const SizedBox(height: GvSpacing.xxs),
+              Text(
+                '${l10n.roundLabel('${view.grandPrix.round}')} · '
+                '${l10n.seasonLabel('${view.grandPrix.season}')}',
+                style: GvTypography.bodyM,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: GvSpacing.xl),
+
+        // Circuit summary (a disabled presentation element in this phase — the
+        // circuit detail screen is not part of the vertical slice).
+        GvScreenSection(
+          title: l10n.grandPrixCircuit,
+          child: GvContentCard(
+            child: Row(
               children: <Widget>[
-                if (event != null)
-                  GvStatusChip(
-                    label: eventStateLabel(l10n, event.state),
-                    tone: toneForEventState(event.state),
+                const SizedBox(
+                  width: 56,
+                  child: GvImagePlaceholder(
+                    aspectRatio: 16 / 9,
+                    icon: Icons.route_outlined,
                   ),
-                const SizedBox(height: GvSpacing.sm),
-                Text(name, style: GvTypography.pageTitle),
-                const SizedBox(height: GvSpacing.xxs),
-                Text(
-                  '${l10n.roundLabel('$round')} · ${l10n.seasonLabel('$season')}',
-                  style: GvTypography.bodyM,
+                ),
+                const SizedBox(width: GvSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(circuitName, style: GvTypography.cardTitle),
+                      if (view.circuit?.country != null)
+                        Text(view.circuit!.country!, style: GvTypography.label),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: GvSpacing.xl),
+        ),
+        const SizedBox(height: GvSpacing.xl),
 
-          // Circuit summary + navigation placeholder to circuit detail.
-          GvScreenSection(
-            title: l10n.grandPrixCircuit,
-            child: GvContentCard(
-              onTap: () => context.openEntity(RoutePaths.circuit(circuit.id)),
-              child: Row(
-                children: <Widget>[
-                  const SizedBox(
-                    width: 56,
-                    child: GvImagePlaceholder(
-                      aspectRatio: 16 / 9,
-                      icon: Icons.route_outlined,
-                    ),
-                  ),
-                  const SizedBox(width: GvSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(circuit.name, style: GvTypography.cardTitle),
-                        Text(circuit.country, style: GvTypography.label),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right, color: GvColors.textMuted),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: GvSpacing.xl),
-
-          // Ordered sessions.
+        // Ordered sessions.
+        if (view.grandPrix.sessions.isNotEmpty)
           GvScreenSection(
             title: l10n.grandPrixSessions,
-            child: Column(
-              children: <Widget>[
-                for (final PlaceholderSession s in Placeholders.weekend)
-                  GvSessionRow(
-                    key: ValueKey<String>('gp-session-${s.name}'),
-                    name: s.name,
-                    time: '${s.day} ${s.time}',
-                    statusLabel: eventStateLabel(l10n, s.state),
-                  ),
-              ],
+            child: SessionList(
+              sessions: view.grandPrix.sessions,
+              eventTimeZone: view.grandPrix.timezone,
             ),
           ),
-          const SizedBox(height: GvSpacing.xl),
+        const SizedBox(height: GvSpacing.xl),
 
-          // Result availability + navigation placeholders to driver/constructor.
-          GvScreenSection(
-            title: l10n.grandPrixResults,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.only(bottom: GvSpacing.sm),
-                  child: Text(
-                    l10n.grandPrixResultsPending,
-                    style: GvTypography.bodyM,
-                  ),
-                ),
-                for (final PlaceholderStanding r in results)
-                  GvResultRow(
-                    key: ValueKey<String>('gp-result-${r.entityId}'),
-                    position: '${r.position}',
-                    driverName: r.name,
-                    team: r.detail,
-                    accentColor: r.accent,
-                    onTap: () =>
-                        context.openEntity(RoutePaths.driver(r.entityId)),
-                  ),
-                const SizedBox(height: GvSpacing.sm),
-                GvSecondaryButton(
-                  label: Placeholders.constructorStandings().first.name,
-                  icon: Icons.groups_outlined,
-                  onPressed: () => context.openEntity(
-                    RoutePaths.constructor(
-                      Placeholders.constructorStandings().first.entityId,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+        // Result availability (no fictional classification is shown).
+        GvScreenSection(
+          title: l10n.grandPrixResults,
+          child: Text(
+            view.grandPrix.hasResults
+                ? l10n.grandPrixResultsAvailable
+                : l10n.grandPrixResultsPending,
+            style: GvTypography.bodyM,
           ),
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailSkeleton extends StatelessWidget {
+  const _DetailSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        GvLayout.screenPaddingHorizontal,
+        GvSpacing.md,
+        GvLayout.screenPaddingHorizontal,
+        GvSpacing.xxl,
       ),
+      children: const <Widget>[
+        GvSkeletonCard(),
+        SizedBox(height: GvSpacing.xl),
+        GvSkeletonBlock(width: 120, height: 18),
+        SizedBox(height: GvSpacing.md),
+        GvSkeletonBlock(height: 48),
+        SizedBox(height: GvSpacing.sm),
+        GvSkeletonBlock(height: 48),
+        SizedBox(height: GvSpacing.sm),
+        GvSkeletonBlock(height: 48),
+      ],
     );
   }
 }

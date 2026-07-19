@@ -1,0 +1,70 @@
+{
+  "data": {
+    "id": "2026-belgian-grand-prix",
+    "season": 2026,
+    "round": 13,
+    "eventSlug": "belgian-grand-prix",
+    "name": "Belgian Grand Prix",
+    "officialName": "Formula 1 Mock Belgian Grand Prix 2026",
+    "circuitId": "spa-francorchamps",
+    "status": "upcoming",
+    "format": "sprint",
+    "startDate": "2026-07-24",
+    "endDate": "2026-07-26",
+    "timezone": "Europe/Brussels",
+    "sessions": [
+      {
+        "id": "2026-belgian-grand-prix-practice-1",
+        "type": "practice_1",
+        "name": "Practice 1",
+        "startTime": "2026-07-24T10:30:00Z",
+        "endTime": "2026-07-24T11:30:00Z",
+        "status": "scheduled"
+      },
+      {
+        "id": "2026-belgian-grand-prix-sprint-qualifying",
+        "type": "sprint_qualifying",
+        "name": "Sprint Qualifying",
+        "startTime": "2026-07-24T14:30:00Z",
+        "endTime": "2026-07-24T15:14:00Z",
+        "status": "scheduled"
+      },
+      {
+        "id": "2026-belgian-grand-prix-sprint",
+        "type": "sprint",
+        "name": "Sprint",
+        "startTime": "2026-07-25T10:00:00Z",
+        "endTime": "2026-07-25T11:00:00Z",
+        "status": "scheduled"
+      },
+      {
+        "id": "2026-belgian-grand-prix-qualifying",
+        "type": "qualifying",
+        "name": "Qualifying",
+        "startTime": "2026-07-25T14:00:00Z",
+        "endTime": "2026-07-25T15:00:00Z",
+        "status": "scheduled"
+      },
+      {
+        "id": "2026-belgian-grand-prix-race",
+        "type": "race",
+        "name": "Race",
+        "startTime": "2026-07-26T13:00:00Z",
+        "endTime": null,
+        "status": "scheduled"
+      }
+    ],
+    "hasResults": false,
+    "media": []
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0013"
+  }
+}

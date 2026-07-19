@@ -31,11 +31,13 @@ void main() {
     );
   });
 
-  testWidgets('golden: home skeleton', (WidgetTester tester) async {
+  testWidgets('golden: home loaded (cached next Grand Prix)', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester, '/');
     await expectLater(
       find.byType(MaterialApp),
-      matchesGoldenFile('goldens/home_skeleton.png'),
+      matchesGoldenFile('goldens/home_loaded.png'),
     );
   });
 
@@ -47,13 +49,11 @@ void main() {
     );
   });
 
-  testWidgets('golden: grand prix detail skeleton', (
-    WidgetTester tester,
-  ) async {
-    await _pump(tester, '/calendar/2026/3');
+  testWidgets('golden: grand prix detail loaded', (WidgetTester tester) async {
+    await _pump(tester, '/calendar/2026/13');
     await expectLater(
       find.byType(MaterialApp),
-      matchesGoldenFile('goldens/grand_prix_detail_skeleton.png'),
+      matchesGoldenFile('goldens/grand_prix_detail_loaded.png'),
     );
   });
 }

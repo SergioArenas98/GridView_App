@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/time/timezones.dart';
 import 'app.dart';
 
 /// Initializes essential services and global error handling, then runs the
@@ -24,5 +26,11 @@ Future<void> bootstrap() async {
     return true;
   };
 
-  runApp(const GridViewApp());
+  // Load the IANA timezone database so session times can render in event-local
+  // time before the first Home refresh completes.
+  ensureTimeZonesInitialized();
+
+  // The ProviderScope owns the app's dependency graph (database, remote data
+  // source, repository, controllers) for its lifetime.
+  runApp(const ProviderScope(child: GridViewApp()));
 }

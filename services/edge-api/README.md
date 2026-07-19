@@ -31,6 +31,17 @@ npm run validate         # all three
 
 `wrangler dev` serves http://localhost:8787/v1/status locally.
 
+### Flutter client and this Worker
+
+The Phase 4 offline-first slice does **not** require this Worker to run. The
+dev/staging Flutter build serves OpenAPI-valid snapshots bundled in the app
+(`assets/dev_fixtures/*`, the same shapes as `test/fixtures/api/v1/`) through the
+same DTO → repository → Drift → UI path as production. To point the client at a
+running Worker or staging instead, pass
+`--dart-define=API_BASE_URL=...` to `flutter run` (see
+`../../docs/technical/GridView_Synchronization.md` §9). Production always uses the
+real HTTP client and never falls back to fixtures.
+
 ## Layout
 
 ```text

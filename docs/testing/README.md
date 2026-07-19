@@ -140,6 +140,46 @@ Router and screens are covered end-to-end through the real `GoRouter` via
   scale and at 320px width; Spanish content on a narrow phone; a bottom safe-area
   inset; reduced-motion rendering.
 - `test/screens/screen_golden_test.dart` — four full-screen goldens (primary
-  shell pill navigation, Home, Standings, Grand Prix detail) at the 2% tolerance,
-  committed under `test/screens/goldens/`. Regenerate with
+  shell pill navigation, Home loaded, Standings, Grand Prix detail loaded) at the
+  2% tolerance, committed under `test/screens/goldens/`. Regenerate with
   `flutter test --update-goldens test/screens/screen_golden_test.dart`.
+
+## Offline-first vertical slice (Phase 4)
+
+The Home → Grand Prix detail slice is tested at every layer. The **real Drift
+pipeline** is exercised by the DAO, repository and `ProviderContainer` controller
+tests (which run with real async). **Widget tests** drive the screens through a
+fake repository (`test/support/fake_repository.dart`) with plain streams — the
+real Drift pipeline schedules stream-query timers that are incompatible with
+`pumpAndSettle` under the widget-test `FakeAsync` zone, so mixing them there is
+deliberately avoided.
+
+- `test/database/vertical_slice_dao_test.dart` — schema creation, foreign keys,
+  cascade delete, upsert/idempotent sync, atomic-transaction rollback, session
+  replacement without duplicates, snapshot version-conflict rule, UTC round-trip,
+  unknown-enum preservation, and DAO stream emissions (in-memory SQLite).
+- `test/database/schema_migration_test.dart` — schema version 1, grand_prix and
+  sessions columns, and the `(season, round)` uniqueness constraint.
+- `test/database/persistence_test.dart` — cached Grand Prix data survives closing
+  and reopening a temporary on-disk database.
+- `test/data/remote/*` — the Dio client with an injected fake HTTP transport
+  (success + every typed failure), the dev fixture source, and dev-fixture
+  contract validity (apiVersion 1, no provider ids).
+- `test/data/repositories/race_weekend_repository_test.dart` — empty-cache
+  refresh, existing cache, failure-with-cache, failure-without-cache, invalid
+  response, newer/older snapshot, detail lookup, missing Grand Prix, and
+  cache-preserved-after-failure.
+- `test/application/*` — the pure state machines (every Home and detail state),
+  the freshness evaluator, and the real controllers via `ProviderContainer`
+  (loading → data, stale, first-load failure, refresh-failure-keeps-cache,
+  not-found, offline-from-cache).
+- `test/time/session_time_test.dart` — event-local conversion incl. DST (CEST vs
+  CET), device fallback, and calendar dates that never shift.
+- `test/screens/vertical_slice_widget_test.dart` — Home loading skeleton, cached
+  content, background refresh, stale/offline notice, first-load error + retry,
+  mock-data banner, Spanish, Home → Grand Prix detail navigation, deep-link with
+  ordered sessions, session ordering, controlled not-found, and offline-from-cache.
+
+No test requires a real Worker, network, Firebase or Android device. Drift tests
+use `NativeDatabase.memory()` (and a temporary on-disk file for the persistence
+test).

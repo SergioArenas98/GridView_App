@@ -257,4 +257,81 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notFoundGoHome => 'Go to Home';
+
+  @override
+  String homeUpdated(String time) {
+    return 'Updated $time';
+  }
+
+  @override
+  String get offlineStaleNotice =>
+      'This data may be out of date — showing the last saved version.';
+
+  @override
+  String get refreshFailedNotice => 'Couldn\'t refresh — showing saved data.';
+
+  @override
+  String get retry => 'Try again';
+
+  @override
+  String get homeErrorTitle => 'Can\'t load Home';
+
+  @override
+  String get homeMoreComingTitle => 'More coming soon';
+
+  @override
+  String get homeMoreComingMessage =>
+      'Championship standings and results arrive in a later update.';
+
+  @override
+  String get errorOffline => 'You appear to be offline.';
+
+  @override
+  String get errorTimeout => 'The connection timed out.';
+
+  @override
+  String get errorServer => 'The service is temporarily unavailable.';
+
+  @override
+  String get errorNotFound => 'That data isn\'t available.';
+
+  @override
+  String get errorUnsupported => 'Please update GridView to continue.';
+
+  @override
+  String get errorGeneric => 'Something went wrong.';
+
+  @override
+  String get grandPrixNotFoundTitle => 'Grand Prix not found';
+
+  @override
+  String get grandPrixNotFoundMessage =>
+      'We couldn\'t find this Grand Prix on the calendar.';
+
+  @override
+  String get grandPrixErrorTitle => 'Can\'t load this Grand Prix';
+
+  @override
+  String get grandPrixResultsAvailable => 'Results are available.';
+
+  @override
+  String get eventStateScheduled => 'Scheduled';
+
+  @override
+  String get eventStateLive => 'Live';
+
+  @override
+  String get eventStatePostponed => 'Postponed';
+
+  @override
+  String get eventStateCancelled => 'Cancelled';
+
+  @override
+  String get sessionStateScheduled => 'Scheduled';
+
+  @override
+  String get sessionStateCompleted => 'Completed';
+
+  @override
+  String get mockDataBanner => 'Sample data — not live results';
 }

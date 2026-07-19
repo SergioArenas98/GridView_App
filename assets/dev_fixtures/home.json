@@ -1,0 +1,94 @@
+{
+  "data": {
+    "freshness": {
+      "generatedAt": "2026-07-18T12:00:00Z",
+      "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+      "staleAfter": "2026-07-18T12:15:00Z",
+      "contentVersion": "2026.07.18.1",
+      "stale": false
+    },
+    "featuredEvent": {
+      "id": "2026-belgian-grand-prix",
+      "season": 2026,
+      "round": 13,
+      "eventSlug": "belgian-grand-prix",
+      "name": "Belgian Grand Prix",
+      "circuitId": "spa-francorchamps",
+      "circuitName": "Circuit de Spa-Francorchamps",
+      "status": "upcoming",
+      "format": "sprint",
+      "startDate": "2026-07-24",
+      "endDate": "2026-07-26",
+      "timezone": "Europe/Brussels",
+      "hasResults": false
+    },
+    "featuredSession": {
+      "id": "2026-belgian-grand-prix-race",
+      "type": "race",
+      "name": "Race",
+      "startTime": "2026-07-26T13:00:00Z",
+      "endTime": null,
+      "status": "scheduled"
+    },
+    "latestCompletedEvent": {
+      "id": "2026-italian-grand-prix",
+      "season": 2026,
+      "round": 12,
+      "eventSlug": "italian-grand-prix",
+      "name": "Italian Grand Prix",
+      "circuitId": "monza",
+      "circuitName": "Autodromo Nazionale Monza",
+      "status": "completed",
+      "format": "standard",
+      "startDate": "2026-07-10",
+      "endDate": "2026-07-12",
+      "timezone": "Europe/Rome",
+      "hasResults": true
+    },
+    "driverLeader": {
+      "season": 2026,
+      "driverId": "max-verstappen",
+      "constructorId": "red-bull",
+      "position": 1,
+      "points": 210.5,
+      "wins": 6,
+      "podiums": 9,
+      "provisional": false
+    },
+    "constructorLeader": {
+      "season": 2026,
+      "constructorId": "mclaren",
+      "position": 1,
+      "points": 390.5,
+      "wins": 7,
+      "provisional": false
+    },
+    "upcomingEvents": [
+      {
+        "id": "2026-belgian-grand-prix",
+        "season": 2026,
+        "round": 13,
+        "eventSlug": "belgian-grand-prix",
+        "name": "Belgian Grand Prix",
+        "circuitId": "spa-francorchamps",
+        "circuitName": "Circuit de Spa-Francorchamps",
+        "status": "upcoming",
+        "format": "sprint",
+        "startDate": "2026-07-24",
+        "endDate": "2026-07-26",
+        "timezone": "Europe/Brussels",
+        "hasResults": false
+      }
+    ]
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

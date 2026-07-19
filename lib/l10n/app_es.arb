@@ -93,5 +93,35 @@
   "notFoundMessage": "No pudimos abrir esta página. Puede que se haya movido o que nunca existiera.",
   "invalidRouteTitle": "Enlace no válido",
   "invalidRouteMessage": "Este enlace apunta a algo que no existe.",
-  "notFoundGoHome": "Ir a Inicio"
+  "notFoundGoHome": "Ir a Inicio",
+
+  "homeUpdated": "Actualizado {time}",
+  "offlineStaleNotice": "Estos datos pueden estar desactualizados — mostrando la última versión guardada.",
+  "refreshFailedNotice": "No se pudo actualizar — mostrando datos guardados.",
+  "retry": "Reintentar",
+
+  "homeErrorTitle": "No se puede cargar Inicio",
+  "homeMoreComingTitle": "Próximamente",
+  "homeMoreComingMessage": "Las clasificaciones y los resultados del campeonato llegarán en una próxima actualización.",
+
+  "errorOffline": "Parece que no tienes conexión.",
+  "errorTimeout": "Se agotó el tiempo de conexión.",
+  "errorServer": "El servicio no está disponible temporalmente.",
+  "errorNotFound": "Esos datos no están disponibles.",
+  "errorUnsupported": "Actualiza GridView para continuar.",
+  "errorGeneric": "Algo salió mal.",
+
+  "grandPrixNotFoundTitle": "Gran Premio no encontrado",
+  "grandPrixNotFoundMessage": "No pudimos encontrar este Gran Premio en el calendario.",
+  "grandPrixErrorTitle": "No se puede cargar este Gran Premio",
+  "grandPrixResultsAvailable": "Los resultados están disponibles.",
+
+  "eventStateScheduled": "Programado",
+  "eventStateLive": "En directo",
+  "eventStatePostponed": "Aplazado",
+  "eventStateCancelled": "Cancelado",
+  "sessionStateScheduled": "Programada",
+  "sessionStateCompleted": "Finalizada",
+
+  "mockDataBanner": "Datos de muestra — no son resultados reales"
 }

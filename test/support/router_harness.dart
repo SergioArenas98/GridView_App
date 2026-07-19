@@ -1,11 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/app/router/app_router.dart';
 import 'package:gridview/core/theme/gridview_theme.dart';
 import 'package:gridview/core/widgets/widgets.dart';
+import 'package:gridview/features/shared/application/providers.dart';
+import 'package:gridview/features/shared/domain/repositories/race_weekend_repository.dart';
 import 'package:gridview/l10n/app_localizations.dart';
+
+import 'domain_fixtures.dart';
+import 'fake_repository.dart';
+
+/// The default fake repository backing widget/navigation tests: a fresh Home
+/// aggregate and a coherent Grand Prix detail for any (season, round). The real
+/// Drift pipeline is exercised in the DAO/repository/controller tests.
+FakeRaceWeekendRepository defaultFakeRepository() => FakeRaceWeekendRepository(
+  home: homeViewFixture(),
+  grandPrix: (int season, int round) => grandPrixDetailFixture(season, round),
+);
 
 /// A test host that mirrors [GridViewApp] but exposes locale, text-scale,
 /// surface size and animation control so navigation, resilience and golden
@@ -62,7 +77,11 @@ class TestApp extends StatelessWidget {
   }
 }
 
-/// Pumps the GridView router at [initialLocation] and settles.
+/// Pumps the GridView router at [initialLocation] and settles. Wraps the app in
+/// a [ProviderScope] backed by an in-memory database, the deterministic
+/// [HarnessApi] and a fixed clock (before the fixtures' `staleAfter`, so content
+/// is fresh). Individual dependencies can be replaced with [api], [clock],
+/// [environment] or [database].
 Future<GoRouter> pumpApp(
   WidgetTester tester, {
   String initialLocation = '/',
@@ -71,19 +90,35 @@ Future<GoRouter> pumpApp(
   Locale locale = const Locale('en'),
   bool disableAnimations = false,
   EdgeInsets padding = EdgeInsets.zero,
+  RaceWeekendRepository? repository,
+  DateTime? clock,
+  AppEnvironment environment = AppEnvironment.development,
+  bool mockData = false,
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
     addTearDown(() => tester.binding.setSurfaceSize(null));
   }
+
+  final DateTime now = clock ?? DateTime.utc(2026, 7, 18, 12, 10);
   final GoRouter router = buildGridViewRouter(initialLocation: initialLocation);
   await tester.pumpWidget(
-    TestApp(
-      router: router,
-      textScale: textScale,
-      locale: locale,
-      disableAnimations: disableAnimations,
-      padding: padding,
+    ProviderScope(
+      overrides: [
+        raceWeekendRepositoryProvider.overrideWithValue(
+          repository ?? defaultFakeRepository(),
+        ),
+        clockProvider.overrideWithValue(() => now),
+        appEnvironmentProvider.overrideWithValue(environment),
+        usesMockDataProvider.overrideWithValue(mockData),
+      ],
+      child: TestApp(
+        router: router,
+        textScale: textScale,
+        locale: locale,
+        disableAnimations: disableAnimations,
+        padding: padding,
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -91,21 +126,22 @@ Future<GoRouter> pumpApp(
 }
 
 /// Pumps a single widget inside the GridView theme + localizations, without the
-/// router. Used for screens exercised in isolation (e.g. Settings with an
-/// injected environment).
+/// router. Used for screens exercised in isolation (e.g. Settings).
 Future<void> pumpStandalone(
   WidgetTester tester,
   Widget child, {
   Locale locale = const Locale('en'),
 }) async {
   await tester.pumpWidget(
-    MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: buildGridViewDarkTheme(),
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: child,
+    ProviderScope(
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: buildGridViewDarkTheme(),
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: child,
+      ),
     ),
   );
   await tester.pumpAndSettle();

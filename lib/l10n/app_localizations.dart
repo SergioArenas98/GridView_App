@@ -577,6 +577,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Go to Home'**
   String get notFoundGoHome;
+
+  /// Freshness caption showing when content was last synced.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated {time}'**
+  String homeUpdated(String time);
+
+  /// Notice shown when cached content is stale.
+  ///
+  /// In en, this message translates to:
+  /// **'This data may be out of date — showing the last saved version.'**
+  String get offlineStaleNotice;
+
+  /// Notice shown when a refresh failed but cached content is visible.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t refresh — showing saved data.'**
+  String get refreshFailedNotice;
+
+  /// Retry action for a recoverable error.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get retry;
+
+  /// Title for the Home first-load error state.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t load Home'**
+  String get homeErrorTitle;
+
+  /// Title for the non-authoritative placeholder section on Home.
+  ///
+  /// In en, this message translates to:
+  /// **'More coming soon'**
+  String get homeMoreComingTitle;
+
+  /// Explains the non-authoritative placeholder section on Home.
+  ///
+  /// In en, this message translates to:
+  /// **'Championship standings and results arrive in a later update.'**
+  String get homeMoreComingMessage;
+
+  /// User-facing message for a network-unavailable failure.
+  ///
+  /// In en, this message translates to:
+  /// **'You appear to be offline.'**
+  String get errorOffline;
+
+  /// User-facing message for a timeout failure.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection timed out.'**
+  String get errorTimeout;
+
+  /// User-facing message for a server-unavailable failure.
+  ///
+  /// In en, this message translates to:
+  /// **'The service is temporarily unavailable.'**
+  String get errorServer;
+
+  /// User-facing message for a not-found failure.
+  ///
+  /// In en, this message translates to:
+  /// **'That data isn\'t available.'**
+  String get errorNotFound;
+
+  /// User-facing message for an unsupported API/schema version.
+  ///
+  /// In en, this message translates to:
+  /// **'Please update GridView to continue.'**
+  String get errorUnsupported;
+
+  /// User-facing message for an unknown or invalid failure.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong.'**
+  String get errorGeneric;
+
+  /// Title for the Grand Prix not-found state.
+  ///
+  /// In en, this message translates to:
+  /// **'Grand Prix not found'**
+  String get grandPrixNotFoundTitle;
+
+  /// Message for the Grand Prix not-found state.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t find this Grand Prix on the calendar.'**
+  String get grandPrixNotFoundMessage;
+
+  /// Title for the Grand Prix detail error state.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t load this Grand Prix'**
+  String get grandPrixErrorTitle;
+
+  /// Shown when a Grand Prix has classified results.
+  ///
+  /// In en, this message translates to:
+  /// **'Results are available.'**
+  String get grandPrixResultsAvailable;
+
+  /// Status for a scheduled Grand Prix.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled'**
+  String get eventStateScheduled;
+
+  /// Status for an in-progress Grand Prix or session.
+  ///
+  /// In en, this message translates to:
+  /// **'Live'**
+  String get eventStateLive;
+
+  /// Status for a postponed Grand Prix.
+  ///
+  /// In en, this message translates to:
+  /// **'Postponed'**
+  String get eventStatePostponed;
+
+  /// Status for a cancelled Grand Prix or session.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get eventStateCancelled;
+
+  /// Status for a scheduled session.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled'**
+  String get sessionStateScheduled;
+
+  /// Status for a completed session.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get sessionStateCompleted;
+
+  /// Banner shown in dev/staging builds that use fixture data.
+  ///
+  /// In en, this message translates to:
+  /// **'Sample data — not live results'**
+  String get mockDataBanner;
 }
 
 class _AppLocalizationsDelegate

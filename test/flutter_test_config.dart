@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gridview/core/time/timezones.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 /// Golden comparisons use a small tolerance so that cross-platform font
 /// antialiasing (developer machine vs the Linux CI runner) does not cause false
@@ -14,6 +16,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// threshold, and are expected to fail. Measured cross-platform font-AA drift is
 /// ~1%; the 2% threshold leaves headroom without masking real changes.
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
+  // Session-time rendering needs the IANA timezone database and intl date
+  // symbols for the app locales; initialise them once for the whole run.
+  ensureTimeZonesInitialized();
+  await initializeDateFormatting('en');
+  await initializeDateFormatting('es');
+
   final GoldenFileComparator current = goldenFileComparator;
   if (current is LocalFileComparator) {
     goldenFileComparator = _TolerantGoldenComparator(current.basedir);

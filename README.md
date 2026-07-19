@@ -34,19 +34,33 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
 - Phase 3B - navigation shell and data-independent screen skeletons
   (`go_router`, four-branch state-preserving shell, floating pill navigation,
   validated routes): done. See `docs/technical/GridView_Navigation.md`.
+- Phase 4 - first offline-first vertical slice (Home next Grand Prix → Grand
+  Prix detail) through Drift + Riverpod + Dio: done. See
+  `docs/technical/GridView_Local_Data.md` and
+  `docs/technical/GridView_Synchronization.md`.
 
-The app still ships as an offline reconstruction shell (no Firebase, ads,
-backend, Drift or provider integration yet): every screen renders deterministic
-placeholder content. A **development-only** component catalogue is reachable from
-**Settings → Developer** in dev/staging builds (never production).
+Home's next-Grand-Prix hero, weekend sessions and freshness, and the Grand Prix
+detail screen are now driven by a **Drift-backed** local store: content renders
+immediately from cache (offline included), a refresh writes one atomic snapshot
+transaction, and a failed refresh never erases cached content. The remaining
+screens (calendar, standings, drivers, teams, circuits) are still
+non-authoritative skeletons; no Firebase, ads or production provider is wired
+yet. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
+and show a "Sample data" banner; **production never falls back to mock data**. A
+**development-only** component catalogue is reachable from **Settings → Developer**
+in dev/staging builds (never production).
 
 ## Development setup
 
 1. Install [FVM](https://fvm.app): `dart pub global activate fvm`
 2. Install the pinned Flutter SDK: `fvm install`
 3. Run the app: `fvm flutter run --flavor dev --dart-define=APP_ENV=development`
+   (no Worker needed — dev serves the bundled `assets/dev_fixtures/*`)
 4. Run checks: `fvm flutter analyze && fvm flutter test`
 
+The Drift-backed local-development flow — running against the bundled fixtures or
+an explicit `API_BASE_URL`, simulating offline/stale, and clearing the local
+database — is documented in `docs/technical/GridView_Synchronization.md` §9.
 Flavors, environment defines, Firebase/AdMob state and the edge API
 environments are documented in `docs/technical/GridView_Environments.md`.
 The edge API has its own instructions in `services/edge-api/README.md`.

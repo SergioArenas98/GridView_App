@@ -1,15 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/app/app.dart';
+import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/home/presentation/home_screen.dart';
+import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/l10n/app_localizations.dart';
+
+import '../support/router_harness.dart';
 
 void main() {
   testWidgets('app boots into the Home branch with the pill navigation', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const GridViewApp());
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          raceWeekendRepositoryProvider.overrideWithValue(
+            defaultFakeRepository(),
+          ),
+          clockProvider.overrideWithValue(() => DateTime.utc(2026, 7, 18, 12)),
+          appEnvironmentProvider.overrideWithValue(AppEnvironment.development),
+          usesMockDataProvider.overrideWithValue(false),
+        ],
+        child: const GridViewApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byType(HomeScreen), findsOneWidget);

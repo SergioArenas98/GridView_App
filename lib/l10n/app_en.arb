@@ -181,5 +181,62 @@
   "invalidRouteMessage": "This link points to something that doesn't exist.",
   "@invalidRouteMessage": { "description": "Invalid-parameter screen message." },
   "notFoundGoHome": "Go to Home",
-  "@notFoundGoHome": { "description": "Recovery action returning to Home." }
+  "@notFoundGoHome": { "description": "Recovery action returning to Home." },
+
+  "homeUpdated": "Updated {time}",
+  "@homeUpdated": {
+    "description": "Freshness caption showing when content was last synced.",
+    "placeholders": { "time": { "type": "String", "example": "12:00" } }
+  },
+  "offlineStaleNotice": "This data may be out of date — showing the last saved version.",
+  "@offlineStaleNotice": { "description": "Notice shown when cached content is stale." },
+  "refreshFailedNotice": "Couldn't refresh — showing saved data.",
+  "@refreshFailedNotice": { "description": "Notice shown when a refresh failed but cached content is visible." },
+  "retry": "Try again",
+  "@retry": { "description": "Retry action for a recoverable error." },
+
+  "homeErrorTitle": "Can't load Home",
+  "@homeErrorTitle": { "description": "Title for the Home first-load error state." },
+  "homeMoreComingTitle": "More coming soon",
+  "@homeMoreComingTitle": { "description": "Title for the non-authoritative placeholder section on Home." },
+  "homeMoreComingMessage": "Championship standings and results arrive in a later update.",
+  "@homeMoreComingMessage": { "description": "Explains the non-authoritative placeholder section on Home." },
+
+  "errorOffline": "You appear to be offline.",
+  "@errorOffline": { "description": "User-facing message for a network-unavailable failure." },
+  "errorTimeout": "The connection timed out.",
+  "@errorTimeout": { "description": "User-facing message for a timeout failure." },
+  "errorServer": "The service is temporarily unavailable.",
+  "@errorServer": { "description": "User-facing message for a server-unavailable failure." },
+  "errorNotFound": "That data isn't available.",
+  "@errorNotFound": { "description": "User-facing message for a not-found failure." },
+  "errorUnsupported": "Please update GridView to continue.",
+  "@errorUnsupported": { "description": "User-facing message for an unsupported API/schema version." },
+  "errorGeneric": "Something went wrong.",
+  "@errorGeneric": { "description": "User-facing message for an unknown or invalid failure." },
+
+  "grandPrixNotFoundTitle": "Grand Prix not found",
+  "@grandPrixNotFoundTitle": { "description": "Title for the Grand Prix not-found state." },
+  "grandPrixNotFoundMessage": "We couldn't find this Grand Prix on the calendar.",
+  "@grandPrixNotFoundMessage": { "description": "Message for the Grand Prix not-found state." },
+  "grandPrixErrorTitle": "Can't load this Grand Prix",
+  "@grandPrixErrorTitle": { "description": "Title for the Grand Prix detail error state." },
+  "grandPrixResultsAvailable": "Results are available.",
+  "@grandPrixResultsAvailable": { "description": "Shown when a Grand Prix has classified results." },
+
+  "eventStateScheduled": "Scheduled",
+  "@eventStateScheduled": { "description": "Status for a scheduled Grand Prix." },
+  "eventStateLive": "Live",
+  "@eventStateLive": { "description": "Status for an in-progress Grand Prix or session." },
+  "eventStatePostponed": "Postponed",
+  "@eventStatePostponed": { "description": "Status for a postponed Grand Prix." },
+  "eventStateCancelled": "Cancelled",
+  "@eventStateCancelled": { "description": "Status for a cancelled Grand Prix or session." },
+  "sessionStateScheduled": "Scheduled",
+  "@sessionStateScheduled": { "description": "Status for a scheduled session." },
+  "sessionStateCompleted": "Completed",
+  "@sessionStateCompleted": { "description": "Status for a completed session." },
+
+  "mockDataBanner": "Sample data — not live results",
+  "@mockDataBanner": { "description": "Banner shown in dev/staging builds that use fixture data." }
 }

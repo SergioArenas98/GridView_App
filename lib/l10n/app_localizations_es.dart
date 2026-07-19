@@ -258,4 +258,82 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get notFoundGoHome => 'Ir a Inicio';
+
+  @override
+  String homeUpdated(String time) {
+    return 'Actualizado $time';
+  }
+
+  @override
+  String get offlineStaleNotice =>
+      'Estos datos pueden estar desactualizados — mostrando la última versión guardada.';
+
+  @override
+  String get refreshFailedNotice =>
+      'No se pudo actualizar — mostrando datos guardados.';
+
+  @override
+  String get retry => 'Reintentar';
+
+  @override
+  String get homeErrorTitle => 'No se puede cargar Inicio';
+
+  @override
+  String get homeMoreComingTitle => 'Próximamente';
+
+  @override
+  String get homeMoreComingMessage =>
+      'Las clasificaciones y los resultados del campeonato llegarán en una próxima actualización.';
+
+  @override
+  String get errorOffline => 'Parece que no tienes conexión.';
+
+  @override
+  String get errorTimeout => 'Se agotó el tiempo de conexión.';
+
+  @override
+  String get errorServer => 'El servicio no está disponible temporalmente.';
+
+  @override
+  String get errorNotFound => 'Esos datos no están disponibles.';
+
+  @override
+  String get errorUnsupported => 'Actualiza GridView para continuar.';
+
+  @override
+  String get errorGeneric => 'Algo salió mal.';
+
+  @override
+  String get grandPrixNotFoundTitle => 'Gran Premio no encontrado';
+
+  @override
+  String get grandPrixNotFoundMessage =>
+      'No pudimos encontrar este Gran Premio en el calendario.';
+
+  @override
+  String get grandPrixErrorTitle => 'No se puede cargar este Gran Premio';
+
+  @override
+  String get grandPrixResultsAvailable => 'Los resultados están disponibles.';
+
+  @override
+  String get eventStateScheduled => 'Programado';
+
+  @override
+  String get eventStateLive => 'En directo';
+
+  @override
+  String get eventStatePostponed => 'Aplazado';
+
+  @override
+  String get eventStateCancelled => 'Cancelado';
+
+  @override
+  String get sessionStateScheduled => 'Programada';
+
+  @override
+  String get sessionStateCompleted => 'Finalizada';
+
+  @override
+  String get mockDataBanner => 'Datos de muestra — no son resultados reales';
 }

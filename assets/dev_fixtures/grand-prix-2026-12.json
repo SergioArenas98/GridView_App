@@ -1,0 +1,70 @@
+{
+  "data": {
+    "id": "2026-italian-grand-prix",
+    "season": 2026,
+    "round": 12,
+    "eventSlug": "italian-grand-prix",
+    "name": "Italian Grand Prix",
+    "officialName": "Formula 1 Mock Italian Grand Prix 2026",
+    "circuitId": "monza",
+    "status": "completed",
+    "format": "standard",
+    "startDate": "2026-07-10",
+    "endDate": "2026-07-12",
+    "timezone": "Europe/Rome",
+    "sessions": [
+      {
+        "id": "2026-italian-grand-prix-practice-1",
+        "type": "practice_1",
+        "name": "Practice 1",
+        "startTime": "2026-07-10T11:30:00Z",
+        "endTime": "2026-07-10T12:30:00Z",
+        "status": "completed"
+      },
+      {
+        "id": "2026-italian-grand-prix-practice-2",
+        "type": "practice_2",
+        "name": "Practice 2",
+        "startTime": "2026-07-10T15:00:00Z",
+        "endTime": "2026-07-10T16:00:00Z",
+        "status": "completed"
+      },
+      {
+        "id": "2026-italian-grand-prix-practice-3",
+        "type": "practice_3",
+        "name": "Practice 3",
+        "startTime": "2026-07-11T10:30:00Z",
+        "endTime": "2026-07-11T11:30:00Z",
+        "status": "completed"
+      },
+      {
+        "id": "2026-italian-grand-prix-qualifying",
+        "type": "qualifying",
+        "name": "Qualifying",
+        "startTime": "2026-07-11T14:00:00Z",
+        "endTime": "2026-07-11T15:00:00Z",
+        "status": "completed"
+      },
+      {
+        "id": "2026-italian-grand-prix-race",
+        "type": "race",
+        "name": "Race",
+        "startTime": "2026-07-12T13:00:00Z",
+        "endTime": "2026-07-12T15:00:00Z",
+        "status": "completed"
+      }
+    ],
+    "hasResults": true,
+    "media": []
+  },
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}
