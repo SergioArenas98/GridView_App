@@ -24,10 +24,17 @@ truth for the rebuild; see `AGENTS.md` for the non-negotiable constraints.
 
 ## Status
 
-Phase 1 (repository and project foundation) of
-`docs/technical/GridView_Implementation_Plan.md`: the legacy application has
-been replaced by the minimal reconstruction shell (offline, no Firebase, no
-ads, no backend dependency). Feature reconstruction starts in Phase 2+.
+Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
+
+- Phase 1 - repository and project foundation: done.
+- Phase 2 - API contract, domain model, fixtures and DTOs: done
+  (`docs/api/gridview-api-v1.yaml`, `docs/technical/GridView_Domain_Model.md`).
+- Phase 3A - design-system foundation (tokens, theme, shared components,
+  component catalogue): done. See `docs/technical/GridView_Design_System.md`.
+
+The app still ships as an offline reconstruction shell (no Firebase, ads,
+backend, Drift or provider integration yet). A **development-only** component
+catalogue is reachable from the shell in dev/staging builds (never production).
 
 ## Development setup
 

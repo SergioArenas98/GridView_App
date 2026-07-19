@@ -88,3 +88,22 @@ flutter test
 
 CI runs all of the above, plus a generated-code-consistency check
 (`dart run build_runner build` then `git diff --exit-code`).
+
+## Design-system tests (Phase 3A)
+
+Under `test/design_system/` (harness: `test/support/component_harness.dart`):
+
+- `component_behavior_test.dart` — buttons, segmented control, bottom nav and
+  error-retry callbacks; disabled and loading states.
+- `semantics_test.dart` — semantic labels and selected/button flags on the
+  important controls.
+- `resilience_test.dart` — no overflow with long English/Spanish strings on a
+  320px phone, and rendering at 1.6-2.0x text scale.
+- `golden_test.dart` — a small representative set (status chips, primary button,
+  data card, standings row) in the dark theme, with committed goldens under
+  `test/design_system/goldens/`.
+
+Goldens are deterministic across platforms because no custom fonts are bundled
+(text uses flutter_test's default font). Regenerate them with
+`flutter test --update-goldens test/design_system/golden_test.dart` only when a
+component's appearance intentionally changes.
