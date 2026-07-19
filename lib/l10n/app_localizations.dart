@@ -104,17 +104,479 @@ abstract class AppLocalizations {
   /// **'GridView'**
   String get appTitle;
 
-  /// Title of the temporary shell home screen.
+  /// Bottom navigation label for the Home branch.
   ///
   /// In en, this message translates to:
-  /// **'GridView reconstruction'**
-  String get shellPlaceholderTitle;
+  /// **'Home'**
+  String get navHome;
 
-  /// Body text of the temporary shell home screen.
+  /// Bottom navigation label for the Calendar branch.
   ///
   /// In en, this message translates to:
-  /// **'The new GridView experience is under construction.'**
-  String get shellPlaceholderMessage;
+  /// **'Calendar'**
+  String get navCalendar;
+
+  /// Bottom navigation label for the Standings branch.
+  ///
+  /// In en, this message translates to:
+  /// **'Standings'**
+  String get navStandings;
+
+  /// Bottom navigation label for the Explore branch.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get navExplore;
+
+  /// Season context header, e.g. '2026 season'.
+  ///
+  /// In en, this message translates to:
+  /// **'{season} season'**
+  String seasonLabel(String season);
+
+  /// Grand Prix round label, e.g. 'Round 3'.
+  ///
+  /// In en, this message translates to:
+  /// **'Round {round}'**
+  String roundLabel(String round);
+
+  /// Section action that opens the full list.
+  ///
+  /// In en, this message translates to:
+  /// **'See all'**
+  String get seeAll;
+
+  /// Accessibility label for the settings action in the app bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get settingsOpen;
+
+  /// Notice that the screen shows placeholder content.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview layout. Live data arrives in a later update.'**
+  String get previewDataNotice;
+
+  /// Status for a finished Grand Prix.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get eventStateCompleted;
+
+  /// Status for the current Grand Prix.
+  ///
+  /// In en, this message translates to:
+  /// **'This weekend'**
+  String get eventStateCurrent;
+
+  /// Status for a future Grand Prix.
+  ///
+  /// In en, this message translates to:
+  /// **'Upcoming'**
+  String get eventStateUpcoming;
+
+  /// Home hero section title.
+  ///
+  /// In en, this message translates to:
+  /// **'Next Grand Prix'**
+  String get homeNextGrandPrix;
+
+  /// Home sessions/status block title.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekend sessions'**
+  String get homeSessions;
+
+  /// Home championship-leaders section title.
+  ///
+  /// In en, this message translates to:
+  /// **'Championship leaders'**
+  String get homeLeaders;
+
+  /// Label for the leading driver summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Drivers\' leader'**
+  String get homeLeaderDrivers;
+
+  /// Label for the leading constructor summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Constructors\' leader'**
+  String get homeLeaderConstructors;
+
+  /// Home latest-result section title.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest result'**
+  String get homeLatestResult;
+
+  /// Home upcoming-events section title.
+  ///
+  /// In en, this message translates to:
+  /// **'Upcoming events'**
+  String get homeUpcoming;
+
+  /// Action opening the featured Grand Prix.
+  ///
+  /// In en, this message translates to:
+  /// **'View Grand Prix'**
+  String get homeOpenGrandPrix;
+
+  /// Calendar screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Calendar'**
+  String get calendarTitle;
+
+  /// Grand Prix detail screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Grand Prix'**
+  String get grandPrixTitle;
+
+  /// Grand Prix detail circuit section title.
+  ///
+  /// In en, this message translates to:
+  /// **'Circuit'**
+  String get grandPrixCircuit;
+
+  /// Grand Prix detail sessions section title.
+  ///
+  /// In en, this message translates to:
+  /// **'Sessions'**
+  String get grandPrixSessions;
+
+  /// Grand Prix detail results section title.
+  ///
+  /// In en, this message translates to:
+  /// **'Results'**
+  String get grandPrixResults;
+
+  /// Placeholder shown when results are not yet available.
+  ///
+  /// In en, this message translates to:
+  /// **'Results will appear once the session is complete.'**
+  String get grandPrixResultsPending;
+
+  /// Navigation to the circuit detail.
+  ///
+  /// In en, this message translates to:
+  /// **'View circuit'**
+  String get grandPrixViewCircuit;
+
+  /// Standings screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Standings'**
+  String get standingsTitle;
+
+  /// Drivers standings segment label.
+  ///
+  /// In en, this message translates to:
+  /// **'Drivers'**
+  String get standingsDrivers;
+
+  /// Constructors standings segment label.
+  ///
+  /// In en, this message translates to:
+  /// **'Constructors'**
+  String get standingsConstructors;
+
+  /// Explore screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get exploreTitle;
+
+  /// Explore drivers entry / list title.
+  ///
+  /// In en, this message translates to:
+  /// **'Drivers'**
+  String get exploreDrivers;
+
+  /// Explore teams entry / list title.
+  ///
+  /// In en, this message translates to:
+  /// **'Teams'**
+  String get exploreTeams;
+
+  /// Explore circuits entry / list title.
+  ///
+  /// In en, this message translates to:
+  /// **'Circuits'**
+  String get exploreCircuits;
+
+  /// Explore drivers entry-card description.
+  ///
+  /// In en, this message translates to:
+  /// **'Every driver on the current grid'**
+  String get exploreDriversDescription;
+
+  /// Explore teams entry-card description.
+  ///
+  /// In en, this message translates to:
+  /// **'Every constructor this season'**
+  String get exploreTeamsDescription;
+
+  /// Explore circuits entry-card description.
+  ///
+  /// In en, this message translates to:
+  /// **'Every circuit on the calendar'**
+  String get exploreCircuitsDescription;
+
+  /// Driver detail screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Driver'**
+  String get driverTitle;
+
+  /// Driver detail current-team section.
+  ///
+  /// In en, this message translates to:
+  /// **'Current team'**
+  String get driverCurrentTeam;
+
+  /// Driver detail season-standing section.
+  ///
+  /// In en, this message translates to:
+  /// **'Season standing'**
+  String get driverSeasonStanding;
+
+  /// Driver detail statistics section.
+  ///
+  /// In en, this message translates to:
+  /// **'Statistics'**
+  String get driverStatistics;
+
+  /// Constructor (team) detail screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Team'**
+  String get constructorTitle;
+
+  /// Constructor detail drivers section.
+  ///
+  /// In en, this message translates to:
+  /// **'Current drivers'**
+  String get constructorDrivers;
+
+  /// Constructor detail standing section.
+  ///
+  /// In en, this message translates to:
+  /// **'Constructor standing'**
+  String get constructorStanding;
+
+  /// Constructor detail information section.
+  ///
+  /// In en, this message translates to:
+  /// **'Team information'**
+  String get constructorInformation;
+
+  /// Circuit detail screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Circuit'**
+  String get circuitTitle;
+
+  /// Circuit detail information section.
+  ///
+  /// In en, this message translates to:
+  /// **'Circuit information'**
+  String get circuitInformation;
+
+  /// Circuit detail layout section.
+  ///
+  /// In en, this message translates to:
+  /// **'Layout'**
+  String get circuitLayout;
+
+  /// Circuit detail related-event section.
+  ///
+  /// In en, this message translates to:
+  /// **'This season\'s Grand Prix'**
+  String get circuitRelatedGrandPrix;
+
+  /// Label for the stable technical id shown on detail screens.
+  ///
+  /// In en, this message translates to:
+  /// **'Identifier'**
+  String get fieldIdentifier;
+
+  /// Driver car-number field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Number'**
+  String get fieldNumber;
+
+  /// Points field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Points'**
+  String get fieldPoints;
+
+  /// Championship-position field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Position'**
+  String get fieldPosition;
+
+  /// Constructor power-unit field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Power unit'**
+  String get fieldPowerUnit;
+
+  /// Constructor base field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Base'**
+  String get fieldBase;
+
+  /// Circuit country field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Country'**
+  String get fieldCountry;
+
+  /// Circuit length field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Length'**
+  String get fieldLength;
+
+  /// Circuit laps field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Laps'**
+  String get fieldLaps;
+
+  /// Fallback display name for an entity that is not in the placeholder catalogue.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile placeholder'**
+  String get genericEntityName;
+
+  /// Settings screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsTitle;
+
+  /// Settings general section header.
+  ///
+  /// In en, this message translates to:
+  /// **'General'**
+  String get settingsSectionGeneral;
+
+  /// Settings about section header.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get settingsSectionAbout;
+
+  /// Settings developer section header (non-production only).
+  ///
+  /// In en, this message translates to:
+  /// **'Developer'**
+  String get settingsSectionDeveloper;
+
+  /// Language setting label.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get settingsLanguage;
+
+  /// Current language value.
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get settingsLanguageValue;
+
+  /// Theme setting label.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get settingsTheme;
+
+  /// Current theme value (dark only in v1).
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get settingsThemeValue;
+
+  /// Explains the dark-only theme.
+  ///
+  /// In en, this message translates to:
+  /// **'Only a dark theme is available in this version.'**
+  String get settingsThemeNote;
+
+  /// Privacy setting label.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get settingsPrivacy;
+
+  /// Acknowledgements setting label.
+  ///
+  /// In en, this message translates to:
+  /// **'Acknowledgements'**
+  String get settingsAcknowledgements;
+
+  /// App information setting label.
+  ///
+  /// In en, this message translates to:
+  /// **'App information'**
+  String get settingsAppInformation;
+
+  /// Version field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Version'**
+  String get settingsVersion;
+
+  /// Developer entry to the component catalogue.
+  ///
+  /// In en, this message translates to:
+  /// **'Component catalogue'**
+  String get settingsComponentCatalogue;
+
+  /// Component catalogue entry description.
+  ///
+  /// In en, this message translates to:
+  /// **'Development-only design-system gallery'**
+  String get settingsComponentCatalogueDescription;
+
+  /// Not-found screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen not found'**
+  String get notFoundTitle;
+
+  /// Not-found screen message.
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t open this page. It may have moved or never existed.'**
+  String get notFoundMessage;
+
+  /// Invalid-parameter screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid link'**
+  String get invalidRouteTitle;
+
+  /// Invalid-parameter screen message.
+  ///
+  /// In en, this message translates to:
+  /// **'This link points to something that doesn\'t exist.'**
+  String get invalidRouteMessage;
+
+  /// Recovery action returning to Home.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Home'**
+  String get notFoundGoHome;
 }
 
 class _AppLocalizationsDelegate

@@ -124,11 +124,15 @@ Every component follows the baseline (UI/UX section 18, TRD section 28):
 `ComponentCatalogueScreen` is a development-only gallery of every component and
 its states, including long English/Spanish text, large text scaling, team accents
 and narrow-phone width. It is **unreachable in production**: `open()` refuses to
-navigate when the environment is production, and the shell only shows its entry
-button outside production.
+navigate when the environment is production, and only non-production builds show
+its entry point.
 
-Open it: run a dev or staging build and tap **"Open component catalogue"** on the
-shell home screen.
+Open it: run a dev or staging build and tap **Settings → Developer → Component
+catalogue**. (Before Phase 3B the entry lived on the placeholder shell home
+screen; it moved to Settings when the navigation shell landed.)
+
+Navigation, routing and the screen skeletons that consume these components are
+documented in `GridView_Navigation.md`.
 
 ## 9. Rules
 

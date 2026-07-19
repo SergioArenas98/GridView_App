@@ -31,10 +31,14 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   (`docs/api/gridview-api-v1.yaml`, `docs/technical/GridView_Domain_Model.md`).
 - Phase 3A - design-system foundation (tokens, theme, shared components,
   component catalogue): done. See `docs/technical/GridView_Design_System.md`.
+- Phase 3B - navigation shell and data-independent screen skeletons
+  (`go_router`, four-branch state-preserving shell, floating pill navigation,
+  validated routes): done. See `docs/technical/GridView_Navigation.md`.
 
 The app still ships as an offline reconstruction shell (no Firebase, ads,
-backend, Drift or provider integration yet). A **development-only** component
-catalogue is reachable from the shell in dev/staging builds (never production).
+backend, Drift or provider integration yet): every screen renders deterministic
+placeholder content. A **development-only** component catalogue is reachable from
+**Settings → Developer** in dev/staging builds (never production).
 
 ## Development setup
 

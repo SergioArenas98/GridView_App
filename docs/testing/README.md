@@ -99,11 +99,47 @@ Under `test/design_system/` (harness: `test/support/component_harness.dart`):
   important controls.
 - `resilience_test.dart` — no overflow with long English/Spanish strings on a
   320px phone, and rendering at 1.6-2.0x text scale.
+- `touch_target_test.dart` — every interactive shared component exposes a hit
+  area of at least 48 logical pixels (`GvLayout.minTouchTarget`).
 - `golden_test.dart` — a small representative set (status chips, primary button,
   data card, standings row) in the dark theme, with committed goldens under
   `test/design_system/goldens/`.
 
-Goldens are deterministic across platforms because no custom fonts are bundled
-(text uses flutter_test's default font). Regenerate them with
-`flutter test --update-goldens test/design_system/golden_test.dart` only when a
-component's appearance intentionally changes.
+### Golden tolerance
+
+`test/flutter_test_config.dart` installs a tolerant golden comparator with a **2%**
+differing-pixel threshold. It exists **only** to absorb cross-platform font
+antialiasing/rasterization drift (~1% measured between the developer machine and
+the Linux CI runner). It must **not** be used to hide layout, spacing, colour or
+component regressions — those change a large fraction of pixels and are expected
+to fail. Do not regenerate goldens per platform; regenerate only when appearance
+changes intentionally.
+
+## Navigation & screen skeletons (Phase 3B)
+
+Router and screens are covered end-to-end through the real `GoRouter` via
+`test/support/router_harness.dart` (`pumpApp`, `tapNav`, `shellLocation`,
+`pageStack`).
+
+- `test/app/app_boot_test.dart` — the app boots into Home with the pill
+  navigation; Spanish labels load; only en/es are supported.
+- `test/navigation/router_test.dart` — switching among all four branches;
+  opening Settings + system back; unknown route → recoverable not-found; invalid
+  `season`/`round`/id → controlled invalid-route state; direct (deep-link)
+  opening of every detail route; **production exclusion of the component
+  catalogue**; **no duplicate entity-route loop** (driver → team → same driver
+  collapses instead of stacking).
+- `test/navigation/state_preservation_test.dart` — branch **stack** preservation
+  across tab switches; re-select-to-root; branch **scroll** preservation; a
+  detail pushed from a branch returns to that branch on system back; app-bar back
+  pops a detail.
+- `test/screens/screen_skeletons_test.dart` — every one of the 13 skeletons
+  renders without errors; a valid-but-unknown entity id shows a generic
+  placeholder (id shown as a technical identifier, never as the name).
+- `test/resilience/navigation_resilience_test.dart` — no overflow at 2.0x text
+  scale and at 320px width; Spanish content on a narrow phone; a bottom safe-area
+  inset; reduced-motion rendering.
+- `test/screens/screen_golden_test.dart` — four full-screen goldens (primary
+  shell pill navigation, Home, Standings, Grand Prix detail) at the 2% tolerance,
+  committed under `test/screens/goldens/`. Regenerate with
+  `flutter test --update-goldens test/screens/screen_golden_test.dart`.

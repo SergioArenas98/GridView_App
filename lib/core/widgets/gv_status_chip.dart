@@ -57,10 +57,17 @@ class GvStatusChip extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: GvSpacing.xs),
-              Text(
-                label,
-                style: GvTypography.label.copyWith(
-                  color: GvColors.textSecondary,
+              // Flexible + ellipsis so a long label (or large text scaling)
+              // shrinks within a constrained parent instead of overflowing.
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: GvTypography.label.copyWith(
+                    color: GvColors.textSecondary,
+                  ),
                 ),
               ),
             ],
