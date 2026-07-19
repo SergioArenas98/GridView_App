@@ -109,7 +109,10 @@ not need to become a shared component. Prefer composing existing components.
 Every component follows the baseline (UI/UX section 18, TRD section 28):
 
 - Semantics on important controls; icon-only buttons carry a label.
-- Touch targets ~44 logical px or larger.
+- Interactive touch targets are at least 48 logical px (`GvLayout.minTouchTarget`);
+  the visible icon or control may be smaller, but the hit area is not. Buttons,
+  icon buttons, segmented controls, bottom-nav destinations and tappable cards
+  all enforce this minimum.
 - Information is never conveyed by colour alone (status chips pair a dot with a
   text label; selected states also change weight and expose a selected flag).
 - No fixed heights that clip scaled text; rows use `minHeight` and ellipsis.

@@ -66,7 +66,9 @@ class _Segment extends StatelessWidget {
           child: AnimatedContainer(
             duration: GvMotion.fast,
             curve: GvMotion.standard,
-            constraints: const BoxConstraints(minHeight: 44),
+            constraints: const BoxConstraints(
+              minHeight: GvLayout.minTouchTarget,
+            ),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: selected ? GvColors.accentPrimary : Colors.transparent,

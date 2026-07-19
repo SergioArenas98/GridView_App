@@ -17,4 +17,9 @@ abstract final class GvLayout {
   /// A "narrow phone" breakpoint used by the catalogue and overflow-safe
   /// layouts.
   static const double narrowPhoneWidth = 320;
+
+  /// Minimum interactive touch target (logical pixels). The visible icon or
+  /// control may be smaller, but every interactive shared component must expose
+  /// a hit area at least this large (WCAG 2.5.5 / Material accessibility).
+  static const double minTouchTarget = 48;
 }

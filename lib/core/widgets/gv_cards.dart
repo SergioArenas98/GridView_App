@@ -17,13 +17,23 @@ class GvContentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Widget content = Padding(padding: padding, child: child);
     return Material(
       color: GvColors.surfaceElevated,
       borderRadius: GvRadii.lgAll,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Padding(padding: padding, child: child),
+        // When the card is interactive, guarantee a minimum 48px hit area even
+        // if the content is short. Non-tappable cards are sized by content.
+        child: onTap == null
+            ? content
+            : ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: GvLayout.minTouchTarget,
+                ),
+                child: content,
+              ),
       ),
     );
   }

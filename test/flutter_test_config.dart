@@ -6,6 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 /// Golden comparisons use a small tolerance so that cross-platform font
 /// antialiasing (developer machine vs the Linux CI runner) does not cause false
 /// failures. Real visual regressions (well above the threshold) still fail.
+///
+/// The tolerance exists ONLY to absorb platform font antialiasing and
+/// rasterization differences between the machine that generated the goldens and
+/// the CI runner. It must NOT be used to hide layout, spacing, colour or
+/// component regressions: those change a large fraction of pixels, exceed the
+/// threshold, and are expected to fail. Measured cross-platform font-AA drift is
+/// ~1%; the 2% threshold leaves headroom without masking real changes.
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   final GoldenFileComparator current = goldenFileComparator;
   if (current is LocalFileComparator) {
@@ -18,8 +25,10 @@ class _TolerantGoldenComparator extends LocalFileComparator {
   _TolerantGoldenComparator(Uri baseDir)
     : super(baseDir.resolve('flutter_test_config.dart'));
 
-  /// Maximum fraction of differing pixels tolerated.
-  static const double _threshold = 0.05;
+  /// Maximum fraction of differing pixels tolerated. Sized to absorb only
+  /// cross-platform font antialiasing/rasterization drift (~1% measured), never
+  /// to mask layout, spacing, colour or component regressions.
+  static const double _threshold = 0.02;
 
   @override
   Future<bool> compare(Uint8List imageBytes, Uri golden) async {

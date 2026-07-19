@@ -92,7 +92,7 @@ ThemeData buildGridViewDarkTheme() {
         disabledBackgroundColor: GvColors.surfaceElevatedAlt,
         disabledForegroundColor: GvColors.textDisabled,
         elevation: 0,
-        minimumSize: const Size(0, 48),
+        minimumSize: const Size(0, GvLayout.minTouchTarget),
         padding: const EdgeInsets.symmetric(horizontal: GvSpacing.lg),
         textStyle: GvTypography.label.copyWith(fontSize: 15),
         shape: const RoundedRectangleBorder(borderRadius: GvRadii.mdAll),
@@ -102,7 +102,7 @@ ThemeData buildGridViewDarkTheme() {
       style: OutlinedButton.styleFrom(
         foregroundColor: GvColors.textPrimary,
         disabledForegroundColor: GvColors.textDisabled,
-        minimumSize: const Size(0, 48),
+        minimumSize: const Size(0, GvLayout.minTouchTarget),
         padding: const EdgeInsets.symmetric(horizontal: GvSpacing.lg),
         side: const BorderSide(color: GvColors.divider),
         textStyle: GvTypography.label.copyWith(fontSize: 15),
@@ -112,7 +112,11 @@ ThemeData buildGridViewDarkTheme() {
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(
         foregroundColor: GvColors.textPrimary,
-        minimumSize: const Size(44, 44),
+        minimumSize: const Size(
+          GvLayout.minTouchTarget,
+          GvLayout.minTouchTarget,
+        ),
+        tapTargetSize: MaterialTapTargetSize.padded,
       ),
     ),
   );
