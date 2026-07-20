@@ -1,68 +1,175 @@
-# GridView edge API
+# GridView Edge API
 
-TypeScript Cloudflare Worker that serves the GridView API contract.
-Architecture, endpoints, storage model and synchronization design:
-`../../docs/technical/GridView_Backend_Scheme.md`.
+TypeScript Cloudflare Worker for GridView API v1.
 
-## Current state
+Phase 5A is local-only: no Cloudflare KV namespace, R2 bucket, route, cron trigger
+or deployment has been provisioned. Public routes read only versioned snapshots
+through the active pointer. Synchronization is available through the scheduled
+handler and protected internal admin routes, backed by the deterministic mock
+provider.
 
-- `GET|HEAD /v1/status` implemented with the GridView response envelopes.
-- Contract layer (`src/contract`), runtime validation and fixtures added in
-  Phase 2 Batch 2B. Production routing for the other endpoints arrives in Phase
-  5; contract tests use a fixture-backed test router.
-- Local development only: **no Cloudflare account resources are provisioned**
-  (no KV, R2, routes, domains or secrets). Bindings arrive in Phase 5.
-- No Formula 1 provider integration.
-
-## Development
+## Local Setup
 
 ```text
 npm install
-npm run dev              # wrangler dev (local Miniflare, no account needed)
-npm test                 # vitest (routes + contract tests)
-npm run typecheck        # tsc --noEmit
-npm run lint             # eslint
-npm run format           # prettier --check
-npm run validate:openapi # redocly lint of docs/api/gridview-api-v1.yaml
-npm run validate:content # curated content vs JSON Schemas
-npm run validate:fixtures # API fixtures vs OpenAPI + provider-ID guard
-npm run validate         # all three
+cp .dev.vars.example .dev.vars
+npm run typecheck
+npm run lint
+npm run format
+npm test
+npm run validate
+npm run dev
 ```
 
-`wrangler dev` serves http://localhost:8787/v1/status locally.
+Use a disposable local `ADMIN_TOKEN` in `.dev.vars`. Do not commit `.dev.vars`.
 
-### Flutter client and this Worker
+## Local Workflow
 
-The Phase 4 offline-first slice does **not** require this Worker to run. The
-dev/staging Flutter build serves OpenAPI-valid snapshots bundled in the app
-(`assets/dev_fixtures/*`, the same shapes as `test/fixtures/api/v1/`) through the
-same DTO → repository → Drift → UI path as production. To point the client at a
-running Worker or staging instead, pass
-`--dart-define=API_BASE_URL=...` to `flutter run` (see
-`../../docs/technical/GridView_Synchronization.md` §9). Production always uses the
-real HTTP client and never falls back to fixtures.
-
-## Layout
+Start the Worker:
 
 ```text
-src/
-├── index.ts              Fetch handler and routing
-├── config/environment.ts Environment validation (Env bindings)
-├── http/envelope.ts      Success/error response envelopes
-├── routes/status.ts      /v1/status handler
-└── contract/             Contract types, enums, runtime validation, parsers
-scripts/                  ajv-based content/fixture validators (Node ESM)
-test/
-├── fixtures/api/v1/       API fixtures + manifest.json (shared source of truth)
-├── support/               fixture-backed test router
-├── contract/              contract tests (envelopes, meta variants, tolerance)
-└── status.test.ts         route tests
+npm run dev
 ```
 
-## Fixtures
+Seed/publish the first mock snapshot:
 
-`test/fixtures/api/v1/manifest.json` maps every fixture to its OpenAPI data
-schema, `dataKind` (single/array), metadata variant (BaseMeta / SnapshotMeta /
-SeasonSnapshotMeta) and whether it is expected to validate. The same fixtures
-back the Flutter parsing and mapping tests. See `../../docs/testing/README.md`
-for naming and how to add a fixture safely.
+```text
+curl -i -X POST http://127.0.0.1:8787/internal/admin/sync/full \
+  -H "Authorization: Bearer <local-token>"
+```
+
+Call public routes:
+
+```text
+curl -i http://127.0.0.1:8787/v1/status
+curl -i http://127.0.0.1:8787/v1/seasons/2026/calendar
+curl -i http://127.0.0.1:8787/v1/drivers/max-verstappen?season=2026
+```
+
+Test ETag / 304:
+
+```text
+curl -i http://127.0.0.1:8787/v1/home?season=2026
+curl -i http://127.0.0.1:8787/v1/home?season=2026 \
+  -H 'If-None-Match: W/"etag-from-first-response"'
+```
+
+Rollback to the previous complete release:
+
+```text
+curl -i -X POST http://127.0.0.1:8787/internal/admin/rollback \
+  -H "Authorization: Bearer <local-token>"
+```
+
+Inspect internal state:
+
+```text
+curl -i http://127.0.0.1:8787/internal/admin/sync/status \
+  -H "Authorization: Bearer <local-token>"
+
+curl -i http://127.0.0.1:8787/internal/admin/quota \
+  -H "Authorization: Bearer <local-token>"
+```
+
+Simulate provider failure in `.dev.vars`, restart `wrangler dev`, then call admin
+sync again:
+
+```text
+MOCK_PROVIDER_FAILURE=failure
+MOCK_PROVIDER_FAILURE=rate_limited
+MOCK_PROVIDER_INVALID_DATA=true
+```
+
+## Public Routes
+
+Implemented public `GET` and `HEAD` operations:
+
+- `/v1/status`
+- `/v1/bootstrap`
+- `/v1/home`
+- `/v1/seasons/current`
+- `/v1/seasons/{season}`
+- `/v1/seasons/{season}/calendar`
+- `/v1/seasons/{season}/grand-prix/{round}`
+- `/v1/seasons/{season}/grand-prix/{round}/results`
+- `/v1/seasons/{season}/standings/drivers`
+- `/v1/seasons/{season}/standings/constructors`
+- `/v1/seasons/{season}/drivers`
+- `/v1/drivers/{driverId}`
+- `/v1/seasons/{season}/constructors`
+- `/v1/constructors/{constructorId}`
+- `/v1/seasons/{season}/circuits`
+- `/v1/circuits/{circuitId}`
+- `/v1/content/manifest`
+
+Unsupported public methods return the public `METHOD_NOT_ALLOWED` envelope.
+Unknown routes and invalid parameters return controlled public error envelopes.
+
+## Internal Admin Routes
+
+Internal routes are not in the public OpenAPI document. Every route requires:
+
+```text
+Authorization: Bearer <ADMIN_TOKEN>
+```
+
+- `POST /internal/admin/sync/full`
+- `POST /internal/admin/sync/resource`
+- `POST /internal/admin/rebuild/home`
+- `POST /internal/admin/rollback`
+- `POST /internal/admin/cache/purge`
+- `GET /internal/admin/quota`
+- `GET /internal/admin/sync/status`
+
+State-changing operations reject `GET`.
+
+## Storage Model
+
+The storage interface has local-memory and Workers KV adapters. Phase 5A uses
+memory locally unless a fake/test KV binding is injected.
+
+Logical keys:
+
+- `snapshot:{season}:{version}:bootstrap`
+- `snapshot:{season}:{version}:home`
+- `snapshot:{season}:{version}:season`
+- `snapshot:{season}:{version}:calendar`
+- `snapshot:{season}:{version}:grand-prix:{round}`
+- `snapshot:{season}:{version}:grand-prix:{round}:results`
+- `snapshot:{season}:{version}:drivers`
+- `snapshot:{season}:{version}:constructors`
+- `snapshot:{season}:{version}:circuits`
+- `snapshot:{season}:{version}:standings:drivers`
+- `snapshot:{season}:{version}:standings:constructors`
+- `snapshot:{season}:{version}:driver:{driverId}`
+- `snapshot:{season}:{version}:constructor:{constructorId}`
+- `snapshot:{season}:{version}:circuit:{circuitId}`
+- `snapshot:{season}:{version}:content:manifest`
+- `active:{season}`
+- `previous:{season}`
+- `meta:current-season`
+- `meta:content-schema`
+- `sync:{season}:state`
+- `quota:provider`
+
+## Cache Semantics
+
+Success snapshot responses use weak ETags based on immutable snapshot identity:
+
+```text
+contentVersion + resource identity
+```
+
+The body includes a per-request `meta.requestId`, so strong byte-based ETags are
+not emitted. Matching `If-None-Match` returns `304` with no body and with
+`X-Request-ID`. Cache policies vary by resource category; public errors use
+`Cache-Control: no-store`.
+
+## Mock Provider
+
+The mock provider is named `mock-development-provider`, uses only repository
+mock/curated content, has no live network access, supports injected failure and
+quota states, and is rejected if explicitly selected in production.
+
+Provider mappings remain internal; provider IDs are not emitted in public
+snapshots.

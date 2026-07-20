@@ -80,7 +80,7 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Validate contract (OpenAPI, curated content, API fixtures)
+      - name: Validate contract, content, fixtures and Worker config
         run: npm run validate
 
   secret-scan:

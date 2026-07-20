@@ -183,3 +183,40 @@ deliberately avoided.
 No test requires a real Worker, network, Firebase or Android device. Drift tests
 use `NativeDatabase.memory()` (and a temporary on-disk file for the persistence
 test).
+
+## Edge API foundation (Phase 5A)
+
+The Worker backend foundation is tested locally with injected adapters only. No
+test requires a Cloudflare account, real KV namespace, provider key or live
+Formula 1 data source.
+
+From `services/edge-api`:
+
+```bash
+npm run typecheck
+npm run lint
+npm run format
+npm test
+npm run validate
+```
+
+Coverage includes:
+
+- Every public OpenAPI route for GET and HEAD.
+- Invalid season, round and stable-ID parameters.
+- Unknown routes, unsupported methods and safe error envelopes.
+- Request ID header/body correlation.
+- Weak ETag stability, `If-None-Match` and `304`.
+- Cache policy differences and no-store error responses.
+- Versioned publication, active-pointer-last writes, previous pointer, rollback,
+  validation failure and write failure.
+- Mock provider failure, rate limiting, quota skip behavior and due-job
+  calculation.
+- Protected internal admin routes and log/response secret redaction.
+- Fake Workers KV adapter behavior without provisioning KV.
+- Generated snapshot provenance, provider-ID isolation, null preservation and
+  fractional points.
+
+The existing fixture validator still reports strict OpenAPI conformance:
+30 conforming fixtures and 1 tolerance-only fixture that must fail strict
+validation.

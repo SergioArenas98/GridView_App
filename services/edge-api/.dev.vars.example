@@ -1,0 +1,8 @@
+ENVIRONMENT=development
+PROVIDER_MODE=mock
+ADMIN_TOKEN=replace-with-disposable-local-token
+
+# Optional local failure simulation:
+# MOCK_PROVIDER_FAILURE=failure
+# MOCK_PROVIDER_FAILURE=rate_limited
+# MOCK_PROVIDER_INVALID_DATA=true

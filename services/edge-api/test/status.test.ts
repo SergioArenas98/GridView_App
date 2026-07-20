@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import worker, { type Env } from '../src/index';
-
-const env: Env = { ENVIRONMENT: 'development' };
+import worker from '../src/index';
+import { createHarness } from './support/edge-harness';
 
 function request(path: string, method = 'GET'): Request {
   return new Request(`https://api.gridview.test${path}`, { method });
@@ -10,11 +9,15 @@ function request(path: string, method = 'GET'): Request {
 
 describe('GET /v1/status', () => {
   it('returns the success envelope with service metadata', async () => {
-    const response = await worker.fetch(request('/v1/status'), env);
+    const harness = createHarness();
+    const response = await worker.fetch(request('/v1/status'), harness.env);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toContain('application/json');
-    expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, max-age=30, must-revalidate',
+    );
+    expect(response.headers.get('ETag')).toMatch(/^W\/"gv1-/);
 
     const body = (await response.json()) as {
       data: Record<string, unknown>;
@@ -30,7 +33,11 @@ describe('GET /v1/status', () => {
   });
 
   it('supports HEAD with headers and no body', async () => {
-    const response = await worker.fetch(request('/v1/status', 'HEAD'), env);
+    const harness = createHarness();
+    const response = await worker.fetch(
+      request('/v1/status', 'HEAD'),
+      harness.env,
+    );
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toContain('application/json');
@@ -40,7 +47,8 @@ describe('GET /v1/status', () => {
 
 describe('routing', () => {
   it('returns the error envelope for unknown paths', async () => {
-    const response = await worker.fetch(request('/v1/unknown'), env);
+    const harness = createHarness();
+    const response = await worker.fetch(request('/v1/unknown'), harness.env);
 
     expect(response.status).toBe(404);
     const body = (await response.json()) as { error: Record<string, unknown> };
@@ -50,7 +58,11 @@ describe('routing', () => {
   });
 
   it('rejects non-GET/HEAD methods with 405 and an Allow header', async () => {
-    const response = await worker.fetch(request('/v1/status', 'POST'), env);
+    const harness = createHarness();
+    const response = await worker.fetch(
+      request('/v1/status', 'POST'),
+      harness.env,
+    );
 
     expect(response.status).toBe(405);
     expect(response.headers.get('Allow')).toBe('GET, HEAD');

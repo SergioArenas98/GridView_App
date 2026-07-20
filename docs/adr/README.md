@@ -20,3 +20,7 @@ GridView reconstruction.
 | [0004](0004-drift-local-database.md) | Drift local database and database file identity | Accepted |
 | [0005](0005-snapshot-conflict-and-freshness.md) | Snapshot conflict rule and freshness semantics | Accepted |
 | [0006](0006-riverpod-state-and-result-pattern.md) | Riverpod state management and the result/state pattern | Accepted |
+| [0007](0007-versioned-kv-publication-active-pointer.md) | Versioned KV publication with active pointer | Accepted |
+| [0008](0008-weak-etag-strategy-with-request-ids.md) | Weak ETags with per-request request IDs | Accepted |
+| [0009](0009-protected-staging-administration-token.md) | Protected administration with injected token | Accepted |
+| [0010](0010-workers-kv-consistency-limitation.md) | Workers KV consistency limitation | Accepted |

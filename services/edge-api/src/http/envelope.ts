@@ -1,34 +1,17 @@
+import type { BaseMeta, ErrorCode } from '../contract/types';
+
 export const API_VERSION = '1';
 
-/**
- * Error codes exposed by the public API. The canonical list is finalized
- * with the OpenAPI contract in Phase 2; the scaffold uses the subset it
- * needs (see docs/technical/GridView_Backend_Scheme.md section 12).
- */
-export type ErrorCode =
-  | 'INVALID_PARAMETER'
-  | 'RESOURCE_NOT_FOUND'
-  | 'METHOD_NOT_ALLOWED'
-  | 'INTERNAL_ERROR';
+export type JsonHeaders = Record<string, string>;
 
-export interface ResponseMeta {
-  readonly apiVersion: string;
-  readonly generatedAt: string;
-  readonly requestId: string;
-}
-
-/** Wraps `data` in the GridView success envelope. */
+/** Wraps `data` in a GridView success envelope. */
 export function successResponse(
   data: unknown,
-  requestId: string,
-  headers: Record<string, string> = {},
+  meta: BaseMeta,
+  headers: JsonHeaders = {},
+  status = 200,
 ): Response {
-  const meta: ResponseMeta = {
-    apiVersion: API_VERSION,
-    generatedAt: new Date().toISOString(),
-    requestId,
-  };
-  return jsonResponse({ data, meta }, 200, requestId, headers);
+  return jsonResponse({ data, meta }, status, meta.requestId, headers);
 }
 
 /** Wraps an error in the GridView error envelope. */
@@ -38,27 +21,31 @@ export function errorResponse(
   message: string,
   retryable: boolean,
   requestId: string,
-  headers: Record<string, string> = {},
+  headers: JsonHeaders = {},
 ): Response {
   return jsonResponse(
     { error: { code, message, retryable, requestId } },
     status,
     requestId,
-    headers,
+    {
+      'Cache-Control': 'no-store',
+      ...headers,
+    },
   );
 }
 
-function jsonResponse(
+/** JSON response helper for public and internal non-public responses. */
+export function jsonResponse(
   body: unknown,
   status: number,
   requestId: string,
-  headers: Record<string, string>,
+  headers: JsonHeaders = {},
 ): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'X-Request-Id': requestId,
+      'X-Request-ID': requestId,
       ...headers,
     },
   });

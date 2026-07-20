@@ -14,7 +14,8 @@
     "validate:openapi": "redocly lint ../../docs/api/gridview-api-v1.yaml --config ../../redocly.yaml",
     "validate:content": "node scripts/validate-content.mjs",
     "validate:fixtures": "node scripts/validate-fixtures.mjs",
-    "validate": "npm run validate:openapi && npm run validate:content && npm run validate:fixtures"
+    "validate:worker-config": "wrangler types .wrangler/worker-configuration.d.ts --include-runtime false",
+    "validate": "npm run validate:openapi && npm run validate:content && npm run validate:fixtures && npm run validate:worker-config"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260718.1",
