@@ -9,6 +9,7 @@ import '../../../../core/api/errors/api_exception.dart';
 import '../../../../core/api/errors/api_failure.dart';
 import '../../../../core/api/errors/error_dto.dart';
 import 'gridview_api.dart';
+import 'snapshot_contract.dart';
 
 /// The production remote data source: talks to the GridView edge API over HTTPS
 /// with Dio and the approved v1 envelope. It maps every transport and contract
@@ -83,6 +84,8 @@ class DioGridViewApi implements GridViewApi {
         ),
       );
     }
+    // Home and Grand Prix are snapshot responses: sourceUpdatedAt is required.
+    requireSnapshotMeta(parsed.meta);
     return parsed;
   }
 

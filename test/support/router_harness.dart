@@ -78,10 +78,10 @@ class TestApp extends StatelessWidget {
 }
 
 /// Pumps the GridView router at [initialLocation] and settles. Wraps the app in
-/// a [ProviderScope] backed by an in-memory database, the deterministic
-/// [HarnessApi] and a fixed clock (before the fixtures' `staleAfter`, so content
-/// is fresh). Individual dependencies can be replaced with [api], [clock],
-/// [environment] or [database].
+/// a [ProviderScope] backed by the deterministic [defaultFakeRepository] and a
+/// fixed clock (before the fixtures' `staleAfter`, so content is fresh).
+/// Individual dependencies can be replaced with [repository], [clock],
+/// [environment] or [mockData].
 Future<GoRouter> pumpApp(
   WidgetTester tester, {
   String initialLocation = '/',

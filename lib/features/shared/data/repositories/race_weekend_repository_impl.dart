@@ -58,10 +58,14 @@ class RaceWeekendRepositoryImpl implements RaceWeekendRepository {
         sessions: sessions,
       );
 
+      // The conflict key must come from the response meta: SnapshotMeta
+      // requires sourceUpdatedAt, whereas the data.freshness object leaves it
+      // optional. The remote layer has already rejected a snapshot whose meta
+      // is missing sourceUpdatedAt.
       final SnapshotWriteOutcome outcome = await _local.writeHomeSnapshot(
         featured: featured,
         featuredCircuit: circuitFromSummaryDto(featuredDto),
-        freshness: freshnessFromDto(response.data.freshness),
+        freshness: freshnessFromMeta(response.meta),
       );
       return RefreshSuccess(applied: outcome == SnapshotWriteOutcome.applied);
     } on GridViewApiException catch (e) {

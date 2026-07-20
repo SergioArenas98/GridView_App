@@ -9,6 +9,7 @@ import '../../../../core/api/envelope/api_response.dart';
 import '../../../../core/api/errors/api_exception.dart';
 import '../../../../core/api/errors/api_failure.dart';
 import 'gridview_api.dart';
+import 'snapshot_contract.dart';
 
 /// Development/staging fixture data source.
 ///
@@ -62,14 +63,18 @@ class FixtureGridViewApi implements GridViewApi {
         ApiFailure(kind: ApiFailureKind.notFound),
       );
     }
+    final ApiResponse<T> parsed;
     try {
       final Map<String, dynamic> json = jsonDecode(raw) as Map<String, dynamic>;
-      return ApiResponse.parse<T>(json, parse);
+      parsed = ApiResponse.parse<T>(json, parse);
     } catch (_) {
       throw const GridViewApiException(
         ApiFailure(kind: ApiFailureKind.invalidResponse),
       );
     }
+    // Home and Grand Prix are snapshot responses: sourceUpdatedAt is required.
+    requireSnapshotMeta(parsed.meta);
+    return parsed;
   }
 
   Map<String, dynamic> _asMap(Object? value) => value as Map<String, dynamic>;

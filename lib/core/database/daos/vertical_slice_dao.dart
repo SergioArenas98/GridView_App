@@ -13,18 +13,27 @@ import '../tables.dart';
 
 part 'vertical_slice_dao.g.dart';
 
-/// The outcome of a snapshot write.
+/// The outcome of a snapshot write. Every value except [applied] is a non-write
+/// that leaves all cached rows untouched.
 ///
-/// - [applied]: the incoming snapshot was newer and was written.
-/// - [rejectedOlder]: the incoming snapshot was older than the cached one and
-///   was not written (protects newer cached data).
-/// - [skippedUpToDate]: the incoming snapshot is the same revision as the cached
-///   one (equal `sourceUpdatedAt` and `contentVersion`); it was intentionally
-///   not rewritten, so no rows change and no stream re-emits.
-///
-/// Both [rejectedOlder] and [skippedUpToDate] are non-writes and map to
-/// `RefreshSuccess(applied: false)` at the repository boundary.
-enum SnapshotWriteOutcome { applied, rejectedOlder, skippedUpToDate }
+/// - [applied]: the incoming snapshot had newer source data (or repaired an
+///   incomplete stored snapshot) and was written.
+/// - [rejectedOlder]: the incoming snapshot's source data was older than the
+///   cached one; not written (protects newer cached data).
+/// - [skippedUpToDate]: same revision as the cached one (equal `sourceUpdatedAt`
+///   and `contentVersion`); intentionally not rewritten, so no rows change and
+///   no stream re-emits.
+/// - [rejectedInvalid]: the incoming snapshot has **no `sourceUpdatedAt`**, which
+///   is contract-invalid (SnapshotMeta requires it). Not written, and
+///   `generatedAt` is never used as a substitute. The remote layer normally
+///   rejects this as a typed failure before it reaches the database; this value
+///   is defence in depth for a direct DAO caller.
+enum SnapshotWriteOutcome {
+  applied,
+  rejectedOlder,
+  skippedUpToDate,
+  rejectedInvalid,
+}
 
 /// Local data source for the Phase 4 vertical slice.
 ///
@@ -225,59 +234,57 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     });
   }
 
-  /// Decides whether an incoming snapshot should be applied, rejected as older,
-  /// or skipped as an identical revision.
+  /// Decides whether an incoming snapshot should be applied, rejected, or
+  /// skipped. **`sourceUpdatedAt` is the primary conflict boundary** — the
+  /// age/revision of the underlying source data — and `generatedAt` must never
+  /// outrank it, nor substitute for it when it is missing.
   ///
-  /// **`sourceUpdatedAt` is the primary conflict boundary** — the age/revision
-  /// of the underlying source data. A snapshot *generated* later can still carry
-  /// *older* source data, so `generatedAt` must never outrank `sourceUpdatedAt`.
-  ///
-  /// 1. incoming source older than stored → reject.
-  /// 2. incoming source newer than stored → apply.
-  /// 3. equal source + equal `contentVersion` → skip (idempotent, no rewrite).
-  /// 4. equal source + differing `contentVersion` → `generatedAt` is a
-  ///    deterministic tie-breaker: a strictly later `generatedAt` applies; an
-  ///    equal or earlier one is rejected.
+  /// 1. incoming `sourceUpdatedAt` **missing** → `rejectedInvalid`
+  ///    (contract-invalid; no write; `generatedAt` is not consulted).
+  /// 2. stored `sourceUpdatedAt` missing but incoming present → `applied`
+  ///    (repair the incomplete cached snapshot; not `generatedAt` ordering).
+  /// 3. incoming source older than stored → `rejectedOlder`.
+  /// 4. incoming source newer than stored → `applied`.
+  /// 5. equal source + equal `contentVersion` → `skippedUpToDate` (no rewrite).
+  /// 6. equal source + differing `contentVersion` → `generatedAt` is a
+  ///    deterministic tie-breaker only: a strictly later `generatedAt` applies;
+  ///    an equal or earlier one is rejected.
   ///
   /// `contentVersion` is compared by equality only (never assumed sortable).
-  /// When `sourceUpdatedAt` is unavailable on either side (older data that
-  /// predates the field), ordering falls back to `generatedAt`.
   SnapshotWriteOutcome _decideOutcome(
     DataFreshness incoming,
     SnapshotRow? existing,
   ) {
+    final DateTime? incomingSource = incoming.sourceUpdatedAt;
+    if (incomingSource == null) {
+      // Contract-invalid: a snapshot must carry sourceUpdatedAt. Never fall back
+      // to generatedAt; reject without writing so cached rows are preserved.
+      return SnapshotWriteOutcome.rejectedInvalid;
+    }
+
     if (existing == null) return SnapshotWriteOutcome.applied;
 
-    final DateTime? incomingSource = incoming.sourceUpdatedAt;
     final DateTime? storedSource = existing.sourceUpdatedAt;
-
-    if (incomingSource != null && storedSource != null) {
-      if (incomingSource.isBefore(storedSource)) {
-        return SnapshotWriteOutcome.rejectedOlder;
-      }
-      if (incomingSource.isAfter(storedSource)) {
-        return SnapshotWriteOutcome.applied;
-      }
-      // Equal source revision.
-      if (incoming.contentVersion == existing.contentVersion) {
-        return SnapshotWriteOutcome.skippedUpToDate;
-      }
-      // Differing content at the same source revision: generatedAt tie-break.
-      return incoming.generatedAt.isAfter(existing.generatedAt)
-          ? SnapshotWriteOutcome.applied
-          : SnapshotWriteOutcome.rejectedOlder;
-    }
-
-    // Fallback: no comparable source revision — order by generatedAt.
-    if (incoming.generatedAt.isBefore(existing.generatedAt)) {
-      return SnapshotWriteOutcome.rejectedOlder;
-    }
-    if (incoming.generatedAt.isAfter(existing.generatedAt)) {
+    if (storedSource == null) {
+      // The stored snapshot predates the sourceUpdatedAt invariant; a valid
+      // incoming snapshot repairs it. This is cache repair, not ordering.
       return SnapshotWriteOutcome.applied;
     }
-    return incoming.contentVersion == existing.contentVersion
-        ? SnapshotWriteOutcome.skippedUpToDate
-        : SnapshotWriteOutcome.applied;
+
+    if (incomingSource.isBefore(storedSource)) {
+      return SnapshotWriteOutcome.rejectedOlder;
+    }
+    if (incomingSource.isAfter(storedSource)) {
+      return SnapshotWriteOutcome.applied;
+    }
+    // Equal source revision.
+    if (incoming.contentVersion == existing.contentVersion) {
+      return SnapshotWriteOutcome.skippedUpToDate;
+    }
+    // Differing content at the same source revision: generatedAt tie-break.
+    return incoming.generatedAt.isAfter(existing.generatedAt)
+        ? SnapshotWriteOutcome.applied
+        : SnapshotWriteOutcome.rejectedOlder;
   }
 
   /// Ensures a minimal season row exists so Grand Prix foreign keys resolve.

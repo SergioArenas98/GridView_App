@@ -43,8 +43,20 @@ Three provenance values, kept distinct (all persisted per snapshot key `home`,
 - **`contentVersion`** — immutable content identity/provenance, compared by
   **equality only** (never assumed sortable).
 
-Rule (`_decideOutcome`):
+`SnapshotMeta` **requires** `sourceUpdatedAt`, so the conflict key is
+`meta.sourceUpdatedAt` (not the optional `data.freshness.sourceUpdatedAt`). A
+snapshot response missing `meta.sourceUpdatedAt` is **contract-invalid** and is
+rejected at the remote boundary (`requireSnapshotMeta` → typed
+`invalidResponse`) before it reaches the database — it **never** falls back to
+`generatedAt`.
 
+Rule (`_decideOutcome`), `generatedAt` never outranks or substitutes for
+`sourceUpdatedAt`:
+
+0. incoming `sourceUpdatedAt` **missing** → **reject as invalid** (no write,
+   `generatedAt` not consulted; cache preserved).
+0b. stored `sourceUpdatedAt` missing but incoming present → **apply** (repair an
+   incomplete pre-invariant cached snapshot).
 1. incoming `sourceUpdatedAt` **older** than stored → **reject** (newer cache and
    its whole transaction state preserved) → `RefreshSuccess(applied: false)`.
 2. incoming `sourceUpdatedAt` **newer** → **apply** atomically.
@@ -53,9 +65,10 @@ Rule (`_decideOutcome`):
 4. equal `sourceUpdatedAt` **+** differing `contentVersion` → `generatedAt`
    tie-breaker: strictly **later** applies; **equal/earlier** is rejected.
 
-Fallback: when `sourceUpdatedAt` is unavailable on either side, ordering falls
-back to `generatedAt`. A rejected or skipped snapshot performs **no write** (no
-false stream update). See ADR 0005.
+A rejected, invalid or skipped snapshot performs **no write** (no false stream
+update). The Drift `snapshots.sourceUpdatedAt` column stays nullable (schema
+unchanged) so legacy null-source rows remain readable and are repaired by rule
+0b. See ADR 0005.
 
 ## 3. Freshness semantics
 

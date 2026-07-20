@@ -100,6 +100,10 @@ List<Session> belgianSprintSessions() => <Session>[
   raceSessionBelgian(),
 ];
 
+/// Builds a domain [DataFreshness]. A real snapshot always carries a source
+/// revision, so [sourceUpdatedAt] defaults to [generatedAt] when not given.
+/// Tests that need the contract-invalid "no source" case build [DataFreshness]
+/// directly instead of calling this helper.
 DataFreshness freshness({
   required DateTime generatedAt,
   DateTime? staleAfter,
@@ -108,7 +112,7 @@ DataFreshness freshness({
   bool? stale = false,
 }) => DataFreshness(
   generatedAt: generatedAt,
-  sourceUpdatedAt: sourceUpdatedAt,
+  sourceUpdatedAt: sourceUpdatedAt ?? generatedAt,
   staleAfter: staleAfter,
   contentVersion: contentVersion,
   stale: stale,

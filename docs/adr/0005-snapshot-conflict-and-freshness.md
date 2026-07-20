@@ -29,14 +29,40 @@ carries `meta.generatedAt`, and season-scoped snapshots additionally carry
   representation. It is compared by **equality only**; it is **not** assumed to
   be numerically or lexicographically sortable.
 
+### Nullability of `sourceUpdatedAt` at each layer
+
+`SnapshotMeta` **requires** `sourceUpdatedAt`, so an incoming public snapshot
+without it is contract-invalid. But the value passes through layers that are
+structurally nullable, so the invariant is enforced explicitly:
+
+| Layer | `sourceUpdatedAt` | Note |
+|---|---|---|
+| OpenAPI `SnapshotMeta`/`SeasonSnapshotMeta` | **required** | Home + Grand Prix responses. (`DataFreshness` object: optional — so it is **not** the conflict key.) |
+| API DTO `MetaDto` | nullable (`String?`) | One DTO unions BaseMeta/SnapshotMeta/SeasonSnapshotMeta. |
+| Remote parser | **enforced non-null** | `requireSnapshotMeta` rejects a snapshot whose `meta.sourceUpdatedAt` is missing as `invalidResponse`, before mapping/persisting. |
+| Domain `DataFreshness` | nullable (`DateTime?`) | Always non-null after the guard + `freshnessFromMeta`. |
+| Drift `snapshots.sourceUpdatedAt` | **nullable column** | Kept nullable so a pre-invariant row can be repaired; no new null row is ever written. |
+| DAO `_decideOutcome` | guards both sides | See rule 0/0b below. |
+
+The **conflict key is `meta.sourceUpdatedAt`** (required), never the optional
+`data.freshness.sourceUpdatedAt`.
+
 ## Decision
 
 ### Conflict rule — `sourceUpdatedAt` is the primary boundary
 
 All three values are persisted in the `snapshots` table, keyed by a logical
 snapshot key (`home`, `grand_prix:{season}:{round}`). `generatedAt` **must never
-outrank** `sourceUpdatedAt`. On a write (`_decideOutcome`):
+outrank `sourceUpdatedAt`, nor substitute for it when it is missing**. On a
+write (`_decideOutcome`):
 
+0. **incoming `sourceUpdatedAt` missing → reject as invalid.** Contract-invalid;
+   no write, `generatedAt` is **not** consulted. DAO returns `rejectedInvalid`.
+   (The remote parser already rejects this as a typed `invalidResponse` failure
+   before it reaches the DAO; this is defence in depth for a direct caller.)
+0b. **stored `sourceUpdatedAt` missing but incoming present → apply (cache
+   repair).** A valid incoming snapshot repairs an incomplete pre-invariant
+   stored row; this is not `generatedAt` ordering.
 1. **incoming `sourceUpdatedAt` < stored → reject.** Newer cached data (and the
    entire cached transaction state) is preserved. DAO returns
    `rejectedOlder`; repository reports `RefreshSuccess(applied: false)`.
@@ -48,13 +74,19 @@ outrank** `sourceUpdatedAt`. On a write (`_decideOutcome`):
    deterministic tie-breaker only.** A strictly **later** `generatedAt` applies;
    an **equal or earlier** one is rejected.
 
-Fallback: when `sourceUpdatedAt` is unavailable on either side (older data that
-predates the field), ordering falls back to `generatedAt`.
-
 The entire write (season/circuit/grand-prix/sessions/freshness) occurs inside a
 **single Drift transaction**, so a snapshot is applied all-or-nothing, and a
-rejected or skipped snapshot performs **no write at all** (no false stream
-emission).
+rejected, invalid or skipped snapshot performs **no write at all** (no false
+stream emission).
+
+### Why the Drift column stays nullable (no schema bump)
+
+The `snapshots.sourceUpdatedAt` column remains nullable and the schema version
+stays **1**. Making it `NOT NULL` would require a migration to backfill or drop
+any pre-invariant rows that an already-installed app may hold. Instead the
+invariant is enforced at the **write boundary** (no new null-source row is ever
+written) and rule 0b **repairs** any legacy null-source row on the next valid
+sync. Existing databases therefore remain readable.
 
 ### Freshness rule
 
