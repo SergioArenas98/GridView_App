@@ -18,29 +18,43 @@ active-version pointer (`GridView_Backend_Scheme.md` §13.1). Every snapshot
 carries `meta.generatedAt`, and season-scoped snapshots additionally carry
 `sourceUpdatedAt`, `staleAfter` and `contentVersion`.
 
+### The three provenance values (do not conflate them)
+
+- **`sourceUpdatedAt`** — the age/revision of the *underlying source data*. This
+  is what actually determines whether one snapshot is more recent than another.
+- **`generatedAt`** — the time the *GridView snapshot document was produced*. A
+  snapshot generated later can still carry **older** source data (a delayed or
+  re-run generation), so `generatedAt` is not a safe recency signal on its own.
+- **`contentVersion`** — an *immutable identity/provenance token* for the content
+  representation. It is compared by **equality only**; it is **not** assumed to
+  be numerically or lexicographically sortable.
+
 ## Decision
 
-### Conflict rule (ordering key: `generatedAt`)
+### Conflict rule — `sourceUpdatedAt` is the primary boundary
 
-Each persisted snapshot records its `generatedAt` in the `snapshots` table,
-keyed by a logical snapshot key (`home`, `grand_prix:{season}:{round}`). On a
-write:
+All three values are persisted in the `snapshots` table, keyed by a logical
+snapshot key (`home`, `grand_prix:{season}:{round}`). `generatedAt` **must never
+outrank** `sourceUpdatedAt`. On a write (`_decideOutcome`):
 
-- **Incoming `generatedAt` is strictly older than the stored one → reject.**
-  The newer cached data is preserved; the DAO returns
-  `SnapshotWriteOutcome.rejectedOlder`, and the repository reports
-  `RefreshSuccess(applied: false)`.
-- **Incoming `generatedAt` is equal → apply (idempotent).** Re-applying the same
-  snapshot upserts identical rows and replaces the same session set, so it
-  produces no duplicates and no net change.
-- **Incoming `generatedAt` is newer → apply (update).** The snapshot replaces the
-  cached one; obsolete child sessions are removed by the wholesale replacement.
+1. **incoming `sourceUpdatedAt` < stored → reject.** Newer cached data (and the
+   entire cached transaction state) is preserved. DAO returns
+   `rejectedOlder`; repository reports `RefreshSuccess(applied: false)`.
+2. **incoming `sourceUpdatedAt` > stored → apply** atomically.
+3. **equal `sourceUpdatedAt` + equal `contentVersion` → skip (idempotent no-op).**
+   No rows are rewritten and the stream does not re-emit. DAO returns
+   `skippedUpToDate`; repository reports `RefreshSuccess(applied: false)`.
+4. **equal `sourceUpdatedAt` + differing `contentVersion` → `generatedAt` is a
+   deterministic tie-breaker only.** A strictly **later** `generatedAt` applies;
+   an **equal or earlier** one is rejected.
 
-`generatedAt` is the primary ordering key because it is the monotonic snapshot
-version. `contentVersion` is retained as informational provenance.
+Fallback: when `sourceUpdatedAt` is unavailable on either side (older data that
+predates the field), ordering falls back to `generatedAt`.
 
 The entire write (season/circuit/grand-prix/sessions/freshness) occurs inside a
-**single Drift transaction**, so a snapshot is applied all-or-nothing.
+**single Drift transaction**, so a snapshot is applied all-or-nothing, and a
+rejected or skipped snapshot performs **no write at all** (no false stream
+emission).
 
 ### Freshness rule
 

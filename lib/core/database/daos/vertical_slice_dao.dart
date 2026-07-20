@@ -13,10 +13,18 @@ import '../tables.dart';
 
 part 'vertical_slice_dao.g.dart';
 
-/// The outcome of a snapshot write. [rejectedOlder] means the incoming snapshot
-/// was older than the cached one and was not applied (the conflict rule that
-/// prevents an older snapshot from overwriting newer cached data).
-enum SnapshotWriteOutcome { applied, rejectedOlder }
+/// The outcome of a snapshot write.
+///
+/// - [applied]: the incoming snapshot was newer and was written.
+/// - [rejectedOlder]: the incoming snapshot was older than the cached one and
+///   was not written (protects newer cached data).
+/// - [skippedUpToDate]: the incoming snapshot is the same revision as the cached
+///   one (equal `sourceUpdatedAt` and `contentVersion`); it was intentionally
+///   not rewritten, so no rows change and no stream re-emits.
+///
+/// Both [rejectedOlder] and [skippedUpToDate] are non-writes and map to
+/// `RefreshSuccess(applied: false)` at the repository boundary.
+enum SnapshotWriteOutcome { applied, rejectedOlder, skippedUpToDate }
 
 /// Local data source for the Phase 4 vertical slice.
 ///
@@ -143,9 +151,8 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
   }) {
     return transaction(() async {
       final SnapshotRow? existing = await _snapshotByKey(homeSnapshotKey);
-      if (_isOlder(freshness, existing)) {
-        return SnapshotWriteOutcome.rejectedOlder;
-      }
+      final SnapshotWriteOutcome decision = _decideOutcome(freshness, existing);
+      if (decision != SnapshotWriteOutcome.applied) return decision;
 
       if (season != null) {
         await into(seasons).insertOnConflictUpdate(_seasonCompanion(season));
@@ -193,9 +200,8 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     final String key = grandPrixSnapshotKey(grandPrix.season, grandPrix.round);
     return transaction(() async {
       final SnapshotRow? existing = await _snapshotByKey(key);
-      if (_isOlder(freshness, existing)) {
-        return SnapshotWriteOutcome.rejectedOlder;
-      }
+      final SnapshotWriteOutcome decision = _decideOutcome(freshness, existing);
+      if (decision != SnapshotWriteOutcome.applied) return decision;
 
       await _ensureSeason(grandPrix.season);
       await _ensureCircuit(grandPrix.circuitId);
@@ -219,8 +225,60 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     });
   }
 
-  bool _isOlder(DataFreshness incoming, SnapshotRow? existing) =>
-      existing != null && incoming.generatedAt.isBefore(existing.generatedAt);
+  /// Decides whether an incoming snapshot should be applied, rejected as older,
+  /// or skipped as an identical revision.
+  ///
+  /// **`sourceUpdatedAt` is the primary conflict boundary** — the age/revision
+  /// of the underlying source data. A snapshot *generated* later can still carry
+  /// *older* source data, so `generatedAt` must never outrank `sourceUpdatedAt`.
+  ///
+  /// 1. incoming source older than stored → reject.
+  /// 2. incoming source newer than stored → apply.
+  /// 3. equal source + equal `contentVersion` → skip (idempotent, no rewrite).
+  /// 4. equal source + differing `contentVersion` → `generatedAt` is a
+  ///    deterministic tie-breaker: a strictly later `generatedAt` applies; an
+  ///    equal or earlier one is rejected.
+  ///
+  /// `contentVersion` is compared by equality only (never assumed sortable).
+  /// When `sourceUpdatedAt` is unavailable on either side (older data that
+  /// predates the field), ordering falls back to `generatedAt`.
+  SnapshotWriteOutcome _decideOutcome(
+    DataFreshness incoming,
+    SnapshotRow? existing,
+  ) {
+    if (existing == null) return SnapshotWriteOutcome.applied;
+
+    final DateTime? incomingSource = incoming.sourceUpdatedAt;
+    final DateTime? storedSource = existing.sourceUpdatedAt;
+
+    if (incomingSource != null && storedSource != null) {
+      if (incomingSource.isBefore(storedSource)) {
+        return SnapshotWriteOutcome.rejectedOlder;
+      }
+      if (incomingSource.isAfter(storedSource)) {
+        return SnapshotWriteOutcome.applied;
+      }
+      // Equal source revision.
+      if (incoming.contentVersion == existing.contentVersion) {
+        return SnapshotWriteOutcome.skippedUpToDate;
+      }
+      // Differing content at the same source revision: generatedAt tie-break.
+      return incoming.generatedAt.isAfter(existing.generatedAt)
+          ? SnapshotWriteOutcome.applied
+          : SnapshotWriteOutcome.rejectedOlder;
+    }
+
+    // Fallback: no comparable source revision — order by generatedAt.
+    if (incoming.generatedAt.isBefore(existing.generatedAt)) {
+      return SnapshotWriteOutcome.rejectedOlder;
+    }
+    if (incoming.generatedAt.isAfter(existing.generatedAt)) {
+      return SnapshotWriteOutcome.applied;
+    }
+    return incoming.contentVersion == existing.contentVersion
+        ? SnapshotWriteOutcome.skippedUpToDate
+        : SnapshotWriteOutcome.applied;
+  }
 
   /// Ensures a minimal season row exists so Grand Prix foreign keys resolve.
   /// Never clobbers a fully-synchronised season row.

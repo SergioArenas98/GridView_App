@@ -43,6 +43,7 @@ class _FakeApi implements GridViewApi {
 
 ApiResponse<HomeDataDto> _homeResponse({
   String generatedAt = '2026-07-18T12:00:00Z',
+  String sourceUpdatedAt = '2026-07-18T11:55:00Z',
   String? staleAfter = '2026-07-18T12:15:00Z',
   bool stale = false,
 }) {
@@ -51,9 +52,12 @@ ApiResponse<HomeDataDto> _homeResponse({
       (json['data'] as Map<String, dynamic>)['freshness']
           as Map<String, dynamic>;
   freshness['generatedAt'] = generatedAt;
+  freshness['sourceUpdatedAt'] = sourceUpdatedAt;
   freshness['staleAfter'] = staleAfter;
   freshness['stale'] = stale;
-  (json['meta'] as Map<String, dynamic>)['generatedAt'] = generatedAt;
+  final Map<String, dynamic> meta = json['meta'] as Map<String, dynamic>;
+  meta['generatedAt'] = generatedAt;
+  meta['sourceUpdatedAt'] = sourceUpdatedAt;
   return ApiResponse.parse<HomeDataDto>(
     json,
     (Object? d) => HomeDataDto.fromJson(d! as Map<String, dynamic>),
@@ -154,34 +158,47 @@ void main() {
       },
     );
 
-    test('a newer snapshot updates the cache', () async {
-      api.home = () => _homeResponse(generatedAt: '2026-07-18T12:00:00Z');
+    test('a snapshot with newer source data updates the cache', () async {
+      api.home = () => _homeResponse(sourceUpdatedAt: '2026-07-18T11:55:00Z');
       await repo.refreshHome();
 
       api.home = () => _homeResponse(
+        sourceUpdatedAt: '2026-07-18T17:55:00Z', // newer source
         generatedAt: '2026-07-18T18:00:00Z',
-        stale: true,
-        staleAfter: '2026-07-18T12:15:00Z',
       );
       final RefreshResult result = await repo.refreshHome();
 
       expect((result as RefreshSuccess).applied, isTrue);
       final HomeView view = (await repo.watchHome().first)!;
-      expect(view.freshness.generatedAt, DateTime.utc(2026, 7, 18, 18));
+      expect(view.freshness.sourceUpdatedAt, DateTime.utc(2026, 7, 18, 17, 55));
     });
 
-    test('an older snapshot is rejected and preserves newer cache', () async {
-      api.home = () => _homeResponse(generatedAt: '2026-07-18T18:00:00Z');
-      await repo.refreshHome();
+    test(
+      'a later-generated snapshot with older source data is rejected',
+      () async {
+        api.home = () => _homeResponse(
+          sourceUpdatedAt: '2026-07-18T17:55:00Z',
+          generatedAt: '2026-07-18T18:00:00Z',
+        );
+        await repo.refreshHome();
 
-      api.home = () => _homeResponse(generatedAt: '2026-07-18T06:00:00Z');
-      final RefreshResult result = await repo.refreshHome();
+        // Generated later, but the source data is older — must NOT overwrite.
+        api.home = () => _homeResponse(
+          sourceUpdatedAt: '2026-07-18T06:00:00Z',
+          generatedAt: '2026-07-18T19:00:00Z',
+        );
+        final RefreshResult result = await repo.refreshHome();
 
-      expect(result, isA<RefreshSuccess>());
-      expect((result as RefreshSuccess).applied, isFalse);
-      final HomeView view = (await repo.watchHome().first)!;
-      expect(view.freshness.generatedAt, DateTime.utc(2026, 7, 18, 18));
-    });
+        expect(result, isA<RefreshSuccess>());
+        expect((result as RefreshSuccess).applied, isFalse);
+        final HomeView view = (await repo.watchHome().first)!;
+        expect(
+          view.freshness.sourceUpdatedAt,
+          DateTime.utc(2026, 7, 18, 17, 55),
+          reason: 'newer cached source data preserved',
+        );
+      },
+    );
 
     test('a failed refresh never erases valid cached data', () async {
       api.home = _homeResponse;

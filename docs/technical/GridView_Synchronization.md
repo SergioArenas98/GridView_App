@@ -32,15 +32,30 @@ persists the full Grand Prix with its ordered session list.
 
 ## 2. Conflict / content-version rule
 
-Ordering key: **`meta.generatedAt`** (the monotonic snapshot version). Per snapshot
-key (`home`, `grand_prix:{season}:{round}`):
+Three provenance values, kept distinct (all persisted per snapshot key `home`,
+`grand_prix:{season}:{round}`):
 
-- Older `generatedAt` → **rejected** (newer cache preserved) →
-  `RefreshSuccess(applied: false)`.
-- Equal `generatedAt` → **idempotent** re-apply (no duplicates).
-- Newer `generatedAt` → **update** (obsolete sessions replaced).
+- **`sourceUpdatedAt`** — age/revision of the underlying **source data**. This is
+  the **primary conflict boundary**.
+- **`generatedAt`** — when the GridView snapshot document was produced. Only an
+  **equal-source tie-breaker**; it never outranks `sourceUpdatedAt` (a
+  later-generated snapshot can carry older source data).
+- **`contentVersion`** — immutable content identity/provenance, compared by
+  **equality only** (never assumed sortable).
 
-`contentVersion` is retained as provenance. See ADR 0005.
+Rule (`_decideOutcome`):
+
+1. incoming `sourceUpdatedAt` **older** than stored → **reject** (newer cache and
+   its whole transaction state preserved) → `RefreshSuccess(applied: false)`.
+2. incoming `sourceUpdatedAt` **newer** → **apply** atomically.
+3. equal `sourceUpdatedAt` **+** equal `contentVersion` → **skip** (idempotent
+   no-op; no rows rewritten, no stream re-emit) → `RefreshSuccess(applied: false)`.
+4. equal `sourceUpdatedAt` **+** differing `contentVersion` → `generatedAt`
+   tie-breaker: strictly **later** applies; **equal/earlier** is rejected.
+
+Fallback: when `sourceUpdatedAt` is unavailable on either side, ordering falls
+back to `generatedAt`. A rejected or skipped snapshot performs **no write** (no
+false stream update). See ADR 0005.
 
 ## 3. Freshness semantics
 

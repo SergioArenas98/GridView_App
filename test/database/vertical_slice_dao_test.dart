@@ -240,18 +240,21 @@ void main() {
       );
     });
 
-    test('an equal snapshot is applied idempotently', () async {
-      await dao.writeGrandPrixSnapshot(
-        grandPrix: belgianGrandPrix(sessions: belgianSprintSessions()),
-        freshness: freshness(generatedAt: t0),
-      );
-      final SnapshotWriteOutcome outcome = await dao.writeGrandPrixSnapshot(
-        grandPrix: belgianGrandPrix(sessions: belgianSprintSessions()),
-        freshness: freshness(generatedAt: t0),
-      );
-      expect(outcome, SnapshotWriteOutcome.applied);
-      expect((await db.select(db.sessions).get()).length, 5);
-    });
+    test(
+      'an identical snapshot is skipped as up to date (idempotent)',
+      () async {
+        await dao.writeGrandPrixSnapshot(
+          grandPrix: belgianGrandPrix(sessions: belgianSprintSessions()),
+          freshness: freshness(generatedAt: t0),
+        );
+        final SnapshotWriteOutcome outcome = await dao.writeGrandPrixSnapshot(
+          grandPrix: belgianGrandPrix(sessions: belgianSprintSessions()),
+          freshness: freshness(generatedAt: t0),
+        );
+        expect(outcome, SnapshotWriteOutcome.skippedUpToDate);
+        expect((await db.select(db.sessions).get()).length, 5);
+      },
+    );
   });
 
   group('value fidelity', () {
