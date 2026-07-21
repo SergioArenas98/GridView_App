@@ -2795,6 +2795,9 @@ abstract class _$GridViewDatabase extends GeneratedDatabase {
       result: [TableUpdate('sessions', kind: UpdateKind.delete)],
     ),
   ]);
+  @override
+  DriftDatabaseOptions get options =>
+      const DriftDatabaseOptions(storeDateTimeAsText: true);
 }
 
 typedef $$SeasonsTableCreateCompanionBuilder =

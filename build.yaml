@@ -1,0 +1,9 @@
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          databases:
+            gridview_database: lib/core/database/gridview_database.dart
+          schema_dir: drift_schemas
+          store_date_time_values_as_text: true

@@ -24,7 +24,7 @@ dependencies:
   # HTTP client for the remote GridView API boundary (TRD §13).
   dio: ^5.7.0
   # Offline-first local persistence (TRD §15).
-  drift: ^2.20.0
+  drift: 2.34.0
   sqlite3_flutter_libs: ^0.5.0
   path_provider: ^2.1.0
   path: ^1.9.0
@@ -39,7 +39,7 @@ dev_dependencies:
   build_runner: ^2.4.13
   freezed: ^3.2.0
   json_serializable: ^6.9.0
-  drift_dev: ^2.20.0
+  drift_dev: 2.34.0
 
 flutter:
   uses-material-design: true
