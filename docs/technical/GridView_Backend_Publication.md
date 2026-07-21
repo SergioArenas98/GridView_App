@@ -1,6 +1,9 @@
 # GridView Backend Publication
 
-Status: Phase 5A local implementation.
+Status: Phase 5B — the publication model below is deployed to Cloudflare staging
+(`gridview-api-staging`) backed by a real Workers KV namespace. The operational
+deploy/seed/rollback procedure is in
+`../operations/GridView_Staging_Edge_Runbook.md`.
 
 ## Request Flow
 
@@ -81,5 +84,26 @@ ETags derived from:
 ```text
 api version + resource identity + contentVersion
 ```
+
+## Staging Notes (Phase 5B)
+
+On staging the publisher runs against a real Workers KV namespace and the
+Cloudflare Cache API purge adapter (local/development use in-memory fakes). This
+does not change the algorithm above; it only changes where documents are stored
+and which URLs are purged.
+
+- **Initial publication.** The namespace starts empty and public routes serve
+  controlled empty/`404` responses until the first `sync/full` publishes a
+  release. Publication provenance is `status: "mock"` — the staging data is
+  non-authoritative. Deterministic first-release fields may be supplied through
+  the temporary `MOCK_PROVIDER_SOURCE_UPDATED_AT` / `MOCK_PROVIDER_CONTENT_VERSION`
+  seeding variables, which are never committed as permanent configuration.
+- **Eventual consistency.** Immediately after a publish or rollback, an edge
+  location may briefly read the previous `active:{season}` pointer until KV
+  propagates; it never observes an unpublished version. Admin `sync/status`
+  reflects the pointer immediately.
+- **Cache purge.** A purge failure is reported (`207`) and logged but never
+  reverts the pointer; clients revalidate via the weak ETag, so a missed purge
+  degrades to a revalidation rather than stale-forever content.
 
 No ETag depends on JSON serialization order.

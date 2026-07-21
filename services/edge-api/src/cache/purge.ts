@@ -24,6 +24,34 @@ export class MemoryCachePurgeAdapter implements CachePurgeAdapter {
   }
 }
 
+export class CloudflareCacheApiPurgeAdapter implements CachePurgeAdapter {
+  constructor(
+    private readonly cacheProvider: () => Cache | null = () =>
+      typeof caches === 'undefined' ? null : caches.default,
+  ) {}
+
+  async purgePublicUrls(urls: string[]): Promise<CachePurgeResult> {
+    const cache = this.cacheProvider();
+    if (!cache) {
+      return {
+        ok: false,
+        urls,
+        failureCategory: 'cache-api-unavailable',
+      };
+    }
+
+    const deletions = await Promise.allSettled(
+      urls.map((url) => cache.delete(new Request(url, { method: 'GET' }))),
+    );
+    const failed = deletions.some((result) => result.status === 'rejected');
+    return {
+      ok: !failed,
+      urls,
+      failureCategory: failed ? 'cache-api-delete-failed' : null,
+    };
+  }
+}
+
 const sharedPurger = new MemoryCachePurgeAdapter();
 
 export function getSharedMemoryPurger(): MemoryCachePurgeAdapter {

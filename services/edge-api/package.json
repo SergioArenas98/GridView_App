@@ -15,7 +15,11 @@
     "validate:content": "node scripts/validate-content.mjs",
     "validate:fixtures": "node scripts/validate-fixtures.mjs",
     "validate:worker-config": "wrangler types .wrangler/worker-configuration.d.ts --include-runtime false",
-    "validate": "npm run validate:openapi && npm run validate:content && npm run validate:fixtures && npm run validate:worker-config"
+    "validate": "npm run validate:openapi && npm run validate:content && npm run validate:fixtures && npm run validate:worker-config",
+    "smoke:staging": "node scripts/staging-smoke.mjs",
+    "check:staging-admin": "node scripts/staging-admin-checks.mjs",
+    "workflow:staging-auth": "node scripts/staging-authenticated-workflow.mjs",
+    "check:staging-observability": "node scripts/staging-observability-check.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260718.1",

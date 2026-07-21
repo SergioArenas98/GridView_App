@@ -12,23 +12,38 @@ compatibility_date = "2026-07-01"
 [vars]
 ENVIRONMENT = "development"
 
-# Future bindings (Phase 5) - do not enable without provisioning approval:
-# [[kv_namespaces]]
-# binding = "GRIDVIEW_DATA"
-# id = "<provisioned KV namespace id>"
-#
-# [[r2_buckets]]
-# binding = "GRIDVIEW_MEDIA"
-# bucket_name = "gridview-media-staging"
-
 [env.staging]
 name = "gridview-api-staging"
+workers_dev = true
+preview_urls = false
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
+PROVIDER_MODE = "mock"
+PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
+
+[env.staging.secrets]
+required = ["ADMIN_TOKEN"]
+
+[[env.staging.kv_namespaces]]
+binding = "GRIDVIEW_DATA"
+id = "1d0fb55486a745a1ad12e03d9f04942b"
+
+[env.staging.triggers]
+crons = ["17 3 * * *"]
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
+[env.staging.observability.logs]
+enabled = true
+persist = true
+invocation_logs = false
 
 [env.production]
 name = "gridview-api-production"
 
 [env.production.vars]
 ENVIRONMENT = "production"
+PROVIDER_MODE = "none"

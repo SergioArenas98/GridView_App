@@ -1,10 +1,15 @@
 import { isInternalPath } from './admin/auth';
 import { handleAdminRequest } from './admin/router';
-import { getSharedMemoryPurger } from './cache/purge';
+import {
+  CloudflareCacheApiPurgeAdapter,
+  getSharedMemoryPurger,
+  type CachePurgeAdapter,
+} from './cache/purge';
 import {
   ConfigurationError,
   resolveRuntimeConfig,
   type Env,
+  type RuntimeConfig,
 } from './config/environment';
 import { errorResponse } from './http/envelope';
 import { consoleLogger } from './logging/logger';
@@ -28,20 +33,21 @@ export default {
     const isHead = request.method === 'HEAD';
     const logger = env.__LOGGER ?? consoleLogger;
     const clock = env.__CLOCK ?? systemClock;
-    const storage = resolveStorage(env);
-    const purger = env.__CACHE_PURGER ?? getSharedMemoryPurger();
 
     let routeTemplate = 'unknown';
     let cacheOutcome = 'miss';
 
     try {
       const config = resolveRuntimeConfig(env);
+      const storage = resolveStorage(env);
+      const purger = resolveCachePurger(env, config);
       const provider = resolveProvider(env, config, clock);
       const publisher = new SnapshotPublisher(
         storage,
         env.__SNAPSHOT_VALIDATOR ?? runtimeSnapshotValidator,
         purger,
         logger,
+        url.origin,
       );
       const sync = new SynchronizationService(
         storage,
@@ -61,6 +67,7 @@ export default {
           purger,
           logger,
           requestId,
+          purgeOrigin: url.origin,
         });
         routeTemplate = url.pathname;
       } else if (request.method !== 'GET' && !isHead) {
@@ -122,34 +129,69 @@ export default {
     }
   },
 
-  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    const clock = env.__CLOCK ?? systemClock;
-    const logger = env.__LOGGER ?? consoleLogger;
-    const storage = resolveStorage(env);
-    const purger = env.__CACHE_PURGER ?? getSharedMemoryPurger();
-    try {
-      const config = resolveRuntimeConfig(env);
-      const provider = resolveProvider(env, config, clock);
-      const publisher = new SnapshotPublisher(
-        storage,
-        env.__SNAPSHOT_VALIDATOR ?? runtimeSnapshotValidator,
-        purger,
-        logger,
-      );
-      const sync = new SynchronizationService(
-        storage,
-        provider,
-        publisher,
-        clock,
-        logger,
-      );
-      const season = (await storage.getCurrentSeason()) ?? 2026;
-      await sync.run({ season, trigger: 'scheduled' });
-    } catch {
-      logger.error({
-        operation: 'scheduled.failed',
-        failureCategory: 'scheduled-handler',
-      });
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    context?: ExecutionContext,
+  ): Promise<void> {
+    const task = runScheduled(env);
+    if (context) {
+      context.waitUntil(task);
+      return;
     }
+    await task;
   },
 } satisfies ExportedHandler<Env>;
+
+async function runScheduled(env: Env): Promise<void> {
+  const clock = env.__CLOCK ?? systemClock;
+  const logger = env.__LOGGER ?? consoleLogger;
+  try {
+    const config = resolveRuntimeConfig(env);
+    const storage = resolveStorage(env);
+    const purger = resolveCachePurger(env, config);
+    const provider = resolveProvider(env, config, clock);
+    const publisher = new SnapshotPublisher(
+      storage,
+      env.__SNAPSHOT_VALIDATOR ?? runtimeSnapshotValidator,
+      purger,
+      logger,
+      scheduledPurgeOrigin(config),
+    );
+    const sync = new SynchronizationService(
+      storage,
+      provider,
+      publisher,
+      clock,
+      logger,
+    );
+    const season = (await storage.getCurrentSeason()) ?? 2026;
+    await sync.run({ season, trigger: 'scheduled' });
+  } catch {
+    logger.error({
+      operation: 'scheduled.failed',
+      failureCategory: 'scheduled-handler',
+    });
+  }
+}
+
+function resolveCachePurger(
+  env: Env,
+  config: RuntimeConfig,
+): CachePurgeAdapter {
+  if (env.__CACHE_PURGER) return env.__CACHE_PURGER;
+  if (config.environment === 'staging' || config.environment === 'production') {
+    return new CloudflareCacheApiPurgeAdapter();
+  }
+  return getSharedMemoryPurger();
+}
+
+function scheduledPurgeOrigin(config: RuntimeConfig): string {
+  if (config.publicBaseUrl) return config.publicBaseUrl;
+  if (config.environment === 'staging' || config.environment === 'production') {
+    throw new ConfigurationError(
+      'PUBLIC_BASE_URL is required for scheduled publication cache deletion.',
+    );
+  }
+  return 'https://api.gridview.local';
+}

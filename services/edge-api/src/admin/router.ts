@@ -17,6 +17,7 @@ interface AdminContext {
   purger: CachePurgeAdapter;
   logger: Logger;
   requestId: string;
+  purgeOrigin: string;
 }
 
 export async function handleAdminRequest(
@@ -136,7 +137,7 @@ export async function handleAdminRequest(
           );
     const docs = ['bootstrap', 'home', 'calendar'] as const;
     const result = await context.purger.purgePublicUrls(
-      publicUrlsForDocuments('https://api.gridview.local', season, [
+      publicUrlsForDocuments(context.purgeOrigin, season, [
         ...docs,
         ...(Array.isArray(calendar?.data)
           ? (calendar.data as Array<{ round: number }>).flatMap((event) => [

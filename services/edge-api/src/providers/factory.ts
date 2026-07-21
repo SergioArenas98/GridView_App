@@ -19,5 +19,7 @@ export function resolveProvider(
           ? 'failure'
           : 'none',
     invalidData: env.MOCK_PROVIDER_INVALID_DATA === 'true',
+    sourceUpdatedAt: env.MOCK_PROVIDER_SOURCE_UPDATED_AT,
+    contentVersion: env.MOCK_PROVIDER_CONTENT_VERSION,
   });
 }

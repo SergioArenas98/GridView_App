@@ -220,3 +220,74 @@ Coverage includes:
 The existing fixture validator still reports strict OpenAPI conformance:
 30 conforming fixtures and 1 tolerance-only fixture that must fail strict
 validation.
+
+## Staging verification (Phase 5B)
+
+The staging Worker (`gridview-api-staging`) is verified with automated helpers
+and a manual Flutter pass. The deploy/seed/verify procedure is in
+`../operations/GridView_Staging_Edge_Runbook.md`.
+
+### Automated Worker tests
+
+The cron `scheduled` handler is covered locally (no remote trigger, no cron
+change) — this is the safe verification mechanism:
+
+- `test/sync/scheduled-handler.test.ts` — drives the real `scheduled()` export
+  through the in-memory harness: same sync-and-publish orchestration as the manual
+  admin sync, reads KV state, skips when no job is due, a failed required job
+  preserves the active release, sync/quota metadata is updated, and no admin token
+  or authorization material appears in the captured logs.
+- `test/sync/synchronization.test.ts` — due-job calculation, quota skip/retry
+  behavior and provider-failure preservation.
+- `test/scripts/staging-observability-command.test.mjs` — the observability
+  helper's tail-launch construction and the redaction scanner: it rejects a real
+  admin token, a `Bearer <value>` and a non-redacted `authorization` field value,
+  while accepting `unauthorized`, `authorization_failed`, an HTTP `401` and a
+  redacted `authorization` field, and never echoes a secret in failure output.
+
+### Live staging scripts (`services/edge-api`)
+
+Read-only public checks need no token; authenticated checks read
+`GRIDVIEW_STAGING_ADMIN_TOKEN` from the environment (never a CLI argument):
+
+```bash
+npm run smoke:staging               -- https://gridview-api-staging.sejuma18.workers.dev
+npm run check:staging-admin         -- https://gridview-api-staging.sejuma18.workers.dev
+npm run workflow:staging-auth       -- https://gridview-api-staging.sejuma18.workers.dev
+npm run check:staging-observability -- https://gridview-api-staging.sejuma18.workers.dev
+```
+
+The observability helper launches `wrangler tail` via the real
+`wrangler-dist/cli.js` entry point (the `.cmd` wrapper is not used — see the
+runbook §12), confirms every expected structured operation, and asserts the logs
+carry no credential material.
+
+### Manual Flutter staging + offline pass
+
+Run the staging flavor against the deployed **public** API (the app never uses
+the admin token):
+
+```powershell
+fvm flutter run --flavor staging `
+  --dart-define=APP_ENV=staging `
+  --dart-define=API_BASE_URL=https://gridview-api-staging.sejuma18.workers.dev
+```
+
+Clear only the staging install between runs:
+
+```powershell
+adb uninstall com.sejuma.gridview.staging
+```
+
+Offline/restart checklist:
+
+1. First launch with an empty local database — Home shows a loading state, then
+   remote data.
+2. Open a Grand Prix detail; confirm session ordering and event-local timezone
+   labels.
+3. Close and reopen the app — content renders immediately from the Drift cache.
+4. Enable airplane mode — Home and detail still render from Drift, with a
+   stale/offline notice; a failed refresh preserves cached content.
+5. Confirm `FixtureGridViewApi` is **not** in use: with `API_BASE_URL` set the
+   client "Sample data" banner is absent (it appears only in pure fixture mode);
+   staging identity is the `com.sejuma.gridview.staging` / `-staging` flavor.

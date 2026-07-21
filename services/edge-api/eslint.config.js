@@ -15,7 +15,7 @@ export default tseslint.config(
   },
   {
     // Node ESM tooling scripts (schema/fixture validation).
-    files: ['scripts/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'test/**/*.test.mjs'],
     languageOptions: {
       globals: { ...globals.node },
     },

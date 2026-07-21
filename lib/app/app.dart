@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/theme/gridview_theme.dart';
+import '../features/shared/presentation/widgets/environment_badge.dart';
 import '../l10n/app_localizations.dart';
 import 'router/app_router.dart';
 
@@ -32,6 +33,8 @@ class _GridViewAppState extends State<GridViewApp> {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: _router,
+      builder: (BuildContext context, Widget? child) =>
+          EnvironmentBadgeOverlay(child: child ?? const SizedBox.shrink()),
     );
   }
 }

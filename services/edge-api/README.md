@@ -2,11 +2,13 @@
 
 TypeScript Cloudflare Worker for GridView API v1.
 
-Phase 5A is local-only: no Cloudflare KV namespace, R2 bucket, route, cron trigger
-or deployment has been provisioned. Public routes read only versioned snapshots
-through the active pointer. Synchronization is available through the scheduled
-handler and protected internal admin routes, backed by the deterministic mock
-provider.
+The Worker runs locally for development and is deployed to Cloudflare **staging**
+(`gridview-api-staging`, Phase 5B). Production is not deployed. Public routes read
+only versioned snapshots through the active pointer. Synchronization is available
+through the cron `scheduled` handler and protected internal admin routes, backed
+by the deterministic mock provider (`PROVIDER_MODE = mock`). The full staging
+deploy/seed/verify/rollback procedure is in
+`../../docs/operations/GridView_Staging_Edge_Runbook.md`.
 
 ## Local Setup
 
@@ -79,6 +81,39 @@ MOCK_PROVIDER_FAILURE=failure
 MOCK_PROVIDER_FAILURE=rate_limited
 MOCK_PROVIDER_INVALID_DATA=true
 ```
+
+## Staging Deployment
+
+Staging config lives in `wrangler.toml` (`[env.staging]`): Worker
+`gridview-api-staging` at `https://gridview-api-staging.sejuma18.workers.dev`
+(`workers_dev`), KV `GRIDVIEW_DATA` (`1d0fb55486a745a1ad12e03d9f04942b`),
+`PROVIDER_MODE = mock`, `PUBLIC_BASE_URL` set, and cron `17 3 * * *` (03:17 UTC).
+
+```text
+# validate + bundle without deploying
+npm run validate
+npm exec wrangler deploy --dry-run --env staging
+
+# set the admin secret (interactive; value never echoed or committed)
+npm exec wrangler secret put ADMIN_TOKEN --env staging
+
+# deploy staging (never --env production)
+npm exec wrangler deploy --env staging
+```
+
+Seed the first release, then run the staging verification scripts (each reads
+`GRIDVIEW_STAGING_ADMIN_TOKEN` from the environment where auth is required):
+
+```text
+npm run smoke:staging               -- https://gridview-api-staging.sejuma18.workers.dev
+npm run check:staging-admin         -- https://gridview-api-staging.sejuma18.workers.dev
+npm run workflow:staging-auth       -- https://gridview-api-staging.sejuma18.workers.dev
+npm run check:staging-observability -- https://gridview-api-staging.sejuma18.workers.dev
+```
+
+See `../../docs/operations/GridView_Staging_Edge_Runbook.md` for the complete
+procedure, including ETag/HEAD/304, rollback, observability/redaction and KV
+eventual-consistency notes.
 
 ## Public Routes
 

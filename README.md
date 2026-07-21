@@ -38,6 +38,14 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   Prix detail) through Drift + Riverpod + Dio: done. See
   `docs/technical/GridView_Local_Data.md` and
   `docs/technical/GridView_Synchronization.md`.
+- Phase 5A - edge API foundation (KV-backed versioned snapshots, active/previous
+  pointers, admin sync, publication, rollback, cache purge, scheduled handler):
+  done. See `services/edge-api/README.md`.
+- Phase 5B - Cloudflare **staging** deployment of the edge API
+  (`gridview-api-staging`, mock provider, cron `17 3 * * *` UTC) with live smoke,
+  admin-security, rollback and observability/redaction verification: in progress.
+  See `docs/operations/GridView_Staging_Edge_Runbook.md`. Production is not
+  deployed.
 
 Home's next-Grand-Prix hero, weekend sessions and freshness, and the Grand Prix
 detail screen are now driven by a **Drift-backed** local store: content renders
