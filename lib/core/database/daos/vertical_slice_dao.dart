@@ -8,6 +8,7 @@ import '../../../features/shared/domain/entities/grand_prix_view.dart';
 import '../../../features/shared/domain/entities/home_view.dart';
 import '../../../features/shared/domain/entities/season.dart';
 import '../../../features/shared/domain/entities/session.dart';
+import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../tables.dart';
 
@@ -159,6 +160,12 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     required DataFreshness freshness,
   }) {
     return transaction(() async {
+      validateSeason(featured.season);
+      validateRound(featured.round);
+      validateSlug(featured.id, field: 'grand prix id');
+      validateSlug(featured.circuitId, field: 'circuitId');
+      if (season != null) validateSeason(season.year, field: 'season year');
+
       final SnapshotRow? existing = await _snapshotByKey(homeSnapshotKey);
       final SnapshotWriteOutcome decision = _decideOutcome(freshness, existing);
       if (decision != SnapshotWriteOutcome.applied) return decision;
@@ -208,6 +215,11 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
   }) {
     final String key = grandPrixSnapshotKey(grandPrix.season, grandPrix.round);
     return transaction(() async {
+      validateSeason(grandPrix.season);
+      validateRound(grandPrix.round);
+      validateSlug(grandPrix.id, field: 'grand prix id');
+      validateSlug(grandPrix.circuitId, field: 'circuitId');
+
       final SnapshotRow? existing = await _snapshotByKey(key);
       final SnapshotWriteOutcome decision = _decideOutcome(freshness, existing);
       if (decision != SnapshotWriteOutcome.applied) return decision;

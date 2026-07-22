@@ -1,12 +1,16 @@
 import 'package:drift/drift.dart';
 
-// Drift table definitions for the Phase 4 vertical slice.
+// Core Drift table definitions (schema v1 origin).
 //
-// Only the tables needed by the "Home next Grand Prix -> Grand Prix detail"
-// journey are defined here: seasons, circuits, grand_prix, sessions and a
-// generic snapshot/freshness metadata table. Other v1 entities (drivers,
-// constructors, standings, results, media) are intentionally out of scope until
-// later phases.
+// This file holds the season-scoped calendar spine that existed since schema
+// v1: seasons, circuits, grand_prix, sessions and the generic snapshot/freshness
+// metadata table. The remaining v1 domain (drivers, constructors, season
+// entries, standings, results and media) was added in schema v2 and lives in
+// the sibling `*_tables.dart` files.
+//
+// The `circuits` table gained its full physical/geographic identity columns in
+// schema v2 (all nullable, added non-destructively so every v1 row is
+// preserved); the other four tables here are byte-for-byte unchanged from v1.
 //
 // Conventions:
 // - Stable GridView IDs are the primary keys (never display names).
@@ -47,11 +51,36 @@ class Circuits extends Table {
   /// ISO 3166-1 alpha-2, uppercase (approved rule).
   TextColumn get countryCode => text().nullable()();
 
+  // --- Added in schema v2 (all nullable; non-destructive `addColumn`). ---
+
+  /// Decimal degrees.
+  RealColumn get latitude => real().nullable()();
+  RealColumn get longitude => real().nullable()();
+
+  /// Lap length in metres (integer, field name states the unit).
+  IntColumn get lengthMeters => integer().nullable()();
+  IntColumn get cornerCount => integer().nullable()();
+
+  /// `CircuitDirection` wire token (`clockwise`/`counter_clockwise`).
+  TextColumn get direction => text().nullable()();
+  IntColumn get firstGrandPrixYear => integer().nullable()();
+
+  /// Optional historical lap record, flattened from the domain `LapRecord`
+  /// value object. The duration is stored as whole milliseconds.
+  TextColumn get lapRecordDriverId => text().nullable()();
+  IntColumn get lapRecordTimeMillis => integer().nullable()();
+  IntColumn get lapRecordYear => integer().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{id};
 }
 
 @DataClassName('GrandPrixRow')
+@TableIndex(name: 'idx_grand_prix_season_start', columns: {#season, #startDate})
+@TableIndex(
+  name: 'idx_grand_prix_circuit_season',
+  columns: {#circuitId, #season},
+)
 class GrandPrixEvents extends Table {
   @override
   String get tableName => 'grand_prix';
@@ -93,6 +122,7 @@ class GrandPrixEvents extends Table {
 }
 
 @DataClassName('SessionRow')
+@TableIndex(name: 'idx_sessions_gp_order', columns: {#grandPrixId, #orderIndex})
 class Sessions extends Table {
   TextColumn get id => text()();
 

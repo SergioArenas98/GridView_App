@@ -1,12 +1,15 @@
 export 'circuit.dart';
 export 'constructor.dart';
+export 'detail_views.dart';
 export 'driver.dart';
 export 'enums.dart';
 export 'freshness.dart';
 export 'grand_prix.dart';
 export 'media.dart';
 export 'race_result.dart';
+export 'resource_key.dart';
 export 'season.dart';
 export 'season_entry.dart';
 export 'session.dart';
 export 'standing.dart';
+export 'sync_state.dart';

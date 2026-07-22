@@ -26,8 +26,8 @@ void main() {
   final DateTime t1 = DateTime.utc(2026, 7, 18, 13);
 
   group('schema', () {
-    test('schema version is 1', () {
-      expect(db.schemaVersion, 1);
+    test('schema version is 2', () {
+      expect(db.schemaVersion, 2);
     });
 
     test('all vertical-slice tables are created', () async {
@@ -329,6 +329,41 @@ void main() {
       expect(view, isNotNull);
       expect(view!.grandPrix.round, 13);
       expect(view.circuit?.name, 'Circuit de Spa-Francorchamps');
+    });
+
+    test('watch streams are isolated per (season, round)', () async {
+      await dao.writeGrandPrixSnapshot(
+        grandPrix: belgianGrandPrix(),
+        freshness: freshness(generatedAt: t0),
+      );
+      await dao.writeGrandPrixSnapshot(
+        grandPrix: GrandPrix(
+          id: '2026-dutch-grand-prix',
+          season: 2026,
+          round: 14,
+          eventSlug: 'dutch-grand-prix',
+          name: 'Dutch Grand Prix',
+          circuitId: 'zandvoort',
+          status: EventStatus.upcoming,
+          format: WeekendFormat.standard,
+          sessions: const <Session>[],
+          hasResults: false,
+        ),
+        freshness: freshness(generatedAt: t0),
+      );
+
+      // Each stream is scoped to its own event: an unrelated event's write
+      // never surfaces the wrong Grand Prix.
+      final GrandPrixDetailView? v13 = await dao
+          .watchGrandPrix(2026, 13)
+          .firstWhere((GrandPrixDetailView? v) => v != null);
+      final GrandPrixDetailView? v14 = await dao
+          .watchGrandPrix(2026, 14)
+          .firstWhere((GrandPrixDetailView? v) => v != null);
+      expect(v13!.grandPrix.id, '2026-belgian-grand-prix');
+      expect(v13.grandPrix.round, 13);
+      expect(v14!.grandPrix.id, '2026-dutch-grand-prix');
+      expect(v14.grandPrix.round, 14);
     });
   });
 }
