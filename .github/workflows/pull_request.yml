@@ -38,6 +38,11 @@ jobs:
           dart run build_runner build
           git diff --exit-code
 
+      - name: Verify Drift schema export is current
+        run: |
+          dart run drift_dev schema dump lib/core/database/gridview_database.dart drift_schemas/
+          git diff --exit-code drift_schemas/
+
       - name: Check formatting
         run: dart format --output=none --set-exit-if-changed .
 
