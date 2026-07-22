@@ -3,9 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gridview/core/api/errors/api_exception.dart';
+import 'package:gridview/core/api/dto/event_dto.dart';
+import 'package:gridview/core/api/dto/view_dto.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/features/shared/data/remote/fixture_gridview_api.dart';
+import 'package:gridview/features/shared/data/remote/remote_result.dart';
 
 /// An [AssetBundle] backed by the real `assets/dev_fixtures/*` files on disk, so
 /// the fixture source is tested against the shipped assets without needing a
@@ -37,29 +39,55 @@ void main() {
   });
 
   test('fetchHome serves the featured Grand Prix', () async {
-    final response = await api.fetchHome();
-    expect(response.meta.apiVersion, '1');
-    expect(response.data.featuredEvent?.id, '2026-belgian-grand-prix');
-    expect(response.data.featuredEvent?.round, 13);
+    final RemoteResult<HomeDataDto> result = await api.fetchHome();
+    expect(result, isA<RemoteModified<HomeDataDto>>());
+    final modified = result as RemoteModified<HomeDataDto>;
+    expect(modified.meta.apiVersion, '1');
+    expect(modified.data.featuredEvent?.id, '2026-belgian-grand-prix');
+    expect(modified.data.featuredEvent?.round, 13);
+    expect(modified.etag, isNotNull);
+  });
+
+  test('re-requesting with the served ETag yields RemoteNotModified', () async {
+    final RemoteModified<HomeDataDto> first =
+        await api.fetchHome() as RemoteModified<HomeDataDto>;
+    final RemoteResult<HomeDataDto> second = await api.fetchHome(
+      etag: first.etag,
+    );
+    expect(second, isA<RemoteNotModified<HomeDataDto>>());
+    expect((second as RemoteNotModified<HomeDataDto>).etag, first.etag);
   });
 
   test('fetchGrandPrix serves the matching round', () async {
-    final response = await api.fetchGrandPrix(season: 2026, round: 13);
-    expect(response.data.id, '2026-belgian-grand-prix');
-    expect(response.data.sessions, hasLength(5));
-    expect(response.data.format, 'sprint');
+    final RemoteResult<GrandPrixDto> result = await api.fetchGrandPrix(
+      season: 2026,
+      round: 13,
+    );
+    final modified = result as RemoteModified<GrandPrixDto>;
+    expect(modified.data.id, '2026-belgian-grand-prix');
+    expect(modified.data.sessions, hasLength(5));
+    expect(modified.data.format, 'sprint');
   });
 
   test('an unknown round maps to a notFound failure', () async {
-    await expectLater(
-      api.fetchGrandPrix(season: 2026, round: 99),
-      throwsA(
-        isA<GridViewApiException>().having(
-          (GridViewApiException e) => e.failure.kind,
-          'kind',
-          ApiFailureKind.notFound,
-        ),
-      ),
+    final RemoteResult<GrandPrixDto> result = await api.fetchGrandPrix(
+      season: 2026,
+      round: 99,
+    );
+    expect(result, isA<RemoteFailure<GrandPrixDto>>());
+    expect(
+      (result as RemoteFailure<GrandPrixDto>).failure.kind,
+      ApiFailureKind.notFound,
+    );
+  });
+
+  test('an endpoint with no bundled fixture maps to notFound', () async {
+    final RemoteResult<List<GrandPrixSummaryDto>> result = await api
+        .fetchCalendar(season: 2026);
+    expect(result, isA<RemoteFailure<List<GrandPrixSummaryDto>>>());
+    expect(
+      (result as RemoteFailure<List<GrandPrixSummaryDto>>).failure.kind,
+      ApiFailureKind.notFound,
     );
   });
 

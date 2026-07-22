@@ -3,45 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/core/api/dto/event_dto.dart';
 import 'package:gridview/core/api/dto/view_dto.dart';
 import 'package:gridview/core/api/envelope/api_response.dart';
-import 'package:gridview/core/api/errors/api_exception.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/database/gridview_database.dart';
-import 'package:gridview/features/shared/data/remote/gridview_api.dart';
+import 'package:gridview/features/shared/data/remote/remote_result.dart';
 import 'package:gridview/features/shared/data/repositories/race_weekend_repository_impl.dart';
 import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/home_view.dart';
 import 'package:gridview/features/shared/domain/repositories/race_weekend_repository.dart';
 
+import '../../support/fake_api.dart';
 import '../../support/fixtures.dart';
 
-/// A programmable [GridViewApi] fake with no live transport.
-class _FakeApi implements GridViewApi {
-  ApiResponse<HomeDataDto> Function()? home;
-  ApiResponse<GrandPrixDto> Function()? grandPrix;
-  ApiFailure? homeFailure;
-  ApiFailure? grandPrixFailure;
-
-  @override
-  bool get usesMockData => false;
-
-  @override
-  Future<ApiResponse<HomeDataDto>> fetchHome({int? season}) async {
-    if (homeFailure != null) throw GridViewApiException(homeFailure!);
-    return home!();
-  }
-
-  @override
-  Future<ApiResponse<GrandPrixDto>> fetchGrandPrix({
-    required int season,
-    required int round,
-  }) async {
-    if (grandPrixFailure != null) throw GridViewApiException(grandPrixFailure!);
-    return grandPrix!();
-  }
-}
-
-ApiResponse<HomeDataDto> _homeResponse({
+RemoteResult<HomeDataDto> _homeResponse({
   String generatedAt = '2026-07-18T12:00:00Z',
   String sourceUpdatedAt = '2026-07-18T11:55:00Z',
   String? staleAfter = '2026-07-18T12:15:00Z',
@@ -58,32 +32,44 @@ ApiResponse<HomeDataDto> _homeResponse({
   final Map<String, dynamic> meta = json['meta'] as Map<String, dynamic>;
   meta['generatedAt'] = generatedAt;
   meta['sourceUpdatedAt'] = sourceUpdatedAt;
-  return ApiResponse.parse<HomeDataDto>(
+  final ApiResponse<HomeDataDto> parsed = ApiResponse.parse<HomeDataDto>(
     json,
     (Object? d) => HomeDataDto.fromJson(d! as Map<String, dynamic>),
   );
+  return RemoteModified<HomeDataDto>(
+    data: parsed.data,
+    meta: parsed.meta,
+    etag: 'W/"home-$sourceUpdatedAt"',
+    requestId: parsed.meta.requestId,
+  );
 }
 
-ApiResponse<GrandPrixDto> _grandPrixResponse({
+RemoteResult<GrandPrixDto> _grandPrixResponse({
   String fixture = 'grand-prix/standard-weekend.json',
   String generatedAt = '2026-07-18T12:00:00Z',
 }) {
   final Map<String, dynamic> json = loadFixture(fixture);
   (json['meta'] as Map<String, dynamic>)['generatedAt'] = generatedAt;
-  return ApiResponse.parse<GrandPrixDto>(
+  final ApiResponse<GrandPrixDto> parsed = ApiResponse.parse<GrandPrixDto>(
     json,
     (Object? d) => GrandPrixDto.fromJson(d! as Map<String, dynamic>),
+  );
+  return RemoteModified<GrandPrixDto>(
+    data: parsed.data,
+    meta: parsed.meta,
+    etag: 'W/"gp"',
+    requestId: parsed.meta.requestId,
   );
 }
 
 void main() {
   late GridViewDatabase db;
-  late _FakeApi api;
+  late FakeGridViewApi api;
   late RaceWeekendRepository repo;
 
   setUp(() {
     db = GridViewDatabase.forTesting(NativeDatabase.memory());
-    api = _FakeApi();
+    api = FakeGridViewApi();
     repo = RaceWeekendRepositoryImpl(remote: api, local: db.verticalSliceDao);
   });
 
@@ -144,9 +130,14 @@ void main() {
         api.home = () {
           final Map<String, dynamic> json = loadFixture('home/pre-event.json');
           (json['data'] as Map<String, dynamic>).remove('featuredEvent');
-          return ApiResponse.parse<HomeDataDto>(
-            json,
-            (Object? d) => HomeDataDto.fromJson(d! as Map<String, dynamic>),
+          final ApiResponse<HomeDataDto> parsed =
+              ApiResponse.parse<HomeDataDto>(
+                json,
+                (Object? d) => HomeDataDto.fromJson(d! as Map<String, dynamic>),
+              );
+          return RemoteModified<HomeDataDto>(
+            data: parsed.data,
+            meta: parsed.meta,
           );
         };
         final RefreshResult result = await repo.refreshHome();
@@ -157,6 +148,18 @@ void main() {
         );
       },
     );
+
+    test('a 304 not-modified is a successful, non-applied refresh', () async {
+      api.home = _homeResponse;
+      await repo.refreshHome();
+
+      api.home = () => const RemoteNotModified<HomeDataDto>(etag: 'W/"x"');
+      final RefreshResult result = await repo.refreshHome();
+      expect(result, isA<RefreshSuccess>());
+      expect((result as RefreshSuccess).applied, isFalse);
+      // Cache preserved.
+      expect(await repo.watchHome().first, isNotNull);
+    });
 
     test('a snapshot with newer source data updates the cache', () async {
       api.home = () => _homeResponse(sourceUpdatedAt: '2026-07-18T11:55:00Z');

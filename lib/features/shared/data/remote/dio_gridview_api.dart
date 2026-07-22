@@ -1,19 +1,29 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../../../../core/api/dto/circuit_dto.dart';
+import '../../../../core/api/dto/detail_dto.dart';
 import '../../../../core/api/dto/event_dto.dart';
+import '../../../../core/api/dto/result_dto.dart';
+import '../../../../core/api/dto/season_dto.dart';
+import '../../../../core/api/dto/standing_dto.dart';
+import '../../../../core/api/dto/summary_dto.dart';
 import '../../../../core/api/dto/view_dto.dart';
 import '../../../../core/api/envelope/api_response.dart';
-import '../../../../core/api/errors/api_exception.dart';
 import '../../../../core/api/errors/api_failure.dart';
 import '../../../../core/api/errors/error_dto.dart';
 import 'gridview_api.dart';
+import 'remote_cancellation.dart';
+import 'remote_result.dart';
 import 'snapshot_contract.dart';
 
 /// The production remote data source: talks to the GridView edge API over HTTPS
-/// with Dio and the approved v1 envelope. It maps every transport and contract
-/// error to a typed [ApiFailure] and never leaks a Dio type or raw server text.
+/// with Dio and the approved v1 envelope. It issues conditional (`If-None-Match`)
+/// reads, treats `304` as a first-class [RemoteNotModified] success, and maps
+/// every transport and contract error to a typed [ApiFailure]. It never leaks a
+/// Dio type or raw server text, and never sends an admin credential.
 class DioGridViewApi implements GridViewApi {
   const DioGridViewApi(this._dio);
 
@@ -25,68 +35,351 @@ class DioGridViewApi implements GridViewApi {
   @override
   bool get usesMockData => false;
 
-  @override
-  Future<ApiResponse<HomeDataDto>> fetchHome({int? season}) {
-    return _get<HomeDataDto>(
-      '/v1/home',
-      queryParameters: <String, dynamic>{
-        'season': season?.toString() ?? 'current',
-      },
-      parse: (Object? data) => HomeDataDto.fromJson(_asMap(data)),
-    );
-  }
+  // --- Health -------------------------------------------------------------
 
   @override
-  Future<ApiResponse<GrandPrixDto>> fetchGrandPrix({
+  Future<RemoteResult<StatusDataDto>> fetchStatus({
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<StatusDataDto>(
+    '/v1/status',
+    parse: (Object? d) => StatusDataDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+    requireSnapshot: false,
+  );
+
+  // --- Aggregate ----------------------------------------------------------
+
+  @override
+  Future<RemoteResult<BootstrapDataDto>> fetchBootstrap({
+    int? season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<BootstrapDataDto>(
+    '/v1/bootstrap',
+    queryParameters: _seasonQuery(season),
+    parse: (Object? d) => BootstrapDataDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  @override
+  Future<RemoteResult<HomeDataDto>> fetchHome({
+    int? season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<HomeDataDto>(
+    '/v1/home',
+    queryParameters: _seasonQuery(season),
+    parse: (Object? d) => HomeDataDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  // --- Seasons ------------------------------------------------------------
+
+  @override
+  Future<RemoteResult<SeasonDto>> fetchCurrentSeason({
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<SeasonDto>(
+    '/v1/seasons/current',
+    parse: (Object? d) => SeasonDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  @override
+  Future<RemoteResult<SeasonDto>> fetchSeason({
+    required int season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<SeasonDto>(
+    '/v1/seasons/$season',
+    parse: (Object? d) => SeasonDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  // --- Calendar -----------------------------------------------------------
+
+  @override
+  Future<RemoteResult<List<GrandPrixSummaryDto>>> fetchCalendar({
+    required int season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<List<GrandPrixSummaryDto>>(
+    '/v1/seasons/$season/calendar',
+    parse: (Object? d) =>
+        _list(d, (Map<String, dynamic> e) => GrandPrixSummaryDto.fromJson(e)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  @override
+  Future<RemoteResult<GrandPrixDto>> fetchGrandPrix({
     required int season,
     required int round,
-  }) {
-    return _get<GrandPrixDto>(
-      '/v1/seasons/$season/grand-prix/$round',
-      parse: (Object? data) => GrandPrixDto.fromJson(_asMap(data)),
-    );
-  }
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<GrandPrixDto>(
+    '/v1/seasons/$season/grand-prix/$round',
+    parse: (Object? d) => GrandPrixDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+  );
 
-  Future<ApiResponse<T>> _get<T>(
+  @override
+  Future<RemoteResult<RaceResultDto>> fetchGrandPrixResults({
+    required int season,
+    required int round,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<RaceResultDto>(
+    '/v1/seasons/$season/grand-prix/$round/results',
+    parse: (Object? d) => RaceResultDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  // --- Standings ----------------------------------------------------------
+
+  @override
+  Future<RemoteResult<List<DriverStandingDto>>> fetchDriverStandings({
+    required int season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<List<DriverStandingDto>>(
+    '/v1/seasons/$season/standings/drivers',
+    parse: (Object? d) =>
+        _list(d, (Map<String, dynamic> e) => DriverStandingDto.fromJson(e)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  @override
+  Future<RemoteResult<List<ConstructorStandingDto>>> fetchConstructorStandings({
+    required int season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<List<ConstructorStandingDto>>(
+    '/v1/seasons/$season/standings/constructors',
+    parse: (Object? d) => _list(
+      d,
+      (Map<String, dynamic> e) => ConstructorStandingDto.fromJson(e),
+    ),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  // --- Drivers ------------------------------------------------------------
+
+  @override
+  Future<RemoteResult<List<SeasonDriverSummaryDto>>> fetchSeasonDrivers({
+    required int season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<List<SeasonDriverSummaryDto>>(
+    '/v1/seasons/$season/drivers',
+    parse: (Object? d) => _list(
+      d,
+      (Map<String, dynamic> e) => SeasonDriverSummaryDto.fromJson(e),
+    ),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  @override
+  Future<RemoteResult<DriverDetailDto>> fetchDriver({
+    required String driverId,
+    int? season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<DriverDetailDto>(
+    '/v1/drivers/$driverId',
+    queryParameters: _seasonQuery(season),
+    parse: (Object? d) => DriverDetailDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  // --- Constructors -------------------------------------------------------
+
+  @override
+  Future<RemoteResult<List<SeasonConstructorSummaryDto>>>
+  fetchSeasonConstructors({
+    required int season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<List<SeasonConstructorSummaryDto>>(
+    '/v1/seasons/$season/constructors',
+    parse: (Object? d) => _list(
+      d,
+      (Map<String, dynamic> e) => SeasonConstructorSummaryDto.fromJson(e),
+    ),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  @override
+  Future<RemoteResult<ConstructorDetailDto>> fetchConstructor({
+    required String constructorId,
+    int? season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<ConstructorDetailDto>(
+    '/v1/constructors/$constructorId',
+    queryParameters: _seasonQuery(season),
+    parse: (Object? d) => ConstructorDetailDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  // --- Circuits -----------------------------------------------------------
+
+  @override
+  Future<RemoteResult<List<CircuitDto>>> fetchSeasonCircuits({
+    required int season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<List<CircuitDto>>(
+    '/v1/seasons/$season/circuits',
+    parse: (Object? d) =>
+        _list(d, (Map<String, dynamic> e) => CircuitDto.fromJson(e)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  @override
+  Future<RemoteResult<CircuitDetailDto>> fetchCircuit({
+    required String circuitId,
+    int? season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<CircuitDetailDto>(
+    '/v1/circuits/$circuitId',
+    queryParameters: _seasonQuery(season),
+    parse: (Object? d) => CircuitDetailDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  // --- Content ------------------------------------------------------------
+
+  @override
+  Future<RemoteResult<ContentManifestDto>> fetchContentManifest({
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) => _get<ContentManifestDto>(
+    '/v1/content/manifest',
+    parse: (Object? d) => ContentManifestDto.fromJson(_asMap(d)),
+    etag: etag,
+    cancellation: cancellation,
+  );
+
+  // --- Core conditional GET ----------------------------------------------
+
+  Future<RemoteResult<T>> _get<T>(
     String path, {
     required T Function(Object? data) parse,
     Map<String, dynamic>? queryParameters,
+    String? etag,
+    RemoteCancellation? cancellation,
+    bool requireSnapshot = true,
   }) async {
+    final CancelToken cancelToken = CancelToken();
+    if (cancellation != null) {
+      if (cancellation.isCancelled) {
+        cancelToken.cancel();
+      } else {
+        unawaited(
+          cancellation.whenCancelled.then((_) {
+            if (!cancelToken.isCancelled) cancelToken.cancel();
+          }),
+        );
+      }
+    }
+
     final Response<dynamic> response;
     try {
       response = await _dio.get<dynamic>(
         path,
         queryParameters: queryParameters,
+        cancelToken: cancelToken,
+        options: Options(
+          headers: etag == null
+              ? null
+              : <String, dynamic>{'If-None-Match': etag},
+          // Accept 304 as a success so Dio does not raise it as an error; 4xx/5xx
+          // still throw and are mapped to typed failures below.
+          validateStatus: (int? s) =>
+              s != null &&
+              (s == HttpStatus.notModified || (s >= 200 && s < 300)),
+        ),
       );
     } on DioException catch (e) {
-      throw GridViewApiException(_mapDioError(e));
+      return RemoteFailure<T>(_mapDioError(e));
     }
-    return _parseEnvelope<T>(response.data, parse);
+
+    final String? responseEtag = _headerValue(response, HttpHeaders.etagHeader);
+    final String? requestId = _headerValue(response, 'x-request-id');
+
+    if (response.statusCode == HttpStatus.notModified) {
+      return RemoteNotModified<T>(
+        etag: responseEtag ?? etag,
+        requestId: requestId,
+      );
+    }
+
+    return _parseEnvelope<T>(
+      response.data,
+      parse,
+      etag: responseEtag,
+      requestId: requestId,
+      requireSnapshot: requireSnapshot,
+    );
   }
 
-  ApiResponse<T> _parseEnvelope<T>(
+  RemoteResult<T> _parseEnvelope<T>(
     Object? body,
-    T Function(Object? data) parse,
-  ) {
+    T Function(Object? data) parse, {
+    required String? etag,
+    required String? requestId,
+    required bool requireSnapshot,
+  }) {
     final ApiResponse<T> parsed;
     try {
       parsed = ApiResponse.parse<T>(_asMap(body), parse);
     } catch (_) {
-      throw const GridViewApiException(
-        ApiFailure(kind: ApiFailureKind.invalidResponse),
+      return RemoteFailure<T>(
+        ApiFailure(kind: ApiFailureKind.invalidResponse, requestId: requestId),
       );
     }
     if (parsed.meta.apiVersion != supportedApiVersion) {
-      throw GridViewApiException(
+      return RemoteFailure<T>(
         ApiFailure(
           kind: ApiFailureKind.unsupportedApiVersion,
-          requestId: parsed.meta.requestId,
+          requestId: requestId ?? parsed.meta.requestId,
         ),
       );
     }
-    // Home and Grand Prix are snapshot responses: sourceUpdatedAt is required.
-    requireSnapshotMeta(parsed.meta);
-    return parsed;
+    if (requireSnapshot && !snapshotMetaIsValid(parsed.meta)) {
+      // A snapshot response missing sourceUpdatedAt is contract-invalid; reject
+      // before it can reach the conflict rule or the database.
+      return RemoteFailure<T>(
+        ApiFailure(
+          kind: ApiFailureKind.invalidResponse,
+          requestId: requestId ?? parsed.meta.requestId,
+        ),
+      );
+    }
+    return RemoteModified<T>(
+      data: parsed.data,
+      meta: parsed.meta,
+      etag: etag,
+      requestId: requestId ?? parsed.meta.requestId,
+    );
   }
 
   ApiFailure _mapDioError(DioException e) {
@@ -107,7 +400,7 @@ class DioGridViewApi implements GridViewApi {
       case DioExceptionType.badCertificate:
         return const ApiFailure(kind: ApiFailureKind.networkUnavailable);
       case DioExceptionType.cancel:
-        return const ApiFailure(kind: ApiFailureKind.unknown);
+        return const ApiFailure(kind: ApiFailureKind.cancelled);
       case DioExceptionType.badResponse:
         return _mapErrorResponse(e.response);
       case DioExceptionType.unknown:
@@ -116,6 +409,10 @@ class DioGridViewApi implements GridViewApi {
             kind: ApiFailureKind.networkUnavailable,
             retryable: true,
           );
+        }
+        if (e.error is FormatException) {
+          // A malformed (non-JSON) body failed to decode.
+          return const ApiFailure(kind: ApiFailureKind.invalidResponse);
         }
         return const ApiFailure(kind: ApiFailureKind.unknown);
     }
@@ -132,24 +429,56 @@ class DioGridViewApi implements GridViewApi {
         // Fall through to status-based mapping.
       }
     }
-    return _mapStatus(response?.statusCode);
+    return _mapStatus(
+      response?.statusCode,
+      requestId: response == null
+          ? null
+          : _headerValue(response, 'x-request-id'),
+    );
   }
 
-  ApiFailure _mapStatus(int? status) {
+  ApiFailure _mapStatus(int? status, {String? requestId}) {
     return switch (status) {
-      400 => const ApiFailure(kind: ApiFailureKind.invalidRequest),
-      404 => const ApiFailure(kind: ApiFailureKind.notFound),
-      429 => const ApiFailure(
+      400 => ApiFailure(
+        kind: ApiFailureKind.invalidRequest,
+        requestId: requestId,
+      ),
+      404 => ApiFailure(kind: ApiFailureKind.notFound, requestId: requestId),
+      429 => ApiFailure(
         kind: ApiFailureKind.rateLimited,
         retryable: true,
+        requestId: requestId,
       ),
-      503 => const ApiFailure(
+      503 => ApiFailure(
         kind: ApiFailureKind.serverUnavailable,
         retryable: true,
+        requestId: requestId,
       ),
-      _ => const ApiFailure(kind: ApiFailureKind.invalidResponse),
+      _ => ApiFailure(
+        kind: ApiFailureKind.invalidResponse,
+        requestId: requestId,
+      ),
     };
   }
 
-  Map<String, dynamic> _asMap(Object? value) => value as Map<String, dynamic>;
+  /// The optional `season` query (year or the literal `current`). Always sent
+  /// for `SeasonQuery` endpoints so the server never has to infer the default.
+  static Map<String, dynamic> _seasonQuery(int? season) => <String, dynamic>{
+    'season': season?.toString() ?? 'current',
+  };
+
+  static List<D> _list<D>(
+    Object? data,
+    D Function(Map<String, dynamic> element) fromJson,
+  ) {
+    final List<dynamic> items = data! as List<dynamic>;
+    return items
+        .map((Object? e) => fromJson(e! as Map<String, dynamic>))
+        .toList(growable: false);
+  }
+
+  static String? _headerValue(Response<dynamic> response, String name) =>
+      response.headers.value(name);
+
+  Map<String, dynamic> _asMap(Object? value) => value! as Map<String, dynamic>;
 }

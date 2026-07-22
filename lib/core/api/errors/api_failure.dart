@@ -13,6 +13,9 @@ enum ApiFailureKind {
   notFound,
   invalidRequest,
   maintenance,
+
+  /// The request was cancelled before it completed (e.g. a superseded refresh).
+  cancelled,
   unknown,
 }
 

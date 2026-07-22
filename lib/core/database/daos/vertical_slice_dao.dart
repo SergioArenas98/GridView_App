@@ -8,6 +8,7 @@ import '../../../features/shared/domain/entities/grand_prix_view.dart';
 import '../../../features/shared/domain/entities/home_view.dart';
 import '../../../features/shared/domain/entities/season.dart';
 import '../../../features/shared/domain/entities/session.dart';
+import '../../../features/shared/domain/snapshot_conflict.dart';
 import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../tables.dart';
@@ -247,56 +248,33 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
   }
 
   /// Decides whether an incoming snapshot should be applied, rejected, or
-  /// skipped. **`sourceUpdatedAt` is the primary conflict boundary** — the
-  /// age/revision of the underlying source data — and `generatedAt` must never
-  /// outrank it, nor substitute for it when it is missing.
-  ///
-  /// 1. incoming `sourceUpdatedAt` **missing** → `rejectedInvalid`
-  ///    (contract-invalid; no write; `generatedAt` is not consulted).
-  /// 2. stored `sourceUpdatedAt` missing but incoming present → `applied`
-  ///    (repair the incomplete cached snapshot; not `generatedAt` ordering).
-  /// 3. incoming source older than stored → `rejectedOlder`.
-  /// 4. incoming source newer than stored → `applied`.
-  /// 5. equal source + equal `contentVersion` → `skippedUpToDate` (no rewrite).
-  /// 6. equal source + differing `contentVersion` → `generatedAt` is a
-  ///    deterministic tie-breaker only: a strictly later `generatedAt` applies;
-  ///    an equal or earlier one is rejected.
-  ///
-  /// `contentVersion` is compared by equality only (never assumed sortable).
+  /// skipped, by delegating to the single centralized [SnapshotConflict] rule
+  /// (shared with the remote-to-local repositories so the ordering can never
+  /// diverge). **`sourceUpdatedAt` is the primary conflict boundary**;
+  /// `generatedAt` is only a tie-breaker and never a substitute.
   SnapshotWriteOutcome _decideOutcome(
     DataFreshness incoming,
     SnapshotRow? existing,
   ) {
-    final DateTime? incomingSource = incoming.sourceUpdatedAt;
-    if (incomingSource == null) {
-      // Contract-invalid: a snapshot must carry sourceUpdatedAt. Never fall back
-      // to generatedAt; reject without writing so cached rows are preserved.
-      return SnapshotWriteOutcome.rejectedInvalid;
-    }
-
-    if (existing == null) return SnapshotWriteOutcome.applied;
-
-    final DateTime? storedSource = existing.sourceUpdatedAt;
-    if (storedSource == null) {
-      // The stored snapshot predates the sourceUpdatedAt invariant; a valid
-      // incoming snapshot repairs it. This is cache repair, not ordering.
-      return SnapshotWriteOutcome.applied;
-    }
-
-    if (incomingSource.isBefore(storedSource)) {
-      return SnapshotWriteOutcome.rejectedOlder;
-    }
-    if (incomingSource.isAfter(storedSource)) {
-      return SnapshotWriteOutcome.applied;
-    }
-    // Equal source revision.
-    if (incoming.contentVersion == existing.contentVersion) {
-      return SnapshotWriteOutcome.skippedUpToDate;
-    }
-    // Differing content at the same source revision: generatedAt tie-break.
-    return incoming.generatedAt.isAfter(existing.generatedAt)
-        ? SnapshotWriteOutcome.applied
-        : SnapshotWriteOutcome.rejectedOlder;
+    final SnapshotConflictOutcome outcome = SnapshotConflict.decide(
+      SnapshotRevision.fromFreshness(incoming),
+      existing == null
+          ? null
+          : SnapshotRevision(
+              generatedAt: existing.generatedAt,
+              sourceUpdatedAt: existing.sourceUpdatedAt,
+              contentVersion: existing.contentVersion,
+            ),
+    );
+    return switch (outcome) {
+      SnapshotConflictOutcome.apply => SnapshotWriteOutcome.applied,
+      SnapshotConflictOutcome.rejectedOlder =>
+        SnapshotWriteOutcome.rejectedOlder,
+      SnapshotConflictOutcome.skippedUpToDate =>
+        SnapshotWriteOutcome.skippedUpToDate,
+      SnapshotConflictOutcome.rejectedInvalid =>
+        SnapshotWriteOutcome.rejectedInvalid,
+    };
   }
 
   /// Ensures a minimal season row exists so Grand Prix foreign keys resolve.

@@ -5,10 +5,10 @@ import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/core/api/envelope/meta_dto.dart';
-import 'package:gridview/core/api/errors/api_exception.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/database/gridview_database.dart';
 import 'package:gridview/features/shared/data/remote/dio_gridview_api.dart';
+import 'package:gridview/features/shared/data/remote/remote_result.dart';
 import 'package:gridview/features/shared/data/remote/snapshot_contract.dart';
 import 'package:gridview/features/shared/data/repositories/race_weekend_repository_impl.dart';
 import 'package:gridview/features/shared/domain/repositories/race_weekend_repository.dart';
@@ -43,31 +43,21 @@ MetaDto _meta({String? sourceUpdatedAt}) => MetaDto(
 );
 
 void main() {
-  group('requireSnapshotMeta', () {
-    test('passes when sourceUpdatedAt is present', () {
+  group('snapshotMetaIsValid', () {
+    test('true when sourceUpdatedAt is present', () {
       expect(
-        () =>
-            requireSnapshotMeta(_meta(sourceUpdatedAt: '2026-07-18T11:55:00Z')),
-        returnsNormally,
+        snapshotMetaIsValid(_meta(sourceUpdatedAt: '2026-07-18T11:55:00Z')),
+        isTrue,
       );
     });
 
-    test('throws invalidResponse when sourceUpdatedAt is missing', () {
-      expect(
-        () => requireSnapshotMeta(_meta()),
-        throwsA(
-          isA<GridViewApiException>().having(
-            (GridViewApiException e) => e.failure.kind,
-            'kind',
-            ApiFailureKind.invalidResponse,
-          ),
-        ),
-      );
+    test('false when sourceUpdatedAt is missing', () {
+      expect(snapshotMetaIsValid(_meta()), isFalse);
     });
   });
 
   test(
-    'DioGridViewApi rejects a snapshot whose meta omits sourceUpdatedAt',
+    'DioGridViewApi returns invalidResponse when meta omits sourceUpdatedAt',
     () async {
       final _MutableAdapter adapter = _MutableAdapter();
       final Dio dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
@@ -76,15 +66,13 @@ void main() {
       (body['meta'] as Map<String, dynamic>).remove('sourceUpdatedAt');
       adapter.body = body;
 
-      await expectLater(
-        DioGridViewApi(dio).fetchHome(),
-        throwsA(
-          isA<GridViewApiException>().having(
-            (GridViewApiException e) => e.failure.kind,
-            'kind',
-            ApiFailureKind.invalidResponse,
-          ),
-        ),
+      final RemoteResult<Object?> result = await DioGridViewApi(
+        dio,
+      ).fetchHome();
+      expect(result, isA<RemoteFailure<Object?>>());
+      expect(
+        (result as RemoteFailure).failure.kind,
+        ApiFailureKind.invalidResponse,
       );
     },
   );
