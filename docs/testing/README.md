@@ -165,10 +165,9 @@ deliberately avoided.
 - `test/data/remote/*` — the Dio client with an injected fake HTTP transport
   (success + every typed failure), the dev fixture source, and dev-fixture
   contract validity (apiVersion 1, no provider ids).
-- `test/data/repositories/race_weekend_repository_test.dart` — empty-cache
-  refresh, existing cache, failure-with-cache, failure-without-cache, invalid
-  response, newer/older snapshot, detail lookup, missing Grand Prix, and
-  cache-preserved-after-failure.
+- Home/Grand Prix repository behaviour is covered by the generalized Phase 6B1
+  repository tests (see the Phase 6B1 section below); the Phase 4
+  `RaceWeekendRepository` was split into `HomeRepository` + `GrandPrixRepository`.
 - `test/application/*` — the pure state machines (every Home and detail state),
   the freshness evaluator, and the real controllers via `ProviderContainer`
   (loading → data, stale, first-load failure, refresh-failure-keeps-cache,
@@ -291,3 +290,59 @@ Offline/restart checklist:
 5. Confirm `FixtureGridViewApi` is **not** in use: with `API_BASE_URL` set the
    client "Sample data" banner is absent (it appears only in pure fixture mode);
    staging identity is the `com.sejuma.gridview.staging` / `-staging` flavor.
+
+## Conditional remote client & complete repositories (Phase 6B1)
+
+The generalized remote-to-local layer is tested at every level, all without a
+real Worker, network, admin token or device (in-memory SQLite, plus temporary
+on-disk files for the persistence tests):
+
+- `test/data/remote/dio_gridview_api_test.dart` — path/query construction for
+  every v1 endpoint, `If-None-Match` sent only when an ETag exists, `200`/`304`/
+  empty-`304`, request-id preservation, all typed failures (offline, timeout,
+  404, 429, 503, invalid JSON, invalid envelope, unsupported version, missing
+  `sourceUpdatedAt`), pre- and in-flight cancellation, and **no** Authorization/
+  admin header.
+- `test/data/remote/fixture_gridview_api_test.dart` — the dev fixture source with
+  conditional-request (content ETag → `RemoteNotModified`) behaviour and 404 for
+  an absent fixture.
+- `test/data/sync/snapshot_conflict_rule_test.dart` — the centralized
+  `SnapshotConflict.decide` (source-primary; generatedAt tie-break only;
+  contentVersion equality).
+- `test/data/sync/resource_sync_test.dart` — metadata semantics and transaction
+  boundaries: a modified apply commits full success metadata; a metadata failure
+  rolls back the domain write; `304` preserves provenance and bumps success; a
+  failure preserves the ETag; an older snapshot records a safe conflict category.
+- `test/data/sync/refresh_coordinator_test.dart` — same-key dedup, different-key
+  independence, slot release on failure and on a thrown action.
+- `test/data/repositories/conditional_refresh_test.dart` — the full pipeline
+  through the calendar repository: empty-cache 200, ETag persistence + reuse,
+  `304`, newer/older/equal snapshots, network/invalid failures preserving the
+  cache, the `304`-with-absent-local one-shot unconditional retry, other-seasons
+  untouched, stream-only-after-commit, no false emission on `304`, and
+  cross-resource independence (driver vs constructor standings).
+- `test/data/repositories/repository_domain_test.dart` — sprint weekend, sprint+
+  race coexistence, fractional/tied standings, DNF/DNS/DSQ nulls, missing
+  bio/media, constructor rebranding across seasons, and nullable circuit values.
+- `test/data/repositories/repository_concurrency_test.dart` — two simultaneous
+  same-key refreshes make one request; different keys run independently; failure
+  and cancellation release the key and a retry re-requests.
+- `test/data/repositories/persistence_reopen_test.dart` — synchronized data,
+  ETags and freshness survive a close/reopen; the reopened cache renders offline;
+  a `304` after reopen sends `If-None-Match` with the persisted ETag.
+- `test/application/production_isolation_test.dart` — production never constructs
+  the fixture API and never falls back to it; every repository refresh fails
+  cleanly with no base URL; no admin credential; no provider identifier in any
+  consumed fixture.
+
+Optional manual staging smoke (non-CI): `tool/staging_smoke.dart` self-skips
+without a base URL. Run it against a public deployment with:
+
+```powershell
+flutter test tool/staging_smoke.dart `
+  --dart-define=API_BASE_URL=https://gridview-api-staging.sejuma18.workers.dev
+```
+
+It uses only public GET routes and a throwaway on-disk database, synchronizes a
+few resources, closes/reopens the database, and confirms local counts and an
+ETag fingerprint survived — printing no response bodies and using no admin token.

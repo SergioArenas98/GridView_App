@@ -24,3 +24,6 @@ GridView reconstruction.
 | [0008](0008-weak-etag-strategy-with-request-ids.md) | Weak ETags with per-request request IDs | Accepted |
 | [0009](0009-protected-staging-administration-token.md) | Protected administration with injected token | Accepted |
 | [0010](0010-workers-kv-consistency-limitation.md) | Workers KV consistency limitation | Accepted |
+| [0011](0011-typed-conditional-http-results.md) | Typed conditional HTTP results | Accepted |
+| [0012](0012-304-with-missing-local-data-recovery.md) | Recovering from a 304 with missing local data | Accepted |
+| [0013](0013-per-resource-refresh-deduplication.md) | Per-resource refresh deduplication | Accepted |

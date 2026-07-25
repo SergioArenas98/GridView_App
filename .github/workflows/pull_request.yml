@@ -49,6 +49,12 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      # `flutter test` runs every suite under test/ — including the Phase 6B1
+      # remote-client, conditional-request, repository, concurrency, persistence
+      # and production-isolation tests, plus the existing migration, widget and
+      # golden tests. None require a Worker, network, secret or device. The
+      # manual staging smoke lives under tool/ (not test/), so it is never run
+      # here, and it self-skips without an API_BASE_URL regardless.
       - name: Run tests
         run: flutter test
 

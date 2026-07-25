@@ -1,9 +1,15 @@
 # GridView — Synchronization & Offline Behaviour
 
-- Status: Phase 4 (first offline-first vertical slice)
+- Status: Phase 6B1 (conditional remote client + complete repositories). §1–§9
+  describe the Phase 4 Home/Grand Prix slice, now generalized to every resource;
+  §10 documents the Phase 6B1 layer (conditional requests, ETags, the shared
+  sync writer, per-resource dedup and the full repository inventory).
 - Related: `GridView_TRD.md` §16, `GridView_Local_Data.md`,
   `docs/adr/0005-snapshot-conflict-and-freshness.md`,
-  `docs/adr/0006-riverpod-state-and-result-pattern.md`
+  `docs/adr/0006-riverpod-state-and-result-pattern.md`,
+  `docs/adr/0011-typed-conditional-http-results.md`,
+  `docs/adr/0012-304-with-missing-local-data-recovery.md`,
+  `docs/adr/0013-per-resource-refresh-deduplication.md`
 
 ## 1. Remote-to-local flow
 
@@ -111,13 +117,16 @@ After at least one successful sync:
 
 ## 6. Error model
 
-The remote data source throws exactly one typed exception
-(`GridViewApiException` carrying `ApiFailure`), covering: network unavailable,
-timeout, rate-limited, server unavailable, invalid response, unsupported
-API/schema version, not found, invalid request. The repository catches it and
-returns a typed `RefreshFailure`; the UI derives a **localized** message. Raw
-Dio/SQLite errors, server text and stack traces never reach the UI. Development
-logging is safe (method, path, status, request id — never bodies or keys).
+The remote data source returns exactly one typed result per call —
+`RemoteResult<T>` = `RemoteModified` (200) / `RemoteNotModified` (304) /
+`RemoteFailure` (a provider-agnostic `ApiFailure`) — never an exception for a
+non-2xx, and never a Dio type (see §10 and ADR 0011). `ApiFailure` covers:
+network unavailable, timeout, rate-limited, server unavailable, invalid
+response, unsupported API/schema version, not found, invalid request,
+cancelled. The repository maps it to a typed `RefreshFailure`; the UI derives a
+**localized** message. Raw Dio/SQLite errors, server text and stack traces never
+reach the UI. Development logging is safe (method, path, status, request id —
+never bodies or keys).
 
 ## 7. Date & timezone handling
 
@@ -183,3 +192,125 @@ Exercising states manually:
 
 **Production never falls back to mock data.** The fixture source is constructed
 only for non-production environments.
+
+## 10. Phase 6B1 — conditional client & complete repositories
+
+Phase 6B1 generalizes the Phase 4 slice into the complete v1 read layer, without
+a second HTTP client, error hierarchy or repository pattern.
+
+### 10.1 Remote-to-local resource flow
+
+```
+GridViewApi (Dio prod / fixture dev)  — one conditional read per resource
+   → RemoteResult<T>  (RemoteModified 200 | RemoteNotModified 304 | RemoteFailure)
+   → repository maps DTO → domain entities (+ RemoteSnapshotMeta from meta)
+   → ResourceSync.applySnapshot: ONE transaction {conflict rule, domain write,
+       resource_sync_metadata success update}
+   → Drift stream re-emits the domain view
+   → (Phase 7) controller derives sealed state → UI renders from cache
+```
+
+Each modified public resource is persisted through **one atomic transaction**
+that includes the validated domain data, the relational collection
+replacement/upserts and the `resource_sync_metadata` success update. A failed
+domain write leaves no success metadata behind; a metadata failure rolls the
+domain write back. A 304 transaction updates only synchronization metadata.
+Independently cacheable resources are never combined into one transaction.
+
+### 10.2 ETag lifecycle & 304 semantics
+
+- Each cacheable resource stores its ETag in `resource_sync_metadata.etag`.
+- A refresh reads that ETag and sends `If-None-Match` when present (never on the
+  first sync, and never after a `forceRefresh`).
+- **200** → persist the returned ETag with the snapshot (success metadata).
+- **304** → a successful validation: `lastAttemptAt`/`lastSuccessAt` bump,
+  `lastFailureCategory` clears, the ETag is replaced **only if** the server
+  supplies a new one, and snapshot provenance (`sourceUpdatedAt`, `generatedAt`,
+  `contentVersion`, `serverStale`) is **preserved unchanged** — no new metadata
+  is invented from the clock, and no domain rows are rewritten.
+- **304 with absent local data** (an inconsistent cache — an ETag but no rows) →
+  retry **exactly once** without `If-None-Match`; a 200 persists normally, a
+  second 304 or a failure returns a typed invalid-cache/protocol failure. Never
+  loops. See ADR 0012.
+
+### 10.3 Conflict rule (centralized)
+
+The §2 rule is implemented once in `SnapshotConflict.decide` (domain layer) and
+consumed by **both** `VerticalSliceDao` and `ResourceSync`, so the ordering can
+never diverge. `sourceUpdatedAt` is primary; `generatedAt` is only an
+equal-source tie-breaker; `contentVersion` is compared by equality. A rejected
+(older/invalid) snapshot writes no domain rows and records a safe
+`lastFailureCategory` (`conflict_older` / `invalid_snapshot`).
+
+### 10.4 Metadata semantics
+
+`resource_sync_metadata` is the sole local source of remote-resource freshness
+and HTTP validator state. On every attempt `lastAttemptAt` updates. On an
+accepted 200: ETag, `generatedAt`, `sourceUpdatedAt`, `staleAfter`,
+`contentVersion`, `serverStale`, `lastSuccessAt` set and `lastFailureCategory`
+clears. On failure: ETag and all prior domain data are preserved, a safe
+`lastFailureCategory` is recorded, and `lastSuccessAt` is **not** updated.
+
+### 10.5 Concurrency & cancellation
+
+`RefreshCoordinator` deduplicates concurrent refreshes of the **same** canonical
+resource key: a second refresh joins the in-flight one and shares its single
+result (one HTTP request). Different keys refresh independently (no global
+lock). A completed run — success, failure or cancellation — releases its slot so
+a later retry starts fresh. Cancellation is transport-neutral
+(`RemoteCancellation`, no Dio `CancelToken` leak). Repositories hold no
+`BuildContext`. See ADR 0013.
+
+### 10.6 Repository inventory
+
+| Repository | Reads (local streams) | Refreshes (conditional) |
+|---|---|---|
+| `SeasonRepository` | current season, season | `/v1/seasons/current`, `/v1/seasons/{s}` |
+| `HomeRepository` | Home view | `/v1/home` |
+| `CalendarRepository` | season calendar | `/v1/seasons/{s}/calendar` |
+| `GrandPrixRepository` | GP detail | `/v1/seasons/{s}/grand-prix/{r}` |
+| `ResultRepository` | results by (season, round) | `…/grand-prix/{r}/results` |
+| `StandingsRepository` | driver + constructor standings | `…/standings/{drivers,constructors}` |
+| `DriverRepository` | season roster, driver detail | `/v1/seasons/{s}/drivers`, `/v1/drivers/{id}` |
+| `ConstructorRepository` | season list, team detail | `/v1/seasons/{s}/constructors`, `/v1/constructors/{id}` |
+| `CircuitRepository` | season circuits, circuit detail | `/v1/seasons/{s}/circuits`, `/v1/circuits/{id}` |
+| `ContentRepository` | content version (metadata) | `/v1/content/manifest` |
+
+Repositories return only domain entities, domain read models and typed
+`RefreshResult` — never DTOs, Dio objects, Drift rows/companions or SQLite
+errors. `status` and `bootstrap` are covered by typed remote calls
+(`fetchStatus`, `fetchBootstrap`); the cross-resource bootstrap **orchestration**
+policy is Phase 6B2.
+
+Collection boundaries: the season roster owns a season's driver entries; driver
+detail owns the stable identity (biography + media). The constructor line-up is
+**derived** from the season's driver entries (never a stored duplicate). Circuit
+identity is stable and shared across seasons, so a circuit sync upserts and never
+deletes. Media is persisted only for the four FK-backed owner types; a driver's
+`media` array is written under its driver owner.
+
+### 10.7 Canonical resource keys
+
+Built exclusively via `ResourceKey` (stable ids only, season-scoped):
+`season:current`, `season:2026`, `home:current`, `calendar:2026`,
+`standings:drivers:2026`, `standings:constructors:2026`, `drivers:2026`,
+`driver:max-verstappen:2026`, `constructors:2026`, `constructor:ferrari:2026`,
+`circuits:2026`, `circuit:spa-francorchamps:2026`, `grand-prix:2026:13`,
+`grand-prix-results:2026:13`, `content:manifest`.
+
+### 10.8 Development / production isolation
+
+Unchanged from §8 and extended to every repository: production always uses
+`DioGridViewApi` (never constructs `FixtureGridViewApi`, never falls back to
+mock content — a missing base URL is a typed failure), no admin credential is
+ever sent, and no provider identifier enters the domain or Drift. Proven in
+`test/application/production_isolation_test.dart`.
+
+### 10.9 How Phase 6B2 consumes this layer
+
+Phase 6B1 owns the local **due/stale query**
+(`SyncMetadataDao.readDueResources` / `watchDueResources`) and every per-resource
+refresh; it wires **no** cross-resource orchestration, foreground policy,
+scheduling or background jobs. Phase 6B2 will read the due-resource query and
+drive refreshes through these repositories (e.g. bootstrap on first launch, then
+foreground/stale-driven refresh), reusing the coordinator's per-key dedup.

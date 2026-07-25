@@ -46,6 +46,15 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   admin-security, rollback and observability/redaction verification: in progress.
   See `docs/operations/GridView_Staging_Edge_Runbook.md`. Production is not
   deployed.
+- Phase 6A - complete local data layer on Drift **schema v2** (full v1 domain
+  persistence, DAOs, queries and a non-destructive migration): done. See
+  `docs/technical/GridView_Local_Data.md`.
+- Phase 6B1 - conditional remote client and complete repositories: done. Every
+  v1 resource has a typed conditional remote call (`If-None-Match`/`304`/ETags)
+  and a domain repository that writes atomically to Drift through a shared
+  sync writer, with per-resource refresh deduplication. See
+  `docs/technical/GridView_Synchronization.md` §10 and ADRs 0011–0013. Phase 6B2
+  (bootstrap + foreground orchestration) is not started.
 
 Home's next-Grand-Prix hero, weekend sessions and freshness, and the Grand Prix
 detail screen are now driven by a **Drift-backed** local store: content renders

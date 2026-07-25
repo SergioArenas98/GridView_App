@@ -1,8 +1,9 @@
 # GridView — Local Data (Drift)
 
-- Status: Phase 6A (complete local data layer — full v1 domain persistence,
-  DAOs, queries and migration)
+- Status: Phase 6B1 (remote-to-local repositories over the Phase 6A schema —
+  §7 documents the writers/streams the remote layer adds; schema stays v2)
 - Related: `GridView_TRD.md` §12/§15, `GridView_Domain_Model.md`,
+  `GridView_Synchronization.md` §10,
   `docs/adr/0004-drift-local-database.md`,
   `docs/adr/0005-snapshot-conflict-and-freshness.md`
 
@@ -206,3 +207,34 @@ reject invalid batches transactionally.
 The reconstructed database (`gridview_v2.sqlite`, SQLite) cannot open,
 reinterpret or destroy the legacy Hive cache (`*.hive` files). Legacy cleanup is
 deferred to a separate, reviewed migration (see ADR 0004).
+
+## 7. Phase 6B1 — how the remote layer writes local data
+
+Phase 6B1 adds no schema and no table/column changes; schema stays **v2**. It
+introduces the writers and streams the repositories use:
+
+- **`SeasonDao`** (new) — the current-season pointer (`setCurrentSeason` clears
+  `isCurrent` on all other seasons) and per-season metadata; streams + counts.
+- **`CalendarDao`** — `replaceCalendar` (season-scoped: obsolete events removed
+  and their sessions cascade; unrelated seasons untouched; summary companions
+  preserve detail-synced sessions/officialName/media); circuit streams + counts.
+- **`StandingsDao`**, **`CompetitorDao`**, **`ResultsDao`** — season/round
+  streams and counts; `CompetitorDao` gains partial-identity upserts
+  (`upsertDriverIdentities` / `upsertConstructorIdentities`) so a season-summary
+  sync never clobbers detail-owned biography/media. `ResultsDao.writeRaceResult`
+  now requires the parent Grand Prix to exist (a missing parent is a typed
+  rejection, never a fabricated event).
+- **`VerticalSliceDao`** — Home/GP snapshot writes accept a `force` flag used
+  when the outer `ResourceSync` has already applied the conflict rule against
+  `resource_sync_metadata`; the snapshots-table gate then only guards direct
+  callers. The conflict decision is delegated to the centralized
+  `SnapshotConflict.decide` (shared with `ResourceSync`).
+
+All writes remain transactional at the DAO boundary; the repository composes the
+domain write and the `resource_sync_metadata` update into **one** transaction via
+`ResourceSync.applySnapshot` (nested DAO transactions become savepoints, so the
+whole apply is atomic). See `GridView_Synchronization.md` §10.
+
+The local **due/stale query** (`SyncMetadataDao.readDueResources` /
+`watchDueResources`) is unchanged from Phase 6A and is the seam Phase 6B2's
+orchestration consumes.
