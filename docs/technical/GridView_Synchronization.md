@@ -141,42 +141,55 @@ never bodies or keys).
 
 ## 8. Development data source
 
-The dev/staging build uses an **injected fixture API**
+The dev/staging build can use an **injected fixture API**
 (`FixtureGridViewApi`) that serves OpenAPI-valid snapshots bundled under
 `assets/dev_fixtures/` through the *same* DTO → repository → Drift → stream → UI
 path as production. It is:
 
-- Available **only** in dev/staging; production always uses the Dio HTTP client
-  and never falls back to mock data (`remoteApiProvider`).
+- Selected **only** by a deliberate `DATA_SOURCE=fixture` build define, and only
+  in non-production builds. It is **never** inferred from a missing
+  `API_BASE_URL`.
 - **Visibly flagged** by a "Sample data — not live results" banner
   (`usesMockDataProvider`).
 - Free of provider identifiers.
 
-Production selection (`remoteApiProvider`):
+Selection (`remoteApiProvider`) is a deliberate function of `(environment,
+DATA_SOURCE, API_BASE_URL)` — see `GridView_Environments.md` for the full truth
+table:
 
-- **production** → `DioGridViewApi` (real HTTPS only; a missing base URL surfaces
-  as a refresh failure, never fixtures).
-- **dev/staging** → the bundled fixture source, unless an explicit `API_BASE_URL`
-  is provided (e.g. a local fixture Worker or staging), in which case the Dio
-  client is used against it.
+- **production** → `DioGridViewApi` with a valid base URL; a missing base URL or
+  an attempted fixture mode is a controlled configuration failure
+  (`MisconfiguredGridViewApi`, typed `configuration`). Production **never**
+  constructs `FixtureGridViewApi`.
+- **dev/staging** → `FixtureGridViewApi` only under `DATA_SOURCE=fixture`; under
+  remote mode (explicit, or the missing/malformed default) a valid base URL uses
+  `DioGridViewApi`, and a missing base URL is a controlled configuration failure,
+  never fixtures.
 
 ## 9. Manual local-development flow
 
-The default dev flow is **one command** — no running Worker required:
+The default dev flow uses the bundled fixtures via a **deliberate** fixture mode
+— no running Worker required:
 
 ```bash
-# Uses the bundled dev fixtures (assets/dev_fixtures/*). Mock banner is shown.
-flutter run --flavor dev --dart-define=APP_ENV=development
+# Deliberate fixture mode: bundled dev fixtures (assets/dev_fixtures/*).
+# The "Sample data" banner is shown.
+flutter run --flavor dev --dart-define=APP_ENV=development \
+  --dart-define=DATA_SOURCE=fixture
 ```
 
-Optional: point dev/staging at a real HTTP endpoint (e.g. a local Worker or
-staging edge API):
+Point dev/staging at a real HTTP endpoint instead (a local Worker or staging edge
+API) with remote mode and a base URL:
 
 ```bash
 flutter run --flavor dev \
   --dart-define=APP_ENV=development \
+  --dart-define=DATA_SOURCE=remote \
   --dart-define=API_BASE_URL=http://10.0.2.2:8787   # 10.0.2.2 = host from the Android emulator
 ```
+
+Fixture mode is never inferred: remote mode (the default) with no `API_BASE_URL`
+is a controlled configuration failure, not a fixture fallback.
 
 Exercising states manually:
 
@@ -191,7 +204,8 @@ Exercising states manually:
   launch starts from an empty `gridview_v2.sqlite`.
 
 **Production never falls back to mock data.** The fixture source is constructed
-only for non-production environments.
+only in non-production builds and only under a deliberate `DATA_SOURCE=fixture`
+value; production forbids it entirely (see `GridView_Environments.md`).
 
 ## 10. Phase 6B1 — conditional client & complete repositories
 
@@ -304,10 +318,13 @@ Built exclusively via `ResourceKey` (stable ids only, season-scoped):
 
 ### 10.8 Development / production isolation
 
-Unchanged from §8 and extended to every repository: production always uses
-`DioGridViewApi` (never constructs `FixtureGridViewApi`, never falls back to
-mock content — a missing base URL is a typed failure), no admin credential is
-ever sent, and no provider identifier enters the domain or Drift. Proven in
+Per §8 and extended to every repository: the bundled fixture source is used only
+under a deliberate `DATA_SOURCE=fixture` non-production build; production never
+constructs `FixtureGridViewApi` (an attempted fixture mode or a missing base URL
+is a controlled `configuration` failure, never mock content), no admin credential
+is ever sent, and no provider identifier enters the domain or Drift. The complete
+selection truth table (including missing, malformed and production-forbidden
+fixture configuration) is proven in
 `test/application/production_isolation_test.dart`.
 
 ### 10.9 How Phase 6B2 consumes this layer

@@ -269,6 +269,7 @@ the admin token):
 ```powershell
 fvm flutter run --flavor staging `
   --dart-define=APP_ENV=staging `
+  --dart-define=DATA_SOURCE=remote `
   --dart-define=API_BASE_URL=https://gridview-api-staging.sejuma18.workers.dev
 ```
 
@@ -287,9 +288,10 @@ Offline/restart checklist:
 3. Close and reopen the app — content renders immediately from the Drift cache.
 4. Enable airplane mode — Home and detail still render from Drift, with a
    stale/offline notice; a failed refresh preserves cached content.
-5. Confirm `FixtureGridViewApi` is **not** in use: with `API_BASE_URL` set the
-   client "Sample data" banner is absent (it appears only in pure fixture mode);
-   staging identity is the `com.sejuma.gridview.staging` / `-staging` flavor.
+5. Confirm `FixtureGridViewApi` is **not** in use: with `DATA_SOURCE=remote` the
+   client "Sample data" banner is absent (it appears only under a deliberate
+   `DATA_SOURCE=fixture`); staging identity is the
+   `com.sejuma.gridview.staging` / `-staging` flavor.
 
 ## Conditional remote client & complete repositories (Phase 6B1)
 
@@ -330,10 +332,14 @@ on-disk files for the persistence tests):
 - `test/data/repositories/persistence_reopen_test.dart` — synchronized data,
   ETags and freshness survive a close/reopen; the reopened cache renders offline;
   a `304` after reopen sends `If-None-Match` with the persisted ETag.
-- `test/application/production_isolation_test.dart` — production never constructs
-  the fixture API and never falls back to it; every repository refresh fails
-  cleanly with no base URL; no admin credential; no provider identifier in any
-  consumed fixture.
+- `test/application/production_isolation_test.dart` — the complete remote-source
+  selection truth table: `DATA_SOURCE` parsing (only `fixture` selects fixtures;
+  missing/malformed resolve to remote); dev/staging select fixtures only under a
+  deliberate `DATA_SOURCE=fixture` (never inferred from a missing base URL);
+  remote mode with no base URL is a controlled `configuration` failure, not
+  fixtures; production never constructs the fixture API (an attempted fixture
+  mode or a missing base URL is a controlled `configuration` failure); no admin
+  credential; no provider identifier in any consumed fixture.
 
 Optional manual staging smoke (non-CI): `tool/staging_smoke.dart` self-skips
 without a base URL. Run it against a public deployment with:

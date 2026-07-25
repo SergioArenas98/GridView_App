@@ -63,7 +63,10 @@ transaction, and a failed refresh never erases cached content. The remaining
 screens (calendar, standings, drivers, teams, circuits) are still
 non-authoritative skeletons; no Firebase, ads or production provider is wired
 yet. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
-and show a "Sample data" banner; **production never falls back to mock data**. A
+only under a deliberate `DATA_SOURCE=fixture` build define (never inferred from a
+missing `API_BASE_URL`) and show a "Sample data" banner; **production never
+constructs the fixture source** — an attempted fixture mode or a missing base URL
+is a controlled configuration failure. A
 **development-only** component catalogue is reachable from **Settings → Developer**
 in dev/staging builds (never production).
 
@@ -71,8 +74,9 @@ in dev/staging builds (never production).
 
 1. Install [FVM](https://fvm.app): `dart pub global activate fvm`
 2. Install the pinned Flutter SDK: `fvm install`
-3. Run the app: `fvm flutter run --flavor dev --dart-define=APP_ENV=development`
-   (no Worker needed — dev serves the bundled `assets/dev_fixtures/*`)
+3. Run the app: `fvm flutter run --flavor dev --dart-define=APP_ENV=development --dart-define=DATA_SOURCE=fixture`
+   (no Worker needed — the deliberate `DATA_SOURCE=fixture` serves the bundled
+   `assets/dev_fixtures/*`; see `docs/technical/GridView_Environments.md`)
 4. Run checks: `fvm flutter analyze && fvm flutter test`
 
 The Drift-backed local-development flow — running against the bundled fixtures or

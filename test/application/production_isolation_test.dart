@@ -4,85 +4,243 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/app/environment/app_environment.dart';
+import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/database/gridview_database.dart';
 import 'package:gridview/core/network/api_config.dart';
+import 'package:gridview/core/network/data_source_config.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/data/remote/dio_gridview_api.dart';
 import 'package:gridview/features/shared/data/remote/fixture_gridview_api.dart';
 import 'package:gridview/features/shared/data/remote/gridview_api.dart';
+import 'package:gridview/features/shared/data/remote/misconfigured_gridview_api.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
 import 'package:gridview/features/shared/domain/repositories/content_repository.dart';
 import 'package:gridview/features/shared/domain/repositories/home_repository.dart';
 
-/// Proves production never uses the bundled fixture source and never silently
-/// falls back to it, even when the API base URL is missing.
+/// Builds a container for the remote-source selection with a fixed environment,
+/// base URL and (already-parsed) data-source mode.
+ProviderContainer _container({
+  required AppEnvironment env,
+  required String baseUrl,
+  required DataSourceMode mode,
+  GridViewDatabase? db,
+}) {
+  return ProviderContainer(
+    overrides: [
+      appEnvironmentProvider.overrideWithValue(env),
+      apiConfigProvider.overrideWithValue(ApiConfig(baseUrl: baseUrl)),
+      dataSourceModeProvider.overrideWithValue(mode),
+      if (db != null) databaseProvider.overrideWithValue(db),
+    ],
+  );
+}
+
 void main() {
-  test(
-    'production never constructs the fixture API (even with no base URL)',
-    () async {
-      final ProviderContainer container = ProviderContainer(
-        overrides: [
-          appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
-          apiConfigProvider.overrideWithValue(const ApiConfig(baseUrl: '')),
-        ],
+  // ---------------------------------------------------------------------------
+  // DATA_SOURCE parsing: fixtures require a deliberate value; a missing or
+  // malformed value never enables fixtures.
+  // ---------------------------------------------------------------------------
+  group('DataSourceConfig.parse', () {
+    test('only the exact token "fixture" selects fixtures', () {
+      expect(DataSourceConfig.parse('fixture'), DataSourceMode.fixture);
+      expect(DataSourceConfig.parse('  FIXTURE  '), DataSourceMode.fixture);
+    });
+
+    test('"remote" selects remote', () {
+      expect(DataSourceConfig.parse('remote'), DataSourceMode.remote);
+    });
+
+    test('a missing value resolves to remote (never fixtures)', () {
+      expect(DataSourceConfig.parse(''), DataSourceMode.remote);
+      expect(DataSourceConfig.parse('   '), DataSourceMode.remote);
+    });
+
+    test('a malformed value resolves to remote (never fixtures)', () {
+      expect(DataSourceConfig.parse('banana'), DataSourceMode.remote);
+      expect(DataSourceConfig.parse('fixtures'), DataSourceMode.remote);
+      expect(DataSourceConfig.parse('true'), DataSourceMode.remote);
+      expect(DataSourceConfig.isMalformed('banana'), isTrue);
+      expect(DataSourceConfig.isMalformed(''), isFalse);
+      expect(DataSourceConfig.isMalformed('remote'), isFalse);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // The complete remote-source selection truth table.
+  // ---------------------------------------------------------------------------
+  group('remote-source selection truth table', () {
+    for (final AppEnvironment env in <AppEnvironment>[
+      AppEnvironment.development,
+      AppEnvironment.staging,
+    ]) {
+      test('$env + explicit remote + valid base URL -> Dio', () {
+        final ProviderContainer c = _container(
+          env: env,
+          baseUrl: 'https://api.example',
+          mode: DataSourceMode.remote,
+        );
+        addTearDown(c.dispose);
+        expect(c.read(remoteApiProvider), isA<DioGridViewApi>());
+        expect(c.read(usesMockDataProvider), isFalse);
+      });
+
+      test('$env + explicit fixture -> Fixture (banner shown)', () {
+        final ProviderContainer c = _container(
+          env: env,
+          baseUrl: '',
+          mode: DataSourceMode.fixture,
+        );
+        addTearDown(c.dispose);
+        expect(c.read(remoteApiProvider), isA<FixtureGridViewApi>());
+        expect(c.read(usesMockDataProvider), isTrue);
+      });
+
+      test(
+        '$env + explicit fixture + a base URL still uses fixtures (deliberate)',
+        () {
+          final ProviderContainer c = _container(
+            env: env,
+            baseUrl: 'https://api.example',
+            mode: DataSourceMode.fixture,
+          );
+          addTearDown(c.dispose);
+          expect(c.read(remoteApiProvider), isA<FixtureGridViewApi>());
+          expect(c.read(usesMockDataProvider), isTrue);
+        },
       );
-      addTearDown(container.dispose);
 
-      final GridViewApi api = container.read(remoteApiProvider);
-      expect(api, isA<DioGridViewApi>());
-      expect(api, isNot(isA<FixtureGridViewApi>()));
-      expect(api.usesMockData, isFalse);
-      expect(container.read(usesMockDataProvider), isFalse);
-    },
-  );
+      test(
+        '$env + remote + missing base URL -> controlled failure, not fixtures',
+        () {
+          final ProviderContainer c = _container(
+            env: env,
+            baseUrl: '',
+            mode: DataSourceMode.remote,
+          );
+          addTearDown(c.dispose);
+          final GridViewApi api = c.read(remoteApiProvider);
+          expect(api, isA<MisconfiguredGridViewApi>());
+          expect(api, isNot(isA<FixtureGridViewApi>()));
+          expect(api.usesMockData, isFalse);
+          expect(c.read(usesMockDataProvider), isFalse);
+        },
+      );
 
+      test(
+        '$env + missing mode (defaults remote) + no base URL -> not fixtures',
+        () {
+          final ProviderContainer c = _container(
+            env: env,
+            baseUrl: '',
+            mode: DataSourceConfig.parse(''), // missing -> remote
+          );
+          addTearDown(c.dispose);
+          expect(c.read(remoteApiProvider), isA<MisconfiguredGridViewApi>());
+          expect(c.read(usesMockDataProvider), isFalse);
+        },
+      );
+
+      test(
+        '$env + malformed mode (defaults remote) + base URL -> Dio, not fixtures',
+        () {
+          final ProviderContainer c = _container(
+            env: env,
+            baseUrl: 'https://api.example',
+            mode: DataSourceConfig.parse('banana'), // malformed -> remote
+          );
+          addTearDown(c.dispose);
+          expect(c.read(remoteApiProvider), isA<DioGridViewApi>());
+          expect(c.read(usesMockDataProvider), isFalse);
+        },
+      );
+    }
+
+    // Production.
+    test('production + valid base URL -> Dio', () {
+      final ProviderContainer c = _container(
+        env: AppEnvironment.production,
+        baseUrl: 'https://api.example',
+        mode: DataSourceMode.remote,
+      );
+      addTearDown(c.dispose);
+      expect(c.read(remoteApiProvider), isA<DioGridViewApi>());
+      expect(c.read(usesMockDataProvider), isFalse);
+    });
+
+    test(
+      'production + missing base URL -> controlled failure, not fixtures',
+      () {
+        final ProviderContainer c = _container(
+          env: AppEnvironment.production,
+          baseUrl: '',
+          mode: DataSourceMode.remote,
+        );
+        addTearDown(c.dispose);
+        final GridViewApi api = c.read(remoteApiProvider);
+        expect(api, isA<MisconfiguredGridViewApi>());
+        expect(
+          (api as MisconfiguredGridViewApi).reason,
+          MisconfigurationReason.missingBaseUrl,
+        );
+        expect(api, isNot(isA<FixtureGridViewApi>()));
+        expect(c.read(usesMockDataProvider), isFalse);
+      },
+    );
+
+    test(
+      'production + attempted fixture mode -> explicit rejection, never Fixture',
+      () {
+        for (final String baseUrl in <String>['', 'https://api.example']) {
+          final ProviderContainer c = _container(
+            env: AppEnvironment.production,
+            baseUrl: baseUrl,
+            mode: DataSourceMode.fixture,
+          );
+          addTearDown(c.dispose);
+          final GridViewApi api = c.read(remoteApiProvider);
+          expect(api, isA<MisconfiguredGridViewApi>());
+          expect(api, isNot(isA<FixtureGridViewApi>()));
+          expect(
+            (api as MisconfiguredGridViewApi).reason,
+            MisconfigurationReason.fixtureForbiddenInProduction,
+          );
+          expect(c.read(usesMockDataProvider), isFalse);
+        }
+      },
+    );
+  });
+
+  // ---------------------------------------------------------------------------
+  // A misconfigured source yields controlled, typed failures — never fixtures.
+  // ---------------------------------------------------------------------------
   test(
-    'missing production API config yields a controlled failure, not fixtures',
+    'a misconfigured production build fails every repository refresh cleanly',
     () async {
       final GridViewDatabase db = GridViewDatabase.forTesting(
         NativeDatabase.memory(),
       );
       addTearDown(db.close);
-      final ProviderContainer container = ProviderContainer(
-        overrides: [
-          appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
-          apiConfigProvider.overrideWithValue(const ApiConfig(baseUrl: '')),
-          databaseProvider.overrideWithValue(db),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final HomeRepository repo = container.read(homeRepositoryProvider);
-      final RefreshResult result = await repo.refreshHome();
-
-      // A controlled, typed failure — never a fixture-backed success.
-      expect(result, isA<RefreshFailure>());
-      // No fixture data was written to the cache.
-      expect(await repo.watchHome().first, isNull);
-    },
-  );
-
-  test(
-    'every production repository refresh fails cleanly with no fixtures',
-    () async {
-      final GridViewDatabase db = GridViewDatabase.forTesting(
-        NativeDatabase.memory(),
-      );
-      addTearDown(db.close);
-      final ProviderContainer c = ProviderContainer(
-        overrides: [
-          appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
-          apiConfigProvider.overrideWithValue(const ApiConfig(baseUrl: '')),
-          databaseProvider.overrideWithValue(db),
-        ],
+      final ProviderContainer c = _container(
+        env: AppEnvironment.production,
+        baseUrl: '',
+        mode: DataSourceMode.remote,
+        db: db,
       );
       addTearDown(c.dispose);
 
-      // No admin credential and no fixture source is reachable in production;
-      // every refresh surfaces a typed failure, never mock content.
+      final HomeRepository home = c.read(homeRepositoryProvider);
+      final RefreshResult result = await home.refreshHome();
+      expect(result, isA<RefreshFailure>());
+      expect(
+        (result as RefreshFailure).failure.kind,
+        ApiFailureKind.configuration,
+      );
+      // No fixture data was written.
+      expect(await home.watchHome().first, isNull);
+
+      // Every repository surfaces the same controlled configuration failure.
       final List<RefreshResult> results = <RefreshResult>[
         await c.read(seasonRepositoryProvider).refreshCurrentSeason(),
-        await c.read(homeRepositoryProvider).refreshHome(),
         await c.read(calendarRepositoryProvider).refreshCalendar(2026),
         await c
             .read(grandPrixRepositoryProvider)
@@ -112,28 +270,27 @@ void main() {
       ];
       for (final RefreshResult r in results) {
         expect(r, isA<RefreshFailure>());
+        expect(
+          (r as RefreshFailure).failure.kind,
+          ApiFailureKind.configuration,
+        );
       }
     },
   );
 
-  test('the remote API is constructed without any admin credential', () {
-    // The Dio the production API is built with carries no Authorization header
-    // and no admin token — the public client never sends one.
-    final ProviderContainer container = ProviderContainer(
-      overrides: [
-        appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
-        apiConfigProvider.overrideWithValue(
-          const ApiConfig(baseUrl: 'https://api.example'),
-        ),
-      ],
+  test('a production build with a base URL sends no admin credential', () {
+    final ProviderContainer c = _container(
+      env: AppEnvironment.production,
+      baseUrl: 'https://api.example',
+      mode: DataSourceMode.remote,
     );
-    addTearDown(container.dispose);
-    final GridViewApi api = container.read(remoteApiProvider);
+    addTearDown(c.dispose);
+    final GridViewApi api = c.read(remoteApiProvider);
     expect(api, isA<DioGridViewApi>());
     expect(api.usesMockData, isFalse);
     // The repository interfaces expose no admin/write surface at all.
-    expect(container.read(homeRepositoryProvider), isA<HomeRepository>());
-    expect(container.read(contentRepositoryProvider), isA<ContentRepository>());
+    expect(c.read(homeRepositoryProvider), isA<HomeRepository>());
+    expect(c.read(contentRepositoryProvider), isA<ContentRepository>());
   });
 
   test('no provider identifier appears in any consumed shared fixture', () {
@@ -164,41 +321,4 @@ void main() {
       }
     }
   });
-
-  // Selection is a pure function of (environment, base URL). It proves both the
-  // development and the **staging** boundaries: staging with a configured base
-  // URL uses the real HTTP client, and staging selects the fixture source ONLY
-  // because no base URL is configured — never merely because the flavor is
-  // staging.
-  for (final AppEnvironment env in <AppEnvironment>[
-    AppEnvironment.development,
-    AppEnvironment.staging,
-  ]) {
-    test('${env.name}: base URL selects Dio, its absence selects fixtures', () {
-      ProviderContainer withBase(String baseUrl) => ProviderContainer(
-        overrides: [
-          appEnvironmentProvider.overrideWithValue(env),
-          apiConfigProvider.overrideWithValue(ApiConfig(baseUrl: baseUrl)),
-        ],
-      );
-
-      final ProviderContainer configured = withBase('https://api.example');
-      addTearDown(configured.dispose);
-      expect(
-        configured.read(remoteApiProvider),
-        isA<DioGridViewApi>(),
-        reason: '$env with a base URL uses the real HTTP client',
-      );
-      expect(configured.read(usesMockDataProvider), isFalse);
-
-      final ProviderContainer noUrl = withBase('');
-      addTearDown(noUrl.dispose);
-      expect(
-        noUrl.read(remoteApiProvider),
-        isA<FixtureGridViewApi>(),
-        reason: '$env selects fixtures only when no base URL is configured',
-      );
-      expect(noUrl.read(usesMockDataProvider), isTrue);
-    });
-  }
 }

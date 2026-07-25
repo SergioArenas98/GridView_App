@@ -61,5 +61,6 @@ String failureMessage(AppLocalizations l10n, ApiFailure failure) =>
       ApiFailureKind.invalidResponse ||
       ApiFailureKind.invalidRequest ||
       ApiFailureKind.cancelled ||
+      ApiFailureKind.configuration ||
       ApiFailureKind.unknown => l10n.errorGeneric,
     };

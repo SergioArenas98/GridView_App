@@ -16,6 +16,11 @@ enum ApiFailureKind {
 
   /// The request was cancelled before it completed (e.g. a superseded refresh).
   cancelled,
+
+  /// The remote data source is misconfigured for this build (e.g. remote mode
+  /// with no `API_BASE_URL`, or a fixture mode requested in a production build).
+  /// A controlled configuration failure — never a fixture fallback.
+  configuration,
   unknown,
 }
 

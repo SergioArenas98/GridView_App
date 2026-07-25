@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/environment/app_environment.dart';
 import '../../../core/database/gridview_database.dart';
 import '../../../core/network/api_config.dart';
+import '../../../core/network/data_source_config.dart';
 import '../../../core/network/gridview_dio.dart';
 import '../data/remote/dio_gridview_api.dart';
 import '../data/remote/fixture_gridview_api.dart';
 import '../data/remote/gridview_api.dart';
+import '../data/remote/misconfigured_gridview_api.dart';
 import '../data/repositories/calendar_repository_impl.dart';
 import '../data/repositories/circuit_repository_impl.dart';
 import '../data/repositories/constructor_repository_impl.dart';
@@ -43,6 +45,14 @@ final Provider<ApiConfig> apiConfigProvider = Provider<ApiConfig>(
   (Ref ref) => ApiConfig.forEnvironment(ref.watch(appEnvironmentProvider)),
 );
 
+/// The deliberately-selected remote data-source mode (`DATA_SOURCE`
+/// build define). Overridable in tests. Fixture mode is never inferred; a
+/// missing or malformed value resolves to [DataSourceMode.remote].
+final Provider<DataSourceMode> dataSourceModeProvider =
+    Provider<DataSourceMode>(
+      (Ref ref) => DataSourceConfig.fromEnvironment().mode,
+    );
+
 /// The application database. Opened once and closed with the scope.
 final Provider<GridViewDatabase> databaseProvider = Provider<GridViewDatabase>((
   Ref ref,
@@ -52,26 +62,53 @@ final Provider<GridViewDatabase> databaseProvider = Provider<GridViewDatabase>((
   return db;
 });
 
-/// The remote data source for the active environment.
+/// The remote data source for the active build.
 ///
-/// Production always uses the real HTTP client and never falls back to mock
-/// data — a missing base URL surfaces as a refresh failure, not fixtures.
-/// Dev/staging use the bundled fixture source unless an explicit `API_BASE_URL`
-/// is configured (e.g. a local fixture Worker or staging), in which case they
-/// use the real HTTP client too.
+/// Selection is a deliberate function of `(environment, DATA_SOURCE mode, base
+/// URL)`; the bundled fixture source is used **only** when fixture mode is
+/// explicitly selected in a non-production build. It is never inferred from a
+/// missing `API_BASE_URL`.
+///
+/// - **production** never constructs the fixture source: fixture mode is a
+///   controlled configuration failure, and remote mode with no base URL is a
+///   controlled configuration failure. A valid base URL uses the real HTTP
+///   client.
+/// - **dev/staging** use the bundled fixtures only under explicit fixture mode;
+///   remote mode requires a valid base URL (else a controlled configuration
+///   failure, not fixtures).
 final Provider<GridViewApi> remoteApiProvider = Provider<GridViewApi>((
   Ref ref,
 ) {
   final AppEnvironment env = ref.watch(appEnvironmentProvider);
   final ApiConfig config = ref.watch(apiConfigProvider);
+  final DataSourceMode mode = ref.watch(dataSourceModeProvider);
 
   if (env.isProduction) {
+    // Production must never construct FixtureGridViewApi.
+    if (mode == DataSourceMode.fixture) {
+      return const MisconfiguredGridViewApi(
+        MisconfigurationReason.fixtureForbiddenInProduction,
+      );
+    }
+    if (!config.hasBaseUrl) {
+      return const MisconfiguredGridViewApi(
+        MisconfigurationReason.missingBaseUrl,
+      );
+    }
     return DioGridViewApi(buildGridViewDio(config));
   }
-  if (config.hasBaseUrl) {
-    return DioGridViewApi(buildGridViewDio(config, enableSafeLogging: true));
+
+  // Dev / staging.
+  if (mode == DataSourceMode.fixture) {
+    return FixtureGridViewApi();
   }
-  return FixtureGridViewApi();
+  // Remote mode: a base URL is required — never fall back to fixtures.
+  if (!config.hasBaseUrl) {
+    return const MisconfiguredGridViewApi(
+      MisconfigurationReason.missingBaseUrl,
+    );
+  }
+  return DioGridViewApi(buildGridViewDio(config, enableSafeLogging: true));
 });
 
 /// Whether the active remote source serves non-authoritative mock data (drives

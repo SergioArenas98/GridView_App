@@ -28,6 +28,57 @@ Unknown or missing `APP_ENV` values fall back to `development`
 never behave as production. Non-production builds show a technical
 environment badge in the UI.
 
+## Remote data source
+
+The remote data source is chosen deliberately at build time from two defines,
+`DATA_SOURCE` and `API_BASE_URL` (`lib/features/shared/application/providers.dart`,
+`remoteApiProvider`):
+
+- `DATA_SOURCE=remote` (default) — talk to the real GridView API over HTTPS;
+  requires a valid `API_BASE_URL`.
+- `DATA_SOURCE=fixture` — serve the bundled OpenAPI-valid fixtures under
+  `assets/dev_fixtures/`. **Deliberate and non-production only.** It shows the
+  "Sample data" banner (`usesMockDataProvider`).
+
+Fixture mode is **never** inferred from a missing `API_BASE_URL`: it requires the
+explicit `DATA_SOURCE=fixture` value, and a missing or malformed `DATA_SOURCE`
+resolves to `remote` (`DataSourceConfig.parse`), so a misconfiguration can never
+silently enable fixtures.
+
+Selection truth table:
+
+| Environment | `DATA_SOURCE` | `API_BASE_URL` | Source |
+|---|---|---|---|
+| dev / staging | `remote` (or missing/malformed) | valid | `DioGridViewApi` |
+| dev / staging | `remote` (or missing/malformed) | missing | controlled configuration failure (`MisconfiguredGridViewApi`) — **not** fixtures |
+| dev / staging | `fixture` | any | `FixtureGridViewApi` (Sample data banner) |
+| production | `remote` (or missing/malformed) | valid | `DioGridViewApi` |
+| production | `remote` (or missing/malformed) | missing | controlled configuration failure |
+| production | `fixture` (attempted) | any | controlled configuration failure — production **never** constructs `FixtureGridViewApi` |
+
+A `MisconfiguredGridViewApi` is not a mock source (`usesMockData` is `false`, so
+no banner); every call returns a typed `ApiFailureKind.configuration` failure.
+
+Common commands:
+
+```text
+# Local dev against the bundled fixtures (deliberate fixture mode).
+flutter run --flavor dev --dart-define=APP_ENV=development --dart-define=DATA_SOURCE=fixture
+
+# Dev/staging against a real HTTP endpoint (a local Worker or staging edge API).
+flutter run --flavor staging --dart-define=APP_ENV=staging \
+  --dart-define=DATA_SOURCE=remote \
+  --dart-define=API_BASE_URL=https://gridview-api-staging.example.workers.dev
+
+# Production always talks to the real API; a missing API_BASE_URL is a
+# controlled configuration failure, never fixtures.
+flutter build appbundle --flavor production --dart-define=APP_ENV=production \
+  --dart-define=API_BASE_URL=https://api.gridview.example
+```
+
+None of this touches Android flavors, application IDs or Gradle configuration —
+it is purely Dart build-time defines.
+
 ## Firebase
 
 - The production Firebase configuration
