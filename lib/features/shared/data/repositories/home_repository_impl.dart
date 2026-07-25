@@ -51,7 +51,9 @@ class HomeRepositoryImpl extends SyncedRepository implements HomeRepository {
         serverStale: m.data.freshness.stale,
       ),
       writeDomain: _writeHome,
-      hasLocalData: () async => (await _local.countHomeSnapshot()) > 0,
+      hasLocalRepresentation: entityRepresentation(
+        () async => (await _local.countHomeSnapshot()) > 0,
+      ),
       forceRefresh: forceRefresh,
     );
   }

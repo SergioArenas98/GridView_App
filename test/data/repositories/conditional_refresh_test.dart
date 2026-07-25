@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/core/api/dto/event_dto.dart';
+import 'package:gridview/core/api/dto/season_dto.dart';
 import 'package:gridview/core/api/dto/standing_dto.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/database/gridview_database.dart';
@@ -11,6 +12,7 @@ import 'package:gridview/features/shared/domain/entities/resource_key.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
 
+import '../../support/fixtures.dart';
 import '../../support/repository_harness.dart';
 import '../../support/scripted_api.dart';
 
@@ -25,6 +27,14 @@ RemoteResult<List<GrandPrixSummaryDto>> _calendar({
   sourceUpdatedAt: source,
   generatedAt: generated,
 );
+
+/// A calendar envelope whose authoritative `data` collection is empty (valid
+/// SeasonSnapshotMeta, zero events).
+Map<String, dynamic> _emptyCalendarEnvelope() {
+  final Map<String, dynamic> json = loadFixture('calendar/2026.json');
+  json['data'] = <dynamic>[];
+  return json;
+}
 
 void main() {
   late GridViewDatabase db;
@@ -161,20 +171,49 @@ void main() {
     });
 
     test(
-      '304 with absent local data triggers exactly one unconditional retry',
+      'a successfully-synced EMPTY collection + 304 makes one request (no retry)',
       () async {
-        // Seed metadata with an ETag but NO domain rows (a cache inconsistency).
+        // A first 200 whose authoritative collection is empty materializes the
+        // resource with normal success metadata and zero rows.
+        api.calendar = (_) => modifiedListFromJson<GrandPrixSummaryDto>(
+          _emptyCalendarEnvelope(),
+          GrandPrixSummaryDto.fromJson,
+          etag: 'W/"empty"',
+        );
+        final RefreshResult first = await h.calendar.refreshCalendar(2026);
+        expect((first as RefreshSuccess).applied, isTrue);
+        expect(await h.calendar.readCalendar(2026), isEmpty);
+        expect((await meta(2026))!.lastSuccessAt, isNotNull);
+
+        // A later 304 must NOT trigger an unconditional retry merely because the
+        // collection has zero rows — it is a valid, materialized representation.
+        api.calendar = (String? etag) =>
+            RemoteNotModified<List<GrandPrixSummaryDto>>(etag: etag);
+        final RefreshResult second = await h.calendar.refreshCalendar(2026);
+        expect((second as RefreshSuccess).applied, isFalse);
+        expect(
+          api.callsFor('calendar'),
+          2,
+          reason: 'one 200 + one 304; the 304 made no unconditional retry',
+        );
+        expect(await h.calendar.readCalendar(2026), isEmpty);
+      },
+    );
+
+    test(
+      'a NEVER-materialized collection + 304 triggers one unconditional retry',
+      () async {
+        // Seed an ETag but NO recorded success (an inconsistent state): the
+        // collection has never been materialized.
         await db.syncMetadataDao.upsert(
           ResourceSyncState(
             resourceKey: ResourceKey.calendar(2026),
             season: 2026,
             etag: 'W/"stale"',
-            lastSuccessAt: DateTime.utc(2026, 7, 19),
           ),
         );
 
-        // First call (conditional, etag present) -> 304; retry (unconditional,
-        // etag null) -> 200.
+        // Conditional call (etag present) -> 304; retry (etag null) -> 200.
         api.calendar = (String? etag) => etag == null
             ? _calendar(etag: 'W/"recovered"')
             : RemoteNotModified<List<GrandPrixSummaryDto>>(etag: etag);
@@ -184,7 +223,7 @@ void main() {
         expect(
           api.callsFor('calendar'),
           2,
-          reason: 'one conditional + one retry',
+          reason: 'one conditional + one unconditional retry',
         );
         expect(await h.calendar.readCalendar(2026), hasLength(5));
         expect((await meta(2026))!.etag, 'W/"recovered"');
@@ -192,14 +231,13 @@ void main() {
     );
 
     test(
-      '304 with absent local data that stays 304 fails as invalid cache',
+      'a never-materialized collection whose retry stays 304 fails as invalid cache',
       () async {
         await db.syncMetadataDao.upsert(
           ResourceSyncState(
             resourceKey: ResourceKey.calendar(2026),
             season: 2026,
             etag: 'W/"stale"',
-            lastSuccessAt: DateTime.utc(2026, 7, 19),
           ),
         );
         // Both the conditional call and the unconditional retry return 304.
@@ -217,6 +255,41 @@ void main() {
           (await meta(2026))!.lastFailureCategory,
           SyncFailureCategory.invalidCache,
         );
+      },
+    );
+
+    test(
+      'a singleton with missing local data + 304 triggers one unconditional retry',
+      () async {
+        // Season detail is a singleton: seed a recorded success + ETag but NO
+        // season row (an inconsistent cache). A 304 must recover via one
+        // unconditional retry despite the recorded success.
+        await db.syncMetadataDao.upsert(
+          ResourceSyncState(
+            resourceKey: ResourceKey.season(2026),
+            season: 2026,
+            etag: 'W/"s-stale"',
+            lastSuccessAt: DateTime.utc(2026, 7, 19),
+          ),
+        );
+        expect(await h.season.readSeason(2026), isNull);
+
+        api.season = (String? etag) => etag == null
+            ? modifiedFromFixture<SeasonDto>(
+                'seasons/current.json',
+                (Object? d) => SeasonDto.fromJson(d! as Map<String, dynamic>),
+                etag: 'W/"s-recovered"',
+              )
+            : RemoteNotModified<SeasonDto>(etag: etag);
+
+        final RefreshResult r = await h.season.refreshSeason(2026);
+        expect((r as RefreshSuccess).applied, isTrue);
+        expect(
+          api.callsFor('season'),
+          2,
+          reason: 'one conditional + one retry',
+        );
+        expect(await h.season.readSeason(2026), isNotNull);
       },
     );
 

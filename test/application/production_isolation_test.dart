@@ -165,22 +165,40 @@ void main() {
     }
   });
 
-  test('dev/staging select the remote source deterministically', () async {
-    ProviderContainer devWith({required String baseUrl}) => ProviderContainer(
-      overrides: [
-        appEnvironmentProvider.overrideWithValue(AppEnvironment.development),
-        apiConfigProvider.overrideWithValue(ApiConfig(baseUrl: baseUrl)),
-      ],
-    );
+  // Selection is a pure function of (environment, base URL). It proves both the
+  // development and the **staging** boundaries: staging with a configured base
+  // URL uses the real HTTP client, and staging selects the fixture source ONLY
+  // because no base URL is configured — never merely because the flavor is
+  // staging.
+  for (final AppEnvironment env in <AppEnvironment>[
+    AppEnvironment.development,
+    AppEnvironment.staging,
+  ]) {
+    test('${env.name}: base URL selects Dio, its absence selects fixtures', () {
+      ProviderContainer withBase(String baseUrl) => ProviderContainer(
+        overrides: [
+          appEnvironmentProvider.overrideWithValue(env),
+          apiConfigProvider.overrideWithValue(ApiConfig(baseUrl: baseUrl)),
+        ],
+      );
 
-    final ProviderContainer noUrl = devWith(baseUrl: '');
-    addTearDown(noUrl.dispose);
-    expect(noUrl.read(remoteApiProvider), isA<FixtureGridViewApi>());
-    expect(noUrl.read(usesMockDataProvider), isTrue);
+      final ProviderContainer configured = withBase('https://api.example');
+      addTearDown(configured.dispose);
+      expect(
+        configured.read(remoteApiProvider),
+        isA<DioGridViewApi>(),
+        reason: '$env with a base URL uses the real HTTP client',
+      );
+      expect(configured.read(usesMockDataProvider), isFalse);
 
-    final ProviderContainer withUrl = devWith(baseUrl: 'https://staging.test');
-    addTearDown(withUrl.dispose);
-    expect(withUrl.read(remoteApiProvider), isA<DioGridViewApi>());
-    expect(withUrl.read(usesMockDataProvider), isFalse);
-  });
+      final ProviderContainer noUrl = withBase('');
+      addTearDown(noUrl.dispose);
+      expect(
+        noUrl.read(remoteApiProvider),
+        isA<FixtureGridViewApi>(),
+        reason: '$env selects fixtures only when no base URL is configured',
+      );
+      expect(noUrl.read(usesMockDataProvider), isTrue);
+    });
+  }
 }

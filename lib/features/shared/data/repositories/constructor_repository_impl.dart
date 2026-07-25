@@ -85,8 +85,7 @@ class ConstructorRepositoryImpl extends SyncedRepository
               .toList(growable: false),
         );
       },
-      hasLocalData: () async =>
-          (await _local.countConstructorSeasonEntries(season)) > 0,
+      hasLocalRepresentation: collectionRepresentation,
       forceRefresh: forceRefresh,
     );
   }
@@ -113,8 +112,9 @@ class ConstructorRepositoryImpl extends SyncedRepository
           _local.upsertConstructors(<Constructor>[
             constructorFromDto(m.data.constructor),
           ]),
-      hasLocalData: () async =>
-          (await _local.countConstructor(constructorId)) > 0,
+      hasLocalRepresentation: entityRepresentation(
+        () async => (await _local.countConstructor(constructorId)) > 0,
+      ),
       forceRefresh: forceRefresh,
     );
   }

@@ -5,6 +5,7 @@ import '../../../../core/database/daos/media_dao.dart'
     show InvalidMediaOwnershipException;
 import '../../../../core/database/entity_validation.dart'
     show InvalidEntityException;
+import '../../domain/entities/sync_state.dart';
 import '../../domain/refresh_result.dart';
 import '../../domain/snapshot_conflict.dart';
 import '../remote/gridview_api.dart';
@@ -22,19 +23,42 @@ typedef ResourceFetch<T> =
       RemoteCancellation? cancellation,
     });
 
+/// Whether a **local representation** of a resource has been materialized, given
+/// its stored sync metadata (which the pipeline has already read).
+///
+/// This is deliberately resource-specific rather than a generic "row count > 0",
+/// so it can distinguish the three states a `304` must handle differently:
+///
+/// - **no representation ever materialized** → the `304` is inconsistent (an
+///   ETag with no successful sync); recover with one unconditional retry;
+/// - **a materialized representation whose authoritative collection is empty** →
+///   a valid, present representation; the `304` updates metadata only;
+/// - **a singleton/detail whose required entity row is missing** → an
+///   inconsistent cache; recover with one unconditional retry.
+///
+/// See [SyncedRepository.collectionRepresentation] and
+/// [SyncedRepository.entityRepresentation] for the two standard implementations.
+typedef LocalRepresentation =
+    Future<bool> Function(ResourceSyncState? storedMeta);
+
 /// Base class for the remote-to-local repositories.
 ///
 /// It centralizes the conditional-refresh pipeline shared by every resource so
 /// each repository only supplies the resource-specific pieces (the fetch, the
-/// snapshot meta, the transactional domain write and a local-presence check):
+/// snapshot meta, the transactional domain write and a local-representation
+/// check):
 ///
 /// 1. read the persisted ETag and issue a conditional request;
 /// 2. on `200` apply the snapshot atomically through [ResourceSync] (conflict
 ///    rule + domain write + success metadata);
-/// 3. on `304` record a validation — unless the local domain data is absent, in
-///    which case retry exactly once unconditionally and, if that still fails to
-///    deliver data, report a typed invalid-cache failure;
+/// 3. on `304` record a validation — unless **no local representation exists**,
+///    in which case retry exactly once unconditionally and, if that still fails
+///    to deliver a representation, report a typed invalid-cache failure;
 /// 4. on failure preserve the cache and record a safe failure category.
+///
+/// The presence check ([LocalRepresentation]) is resource-specific, so a
+/// successfully-synced but empty collection counts as present and never triggers
+/// the retry (see [collectionRepresentation] / [entityRepresentation]).
 ///
 /// Concurrent refreshes of the same canonical key are collapsed by the shared
 /// [RefreshCoordinator].
@@ -51,6 +75,20 @@ abstract class SyncedRepository {
   final RefreshCoordinator coordinator;
   final DateTime Function() now;
 
+  /// The standard representation check for an **authoritative collection**: the
+  /// collection is materialized as soon as a successful sync has been recorded,
+  /// even when the collection is legitimately empty (zero rows). It relies only
+  /// on the sync metadata, so it does not conflate "empty" with "never synced".
+  LocalRepresentation get collectionRepresentation =>
+      (ResourceSyncState? storedMeta) async =>
+          storedMeta?.lastSuccessAt != null;
+
+  /// The standard representation check for a **singleton/detail**: the
+  /// representation exists iff its required domain entity row is present. A
+  /// missing row (even with a recorded success) is an inconsistent cache.
+  LocalRepresentation entityRepresentation(Future<bool> Function() rowExists) =>
+      (ResourceSyncState? storedMeta) => rowExists();
+
   /// Runs the full conditional-refresh pipeline for [key], deduplicated per key.
   Future<RefreshResult> refreshResource<T>({
     required String key,
@@ -58,7 +96,7 @@ abstract class SyncedRepository {
     required ResourceFetch<T> fetch,
     required RemoteSnapshotMeta Function(RemoteModified<T> modified) metaOf,
     required Future<void> Function(RemoteModified<T> modified) writeDomain,
-    required Future<bool> Function() hasLocalData,
+    required LocalRepresentation hasLocalRepresentation,
     RemoteCancellation? cancellation,
     bool forceRefresh = false,
   }) {
@@ -70,7 +108,7 @@ abstract class SyncedRepository {
         fetch: fetch,
         metaOf: metaOf,
         writeDomain: writeDomain,
-        hasLocalData: hasLocalData,
+        hasLocalRepresentation: hasLocalRepresentation,
         cancellation: cancellation,
         forceRefresh: forceRefresh,
       ),
@@ -83,13 +121,14 @@ abstract class SyncedRepository {
     required ResourceFetch<T> fetch,
     required RemoteSnapshotMeta Function(RemoteModified<T>) metaOf,
     required Future<void> Function(RemoteModified<T>) writeDomain,
-    required Future<bool> Function() hasLocalData,
+    required LocalRepresentation hasLocalRepresentation,
     required RemoteCancellation? cancellation,
     required bool forceRefresh,
   }) async {
-    final String? storedEtag = forceRefresh
-        ? null
-        : (await sync.read(key))?.etag;
+    // Read the stored metadata once: its ETag drives the conditional request and
+    // its success state feeds the resource-specific representation check.
+    final ResourceSyncState? storedMeta = await sync.read(key);
+    final String? storedEtag = forceRefresh ? null : storedMeta?.etag;
     final RemoteResult<T> result = await fetch(
       etag: storedEtag,
       cancellation: cancellation,
@@ -102,11 +141,13 @@ abstract class SyncedRepository {
       return _apply<T>(key, scope, result, metaOf, writeDomain);
     }
     if (result is RemoteNotModified<T>) {
-      if (await hasLocalData()) {
+      if (await hasLocalRepresentation(storedMeta)) {
+        // A present local representation (including a valid empty collection):
+        // update synchronization metadata only, no domain write, no retry.
         await sync.recordNotModified(key, scope, now(), newEtag: result.etag);
         return const RefreshSuccess(applied: false);
       }
-      // 304 but the local domain data is absent: the cache is inconsistent.
+      // 304 but no local representation exists: the cache is inconsistent.
       // Retry exactly once, unconditionally (no If-None-Match).
       final RemoteResult<T> retry = await fetch(cancellation: cancellation);
       if (retry is RemoteModified<T>) {

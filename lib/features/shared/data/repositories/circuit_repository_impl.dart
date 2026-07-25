@@ -66,12 +66,7 @@ class CircuitRepositoryImpl extends SyncedRepository
           RemoteSnapshotMeta.fromMeta(m.meta, etag: m.etag),
       writeDomain: (RemoteModified<List<CircuitDto>> m) => _local
           .upsertCircuits(m.data.map(circuitFromDto).toList(growable: false)),
-      hasLocalData: () async {
-        for (final Circuit c in await _local.circuitsForSeason(season)) {
-          if (c.id.isNotEmpty) return true;
-        }
-        return false;
-      },
+      hasLocalRepresentation: collectionRepresentation,
       forceRefresh: forceRefresh,
     );
   }
@@ -96,7 +91,9 @@ class CircuitRepositoryImpl extends SyncedRepository
           RemoteSnapshotMeta.fromMeta(m.meta, etag: m.etag),
       writeDomain: (RemoteModified<CircuitDetailDto> m) =>
           _local.upsertCircuits(<Circuit>[circuitFromDto(m.data.circuit)]),
-      hasLocalData: () async => (await _local.countCircuit(circuitId)) > 0,
+      hasLocalRepresentation: entityRepresentation(
+        () async => (await _local.countCircuit(circuitId)) > 0,
+      ),
       forceRefresh: forceRefresh,
     );
   }

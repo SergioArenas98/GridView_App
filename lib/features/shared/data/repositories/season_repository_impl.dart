@@ -49,7 +49,9 @@ class SeasonRepositoryImpl extends SyncedRepository
           RemoteSnapshotMeta.fromMeta(m.meta, etag: m.etag),
       writeDomain: (RemoteModified<SeasonDto> m) =>
           _local.setCurrentSeason(seasonFromDto(m.data)),
-      hasLocalData: () async => (await _local.countCurrentSeason()) > 0,
+      hasLocalRepresentation: entityRepresentation(
+        () async => (await _local.countCurrentSeason()) > 0,
+      ),
       forceRefresh: forceRefresh,
     );
   }
@@ -65,7 +67,9 @@ class SeasonRepositoryImpl extends SyncedRepository
           RemoteSnapshotMeta.fromMeta(m.meta, etag: m.etag),
       writeDomain: (RemoteModified<SeasonDto> m) =>
           _local.upsertSeason(seasonFromDto(m.data)),
-      hasLocalData: () async => (await _local.countSeason(season)) > 0,
+      hasLocalRepresentation: entityRepresentation(
+        () async => (await _local.countSeason(season)) > 0,
+      ),
       forceRefresh: forceRefresh,
     );
   }

@@ -80,8 +80,9 @@ class GrandPrixRepositoryImpl extends SyncedRepository
           );
         }
       },
-      hasLocalData: () async =>
-          (await _local.countGrandPrix(season, round)) > 0,
+      hasLocalRepresentation: entityRepresentation(
+        () async => (await _local.countGrandPrix(season, round)) > 0,
+      ),
       forceRefresh: forceRefresh,
     );
   }

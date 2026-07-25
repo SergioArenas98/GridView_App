@@ -228,10 +228,14 @@ Independently cacheable resources are never combined into one transaction.
   supplies a new one, and snapshot provenance (`sourceUpdatedAt`, `generatedAt`,
   `contentVersion`, `serverStale`) is **preserved unchanged** — no new metadata
   is invented from the clock, and no domain rows are rewritten.
-- **304 with absent local data** (an inconsistent cache — an ETag but no rows) →
-  retry **exactly once** without `If-None-Match`; a 200 persists normally, a
-  second 304 or a failure returns a typed invalid-cache/protocol failure. Never
-  loops. See ADR 0012.
+- **304 with no materialized local representation** → retry **exactly once**
+  without `If-None-Match`; a 200 persists normally, a second 304 or a failure
+  returns a typed invalid-cache/protocol failure. Never loops. "Materialized" is
+  resource-specific: a **collection** is present as soon as a successful sync is
+  recorded (`lastSuccessAt`), so a valid **empty** collection is present and a
+  304 updates metadata only (no retry, no write); a **singleton/detail** is
+  present iff its required row exists, so a missing row recovers via the retry.
+  See ADR 0012.
 
 ### 10.3 Conflict rule (centralized)
 

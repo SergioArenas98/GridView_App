@@ -1,6 +1,5 @@
 import '../../../../core/api/dto/view_dto.dart';
 import '../../domain/entities/resource_key.dart';
-import '../../domain/entities/sync_state.dart';
 import '../../domain/refresh_result.dart';
 import '../../domain/repositories/content_repository.dart';
 import '../remote/remote_cancellation.dart';
@@ -49,12 +48,9 @@ class ContentRepositoryImpl extends SyncedRepository
       ),
       // The manifest has no domain rows; the write is a metadata-only commit.
       writeDomain: (RemoteModified<ContentManifestDto> m) async {},
-      hasLocalData: () async {
-        final ResourceSyncState? state = await sync.read(
-          ResourceKey.contentManifest(),
-        );
-        return state?.lastSuccessAt != null;
-      },
+      // The manifest's representation is its persisted metadata, so a recorded
+      // success is the presence signal (collection semantics).
+      hasLocalRepresentation: collectionRepresentation,
       forceRefresh: forceRefresh,
     );
   }

@@ -86,8 +86,7 @@ class DriverRepositoryImpl extends SyncedRepository
         await _local.upsertDriverIdentities(identities);
         await _local.replaceDriverSeasonEntries(season, entries);
       },
-      hasLocalData: () async =>
-          (await _local.countDriverSeasonEntries(season)) > 0,
+      hasLocalRepresentation: collectionRepresentation,
       forceRefresh: forceRefresh,
     );
   }
@@ -127,7 +126,9 @@ class DriverRepositoryImpl extends SyncedRepository
           ]);
         }
       },
-      hasLocalData: () async => (await _local.countDriver(driverId)) > 0,
+      hasLocalRepresentation: entityRepresentation(
+        () async => (await _local.countDriver(driverId)) > 0,
+      ),
       forceRefresh: forceRefresh,
     );
   }

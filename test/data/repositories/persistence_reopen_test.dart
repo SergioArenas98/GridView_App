@@ -12,6 +12,7 @@ import 'package:gridview/features/shared/domain/entities/standing.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
 
+import '../../support/fixtures.dart';
 import '../../support/repository_harness.dart';
 import '../../support/scripted_api.dart';
 
@@ -131,4 +132,55 @@ void main() {
     expect(cal, isNotEmpty, reason: 'cache intact after a reopen + 304');
     await db2.close();
   });
+
+  test(
+    'a valid EMPTY collection survives close/reopen and stays valid on a 304',
+    () async {
+      // First session: sync an authoritative EMPTY calendar (zero events).
+      final GridViewDatabase db1 = GridViewDatabase.forTesting(
+        NativeDatabase(dbFile),
+      );
+      final ScriptedGridViewApi api1 = ScriptedGridViewApi();
+      api1.calendar = (_) {
+        final Map<String, dynamic> json = loadFixture('calendar/2026.json');
+        json['data'] = <dynamic>[];
+        return modifiedListFromJson<GrandPrixSummaryDto>(
+          json,
+          GrandPrixSummaryDto.fromJson,
+          etag: 'W/"empty"',
+        );
+      };
+      final RefreshResult first = await RepositoryHarness(
+        db1,
+        api1,
+      ).calendar.refreshCalendar(2026);
+      expect((first as RefreshSuccess).applied, isTrue);
+      await db1.close();
+
+      // Reopen: the empty collection is still a materialized representation, so a
+      // 304 makes no unconditional retry and no domain write.
+      final GridViewDatabase db2 = GridViewDatabase.forTesting(
+        NativeDatabase(dbFile),
+      );
+      addTearDown(db2.close);
+      final ScriptedGridViewApi api2 = ScriptedGridViewApi();
+      api2.calendar = (String? etag) =>
+          RemoteNotModified<List<GrandPrixSummaryDto>>(etag: etag);
+      final RepositoryHarness h2 = RepositoryHarness(db2, api2);
+
+      final RefreshResult r = await h2.calendar.refreshCalendar(2026);
+      expect((r as RefreshSuccess).applied, isFalse);
+      expect(
+        api2.callsFor('calendar'),
+        1,
+        reason: 'no unconditional retry for a valid empty collection',
+      );
+      expect(await h2.calendar.readCalendar(2026), isEmpty);
+      final ResourceSyncState meta = (await db2.syncMetadataDao.read(
+        ResourceKey.calendar(2026),
+      ))!;
+      expect(meta.etag, 'W/"empty"');
+      expect(meta.lastSuccessAt, isNotNull);
+    },
+  );
 }

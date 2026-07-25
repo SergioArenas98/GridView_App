@@ -62,7 +62,9 @@ class CalendarRepositoryImpl extends SyncedRepository
         ];
         return _local.replaceCalendar(season, events, hostCircuits);
       },
-      hasLocalData: () async => (await _local.countEventsForSeason(season)) > 0,
+      // A season calendar is an authoritative collection: a successful sync
+      // materializes it even when the season legitimately has no events.
+      hasLocalRepresentation: collectionRepresentation,
       forceRefresh: forceRefresh,
     );
   }

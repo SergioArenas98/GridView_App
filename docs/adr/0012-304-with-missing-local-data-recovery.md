@@ -23,7 +23,8 @@ recovery is defence in depth for the cases above.
 
 ## Decision
 
-When a resource returns `304` but its **local domain data is absent**:
+When a resource returns `304` but **no local representation of it has been
+materialized**:
 
 1. Treat the local cache as inconsistent.
 2. Retry the request **exactly once**, **unconditionally** (no `If-None-Match`).
@@ -33,17 +34,44 @@ When a resource returns `304` but its **local domain data is absent**:
    a safe `invalid_cache` category.
 5. Never loop.
 
-"Local data present" is a **domain-level** check (the rows exist), not a metadata
-check — otherwise the recovery could never trigger, since an ETag is only ever
-stored alongside a recorded success.
+### What "a local representation exists" means (resource-specific)
+
+Presence is **not** a generic "domain row count > 0" — that would wrongly treat a
+successfully-synced but legitimately **empty** collection as missing, retrying on
+every later `304`. Three states are distinguished:
+
+- **No representation ever materialized** — the resource has no recorded
+  successful sync. A `304` here (an ETag with no success) is inconsistent →
+  recover.
+- **A materialized representation whose authoritative collection is empty** — a
+  valid, present representation. A `304` updates synchronization metadata only;
+  **no** retry, **no** domain write.
+- **A singleton/detail whose required entity row is missing** — an inconsistent
+  cache → recover.
+
+Accordingly the check is:
+
+- **Collections** (calendar, standings, season drivers/constructors/circuits,
+  results, content manifest): materialized iff a **successful sync has been
+  recorded** (`resource_sync_metadata.lastSuccessAt != null`). Because a modified
+  snapshot commits the domain write and its success metadata in one transaction,
+  a recorded success guarantees the (possibly empty) collection was written.
+- **Singletons/details** (current season, season, home, Grand Prix, driver,
+  constructor, circuit): materialized iff the **required domain row exists**.
+
+No schema change or extra column is introduced for this; the existing
+`lastSuccessAt` and the domain rows carry the signal.
 
 ## Consequences
 
-- A corrupted or partially-cleared cache self-heals on the next refresh with at
-  most one extra request.
-- A genuinely-empty-but-synced collection re-validates unconditionally on each
-  `304` (one extra request); acceptable, since real F1 collections are non-empty
-  and the alternative (metadata-only presence) would make the recovery
-  unreachable.
-- Covered by `test/data/repositories/conditional_refresh_test.dart`
-  ("304 with absent local data …").
+- A successfully-synced empty collection is a first-class present representation:
+  its first `200` persists normal success metadata, and every later `304` updates
+  metadata only (one HTTP request, no retry, no domain write) — including after a
+  database close/reopen.
+- A corrupted/cleared singleton, or a collection that was never materialized,
+  self-heals on the next refresh with at most one extra request.
+- Covered by `test/data/repositories/conditional_refresh_test.dart` (empty
+  collection + `304` → one request; never-materialized collection + `304` → one
+  retry; missing singleton + `304` → one retry) and
+  `test/data/repositories/persistence_reopen_test.dart` (a valid empty collection
+  survives reopen and stays valid on a `304`).

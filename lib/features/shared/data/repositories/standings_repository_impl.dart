@@ -64,7 +64,7 @@ class StandingsRepositoryImpl extends SyncedRepository
             season,
             m.data.map(driverStandingFromDto).toList(growable: false),
           ),
-      hasLocalData: () async => (await _local.countDriverStandings(season)) > 0,
+      hasLocalRepresentation: collectionRepresentation,
       forceRefresh: forceRefresh,
     );
   }
@@ -90,8 +90,7 @@ class StandingsRepositoryImpl extends SyncedRepository
             season,
             m.data.map(constructorStandingFromDto).toList(growable: false),
           ),
-      hasLocalData: () async =>
-          (await _local.countConstructorStandings(season)) > 0,
+      hasLocalRepresentation: collectionRepresentation,
       forceRefresh: forceRefresh,
     );
   }

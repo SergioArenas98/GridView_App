@@ -64,11 +64,10 @@ class ResultRepositoryImpl extends SyncedRepository
           RemoteSnapshotMeta.fromMeta(m.meta, etag: m.etag),
       writeDomain: (RemoteModified<RaceResultDto> m) =>
           _local.writeRaceResult(raceResultFromDto(m.data)),
-      hasLocalData: () async {
-        // The document family for this (season, round) is present when any
-        // result document — of any session type — is cached.
-        return (await _local.countResultsForSeasonRound(season, round)) > 0;
-      },
+      // The results document family for a (season, round) is an authoritative
+      // collection (0..2 documents — sprint and race can coexist); a successful
+      // sync materializes it, so it uses collection semantics.
+      hasLocalRepresentation: collectionRepresentation,
       forceRefresh: forceRefresh,
     );
   }
