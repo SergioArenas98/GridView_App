@@ -112,6 +112,47 @@ class StandingsDao extends DatabaseAccessor<GridViewDatabase>
     return rows.map(_constructorFrom).toList(growable: false);
   }
 
+  Stream<List<DriverStanding>> watchDriverStandingsForSeason(int season) =>
+      (select(driverStandings)
+            ..where((DriverStandings s) => s.season.equals(season))
+            ..orderBy(<OrderClauseGenerator<DriverStandings>>[
+              (DriverStandings s) => OrderingTerm(expression: s.orderIndex),
+            ]))
+          .watch()
+          .map(
+            (List<DriverStandingRow> rows) =>
+                rows.map(_driverFrom).toList(growable: false),
+          );
+
+  Stream<List<ConstructorStanding>> watchConstructorStandingsForSeason(
+    int season,
+  ) =>
+      (select(constructorStandings)
+            ..where((ConstructorStandings s) => s.season.equals(season))
+            ..orderBy(<OrderClauseGenerator<ConstructorStandings>>[
+              (ConstructorStandings s) =>
+                  OrderingTerm(expression: s.orderIndex),
+            ]))
+          .watch()
+          .map(
+            (List<ConstructorStandingRow> rows) =>
+                rows.map(_constructorFrom).toList(growable: false),
+          );
+
+  Future<int> countDriverStandings(int season) async {
+    final List<DriverStandingRow> rows = await (select(
+      driverStandings,
+    )..where((DriverStandings s) => s.season.equals(season))).get();
+    return rows.length;
+  }
+
+  Future<int> countConstructorStandings(int season) async {
+    final List<ConstructorStandingRow> rows = await (select(
+      constructorStandings,
+    )..where((ConstructorStandings s) => s.season.equals(season))).get();
+    return rows.length;
+  }
+
   Future<DriverStanding?> driverStanding(int season, String driverId) async {
     final DriverStandingRow? row =
         await (select(driverStandings)..where(

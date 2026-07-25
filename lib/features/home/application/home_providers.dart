@@ -4,13 +4,13 @@ import '../../../core/api/errors/api_failure.dart';
 import '../../shared/application/providers.dart';
 import '../../shared/application/refresh_status.dart';
 import '../../shared/domain/entities/home_view.dart';
-import '../../shared/domain/repositories/race_weekend_repository.dart';
+import '../../shared/domain/refresh_result.dart';
 import 'home_state.dart';
 
 /// The Drift-backed Home stream. Keep-alive so Home content persists across
 /// normal branch navigation without re-fetching.
 final StreamProvider<HomeView?> homeCacheProvider = StreamProvider<HomeView?>(
-  (Ref ref) => ref.watch(raceWeekendRepositoryProvider).watchHome(),
+  (Ref ref) => ref.watch(homeRepositoryProvider).watchHome(),
 );
 
 /// Owns Home refresh orchestration and status. Triggers one refresh on creation
@@ -26,7 +26,7 @@ class HomeController extends Notifier<RefreshStatus> {
     if (state.inProgress) return; // dedupe overlapping refreshes
     state = RefreshStatus.running;
     final RefreshResult result = await ref
-        .read(raceWeekendRepositoryProvider)
+        .read(homeRepositoryProvider)
         .refreshHome();
     state = switch (result) {
       RefreshSuccess() => RefreshStatus.idle,

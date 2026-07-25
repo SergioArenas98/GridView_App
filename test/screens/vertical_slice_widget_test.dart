@@ -8,7 +8,7 @@ import 'package:gridview/features/calendar/presentation/grand_prix_detail_screen
 import 'package:gridview/features/home/presentation/home_screen.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/home_view.dart';
-import 'package:gridview/features/shared/domain/repositories/race_weekend_repository.dart';
+import 'package:gridview/features/shared/domain/refresh_result.dart';
 import 'package:gridview/features/shared/presentation/widgets/mock_data_banner.dart';
 
 import '../support/domain_fixtures.dart';

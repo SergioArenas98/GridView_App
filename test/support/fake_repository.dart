@@ -1,15 +1,20 @@
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/home_view.dart';
-import 'package:gridview/features/shared/domain/repositories/race_weekend_repository.dart';
+import 'package:gridview/features/shared/domain/refresh_result.dart';
+import 'package:gridview/features/shared/domain/repositories/grand_prix_repository.dart';
+import 'package:gridview/features/shared/domain/repositories/home_repository.dart';
 
-/// A plain-Dart fake repository for widget tests.
+/// A plain-Dart fake for the Home and Grand Prix repositories, for widget tests.
 ///
 /// Widget tests drive the *screens'* rendering of each controller state. The
 /// real Drift pipeline is exercised end to end by the DAO, repository and
 /// ProviderContainer controller tests (which run with real async). Using plain
 /// streams here avoids Drift's stream-query timers, which are incompatible with
 /// `pumpAndSettle` under the widget-test `FakeAsync` zone.
-class FakeRaceWeekendRepository implements RaceWeekendRepository {
+///
+/// One class implements both repositories so a single instance backs both the
+/// [homeRepositoryProvider] and [grandPrixRepositoryProvider] overrides.
+class FakeRaceWeekendRepository implements HomeRepository, GrandPrixRepository {
   FakeRaceWeekendRepository({
     this.home,
     this.grandPrix,
@@ -40,6 +45,9 @@ class FakeRaceWeekendRepository implements RaceWeekendRepository {
   Stream<HomeView?> watchHome() => homeStream ?? Stream<HomeView?>.value(home);
 
   @override
+  Future<HomeView?> readHome() => watchHome().first;
+
+  @override
   Stream<GrandPrixDetailView?> watchGrandPrix({
     required int season,
     required int round,
@@ -49,7 +57,13 @@ class FakeRaceWeekendRepository implements RaceWeekendRepository {
   }
 
   @override
-  Future<RefreshResult> refreshHome() =>
+  Future<GrandPrixDetailView?> readGrandPrix({
+    required int season,
+    required int round,
+  }) => watchGrandPrix(season: season, round: round).first;
+
+  @override
+  Future<RefreshResult> refreshHome({bool forceRefresh = false}) =>
       onRefreshHome?.call() ??
       Future<RefreshResult>.value(const RefreshSuccess());
 
@@ -57,6 +71,7 @@ class FakeRaceWeekendRepository implements RaceWeekendRepository {
   Future<RefreshResult> refreshGrandPrix({
     required int season,
     required int round,
+    bool forceRefresh = false,
   }) =>
       onRefreshGrandPrix?.call(season, round) ??
       Future<RefreshResult>.value(const RefreshSuccess());

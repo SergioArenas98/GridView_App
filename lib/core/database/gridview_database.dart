@@ -6,6 +6,7 @@ import 'daos/calendar_dao.dart';
 import 'daos/competitor_dao.dart';
 import 'daos/media_dao.dart';
 import 'daos/results_dao.dart';
+import 'daos/season_dao.dart';
 import 'daos/standings_dao.dart';
 import 'daos/sync_metadata_dao.dart';
 import 'daos/vertical_slice_dao.dart';
@@ -69,6 +70,7 @@ part 'gridview_database.g.dart';
     ResultsDao,
     CompetitorDao,
     CalendarDao,
+    SeasonDao,
     SyncMetadataDao,
   ],
 )

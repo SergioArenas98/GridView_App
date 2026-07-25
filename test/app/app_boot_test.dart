@@ -8,18 +8,19 @@ import 'package:gridview/features/home/presentation/home_screen.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/l10n/app_localizations.dart';
 
+import '../support/fake_repository.dart';
 import '../support/router_harness.dart';
 
 void main() {
   testWidgets('app boots into the Home branch with the pill navigation', (
     WidgetTester tester,
   ) async {
+    final FakeRaceWeekendRepository repo = defaultFakeRepository();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          raceWeekendRepositoryProvider.overrideWithValue(
-            defaultFakeRepository(),
-          ),
+          homeRepositoryProvider.overrideWithValue(repo),
+          grandPrixRepositoryProvider.overrideWithValue(repo),
           clockProvider.overrideWithValue(() => DateTime.utc(2026, 7, 18, 12)),
           appEnvironmentProvider.overrideWithValue(AppEnvironment.development),
           usesMockDataProvider.overrideWithValue(false),

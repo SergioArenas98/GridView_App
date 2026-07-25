@@ -146,6 +146,19 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     snapshots,
   )..where((Snapshots s) => s.key.equals(key))).getSingleOrNull();
 
+  /// 1 when the Home snapshot row exists, else 0 (local-presence probe for the
+  /// conditional-refresh 304-recovery).
+  Future<int> countHomeSnapshot() async {
+    final SnapshotRow? row = await _snapshotByKey(homeSnapshotKey);
+    return row == null ? 0 : 1;
+  }
+
+  /// 1 when the Grand Prix event row for (season, round) exists, else 0.
+  Future<int> countGrandPrix(int season, int round) async {
+    final GrandPrixRow? row = await _grandPrixRow(season, round);
+    return row == null ? 0 : 1;
+  }
+
   // ---------------------------------------------------------------------------
   // Writes (atomic snapshot transactions with the conflict rule)
   // ---------------------------------------------------------------------------
@@ -159,6 +172,7 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     required GrandPrix featured,
     Circuit? featuredCircuit,
     required DataFreshness freshness,
+    bool force = false,
   }) {
     return transaction(() async {
       validateSeason(featured.season);
@@ -167,9 +181,17 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
       validateSlug(featured.circuitId, field: 'circuitId');
       if (season != null) validateSeason(season.year, field: 'season year');
 
-      final SnapshotRow? existing = await _snapshotByKey(homeSnapshotKey);
-      final SnapshotWriteOutcome decision = _decideOutcome(freshness, existing);
-      if (decision != SnapshotWriteOutcome.applied) return decision;
+      // [force] is used when an outer coordinator (ResourceSync against
+      // resource_sync_metadata) has already decided to apply; the snapshots-table
+      // conflict gate then only guards direct DAO callers.
+      if (!force) {
+        final SnapshotRow? existing = await _snapshotByKey(homeSnapshotKey);
+        final SnapshotWriteOutcome decision = _decideOutcome(
+          freshness,
+          existing,
+        );
+        if (decision != SnapshotWriteOutcome.applied) return decision;
+      }
 
       if (season != null) {
         await into(seasons).insertOnConflictUpdate(_seasonCompanion(season));
@@ -213,6 +235,7 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
   Future<SnapshotWriteOutcome> writeGrandPrixSnapshot({
     required GrandPrix grandPrix,
     required DataFreshness freshness,
+    bool force = false,
   }) {
     final String key = grandPrixSnapshotKey(grandPrix.season, grandPrix.round);
     return transaction(() async {
@@ -221,9 +244,14 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
       validateSlug(grandPrix.id, field: 'grand prix id');
       validateSlug(grandPrix.circuitId, field: 'circuitId');
 
-      final SnapshotRow? existing = await _snapshotByKey(key);
-      final SnapshotWriteOutcome decision = _decideOutcome(freshness, existing);
-      if (decision != SnapshotWriteOutcome.applied) return decision;
+      if (!force) {
+        final SnapshotRow? existing = await _snapshotByKey(key);
+        final SnapshotWriteOutcome decision = _decideOutcome(
+          freshness,
+          existing,
+        );
+        if (decision != SnapshotWriteOutcome.applied) return decision;
+      }
 
       await _ensureSeason(grandPrix.season);
       await _ensureCircuit(grandPrix.circuitId);

@@ -11464,6 +11464,7 @@ abstract class _$GridViewDatabase extends GeneratedDatabase {
     this as GridViewDatabase,
   );
   late final CalendarDao calendarDao = CalendarDao(this as GridViewDatabase);
+  late final SeasonDao seasonDao = SeasonDao(this as GridViewDatabase);
   late final SyncMetadataDao syncMetadataDao = SyncMetadataDao(
     this as GridViewDatabase,
   );

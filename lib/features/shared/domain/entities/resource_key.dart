@@ -9,7 +9,14 @@
 class ResourceKey {
   const ResourceKey._();
 
-  static String home(int season) => 'home:$season';
+  /// The current-season resource (`GET /v1/seasons/current`).
+  static String currentSeason() => 'season:current';
+
+  /// Season metadata (`GET /v1/seasons/{season}`).
+  static String season(int season) => 'season:$season';
+
+  /// The Home view for a specific [season], or the current season when omitted.
+  static String home([int? season]) => 'home:${season ?? 'current'}';
 
   static String calendar(int season) => 'calendar:$season';
 
@@ -37,4 +44,7 @@ class ResourceKey {
 
   static String grandPrixResults(int season, int round) =>
       'grand-prix-results:$season:$round';
+
+  /// The curated content/media manifest (`GET /v1/content/manifest`).
+  static String contentManifest() => 'content:manifest';
 }

@@ -89,6 +89,34 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     });
   }
 
+  /// Upserts the stable driver identity fields carried by a *season summary*
+  /// (name, code, number, country) without clobbering the richer fields a driver
+  /// detail sync owns (biography, given/family name, nationality, birth, media).
+  Future<void> upsertDriverIdentities(List<Driver> items) {
+    return transaction(() async {
+      for (final Driver d in items) {
+        validateSlug(d.id, field: 'driver id');
+        validateCountryCode(d.countryCode, field: 'driver countryCode');
+        await into(drivers).insertOnConflictUpdate(_driverIdentityCompanion(d));
+      }
+    });
+  }
+
+  /// Upserts the stable constructor identity fields carried by a *season summary*
+  /// (base name, short name, base colour) without clobbering detail-owned fields
+  /// (nationality, country, biography, media).
+  Future<void> upsertConstructorIdentities(List<Constructor> items) {
+    return transaction(() async {
+      for (final Constructor c in items) {
+        validateSlug(c.id, field: 'constructor id');
+        validateCountryCode(c.countryCode, field: 'constructor countryCode');
+        await into(
+          constructors,
+        ).insertOnConflictUpdate(_constructorIdentityCompanion(c));
+      }
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Season participation writes
   // ---------------------------------------------------------------------------
@@ -303,6 +331,81 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
   }
 
   // ---------------------------------------------------------------------------
+  // Streams and counts
+  // ---------------------------------------------------------------------------
+
+  Stream<List<SeasonDriver>> watchDriversForSeason(int season) => _watch(
+    <ResultSetImplementation<dynamic, dynamic>>[drivers, driverSeasonEntries],
+    () => driversForSeason(season),
+  );
+
+  Stream<List<SeasonConstructor>> watchConstructorsForSeason(int season) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        constructors,
+        constructorSeasonEntries,
+      ], () => constructorsForSeason(season));
+
+  Stream<DriverDetailView?> watchDriverDetail(int season, String driverId) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        drivers,
+        driverSeasonEntries,
+        attachedDatabase.driverStandings,
+        attachedDatabase.driverMedia,
+        attachedDatabase.mediaAssets,
+        attachedDatabase.mediaAssetVariants,
+      ], () => driverDetail(season, driverId));
+
+  Stream<TeamDetailView?> watchTeamDetail(int season, String constructorId) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        constructors,
+        constructorSeasonEntries,
+        driverSeasonEntries,
+        drivers,
+        attachedDatabase.constructorStandings,
+        attachedDatabase.constructorMedia,
+        attachedDatabase.mediaAssets,
+        attachedDatabase.mediaAssetVariants,
+      ], () => teamDetail(season, constructorId));
+
+  Future<int> countDriverSeasonEntries(int season) async {
+    final List<DriverSeasonEntryRow> rows = await (select(
+      driverSeasonEntries,
+    )..where((DriverSeasonEntries e) => e.season.equals(season))).get();
+    return rows.length;
+  }
+
+  Future<int> countConstructorSeasonEntries(int season) async {
+    final List<ConstructorSeasonEntryRow> rows = await (select(
+      constructorSeasonEntries,
+    )..where((ConstructorSeasonEntries e) => e.season.equals(season))).get();
+    return rows.length;
+  }
+
+  Future<int> countDriver(String id) async {
+    final DriverRow? row = await (select(
+      drivers,
+    )..where((Drivers d) => d.id.equals(id))).getSingleOrNull();
+    return row == null ? 0 : 1;
+  }
+
+  Future<int> countConstructor(String id) async {
+    final ConstructorRow? row = await (select(
+      constructors,
+    )..where((Constructors c) => c.id.equals(id))).getSingleOrNull();
+    return row == null ? 0 : 1;
+  }
+
+  Stream<T> _watch<T>(
+    List<ResultSetImplementation<dynamic, dynamic>> tables,
+    Future<T> Function() read,
+  ) async* {
+    yield await read();
+    yield* attachedDatabase
+        .tableUpdates(TableUpdateQuery.onAllTables(tables))
+        .asyncMap((_) => read());
+  }
+
+  // ---------------------------------------------------------------------------
   // Read helpers
   // ---------------------------------------------------------------------------
 
@@ -391,6 +494,26 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
   // ---------------------------------------------------------------------------
   // Mapping
   // ---------------------------------------------------------------------------
+
+  /// Partial companion: only the summary-known identity columns are set; the
+  /// detail-owned columns are left absent so an upsert preserves them.
+  DriversCompanion _driverIdentityCompanion(Driver d) =>
+      DriversCompanion.insert(
+        id: d.id,
+        fullName: d.fullName,
+        shortCode: Value<String?>(d.shortCode),
+        permanentNumber: Value<int?>(d.permanentNumber),
+        countryCode: Value<String?>(d.countryCode),
+      );
+
+  /// Partial companion: only the summary-known identity columns are set.
+  ConstructorsCompanion _constructorIdentityCompanion(Constructor c) =>
+      ConstructorsCompanion.insert(
+        id: c.id,
+        name: c.name,
+        shortName: Value<String?>(c.shortName),
+        colorPrimary: Value<String?>(c.colorPrimary),
+      );
 
   DriversCompanion _driverCompanion(Driver d) => DriversCompanion.insert(
     id: d.id,

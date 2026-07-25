@@ -8,7 +8,6 @@ import 'package:gridview/app/router/app_router.dart';
 import 'package:gridview/core/theme/gridview_theme.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/shared/application/providers.dart';
-import 'package:gridview/features/shared/domain/repositories/race_weekend_repository.dart';
 import 'package:gridview/l10n/app_localizations.dart';
 
 import 'domain_fixtures.dart';
@@ -90,7 +89,7 @@ Future<GoRouter> pumpApp(
   Locale locale = const Locale('en'),
   bool disableAnimations = false,
   EdgeInsets padding = EdgeInsets.zero,
-  RaceWeekendRepository? repository,
+  FakeRaceWeekendRepository? repository,
   DateTime? clock,
   AppEnvironment environment = AppEnvironment.development,
   bool mockData = false,
@@ -101,13 +100,13 @@ Future<GoRouter> pumpApp(
   }
 
   final DateTime now = clock ?? DateTime.utc(2026, 7, 18, 12, 10);
+  final FakeRaceWeekendRepository repo = repository ?? defaultFakeRepository();
   final GoRouter router = buildGridViewRouter(initialLocation: initialLocation);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        raceWeekendRepositoryProvider.overrideWithValue(
-          repository ?? defaultFakeRepository(),
-        ),
+        homeRepositoryProvider.overrideWithValue(repo),
+        grandPrixRepositoryProvider.overrideWithValue(repo),
         clockProvider.overrideWithValue(() => now),
         appEnvironmentProvider.overrideWithValue(environment),
         usesMockDataProvider.overrideWithValue(mockData),

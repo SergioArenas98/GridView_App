@@ -7,6 +7,7 @@ import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/presentation/widgets/environment_badge.dart';
 import 'package:gridview/features/shared/presentation/widgets/mock_data_banner.dart';
 
+import '../support/fake_repository.dart';
 import '../support/router_harness.dart';
 
 void main() {
@@ -18,12 +19,12 @@ void main() {
     required AppEnvironment environment,
     bool mockData = false,
   }) async {
+    final FakeRaceWeekendRepository repo = defaultFakeRepository();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          raceWeekendRepositoryProvider.overrideWithValue(
-            defaultFakeRepository(),
-          ),
+          homeRepositoryProvider.overrideWithValue(repo),
+          grandPrixRepositoryProvider.overrideWithValue(repo),
           clockProvider.overrideWithValue(() => DateTime.utc(2026, 7, 18, 12)),
           appEnvironmentProvider.overrideWithValue(environment),
           usesMockDataProvider.overrideWithValue(mockData),

@@ -4,7 +4,7 @@ import '../../../core/api/errors/api_failure.dart';
 import '../../shared/application/providers.dart';
 import '../../shared/application/refresh_status.dart';
 import '../../shared/domain/entities/grand_prix_view.dart';
-import '../../shared/domain/repositories/race_weekend_repository.dart';
+import '../../shared/domain/refresh_result.dart';
 import 'grand_prix_detail_state.dart';
 
 /// The Drift-backed Grand Prix detail stream, per (season, round). Auto-disposed
@@ -13,7 +13,7 @@ import 'grand_prix_detail_state.dart';
 final grandPrixCacheProvider = StreamProvider.autoDispose
     .family<GrandPrixDetailView?, GrandPrixKey>(
       (Ref ref, GrandPrixKey key) => ref
-          .watch(raceWeekendRepositoryProvider)
+          .watch(grandPrixRepositoryProvider)
           .watchGrandPrix(season: key.season, round: key.round),
     );
 
@@ -35,7 +35,7 @@ class GrandPrixController extends Notifier<RefreshStatus> {
     if (state.inProgress) return;
     state = RefreshStatus.running;
     final RefreshResult result = await ref
-        .read(raceWeekendRepositoryProvider)
+        .read(grandPrixRepositoryProvider)
         .refreshGrandPrix(season: key.season, round: key.round);
     state = switch (result) {
       RefreshSuccess() => RefreshStatus.idle,

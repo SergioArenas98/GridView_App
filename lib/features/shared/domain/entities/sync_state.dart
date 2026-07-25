@@ -49,4 +49,45 @@ class ResourceSyncState {
 
   /// Server-provided stale flag, when supplied.
   final bool? serverStale;
+
+  /// Returns a copy with the given fields replaced. Immutable update: never
+  /// mutates the receiver. Because every field is nullable, a "clear to null"
+  /// override is expressed with an explicit sentinel where needed by the caller;
+  /// the metadata writer only ever sets fields to concrete new values or leaves
+  /// them unchanged, so plain replacement is sufficient here.
+  ResourceSyncState copyWith({
+    String? resourceKey,
+    int? season,
+    String? entityId,
+    int? round,
+    String? etag,
+    DateTime? generatedAt,
+    DateTime? sourceUpdatedAt,
+    DateTime? staleAfter,
+    String? contentVersion,
+    DateTime? lastAttemptAt,
+    DateTime? lastSuccessAt,
+    Object? lastFailureCategory = _unset,
+    bool? serverStale,
+  }) => ResourceSyncState(
+    resourceKey: resourceKey ?? this.resourceKey,
+    season: season ?? this.season,
+    entityId: entityId ?? this.entityId,
+    round: round ?? this.round,
+    etag: etag ?? this.etag,
+    generatedAt: generatedAt ?? this.generatedAt,
+    sourceUpdatedAt: sourceUpdatedAt ?? this.sourceUpdatedAt,
+    staleAfter: staleAfter ?? this.staleAfter,
+    contentVersion: contentVersion ?? this.contentVersion,
+    lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
+    lastSuccessAt: lastSuccessAt ?? this.lastSuccessAt,
+    // lastFailureCategory is the one field cleared on success, so it accepts an
+    // explicit null via the sentinel (null argument means "clear").
+    lastFailureCategory: identical(lastFailureCategory, _unset)
+        ? this.lastFailureCategory
+        : lastFailureCategory as String?,
+    serverStale: serverStale ?? this.serverStale,
+  );
+
+  static const Object _unset = Object();
 }

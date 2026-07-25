@@ -8,7 +8,8 @@ import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/data/remote/dio_gridview_api.dart';
 import 'package:gridview/features/shared/data/remote/fixture_gridview_api.dart';
 import 'package:gridview/features/shared/data/remote/gridview_api.dart';
-import 'package:gridview/features/shared/domain/repositories/race_weekend_repository.dart';
+import 'package:gridview/features/shared/domain/refresh_result.dart';
+import 'package:gridview/features/shared/domain/repositories/home_repository.dart';
 
 /// Proves production never uses the bundled fixture source and never silently
 /// falls back to it, even when the API base URL is missing.
@@ -48,9 +49,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      final RaceWeekendRepository repo = container.read(
-        raceWeekendRepositoryProvider,
-      );
+      final HomeRepository repo = container.read(homeRepositoryProvider);
       final RefreshResult result = await repo.refreshHome();
 
       // A controlled, typed failure — never a fixture-backed success.

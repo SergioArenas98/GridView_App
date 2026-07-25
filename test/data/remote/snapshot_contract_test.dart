@@ -10,10 +10,11 @@ import 'package:gridview/core/database/gridview_database.dart';
 import 'package:gridview/features/shared/data/remote/dio_gridview_api.dart';
 import 'package:gridview/features/shared/data/remote/remote_result.dart';
 import 'package:gridview/features/shared/data/remote/snapshot_contract.dart';
-import 'package:gridview/features/shared/data/repositories/race_weekend_repository_impl.dart';
-import 'package:gridview/features/shared/domain/repositories/race_weekend_repository.dart';
+import 'package:gridview/features/shared/domain/refresh_result.dart';
+import 'package:gridview/features/shared/domain/repositories/home_repository.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/repository_harness.dart';
 
 class _MutableAdapter implements HttpClientAdapter {
   Map<String, dynamic> body = <String, dynamic>{};
@@ -87,10 +88,10 @@ void main() {
       final _MutableAdapter adapter = _MutableAdapter();
       final Dio dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
         ..httpClientAdapter = adapter;
-      final RaceWeekendRepository repo = RaceWeekendRepositoryImpl(
-        remote: DioGridViewApi(dio),
-        local: db.verticalSliceDao,
-      );
+      final HomeRepository repo = RepositoryHarness(
+        db,
+        DioGridViewApi(dio),
+      ).home;
 
       // Seed a valid Home snapshot.
       adapter.body = loadFixture('home/pre-event.json');

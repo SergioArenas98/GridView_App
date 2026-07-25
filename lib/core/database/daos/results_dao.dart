@@ -6,6 +6,7 @@ import '../competitor_tables.dart';
 import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../result_tables.dart';
+import '../tables.dart';
 
 part 'results_dao.g.dart';
 
@@ -34,6 +35,21 @@ class ResultsDao extends DatabaseAccessor<GridViewDatabase>
       validateSlug(result.grandPrixId, field: 'grandPrixId');
       validateSeason(result.season, field: 'result season');
       validateRound(result.round, field: 'result round');
+
+      // A result document is owned by its Grand Prix (FK). The event must be
+      // synchronised first (via the calendar or the Grand Prix detail); we never
+      // fabricate a placeholder event, so a missing parent is a typed rejection
+      // that leaves the cache untouched.
+      final GrandPrixRow? parent =
+          await (select(attachedDatabase.grandPrixEvents)
+                ..where((GrandPrixEvents g) => g.id.equals(result.grandPrixId)))
+              .getSingleOrNull();
+      if (parent == null) {
+        throw InvalidEntityException(
+          'Grand Prix "${result.grandPrixId}" is not present; synchronise the '
+          'event before its results.',
+        );
+      }
       for (final RaceResultEntry e in result.entries) {
         validateSlug(e.driverId, field: 'driverId');
         validateSlug(e.constructorId, field: 'constructorId');
@@ -83,6 +99,52 @@ class ResultsDao extends DatabaseAccessor<GridViewDatabase>
       results.add(_resultFrom(row, await _entriesFor(row.id)));
     }
     return results;
+  }
+
+  /// All result documents for a (season, round) — a sprint weekend has both a
+  /// sprint and a race document — ordered by session type.
+  Future<List<RaceResult>> resultsForSeasonRound(int season, int round) async {
+    final List<RaceResultRow> rows =
+        await (select(raceResults)
+              ..where(
+                (RaceResults r) =>
+                    r.season.equals(season) & r.round.equals(round),
+              )
+              ..orderBy(<OrderClauseGenerator<RaceResults>>[
+                (RaceResults r) => OrderingTerm(expression: r.sessionType),
+              ]))
+            .get();
+    final List<RaceResult> results = <RaceResult>[];
+    for (final RaceResultRow row in rows) {
+      results.add(_resultFrom(row, await _entriesFor(row.id)));
+    }
+    return results;
+  }
+
+  Stream<List<RaceResult>> watchResultsForSeasonRound(int season, int round) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        raceResults,
+        raceResultEntries,
+      ], () => resultsForSeasonRound(season, round));
+
+  Future<int> countResultsForSeasonRound(int season, int round) async {
+    final List<RaceResultRow> rows =
+        await (select(raceResults)..where(
+              (RaceResults r) =>
+                  r.season.equals(season) & r.round.equals(round),
+            ))
+            .get();
+    return rows.length;
+  }
+
+  Stream<T> _watch<T>(
+    List<ResultSetImplementation<dynamic, dynamic>> tables,
+    Future<T> Function() read,
+  ) async* {
+    yield await read();
+    yield* attachedDatabase
+        .tableUpdates(TableUpdateQuery.onAllTables(tables))
+        .asyncMap((_) => read());
   }
 
   Future<List<RaceResultEntry>> _entriesFor(String resultId) async {

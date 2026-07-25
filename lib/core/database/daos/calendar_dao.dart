@@ -52,6 +52,77 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
   }
 
   // ---------------------------------------------------------------------------
+  // Calendar collection write (season-scoped replacement)
+  // ---------------------------------------------------------------------------
+
+  /// Replaces a season's calendar with [events] (Grand Prix summaries) and their
+  /// host [circuits] (summaries), in one transaction. Preserves unrelated
+  /// seasons. Events absent from [events] are removed (cascading their
+  /// sessions); events that persist keep their detail-synced sessions,
+  /// `officialName` and media (the summary companion leaves those columns
+  /// untouched). This is authoritative for which events exist in the season; it
+  /// never invents sessions (calendar summaries carry none).
+  Future<void> replaceCalendar(
+    int season,
+    List<GrandPrix> events,
+    List<Circuit> hostCircuits,
+  ) {
+    return transaction(() async {
+      validateSeason(season);
+      for (final GrandPrix e in events) {
+        validateSlug(e.id, field: 'grand prix id');
+        validateSlug(e.circuitId, field: 'circuitId');
+        validateSeason(e.season, field: 'event season');
+        validateRound(e.round, field: 'event round');
+      }
+      for (final Circuit c in hostCircuits) {
+        validateSlug(c.id, field: 'circuit id');
+        validateCountryCode(c.countryCode, field: 'circuit countryCode');
+      }
+
+      await attachedDatabase.seasonDao.ensureSeason(season);
+
+      // Summary circuits refresh only the columns they carry (id + name),
+      // preserving richer detail-synced circuit facts and media.
+      for (final Circuit c in hostCircuits) {
+        await into(
+          circuits,
+        ).insertOnConflictUpdate(_summaryCircuitCompanion(c));
+      }
+      // Ensure every referenced circuit exists (FK), without clobbering names.
+      for (final GrandPrix e in events) {
+        await _ensureCircuit(e.circuitId);
+      }
+
+      final Set<String> keepIds = events.map((GrandPrix e) => e.id).toSet();
+      await (delete(grandPrixEvents)..where(
+            (GrandPrixEvents g) =>
+                g.season.equals(season) & g.id.isNotIn(keepIds),
+          ))
+          .go();
+
+      for (final GrandPrix e in events) {
+        await into(
+          grandPrixEvents,
+        ).insertOnConflictUpdate(_summaryEventCompanion(e));
+      }
+    });
+  }
+
+  /// Streams the season calendar; re-emits after any calendar/session commit.
+  Stream<List<GrandPrix>> watchCalendar(int season) => _watch(
+    <ResultSetImplementation<dynamic, dynamic>>[grandPrixEvents, sessions],
+    () => calendar(season),
+  );
+
+  Future<int> countEventsForSeason(int season) async {
+    final List<GrandPrixRow> rows = await (select(
+      grandPrixEvents,
+    )..where((GrandPrixEvents g) => g.season.equals(season))).get();
+    return rows.length;
+  }
+
+  // ---------------------------------------------------------------------------
   // Calendar / events
   // ---------------------------------------------------------------------------
 
@@ -167,6 +238,37 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     return rows.map((CircuitRow r) => _circuitFrom(r)).toList(growable: false);
   }
 
+  /// Streams the circuits used in a season (derived from the season's events);
+  /// re-emits after any circuit/event commit.
+  Stream<List<Circuit>> watchCircuitsForSeason(int season) => _watch(
+    <ResultSetImplementation<dynamic, dynamic>>[grandPrixEvents, circuits],
+    () => circuitsForSeason(season),
+  );
+
+  /// Streams full circuit detail; re-emits after any circuit/event/session/media
+  /// commit.
+  Stream<CircuitDetailView?> watchCircuitDetail(String circuitId) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        circuits,
+        grandPrixEvents,
+        sessions,
+        attachedDatabase.circuitMedia,
+        attachedDatabase.mediaAssets,
+        attachedDatabase.mediaAssetVariants,
+      ], () => circuitDetail(circuitId));
+
+  Future<int> countCircuit(String id) async {
+    final CircuitRow? row = await (select(
+      circuits,
+    )..where((Circuits c) => c.id.equals(id))).getSingleOrNull();
+    return row == null ? 0 : 1;
+  }
+
+  Future<int> countCircuits() async {
+    final List<CircuitRow> rows = await select(circuits).get();
+    return rows.length;
+  }
+
   /// Full circuit detail: the circuit (with its physical facts and media) plus
   /// the events it hosts, ordered by season then round.
   Future<CircuitDetailView?> circuitDetail(String circuitId) async {
@@ -210,6 +312,54 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
             .get();
     return rows.map(_sessionFrom).toList(growable: false);
   }
+
+  /// Emits an initial value, then re-emits after any commit to [tables].
+  Stream<T> _watch<T>(
+    List<ResultSetImplementation<dynamic, dynamic>> tables,
+    Future<T> Function() read,
+  ) async* {
+    yield await read();
+    yield* attachedDatabase
+        .tableUpdates(TableUpdateQuery.onAllTables(tables))
+        .asyncMap((_) => read());
+  }
+
+  /// Ensures a circuit row exists (non-authoritative name), preserving any
+  /// real name already synchronised.
+  Future<void> _ensureCircuit(String id) => into(circuits).insert(
+    CircuitsCompanion.insert(id: id, name: _humanizeSlug(id)),
+    mode: InsertMode.insertOrIgnore,
+  );
+
+  /// A partial circuit companion carrying only the summary columns (id + name),
+  /// so an upsert never clobbers detail-synced physical facts or media.
+  CircuitsCompanion _summaryCircuitCompanion(Circuit c) =>
+      CircuitsCompanion.insert(id: c.id, name: c.name);
+
+  /// A partial event companion carrying only the summary columns; `officialName`
+  /// and sessions are left untouched so a detail sync's richer data survives.
+  GrandPrixEventsCompanion _summaryEventCompanion(GrandPrix g) =>
+      GrandPrixEventsCompanion.insert(
+        id: g.id,
+        season: g.season,
+        round: g.round,
+        eventSlug: g.eventSlug,
+        name: g.name,
+        circuitId: g.circuitId,
+        status: g.status.wire,
+        format: g.format.wire,
+        startDate: Value<String?>(g.startDate),
+        endDate: Value<String?>(g.endDate),
+        timezone: Value<String?>(g.timezone),
+        hasResults: Value<bool>(g.hasResults),
+      );
+
+  String _humanizeSlug(String slug) => slug
+      .split('-')
+      .map(
+        (String w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}',
+      )
+      .join(' ');
 
   String _dateString(DateTime d) {
     final DateTime u = d.toUtc();
