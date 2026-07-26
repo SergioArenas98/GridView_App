@@ -9,6 +9,7 @@ import '../data/remote/dio_gridview_api.dart';
 import '../data/remote/fixture_gridview_api.dart';
 import '../data/remote/gridview_api.dart';
 import '../data/remote/misconfigured_gridview_api.dart';
+import '../data/repositories/bootstrap_repository_impl.dart';
 import '../data/repositories/calendar_repository_impl.dart';
 import '../data/repositories/circuit_repository_impl.dart';
 import '../data/repositories/constructor_repository_impl.dart';
@@ -21,6 +22,7 @@ import '../data/repositories/season_repository_impl.dart';
 import '../data/repositories/standings_repository_impl.dart';
 import '../data/sync/refresh_coordinator.dart';
 import '../data/sync/resource_sync.dart';
+import '../domain/repositories/bootstrap_repository.dart';
 import '../domain/repositories/calendar_repository.dart';
 import '../domain/repositories/circuit_repository.dart';
 import '../domain/repositories/constructor_repository.dart';
@@ -130,6 +132,25 @@ final Provider<RefreshCoordinator> refreshCoordinatorProvider =
     Provider<RefreshCoordinator>((Ref ref) => RefreshCoordinator());
 
 // --- Repositories -------------------------------------------------------
+
+/// The first-launch aggregate repository. It writes several domain families in
+/// one transaction, so it is bound to the same single database instance as
+/// every other repository.
+final Provider<BootstrapRepository> bootstrapRepositoryProvider =
+    Provider<BootstrapRepository>((Ref ref) {
+      final GridViewDatabase db = ref.watch(databaseProvider);
+      return BootstrapRepositoryImpl(
+        remote: ref.watch(remoteApiProvider),
+        sync: ref.watch(resourceSyncProvider),
+        coordinator: ref.watch(refreshCoordinatorProvider),
+        now: ref.watch(clockProvider),
+        seasons: db.seasonDao,
+        calendar: db.calendarDao,
+        competitors: db.competitorDao,
+        standings: db.standingsDao,
+        snapshots: db.verticalSliceDao,
+      );
+    });
 
 final Provider<SeasonRepository> seasonRepositoryProvider =
     Provider<SeasonRepository>(
