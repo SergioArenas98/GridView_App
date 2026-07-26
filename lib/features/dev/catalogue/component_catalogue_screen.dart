@@ -145,7 +145,16 @@ class _ComponentCatalogueScreenState extends State<ComponentCatalogueScreen> {
             title: 'Rows',
             child: Column(
               children: <Widget>[
-                const GvSessionRow(name: 'Race', time: '15:00'),
+                const GvSessionRow(
+                  name: 'Race',
+                  statusLabel: 'Sun 26 Jul · Scheduled',
+                  time: '15:00 CEST',
+                ),
+                const GvSessionRow(
+                  name: 'Sprint',
+                  statusLabel: 'Sat 25 Jul · Cancelled',
+                  tone: GvStatusTone.warning,
+                ),
                 const GvStandingsRow(
                   position: '1',
                   name: 'Max Verstappen',
@@ -169,7 +178,20 @@ class _ComponentCatalogueScreenState extends State<ComponentCatalogueScreen> {
                   driverName: 'Lando Norris',
                   team: 'McLaren',
                   timeOrGap: '+3.456',
+                  score: '18',
+                  badgeLabel: 'Fastest lap',
                   accentColor: Color(0xFFFF8000),
+                ),
+                // The secondary (team) action is a separate stacked hit area.
+                GvResultRow(
+                  position: '—',
+                  driverName: 'Charles Leclerc',
+                  team: 'Ferrari',
+                  statusLabel: 'DNF',
+                  semanticLabel: 'Charles Leclerc, Ferrari, DNF',
+                  onTap: () {},
+                  onTeamTap: () {},
+                  teamSemanticLabel: 'Open team Ferrari',
                 ),
               ],
             ),

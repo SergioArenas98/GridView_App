@@ -155,7 +155,41 @@ class ResultsDao extends DatabaseAccessor<GridViewDatabase>
                 (RaceResultEntries e) => OrderingTerm(expression: e.orderIndex),
               ]))
             .get();
-    return rows.map(_entryFrom).toList(growable: false);
+    if (rows.isEmpty) return const <RaceResultEntry>[];
+
+    // Resolve competitor display names from the locally stored profiles. A
+    // classification carries identifiers only, so a name that has not been
+    // synchronised yet simply stays null.
+    final List<DriverRow> driverRows =
+        await (select(drivers)..where(
+              (Drivers d) => d.id.isIn(
+                rows.map((RaceResultEntryRow r) => r.driverId).toSet(),
+              ),
+            ))
+            .get();
+    final List<ConstructorRow> constructorRows =
+        await (select(constructors)..where(
+              (Constructors c) => c.id.isIn(
+                rows.map((RaceResultEntryRow r) => r.constructorId).toSet(),
+              ),
+            ))
+            .get();
+    final Map<String, String> driverNames = <String, String>{
+      for (final DriverRow d in driverRows) d.id: d.fullName,
+    };
+    final Map<String, String> constructorNames = <String, String>{
+      for (final ConstructorRow c in constructorRows) c.id: c.name,
+    };
+
+    return rows
+        .map(
+          (RaceResultEntryRow r) => _entryFrom(
+            r,
+            driverName: driverNames[r.driverId],
+            constructorName: constructorNames[r.constructorId],
+          ),
+        )
+        .toList(growable: false);
   }
 
   // ---------------------------------------------------------------------------
@@ -236,9 +270,15 @@ class ResultsDao extends DatabaseAccessor<GridViewDatabase>
     );
   }
 
-  RaceResultEntry _entryFrom(RaceResultEntryRow r) => RaceResultEntry(
+  RaceResultEntry _entryFrom(
+    RaceResultEntryRow r, {
+    String? driverName,
+    String? constructorName,
+  }) => RaceResultEntry(
     driverId: r.driverId,
     constructorId: r.constructorId,
+    driverName: driverName,
+    constructorName: constructorName,
     position: r.position,
     gridPosition: r.gridPosition,
     points: r.points,

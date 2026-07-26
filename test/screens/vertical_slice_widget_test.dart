@@ -15,6 +15,12 @@ import '../support/domain_fixtures.dart';
 import '../support/fake_repository.dart';
 import '../support/router_harness.dart';
 
+/// The Grand Prix detail screen is a long scrolling page (hero, weekend facts,
+/// the full session schedule and the classifications). These tests assert on
+/// content across the whole page, so they use a tall surface instead of
+/// scrolling step by step — nothing about the assertions is relaxed.
+const Size _tallDetail = Size(400, 1600);
+
 void main() {
   group('Home states', () {
     testWidgets('shows a skeleton when there is no cached content', (
@@ -109,7 +115,7 @@ void main() {
     testWidgets('opens Grand Prix detail from the Home hero', (
       WidgetTester tester,
     ) async {
-      await pumpApp(tester);
+      await pumpApp(tester, surfaceSize: _tallDetail);
       await tester.tap(find.text('View Grand Prix'));
       await tester.pumpAndSettle();
 
@@ -122,7 +128,11 @@ void main() {
     testWidgets('opens directly via deep link with ordered sessions', (
       WidgetTester tester,
     ) async {
-      await pumpApp(tester, initialLocation: '/calendar/2026/13');
+      await pumpApp(
+        tester,
+        initialLocation: '/calendar/2026/13',
+        surfaceSize: _tallDetail,
+      );
 
       expect(find.byType(GrandPrixDetailScreen), findsOneWidget);
       // All five sprint-weekend sessions render.
@@ -140,7 +150,11 @@ void main() {
     testWidgets('sessions are displayed in weekend order', (
       WidgetTester tester,
     ) async {
-      await pumpApp(tester, initialLocation: '/calendar/2026/13');
+      await pumpApp(
+        tester,
+        initialLocation: '/calendar/2026/13',
+        surfaceSize: _tallDetail,
+      );
 
       double dyOf(String name) => tester.getTopLeft(find.text(name)).dy;
       expect(dyOf('Practice 1'), lessThan(dyOf('Sprint Qualifying')));
@@ -182,6 +196,7 @@ void main() {
         repository: repo,
         initialLocation: '/calendar/2026/13',
         disableAnimations: true,
+        surfaceSize: _tallDetail,
       );
 
       expect(find.text('Race'), findsWidgets);

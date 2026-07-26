@@ -15,6 +15,8 @@ class RaceResultEntry {
   const RaceResultEntry({
     required this.driverId,
     required this.constructorId,
+    this.driverName,
+    this.constructorName,
     this.position,
     this.gridPosition,
     this.points,
@@ -30,6 +32,17 @@ class RaceResultEntry {
 
   final String driverId;
   final String constructorId;
+
+  /// Display names resolved from the locally stored competitor profiles.
+  ///
+  /// A classification carries identifiers only, so these are **read-only
+  /// projections** filled in by the local read and left null by the remote
+  /// mapper. Null simply means the competitor has not been synchronised yet;
+  /// the caller falls back to the stable identifier rather than inventing a
+  /// name.
+  final String? driverName;
+  final String? constructorName;
+
   final int? position;
   final int? gridPosition;
   final double? points;
