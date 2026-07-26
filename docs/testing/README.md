@@ -452,3 +452,155 @@ flutter test tool/staging_smoke.dart `
 It uses only public GET routes, a throwaway on-disk database and no admin token,
 and prints only counts, safe failure categories and redacted ETag fingerprints.
 CI never depends on staging availability.
+
+## Calendar & Grand Prix features (Phase 7A)
+
+The two feature screens are covered end to end without a Worker, network, admin
+token or device (pure functions, `ProviderContainer` over in-memory SQLite,
+widget tests over fake repositories, and temporary on-disk files for the
+persistence suite):
+
+- `test/domain/relevant_event_test.dart` — the one relevant-event rule shared by
+  Home, the Calendar and `CalendarDao.nextEvent`: an in-progress event wins over
+  a later upcoming one (both by explicit status and by date window); the next
+  eligible event is chosen otherwise; cancelled events are never selected as
+  current **or** upcoming; completed events are never upcoming and a completed
+  season has none; a postponed event that still carries a future date stays
+  eligible; missing and malformed dates are skipped rather than thrown on; round
+  breaks a same-date tie; the injected clock alone decides the boundary (start
+  day, last day, the day after, well before); and Home's featured event and the
+  Calendar's highlighted event resolve to the same identity from the same input.
+- `test/application/calendar_state_test.dart` — the pure state derivation: no
+  season, an unemitted stream, and metadata that has never succeeded are all
+  loading and never "empty"; an unresolvable season becomes a controlled
+  recoverable error only once a run has settled; no representation plus a failure
+  is a first-load error; a materialized empty calendar is `CalendarEmpty` with
+  its own non-blocking failure slot; cached events survive a refresh and a
+  refresh failure; the persisted round order is preserved exactly; the
+  `staleAfter` boundary and the server stale flag; a season transition carries
+  the new season through the state.
+- `test/application/calendar_controller_test.dart` — ownership over the real
+  coordinator, repositories and Drift: creating the controller and re-reading the
+  derived state produce **zero** requests; a manual refresh runs the application
+  coordinator exactly once and still sends the persisted ETag; a duplicate tap is
+  coalesced; the refresh future completes even when the run is cancelled; a run
+  in progress reports as refreshing and then settles; an unrelated core failure
+  is not a Calendar error; a Calendar failure keeps its cache as a non-blocking
+  error and becomes a first-load error without one; the resource key is exactly
+  `calendar:<season>`; a season transition switches the watched calendar while
+  the previous season's rows and metadata stay on disk.
+- `test/application/grand_prix_results_state_test.dart` — the result section's
+  pure derivation: an upcoming event is unavailable, an advertised classification
+  is loading, a recorded success with nothing stored is unavailable (not an
+  error), a stored-but-empty document is not a classification, a failure with no
+  cache is a scoped error, a refresh outranks a previous failure; sprint and race
+  documents coexist and stay separate and ordered; cached results render even
+  when nothing advertises them; result freshness comes from its own metadata.
+- `test/application/grand_prix_results_controller_test.dart` — on-demand
+  ownership: opening a route triggers exactly one detail request and re-reading
+  the state triggers none; a retry after a failure issues a new one; the keys are
+  exactly `grand-prix:<season>:<round>` and
+  `grand-prix-results:<season>:<round>`; a route season may differ from the
+  stored current season (and works with none stored at all); an upcoming event
+  with `hasResults == false` requests nothing; `hasResults == true` requests
+  exactly once; a detail refresh that flips the flag false→true requests exactly
+  once and never again; repeated local emissions never repeat the request; cached
+  results render even after the flag is cleared; detail and result failures stay
+  independent in both directions; a result retry touches only the result
+  resource; disposing the scope cancels the in-flight request (observed on the
+  cancellation token) and a later visit still succeeds.
+- `test/screens/calendar_widget_test.dart` — the loading skeleton, a valid empty
+  calendar (a real empty state, not a loader), a first-load failure with a retry
+  that refreshes, an unresolvable season; the persisted order, the "Next" marker,
+  a localized label for every status including postponed/cancelled/unknown,
+  missing locality/country rendering nothing at all, no placeholder content
+  remaining; tapping an event opens the correct season/round; a stale cached-data
+  notice, pull-to-refresh and a refresh failure both keeping the rows visible, an
+  unrelated core failure not becoming a Calendar error, the labelled refresh
+  action; the one-time positioning of the relevant event, its non-repetition on a
+  later emission, and scroll preservation across a branch switch and a return
+  from detail; semantics, 48 px targets, a 2× text scale and Spanish copy.
+- `test/screens/grand_prix_widget_test.dart` — identity, status, format,
+  location, dates and both time-zone contexts; a duplicate official name not
+  repeated; missing locality/country/timezone vanishing; unknown status and
+  format still reading as labels; sprint and standard weekends through the same
+  widget path in delivered order; unknown, cancelled and postponed sessions
+  staying visible; a session with no time showing none; an empty schedule as a
+  controlled empty state; results-pending without an error; a rendered
+  classification with fractional points, elapsed time and gap; sprint and race
+  sections coexisting and separate; DNF/DNS/DSQ/DNQ/lapped/unknown finishes,
+  laps-behind, duplicate displayed positions, a fastest-lap badge and a
+  provisional status; a result failure scoped to its section with and without
+  cache; cached results surviving a `hasResults == false`; a detail failure
+  keeping the weekend visible; the stale notice; circuit, driver and constructor
+  navigation by stable id; loop prevention; Android back to the Calendar branch;
+  a deep link; an invalid parameter staying controlled; row semantics, the 48 px
+  team target, a 2× text scale and Spanish copy.
+- `test/data/repositories/feature_offline_test.dart` — on a temporary **on-disk**
+  database: the calendar survives a close/reopen and renders with zero network
+  calls; Grand Prix detail and *both* classifications survive and stay visible
+  while every on-demand refresh fails; the persisted ETags drive the next
+  conditional validation; a `304` after a reopen produces no domain emission and
+  no visible change; a valid empty calendar stays empty rather than loading; a
+  Grand Prix with no sessions stays renderable; the previous season stays on disk
+  after a transition.
+- `test/design_system/result_row_test.dart` — the extended classification row:
+  omitted values are not rendered (no false zeroes), supplied values all render,
+  the primary and team actions are separate non-overlapping hit areas with their
+  own button semantics, the team target is at least 48 px, a long value at a 2×
+  text scale wraps instead of overflowing, and a session row shows an accent only
+  for a non-neutral tone.
+
+### Phase 7A goldens
+
+`test/screens/screen_golden_test.dart` adds dark-theme goldens for the populated
+Calendar (with the one-time relevant-event positioning visible), the valid empty
+Calendar, the stale/cached Calendar, an upcoming standard Grand Prix, a completed
+Grand Prix with its classification, and a Grand Prix whose result section failed.
+The existing `grand_prix_detail_loaded` golden was regenerated for the new
+real-data layout and inspected; `home_loaded` and `primary_shell_nav` are
+unchanged.
+
+### Manual staging validation (Phase 7A, non-CI)
+
+CI never depends on staging availability; this pass is manual and uses only
+public GET routes — no admin route and no `ADMIN_TOKEN`.
+
+Build and install a staging APK with an externally supplied base URL:
+
+```powershell
+flutter build apk --debug `
+  --dart-define=APP_ENV=staging `
+  --dart-define=DATA_SOURCE=remote `
+  --dart-define=API_BASE_URL=<staging base URL>
+```
+
+Checklist:
+
+1. Open **Calendar** on an install that has already synchronised.
+2. Verify the season header shows the current season and that the event list is
+   in chronological (round) order.
+3. Verify the current/next event is easy to identify (accent, "Next" chip) and
+   that the list opened positioned near it, with earlier rounds reachable above.
+4. Open an **upcoming standard** Grand Prix; check the header, weekend facts and
+   the full session schedule.
+5. Open a **sprint** Grand Prix; check that the sprint sessions render through
+   the same schedule, in delivered order.
+6. Open a **completed** Grand Prix with results; check the classification.
+7. Where the event is a completed sprint weekend, confirm the **sprint and race
+   sections coexist** and are never merged.
+8. Confirm session names, dates, times and the time-zone labels, plus the event
+   and device time-zone fields.
+9. Navigate to **Circuit**, then back; from a result row navigate to **Driver**
+   and to **Constructor** (the team is its own tap target), then back.
+10. Return to **Calendar** and confirm the scroll position was preserved.
+11. Enable **airplane mode** now that the data is cached.
+12. Reopen Calendar and a Grand Prix detail; confirm cached content still
+    renders, with a discreet cached-data notice rather than an error.
+13. Trigger pull-to-refresh while offline; confirm the cached content stays
+    visible, the indicator completes, and the failure is non-blocking.
+14. Restore connectivity and refresh again; confirm the content updates (or that
+    a `304` leaves it visually unchanged).
+15. Confirm the **STAGING** badge is visible.
+16. Confirm **no "Sample data" banner** appears (staging with
+    `DATA_SOURCE=remote` must never use fixtures).

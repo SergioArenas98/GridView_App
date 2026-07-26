@@ -134,6 +134,38 @@ screen; it moved to Settings when the navigation shell landed.)
 Navigation, routing and the screen skeletons that consume these components are
 documented in `GridView_Navigation.md`.
 
+## 8b. Phase 7A component changes
+
+Three data-agnostic refinements were made while wiring the Calendar and Grand
+Prix features. None of them knows about a domain entity, a repository, Riverpod
+or Drift; feature widgets map their own state into primitive inputs.
+
+- **`gvToneColor(context, tone)`** was extracted from `GvStatusChip` so a chip, a
+  row accent and any other status affordance resolve the same semantic colour.
+  The chip's rendering is unchanged.
+- **`GvSessionRow.tone`** now actually renders: a non-neutral tone adds a
+  restrained accent bar. Feature code deliberately reserves it for the states a
+  reader must not miss (live, cancelled, postponed) — colouring every scheduled
+  or completed row would be noise. The textual status label is always present,
+  so meaning is never carried by colour alone.
+- **`GvResultRow`** gained optional `statusLabel`, `badgeLabel`, `score`,
+  `semanticLabel`, `onTeamTap` and `teamSemanticLabel`. Every value is optional
+  and purely presentational: anything the caller omits is not rendered, so a
+  missing value never becomes a false zero. The primary action and the secondary
+  (team) action occupy **separate, stacked** hit areas, each at least
+  `GvLayout.minTouchTarget` tall and each exposing its own button semantics — no
+  nested competing tap regions. `semanticLabel` replaces the row's merged child
+  semantics with one explicit label so a screen reader announces position,
+  driver, team, status and score in a useful order.
+
+A row's trailing slot is now capped at a fraction of the row width. A `Row`
+gives a non-flex child unbounded width, which turned a long value (a race time
+at a large text scale) into an overflow instead of a wrap; capping it keeps the
+title readable and lets the value wrap.
+
+The component catalogue examples and the design-system tests were updated with
+these components.
+
 ## 9. Rules
 
 - No raw colour/spacing/radius literals in widgets — use tokens.

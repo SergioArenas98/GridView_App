@@ -62,16 +62,27 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   first, then one post-frame run begins. `GET /v1/bootstrap` is a single
   conditional resource persisted in one transaction, and its ETag is never
   copied onto individual resources. See
-  `docs/technical/GridView_Synchronization.md` §11 and ADRs 0014-0015. Phase 7
-  (feature screens) is not started.
+  `docs/technical/GridView_Synchronization.md` §11 and ADRs 0014-0015.
+- Phase 7A - Calendar and Grand Prix feature implementation: done. The Calendar
+  renders the locally resolved current season from Drift in its persisted round
+  order, highlights the one relevant event through a rule shared with Home,
+  positions the list at it exactly once per branch session, and refreshes only
+  when the user asks — through the single application coordinator, never on
+  controller creation. Grand Prix detail renders identity, the weekend facts,
+  every persisted session in delivered order and the stored sprint/race
+  classifications; detail and results are independent on-demand resources, each
+  requested at most once per opened route, each keeping its cached content
+  through a refresh or a failure. See
+  `docs/technical/GridView_Synchronization.md` §12 and
+  `docs/technical/GridView_Navigation.md` §9. Phases 7B-7D (standings, drivers,
+  teams, circuits) are not started.
 
-Home's next-Grand-Prix hero, weekend sessions and freshness, and the Grand Prix
-detail screen are now driven by a **Drift-backed** local store: content renders
-immediately from cache (offline included), a refresh writes one atomic snapshot
-transaction, and a failed refresh never erases cached content. The remaining
-screens (calendar, standings, drivers, teams, circuits) are still
-non-authoritative skeletons; no Firebase, ads or production provider is wired
-yet. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
+Home's next-Grand-Prix hero, the Calendar and the Grand Prix detail screen are
+driven by a **Drift-backed** local store: content renders immediately from cache
+(offline included), a refresh writes one atomic snapshot transaction, and a
+failed refresh never erases cached content. The remaining screens (standings,
+drivers, teams, circuits) are still non-authoritative skeletons; no Firebase, ads
+or production provider is wired yet. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
 only under a deliberate `DATA_SOURCE=fixture` build define (never inferred from a
 missing `API_BASE_URL`) and show a "Sample data" banner; **production never
 constructs the fixture source** — an attempted fixture mode or a missing base URL

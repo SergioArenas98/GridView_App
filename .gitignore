@@ -72,3 +72,7 @@ services/edge-api/dist/
 services/edge-api/worker-configuration.d.ts
 
 /backend/
+
+# Golden-test diff artifacts written by `flutter test` on a mismatch. They are
+# inspection output, never a committed baseline.
+test/**/failures/

@@ -128,8 +128,69 @@ production always uses the real compile-time environment.)
 
 ## 8. Presentation data
 
-Screens consume `lib/features/shared/presentation/placeholder/placeholder_content.dart`
-— presentation-only models with deterministic mock values. **No API DTO or domain
-entity is imported into a presentation widget.** Team colours appear only as
+The remaining skeleton screens (standings, drivers, teams, circuits) still
+consume `lib/features/shared/presentation/placeholder/placeholder_content.dart`
+— presentation-only models with deterministic mock values. **No API DTO or Drift
+row is imported into a presentation widget.** Team colours appear only as
 restrained accents (a line, dot or small highlight), never as full row
-backgrounds. Real data replaces the placeholders in Phase 4.
+backgrounds.
+
+Home and Grand Prix detail were moved onto real Drift-backed domain read models
+in Phase 4; the Calendar followed in Phase 7A and no longer references the
+placeholder catalogue at all.
+
+## 9. Calendar and Grand Prix navigation (Phase 7A)
+
+### 9.1 Calendar to Grand Prix
+
+The Calendar branch root is season-agnostic (`/calendar`) and resolves the
+current season locally. Tapping an event opens `/calendar/<season>/<round>` via
+`context.openEntity`, using the event's own stored `season` and `round` — never
+a display name and never a hardcoded year.
+
+Grand Prix detail renders on the **root navigator** (§4), so the Calendar
+branch, its stack and its scroll position are preserved underneath. Back
+(app-bar or Android system back) returns to exactly that position.
+
+### 9.2 Calendar scroll and branch state
+
+`CalendarScreen` owns a `ScrollController` for the branch session. Because the
+shell keeps each branch's state in an `IndexedStack`, that controller — and the
+user's scroll offset — survives switching to another branch and back, and
+survives returning from Grand Prix detail.
+
+On the first useful render of a branch session the list is positioned **once** so
+the current/next relevant event is near the top, with earlier events still
+reachable above it. `CalendarScrollAnchor` converges deterministically within a
+bounded number of frames (scroll the anchored row into view if it is built,
+otherwise jump to a proportional estimate and retry next frame) — no timer and
+no arbitrary delay. It never repositions again: not for a later Drift emission,
+not after a background refresh and not on return from a detail screen.
+Re-selecting the Calendar branch returns it to its root through the existing
+shell behaviour without creating a duplicate route.
+
+### 9.3 Grand Prix to Circuit, Driver and Constructor
+
+All three use stable identifiers through `RoutePaths`:
+
+- the circuit action opens `/circuits/<circuitId>`;
+- a result row's primary action opens `/drivers/<driverId>`;
+- the team name inside a result row is a **separate** hit area (at least
+  48 logical pixels, with its own button semantics) that opens
+  `/constructors/<constructorId>`.
+
+The two hit areas are stacked rather than nested, so there are no competing tap
+regions. Immediate-loop prevention (§4) is unchanged: Grand Prix → Circuit →
+that same Grand Prix returns to the existing route instead of stacking a
+duplicate.
+
+Circuit, driver and constructor detail content itself remains a skeleton until
+Phases 7C/7D; only the routes are wired.
+
+### 9.4 Deep links and invalid parameters
+
+`/calendar/:season/:round` continues to open directly, independently of the
+current Calendar season — Grand Prix detail is keyed by its own route values.
+An invalid season or round still resolves to the controlled invalid-parameter
+screen, and a Grand Prix that a successful refresh proves does not exist shows a
+controlled not-found state with a recovery action.

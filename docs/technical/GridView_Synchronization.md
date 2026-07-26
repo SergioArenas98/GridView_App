@@ -701,3 +701,165 @@ No active year is hardcoded anywhere. When the current season changes:
   driver, constructor, circuit) when their page is opened.
 - Feature controllers must not recreate lifecycle policy: no
   `WidgetsBindingObserver`, no timers, no second startup run.
+
+---
+
+## 12. Feature ownership (Phase 7A: Calendar and Grand Prix)
+
+Phase 7A is the first consumer of the Phase 6 layer. Nothing about the
+synchronization contract changed; this section records how the two features sit
+on top of it.
+
+### 12.1 Calendar ownership
+
+`CalendarController` (`lib/features/calendar/application/calendar_providers.dart`)
+owns the Calendar's *presentation* refresh status and nothing else.
+
+- **It starts no refresh when it is created.** Startup and foreground refresh of
+  the current-season core set belong to `AppSyncCoordinator` (§11.6, §11.10). A
+  controller that also refreshed on creation would issue a known-duplicate
+  request that per-key deduplication should never have to absorb, and would
+  couple "the user looked at a screen" to "the app synchronised". Building or
+  rebuilding the Calendar screen therefore cannot produce a request.
+- **It mirrors the coordinator's report** for the exact `calendar:<season>`
+  resource, through the shared `resourceRefreshStatus` projection. An unrelated
+  core resource failing during a run is never a Calendar error, and another
+  season's calendar never matches.
+- **Content comes only from Drift**: `calendarCacheProvider(season)` streams
+  `CalendarRepository.watchCalendar`, which returns `CalendarEntry` domain read
+  models (the persisted Grand Prix summary joined with its host circuit
+  summary). No Drift row and no DTO reaches presentation.
+
+### 12.2 Manual Calendar refresh
+
+Pull-to-refresh and the app-bar refresh action both call
+`CalendarController.refresh()`, which calls the one manual entry point,
+`manualCoreRefreshProvider` -> `AppSyncCoordinator.refreshNow()`.
+
+- It forces **eligibility** for one run and keeps conditional requests and
+  persisted ETags — a `304` is a successful validation, not a failure.
+- Concurrent taps are collapsed: the controller's own in-progress guard drops
+  the second tap, and the coordinator queues at most one forced follow-up behind
+  an active run.
+- The returned future always completes — after success, failure **or**
+  cancellation — so the refresh indicator can never hang.
+- The aggregate result is read **resource by resource**: only a failed
+  `calendar:<season>` (or an unresolvable season) becomes a Calendar error.
+- No `BuildContext` is stored anywhere in the controller.
+
+`manualCoreRefreshProvider` exists so a feature depends on the *capability*
+rather than on the coordinator's whole object graph; there is still exactly one
+implementation in the application.
+
+### 12.3 Current-season resolution
+
+The Calendar branch root stays season-agnostic (`/calendar`). The season is
+resolved locally from `currentSeasonProvider`, a stream over
+`SeasonRepository.watchCurrentSeason()`:
+
+- no year is ever hardcoded;
+- a season transition re-points the screen at the new season's resources; the
+  previous season's rows and metadata stay in Drift, simply unwatched;
+- a transient loss of connectivity never clears an already-resolved season;
+- with no season resolvable **and** no calendar stored, the screen shows a
+  controlled, retryable state rather than throwing. It only claims the season is
+  unresolvable once an application run has actually finished trying.
+
+### 12.4 Relevant-event resolution
+
+`resolveRelevantEvent` (`lib/features/shared/domain/relevant_event.dart`) is the
+single rule shared by Home, the Calendar screen and `CalendarDao.nextEvent`, so
+the three can never disagree. It is pure and takes an injected clock.
+
+1. An event **in progress** wins — either the server says so, or today falls
+   inside its `[startDate, endDate]` window.
+2. Otherwise the earliest still-eligible event dated on or after today, with
+   `round` as the stable tie-breaker.
+3. Otherwise none.
+
+**Cancelled** events are never relevant. **Completed** events are never
+upcoming. **Postponed** events stay eligible while they still carry a date on or
+after today — they remain on the calendar, only moved. Missing or malformed
+dates make an event ineligible for the date rules; they never throw.
+
+### 12.5 Calendar presentation states
+
+`computeCalendarState` is pure and independently testable. Materialization is
+read from the persisted `resource_sync_metadata` row (`lastSuccessAt != null`),
+matching `SyncedRepository.collectionRepresentation` — **never** inferred from
+the number of events. So:
+
+- a successfully synchronised but **empty** calendar is `CalendarEmpty`, a real
+  state with its own copy, never a loader and never an error;
+- a calendar that has never synchronised and has no events is `CalendarLoading`
+  (or `CalendarFirstLoadError` once a failure has been reported);
+- cached events always win: `CalendarReady` keeps its rows through a refresh and
+  through a refresh failure, which is reported as a non-blocking notice.
+
+Note the one honest consequence of ETag isolation (ADR 0014): after a first-use
+bootstrap, `calendar:<season>` has no metadata of its own, so a season with
+**zero** events reads as loading until the calendar endpoint itself syncs on the
+next foreground or manual run. A season with events renders immediately.
+
+### 12.6 Grand Prix detail and results ownership
+
+Detail and results stay **feature-owned and on demand** (§11.8); neither is
+routed through the application planner.
+
+- `GrandPrixController` issues at most **one** detail refresh for
+  `grand-prix:<season>:<round>` when a valid route opens. The notifier is built
+  once per provider lifetime, so a widget rebuild cannot produce a second
+  request. Disposal cancels the in-flight request, releasing the repository's
+  per-key slot so a later visit retries cleanly.
+- `GrandPrixResultsController` owns `grand-prix-results:<season>:<round>` and is
+  driven by **eligibility**, never by a timer.
+- Rendering never waits for either request: both local streams are subscribed
+  immediately and cached content is visible while a request runs.
+- The two are independent: a result failure never replaces valid detail with a
+  full-screen error, and a detail failure never erases cached detail or cached
+  results.
+
+### 12.7 Result eligibility and cached-result precedence
+
+- Stored classifications make the resource eligible, so entering the screen
+  revalidates them **conditionally, exactly once**.
+- With nothing stored, the event's own `hasResults` decides: an upcoming event
+  with `hasResults == false` never asks for a classification that does not exist.
+- A detail refresh that flips `hasResults` from `false` to `true` triggers
+  exactly one result request; no further local emission repeats it.
+- A failed automatic attempt is **not** retried automatically — the user's retry
+  action calls the result controller directly.
+- **Cached results always win.** Once a document with entries is stored it is
+  rendered regardless of what a later compact or detail `hasResults` flag says.
+  A stored document with `status = unavailable` and no entries is not a
+  classification and does not count as cached results.
+
+### 12.8 Freshness presentation
+
+Calendar, Grand Prix detail and the result section each read **their own**
+record; ETags and freshness are never combined.
+
+- Calendar and result freshness come from `resource_sync_metadata` via
+  `evaluateResourceFreshness`, which applies exactly the same rule as
+  `evaluateFreshness` — there is one freshness policy, not two.
+- Grand Prix detail freshness comes from the persisted snapshot it already
+  carries.
+- Stale or failed states show a discreet notice **alongside** the cached
+  content, never instead of it, and never claim the device is offline merely
+  because one request failed. There is no connectivity polling and no
+  `/v1/status` call before a feature refresh.
+- A `304` writes no domain rows, so no stream re-emits and no visible content
+  changes.
+
+### 12.9 Phase 7B hand-off
+
+- Standings is season-scoped core (§11.8) and must follow the Calendar pattern:
+  no refresh on controller creation, mirror the coordinator for
+  `standings:drivers:<season>` / `standings:constructors:<season>`, and use
+  `manualCoreRefreshProvider` for a user-initiated refresh.
+- Driver, constructor and circuit **detail** are on-demand and must follow the
+  Grand Prix pattern: one request per opened route, cancellation on dispose,
+  cached content preserved through failures.
+- Reuse `currentSeasonProvider`, `resourceSyncStateProvider`,
+  `resourceRefreshStatus` and `evaluateResourceFreshness`; do not add a second
+  result, error or state-management pattern.
