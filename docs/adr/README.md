@@ -27,3 +27,5 @@ GridView reconstruction.
 | [0011](0011-typed-conditional-http-results.md) | Typed conditional HTTP results | Accepted |
 | [0012](0012-304-with-missing-local-data-recovery.md) | Recovering from a 304 with missing local data | Accepted |
 | [0013](0013-per-resource-refresh-deduplication.md) | Per-resource refresh deduplication | Accepted |
+| [0014](0014-bootstrap-atomic-persistence-and-metadata-isolation.md) | Bootstrap atomic persistence and metadata isolation | Accepted |
+| [0015](0015-application-synchronization-policy.md) | Application startup, foreground and manual synchronization policy | Accepted |

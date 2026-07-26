@@ -352,3 +352,93 @@ flutter test tool/staging_smoke.dart `
 It uses only public GET routes and a throwaway on-disk database, synchronizes a
 few resources, closes/reopens the database, and confirms local counts and an
 ETag fingerprint survived — printing no response bodies and using no admin token.
+
+## Bootstrap & application synchronization orchestration (Phase 6B2)
+
+The application-level policy is tested end to end without a Worker, network,
+admin token or device (in-memory SQLite, plus temporary on-disk files for the
+persistence suites):
+
+- `test/data/repositories/bootstrap_repository_test.dart` — bootstrap as one
+  conditional resource: an empty database plus a `200` materializes every
+  contract-defined family; success metadata and the ETag persist under
+  `bootstrap` only, and **no** individual resource key acquires metadata or a
+  fabricated ETag; equal is idempotent, older is rejected, a missing
+  `sourceUpdatedAt` is invalid — all preserving the cache; one invalid family
+  rolls back every other bootstrap change (domain rows *and* success metadata);
+  a transport failure keeps the cache and the validator; a valid `304` makes one
+  request and rewrites no domain rows; a `304` with no recorded bootstrap
+  representation retries once unconditionally; a valid *empty* bootstrap stays
+  materialized and needs no retry; compact merges never erase a driver
+  biography, a constructor's nationality/country/media, a circuit's physical
+  facts and lap record, detail-synced sessions or the official name, or stored
+  race results; unrelated seasons are untouched; stable identities are not
+  duplicated; a contract-permitted Home with no featured event still
+  materializes.
+- `test/sync/sync_resource_parser_test.dart` — every canonical key round-trips to
+  its typed resource; unknown prefixes, wrong segment counts, non-numeric or
+  out-of-range seasons/rounds, malformed stable ids and additive future keys all
+  resolve to an unsupported resource (never an exception, never a deletion); the
+  automatic-core versus on-demand inventory is asserted key by key.
+- `test/sync/sync_planner_test.dart` — the due rule (null `lastSuccessAt`,
+  `serverStale`, `staleAfter == now`, `staleAfter > now`, no fallback TTL, a
+  missing metadata row); no usable cache plans bootstrap and nothing beside it; a
+  usable cache never forces bootstrap; a failed bootstrap recovers with season
+  context + first screen only; a manual run ignores due eligibility; deterministic
+  stage and resource order; details, historical and unrelated seasons excluded;
+  the content manifest plannable without season context; no hardcoded season.
+- `test/sync/app_sync_coordinator_test.dart` — startup runs once and the initial
+  `resumed` never duplicates it; an empty cache requests bootstrap **only**; a
+  failed bootstrap resolves the season once then Home, with no compensating
+  fan-out; a local season survives a remote season failure; automatic runs
+  refresh only due resources and never sweep details; a malformed stored key
+  cannot crash a run and its row is left alone; stages keep dependency order;
+  independent resources overlap but never exceed the injected limit (4, and a
+  stricter 2); one failure never blocks independent resources; a rate-limited
+  resource is not retried inside the run; manual refreshes non-due core
+  resources while still sending the persisted ETags; two foreground triggers
+  coalesce into one run; repeated manual taps queue exactly one forced follow-up;
+  cancellation stops scheduling, is never reported as success, releases the
+  repository in-flight slots and leaves a later run able to retry; no raw
+  exception, DTO or transport object reaches the state.
+- `test/sync/season_transition_test.dart` — a new current season is adopted while
+  every previous-season row and metadata entry survives; the new season's core
+  resources have no metadata and are treated as never synchronized; a new season
+  with no usable Home cache prefers bootstrap over a fan-out; no year is
+  hardcoded.
+- `test/sync/sync_providers_test.dart` — every dependency is override-friendly;
+  one database instance backs the whole graph; the aggregate state provider
+  needs no database of its own; the coordinator publishes into it; disposing the
+  scope cancels the run in flight; the manual entry point needs no
+  `BuildContext`; the startup run happens after the first frame; rebuilds never
+  trigger synchronization; only a genuine background → resumed transition does
+  (a transient `inactive` does not); no `BuildContext` is retained.
+- `test/app/startup_non_blocking_test.dart` — the navigation shell is built while
+  a never-completing bootstrap is in flight; an empty first launch shows the
+  structured shell rather than a blocking splash; cached Home renders before a
+  delayed response completes; startup does not request every v1 endpoint at once;
+  the run starts only after the shell is on screen.
+- `test/sync/sync_persistence_test.dart` (temporary on-disk database) — a
+  first-use bootstrap survives close/reopen with its ETag and freshness; a
+  returning launch renders cached Home with zero network calls; a foreground pass
+  after reopen sends the persisted validators; a failed refresh preserves cached
+  content and reports a typed partial result; a valid empty collection stays
+  valid across a reopen; and no synchronized core screen needs live network after
+  a successful bootstrap.
+- `test/application/home_controller_test.dart` — Home does **not** launch its own
+  refresh on creation (startup ownership moved to the coordinator), while its
+  loading/ready/stale/first-load-error/retry behaviour is unchanged.
+
+Optional manual staging orchestration smoke (non-CI): `tool/staging_smoke.dart`
+also contains a first-use bootstrap → reopen → returning-revalidation pass. It
+self-skips without a base URL and requires an explicit remote data source:
+
+```powershell
+flutter test tool/staging_smoke.dart `
+  --dart-define=DATA_SOURCE=remote `
+  --dart-define=API_BASE_URL=https://gridview-api-staging.sejuma18.workers.dev
+```
+
+It uses only public GET routes, a throwaway on-disk database and no admin token,
+and prints only counts, safe failure categories and redacted ETag fingerprints.
+CI never depends on staging availability.

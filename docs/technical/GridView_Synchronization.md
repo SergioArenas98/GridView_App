@@ -332,6 +332,339 @@ fixture configuration) is proven in
 Phase 6B1 owns the local **due/stale query**
 (`SyncMetadataDao.readDueResources` / `watchDueResources`) and every per-resource
 refresh; it wires **no** cross-resource orchestration, foreground policy,
-scheduling or background jobs. Phase 6B2 will read the due-resource query and
-drive refreshes through these repositories (e.g. bootstrap on first launch, then
-foreground/stale-driven refresh), reusing the coordinator's per-key dedup.
+scheduling or background jobs. Phase 6B2 (§11) reads the due-resource query and
+drives refreshes through these repositories, reusing the coordinator's per-key
+dedup.
+
+One Phase 6B2 change reaches back into this layer: the repository refresh
+methods' low-level `bypassValidator` flag (previously `forceRefresh`) is named to
+say exactly what it does — drop the stored `If-None-Match`. Application-level
+"force" means *eligibility*, never a validator bypass (§11.9), and the two must
+never be confused. Repository refresh methods also accept an optional
+`RemoteCancellation` so an application-level run can abort what it started.
+
+---
+
+## 11. Phase 6B2 — bootstrap and application synchronization orchestration
+
+Phase 6B2 adds the cross-resource policy and the application lifecycle
+orchestration on top of the Phase 6B1 repositories:
+
+```
+local Drift cache
+  -> immediate application render
+  -> bootstrap when first-use data is absent
+  -> deterministic due-resource plan
+  -> bounded repository refreshes
+  -> Drift stream updates
+  -> automatic foreground revalidation
+  -> manual refresh entry point
+```
+
+See ADR 0014 (bootstrap persistence and metadata isolation) and ADR 0015
+(startup/foreground/manual policy) for the decisions behind this section.
+
+### 11.1 Ownership
+
+`AppSyncCoordinator` (`lib/features/sync/application/`) is the single
+application-level synchronization boundary. It owns:
+
+- first-use bootstrap policy;
+- current-season resolution;
+- due-resource planning;
+- the startup run, the foreground run and the manual current-season refresh;
+- cross-resource priority and dependency ordering;
+- aggregate run state;
+- cancellation of an application-level run.
+
+It owns **none** of: DTO parsing, HTTP response handling, ETag persistence, the
+snapshot-conflict comparison, per-resource domain writes, or feature
+presentation state. Those stay in Phase 6B1.
+
+`HomeController` no longer starts a refresh when it is created. Automatic
+startup/foreground refresh of Home belongs to the coordinator; the controller
+mirrors the coordinator's Home outcome and keeps `refresh()` for the user's
+explicit retry. Grand Prix detail keeps its on-demand refresh when the detail
+page is opened.
+
+### 11.2 Bootstrap as a conditional resource
+
+`BootstrapRepository` / `BootstrapRepositoryImpl` treats `GET /v1/bootstrap` as
+one conditional resource under `ResourceKey.bootstrap()` (`bootstrap`), running
+through the same `SyncedRepository` pipeline as everything else.
+
+**Transaction boundary.** `ResourceSync.applySnapshot` wraps the conflict
+decision, the whole domain write and the success metadata in one transaction:
+
+| Outcome | Domain rows | Metadata |
+|---|---|---|
+| Newer accepted `200` | all families applied | full success metadata + ETag |
+| Equal revision | untouched (idempotent) | validation recorded |
+| Older / contract-invalid | untouched | safe conflict category |
+| `304` | untouched | validation only |
+| Any failure (family or metadata) | **all rolled back** | safe failure category |
+
+**Families persisted** (exactly what OpenAPI `BootstrapData` defines): season
+metadata, calendar summaries, season driver summaries + entries, season
+constructor summaries + entries, circuit summaries, driver standings,
+constructor standings, and the Home snapshot.
+
+### 11.3 Metadata and ETag isolation
+
+Bootstrap is **one** HTTP representation with **one** ETag, so:
+
+- its ETag and provenance are persisted only under `ResourceKey.bootstrap()`;
+- `home`, `calendar:<season>`, `standings:*`, `drivers:*`, `constructors:*`,
+  `circuits:*` and `content:manifest` are **not** created, marked revalidated, or
+  given invented `generatedAt` / `sourceUpdatedAt` / `staleAfter` /
+  `contentVersion` values;
+- the payload's `contentVersion` / `mediaVersion` are informational echoes and
+  drive no local write — writing them under `content:manifest` would forge that
+  resource's metadata.
+
+Each individual endpoint acquires its own metadata only when its own
+representation is refreshed. Sending a validator the server never issued for a
+URL would make the next conditional request a lie.
+
+### 11.4 Compact-data merge rules
+
+Bootstrap must never downgrade richer local detail data. Every write is either a
+**partial-identity upsert** (only the columns the summary carries; an omitted
+optional field is left out of the companion, never written as null) or a
+**season-scoped replacement** of a collection the contract defines as complete
+for that season.
+
+| Bootstrap family | Write | Preserves |
+|---|---|---|
+| Season | `setCurrentSeason` / `upsertSeason` | other seasons' rows and data |
+| Calendar | `replaceCalendar` (authoritative for the season) | detail-synced sessions, `officialName`, media on surviving events; other seasons |
+| Circuit summaries | `upsertCircuitSummaries` (never deletes) | coordinates, length, corner count, direction, first-GP year, lap record, media |
+| Season drivers | identity upsert + `replaceDriverSeasonEntries` | biography, given/family name, nationality, birth, media |
+| Season constructors | identity upsert + `replaceConstructorSeasonEntries` | nationality, country, biography, media |
+| Standings | `replaceDriverStandings` / `replaceConstructorStandings` | competitor identities; the other table |
+| Home | `writeHomeSnapshot` (skipped when the contract-permitted `featuredEvent` is absent) | detail-synced event data |
+
+Results are never written or deleted by bootstrap. Removing an event from the
+authoritative season calendar does cascade that event's own child rows — that is
+referential integrity, not bootstrap deleting data outside its contract.
+
+Constructor line-ups are derived from the season's driver entries, so a
+summary's `driverLineup` is deliberately ignored (Phase 6A ownership).
+
+### 11.5 First-use cache predicate
+
+```
+hasUsableFirstScreenCache = currentSeason != null
+                         && homeFeaturedSeason == currentSeason
+```
+
+A locally resolvable current season, and a renderable Home read model **for that
+season**. Nothing more: requiring the calendar, standings or the explore
+collections would turn a perfectly renderable returning launch into a forced
+first-use bootstrap. A Home snapshot left over from last season does not count.
+
+### 11.6 Startup policy
+
+1. Open local services and Drift.
+2. Render the shell and any cached Home data.
+3. Start synchronization **after the first frame** (a post-frame callback).
+4. The local database stays the only UI read source; successful repository
+   transactions reach the UI through Drift streams.
+
+**No usable cache.** Bootstrap is the first and only remote resource attempted.
+On success or a valid `304` the run ends there — no immediate fan-out to the
+individual resources. On failure: the shell stays usable, partial caches are
+preserved, there is no loop, and the run recovers with the **minimal** plan
+(season context + first screen). With no local season, the public current-season
+resource is attempted once and the minimum Home resource is refreshed; all
+collections are never launched to compensate.
+
+**Usable cache.** Render it immediately, do not force bootstrap merely because
+the process restarted, resolve the season locally, and refresh only the eligible
+resources the server's metadata says are due. No client-side TTL is invented.
+
+### 11.7 Due-resource planner
+
+`SyncPlanner.plan` is pure and deterministic: same inputs, same typed plan, no
+clock, no I/O.
+
+Inputs: trigger, supplied UTC now, locally resolved season, expected core keys,
+persisted `ResourceSyncState` values, the persisted due-query result, the
+usable-cache flag, whether bootstrap is materialized, and whether bootstrap has
+already been attempted in this run.
+
+**Due semantics** (`isResourceDue`, the in-memory twin of the SQL predicate):
+
+- `lastSuccessAt` is null → due;
+- `serverStale` is true → due;
+- `staleAfter` non-null and `<= now` → due (the `<=` boundary is deliberate);
+- otherwise not due. No fallback TTL when `staleAfter` is absent.
+
+**Missing metadata rows.** `readDueResources` can only return rows that exist, so
+the planner merges the expected canonical keys (built through `ResourceKey`,
+never string concatenation) with the query's result and treats a missing row as
+never synchronized.
+
+**Resource-key dispatch.** `SyncResourceParser` is the only place a resource key
+is taken apart. It maps canonical keys to typed `SyncResource` values, validating
+season (1950–2100), round (1–30) and stable ids. Parsing is total: an unknown
+prefix, a wrong segment count or a malformed scope becomes
+`UnsupportedSyncResource`, which is never refreshed, never crashes a run, and
+whose metadata row is never deleted — so an additive key type from a newer build
+survives a downgrade. `ResourceRefreshDispatcher` is the single typed registry
+mapping those values to repository calls.
+
+### 11.8 Automatic versus on-demand resources
+
+**Automatic core** (startup + foreground):
+
+| Resource | Key |
+|---|---|
+| Current season | `season:current` |
+| Season metadata | `season:<year>` |
+| Home | `home:current` |
+| Calendar | `calendar:<year>` |
+| Driver standings | `standings:drivers:<year>` |
+| Constructor standings | `standings:constructors:<year>` |
+| Season drivers | `drivers:<year>` |
+| Season constructors | `constructors:<year>` |
+| Season circuits | `circuits:<year>` |
+| Content manifest | `content:manifest` |
+
+**On demand** (never swept automatically; refreshed when their feature/detail is
+opened or explicitly requested): `grand-prix:<year>:<round>`,
+`grand-prix-results:<year>:<round>`, `driver:<id>:<year>`,
+`constructor:<id>:<year>`, `circuit:<id>:<year>`, and any historical-season
+resource. Their metadata remains stored and queryable.
+
+Bootstrap itself is not part of the automatic core set: it is scheduled only by
+the first-use policy.
+
+### 11.9 Stages, concurrency and manual refresh
+
+| Stage | Resources |
+|---|---|
+| 0 — Bootstrap | only when first-use policy requires it |
+| 1 — Season context | current season, season metadata |
+| 2 — First screen | Home, calendar |
+| 3 — Championship | driver standings, constructor standings |
+| 4 — Explore & content | season drivers, constructors, circuits, content manifest |
+
+Stages execute in order; resources inside a stage are independent and run
+concurrently, bounded by an **injected limit of 4**
+(`kDefaultSyncConcurrency` / `syncConcurrencyProvider`). This is not a global
+HTTP lock: whole runs are serialised, resources within a stage are not. A Home
+failure never blocks the calendar or a later stage; one standings failure never
+erases or blocks the other. Home appears at most once per plan, and
+`GET /v1/status` is never used as a connectivity preflight.
+
+A changed current season is resolved before season-scoped commands are built: the
+coordinator executes stage 1, re-reads the local current season, and re-plans
+when it changed.
+
+**Manual refresh** (`AppSyncCoordinator.refreshNow`, exposed for Phase 7 through
+`refreshCurrentSeasonCore(ref)`) refreshes the current-season core set, ignoring
+due eligibility for that run, while **keeping** conditional requests and every
+persisted ETag. It uses the same stage order, the same concurrency limit and the
+same per-key deduplication, returns an aggregate typed result that represents
+partial success, and needs no `BuildContext`. Forcing eligibility is not a
+validator bypass; `bypassValidator` remains a separate low-level repository
+option that ordinary refreshes never use.
+
+### 11.10 Foreground lifecycle and coalescing
+
+`AppSyncLifecycleScope` is mounted once at the composition root (in
+`bootstrap()`), never by a screen, and holds no `BuildContext` beyond its own
+`State`.
+
+- The startup run is scheduled in a post-frame callback and runs exactly once.
+- The initial `resumed` notification never duplicates it.
+- Only a genuine background → resumed transition triggers a foreground run; a
+  transient `inactive` (an iOS overlay) does not.
+- Rebuilds never trigger synchronization.
+- Freshness is queried at the moment the run begins.
+- Pause, hidden, detached and provider-scope disposal cancel the active run.
+- There is no periodic timer, background isolate or scheduled job, and no
+  synchronization continues while the app is deliberately backgrounded.
+
+**Coalescing.** One run owns automatic orchestration at a time:
+
+| Situation | Behaviour |
+|---|---|
+| Automatic trigger during an active run | joins it; no second run |
+| Repeated foreground triggers | one run |
+| Manual trigger during an active run | queues **exactly one** forced follow-up |
+| Repeated manual taps while that follow-up is pending | still one follow-up |
+| Cancellation | resolves pending work; never blocks a future run |
+
+**Cancellation** stops scheduling new resource commands, aborts in-flight
+requests through the run's `RemoteCancellation` (releasing each repository's
+in-flight slot), and reports the run as cancelled — never as a success. A later
+resume or manual refresh starts a fresh run normally.
+
+### 11.11 Aggregate run state
+
+In memory only; `resource_sync_metadata` remains the durable record for each
+remote representation, and no run state is persisted to a table.
+
+| State | Meaning |
+|---|---|
+| `AppSyncIdle` | no run has started |
+| `AppSyncRunning` | in progress, with trigger and optional current stage |
+| `AppSyncCompleted` | finished; `fullSuccess` separates a clean run from partial failures, with success/failure counts |
+| `AppSyncCancelled` | cancelled; never reported as success |
+| `AppSyncSeasonContextUnavailable` | no season context could be resolved; season-scoped work was skipped |
+
+Per-resource outcomes carry the canonical key, a category (`applied`,
+`unchanged`, `skipped`, `failed`, `cancelled`) and — for a failure — the typed
+`ApiFailureKind` only. No exception, Dio response, DTO, Drift row, server body or
+configuration value is reachable from the state.
+
+`unchanged` deliberately covers "`304`", "idempotent" and "older revision
+rejected" together: Phase 6B1's `RefreshResult` records precisely which case
+occurred (`RefreshApplication`), and the application-level report collapses them
+into the one fact a consumer needs — the cache was preserved and nothing was
+written.
+
+### 11.12 Failure and retry semantics
+
+- A failed resource preserves its valid domain cache and its ETag.
+- Other independent resources continue; no transaction spans unrelated resources.
+- No coordinator-level retry loop; a rate-limited resource is not immediately
+  retried (transport `Retry-After` behaviour is unchanged).
+- The single unconditional `304` recovery stays repository-owned (ADR 0012).
+- A configuration failure surfaces as a typed `configuration` failure; production
+  never falls back to fixtures.
+- Offline first launch leaves the shell and local sections usable; offline
+  returning launch continues to render cached Home.
+- A partial bootstrap failure rolls back the complete bootstrap transaction.
+- Safe failure categories may be logged; response bodies and credentials are not.
+
+### 11.13 Season transitions
+
+No active year is hardcoded anywhere. When the current season changes:
+
+- all previous-season data (calendars, standings, entities, details) and its
+  metadata are preserved untouched;
+- new automatic plans switch to the new season;
+- the new `Season` is persisted through the existing repository transaction;
+- the new season's core resources have no metadata, so they are treated as
+  missing/due rather than fresh;
+- a new season with no usable Home cache prefers bootstrap;
+- stable identities are not mutated because seasonal branding changed;
+- there is no global database reset.
+
+### 11.14 Phase 7 hand-off
+
+- Screens continue to read **Drift streams**; content never comes from a refresh
+  result.
+- The application coordinator owns **startup and foreground** refresh of the core
+  current-season resources listed in §11.8.
+- Feature controllers call the manual/core refresh entry point
+  (`refreshCurrentSeasonCore(ref)` / `AppSyncCoordinator.refreshNow`) for a
+  user-initiated refresh — they must **not** start their own refresh when they
+  are created.
+- Detail controllers own **on-demand** detail refresh (Grand Prix, results,
+  driver, constructor, circuit) when their page is opened.
+- Feature controllers must not recreate lifecycle policy: no
+  `WidgetsBindingObserver`, no timers, no second startup run.

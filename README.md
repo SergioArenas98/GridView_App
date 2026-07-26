@@ -53,8 +53,17 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   v1 resource has a typed conditional remote call (`If-None-Match`/`304`/ETags)
   and a domain repository that writes atomically to Drift through a shared
   sync writer, with per-resource refresh deduplication. See
-  `docs/technical/GridView_Synchronization.md` §10 and ADRs 0011–0013. Phase 6B2
-  (bootstrap + foreground orchestration) is not started.
+  `docs/technical/GridView_Synchronization.md` §10 and ADRs 0011–0013.
+- Phase 6B2 - bootstrap and application synchronization orchestration: done.
+  A single `AppSyncCoordinator` owns first-use bootstrap policy, deterministic
+  due-resource planning, staged and bounded refreshes, lifecycle-driven
+  foreground revalidation, a manual current-season refresh and run cancellation.
+  Rendering never waits for the network: the shell and any cached content render
+  first, then one post-frame run begins. `GET /v1/bootstrap` is a single
+  conditional resource persisted in one transaction, and its ETag is never
+  copied onto individual resources. See
+  `docs/technical/GridView_Synchronization.md` §11 and ADRs 0014-0015. Phase 7
+  (feature screens) is not started.
 
 Home's next-Grand-Prix hero, weekend sessions and freshness, and the Grand Prix
 detail screen are now driven by a **Drift-backed** local store: content renders

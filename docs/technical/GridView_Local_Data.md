@@ -167,7 +167,7 @@ Rules enforced by structure and review:
 | DAO | Writes | Reads (local queries) |
 |---|---|---|
 | `VerticalSliceDao` | `writeHomeSnapshot`, `writeGrandPrixSnapshot` | `watchHome`, `watchGrandPrix` |
-| `CalendarDao` | `upsertCircuits` (full circuit + media) | `calendar`, `nextEvent`, `latestCompletedEvent`, `currentSession`, `circuitsForSeason`, `circuitDetail` |
+| `CalendarDao` | `upsertCircuits` (full circuit + media), `upsertCircuitSummaries` (compact identity only), `replaceCalendar` | `calendar`, `nextEvent`, `latestCompletedEvent`, `currentSession`, `circuitsForSeason`, `circuitDetail` |
 | `CompetitorDao` | `upsertDrivers`, `upsertConstructors`, `replaceDriverSeasonEntries`, `replaceConstructorSeasonEntries` | `driversForSeason`, `constructorsForSeason`, `driverDetail`, `teamDetail` |
 | `StandingsDao` | `replaceDriverStandings`, `replaceConstructorStandings` | `driverStandingsForSeason`, `constructorStandingsForSeason`, `driverStanding`, `constructorStanding` |
 | `ResultsDao` | `writeRaceResult` | `raceResult`, `resultsForGrandPrix` |
@@ -238,3 +238,42 @@ whole apply is atomic). See `GridView_Synchronization.md` §10.
 The local **due/stale query** (`SyncMetadataDao.readDueResources` /
 `watchDueResources`) is unchanged from Phase 6A and is the seam Phase 6B2's
 orchestration consumes.
+
+## 8. Phase 6B2 — bootstrap writes and compact-merge safety
+
+Phase 6B2 adds **no** schema change: schema stays **v2**, the database file stays
+`gridview_v2.sqlite`, and both exported schema snapshots are byte-identical to
+Phase 6A. It adds two write helpers and tightens two existing companions so that
+compact aggregate data can never downgrade richer detail data.
+
+**New DAO writes**
+
+- **`CalendarDao.upsertCircuitSummaries`** — the compact `CircuitSummary` upsert
+  bootstrap needs: id and name, plus locality/country code **only when the
+  summary carries them**. It never deletes (a circuit may host another season's
+  events) and never touches the detail-owned coordinates, length, corner count,
+  direction, first-Grand-Prix year, lap record or media.
+
+**Tightened companions** (an omitted optional field is not a deletion
+instruction)
+
+- `VerticalSliceDao`'s snapshot circuit companion no longer writes
+  `locality` / `country` / `countryCode` as null when a *summary* omits them, so
+  a Home snapshot cannot blank a detail-synced circuit's geography.
+- The same companion no longer writes a null `officialName`, so a Home snapshot's
+  summary event cannot erase the official name a Grand Prix detail sync stored.
+
+**Bootstrap's transaction.** `BootstrapRepositoryImpl` composes the season,
+calendar, circuit summaries, driver/constructor identities and season entries,
+both standings tables and the Home snapshot into the **single** transaction
+`ResourceSync.applySnapshot` opens (nested DAO transactions become savepoints).
+Any failure — in a family or in the metadata write — rolls back the whole
+bootstrap. See `GridView_Synchronization.md` §11.2–§11.4 and ADR 0014.
+
+**Metadata.** Only the `bootstrap` row is written by a bootstrap sync. No other
+`resource_sync_metadata` row is created or updated, so no individual resource
+inherits an ETag or a freshness window the server never issued for its URL.
+
+**Aggregate run state is not persisted.** `resource_sync_metadata` remains the
+only durable synchronization record; the application-level run state lives in
+memory and adds no table.

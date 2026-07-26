@@ -74,10 +74,23 @@ flutter run --flavor staging --dart-define=APP_ENV=staging \
 # controlled configuration failure, never fixtures.
 flutter build appbundle --flavor production --dart-define=APP_ENV=production \
   --dart-define=API_BASE_URL=https://api.gridview.example
+
+# Manual (non-CI) staging orchestration smoke: first-use bootstrap, close/reopen
+# and a returning conditional-revalidation pass over public routes only.
+flutter test tool/staging_smoke.dart \
+  --dart-define=DATA_SOURCE=remote \
+  --dart-define=API_BASE_URL=https://gridview-api-staging.example.workers.dev
 ```
 
 None of this touches Android flavors, application IDs or Gradle configuration —
 it is purely Dart build-time defines.
+
+Whatever the environment, the data source only decides *where* representations
+come from. *When* they are fetched is the application synchronization
+coordinator's decision (`docs/technical/GridView_Synchronization.md` §11): the
+shell and any cached content always render first, one run starts after the first
+frame, and refreshes follow server-provided freshness rather than any
+environment-specific interval.
 
 ## Firebase
 
