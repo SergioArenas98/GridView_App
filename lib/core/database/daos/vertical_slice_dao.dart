@@ -68,28 +68,61 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
 
   Future<HomeView?> _composeHome(SnapshotRow? snap) async {
     if (snap == null) return null;
+    // `focusSeason` is the snapshot's materialization signal: a Home
+    // representation always knows which season it describes.
     final int? season = snap.focusSeason;
-    final int? round = snap.focusRound;
-    if (season == null || round == null) return null;
+    if (season == null) return null;
 
-    final GrandPrixRow? gpRow = await _grandPrixRow(season, round);
-    if (gpRow == null) return null;
-
-    final List<Session> sessions = await _sessionsFor(gpRow.id);
     final SeasonRow? seasonRow = await (select(
       seasons,
     )..where((Seasons s) => s.year.equals(season))).getSingleOrNull();
+    final DataFreshness freshness = _freshnessFrom(snap);
+
+    final int? round = snap.focusRound;
+    if (round == null) {
+      // A season with nothing scheduled yet: a valid, materialized Home with no
+      // featured event — never treated as a missing representation.
+      return HomeView(
+        seasonYear: season,
+        season: seasonRow == null ? null : _seasonFrom(seasonRow),
+        freshness: freshness,
+      );
+    }
+
+    final GrandPrixRow? gpRow = await _grandPrixRow(season, round);
+    // A focus round whose event row is gone is an inconsistent cache, not an
+    // empty season.
+    if (gpRow == null) return null;
+
+    final List<Session> sessions = await _sessionsFor(gpRow.id);
     final CircuitRow? circuitRow = await (select(
       circuits,
     )..where((Circuits c) => c.id.equals(gpRow.circuitId))).getSingleOrNull();
 
     return HomeView(
+      seasonYear: season,
       season: seasonRow == null ? null : _seasonFrom(seasonRow),
       featured: _grandPrixFrom(gpRow, sessions),
       circuit: circuitRow == null ? null : _circuitFrom(circuitRow),
-      freshness: _freshnessFrom(snap),
+      freshness: freshness,
     );
   }
+
+  /// The season of the materialized Home representation, or `null` when no Home
+  /// snapshot has been materialized.
+  ///
+  /// This is the persisted materialization signal the application-level
+  /// first-use policy reads. It is deliberately independent of whether the
+  /// season has a featured event: an empty season that synchronised
+  /// successfully is materialized.
+  Future<int?> homeSnapshotSeason() async =>
+      (await _snapshotByKey(homeSnapshotKey))?.focusSeason;
+
+  /// Streaming form of [homeSnapshotSeason].
+  Stream<int?> watchHomeSnapshotSeason() =>
+      (select(snapshots)..where((Snapshots s) => s.key.equals(homeSnapshotKey)))
+          .watchSingleOrNull()
+          .map((SnapshotRow? row) => row?.focusSeason);
 
   /// Streams the Grand Prix detail aggregate for (season, round). Emits `null`
   /// until the Grand Prix has been cached. Re-emits whenever its row is written
@@ -167,18 +200,25 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
   /// `generatedAt`; rejected when the incoming snapshot is older than the
   /// cached one. Featured sessions are upserted additively — the detail sync
   /// owns authoritative full-session replacement.
+  /// [homeSeason] is the season the snapshot represents and is what makes it
+  /// *materialized*; [featured] may be null for a season with nothing scheduled
+  /// yet, which is a valid Home rather than a missing one.
   Future<SnapshotWriteOutcome> writeHomeSnapshot({
+    required int homeSeason,
     Season? season,
-    required GrandPrix featured,
+    GrandPrix? featured,
     Circuit? featuredCircuit,
     required DataFreshness freshness,
     bool force = false,
   }) {
     return transaction(() async {
-      validateSeason(featured.season);
-      validateRound(featured.round);
-      validateSlug(featured.id, field: 'grand prix id');
-      validateSlug(featured.circuitId, field: 'circuitId');
+      validateSeason(homeSeason, field: 'home season');
+      if (featured != null) {
+        validateSeason(featured.season);
+        validateRound(featured.round);
+        validateSlug(featured.id, field: 'grand prix id');
+        validateSlug(featured.circuitId, field: 'circuitId');
+      }
       if (season != null) validateSeason(season.year, field: 'season year');
 
       // [force] is used when an outer coordinator (ResourceSync against
@@ -196,32 +236,38 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
       if (season != null) {
         await into(seasons).insertOnConflictUpdate(_seasonCompanion(season));
       }
-      await _ensureSeason(featured.season);
+      await _ensureSeason(homeSeason);
 
-      if (featuredCircuit != null) {
+      if (featured != null) {
+        await _ensureSeason(featured.season);
+        if (featuredCircuit != null) {
+          await into(
+            circuits,
+          ).insertOnConflictUpdate(_circuitCompanion(featuredCircuit));
+        } else {
+          await _ensureCircuit(featured.circuitId);
+        }
+
         await into(
-          circuits,
-        ).insertOnConflictUpdate(_circuitCompanion(featuredCircuit));
-      } else {
-        await _ensureCircuit(featured.circuitId);
+          grandPrixEvents,
+        ).insertOnConflictUpdate(_grandPrixCompanion(featured));
+
+        for (final Session s in featured.sessions) {
+          await into(sessions).insertOnConflictUpdate(
+            _sessionCompanion(s, featured.id, _canonicalOrder(s.type)),
+          );
+        }
       }
 
-      await into(
-        grandPrixEvents,
-      ).insertOnConflictUpdate(_grandPrixCompanion(featured));
-
-      for (final Session s in featured.sessions) {
-        await into(sessions).insertOnConflictUpdate(
-          _sessionCompanion(s, featured.id, _canonicalOrder(s.type)),
-        );
-      }
-
+      // The snapshot row records the season unconditionally — that is the
+      // materialization signal — and the focus round only when there is a
+      // featured event to point at.
       await into(snapshots).insertOnConflictUpdate(
         _snapshotCompanion(
           homeSnapshotKey,
           freshness,
-          focusSeason: featured.season,
-          focusRound: featured.round,
+          focusSeason: homeSeason,
+          focusRound: featured?.round,
         ),
       );
       return SnapshotWriteOutcome.applied;

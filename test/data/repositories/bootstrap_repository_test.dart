@@ -80,7 +80,7 @@ void main() {
         await h.bootstrap.refreshBootstrap();
 
         for (final String key in <String>[
-          ResourceKey.home(),
+          ResourceKey.home(2026),
           ResourceKey.currentSeason(),
           ResourceKey.season(2026),
           ResourceKey.calendar(2026),
@@ -530,18 +530,32 @@ void main() {
 
       final HomeView? home = await db.verticalSliceDao.watchHome().first;
       expect(home, isNotNull);
-      expect(home!.featured.season, 2026);
+      expect(home!.featured!.season, 2026);
     });
 
-    test('a bootstrap with no featured event still materializes', () async {
+    test('a season with no featured event still materializes a Home '
+        'representation', () async {
       api.bootstrap = (_) =>
           bootstrapModified(bootstrapEnvelope(home: emptyHomeJson()));
 
       final RefreshResult result = await h.bootstrap.refreshBootstrap();
       expect(result, isA<RefreshSuccess>());
-      expect(await db.verticalSliceDao.countHomeSnapshot(), 0);
       expect(await h.bootstrap.isMaterialized(), isTrue);
       expect(await db.calendarDao.countEventsForSeason(2026), 5);
+
+      // The Home snapshot is written and records its season — that is what
+      // makes it materialized. It is deliberately not inferred from the
+      // presence of a featured event.
+      expect(await db.verticalSliceDao.countHomeSnapshot(), 1);
+      expect(await db.verticalSliceDao.homeSnapshotSeason(), 2026);
+      expect(await h.home.materializedSeason(), 2026);
+
+      // The local read model is a well-defined empty Home, not null.
+      final HomeView? view = await db.verticalSliceDao.watchHome().first;
+      expect(view, isNotNull);
+      expect(view!.seasonYear, 2026);
+      expect(view.featured, isNull);
+      expect(view.hasFeaturedEvent, isFalse);
     });
 
     test(

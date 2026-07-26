@@ -119,6 +119,22 @@ final Provider<bool> usesMockDataProvider = Provider<bool>(
   (Ref ref) => ref.watch(remoteApiProvider).usesMockData,
 );
 
+/// Resolves the locally stored current-season year, or null when none is
+/// stored.
+///
+/// Season-scoped feature controllers call this to build canonical resource keys
+/// (Home, calendar, standings, …) — a controller never reaches into the season
+/// repository itself. It is deliberately a **function** rather than an async
+/// provider: there is no loading state to thread through, and a widget test can
+/// supply a season with `overrideWithValue` without constructing the database.
+typedef CurrentSeasonResolver = Future<int?> Function();
+
+final Provider<CurrentSeasonResolver> currentSeasonResolverProvider =
+    Provider<CurrentSeasonResolver>((Ref ref) {
+      final SeasonRepository seasons = ref.watch(seasonRepositoryProvider);
+      return () async => (await seasons.readCurrentSeason())?.year;
+    });
+
 /// The transactional resource-sync writer (conflict rule + metadata), bound to
 /// the single application database.
 final Provider<ResourceSync> resourceSyncProvider = Provider<ResourceSync>(

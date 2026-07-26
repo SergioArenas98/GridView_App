@@ -9,7 +9,7 @@ void main() {
       ResourceKey.bootstrap(): const BootstrapSyncResource(),
       ResourceKey.currentSeason(): const CurrentSeasonSyncResource(),
       ResourceKey.season(2026): const SeasonMetadataSyncResource(2026),
-      ResourceKey.home(): const HomeSyncResource(),
+      ResourceKey.home(2026): const HomeSyncResource(2026),
       ResourceKey.calendar(2026): const CalendarSyncResource(2026),
       ResourceKey.driverStandings(2026): const DriverStandingsSyncResource(
         2026,
@@ -53,7 +53,7 @@ void main() {
       'season:1800',
       'season:2200',
       'home',
-      'home:2026',
+      'home:current',
       'calendar:2026:extra',
       'standings:teams:2026',
       'standings:drivers',
@@ -85,7 +85,7 @@ void main() {
       for (final String key in <String>[
         ResourceKey.currentSeason(),
         ResourceKey.season(2026),
-        ResourceKey.home(),
+        ResourceKey.home(2026),
         ResourceKey.calendar(2026),
         ResourceKey.driverStandings(2026),
         ResourceKey.constructorStandings(2026),

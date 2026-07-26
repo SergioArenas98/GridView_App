@@ -9,6 +9,7 @@ import '../../../core/time/session_time.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/providers.dart';
+import '../../shared/domain/entities/grand_prix.dart';
 import '../../shared/domain/entities/home_view.dart';
 import '../../shared/presentation/domain_status.dart';
 import '../../shared/presentation/widgets/mock_data_banner.dart';
@@ -58,9 +59,9 @@ class _HomeContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final HomeView view = state.view;
-    final int seasonYear = view.season?.year ?? view.featured.season;
+    final int seasonYear = view.seasonYear;
     final bool showMock = ref.watch(usesMockDataProvider);
-    final String? statusLabel = eventStatusLabel(l10n, view.featured.status);
+    final GrandPrix? featured = view.featured;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -87,57 +88,71 @@ class _HomeContent extends ConsumerWidget {
         ],
         const SizedBox(height: GvSpacing.xl),
 
-        // Next Grand Prix hero.
-        GvScreenSection(
-          title: l10n.homeNextGrandPrix,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              GvHeroCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: <Widget>[
-                    if (statusLabel != null)
-                      GvStatusChip(
-                        label: statusLabel,
-                        tone: toneForEventStatus(view.featured.status),
+        // Next Grand Prix hero — or, for a season with nothing scheduled yet, a
+        // clearly-labelled empty state. An empty season is valid cached data,
+        // never a loading or error condition.
+        if (featured == null)
+          GvScreenSection(
+            title: l10n.homeNextGrandPrix,
+            child: GvEmptyState(
+              title: l10n.homeNoEventsTitle,
+              message: l10n.homeNoEventsMessage,
+              icon: Icons.event_busy_outlined,
+            ),
+          )
+        else ...<Widget>[
+          GvScreenSection(
+            title: l10n.homeNextGrandPrix,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                GvHeroCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: <Widget>[
+                      if (eventStatusLabel(l10n, featured.status)
+                          case final String statusLabel)
+                        GvStatusChip(
+                          label: statusLabel,
+                          tone: toneForEventStatus(featured.status),
+                        ),
+                      const SizedBox(height: GvSpacing.sm),
+                      Text(featured.name, style: GvTypography.pageTitle),
+                      const SizedBox(height: GvSpacing.xxs),
+                      Text(
+                        _heroSubtitle(context, view, featured),
+                        style: GvTypography.bodyM,
                       ),
-                    const SizedBox(height: GvSpacing.sm),
-                    Text(view.featured.name, style: GvTypography.pageTitle),
-                    const SizedBox(height: GvSpacing.xxs),
-                    Text(
-                      _heroSubtitle(context, view),
-                      style: GvTypography.bodyM,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: GvSpacing.sm),
-              GvPrimaryButton(
-                label: l10n.homeOpenGrandPrix,
-                icon: Icons.arrow_forward,
-                onPressed: () => context.openEntity(
-                  RoutePaths.grandPrix(
-                    season: view.featured.season,
-                    round: view.featured.round,
+                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: GvSpacing.xl),
-
-        // Weekend sessions / status.
-        if (view.featured.sessions.isNotEmpty)
-          GvScreenSection(
-            title: l10n.homeSessions,
-            child: SessionList(
-              sessions: view.featured.sessions,
-              eventTimeZone: view.featured.timezone,
+                const SizedBox(height: GvSpacing.sm),
+                GvPrimaryButton(
+                  label: l10n.homeOpenGrandPrix,
+                  icon: Icons.arrow_forward,
+                  onPressed: () => context.openEntity(
+                    RoutePaths.grandPrix(
+                      season: featured.season,
+                      round: featured.round,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(height: GvSpacing.xl),
+
+          // Weekend sessions / status.
+          if (featured.sessions.isNotEmpty)
+            GvScreenSection(
+              title: l10n.homeSessions,
+              child: SessionList(
+                sessions: featured.sessions,
+                eventTimeZone: featured.timezone,
+              ),
+            ),
+        ],
         const SizedBox(height: GvSpacing.xl),
 
         // Out-of-slice sections: non-authoritative placeholder (never fictional
@@ -154,13 +169,17 @@ class _HomeContent extends ConsumerWidget {
     );
   }
 
-  String _heroSubtitle(BuildContext context, HomeView view) {
+  String _heroSubtitle(
+    BuildContext context,
+    HomeView view,
+    GrandPrix featured,
+  ) {
     final SessionTimePresenter presenter = SessionTimePresenter(
       locale: Localizations.localeOf(context).languageCode,
     );
     final String? dateRange = presenter.formatDateRange(
-      view.featured.startDate,
-      view.featured.endDate,
+      featured.startDate,
+      featured.endDate,
     );
     return <String?>[
       view.circuit?.name,

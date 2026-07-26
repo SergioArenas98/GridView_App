@@ -71,7 +71,10 @@ class ResourceRefreshDispatcher {
         year,
         cancellation: cancellation,
       ),
-      HomeSyncResource() => home.refreshHome(cancellation: cancellation),
+      HomeSyncResource(:final int year) => home.refreshHome(
+        season: year,
+        cancellation: cancellation,
+      ),
       CalendarSyncResource(:final int year) => calendar.refreshCalendar(
         year,
         cancellation: cancellation,

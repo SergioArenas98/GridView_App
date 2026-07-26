@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' show QueryRow;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/core/api/dto/circuit_dto.dart';
@@ -15,6 +16,8 @@ import 'package:gridview/features/shared/domain/entities/resource_key.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/sync/domain/app_sync_state.dart';
 import 'package:gridview/features/sync/domain/sync_plan.dart';
+import 'package:gridview/features/sync/domain/sync_resource.dart';
+import 'package:gridview/features/sync/domain/sync_resource_parser.dart';
 
 import '../support/bootstrap_fixture.dart';
 import '../support/scripted_api.dart';
@@ -64,6 +67,19 @@ void scriptCoreEndpoints(ScriptedGridViewApi api, {int season = 2026}) {
     'content/manifest.json',
     (Object? d) => ContentManifestDto.fromJson(d! as Map<String, dynamic>),
   );
+}
+
+/// Every `resource_sync_metadata` key that looks like a Home resource, however
+/// it is shaped. Used to prove that only canonical `home:<year>` rows exist.
+Future<List<String>> homeMetadataKeys(GridViewDatabase db) async {
+  final List<QueryRow> rows = await db
+      .customSelect('SELECT resource_key FROM resource_sync_metadata')
+      .get();
+  return rows
+      .map((QueryRow r) => r.read<String>('resource_key'))
+      .where((String k) => k == 'home' || k.startsWith('home:'))
+      .toList(growable: false)
+    ..sort();
 }
 
 void main() {
@@ -139,15 +155,82 @@ void main() {
     });
   });
 
-  group('bootstrap failure recovery', () {
+  group('bootstrap failure recovery — Home is season-scoped', () {
+    test('no local season and a failed current-season lookup makes zero Home '
+        'requests', () async {
+      api.bootstrap = (_) => const RemoteFailure<BootstrapDataDto>(
+        ApiFailure(kind: ApiFailureKind.serverUnavailable),
+      );
+      api.currentSeason = (_) => const RemoteFailure<SeasonDto>(
+        ApiFailure(kind: ApiFailureKind.networkUnavailable),
+      );
+      api.home = (_) => modifiedFromFixture<HomeDataDto>(
+        'home/pre-event.json',
+        (Object? d) => HomeDataDto.fromJson(d! as Map<String, dynamic>),
+      );
+
+      await h.coordinator.start();
+
+      expect(api.callsFor('bootstrap'), 1, reason: 'no retry loop');
+      expect(api.callsFor('currentSeason'), 1, reason: 'attempted once');
+      // Home is season-scoped: with no season there is no canonical key, so
+      // it is never requested — not even unscoped.
+      expect(api.callsFor('home'), 0);
+      // No compensating fan-out either.
+      expect(api.callsFor('driverStandings'), 0);
+      expect(api.callsFor('seasonDrivers'), 0);
+      expect(api.callsFor('calendar'), 0);
+      expect(h.coordinator.state, isA<AppSyncSeasonContextUnavailable>());
+
+      // And no Home metadata of any shape was created.
+      expect(await homeMetadataKeys(db), isEmpty);
+    });
+
     test(
-      'a failed bootstrap with no season resolves the season once, then Home',
+      'a locally resolved season makes Home use that exact canonical year',
       () async {
+        await seedUsableCache();
+        // Keep the stored current season but drop the Home representation, so
+        // the next run is a first-use run again.
+        await db.customStatement('DELETE FROM snapshots');
+        scriptCoreEndpoints(api);
         api.bootstrap = (_) => const RemoteFailure<BootstrapDataDto>(
           ApiFailure(kind: ApiFailureKind.serverUnavailable),
         );
         api.currentSeason = (_) => const RemoteFailure<SeasonDto>(
           ApiFailure(kind: ApiFailureKind.networkUnavailable),
+        );
+
+        await h.coordinator.onForeground();
+
+        expect(api.callsFor('home'), 1);
+        expect(await homeMetadataKeys(db), <String>[ResourceKey.home(2026)]);
+        // The recovery plan is the minimum first screen, not the whole set.
+        expect(api.callsFor('calendar'), 0);
+        expect(api.callsFor('driverStandings'), 0);
+      },
+    );
+
+    test(
+      'a remotely resolved season makes Home use the returned year',
+      () async {
+        api.bootstrap = (_) => const RemoteFailure<BootstrapDataDto>(
+          ApiFailure(kind: ApiFailureKind.serverUnavailable),
+        );
+        api.currentSeason = (_) => modifiedFromJson<SeasonDto>(
+          <String, dynamic>{
+            'data': seasonJson(2031),
+            'meta': <String, dynamic>{
+              'apiVersion': '1',
+              'schemaVersion': 1,
+              'season': 2031,
+              'generatedAt': '2026-07-18T12:00:00Z',
+              'sourceUpdatedAt': '2026-07-18T11:55:00Z',
+              'requestId': 'req-test-season',
+            },
+          },
+          (Object? d) => SeasonDto.fromJson(d! as Map<String, dynamic>),
+          etag: 'W/"season-2031"',
         );
         api.home = (_) => modifiedFromFixture<HomeDataDto>(
           'home/pre-event.json',
@@ -156,42 +239,33 @@ void main() {
 
         await h.coordinator.start();
 
-        expect(api.callsFor('bootstrap'), 1, reason: 'no retry loop');
         expect(api.callsFor('currentSeason'), 1);
         expect(api.callsFor('home'), 1);
-        // No compensating fan-out.
-        expect(api.callsFor('driverStandings'), 0);
-        expect(api.callsFor('seasonDrivers'), 0);
-        expect(api.callsFor('calendar'), 0);
-        expect(h.coordinator.state, isA<AppSyncSeasonContextUnavailable>());
+        // Exactly one Home metadata row, under the resolved year.
+        expect(await homeMetadataKeys(db), <String>[ResourceKey.home(2031)]);
       },
     );
 
-    test('a local season survives a remote current-season failure', () async {
-      await seedUsableCache();
-      // Break the cached Home so the next run is a first-use run again, but
-      // keep the stored current season.
-      await db.customStatement('DELETE FROM snapshots');
-      api.bootstrap = (_) => const RemoteFailure<BootstrapDataDto>(
-        ApiFailure(kind: ApiFailureKind.serverUnavailable),
-      );
-      api.currentSeason = (_) => const RemoteFailure<SeasonDto>(
-        ApiFailure(kind: ApiFailureKind.networkUnavailable),
-      );
-      scriptCoreEndpoints(api);
-      api.currentSeason = (_) => const RemoteFailure<SeasonDto>(
-        ApiFailure(kind: ApiFailureKind.networkUnavailable),
-      );
+    test(
+      'no unscoped or "current" Home metadata can ever be created',
+      () async {
+        await seedUsableCache();
+        scriptCoreEndpoints(api);
+        await h.coordinator.refreshNow();
 
-      await h.coordinator.onForeground();
-
-      // The season-scoped work still happened, using the locally stored season.
-      expect(api.callsFor('calendar'), 1);
-      expect(api.callsFor('season'), 1);
-      final AppSyncState state = h.coordinator.state;
-      expect(state, isA<AppSyncCompleted>());
-      expect((state as AppSyncCompleted).fullSuccess, isFalse);
-    });
+        final List<String> keys = await homeMetadataKeys(db);
+        expect(keys, isNotEmpty);
+        for (final String key in keys) {
+          expect(key, isNot('home'));
+          expect(key, isNot('home:current'));
+          expect(
+            SyncResourceParser.parse(key),
+            isA<HomeSyncResource>(),
+            reason: '$key must be a canonical season-scoped Home key',
+          );
+        }
+      },
+    );
   });
 
   group('due eligibility', () {
@@ -412,7 +486,7 @@ void main() {
       expect(state.failureCount, 1);
       expect(state.successCount, greaterThan(5));
       final ResourceSyncOutcome home = state.outcomes.firstWhere(
-        (ResourceSyncOutcome o) => o.resourceKey == ResourceKey.home(),
+        (ResourceSyncOutcome o) => o.resourceKey == ResourceKey.home(2026),
       );
       expect(home.kind, ResourceSyncOutcomeKind.failed);
       expect(home.failure, ApiFailureKind.serverUnavailable);

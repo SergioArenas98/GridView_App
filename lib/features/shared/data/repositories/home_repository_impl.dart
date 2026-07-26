@@ -2,7 +2,6 @@
 import '../../../../core/api/dto/event_dto.dart';
 import '../../../../core/api/dto/view_dto.dart';
 import '../../../../core/database/daos/vertical_slice_dao.dart';
-import '../../../../core/database/entity_validation.dart';
 import '../../domain/entities/grand_prix.dart';
 import '../../domain/entities/home_view.dart';
 import '../../domain/entities/resource_key.dart';
@@ -39,53 +38,65 @@ class HomeRepositoryImpl extends SyncedRepository implements HomeRepository {
   Future<HomeView?> readHome() => _local.watchHome().first;
 
   @override
+  Future<int?> materializedSeason() => _local.homeSnapshotSeason();
+
+  @override
+  Stream<int?> watchMaterializedSeason() => _local.watchHomeSnapshotSeason();
+
+  @override
   Future<RefreshResult> refreshHome({
+    required int season,
     bool bypassValidator = false,
     RemoteCancellation? cancellation,
   }) {
     return refreshResource<HomeDataDto>(
-      key: ResourceKey.home(),
-      scope: ResourceScope.none,
-      fetch: ({String? etag, RemoteCancellation? cancellation}) =>
-          remote.fetchHome(etag: etag, cancellation: cancellation),
+      key: ResourceKey.home(season),
+      scope: ResourceScope(season: season),
+      fetch: ({String? etag, RemoteCancellation? cancellation}) => remote
+          .fetchHome(season: season, etag: etag, cancellation: cancellation),
       metaOf: (RemoteModified<HomeDataDto> m) => RemoteSnapshotMeta.fromMeta(
         m.meta,
         etag: m.etag,
         serverStale: m.data.freshness.stale,
       ),
-      writeDomain: _writeHome,
+      writeDomain: (RemoteModified<HomeDataDto> m) => _writeHome(m, season),
+      // The representation exists only when the materialized Home belongs to
+      // *this* season: a snapshot left over from another season cannot validate
+      // a `304` for this one.
       hasLocalRepresentation: entityRepresentation(
-        () async => (await _local.countHomeSnapshot()) > 0,
+        () async => (await _local.homeSnapshotSeason()) == season,
       ),
       bypassValidator: bypassValidator,
       cancellation: cancellation,
     );
   }
 
-  Future<void> _writeHome(RemoteModified<HomeDataDto> modified) async {
+  Future<void> _writeHome(
+    RemoteModified<HomeDataDto> modified,
+    int season,
+  ) async {
     final HomeDataDto data = modified.data;
     final GrandPrixSummaryDto? featuredDto = data.featuredEvent;
-    if (featuredDto == null) {
-      // A Home snapshot with no featured event cannot drive the view. Thrown
-      // inside the transaction so it rolls back; the pipeline maps this to a
-      // typed invalidResponse failure that preserves the cache.
-      throw const InvalidEntityException(
-        'Home snapshot has no featured event.',
-      );
-    }
-    final List<Session> sessions = data.featuredSession == null
-        ? const <Session>[]
-        : <Session>[sessionFromDto(data.featuredSession!)];
-    final GrandPrix featured = grandPrixFromSummaryDto(
-      featuredDto,
-      sessions: sessions,
-    );
+    // A Home with no featured event is a season with nothing scheduled yet: a
+    // valid, materialized representation, not an invalid payload. The snapshot
+    // still records its season, which is what makes it materialized.
+    final GrandPrix? featured = featuredDto == null
+        ? null
+        : grandPrixFromSummaryDto(
+            featuredDto,
+            sessions: data.featuredSession == null
+                ? const <Session>[]
+                : <Session>[sessionFromDto(data.featuredSession!)],
+          );
     // The outer pipeline already applied the conflict rule against
     // resource_sync_metadata, so force the snapshot-table write (its own gate
     // only guards direct DAO callers).
     await _local.writeHomeSnapshot(
+      homeSeason: season,
       featured: featured,
-      featuredCircuit: circuitFromSummaryDto(featuredDto),
+      featuredCircuit: featuredDto == null
+          ? null
+          : circuitFromSummaryDto(featuredDto),
       freshness: freshnessFromMeta(modified.meta),
       force: true,
     );

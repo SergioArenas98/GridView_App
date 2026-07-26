@@ -47,11 +47,10 @@ abstract final class SyncResourceParser {
             : SeasonMetadataSyncResource(year);
 
       case 'home':
-        // Only the current-season Home is a known application resource; an
-        // explicitly season-scoped Home key is not one this build dispatches.
-        return parts.length == 2 && parts[1] == 'current'
-            ? const HomeSyncResource()
-            : UnsupportedSyncResource(key);
+        // Home is season-scoped. A legacy or unscoped `home:current` key is
+        // deliberately NOT dispatchable: without a year there is no validator
+        // to read and no metadata row to write.
+        return _seasonScoped(key, parts, HomeSyncResource.new);
 
       case 'calendar':
         return _seasonScoped(key, parts, CalendarSyncResource.new);

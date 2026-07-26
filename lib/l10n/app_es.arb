@@ -103,6 +103,8 @@
   "homeErrorTitle": "No se puede cargar Inicio",
   "homeMoreComingTitle": "Próximamente",
   "homeMoreComingMessage": "Las clasificaciones y los resultados del campeonato llegarán en una próxima actualización.",
+  "homeNoEventsTitle": "Todavía no hay carreras programadas",
+  "homeNoEventsMessage": "El calendario de esta temporada aún no se ha publicado. El inicio se completará en cuanto lo esté.",
 
   "errorOffline": "Parece que no tienes conexión.",
   "errorTimeout": "Se agotó el tiempo de conexión.",

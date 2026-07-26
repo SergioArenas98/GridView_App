@@ -198,34 +198,36 @@ class BootstrapRepositoryImpl extends SyncedRepository
           .toList(growable: false),
     );
 
-    // 7. Home snapshot. Unlike `GET /v1/home`, the bootstrap contract permits a
-    //    Home block with no featured event (a season with nothing scheduled
-    //    yet), so an absent featured event is not an invalid payload here — it
-    //    simply leaves the Home snapshot unwritten rather than failing the whole
-    //    bootstrap.
-    await _writeHomeFromBootstrap(data.home, modified);
+    // 7. Home snapshot. A season with nothing scheduled yet carries no featured
+    //    event, which the bootstrap contract explicitly permits: the snapshot is
+    //    still written and still records its season, so an empty season counts
+    //    as a materialized Home rather than a missing one.
+    await _writeHomeFromBootstrap(data.home, modified, year);
   }
 
   Future<void> _writeHomeFromBootstrap(
     HomeDataDto home,
     RemoteModified<BootstrapDataDto> modified,
+    int season,
   ) async {
     final GrandPrixSummaryDto? featuredDto = home.featuredEvent;
-    if (featuredDto == null) return;
-
-    final List<Session> sessions = home.featuredSession == null
-        ? const <Session>[]
-        : <Session>[sessionFromDto(home.featuredSession!)];
-    final GrandPrix featured = grandPrixFromSummaryDto(
-      featuredDto,
-      sessions: sessions,
-    );
+    final GrandPrix? featured = featuredDto == null
+        ? null
+        : grandPrixFromSummaryDto(
+            featuredDto,
+            sessions: home.featuredSession == null
+                ? const <Session>[]
+                : <Session>[sessionFromDto(home.featuredSession!)],
+          );
     // The outer pipeline already applied the conflict rule against
     // resource_sync_metadata for the bootstrap representation, so the
     // snapshots-table gate (which only guards direct DAO callers) is forced.
     await _snapshots.writeHomeSnapshot(
+      homeSeason: season,
       featured: featured,
-      featuredCircuit: circuitFromSummaryDto(featuredDto),
+      featuredCircuit: featuredDto == null
+          ? null
+          : circuitFromSummaryDto(featuredDto),
       freshness: freshnessFromMeta(modified.meta),
       force: true,
     );

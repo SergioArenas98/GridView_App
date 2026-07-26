@@ -147,6 +147,10 @@ Future<GoRouter> pumpApp(
         clockProvider.overrideWithValue(() => now),
         appEnvironmentProvider.overrideWithValue(environment),
         usesMockDataProvider.overrideWithValue(mockData),
+        // Home is season-scoped. Widget tests replace the data layer with
+        // fakes, so the season it renders is supplied directly rather than
+        // resolved from a database these tests never open.
+        currentSeasonResolverProvider.overrideWithValue(() async => 2026),
       ],
       child: StartupRefreshStandIn(
         child: TestApp(

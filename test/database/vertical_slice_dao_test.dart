@@ -97,6 +97,7 @@ void main() {
       'applies season, circuit, grand prix, session and freshness atomically',
       () async {
         final SnapshotWriteOutcome outcome = await dao.writeHomeSnapshot(
+          homeSeason: 2026,
           season: season2026(),
           featured: belgianGrandPrix(),
           featuredCircuit: circuitSpa(),
@@ -114,6 +115,7 @@ void main() {
 
     test('repeated identical sync is idempotent (no duplicates)', () async {
       Future<void> sync() => dao.writeHomeSnapshot(
+        homeSeason: 2026,
         season: season2026(),
         featured: belgianGrandPrix(),
         featuredCircuit: circuitSpa(),
@@ -131,6 +133,7 @@ void main() {
 
     test('preserves null optional values', () async {
       await dao.writeHomeSnapshot(
+        homeSeason: 2026,
         featured: belgianGrandPrix(), // officialName is null
         featuredCircuit: circuitSpa(),
         freshness: freshness(generatedAt: t0),
@@ -302,6 +305,7 @@ void main() {
       expect(emissions, <HomeView?>[null]);
 
       await dao.writeHomeSnapshot(
+        homeSeason: 2026,
         season: season2026(),
         featured: belgianGrandPrix(),
         featuredCircuit: circuitSpa(),
@@ -311,13 +315,14 @@ void main() {
 
       expect(emissions.last, isA<HomeView>());
       final HomeView view = emissions.last!;
-      expect(view.featured.id, '2026-belgian-grand-prix');
+      expect(view.featured!.id, '2026-belgian-grand-prix');
       expect(view.season?.year, 2026);
       await sub.cancel();
     });
 
     test('watchGrandPrix emits the detail view with its circuit', () async {
       await dao.writeHomeSnapshot(
+        homeSeason: 2026,
         season: season2026(),
         featured: belgianGrandPrix(),
         featuredCircuit: circuitSpa(),

@@ -119,7 +119,11 @@ DataFreshness freshness({
 );
 
 /// A fresh-by-default Home view aggregate for widget tests.
-HomeView homeViewFixture({DataFreshness? withFreshness}) => HomeView(
+HomeView homeViewFixture({
+  DataFreshness? withFreshness,
+  int seasonYear = 2026,
+}) => HomeView(
+  seasonYear: seasonYear,
   featured: belgianGrandPrix(sessions: <Session>[raceSessionBelgian()]),
   circuit: circuitSpa(),
   freshness:

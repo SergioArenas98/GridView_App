@@ -134,7 +134,7 @@ void main() {
     expect(api.callsFor('driverStandings'), 0);
 
     final HomeView? home = await db.verticalSliceDao.watchHome().first;
-    expect(home?.featured.season, 2027);
+    expect(home?.featured?.season, 2027);
   });
 
   test('no season year is hardcoded anywhere in the plan', () async {

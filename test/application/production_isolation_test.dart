@@ -229,7 +229,7 @@ void main() {
       addTearDown(c.dispose);
 
       final HomeRepository home = c.read(homeRepositoryProvider);
-      final RefreshResult result = await home.refreshHome();
+      final RefreshResult result = await home.refreshHome(season: 2026);
       expect(result, isA<RefreshFailure>());
       expect(
         (result as RefreshFailure).failure.kind,

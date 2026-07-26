@@ -375,6 +375,13 @@ persistence suites):
   race results; unrelated seasons are untouched; stable identities are not
   duplicated; a contract-permitted Home with no featured event still
   materializes.
+- `test/sync/first_screen_cache_test.dart` — the usable-cache predicate as
+  materialization, not featured-event presence: a current season whose Home has
+  no events is usable; no materialized Home is not; a Home belonging to another
+  season is not; an empty season yields a defined local empty read model
+  (`HomeView.featured == null`, `seasonYear` set); and on a temporary on-disk
+  database a valid empty Home survives close/reopen so the returning launch does
+  **not** bootstrap again.
 - `test/sync/sync_resource_parser_test.dart` — every canonical key round-trips to
   its typed resource; unknown prefixes, wrong segment counts, non-numeric or
   out-of-range seasons/rounds, malformed stable ids and additive future keys all
@@ -388,9 +395,12 @@ persistence suites):
   stage and resource order; details, historical and unrelated seasons excluded;
   the content manifest plannable without season context; no hardcoded season.
 - `test/sync/app_sync_coordinator_test.dart` — startup runs once and the initial
-  `resumed` never duplicates it; an empty cache requests bootstrap **only**; a
-  failed bootstrap resolves the season once then Home, with no compensating
-  fan-out; a local season survives a remote season failure; automatic runs
+  `resumed` never duplicates it; an empty cache requests bootstrap **only**;
+  after a failed bootstrap Home is season-scoped throughout — no local season
+  plus a failed current-season lookup makes **zero** Home requests and finishes
+  as `AppSyncSeasonContextUnavailable`, a local season makes Home use that exact
+  canonical year, a remotely resolved season makes Home use the returned year,
+  and no unscoped or `home:current` metadata row can ever exist; automatic runs
   refresh only due resources and never sweep details; a malformed stored key
   cannot crash a run and its row is left alone; stages keep dependency order;
   independent resources overlap but never exceed the injected limit (4, and a

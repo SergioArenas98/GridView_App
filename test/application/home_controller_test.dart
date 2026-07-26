@@ -28,6 +28,9 @@ ProviderContainer _container(FakeGridViewApi api, DateTime now) {
       databaseProvider.overrideWithValue(db),
       remoteApiProvider.overrideWithValue(api),
       clockProvider.overrideWithValue(() => now),
+      // Home is season-scoped: its controller needs a resolved season before it
+      // can build the canonical `home:<year>` key.
+      currentSeasonResolverProvider.overrideWithValue(() async => 2026),
     ],
   );
   addTearDown(container.dispose);
@@ -83,7 +86,7 @@ void main() {
     await _settle();
     final HomeReady ready = c.read(homeStateProvider) as HomeReady;
     expect(ready.freshness, FreshnessState.stale);
-    expect(ready.view.featured.id, '2026-belgian-grand-prix');
+    expect(ready.view.featured!.id, '2026-belgian-grand-prix');
   });
 
   test(
@@ -116,6 +119,6 @@ void main() {
 
     final HomeReady ready = c.read(homeStateProvider) as HomeReady;
     expect(ready.refreshError?.kind, ApiFailureKind.serverUnavailable);
-    expect(ready.view.featured.id, '2026-belgian-grand-prix');
+    expect(ready.view.featured!.id, '2026-belgian-grand-prix');
   });
 }

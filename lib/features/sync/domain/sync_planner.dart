@@ -10,9 +10,9 @@ enum SyncPlanScope {
   /// one.
   bootstrapOnly,
 
-  /// The recovery plan after a failed bootstrap: season context plus the first
-  /// screen, and nothing else. Compensating for a failed bootstrap by launching
-  /// every collection is explicitly not the behaviour.
+  /// The recovery plan after a failed bootstrap: season context plus the
+  /// minimum Home resource, and nothing else. Compensating for a failed
+  /// bootstrap by launching every collection is explicitly not the behaviour.
   minimalFirstScreen,
 
   /// The normal plan: season context, first screen, championship, then the
@@ -89,9 +89,8 @@ abstract final class SyncPlanner {
       );
     }
 
-    final bool minimal = scope == SyncPlanScope.minimalFirstScreen;
-    final List<SyncPlanStage> stages = minimal
-        ? coreStages(season).take(2).toList(growable: false)
+    final List<SyncPlanStage> stages = scope == SyncPlanScope.minimalFirstScreen
+        ? _minimalStages(season)
         : coreStages(season);
 
     final List<SyncPlanStage> eligible = <SyncPlanStage>[
@@ -115,10 +114,11 @@ abstract final class SyncPlanner {
   ///
   /// This is the single definition of "what an automatic run covers": the
   /// planner filters it, and the coordinator reads the same list to decide which
-  /// metadata rows to load. A season-scoped resource is simply omitted when no
-  /// season context exists; the season-agnostic ones (current season, Home, the
-  /// content manifest) stay plannable so an unresolved season never leaves the
-  /// app with nothing to do.
+  /// metadata rows to load. A season-scoped resource — Home included — is simply
+  /// omitted when no season context exists, because there is no canonical key to
+  /// build. Only the genuinely season-agnostic resources (the current-season
+  /// lookup itself and the content manifest) stay plannable, so an unresolved
+  /// season leaves the run with season resolution to do and nothing else.
   ///
   /// Detail and historical resources are absent by design — they are refreshed
   /// on demand by whichever feature opens them.
@@ -128,7 +128,7 @@ abstract final class SyncPlanner {
       if (season != null) SeasonMetadataSyncResource(season),
     ]),
     SyncPlanStage(SyncStage.firstScreen, <SyncResource>[
-      const HomeSyncResource(),
+      if (season != null) HomeSyncResource(season),
       if (season != null) CalendarSyncResource(season),
     ]),
     SyncPlanStage(SyncStage.championship, <SyncResource>[
@@ -140,6 +140,23 @@ abstract final class SyncPlanner {
       if (season != null) SeasonConstructorsSyncResource(season),
       if (season != null) SeasonCircuitsSyncResource(season),
       const ContentManifestSyncResource(),
+    ]),
+  ];
+
+  /// The recovery stages after a failed bootstrap: season context, then the
+  /// **minimum** Home resource for the resolved season.
+  ///
+  /// Home is season-scoped, so with no season there is nothing to plan beyond
+  /// resolving one. The coordinator re-plans once stage 1 has resolved a season,
+  /// which is how Home is reached with the right canonical year — never through
+  /// an unscoped request whose metadata is assigned after the fact.
+  static List<SyncPlanStage> _minimalStages(int? season) => <SyncPlanStage>[
+    SyncPlanStage(SyncStage.seasonContext, <SyncResource>[
+      const CurrentSeasonSyncResource(),
+      if (season != null) SeasonMetadataSyncResource(season),
+    ]),
+    SyncPlanStage(SyncStage.firstScreen, <SyncResource>[
+      if (season != null) HomeSyncResource(season),
     ]),
   ];
 

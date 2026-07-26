@@ -455,13 +455,26 @@ summary's `driverLineup` is deliberately ignored (Phase 6A ownership).
 
 ```
 hasUsableFirstScreenCache = currentSeason != null
-                         && homeFeaturedSeason == currentSeason
+                         && materializedHomeSeason == currentSeason
 ```
 
-A locally resolvable current season, and a renderable Home read model **for that
-season**. Nothing more: requiring the calendar, standings or the explore
-collections would turn a perfectly renderable returning launch into a forced
-first-use bootstrap. A Home snapshot left over from last season does not count.
+A locally resolvable current season, and a **materialized Home representation
+for that season**. Nothing more: requiring the calendar, standings or the
+explore collections would turn a perfectly renderable returning launch into a
+forced first-use bootstrap, and a Home snapshot left over from last season does
+not count.
+
+Materialization is read from the persisted snapshot — `snapshots.focusSeason`
+for the `home` key, exposed as `HomeRepository.materializedSeason()` — and is
+**never** inferred from the presence of a featured Grand Prix. A current season
+whose Home legitimately has no scheduled events is a valid empty state and a
+usable cache: inferring materialization from a featured event would send such a
+season back through bootstrap on every single restart.
+
+The Home read model reflects this directly: `HomeView.featured` is nullable and
+`HomeView.seasonYear` always names the season the representation describes, so
+an empty season renders a defined empty Home rather than looking like a missing
+or still-loading one.
 
 ### 11.6 Startup policy
 
@@ -473,11 +486,21 @@ first-use bootstrap. A Home snapshot left over from last season does not count.
 
 **No usable cache.** Bootstrap is the first and only remote resource attempted.
 On success or a valid `304` the run ends there — no immediate fan-out to the
-individual resources. On failure: the shell stays usable, partial caches are
-preserved, there is no loop, and the run recovers with the **minimal** plan
-(season context + first screen). With no local season, the public current-season
-resource is attempted once and the minimum Home resource is refreshed; all
-collections are never launched to compensate.
+individual resources. On failure the shell stays usable, partial caches are
+preserved, there is no loop, and the run recovers with the **minimal** plan:
+season context, then the minimum Home resource for the resolved season.
+
+Because Home is season-scoped (§11.8), that recovery has a strict order:
+
+1. use a valid locally resolved current season when there is one;
+2. otherwise attempt the public current-season resource **exactly once**;
+3. only once a season is resolved, refresh Home for that exact year;
+4. if no season can be resolved, **do not call Home at all** — the run finishes
+   as `AppSyncSeasonContextUnavailable`;
+5. non-season-scoped work (the content manifest) may remain independently
+   eligible, but it never justifies an unscoped Home request.
+
+All collections are never launched to compensate for a failed bootstrap.
 
 **Usable cache.** Render it immediately, do not force bootstrap merely because
 the process restarted, resolve the season locally, and refresh only the eligible
@@ -522,7 +545,7 @@ mapping those values to repository calls.
 |---|---|
 | Current season | `season:current` |
 | Season metadata | `season:<year>` |
-| Home | `home:current` |
+| Home | `home:<year>` |
 | Calendar | `calendar:<year>` |
 | Driver standings | `standings:drivers:<year>` |
 | Constructor standings | `standings:constructors:<year>` |
@@ -539,6 +562,14 @@ resource. Their metadata remains stored and queryable.
 
 Bootstrap itself is not part of the automatic core set: it is scheduled only by
 the first-use policy.
+
+**Home is season-scoped.** The server serves a different Home per season, so its
+validator, provenance and attempt metadata belong to a specific year and its key
+is always `home:<year>`. There is deliberately **no** `home:current`, no unscoped
+key, no temporary key and no unconditional request whose metadata is assigned
+after the response: a caller that does not yet know the season cannot build a
+canonical key and must resolve the season first. `home:current` parses to an
+unsupported resource, so a legacy row can never be dispatched.
 
 ### 11.9 Stages, concurrency and manual refresh
 
@@ -560,7 +591,9 @@ erases or blocks the other. Home appears at most once per plan, and
 
 A changed current season is resolved before season-scoped commands are built: the
 coordinator executes stage 1, re-reads the local current season, and re-plans
-when it changed.
+when it changed. That re-plan is also how the bootstrap-failure recovery reaches
+Home with the right year — stage 1 resolves the season, the plan is rebuilt, and
+only then is `home:<year>` scheduled.
 
 **Manual refresh** (`AppSyncCoordinator.refreshNow`, exposed for Phase 7 through
 `refreshCurrentSeasonCore(ref)`) refreshes the current-season core set, ignoring

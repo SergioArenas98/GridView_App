@@ -286,6 +286,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'Las clasificaciones y los resultados del campeonato llegarán en una próxima actualización.';
 
   @override
+  String get homeNoEventsTitle => 'Todavía no hay carreras programadas';
+
+  @override
+  String get homeNoEventsMessage =>
+      'El calendario de esta temporada aún no se ha publicado. El inicio se completará en cuanto lo esté.';
+
+  @override
   String get errorOffline => 'Parece que no tienes conexión.';
 
   @override

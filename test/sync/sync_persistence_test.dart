@@ -92,7 +92,7 @@ void main() {
 
     final HomeView? home = await db.verticalSliceDao.watchHome().first;
     expect(home, isNotNull);
-    expect(home!.featured.season, 2026);
+    expect(home!.featured!.season, 2026);
     expect(
       api.calls,
       isEmpty,
@@ -126,9 +126,16 @@ void main() {
 
     // Everything is due again from the app's point of view only if the server
     // says so; force the run to prove the stored validator is sent.
+    final String? homeEtag = (await db.syncMetadataDao.read(
+      ResourceKey.home(2026),
+    ))?.etag;
+    expect(homeEtag, isNotNull);
+
     await h.coordinator.refreshNow();
     expect(api.lastEtag['calendar'], calendarEtag);
-    expect(api.lastEtag['home'], isNotNull);
+    // Home's validator comes from its own season-scoped row, never from an
+    // unscoped key.
+    expect(api.lastEtag['home'], homeEtag);
   });
 
   test('a failed foreground refresh preserves the cached content', () async {

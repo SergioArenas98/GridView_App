@@ -284,6 +284,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Championship standings and results arrive in a later update.';
 
   @override
+  String get homeNoEventsTitle => 'No races scheduled yet';
+
+  @override
+  String get homeNoEventsMessage =>
+      'The calendar for this season has not been published. Home will fill in as soon as it is.';
+
+  @override
   String get errorOffline => 'You appear to be offline.';
 
   @override

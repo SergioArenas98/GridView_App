@@ -4,7 +4,6 @@ import 'dart:math' as math;
 
 import '../../../core/database/daos/sync_metadata_dao.dart';
 import '../../shared/data/remote/remote_cancellation.dart';
-import '../../shared/domain/entities/home_view.dart';
 import '../../shared/domain/entities/season.dart';
 import '../../shared/domain/entities/sync_state.dart';
 import '../../shared/domain/refresh_result.dart';
@@ -297,7 +296,9 @@ class AppSyncCoordinator {
   }) async {
     final DateTime now = _now().toUtc();
     final int? season = await _localSeason();
-    final HomeView? home = await _home.readHome();
+    // The persisted materialization signal — never "does Home have a featured
+    // event". A season with nothing scheduled is materialized and usable.
+    final int? materializedHomeSeason = await _home.materializedSeason();
     final List<ResourceSyncState> due = await _metadata.readDueResources(now);
 
     final Map<String, ResourceSyncState?> metadata =
@@ -313,7 +314,7 @@ class AppSyncCoordinator {
         currentSeason: season,
         hasUsableFirstScreenCache: hasUsableFirstScreenCache(
           currentSeason: season,
-          homeFeaturedSeason: home?.featured.season,
+          materializedHomeSeason: materializedHomeSeason,
         ),
         bootstrapMaterialized: await _bootstrap.isMaterialized(),
         metadata: metadata,

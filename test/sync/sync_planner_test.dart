@@ -141,17 +141,21 @@ void main() {
       expect(plan.resourceKeys, isNot(contains(ResourceKey.bootstrap())));
     });
 
-    test('a failed bootstrap recovers with season context and the first screen '
-        'only', () {
+    test('a failed bootstrap recovers with season context and the minimum Home '
+        'resource only', () {
       final SyncPlan plan = SyncPlanner.plan(
         input(hasUsableFirstScreenCache: false, bootstrapAttempted: true),
       );
       expect(plan.resourceKeys, <String>[
         ResourceKey.currentSeason(),
         ResourceKey.season(2026),
-        ResourceKey.home(),
-        ResourceKey.calendar(2026),
+        ResourceKey.home(2026),
       ]);
+      expect(
+        plan.resourceKeys,
+        isNot(contains(ResourceKey.calendar(2026))),
+        reason: 'only the minimum Home resource, not the whole first screen',
+      );
       expect(
         plan.resourceKeys,
         isNot(contains(ResourceKey.driverStandings(2026))),
@@ -160,7 +164,22 @@ void main() {
     });
 
     test(
-      'with no season at all the recovery plan keeps the season-agnostic work',
+      'a locally resolved season makes the recovery Home use that exact year',
+      () {
+        final SyncPlan plan = SyncPlanner.plan(
+          input(
+            currentSeason: 2031,
+            hasUsableFirstScreenCache: false,
+            bootstrapAttempted: true,
+          ),
+        );
+        expect(plan.resourceKeys, contains(ResourceKey.home(2031)));
+        expect(plan.resourceKeys, isNot(contains(ResourceKey.home(2026))));
+      },
+    );
+
+    test(
+      'with no season at all the recovery plan only resolves the season',
       () {
         final SyncPlan plan = SyncPlanner.plan(
           input(
@@ -169,10 +188,10 @@ void main() {
             bootstrapAttempted: true,
           ),
         );
-        expect(plan.resourceKeys, <String>[
-          ResourceKey.currentSeason(),
-          ResourceKey.home(),
-        ]);
+        // Home is season-scoped: there is no canonical key to build, so it is
+        // not planned at all. The coordinator re-plans after stage 1 resolves a
+        // season.
+        expect(plan.resourceKeys, <String>[ResourceKey.currentSeason()]);
         expect(plan.seasonContextResolved, isFalse);
       },
     );
@@ -210,7 +229,7 @@ void main() {
       expect(plan.resourceKeys, <String>[
         ResourceKey.currentSeason(),
         ResourceKey.season(2026),
-        ResourceKey.home(),
+        ResourceKey.home(2026),
         ResourceKey.calendar(2026),
         ResourceKey.driverStandings(2026),
         ResourceKey.constructorStandings(2026),
@@ -230,7 +249,7 @@ void main() {
       expect(plan.resourceKeys.toSet(), <String>{
         ResourceKey.currentSeason(),
         ResourceKey.season(2026),
-        ResourceKey.home(),
+        ResourceKey.home(2026),
         ResourceKey.calendar(2026),
         ResourceKey.driverStandings(2026),
         ResourceKey.constructorStandings(2026),
@@ -275,7 +294,9 @@ void main() {
         input(trigger: SyncTrigger.manual),
       );
       expect(
-        plan.resourceKeys.where((String k) => k == ResourceKey.home()).length,
+        plan.resourceKeys
+            .where((String k) => k == ResourceKey.home(2026))
+            .length,
         1,
       );
     });
@@ -283,7 +304,7 @@ void main() {
     test('planning is deterministic for identical inputs', () {
       final SyncPlanInput i = input(
         trigger: SyncTrigger.foreground,
-        metadata: allFresh(2026)..remove(ResourceKey.home()),
+        metadata: allFresh(2026)..remove(ResourceKey.home(2026)),
       );
       expect(
         SyncPlanner.plan(i).resourceKeys,
@@ -306,7 +327,13 @@ void main() {
           input(trigger: SyncTrigger.manual, currentSeason: null),
         );
         expect(plan.resourceKeys, contains(ResourceKey.contentManifest()));
-        expect(plan.resourceKeys, contains(ResourceKey.home()));
+        // Home is season-scoped: without a season there is no canonical key, so
+        // it is not planned. Non-season-scoped work never justifies an unscoped
+        // Home request.
+        expect(
+          plan.resourceKeys.where((String k) => k.startsWith('home')),
+          isEmpty,
+        );
         expect(plan.seasonContextResolved, isFalse);
         for (final String key in plan.resourceKeys) {
           expect(key, isNot(contains('2026')));

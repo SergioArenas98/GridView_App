@@ -254,6 +254,20 @@ compact aggregate data can never downgrade richer detail data.
   events) and never touches the detail-owned coordinates, length, corner count,
   direction, first-Grand-Prix year, lap record or media.
 
+**Home snapshot materialization** (no schema change; existing nullable columns)
+
+- `snapshots.focusSeason` is now the Home representation's **materialization
+  signal** and is written unconditionally; `focusRound` is written only when
+  there is a featured event to point at. `writeHomeSnapshot` therefore takes a
+  required `homeSeason` and a **nullable** `featured`, so a season with nothing
+  scheduled is a valid, materialized Home rather than an unwritable one.
+- `VerticalSliceDao.homeSnapshotSeason()` / `watchHomeSnapshotSeason()` expose
+  that signal; the application-level first-use policy reads it instead of
+  inferring materialization from a featured Grand Prix.
+- `watchHome()` composes a `HomeView` with a null `featured` for such a season,
+  and a `focusRound` whose event row is missing still yields `null` — an
+  inconsistent cache, not an empty season.
+
 **Tightened companions** (an omitted optional field is not a deletion
 instruction)
 

@@ -201,6 +201,10 @@
   "@homeMoreComingTitle": { "description": "Title for the non-authoritative placeholder section on Home." },
   "homeMoreComingMessage": "Championship standings and results arrive in a later update.",
   "@homeMoreComingMessage": { "description": "Explains the non-authoritative placeholder section on Home." },
+  "homeNoEventsTitle": "No races scheduled yet",
+  "@homeNoEventsTitle": { "description": "Title shown on Home when the current season has no events yet." },
+  "homeNoEventsMessage": "The calendar for this season has not been published. Home will fill in as soon as it is.",
+  "@homeNoEventsMessage": { "description": "Explains the empty Home state for a season with no events." },
 
   "errorOffline": "You appear to be offline.",
   "@errorOffline": { "description": "User-facing message for a network-unavailable failure." },

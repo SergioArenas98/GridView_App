@@ -10,6 +10,7 @@ void main() {
   final DateTime now = DateTime.utc(2026, 7, 18, 12, 10);
 
   HomeView viewWith({DateTime? staleAfter, bool? stale}) => HomeView(
+    seasonYear: 2026,
     featured: belgianGrandPrix(),
     freshness: freshness(
       generatedAt: DateTime.utc(2026, 7, 18, 12),
@@ -86,6 +87,6 @@ void main() {
     );
     final HomeReady ready = state as HomeReady;
     expect(ready.refreshError?.kind, ApiFailureKind.serverUnavailable);
-    expect(ready.view.featured.id, '2026-belgian-grand-prix');
+    expect(ready.view.featured!.id, '2026-belgian-grand-prix');
   });
 }

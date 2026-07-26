@@ -48,14 +48,33 @@ row at all** counts as never synchronized: the SQL query can only return rows
 that exist, so the planner merges the expected core keys with the query's result
 rather than trusting the query alone.
 
+**The usable-cache predicate is about materialization.** A usable first-screen
+cache is a locally resolved current season plus a **materialized Home
+representation for that season** — read from the persisted snapshot's season
+(`snapshots.focusSeason` for the `home` key), never inferred from the presence of
+a featured Grand Prix. A current season whose Home legitimately has no scheduled
+events is a valid empty state and usable cache; treating "no featured event" as
+"not materialized" would force a bootstrap on every restart for such a season.
+`HomeView.featured` is therefore nullable and `HomeView.seasonYear` always names
+the season, so an empty season renders a defined empty Home instead of looking
+missing.
+
+**Home is season-scoped.** Its canonical key is always `home:<year>`. There is no
+`home:current`, no unscoped key, no temporary key and no unconditional request
+whose metadata is assigned after the response — the coordinator must know the
+season before it can read the right validator, record attempt metadata or
+dispatch the refresh.
+
 **First-use policy.** With no usable first-screen cache, bootstrap is the first
 and *only* remote resource attempted — the point of the aggregate is to replace a
 fan-out, not to join one. On success (or a valid `304`) the run ends there; the
 UI renders from that transaction through Drift, and the individual endpoints
 acquire their own representations later. On failure the shell stays usable, every
 partial cache is preserved, there is no retry loop, and the run recovers with a
-*minimal* plan — season context plus the first screen — never a compensating
-fan-out of all collections.
+*minimal* plan: season context, then the minimum Home resource for the resolved
+season — never a compensating fan-out of all collections. If no season can be
+resolved, locally or remotely, Home is **not** called and the run finishes as
+`AppSyncSeasonContextUnavailable`.
 
 **Automatic scope.** Automatic startup and foreground runs cover only
 current-season core resources: current season, season metadata, Home, calendar,
@@ -122,7 +141,8 @@ stays repository-owned; a configuration failure surfaces as a typed
 - Phase 7 controllers read Drift streams and call the manual/core refresh entry
   point; detail controllers own their on-demand refreshes. No feature recreates
   lifecycle policy.
-- Covered by `test/sync/sync_planner_test.dart`,
+- Covered by `test/sync/first_screen_cache_test.dart`,
+  `test/sync/sync_planner_test.dart`,
   `test/sync/sync_resource_parser_test.dart`,
   `test/sync/app_sync_coordinator_test.dart`,
   `test/sync/season_transition_test.dart`,

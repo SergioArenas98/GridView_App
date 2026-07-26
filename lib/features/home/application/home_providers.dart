@@ -4,10 +4,11 @@ import '../../../core/api/errors/api_failure.dart';
 import '../../shared/application/providers.dart';
 import '../../shared/application/refresh_status.dart';
 import '../../shared/domain/entities/home_view.dart';
-import '../../shared/domain/entities/resource_key.dart';
 import '../../shared/domain/refresh_result.dart';
 import '../../sync/application/sync_providers.dart';
 import '../../sync/domain/app_sync_state.dart';
+import '../../sync/domain/sync_resource.dart';
+import '../../sync/domain/sync_resource_parser.dart';
 import 'home_state.dart';
 
 /// The Drift-backed Home stream. Keep-alive so Home content persists across
@@ -41,12 +42,20 @@ class HomeController extends Notifier<RefreshStatus> {
   /// The user's explicit refresh. It still deduplicates against itself, and the
   /// repository's per-key coordinator collapses it with any concurrent
   /// application-level refresh of the same resource.
+  ///
+  /// Home is season-scoped, so without a locally resolved season there is no
+  /// canonical `home:<year>` key to refresh: the retry is a no-op rather than an
+  /// unscoped request. Resolving the season is the application coordinator's
+  /// job, and its run reports `AppSyncSeasonContextUnavailable` when it cannot.
   Future<void> refresh() async {
     if (state.inProgress) return;
+    final int? season = await ref.read(currentSeasonResolverProvider)();
+    if (season == null) return;
+
     state = RefreshStatus.running;
     final RefreshResult result = await ref
         .read(homeRepositoryProvider)
-        .refreshHome();
+        .refreshHome(season: season);
     state = switch (result) {
       RefreshSuccess() => RefreshStatus.idle,
       RefreshFailure(:final ApiFailure failure) => RefreshStatus.idle.failed(
@@ -58,12 +67,18 @@ class HomeController extends Notifier<RefreshStatus> {
   /// Maps an application-level state onto Home's status, or null when it says
   /// nothing about Home (an idle coordinator, or a finished run that never
   /// planned Home).
+  ///
+  /// The Home outcome is matched by parsing the canonical key through the shared
+  /// parser rather than by comparing strings, so this never has to know which
+  /// season the run was for.
   static RefreshStatus? _statusFor(AppSyncState state) {
     if (state is AppSyncRunning) return RefreshStatus.running;
     if (state is AppSyncIdle) return null;
 
     for (final ResourceSyncOutcome outcome in state.outcomes) {
-      if (outcome.resourceKey != ResourceKey.home()) continue;
+      if (SyncResourceParser.parse(outcome.resourceKey) is! HomeSyncResource) {
+        continue;
+      }
       final ApiFailureKind? failure = outcome.failure;
       if (outcome.isFailure && failure != null) {
         return RefreshStatus.idle.failed(ApiFailure(kind: failure));

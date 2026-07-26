@@ -24,8 +24,14 @@ class ResourceKey {
   /// Season metadata (`GET /v1/seasons/{season}`).
   static String season(int season) => 'season:$season';
 
-  /// The Home view for a specific [season], or the current season when omitted.
-  static String home([int? season]) => 'home:${season ?? 'current'}';
+  /// The Home view for a specific [season].
+  ///
+  /// Home is a **season-scoped** representation: the server serves a different
+  /// Home per season, so its validator, provenance and attempt metadata belong
+  /// to a specific year. There is deliberately no unscoped or "current" Home
+  /// key — a caller that does not yet know the season cannot build a canonical
+  /// key, and must resolve the season first rather than invent one.
+  static String home(int season) => 'home:$season';
 
   static String calendar(int season) => 'calendar:$season';
 

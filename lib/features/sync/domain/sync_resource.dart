@@ -91,14 +91,21 @@ class SeasonMetadataSyncResource extends SyncResource {
   SyncStage get stage => SyncStage.seasonContext;
 }
 
-/// The Home view. `GET /v1/home` takes an optional season; the application only
-/// ever asks for the current one, so this resource is season-agnostic and stays
-/// plannable even when no season context could be resolved.
+/// The Home view for a season.
+///
+/// Home is **season-scoped**: the server serves a different Home per season, so
+/// it can only be planned once a season has been resolved. There is no unscoped
+/// or "current" Home resource to fall back on.
 class HomeSyncResource extends SyncResource {
-  const HomeSyncResource();
+  const HomeSyncResource(this.year);
+
+  final int year;
 
   @override
-  String get key => ResourceKey.home();
+  String get key => ResourceKey.home(year);
+
+  @override
+  int? get season => year;
 
   @override
   bool get isAutomaticCore => true;

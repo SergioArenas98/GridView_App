@@ -620,6 +620,18 @@ abstract class AppLocalizations {
   /// **'Championship standings and results arrive in a later update.'**
   String get homeMoreComingMessage;
 
+  /// Title shown on Home when the current season has no events yet.
+  ///
+  /// In en, this message translates to:
+  /// **'No races scheduled yet'**
+  String get homeNoEventsTitle;
+
+  /// Explains the empty Home state for a season with no events.
+  ///
+  /// In en, this message translates to:
+  /// **'The calendar for this season has not been published. Home will fill in as soon as it is.'**
+  String get homeNoEventsMessage;
+
   /// User-facing message for a network-unavailable failure.
   ///
   /// In en, this message translates to:

@@ -64,7 +64,17 @@ class FakeRaceWeekendRepository implements HomeRepository, GrandPrixRepository {
   }) => watchGrandPrix(season: season, round: round).first;
 
   @override
+  @override
+  Future<int?> materializedSeason() async =>
+      (await watchHome().first)?.seasonYear;
+
+  @override
+  Stream<int?> watchMaterializedSeason() =>
+      watchHome().map((HomeView? view) => view?.seasonYear);
+
+  @override
   Future<RefreshResult> refreshHome({
+    required int season,
     bool bypassValidator = false,
     RemoteCancellation? cancellation,
   }) =>

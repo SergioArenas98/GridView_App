@@ -95,7 +95,7 @@ void main() {
 
       // Seed a valid Home snapshot.
       adapter.body = loadFixture('home/pre-event.json');
-      expect(await repo.refreshHome(), isA<RefreshSuccess>());
+      expect(await repo.refreshHome(season: 2026), isA<RefreshSuccess>());
       final before = await repo.watchHome().first;
       expect(before, isNotNull);
 
@@ -104,7 +104,7 @@ void main() {
       (invalid['meta'] as Map<String, dynamic>).remove('sourceUpdatedAt');
       adapter.body = invalid;
 
-      final RefreshResult result = await repo.refreshHome();
+      final RefreshResult result = await repo.refreshHome(season: 2026);
       expect(result, isA<RefreshFailure>());
       expect(
         (result as RefreshFailure).failure.kind,
@@ -114,7 +114,7 @@ void main() {
       // Cached content is unchanged and still available.
       final after = await repo.watchHome().first;
       expect(after, isNotNull);
-      expect(after!.featured.id, before!.featured.id);
+      expect(after!.featured!.id, before!.featured!.id);
       expect(after.freshness.sourceUpdatedAt, before.freshness.sourceUpdatedAt);
     },
   );
