@@ -6,7 +6,7 @@ import 'package:gridview/core/api/dto/event_dto.dart';
 import 'package:gridview/core/api/dto/standing_dto.dart';
 import 'package:gridview/core/database/gridview_database.dart';
 import 'package:gridview/features/shared/data/remote/remote_result.dart';
-import 'package:gridview/features/shared/domain/entities/grand_prix.dart';
+import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
 import 'package:gridview/features/shared/domain/entities/resource_key.dart';
 import 'package:gridview/features/shared/domain/entities/standing.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
@@ -128,7 +128,7 @@ void main() {
     final RefreshResult r = await h2.calendar.refreshCalendar(2026);
     expect(sentEtag, 'W/"persisted"', reason: 'reopened cache reused its ETag');
     expect((r as RefreshSuccess).applied, isFalse);
-    final List<GrandPrix> cal = await h2.calendar.readCalendar(2026);
+    final List<CalendarEntry> cal = await h2.calendar.readCalendar(2026);
     expect(cal, isNotEmpty, reason: 'cache intact after a reopen + 304');
     await db2.close();
   });

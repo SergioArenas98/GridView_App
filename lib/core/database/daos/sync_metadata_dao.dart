@@ -29,6 +29,22 @@ class SyncMetadataDao extends DatabaseAccessor<GridViewDatabase>
     return row == null ? null : _fromRow(row);
   }
 
+  /// Streams one resource's metadata row, emitting `null` while no row exists.
+  ///
+  /// Feature controllers use this to observe a resource's **persisted**
+  /// materialization and freshness (never a row count, never an in-memory run
+  /// state), so a valid empty collection is distinguishable from one that has
+  /// never synchronised.
+  Stream<ResourceSyncState?> watchResource(String resourceKey) {
+    return (select(
+          resourceSyncMetadata,
+        )..where((ResourceSyncMetadata m) => m.resourceKey.equals(resourceKey)))
+        .watchSingleOrNull()
+        .map(
+          (ResourceSyncMetadataRow? row) => row == null ? null : _fromRow(row),
+        );
+  }
+
   /// The resources locally **due** for refresh at [now] (a supplied UTC instant
   /// — the DAO never calls `DateTime.now`). A resource is due when any holds:
   ///

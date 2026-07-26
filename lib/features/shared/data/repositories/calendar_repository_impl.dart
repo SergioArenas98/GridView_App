@@ -1,6 +1,7 @@
 // ignore_for_file: prefer_initializing_formals
 import '../../../../core/api/dto/event_dto.dart';
 import '../../../../core/database/daos/calendar_dao.dart';
+import '../../domain/entities/calendar_entry.dart';
 import '../../domain/entities/circuit.dart';
 import '../../domain/entities/grand_prix.dart';
 import '../../domain/entities/resource_key.dart';
@@ -30,11 +31,12 @@ class CalendarRepositoryImpl extends SyncedRepository
   final CalendarDao _local;
 
   @override
-  Stream<List<GrandPrix>> watchCalendar(int season) =>
-      _local.watchCalendar(season);
+  Stream<List<CalendarEntry>> watchCalendar(int season) =>
+      _local.watchCalendarEntries(season);
 
   @override
-  Future<List<GrandPrix>> readCalendar(int season) => _local.calendar(season);
+  Future<List<CalendarEntry>> readCalendar(int season) =>
+      _local.calendarEntries(season);
 
   @override
   Future<RefreshResult> refreshCalendar(

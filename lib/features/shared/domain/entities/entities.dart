@@ -1,3 +1,4 @@
+export 'calendar_entry.dart';
 export 'circuit.dart';
 export 'constructor.dart';
 export 'detail_views.dart';

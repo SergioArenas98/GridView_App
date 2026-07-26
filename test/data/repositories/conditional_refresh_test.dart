@@ -7,7 +7,7 @@ import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/database/gridview_database.dart';
 import 'package:gridview/features/shared/data/remote/remote_result.dart';
 import 'package:gridview/features/shared/data/sync/resource_sync.dart';
-import 'package:gridview/features/shared/domain/entities/grand_prix.dart';
+import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
 import 'package:gridview/features/shared/domain/entities/resource_key.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
@@ -62,7 +62,7 @@ void main() {
         expect(r, isA<RefreshSuccess>());
         expect((r as RefreshSuccess).applied, isTrue);
 
-        final List<GrandPrix> cal = await h.calendar.readCalendar(2026);
+        final List<CalendarEntry> cal = await h.calendar.readCalendar(2026);
         expect(cal, hasLength(5));
         final ResourceSyncState m = (await meta(2026))!;
         expect(m.etag, 'W/"cal1"');
@@ -304,7 +304,7 @@ void main() {
       final List<int> lengths = <int>[];
       final sub = h.calendar
           .watchCalendar(2026)
-          .listen((List<GrandPrix> c) => lengths.add(c.length));
+          .listen((List<CalendarEntry> c) => lengths.add(c.length));
       await Future<void>.delayed(const Duration(milliseconds: 20));
 
       api.calendar = (_) => _calendar();

@@ -1,4 +1,5 @@
 import 'entities/freshness.dart';
+import 'entities/sync_state.dart';
 
 /// Whether cached content is currently fresh or stale.
 enum FreshnessState { fresh, stale }
@@ -18,4 +19,30 @@ FreshnessState evaluateFreshness(DataFreshness freshness, DateTime now) {
   }
   if (freshness.stale == true) return FreshnessState.stale;
   return FreshnessState.fresh;
+}
+
+/// Evaluates the freshness recorded for a resource in `resource_sync_metadata`.
+///
+/// Resources whose content carries no snapshot of its own (the season calendar,
+/// a result document) still have persisted provenance, so freshness is read from
+/// that record rather than re-derived. It applies exactly the same rule as
+/// [evaluateFreshness] — there is one freshness policy, not two.
+///
+/// A resource that has never synchronised successfully has nothing to vouch for
+/// its content and is reported stale.
+FreshnessState evaluateResourceFreshness(
+  ResourceSyncState? state,
+  DateTime now,
+) {
+  if (state == null || state.lastSuccessAt == null) return FreshnessState.stale;
+  return evaluateFreshness(
+    DataFreshness(
+      generatedAt: state.generatedAt ?? state.lastSuccessAt!,
+      sourceUpdatedAt: state.sourceUpdatedAt,
+      staleAfter: state.staleAfter,
+      contentVersion: state.contentVersion,
+      stale: state.serverStale,
+    ),
+    now,
+  );
 }

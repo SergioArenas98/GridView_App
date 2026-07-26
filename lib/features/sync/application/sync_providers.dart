@@ -74,8 +74,23 @@ final Provider<AppSyncCoordinator> appSyncCoordinatorProvider =
       return coordinator;
     });
 
+/// A user-initiated refresh of the current-season core set.
+typedef ManualCoreRefresh = Future<void> Function();
+
 /// The manual current-season refresh entry point for Phase 7 feature
-/// controllers. It needs no `BuildContext`, forces eligibility for one run and
-/// keeps conditional requests.
+/// controllers.
+///
+/// It forces eligibility for one run, keeps conditional requests and persisted
+/// ETags, and needs no `BuildContext`. Exposed as a provider so a feature
+/// controller depends on the *capability* rather than on the coordinator's
+/// whole object graph — a widget test can substitute it without opening a
+/// database, and there is still exactly one implementation in the application.
+final Provider<ManualCoreRefresh> manualCoreRefreshProvider =
+    Provider<ManualCoreRefresh>(
+      (Ref ref) =>
+          () => ref.read(appSyncCoordinatorProvider).refreshNow(),
+    );
+
+/// Convenience wrapper around [manualCoreRefreshProvider].
 Future<void> refreshCurrentSeasonCore(Ref ref) =>
-    ref.read(appSyncCoordinatorProvider).refreshNow();
+    ref.read(manualCoreRefreshProvider)();

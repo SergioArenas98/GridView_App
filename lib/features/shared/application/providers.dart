@@ -22,6 +22,8 @@ import '../data/repositories/season_repository_impl.dart';
 import '../data/repositories/standings_repository_impl.dart';
 import '../data/sync/refresh_coordinator.dart';
 import '../data/sync/resource_sync.dart';
+import '../domain/entities/season.dart';
+import '../domain/entities/sync_state.dart';
 import '../domain/repositories/bootstrap_repository.dart';
 import '../domain/repositories/calendar_repository.dart';
 import '../domain/repositories/circuit_repository.dart';
@@ -134,6 +136,33 @@ final Provider<CurrentSeasonResolver> currentSeasonResolverProvider =
       final SeasonRepository seasons = ref.watch(seasonRepositoryProvider);
       return () async => (await seasons.readCurrentSeason())?.year;
     });
+
+/// The locally resolved current-season year as a stream, or `null` while none is
+/// stored.
+///
+/// Season-agnostic screens (Calendar, later Standings) watch this so a season
+/// transition re-points them at the new season's resources without a route
+/// change and without any hardcoded year. It reads only the local database: a
+/// transient loss of connectivity never clears an already-resolved season.
+final StreamProvider<int?> currentSeasonProvider = StreamProvider<int?>(
+  (Ref ref) => ref
+      .watch(seasonRepositoryProvider)
+      .watchCurrentSeason()
+      .map((Season? season) => season?.year),
+);
+
+/// Streams the persisted synchronization metadata of one canonical resource key.
+///
+/// This is the durable materialization/freshness record — never a row count and
+/// never in-memory run state — so a successfully synchronised but empty
+/// collection is distinguishable from one that has never synchronised.
+// The family type itself is not exported by flutter_riverpod's show-list, so the
+// provider is declared without an explicit type annotation.
+final resourceSyncStateProvider =
+    StreamProvider.family<ResourceSyncState?, String>(
+      (Ref ref, String key) =>
+          ref.watch(databaseProvider).syncMetadataDao.watchResource(key),
+    );
 
 /// The transactional resource-sync writer (conflict rule + metadata), bound to
 /// the single application database.

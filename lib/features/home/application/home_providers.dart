@@ -5,10 +5,10 @@ import '../../shared/application/providers.dart';
 import '../../shared/application/refresh_status.dart';
 import '../../shared/domain/entities/home_view.dart';
 import '../../shared/domain/refresh_result.dart';
+import '../../sync/application/resource_refresh_status.dart';
 import '../../sync/application/sync_providers.dart';
 import '../../sync/domain/app_sync_state.dart';
 import '../../sync/domain/sync_resource.dart';
-import '../../sync/domain/sync_resource_parser.dart';
 import 'home_state.dart';
 
 /// The Drift-backed Home stream. Keep-alive so Home content persists across
@@ -56,6 +56,7 @@ class HomeController extends Notifier<RefreshStatus> {
     final RefreshResult result = await ref
         .read(homeRepositoryProvider)
         .refreshHome(season: season);
+    if (!ref.mounted) return;
     state = switch (result) {
       RefreshSuccess() => RefreshStatus.idle,
       RefreshFailure(:final ApiFailure failure) => RefreshStatus.idle.failed(
@@ -71,22 +72,10 @@ class HomeController extends Notifier<RefreshStatus> {
   /// The Home outcome is matched by parsing the canonical key through the shared
   /// parser rather than by comparing strings, so this never has to know which
   /// season the run was for.
-  static RefreshStatus? _statusFor(AppSyncState state) {
-    if (state is AppSyncRunning) return RefreshStatus.running;
-    if (state is AppSyncIdle) return null;
-
-    for (final ResourceSyncOutcome outcome in state.outcomes) {
-      if (SyncResourceParser.parse(outcome.resourceKey) is! HomeSyncResource) {
-        continue;
-      }
-      final ApiFailureKind? failure = outcome.failure;
-      if (outcome.isFailure && failure != null) {
-        return RefreshStatus.idle.failed(ApiFailure(kind: failure));
-      }
-      return RefreshStatus.idle;
-    }
-    return RefreshStatus.idle;
-  }
+  static RefreshStatus? _statusFor(AppSyncState state) => resourceRefreshStatus(
+    state,
+    (SyncResource resource) => resource is HomeSyncResource,
+  );
 }
 
 final NotifierProvider<HomeController, RefreshStatus> homeControllerProvider =

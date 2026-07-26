@@ -1,11 +1,13 @@
 import 'package:drift/drift.dart';
 
+import '../../../features/shared/domain/entities/calendar_entry.dart';
 import '../../../features/shared/domain/entities/circuit.dart';
 import '../../../features/shared/domain/entities/detail_views.dart';
 import '../../../features/shared/domain/entities/enums.dart';
 import '../../../features/shared/domain/entities/grand_prix.dart';
 import '../../../features/shared/domain/entities/media.dart';
 import '../../../features/shared/domain/entities/session.dart';
+import '../../../features/shared/domain/relevant_event.dart';
 import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../tables.dart';
@@ -134,6 +136,39 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     () => calendar(season),
   );
 
+  /// The season calendar joined with each event's host circuit summary, in the
+  /// persisted round order. The circuit is `null` only when its row is absent.
+  Future<List<CalendarEntry>> calendarEntries(int season) async {
+    final List<GrandPrix> events = await calendar(season);
+    if (events.isEmpty) return const <CalendarEntry>[];
+
+    final Set<String> circuitIds = events
+        .map((GrandPrix e) => e.circuitId)
+        .toSet();
+    final List<CircuitRow> rows = await (select(
+      circuits,
+    )..where((Circuits c) => c.id.isIn(circuitIds))).get();
+    final Map<String, Circuit> byId = <String, Circuit>{
+      for (final CircuitRow r in rows) r.id: _circuitFrom(r),
+    };
+
+    return events
+        .map(
+          (GrandPrix e) =>
+              CalendarEntry(grandPrix: e, circuit: byId[e.circuitId]),
+        )
+        .toList(growable: false);
+  }
+
+  /// Streams [calendarEntries]; re-emits after any calendar/session/circuit
+  /// commit.
+  Stream<List<CalendarEntry>> watchCalendarEntries(int season) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        grandPrixEvents,
+        sessions,
+        circuits,
+      ], () => calendarEntries(season));
+
   Future<int> countEventsForSeason(int season) async {
     final List<GrandPrixRow> rows = await (select(
       grandPrixEvents,
@@ -162,26 +197,19 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     return events;
   }
 
-  /// The next event of the season: the earliest-dated event on or after [now]
-  /// (round breaks ties). Returns `null` when the season has no upcoming event.
+  /// The season's relevant event at [now]: the one in progress, else the next
+  /// eligible one. Returns `null` when the season has nothing left to show.
+  ///
+  /// The rule itself lives in [resolveRelevantEvent] so Home, the Calendar
+  /// screen and this query can never disagree; the DAO only supplies the
+  /// authoritative chronology it already stores (a season is at most a few dozen
+  /// rows, so resolving in Dart costs nothing and keeps one implementation).
   Future<GrandPrix?> nextEvent(int season, DateTime now) async {
-    final String today = _dateString(now);
-    final GrandPrixRow? row =
-        await (select(grandPrixEvents)
-              ..where(
-                (GrandPrixEvents g) =>
-                    g.season.equals(season) &
-                    g.startDate.isNotNull() &
-                    g.startDate.isBiggerOrEqualValue(today),
-              )
-              ..orderBy(<OrderClauseGenerator<GrandPrixEvents>>[
-                (GrandPrixEvents g) => OrderingTerm(expression: g.startDate),
-                (GrandPrixEvents g) => OrderingTerm(expression: g.round),
-              ])
-              ..limit(1))
-            .getSingleOrNull();
-    if (row == null) return null;
-    return _grandPrixFrom(row, await _sessionsFor(row.id));
+    final RelevantEvent? relevant = resolveRelevantEvent(
+      await calendar(season),
+      now,
+    );
+    return relevant?.event;
   }
 
   /// The most recently finished event of the season: the latest event whose
