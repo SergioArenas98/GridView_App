@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,9 +34,27 @@ ProviderContainer _container(FakeGridViewApi api, DateTime now) {
   return container;
 }
 
+/// Stands in for the application-level coordinator's startup run: Home no
+/// longer refreshes itself on creation, so the one automatic refresh is
+/// triggered from outside, exactly as the coordinator does after the first
+/// frame.
+void _startupRefresh(ProviderContainer c) {
+  unawaited(c.read(homeControllerProvider.notifier).refresh());
+}
+
 void main() {
   final DateTime fresh = DateTime.utc(2026, 7, 18, 12, 10); // before staleAfter
   final DateTime late = DateTime.utc(2026, 7, 18, 12, 20); // after staleAfter
+
+  test('Home does not launch its own refresh on creation', () async {
+    final FakeGridViewApi api = FakeGridViewApi();
+    final ProviderContainer c = _container(api, fresh);
+    c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
+
+    await _settle();
+    expect(api.homeCalls, 0);
+    expect(c.read(homeStateProvider), isA<HomeLoading>());
+  });
 
   test(
     'initial state is loading, then a successful refresh yields fresh data',
@@ -44,6 +64,7 @@ void main() {
       c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
 
       expect(c.read(homeStateProvider), isA<HomeLoading>());
+      _startupRefresh(c);
 
       await _settle();
       final HomeState state = c.read(homeStateProvider);
@@ -57,6 +78,7 @@ void main() {
     final FakeGridViewApi api = FakeGridViewApi();
     final ProviderContainer c = _container(api, late);
     c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
+    _startupRefresh(c);
 
     await _settle();
     final HomeReady ready = c.read(homeStateProvider) as HomeReady;
@@ -73,6 +95,7 @@ void main() {
         );
       final ProviderContainer c = _container(api, fresh);
       c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
+      _startupRefresh(c);
 
       await _settle();
       expect(c.read(homeStateProvider), isA<HomeFirstLoadError>());
@@ -83,6 +106,7 @@ void main() {
     final FakeGridViewApi api = FakeGridViewApi();
     final ProviderContainer c = _container(api, fresh);
     c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
+    _startupRefresh(c);
     await _settle();
     expect(c.read(homeStateProvider), isA<HomeReady>());
 

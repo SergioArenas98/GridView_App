@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/time/timezones.dart';
+import '../features/sync/application/app_sync_lifecycle.dart';
 import 'app.dart';
 
 /// Initializes essential services and global error handling, then runs the
@@ -31,6 +32,13 @@ Future<void> bootstrap() async {
   ensureTimeZonesInitialized();
 
   // The ProviderScope owns the app's dependency graph (database, remote data
-  // source, repository, controllers) for its lifetime.
-  runApp(const ProviderScope(child: GridViewApp()));
+  // source, repositories, controllers) for its lifetime.
+  //
+  // [AppSyncLifecycleScope] is mounted here, at the composition root, so the
+  // single application-level synchronization owner is wired once and never by a
+  // screen. It schedules the startup run *after the first frame*: the shell and
+  // any cached content render before a byte of network work begins.
+  runApp(
+    const ProviderScope(child: AppSyncLifecycleScope(child: GridViewApp())),
+  );
 }
