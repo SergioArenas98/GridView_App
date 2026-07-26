@@ -66,7 +66,12 @@ class CalendarEmpty extends CalendarState {
   });
 
   final int season;
-  final FreshnessState freshness;
+
+  /// The calendar resource's own freshness, or `null` when it has none of its
+  /// own yet (a representation materialized by an accepted bootstrap). Unknown
+  /// is never presented as stale, and never as fresh.
+  final FreshnessState? freshness;
+
   final DateTime? lastSuccessAt;
   final bool refreshing;
   final CalendarFailure? refreshError;
@@ -94,7 +99,9 @@ class CalendarReady extends CalendarState {
   /// The event to highlight, or null when the season has none left.
   final RelevantEvent? relevant;
 
-  final FreshnessState freshness;
+  /// The calendar resource's own freshness, or `null` when it has none of its
+  /// own yet (a representation materialized by an accepted bootstrap).
+  final FreshnessState? freshness;
   final DateTime? lastSuccessAt;
   final bool refreshing;
 
@@ -107,26 +114,70 @@ class CalendarReady extends CalendarState {
   String? get relevantEventId => relevant?.event.id;
 }
 
+/// Whether the season's calendar collection has a **materialized local
+/// representation**, from persisted synchronization state alone.
+///
+/// Two records can materialize it, and neither is inferred from the number of
+/// events:
+///
+/// 1. the calendar resource's own record — `calendar:<season>` has synchronised
+///    successfully at least once (the same rule as
+///    `SyncedRepository.collectionRepresentation`);
+/// 2. an **accepted bootstrap for this exact season** — one atomic transaction
+///    applied the contract-defined calendar collection, so a season that
+///    legitimately has no events is materialized even though the calendar
+///    endpoint itself has never been called.
+///
+/// The bootstrap record is consulted only for *materialization*. It contributes
+/// no ETag, no provenance and no freshness to the calendar resource, and it
+/// never makes the calendar endpoint look revalidated (ADR 0014): a missing
+/// `calendar:<season>` row stays missing, so the resource remains due for a
+/// later foreground or manual synchronization.
+///
+/// The season match uses the bootstrap row's **own** season scope — the season
+/// the last accepted bootstrap actually applied — so an older season's bootstrap
+/// can never materialize a newer current season's calendar.
+bool hasMaterializedCalendar({
+  required int? season,
+  required ResourceSyncState? metadata,
+  required ResourceSyncState? bootstrapMetadata,
+}) {
+  if (season == null) return false;
+  if (metadata?.lastSuccessAt != null) return true;
+  final ResourceSyncState? bootstrap = bootstrapMetadata;
+  return bootstrap != null &&
+      bootstrap.lastSuccessAt != null &&
+      bootstrap.season == season;
+}
+
 /// Derives the Calendar state from the locally resolved season, the Drift-backed
 /// calendar stream, the persisted resource metadata and the transient manual
 /// refresh status.
 ///
 /// Pure and side-effect free, so every state is unit-testable without Riverpod
-/// or a widget tree. Materialization is read from [metadata] — never inferred
-/// from the number of events — so a valid empty calendar and one that has never
-/// synchronised stay distinguishable.
+/// or a widget tree. Materialization comes from [hasMaterializedCalendar] —
+/// never from the number of events — so a valid empty calendar and one that has
+/// never synchronised stay distinguishable.
+///
+/// Freshness is the calendar resource's **own**, and is `null` while it has none
+/// (a representation materialized by bootstrap). Bootstrap provenance is never
+/// borrowed to fill it in.
 CalendarState computeCalendarState({
   required int? season,
   required bool seasonReady,
   required List<CalendarEntry>? events,
   required ResourceSyncState? metadata,
   required bool metadataReady,
+  required ResourceSyncState? bootstrapMetadata,
+  required bool bootstrapMetadataReady,
   required bool refreshing,
   required ApiFailure? lastFailure,
   required bool syncSettled,
   required DateTime now,
 }) {
-  final FreshnessState freshness = evaluateResourceFreshness(metadata, now);
+  final FreshnessState? freshness = metadata?.lastSuccessAt == null
+      ? null
+      : evaluateResourceFreshness(metadata, now);
   final CalendarFailure? refreshError = (refreshing || lastFailure == null)
       ? null
       : CalendarFailure.resource(lastFailure);
@@ -156,11 +207,18 @@ CalendarState computeCalendarState({
     return const CalendarFirstLoadError(CalendarFailure.seasonUnresolved());
   }
 
-  if (events == null || !metadataReady) return const CalendarLoading();
+  if (events == null || !metadataReady || !bootstrapMetadataReady) {
+    return const CalendarLoading();
+  }
 
-  // A recorded success is what materializes an authoritative collection, so an
-  // empty-but-synced calendar is a valid representation.
-  if (metadata?.lastSuccessAt != null) {
+  // A materialized authoritative collection — synchronised directly, or applied
+  // by an accepted bootstrap for this exact season — makes an empty calendar a
+  // valid representation rather than an unknown one.
+  if (hasMaterializedCalendar(
+    season: season,
+    metadata: metadata,
+    bootstrapMetadata: bootstrapMetadata,
+  )) {
     return CalendarEmpty(
       season: season,
       freshness: freshness,

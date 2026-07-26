@@ -90,6 +90,14 @@ abstract class SyncedRepository {
       (ResourceSyncState? storedMeta) => rowExists();
 
   /// Runs the full conditional-refresh pipeline for [key], deduplicated per key.
+  ///
+  /// [scopeOf] refines the resource's **own** scope columns from an accepted
+  /// `200`, for the rare resource whose scope is only known once the payload
+  /// arrives (bootstrap names whichever season the server considers current).
+  /// It is applied to the resource's own metadata row only — it never writes,
+  /// scopes or validates any other resource — and a failure keeps the declared
+  /// [scope], so a previously recorded scope survives (the metadata merge
+  /// preserves a stored value when the scope supplies none).
   Future<RefreshResult> refreshResource<T>({
     required String key,
     required ResourceScope scope,
@@ -97,6 +105,7 @@ abstract class SyncedRepository {
     required RemoteSnapshotMeta Function(RemoteModified<T> modified) metaOf,
     required Future<void> Function(RemoteModified<T> modified) writeDomain,
     required LocalRepresentation hasLocalRepresentation,
+    ResourceScope Function(RemoteModified<T> modified)? scopeOf,
     RemoteCancellation? cancellation,
     bool bypassValidator = false,
   }) {
@@ -109,6 +118,7 @@ abstract class SyncedRepository {
         metaOf: metaOf,
         writeDomain: writeDomain,
         hasLocalRepresentation: hasLocalRepresentation,
+        scopeOf: scopeOf,
         cancellation: cancellation,
         bypassValidator: bypassValidator,
       ),
@@ -122,6 +132,7 @@ abstract class SyncedRepository {
     required RemoteSnapshotMeta Function(RemoteModified<T>) metaOf,
     required Future<void> Function(RemoteModified<T>) writeDomain,
     required LocalRepresentation hasLocalRepresentation,
+    required ResourceScope Function(RemoteModified<T>)? scopeOf,
     required RemoteCancellation? cancellation,
     required bool bypassValidator,
   }) async {
@@ -138,7 +149,7 @@ abstract class SyncedRepository {
     // code-generation toolchain's parser mis-reads a generic type-argument
     // pattern (`RemoteModified<T>`) in a switch as a comparison expression.
     if (result is RemoteModified<T>) {
-      return _apply<T>(key, scope, result, metaOf, writeDomain);
+      return _apply<T>(key, scope, result, metaOf, writeDomain, scopeOf);
     }
     if (result is RemoteNotModified<T>) {
       if (await hasLocalRepresentation(storedMeta)) {
@@ -153,7 +164,7 @@ abstract class SyncedRepository {
       // Retry exactly once, unconditionally (no If-None-Match).
       final RemoteResult<T> retry = await fetch(cancellation: cancellation);
       if (retry is RemoteModified<T>) {
-        return _apply<T>(key, scope, retry, metaOf, writeDomain);
+        return _apply<T>(key, scope, retry, metaOf, writeDomain, scopeOf);
       }
       if (retry is RemoteFailure<T>) {
         await sync.recordFailure(key, scope, retry.failure.kind.name, now());
@@ -181,12 +192,13 @@ abstract class SyncedRepository {
     RemoteModified<T> modified,
     RemoteSnapshotMeta Function(RemoteModified<T>) metaOf,
     Future<void> Function(RemoteModified<T>) writeDomain,
+    ResourceScope Function(RemoteModified<T>)? scopeOf,
   ) async {
     final SnapshotConflictOutcome outcome;
     try {
       outcome = await sync.applySnapshot(
         key: key,
-        scope: scope,
+        scope: scopeOf == null ? scope : scopeOf(modified),
         incoming: metaOf(modified),
         at: now(),
         writeDomain: () => writeDomain(modified),

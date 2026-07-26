@@ -83,10 +83,18 @@ class BootstrapRepositoryImpl extends SyncedRepository
   }) {
     return refreshResource<BootstrapDataDto>(
       key: ResourceKey.bootstrap(),
-      // Bootstrap always asks for the server's current season, so its metadata
-      // row carries no season scope: the key is a single global representation
-      // and the payload names whichever season is current.
+      // Bootstrap always asks for the server's current season, so the season it
+      // covers is only known once the payload arrives: the declared scope is
+      // empty and an accepted `200` records the season it actually applied.
+      //
+      // This is bootstrap's **own** scope column, nothing else: no individual
+      // resource gains a metadata row, an ETag or any provenance from it
+      // (ADR 0014). It exists so a reader can tell *which* season the last
+      // accepted bootstrap materialized — an older season's bootstrap must
+      // never be mistaken for the current season's collections.
       scope: ResourceScope.none,
+      scopeOf: (RemoteModified<BootstrapDataDto> m) =>
+          ResourceScope(season: m.data.season.year),
       fetch: ({String? etag, RemoteCancellation? cancellation}) =>
           remote.fetchBootstrap(etag: etag, cancellation: cancellation),
       // The provenance is bootstrap's own response meta. `data.contentVersion`

@@ -478,10 +478,21 @@ persistence suite):
   its own non-blocking failure slot; cached events survive a refresh and a
   refresh failure; the persisted round order is preserved exactly; the
   `staleAfter` boundary and the server stale flag; a season transition carries
-  the new season through the state.
+  the new season through the state. The materialization predicate is covered
+  directly: a direct calendar success materializes; an accepted bootstrap for the
+  same season materializes; one for another season, with no recorded season, or
+  that never succeeded does not; bootstrap materialization claims no freshness of
+  its own; the calendar's own record stays the preferred freshness source; and a
+  failed later refresh keeps the bootstrap-derived state with only a non-blocking
+  error.
 - `test/application/calendar_controller_test.dart` — ownership over the real
-  coordinator, repositories and Drift: creating the controller and re-reading the
-  derived state produce **zero** requests; a manual refresh runs the application
+  coordinator, repositories and Drift, plus bootstrap materialization end to end
+  (a first-use bootstrap with an empty calendar is empty rather than loading,
+  creates no calendar metadata or ETag, leaves the resource due for a later run
+  that writes only its own validator, keeps its state through a failed later
+  refresh, and an older season's bootstrap materializes nothing for a newer one):
+  creating the controller and re-reading the derived state produce **zero**
+  requests; a manual refresh runs the application
   coordinator exactly once and still sends the persisted ETag; a duplicate tap is
   coalesced; the refresh future completes even when the run is cancelled; a run
   in progress reports as refreshing and then settles; an unrelated core failure
@@ -542,7 +553,10 @@ persistence suite):
   while every on-demand refresh fails; the persisted ETags drive the next
   conditional validation; a `304` after a reopen produces no domain emission and
   no visible change; a valid empty calendar stays empty rather than loading; a
-  Grand Prix with no sessions stays renderable; the previous season stays on disk
+  Grand Prix with no sessions stays renderable; a calendar materialized only by
+  an accepted bootstrap survives a reopen and shows the empty state rather than a
+  loader while creating no `calendar:<season>` row or ETag, and a later calendar
+  sync creates and uses only its own validator; the previous season stays on disk
   after a transition.
 - `test/design_system/result_row_test.dart` — the extended classification row:
   omitted values are not rendered (no false zeroes), supplied values all render,

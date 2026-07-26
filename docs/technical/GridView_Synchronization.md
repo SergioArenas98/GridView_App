@@ -426,6 +426,15 @@ Each individual endpoint acquires its own metadata only when its own
 representation is refreshed. Sending a validator the server never issued for a
 URL would make the next conditional request a lie.
 
+Bootstrap's **own** row does record which season it applied. The request always
+asks for the server's current season, so the scope is only known once the
+payload arrives: the declared scope is empty and an accepted `200` writes the
+season it actually materialized (`SyncedRepository.refreshResource`'s `scopeOf`
+hook, used by this one resource). This is bootstrap's own scope column and
+nothing else — no individual resource gains a row, an ETag or any provenance
+from it — and it is what lets a reader tell an older season's bootstrap from the
+current one's (§12.5).
+
 ### 11.4 Compact-data merge rules
 
 Bootstrap must never downgrade richer local detail data. Every write is either a
@@ -796,10 +805,27 @@ the number of events. So:
 - cached events always win: `CalendarReady` keeps its rows through a refresh and
   through a refresh failure, which is reported as a non-blocking notice.
 
-Note the one honest consequence of ETag isolation (ADR 0014): after a first-use
-bootstrap, `calendar:<season>` has no metadata of its own, so a season with
-**zero** events reads as loading until the calendar endpoint itself syncs on the
-next foreground or manual run. A season with events renders immediately.
+Materialization has **two** sources, and neither is a row count:
+
+1. the calendar resource's own record — `calendar:<season>.lastSuccessAt` is
+   set (the `collectionRepresentation` rule);
+2. an accepted bootstrap **for this exact season** — one atomic transaction
+   applied the contract-defined calendar collection, so a season that
+   legitimately has no events is materialized even though the calendar endpoint
+   has never been called.
+
+The bootstrap record is consulted for materialization only. It contributes no
+ETag, no provenance and no freshness to the calendar resource; `calendar:<season>`
+stays absent, so the resource remains due for the next foreground or manual run
+and its first conditional request still carries no validator (§11.3). The season
+match uses bootstrap's own recorded season, so an older season's bootstrap can
+never materialize a newer current season's calendar.
+
+Because a bootstrap-materialized calendar has no record of its own, its freshness
+is **unknown** rather than fresh or stale: no "updated at" line and no stale
+notice are shown until the calendar endpoint has synced once. A later failed
+calendar refresh keeps the bootstrap-derived empty/ready state and adds only a
+non-blocking error.
 
 ### 12.6 Grand Prix detail and results ownership
 

@@ -6,12 +6,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/core/api/dto/event_dto.dart';
 import 'package:gridview/core/api/dto/season_dto.dart';
 import 'package:gridview/core/api/dto/standing_dto.dart';
+import 'package:gridview/core/api/dto/view_dto.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/database/gridview_database.dart';
 import 'package:gridview/features/calendar/application/calendar_providers.dart';
 import 'package:gridview/features/calendar/application/calendar_state.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/data/remote/remote_result.dart';
+import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
 
 import '../support/bootstrap_fixture.dart';
@@ -81,6 +83,16 @@ RemoteResult<SeasonDto> _seasonResult(int year) => modifiedFromJson<SeasonDto>(
   (Object? d) => SeasonDto.fromJson(d! as Map<String, dynamic>),
   etag: 'W/"season-$year"',
 );
+
+RemoteResult<HomeDataDto> _homeResult(int year, {bool empty = false}) =>
+    modifiedFromJson<HomeDataDto>(
+      <String, dynamic>{
+        'data': empty ? emptyHomeJson() : homeJson(season: year),
+        'meta': _meta('r-home-$year', revision: year - 2026),
+      },
+      (Object? d) => HomeDataDto.fromJson(d! as Map<String, dynamic>),
+      etag: 'W/"home-$year"',
+    );
 
 /// Scripts the endpoints an ordinary current-season core run touches.
 void _scriptCore(
@@ -278,20 +290,21 @@ void main() {
       );
     });
 
-    test('a Calendar failure without cache is a first-load error', () async {
+    test('a Calendar failure without any materialization is a first-load '
+        'error', () async {
       final ProviderContainer c = _container(db, api);
-      // First use establishes the season and Home, but the season has no events
-      // yet — so `calendar:2026` has never materialized.
-      api.bootstrap = (String? etag) => bootstrapModified(
-        bootstrapEnvelope(calendar: <dynamic>[], home: emptyHomeJson()),
-      );
-      await c.read(appSyncCoordinatorProvider).start();
-      await _settle();
-      api.bootstrap = null;
-      api.calls.clear();
-
+      // Home and the season are cached (so the run plans the core set), but
+      // nothing has ever materialized the calendar — neither the calendar
+      // endpoint nor an accepted bootstrap.
       api.currentSeason = (String? etag) => _seasonResult(2026);
       api.season = (String? etag) => _seasonResult(2026);
+      // An empty Home writes no event row, so the calendar really is empty.
+      api.home = (String? etag) => _homeResult(2026, empty: true);
+      await c.read(seasonRepositoryProvider).refreshCurrentSeason();
+      await c.read(homeRepositoryProvider).refreshHome(season: 2026);
+      await _settle();
+      expect(await db.syncMetadataDao.read('bootstrap'), isNull);
+
       api.calendar = (String? etag) =>
           _calendarFailure(ApiFailureKind.serverUnavailable);
 
@@ -306,6 +319,136 @@ void main() {
         CalendarFailureCause.resourceFailed,
       );
     });
+  });
+
+  group('bootstrap materialization', () {
+    test('a first-use bootstrap with an empty calendar is empty, not '
+        'loading', () async {
+      final ProviderContainer c = _container(db, api);
+      api.bootstrap = (String? etag) => bootstrapModified(
+        bootstrapEnvelope(calendar: <dynamic>[], home: emptyHomeJson()),
+      );
+      c.listen(calendarStateProvider, (_, _) {}, fireImmediately: true);
+      await c.read(appSyncCoordinatorProvider).start();
+      await _settle();
+
+      final CalendarState state = c.read(calendarStateProvider);
+      expect(state, isA<CalendarEmpty>());
+      expect((state as CalendarEmpty).season, 2026);
+      // …and it borrows no freshness from bootstrap.
+      expect(state.freshness, isNull);
+      expect(state.lastSuccessAt, isNull);
+    });
+
+    test('bootstrap creates no calendar metadata or ETag', () async {
+      final ProviderContainer c = _container(db, api);
+      api.bootstrap = (String? etag) => bootstrapModified(
+        bootstrapEnvelope(calendar: <dynamic>[], home: emptyHomeJson()),
+      );
+      await c.read(appSyncCoordinatorProvider).start();
+      await _settle();
+
+      expect(await db.syncMetadataDao.read('calendar:2026'), isNull);
+      final ResourceSyncState? boot = await db.syncMetadataDao.read(
+        'bootstrap',
+      );
+      expect(boot?.lastSuccessAt, isNotNull);
+      expect(
+        boot?.season,
+        2026,
+        reason: 'the season bootstrap actually applied',
+      );
+    });
+
+    test(
+      'the calendar resource stays due for a later synchronization',
+      () async {
+        final ProviderContainer c = _container(db, api);
+        api.bootstrap = (String? etag) => bootstrapModified(
+          bootstrapEnvelope(calendar: <dynamic>[], home: emptyHomeJson()),
+        );
+        await c.read(appSyncCoordinatorProvider).start();
+        await _settle();
+        api.bootstrap = null;
+        api.calls.clear();
+
+        _scriptCore(api);
+        c.listen(calendarStateProvider, (_, _) {}, fireImmediately: true);
+        await c.read(calendarControllerProvider.notifier).refresh();
+        await _settle();
+
+        expect(api.callsFor('calendar'), 1, reason: 'still eligible');
+        final ResourceSyncState? meta = await db.syncMetadataDao.read(
+          'calendar:2026',
+        );
+        expect(meta?.lastSuccessAt, isNotNull);
+        expect(
+          meta?.etag,
+          'W/"cal"',
+          reason: 'its own validator, not bootstrap',
+        );
+        expect(c.read(calendarStateProvider), isA<CalendarReady>());
+      },
+    );
+
+    test('a failed later calendar refresh keeps the bootstrap-derived empty '
+        'state', () async {
+      final ProviderContainer c = _container(db, api);
+      api.bootstrap = (String? etag) => bootstrapModified(
+        bootstrapEnvelope(calendar: <dynamic>[], home: emptyHomeJson()),
+      );
+      await c.read(appSyncCoordinatorProvider).start();
+      await _settle();
+      api.bootstrap = null;
+
+      api.currentSeason = (String? etag) => _seasonResult(2026);
+      api.season = (String? etag) => _seasonResult(2026);
+      api.calendar = (String? etag) =>
+          _calendarFailure(ApiFailureKind.networkUnavailable);
+      c.listen(calendarStateProvider, (_, _) {}, fireImmediately: true);
+      await c.read(calendarControllerProvider.notifier).refresh();
+      await _settle();
+
+      final CalendarState state = c.read(calendarStateProvider);
+      expect(state, isA<CalendarEmpty>());
+      expect(
+        (state as CalendarEmpty).refreshError?.cause,
+        CalendarFailureCause.resourceFailed,
+      );
+    });
+
+    test(
+      'an older season bootstrap does not materialize a newer season',
+      () async {
+        final ProviderContainer c = _container(db, api);
+        api.bootstrap = (String? etag) => bootstrapModified(
+          bootstrapEnvelope(
+            season: 2026,
+            calendar: <dynamic>[],
+            home: emptyHomeJson(),
+          ),
+        );
+        await c.read(appSyncCoordinatorProvider).start();
+        await _settle();
+        api.bootstrap = null;
+
+        // The season rolls over; only the season resource succeeds.
+        api.currentSeason = (String? etag) => _seasonResult(2027);
+        api.season = (String? etag) => _seasonResult(2027);
+        api.calendar = (String? etag) =>
+            _calendarFailure(ApiFailureKind.serverUnavailable);
+        c.listen(calendarStateProvider, (_, _) {}, fireImmediately: true);
+        await c.read(calendarControllerProvider.notifier).refresh();
+        await _settle();
+
+        expect(await c.read(currentSeasonResolverProvider)(), 2027);
+        expect(
+          c.read(calendarStateProvider),
+          isNot(isA<CalendarEmpty>()),
+          reason: '2026 bootstrap says nothing about the 2027 calendar',
+        );
+      },
+    );
   });
 
   group('season scoping', () {

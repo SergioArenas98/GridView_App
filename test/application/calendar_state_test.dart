@@ -15,6 +15,8 @@ CalendarState _state({
   List<CalendarEntry>? events,
   ResourceSyncState? metadata,
   bool metadataReady = true,
+  ResourceSyncState? bootstrapMetadata,
+  bool bootstrapMetadataReady = true,
   bool refreshing = false,
   ApiFailure? lastFailure,
   bool syncSettled = true,
@@ -25,10 +27,24 @@ CalendarState _state({
   events: events,
   metadata: metadata,
   metadataReady: metadataReady,
+  bootstrapMetadata: bootstrapMetadata,
+  bootstrapMetadataReady: bootstrapMetadataReady,
   refreshing: refreshing,
   lastFailure: lastFailure,
   syncSettled: syncSettled,
   now: now ?? DateTime.utc(2026, 7, 18, 12, 5),
+);
+
+/// An accepted bootstrap that applied [season]'s collections.
+ResourceSyncState acceptedBootstrap({int season = 2026}) => ResourceSyncState(
+  resourceKey: 'bootstrap',
+  season: season,
+  etag: 'W/"bootstrap-1"',
+  generatedAt: DateTime.utc(2026, 7, 18, 12),
+  sourceUpdatedAt: DateTime.utc(2026, 7, 18, 11, 55),
+  staleAfter: DateTime.utc(2026, 7, 18, 12, 15),
+  lastAttemptAt: DateTime.utc(2026, 7, 18, 12),
+  lastSuccessAt: DateTime.utc(2026, 7, 18, 12),
 );
 
 void main() {
@@ -191,8 +207,11 @@ void main() {
         metadataReady: false,
       );
       expect(state, isA<CalendarReady>());
-      // No provenance to vouch for the content: reported stale, not fresh.
-      expect((state as CalendarReady).isStale, isTrue);
+      // The calendar resource has no record of its own yet: freshness is
+      // unknown, which is neither fresh nor stale.
+      final CalendarReady ready = state as CalendarReady;
+      expect(ready.freshness, isNull);
+      expect(ready.isStale, isFalse);
     });
   });
 
@@ -229,6 +248,173 @@ void main() {
               )
               as CalendarReady;
       expect(ready.freshness, FreshnessState.stale);
+    });
+  });
+
+  group('bootstrap materialization', () {
+    test('an accepted bootstrap for this season materializes an empty '
+        'calendar', () {
+      final CalendarState state = _state(
+        metadata: null,
+        events: const <CalendarEntry>[],
+        bootstrapMetadata: acceptedBootstrap(),
+      );
+      expect(state, isA<CalendarEmpty>());
+      expect((state as CalendarEmpty).season, 2026);
+    });
+
+    test(
+      'an accepted bootstrap never claims individual calendar freshness',
+      () {
+        final CalendarEmpty empty =
+            _state(
+                  metadata: null,
+                  events: const <CalendarEntry>[],
+                  bootstrapMetadata: acceptedBootstrap(),
+                )
+                as CalendarEmpty;
+        expect(empty.freshness, isNull, reason: 'no record of its own');
+        expect(empty.isStale, isFalse);
+        expect(empty.lastSuccessAt, isNull);
+      },
+    );
+
+    test('an accepted bootstrap for this season renders stored events', () {
+      final CalendarState state = _state(
+        metadata: null,
+        events: calendarFixture(),
+        bootstrapMetadata: acceptedBootstrap(),
+      );
+      expect(state, isA<CalendarReady>());
+      expect((state as CalendarReady).events, hasLength(5));
+    });
+
+    test('a bootstrap from an older season materializes nothing', () {
+      expect(
+        _state(
+          season: 2027,
+          metadata: null,
+          events: const <CalendarEntry>[],
+          bootstrapMetadata: acceptedBootstrap(season: 2026),
+        ),
+        isA<CalendarLoading>(),
+      );
+    });
+
+    test('a bootstrap that never succeeded materializes nothing', () {
+      expect(
+        _state(
+          metadata: null,
+          events: const <CalendarEntry>[],
+          bootstrapMetadata: const ResourceSyncState(
+            resourceKey: 'bootstrap',
+            season: 2026,
+            lastFailureCategory: 'networkUnavailable',
+          ),
+        ),
+        isA<CalendarLoading>(),
+      );
+    });
+
+    test('a bootstrap-materialized calendar keeps a failed later refresh '
+        'non-blocking', () {
+      final CalendarState state = _state(
+        metadata: null,
+        events: const <CalendarEntry>[],
+        bootstrapMetadata: acceptedBootstrap(),
+        lastFailure: _offline,
+      );
+      expect(state, isA<CalendarEmpty>());
+      final CalendarEmpty empty = state as CalendarEmpty;
+      expect(empty.refreshError?.cause, CalendarFailureCause.resourceFailed);
+      expect(empty.freshness, isNull);
+    });
+
+    test('the calendar record stays the preferred freshness source', () {
+      final CalendarEmpty empty =
+          _state(
+                metadata: syncedMetadata(
+                  'calendar:2026',
+                  staleAfter: DateTime.utc(2026, 7, 18, 12, 15),
+                ),
+                events: const <CalendarEntry>[],
+                bootstrapMetadata: acceptedBootstrap(),
+              )
+              as CalendarEmpty;
+      expect(empty.freshness, FreshnessState.fresh);
+      expect(empty.lastSuccessAt, isNotNull);
+    });
+
+    test('an unread bootstrap record is not yet an answer', () {
+      expect(
+        _state(
+          metadata: null,
+          events: const <CalendarEntry>[],
+          bootstrapMetadata: null,
+          bootstrapMetadataReady: false,
+        ),
+        isA<CalendarLoading>(),
+      );
+    });
+  });
+
+  group('the materialization predicate', () {
+    test('direct calendar success materializes', () {
+      expect(
+        hasMaterializedCalendar(
+          season: 2026,
+          metadata: syncedMetadata('calendar:2026'),
+          bootstrapMetadata: null,
+        ),
+        isTrue,
+      );
+    });
+
+    test('an accepted bootstrap for the same season materializes', () {
+      expect(
+        hasMaterializedCalendar(
+          season: 2026,
+          metadata: null,
+          bootstrapMetadata: acceptedBootstrap(),
+        ),
+        isTrue,
+      );
+    });
+
+    test('an accepted bootstrap for another season does not', () {
+      expect(
+        hasMaterializedCalendar(
+          season: 2027,
+          metadata: null,
+          bootstrapMetadata: acceptedBootstrap(season: 2026),
+        ),
+        isFalse,
+      );
+    });
+
+    test('a bootstrap with no recorded season does not', () {
+      expect(
+        hasMaterializedCalendar(
+          season: 2026,
+          metadata: null,
+          bootstrapMetadata: ResourceSyncState(
+            resourceKey: 'bootstrap',
+            lastSuccessAt: DateTime.utc(2026, 7, 18, 12),
+          ),
+        ),
+        isFalse,
+      );
+    });
+
+    test('no season resolves to not materialized', () {
+      expect(
+        hasMaterializedCalendar(
+          season: null,
+          metadata: syncedMetadata('calendar:2026'),
+          bootstrapMetadata: acceptedBootstrap(),
+        ),
+        isFalse,
+      );
     });
   });
 

@@ -106,6 +106,12 @@ final Provider<CalendarState> calendarStateProvider = Provider<CalendarState>((
     events = ref.watch(calendarCacheProvider(year));
     metadata = ref.watch(resourceSyncStateProvider(ResourceKey.calendar(year)));
   }
+  // Bootstrap's own record. It is read for one thing only — whether an accepted
+  // bootstrap materialized *this* season's collections — and contributes no
+  // ETag, provenance or freshness to the calendar resource.
+  final AsyncValue<ResourceSyncState?> bootstrap = ref.watch(
+    resourceSyncStateProvider(ResourceKey.bootstrap()),
+  );
 
   return computeCalendarState(
     season: year,
@@ -113,6 +119,8 @@ final Provider<CalendarState> calendarStateProvider = Provider<CalendarState>((
     events: events?.value,
     metadata: metadata?.value,
     metadataReady: metadata?.hasValue ?? false,
+    bootstrapMetadata: bootstrap.value,
+    bootstrapMetadataReady: bootstrap.hasValue,
     refreshing: status.inProgress,
     lastFailure: status.lastFailure,
     syncSettled: sync is! AppSyncIdle && sync is! AppSyncRunning,

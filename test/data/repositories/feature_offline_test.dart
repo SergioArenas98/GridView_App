@@ -21,6 +21,7 @@ import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 
+import '../../support/bootstrap_fixture.dart';
 import '../../support/repository_harness.dart';
 import '../../support/scripted_api.dart';
 
@@ -326,6 +327,74 @@ void main() {
     expect((state as GrandPrixReady).view.grandPrix.sessions, isEmpty);
     expect(state.view.grandPrix.name, 'Italian Grand Prix');
   });
+
+  test('a bootstrap-materialized empty calendar survives a reopen without a '
+      'loader', () async {
+    // Session 1: one accepted first-use bootstrap for a season with no
+    // events yet. The calendar endpoint itself is never called.
+    final GridViewDatabase db1 = open();
+    final ScriptedGridViewApi api1 = ScriptedGridViewApi();
+    api1.bootstrap = (String? etag) => bootstrapModified(
+      bootstrapEnvelope(calendar: <dynamic>[], home: emptyHomeJson()),
+    );
+    await RepositoryHarness(db1, api1, now: now).bootstrap.refreshBootstrap();
+    expect(await db1.syncMetadataDao.read('calendar:2026'), isNull);
+    await db1.close();
+
+    // Session 2: reopened before the calendar endpoint has ever synced.
+    final GridViewDatabase db2 = open();
+    addTearDown(db2.close);
+    final ScriptedGridViewApi api2 = ScriptedGridViewApi();
+    final ProviderContainer c = container(db2, api2);
+    c.listen(calendarStateProvider, (_, _) {}, fireImmediately: true);
+    await settle();
+
+    final CalendarState state = c.read(calendarStateProvider);
+    expect(
+      state,
+      isA<CalendarEmpty>(),
+      reason: 'an accepted bootstrap applied the collection',
+    );
+    // Bootstrap lends no validator and no freshness to the calendar.
+    expect((state as CalendarEmpty).freshness, isNull);
+    expect(state.lastSuccessAt, isNull);
+    expect(await db2.syncMetadataDao.read('calendar:2026'), isNull);
+    expect(api2.calls, isEmpty, reason: 'rendering never reaches the network');
+  });
+
+  test(
+    'a later calendar sync creates and uses only its own metadata',
+    () async {
+      final GridViewDatabase db1 = open();
+      final ScriptedGridViewApi api1 = ScriptedGridViewApi();
+      api1.bootstrap = (String? etag) => bootstrapModified(
+        bootstrapEnvelope(calendar: <dynamic>[], home: emptyHomeJson()),
+      );
+      await RepositoryHarness(db1, api1, now: now).bootstrap.refreshBootstrap();
+      final ResourceSyncState? boot = await db1.syncMetadataDao.read(
+        'bootstrap',
+      );
+      await db1.close();
+
+      final GridViewDatabase db2 = open();
+      addTearDown(db2.close);
+      final ScriptedGridViewApi api2 = ScriptedGridViewApi();
+      api2.calendar = (String? etag) => calendar(etag: 'W/"cal-own"');
+      final RepositoryHarness h = RepositoryHarness(db2, api2, now: now);
+      await h.calendar.refreshCalendar(2026);
+
+      // The first conditional request carried no validator: bootstrap's ETag is
+      // never borrowed.
+      expect(api2.lastEtag['calendar'], isNull);
+      final ResourceSyncState? meta = await db2.syncMetadataDao.read(
+        'calendar:2026',
+      );
+      expect(meta?.etag, 'W/"cal-own"');
+      expect(meta?.lastSuccessAt, isNotNull);
+      expect(meta?.etag, isNot(boot?.etag));
+      expect(await h.calendar.readCalendar(2026), isNotEmpty);
+    },
+  );
 
   test('the previous season stays on disk after a season transition', () async {
     await seed();
