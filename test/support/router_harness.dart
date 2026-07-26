@@ -137,6 +137,7 @@ Future<GoRouter> pumpApp(
   int? currentSeason = 2026,
   ResourceSyncState? Function(String key)? syncMetadata,
   ManualCoreRefresh? onManualRefresh,
+  String deviceTimeZone = 'UTC',
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
@@ -154,6 +155,10 @@ Future<GoRouter> pumpApp(
         grandPrixRepositoryProvider.overrideWithValue(repo),
         resultRepositoryProvider.overrideWithValue(repo),
         clockProvider.overrideWithValue(() => now),
+        // Pinned so rendering never depends on the host machine's time zone:
+        // a developer machine and the Linux CI runner report different names
+        // for the same instant, which would make goldens machine-specific.
+        deviceTimeZoneProvider.overrideWithValue(deviceTimeZone),
         appEnvironmentProvider.overrideWithValue(environment),
         usesMockDataProvider.overrideWithValue(mockData),
         // Home, Calendar and Standings are season-scoped. Widget tests replace

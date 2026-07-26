@@ -40,6 +40,15 @@ import '../domain/repositories/standings_repository.dart';
 final Provider<DateTime Function()> clockProvider =
     Provider<DateTime Function()>((Ref ref) => DateTime.now);
 
+/// The device's current time-zone label, as shown to the user.
+///
+/// Derived from the injected clock rather than read ad hoc, and overridable so a
+/// widget test or golden never depends on the host machine's zone (a developer
+/// machine and the CI runner report different names for the same instant).
+final Provider<String> deviceTimeZoneProvider = Provider<String>(
+  (Ref ref) => ref.watch(clockProvider)().toLocal().timeZoneName,
+);
+
 /// The build environment. Overridable in tests.
 final Provider<AppEnvironment> appEnvironmentProvider =
     Provider<AppEnvironment>((Ref ref) => AppEnvironment.current);
