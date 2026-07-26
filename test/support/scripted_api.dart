@@ -34,6 +34,7 @@ class ScriptedGridViewApi extends BaseFakeGridViewApi {
 
   // Scriptable responders. Each takes the sent etag and returns a result
   // (synchronously, or as a Future to model an in-flight request).
+  FutureOr<RemoteResult<BootstrapDataDto>> Function(String? etag)? bootstrap;
   FutureOr<RemoteResult<SeasonDto>> Function(String? etag)? currentSeason;
   FutureOr<RemoteResult<SeasonDto>> Function(String? etag)? season;
   FutureOr<RemoteResult<HomeDataDto>> Function(String? etag)? home;
@@ -72,6 +73,13 @@ class ScriptedGridViewApi extends BaseFakeGridViewApi {
     if (responder == null) return notFound<T>();
     return responder(etag);
   }
+
+  @override
+  Future<RemoteResult<BootstrapDataDto>> fetchBootstrap({
+    int? season,
+    String? etag,
+    RemoteCancellation? cancellation,
+  }) async => _dispatch('bootstrap', etag, bootstrap);
 
   @override
   Future<RemoteResult<SeasonDto>> fetchCurrentSeason({

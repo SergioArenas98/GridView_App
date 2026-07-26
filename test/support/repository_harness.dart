@@ -1,5 +1,6 @@
 import 'package:gridview/core/database/gridview_database.dart';
 import 'package:gridview/features/shared/data/remote/gridview_api.dart';
+import 'package:gridview/features/shared/data/repositories/bootstrap_repository_impl.dart';
 import 'package:gridview/features/shared/data/repositories/calendar_repository_impl.dart';
 import 'package:gridview/features/shared/data/repositories/circuit_repository_impl.dart';
 import 'package:gridview/features/shared/data/repositories/constructor_repository_impl.dart';
@@ -33,6 +34,18 @@ class RepositoryHarness {
   final DateTime _now;
 
   DateTime now() => _now;
+
+  BootstrapRepositoryImpl get bootstrap => BootstrapRepositoryImpl(
+    remote: api,
+    sync: sync,
+    coordinator: coordinator,
+    now: now,
+    seasons: db.seasonDao,
+    calendar: db.calendarDao,
+    competitors: db.competitorDao,
+    standings: db.standingsDao,
+    snapshots: db.verticalSliceDao,
+  );
 
   SeasonRepositoryImpl get season => SeasonRepositoryImpl(
     remote: api,
