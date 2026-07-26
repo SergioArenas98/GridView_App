@@ -733,6 +733,252 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sample data — not live results'**
   String get mockDataBanner;
+
+  /// Caption showing when a resource was last synchronised successfully.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated {time}'**
+  String lastUpdatedLabel(String time);
+
+  /// Fallback label for an event status this app version does not recognise.
+  ///
+  /// In en, this message translates to:
+  /// **'Status unknown'**
+  String get eventStateUnknown;
+
+  /// Fallback label for a session status this app version does not recognise.
+  ///
+  /// In en, this message translates to:
+  /// **'Status unknown'**
+  String get sessionStateUnknown;
+
+  /// Fallback name for a session whose type this app version does not recognise.
+  ///
+  /// In en, this message translates to:
+  /// **'Session'**
+  String get sessionNameUnknown;
+
+  /// Label for a standard (non-sprint) Grand Prix weekend.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard weekend'**
+  String get weekendFormatStandard;
+
+  /// Label for a sprint Grand Prix weekend.
+  ///
+  /// In en, this message translates to:
+  /// **'Sprint weekend'**
+  String get weekendFormatSprint;
+
+  /// Fallback label for a weekend format this app version does not recognise.
+  ///
+  /// In en, this message translates to:
+  /// **'Format unknown'**
+  String get weekendFormatUnknown;
+
+  /// Marks the next relevant event in the calendar list.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get calendarNextLabel;
+
+  /// Title for a valid but empty season calendar.
+  ///
+  /// In en, this message translates to:
+  /// **'No races scheduled yet'**
+  String get calendarEmptyTitle;
+
+  /// Message for a valid but empty season calendar.
+  ///
+  /// In en, this message translates to:
+  /// **'The calendar for this season has not been published. It will appear here as soon as it is.'**
+  String get calendarEmptyMessage;
+
+  /// Title for the Calendar first-load error state.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t load the calendar'**
+  String get calendarErrorTitle;
+
+  /// Title shown when no current season could be resolved locally.
+  ///
+  /// In en, this message translates to:
+  /// **'Season not available yet'**
+  String get calendarSeasonUnavailableTitle;
+
+  /// Message shown when no current season could be resolved locally.
+  ///
+  /// In en, this message translates to:
+  /// **'GridView could not determine the current season. Check your connection and try again.'**
+  String get calendarSeasonUnavailableMessage;
+
+  /// Accessibility label for the Calendar refresh action.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh calendar'**
+  String get calendarRefreshAction;
+
+  /// Accessibility label for a calendar event card.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}, round {round}, {status}'**
+  String calendarEventSemantics(String name, String round, String status);
+
+  /// Title shown when a Grand Prix has no persisted sessions.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule not available'**
+  String get grandPrixNoSessionsTitle;
+
+  /// Message shown when a Grand Prix has no persisted sessions.
+  ///
+  /// In en, this message translates to:
+  /// **'Session times for this weekend have not been published yet.'**
+  String get grandPrixNoSessionsMessage;
+
+  /// Section title for a sprint classification.
+  ///
+  /// In en, this message translates to:
+  /// **'Sprint results'**
+  String get grandPrixSprintResults;
+
+  /// Section title for a race classification.
+  ///
+  /// In en, this message translates to:
+  /// **'Race results'**
+  String get grandPrixRaceResults;
+
+  /// Title shown when an event has no classification yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Results not available yet'**
+  String get grandPrixResultsUnavailableTitle;
+
+  /// Title for a recoverable result-section error.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t load results'**
+  String get grandPrixResultsErrorTitle;
+
+  /// Accessibility label for navigating from a result row to a driver.
+  ///
+  /// In en, this message translates to:
+  /// **'Open driver {name}'**
+  String grandPrixOpenDriver(String name);
+
+  /// Accessibility label for navigating from a result row to a constructor.
+  ///
+  /// In en, this message translates to:
+  /// **'Open team {name}'**
+  String grandPrixOpenConstructor(String name);
+
+  /// Circuit field label on the Grand Prix detail.
+  ///
+  /// In en, this message translates to:
+  /// **'Circuit'**
+  String get fieldCircuit;
+
+  /// Locality/country field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get fieldLocation;
+
+  /// Weekend date-range field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Dates'**
+  String get fieldDates;
+
+  /// Field label for the event's own IANA time zone.
+  ///
+  /// In en, this message translates to:
+  /// **'Event time zone'**
+  String get fieldEventTimeZone;
+
+  /// Field label for the device's local time zone.
+  ///
+  /// In en, this message translates to:
+  /// **'Your time zone'**
+  String get fieldDeviceTimeZone;
+
+  /// Badge/label marking the fastest lap of a session.
+  ///
+  /// In en, this message translates to:
+  /// **'Fastest lap'**
+  String get resultsFastestLap;
+
+  /// How many whole laps behind the leader a classified driver finished.
+  ///
+  /// In en, this message translates to:
+  /// **'{laps, plural, =1{+1 lap} other{+{laps} laps}}'**
+  String resultLapsBehind(int laps);
+
+  /// A classification that is not yet final.
+  ///
+  /// In en, this message translates to:
+  /// **'Provisional'**
+  String get resultStatusProvisional;
+
+  /// A final classification.
+  ///
+  /// In en, this message translates to:
+  /// **'Final'**
+  String get resultStatusFinal;
+
+  /// A classification that has not been produced yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available'**
+  String get resultStatusUnavailable;
+
+  /// Fallback for a result status this app version does not recognise.
+  ///
+  /// In en, this message translates to:
+  /// **'Status unknown'**
+  String get resultStatusUnknown;
+
+  /// Driver finished the session.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished'**
+  String get finishStatusFinished;
+
+  /// Driver finished one or more laps behind.
+  ///
+  /// In en, this message translates to:
+  /// **'Lapped'**
+  String get finishStatusLapped;
+
+  /// Did not finish.
+  ///
+  /// In en, this message translates to:
+  /// **'DNF'**
+  String get finishStatusDnf;
+
+  /// Did not start.
+  ///
+  /// In en, this message translates to:
+  /// **'DNS'**
+  String get finishStatusDns;
+
+  /// Disqualified.
+  ///
+  /// In en, this message translates to:
+  /// **'DSQ'**
+  String get finishStatusDsq;
+
+  /// Did not qualify.
+  ///
+  /// In en, this message translates to:
+  /// **'DNQ'**
+  String get finishStatusDnq;
+
+  /// Fallback for a finish status this app version does not recognise.
+  ///
+  /// In en, this message translates to:
+  /// **'Status unknown'**
+  String get finishStatusUnknown;
 }
 
 class _AppLocalizationsDelegate

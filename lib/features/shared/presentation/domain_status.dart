@@ -26,6 +26,54 @@ String? eventStatusLabel(AppLocalizations l10n, EventStatus status) =>
       EventStatus.unknown => null,
     };
 
+/// The localized label for an event status, always non-null.
+///
+/// Screens that must give **every** status a controlled presentation (the
+/// Calendar list, the Grand Prix hero) use this variant: an unrecognised status
+/// reads as an explicit "unknown" label rather than silently disappearing.
+String requiredEventStatusLabel(AppLocalizations l10n, EventStatus status) =>
+    eventStatusLabel(l10n, status) ?? l10n.eventStateUnknown;
+
+/// The localized label for a weekend format, always non-null.
+String weekendFormatLabel(AppLocalizations l10n, WeekendFormat format) =>
+    switch (format) {
+      WeekendFormat.standard => l10n.weekendFormatStandard,
+      WeekendFormat.sprint => l10n.weekendFormatSprint,
+      WeekendFormat.unknown => l10n.weekendFormatUnknown,
+    };
+
+/// The localized label for a classification's status, always non-null.
+String resultStatusLabel(AppLocalizations l10n, ResultStatus status) =>
+    switch (status) {
+      ResultStatus.provisional => l10n.resultStatusProvisional,
+      ResultStatus.finalResult => l10n.resultStatusFinal,
+      ResultStatus.unavailable => l10n.resultStatusUnavailable,
+      ResultStatus.unknown => l10n.resultStatusUnknown,
+    };
+
+/// The localized label for a driver's finish status, always non-null.
+String finishStatusLabel(AppLocalizations l10n, FinishStatus status) =>
+    switch (status) {
+      FinishStatus.finished => l10n.finishStatusFinished,
+      FinishStatus.lapped => l10n.finishStatusLapped,
+      FinishStatus.dnf => l10n.finishStatusDnf,
+      FinishStatus.dns => l10n.finishStatusDns,
+      FinishStatus.dsq => l10n.finishStatusDsq,
+      FinishStatus.dnq => l10n.finishStatusDnq,
+      FinishStatus.unknown => l10n.finishStatusUnknown,
+    };
+
+/// The design-system tone for a finish status.
+GvStatusTone toneForFinishStatus(FinishStatus status) => switch (status) {
+  FinishStatus.finished => GvStatusTone.success,
+  FinishStatus.lapped => GvStatusTone.info,
+  FinishStatus.dnf ||
+  FinishStatus.dns ||
+  FinishStatus.dsq ||
+  FinishStatus.dnq => GvStatusTone.warning,
+  FinishStatus.unknown => GvStatusTone.neutral,
+};
+
 /// The localized label for a session status, or `null` when unknown.
 String? sessionStatusLabel(AppLocalizations l10n, SessionStatus status) =>
     switch (status) {
@@ -37,10 +85,21 @@ String? sessionStatusLabel(AppLocalizations l10n, SessionStatus status) =>
       SessionStatus.unknown => null,
     };
 
-/// A session's display name: the supplied name, else a humanised session type.
+/// The localized label for a session status, always non-null.
+String requiredSessionStatusLabel(
+  AppLocalizations l10n,
+  SessionStatus status,
+) => sessionStatusLabel(l10n, status) ?? l10n.sessionStateUnknown;
+
+/// A session's display name: the supplied name, else a humanised session type,
+/// else a localized fallback for a type this app version does not recognise.
 /// Formula 1 session names are not translated (TRD §26).
-String sessionDisplayName(Session session) =>
-    session.name ?? _humanize(session.type.wire);
+String sessionDisplayName(AppLocalizations l10n, Session session) {
+  final String? name = session.name;
+  if (name != null && name.isNotEmpty) return name;
+  if (session.type == SessionType.unknown) return l10n.sessionNameUnknown;
+  return _humanize(session.type.wire);
+}
 
 String _humanize(String token) => token
     .split('_')

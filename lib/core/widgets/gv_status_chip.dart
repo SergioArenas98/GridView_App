@@ -7,6 +7,20 @@ import '../theme/tokens/tokens.dart';
 /// enums; feature code maps its own states (e.g. EventStatus) onto a tone.
 enum GvStatusTone { neutral, info, live, success, warning }
 
+/// The semantic colour for a [GvStatusTone]. Shared so a chip, a row accent and
+/// any other status affordance stay visually consistent; meaning is always
+/// carried by an accompanying label, never by this colour alone.
+Color gvToneColor(BuildContext context, GvStatusTone tone) {
+  final GvSemanticColors colors = context.gvColors;
+  return switch (tone) {
+    GvStatusTone.neutral => colors.textMuted,
+    GvStatusTone.info => colors.info,
+    GvStatusTone.live => GvColors.accentPrimary,
+    GvStatusTone.success => colors.success,
+    GvStatusTone.warning => colors.warning,
+  };
+}
+
 /// A compact status pill. Meaning is carried by the text label (a coloured dot
 /// only reinforces it), so information is never conveyed by colour alone.
 class GvStatusChip extends StatelessWidget {
@@ -19,20 +33,9 @@ class GvStatusChip extends StatelessWidget {
   final String label;
   final GvStatusTone tone;
 
-  Color _toneColor(BuildContext context) {
-    final GvSemanticColors colors = context.gvColors;
-    return switch (tone) {
-      GvStatusTone.neutral => colors.textMuted,
-      GvStatusTone.info => colors.info,
-      GvStatusTone.live => GvColors.accentPrimary,
-      GvStatusTone.success => colors.success,
-      GvStatusTone.warning => colors.warning,
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
-    final Color toneColor = _toneColor(context);
+    final Color toneColor = gvToneColor(context, tone);
     return Semantics(
       label: label,
       child: ExcludeSemantics(

@@ -11,16 +11,20 @@ import 'package:gridview/core/theme/gridview_theme.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/home/application/home_providers.dart';
 import 'package:gridview/features/shared/application/providers.dart';
+import 'package:gridview/features/shared/domain/entities/sync_state.dart';
+import 'package:gridview/features/sync/application/sync_providers.dart';
 import 'package:gridview/l10n/app_localizations.dart';
 
 import 'domain_fixtures.dart';
 import 'fake_repository.dart';
 
 /// The default fake repository backing widget/navigation tests: a fresh Home
-/// aggregate and a coherent Grand Prix detail for any (season, round). The real
-/// Drift pipeline is exercised in the DAO/repository/controller tests.
+/// aggregate, a realistic season calendar and a coherent Grand Prix detail for
+/// any (season, round). The real Drift pipeline is exercised in the
+/// DAO/repository/controller tests.
 FakeRaceWeekendRepository defaultFakeRepository() => FakeRaceWeekendRepository(
   home: homeViewFixture(),
+  calendar: (int season) => calendarFixture(season: season),
   grandPrix: (int season, int round) => grandPrixDetailFixture(season, round),
 );
 
@@ -130,6 +134,9 @@ Future<GoRouter> pumpApp(
   DateTime? clock,
   AppEnvironment environment = AppEnvironment.development,
   bool mockData = false,
+  int? currentSeason = 2026,
+  ResourceSyncState? Function(String key)? syncMetadata,
+  ManualCoreRefresh? onManualRefresh,
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
@@ -143,14 +150,42 @@ Future<GoRouter> pumpApp(
     ProviderScope(
       overrides: [
         homeRepositoryProvider.overrideWithValue(repo),
+        calendarRepositoryProvider.overrideWithValue(repo),
         grandPrixRepositoryProvider.overrideWithValue(repo),
+        resultRepositoryProvider.overrideWithValue(repo),
         clockProvider.overrideWithValue(() => now),
         appEnvironmentProvider.overrideWithValue(environment),
         usesMockDataProvider.overrideWithValue(mockData),
-        // Home is season-scoped. Widget tests replace the data layer with
-        // fakes, so the season it renders is supplied directly rather than
-        // resolved from a database these tests never open.
-        currentSeasonResolverProvider.overrideWithValue(() async => 2026),
+        // Home, Calendar and Standings are season-scoped. Widget tests replace
+        // the data layer with fakes, so the season they render is supplied
+        // directly rather than resolved from a database these tests never open.
+        currentSeasonResolverProvider.overrideWithValue(
+          () async => currentSeason,
+        ),
+        currentSeasonProvider.overrideWith(
+          (Ref ref) => Stream<int?>.value(currentSeason),
+        ),
+        // The persisted materialization/freshness record. By default every
+        // resource reads as successfully synchronised and fresh, so screens
+        // render their real content rather than a first-load state.
+        // The manual current-season refresh capability. Widget tests drive
+        // rendering, so this stands in for the coordinator's whole object
+        // graph — mounting the real one would open a database these tests
+        // deliberately replace with fakes. It still performs a real calendar
+        // refresh through the fake repository, so call counts stay meaningful.
+        manualCoreRefreshProvider.overrideWithValue(
+          onManualRefresh ??
+              () async {
+                final int? season = currentSeason;
+                if (season == null) return;
+                await repo.refreshCalendar(season);
+              },
+        ),
+        resourceSyncStateProvider.overrideWith(
+          (Ref ref, String key) => Stream<ResourceSyncState?>.value(
+            syncMetadata == null ? syncedMetadata(key) : syncMetadata(key),
+          ),
+        ),
       ],
       child: StartupRefreshStandIn(
         child: TestApp(
@@ -201,3 +236,18 @@ Future<void> tapNav(WidgetTester tester, String label) async {
 /// provider (no dependency on internal routing-match types).
 String shellLocation(GoRouter router) =>
     router.routeInformationProvider.value.uri.toString();
+
+/// The [ProviderContainer] backing the pumped app, so a test can publish an
+/// application-level synchronization state exactly as the real coordinator does
+/// (feature controllers mirror it; they never produce it).
+ProviderContainer containerOf(WidgetTester tester) =>
+    ProviderScope.containerOf(tester.element(find.byType(TestApp)));
+
+/// The scroll offset of the first scroll view inside [screen].
+double scrollOffsetOf(WidgetTester tester, Type screen) {
+  final Finder scrollable = find.descendant(
+    of: find.byType(screen),
+    matching: find.byType(Scrollable),
+  );
+  return tester.state<ScrollableState>(scrollable.first).position.pixels;
+}

@@ -341,4 +341,146 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mockDataBanner => 'Sample data — not live results';
+
+  @override
+  String lastUpdatedLabel(String time) {
+    return 'Updated $time';
+  }
+
+  @override
+  String get eventStateUnknown => 'Status unknown';
+
+  @override
+  String get sessionStateUnknown => 'Status unknown';
+
+  @override
+  String get sessionNameUnknown => 'Session';
+
+  @override
+  String get weekendFormatStandard => 'Standard weekend';
+
+  @override
+  String get weekendFormatSprint => 'Sprint weekend';
+
+  @override
+  String get weekendFormatUnknown => 'Format unknown';
+
+  @override
+  String get calendarNextLabel => 'Next';
+
+  @override
+  String get calendarEmptyTitle => 'No races scheduled yet';
+
+  @override
+  String get calendarEmptyMessage =>
+      'The calendar for this season has not been published. It will appear here as soon as it is.';
+
+  @override
+  String get calendarErrorTitle => 'Can\'t load the calendar';
+
+  @override
+  String get calendarSeasonUnavailableTitle => 'Season not available yet';
+
+  @override
+  String get calendarSeasonUnavailableMessage =>
+      'GridView could not determine the current season. Check your connection and try again.';
+
+  @override
+  String get calendarRefreshAction => 'Refresh calendar';
+
+  @override
+  String calendarEventSemantics(String name, String round, String status) {
+    return '$name, round $round, $status';
+  }
+
+  @override
+  String get grandPrixNoSessionsTitle => 'Schedule not available';
+
+  @override
+  String get grandPrixNoSessionsMessage =>
+      'Session times for this weekend have not been published yet.';
+
+  @override
+  String get grandPrixSprintResults => 'Sprint results';
+
+  @override
+  String get grandPrixRaceResults => 'Race results';
+
+  @override
+  String get grandPrixResultsUnavailableTitle => 'Results not available yet';
+
+  @override
+  String get grandPrixResultsErrorTitle => 'Can\'t load results';
+
+  @override
+  String grandPrixOpenDriver(String name) {
+    return 'Open driver $name';
+  }
+
+  @override
+  String grandPrixOpenConstructor(String name) {
+    return 'Open team $name';
+  }
+
+  @override
+  String get fieldCircuit => 'Circuit';
+
+  @override
+  String get fieldLocation => 'Location';
+
+  @override
+  String get fieldDates => 'Dates';
+
+  @override
+  String get fieldEventTimeZone => 'Event time zone';
+
+  @override
+  String get fieldDeviceTimeZone => 'Your time zone';
+
+  @override
+  String get resultsFastestLap => 'Fastest lap';
+
+  @override
+  String resultLapsBehind(int laps) {
+    String _temp0 = intl.Intl.pluralLogic(
+      laps,
+      locale: localeName,
+      other: '+$laps laps',
+      one: '+1 lap',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get resultStatusProvisional => 'Provisional';
+
+  @override
+  String get resultStatusFinal => 'Final';
+
+  @override
+  String get resultStatusUnavailable => 'Not available';
+
+  @override
+  String get resultStatusUnknown => 'Status unknown';
+
+  @override
+  String get finishStatusFinished => 'Finished';
+
+  @override
+  String get finishStatusLapped => 'Lapped';
+
+  @override
+  String get finishStatusDnf => 'DNF';
+
+  @override
+  String get finishStatusDns => 'DNS';
+
+  @override
+  String get finishStatusDsq => 'DSQ';
+
+  @override
+  String get finishStatusDnq => 'DNQ';
+
+  @override
+  String get finishStatusUnknown => 'Status unknown';
 }

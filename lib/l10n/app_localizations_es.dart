@@ -343,4 +343,148 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mockDataBanner => 'Datos de muestra — no son resultados reales';
+
+  @override
+  String lastUpdatedLabel(String time) {
+    return 'Actualizado $time';
+  }
+
+  @override
+  String get eventStateUnknown => 'Estado desconocido';
+
+  @override
+  String get sessionStateUnknown => 'Estado desconocido';
+
+  @override
+  String get sessionNameUnknown => 'Sesión';
+
+  @override
+  String get weekendFormatStandard => 'Fin de semana estándar';
+
+  @override
+  String get weekendFormatSprint => 'Fin de semana al sprint';
+
+  @override
+  String get weekendFormatUnknown => 'Formato desconocido';
+
+  @override
+  String get calendarNextLabel => 'Siguiente';
+
+  @override
+  String get calendarEmptyTitle => 'Todavía no hay carreras programadas';
+
+  @override
+  String get calendarEmptyMessage =>
+      'El calendario de esta temporada aún no se ha publicado. Aparecerá aquí en cuanto lo esté.';
+
+  @override
+  String get calendarErrorTitle => 'No se puede cargar el calendario';
+
+  @override
+  String get calendarSeasonUnavailableTitle =>
+      'Temporada no disponible todavía';
+
+  @override
+  String get calendarSeasonUnavailableMessage =>
+      'GridView no ha podido determinar la temporada actual. Comprueba tu conexión e inténtalo de nuevo.';
+
+  @override
+  String get calendarRefreshAction => 'Actualizar el calendario';
+
+  @override
+  String calendarEventSemantics(String name, String round, String status) {
+    return '$name, ronda $round, $status';
+  }
+
+  @override
+  String get grandPrixNoSessionsTitle => 'Horario no disponible';
+
+  @override
+  String get grandPrixNoSessionsMessage =>
+      'Los horarios de las sesiones de este fin de semana aún no se han publicado.';
+
+  @override
+  String get grandPrixSprintResults => 'Resultados del sprint';
+
+  @override
+  String get grandPrixRaceResults => 'Resultados de la carrera';
+
+  @override
+  String get grandPrixResultsUnavailableTitle =>
+      'Resultados aún no disponibles';
+
+  @override
+  String get grandPrixResultsErrorTitle => 'No se pueden cargar los resultados';
+
+  @override
+  String grandPrixOpenDriver(String name) {
+    return 'Abrir el piloto $name';
+  }
+
+  @override
+  String grandPrixOpenConstructor(String name) {
+    return 'Abrir el equipo $name';
+  }
+
+  @override
+  String get fieldCircuit => 'Circuito';
+
+  @override
+  String get fieldLocation => 'Ubicación';
+
+  @override
+  String get fieldDates => 'Fechas';
+
+  @override
+  String get fieldEventTimeZone => 'Zona horaria del evento';
+
+  @override
+  String get fieldDeviceTimeZone => 'Tu zona horaria';
+
+  @override
+  String get resultsFastestLap => 'Vuelta rápida';
+
+  @override
+  String resultLapsBehind(int laps) {
+    String _temp0 = intl.Intl.pluralLogic(
+      laps,
+      locale: localeName,
+      other: '+$laps vueltas',
+      one: '+1 vuelta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get resultStatusProvisional => 'Provisional';
+
+  @override
+  String get resultStatusFinal => 'Definitivo';
+
+  @override
+  String get resultStatusUnavailable => 'No disponible';
+
+  @override
+  String get resultStatusUnknown => 'Estado desconocido';
+
+  @override
+  String get finishStatusFinished => 'Finalizó';
+
+  @override
+  String get finishStatusLapped => 'Doblado';
+
+  @override
+  String get finishStatusDnf => 'DNF';
+
+  @override
+  String get finishStatusDns => 'DNS';
+
+  @override
+  String get finishStatusDsq => 'DSQ';
+
+  @override
+  String get finishStatusDnq => 'DNQ';
+
+  @override
+  String get finishStatusUnknown => 'Estado desconocido';
 }
