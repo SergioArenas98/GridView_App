@@ -51,7 +51,8 @@ class CircuitRepositoryImpl extends SyncedRepository
   @override
   Future<RefreshResult> refreshSeasonCircuits(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<List<CircuitDto>>(
       key: ResourceKey.circuits(season),
@@ -67,7 +68,8 @@ class CircuitRepositoryImpl extends SyncedRepository
       writeDomain: (RemoteModified<List<CircuitDto>> m) => _local
           .upsertCircuits(m.data.map(circuitFromDto).toList(growable: false)),
       hasLocalRepresentation: collectionRepresentation,
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 
@@ -75,7 +77,8 @@ class CircuitRepositoryImpl extends SyncedRepository
   Future<RefreshResult> refreshCircuit({
     required String circuitId,
     required int season,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<CircuitDetailDto>(
       key: ResourceKey.circuit(circuitId, season),
@@ -94,7 +97,8 @@ class CircuitRepositoryImpl extends SyncedRepository
       hasLocalRepresentation: entityRepresentation(
         () async => (await _local.countCircuit(circuitId)) > 0,
       ),
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 }

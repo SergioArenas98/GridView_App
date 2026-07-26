@@ -1,3 +1,4 @@
+import '../../data/remote/remote_cancellation.dart';
 import '../refresh_result.dart';
 
 /// Domain-facing repository for the curated content/media manifest.
@@ -9,5 +10,8 @@ import '../refresh_result.dart';
 abstract interface class ContentRepository {
   /// The last successfully synchronized content version, or null.
   Future<String?> readContentVersion();
-  Future<RefreshResult> refreshContentManifest({bool forceRefresh = false});
+  Future<RefreshResult> refreshContentManifest({
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  });
 }

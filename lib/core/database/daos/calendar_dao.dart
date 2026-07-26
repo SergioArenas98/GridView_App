@@ -51,6 +51,25 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     });
   }
 
+  /// Upserts the *compact* circuit identity carried by a `CircuitSummary`
+  /// (id, name and — when supplied — locality and country code) without ever
+  /// clobbering the richer detail-synced columns (coordinates, length, corner
+  /// count, direction, first Grand Prix year, lap record) or media.
+  ///
+  /// An optional field the summary omits is **not** a deletion instruction: it
+  /// is simply left out of the companion, so the stored value survives.
+  Future<void> upsertCircuitSummaries(List<Circuit> items) {
+    return transaction(() async {
+      for (final Circuit c in items) {
+        validateSlug(c.id, field: 'circuit id');
+        validateCountryCode(c.countryCode, field: 'circuit countryCode');
+        await into(
+          circuits,
+        ).insertOnConflictUpdate(_compactCircuitCompanion(c));
+      }
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Calendar collection write (season-scoped replacement)
   // ---------------------------------------------------------------------------
@@ -335,6 +354,22 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
   /// so an upsert never clobbers detail-synced physical facts or media.
   CircuitsCompanion _summaryCircuitCompanion(Circuit c) =>
       CircuitsCompanion.insert(id: c.id, name: c.name);
+
+  /// A partial circuit companion for a compact `CircuitSummary`: id and name,
+  /// plus locality/country code **only when the summary carries them**. Absent
+  /// optional values are omitted from the companion rather than written as
+  /// null, so an upsert never erases richer stored data.
+  CircuitsCompanion _compactCircuitCompanion(Circuit c) =>
+      CircuitsCompanion.insert(
+        id: c.id,
+        name: c.name,
+        locality: c.locality == null
+            ? const Value<String?>.absent()
+            : Value<String?>(c.locality),
+        countryCode: c.countryCode == null
+            ? const Value<String?>.absent()
+            : Value<String?>(c.countryCode),
+      );
 
   /// A partial event companion carrying only the summary columns; `officialName`
   /// and sessions are left untouched so a detail sync's richer data survives.

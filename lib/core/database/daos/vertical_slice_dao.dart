@@ -337,13 +337,20 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     isCurrent: Value<bool>(s.isCurrent),
   );
 
+  /// The circuit a snapshot carries is a *summary*: it never holds the
+  /// detail-owned physical facts, and an optional field it omits is not a
+  /// deletion instruction. Absent values are therefore left out of the
+  /// companion so an upsert preserves whatever a detail sync already stored.
   CircuitsCompanion _circuitCompanion(Circuit c) => CircuitsCompanion.insert(
     id: c.id,
     name: c.name,
-    locality: Value<String?>(c.locality),
-    country: Value<String?>(c.country),
-    countryCode: Value<String?>(c.countryCode),
+    locality: _presentOrAbsent(c.locality),
+    country: _presentOrAbsent(c.country),
+    countryCode: _presentOrAbsent(c.countryCode),
   );
+
+  Value<String?> _presentOrAbsent(String? value) =>
+      value == null ? const Value<String?>.absent() : Value<String?>(value);
 
   GrandPrixEventsCompanion _grandPrixCompanion(GrandPrix g) =>
       GrandPrixEventsCompanion.insert(
@@ -352,7 +359,10 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
         round: g.round,
         eventSlug: g.eventSlug,
         name: g.name,
-        officialName: Value<String?>(g.officialName),
+        // A snapshot's featured event is a *summary*: it never carries the
+        // official name, and its absence is not a deletion instruction. Leaving
+        // the column out preserves whatever the detail sync stored.
+        officialName: _presentOrAbsent(g.officialName),
         circuitId: g.circuitId,
         status: g.status.wire,
         format: g.format.wire,

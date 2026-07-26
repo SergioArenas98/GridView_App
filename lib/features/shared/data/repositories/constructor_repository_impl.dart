@@ -56,7 +56,8 @@ class ConstructorRepositoryImpl extends SyncedRepository
   @override
   Future<RefreshResult> refreshSeasonConstructors(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<List<SeasonConstructorSummaryDto>>(
       key: ResourceKey.constructors(season),
@@ -86,7 +87,8 @@ class ConstructorRepositoryImpl extends SyncedRepository
         );
       },
       hasLocalRepresentation: collectionRepresentation,
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 
@@ -94,7 +96,8 @@ class ConstructorRepositoryImpl extends SyncedRepository
   Future<RefreshResult> refreshConstructor({
     required String constructorId,
     required int season,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<ConstructorDetailDto>(
       key: ResourceKey.constructor(constructorId, season),
@@ -115,7 +118,8 @@ class ConstructorRepositoryImpl extends SyncedRepository
       hasLocalRepresentation: entityRepresentation(
         () async => (await _local.countConstructor(constructorId)) > 0,
       ),
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 }

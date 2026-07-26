@@ -1,3 +1,4 @@
+import '../../data/remote/remote_cancellation.dart';
 import '../entities/detail_views.dart';
 import '../refresh_result.dart';
 
@@ -21,11 +22,13 @@ abstract interface class ConstructorRepository {
 
   Future<RefreshResult> refreshSeasonConstructors(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
   Future<RefreshResult> refreshConstructor({
     required String constructorId,
     required int season,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
 }

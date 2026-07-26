@@ -1,3 +1,4 @@
+import '../../data/remote/remote_cancellation.dart';
 import '../entities/season.dart';
 import '../refresh_result.dart';
 
@@ -10,6 +11,13 @@ abstract interface class SeasonRepository {
   Future<Season?> readCurrentSeason();
   Future<Season?> readSeason(int season);
 
-  Future<RefreshResult> refreshCurrentSeason({bool forceRefresh = false});
-  Future<RefreshResult> refreshSeason(int season, {bool forceRefresh = false});
+  Future<RefreshResult> refreshCurrentSeason({
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  });
+  Future<RefreshResult> refreshSeason(
+    int season, {
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  });
 }

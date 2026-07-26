@@ -50,7 +50,8 @@ class GrandPrixRepositoryImpl extends SyncedRepository
   Future<RefreshResult> refreshGrandPrix({
     required int season,
     required int round,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<GrandPrixDto>(
       key: ResourceKey.grandPrix(season, round),
@@ -83,7 +84,8 @@ class GrandPrixRepositoryImpl extends SyncedRepository
       hasLocalRepresentation: entityRepresentation(
         () async => (await _local.countGrandPrix(season, round)) > 0,
       ),
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 }

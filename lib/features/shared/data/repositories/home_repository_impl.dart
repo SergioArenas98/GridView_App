@@ -39,7 +39,10 @@ class HomeRepositoryImpl extends SyncedRepository implements HomeRepository {
   Future<HomeView?> readHome() => _local.watchHome().first;
 
   @override
-  Future<RefreshResult> refreshHome({bool forceRefresh = false}) {
+  Future<RefreshResult> refreshHome({
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  }) {
     return refreshResource<HomeDataDto>(
       key: ResourceKey.home(),
       scope: ResourceScope.none,
@@ -54,7 +57,8 @@ class HomeRepositoryImpl extends SyncedRepository implements HomeRepository {
       hasLocalRepresentation: entityRepresentation(
         () async => (await _local.countHomeSnapshot()) > 0,
       ),
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 

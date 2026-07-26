@@ -1,3 +1,4 @@
+import '../../data/remote/remote_cancellation.dart';
 import '../entities/grand_prix_view.dart';
 import '../refresh_result.dart';
 
@@ -18,6 +19,7 @@ abstract interface class GrandPrixRepository {
   Future<RefreshResult> refreshGrandPrix({
     required int season,
     required int round,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
 }

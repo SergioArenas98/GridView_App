@@ -1,3 +1,4 @@
+import '../../data/remote/remote_cancellation.dart';
 import '../entities/grand_prix.dart';
 import '../refresh_result.dart';
 
@@ -9,6 +10,7 @@ abstract interface class CalendarRepository {
   Future<List<GrandPrix>> readCalendar(int season);
   Future<RefreshResult> refreshCalendar(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
 }

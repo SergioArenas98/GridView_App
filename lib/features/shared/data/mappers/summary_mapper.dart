@@ -1,4 +1,5 @@
 import '../../../../core/api/dto/summary_dto.dart';
+import '../../domain/entities/circuit.dart';
 import '../../domain/entities/constructor.dart';
 import '../../domain/entities/driver.dart';
 import '../../domain/entities/enums.dart';
@@ -9,6 +10,17 @@ import '../../domain/entities/season_entry.dart';
 // composite entry id, so the participation id is synthesised deterministically
 // from the season and stable id (`<season>-<slug>`) — stable across syncs and
 // unique within the season (one summary per competitor per season).
+
+/// The compact circuit identity carried by a `CircuitSummary` (id, name and,
+/// when present, locality/country code). The physical facts, lap record and
+/// media stay with the circuit detail sync, so this entity deliberately leaves
+/// them null — a null here means "not carried by this summary", never "delete".
+Circuit circuitFromCircuitSummaryDto(CircuitSummaryDto dto) => Circuit(
+  id: dto.id,
+  name: dto.name,
+  locality: dto.locality,
+  countryCode: dto.countryCode,
+);
 
 /// The stable driver identity carried by a season-driver summary (name, code,
 /// number, country). Biography and media are left to the driver detail sync.

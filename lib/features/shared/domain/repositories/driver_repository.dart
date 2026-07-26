@@ -1,3 +1,4 @@
+import '../../data/remote/remote_cancellation.dart';
 import '../entities/detail_views.dart';
 import '../refresh_result.dart';
 
@@ -20,11 +21,13 @@ abstract interface class DriverRepository {
 
   Future<RefreshResult> refreshSeasonDrivers(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
   Future<RefreshResult> refreshDriver({
     required String driverId,
     required int season,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
 }

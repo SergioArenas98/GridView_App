@@ -1,3 +1,4 @@
+import '../../data/remote/remote_cancellation.dart';
 import '../entities/race_result.dart';
 import '../refresh_result.dart';
 
@@ -16,6 +17,7 @@ abstract interface class ResultRepository {
   Future<RefreshResult> refreshResults({
     required int season,
     required int round,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
 }

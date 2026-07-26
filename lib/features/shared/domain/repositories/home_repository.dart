@@ -1,3 +1,4 @@
+import '../../data/remote/remote_cancellation.dart';
 import '../entities/home_view.dart';
 import '../refresh_result.dart';
 
@@ -9,5 +10,8 @@ import '../refresh_result.dart';
 abstract interface class HomeRepository {
   Stream<HomeView?> watchHome();
   Future<HomeView?> readHome();
-  Future<RefreshResult> refreshHome({bool forceRefresh = false});
+  Future<RefreshResult> refreshHome({
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  });
 }

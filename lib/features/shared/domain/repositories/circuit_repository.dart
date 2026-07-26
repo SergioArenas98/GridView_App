@@ -1,3 +1,4 @@
+import '../../data/remote/remote_cancellation.dart';
 import '../entities/circuit.dart';
 import '../entities/detail_views.dart';
 import '../refresh_result.dart';
@@ -13,11 +14,13 @@ abstract interface class CircuitRepository {
 
   Future<RefreshResult> refreshSeasonCircuits(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
   Future<RefreshResult> refreshCircuit({
     required String circuitId,
     required int season,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
 }

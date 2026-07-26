@@ -39,7 +39,10 @@ class SeasonRepositoryImpl extends SyncedRepository
   Future<Season?> readSeason(int season) => _local.readSeason(season);
 
   @override
-  Future<RefreshResult> refreshCurrentSeason({bool forceRefresh = false}) {
+  Future<RefreshResult> refreshCurrentSeason({
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  }) {
     return refreshResource<SeasonDto>(
       key: ResourceKey.currentSeason(),
       scope: ResourceScope.none,
@@ -52,12 +55,17 @@ class SeasonRepositoryImpl extends SyncedRepository
       hasLocalRepresentation: entityRepresentation(
         () async => (await _local.countCurrentSeason()) > 0,
       ),
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 
   @override
-  Future<RefreshResult> refreshSeason(int season, {bool forceRefresh = false}) {
+  Future<RefreshResult> refreshSeason(
+    int season, {
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  }) {
     return refreshResource<SeasonDto>(
       key: ResourceKey.season(season),
       scope: ResourceScope(season: season),
@@ -70,7 +78,8 @@ class SeasonRepositoryImpl extends SyncedRepository
       hasLocalRepresentation: entityRepresentation(
         () async => (await _local.countSeason(season)) > 0,
       ),
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 }

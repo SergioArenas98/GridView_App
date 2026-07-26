@@ -48,7 +48,8 @@ class ResultRepositoryImpl extends SyncedRepository
   Future<RefreshResult> refreshResults({
     required int season,
     required int round,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<RaceResultDto>(
       key: ResourceKey.grandPrixResults(season, round),
@@ -68,7 +69,8 @@ class ResultRepositoryImpl extends SyncedRepository
       // collection (0..2 documents — sprint and race can coexist); a successful
       // sync materializes it, so it uses collection semantics.
       hasLocalRepresentation: collectionRepresentation,
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 }

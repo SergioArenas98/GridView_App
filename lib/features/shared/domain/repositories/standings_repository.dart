@@ -1,3 +1,4 @@
+import '../../data/remote/remote_cancellation.dart';
 import '../entities/standing.dart';
 import '../refresh_result.dart';
 
@@ -12,10 +13,12 @@ abstract interface class StandingsRepository {
 
   Future<RefreshResult> refreshDriverStandings(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
   Future<RefreshResult> refreshConstructorStandings(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   });
 }

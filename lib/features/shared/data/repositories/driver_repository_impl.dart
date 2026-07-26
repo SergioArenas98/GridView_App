@@ -58,7 +58,8 @@ class DriverRepositoryImpl extends SyncedRepository
   @override
   Future<RefreshResult> refreshSeasonDrivers(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<List<SeasonDriverSummaryDto>>(
       key: ResourceKey.drivers(season),
@@ -87,7 +88,8 @@ class DriverRepositoryImpl extends SyncedRepository
         await _local.replaceDriverSeasonEntries(season, entries);
       },
       hasLocalRepresentation: collectionRepresentation,
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 
@@ -95,7 +97,8 @@ class DriverRepositoryImpl extends SyncedRepository
   Future<RefreshResult> refreshDriver({
     required String driverId,
     required int season,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<DriverDetailDto>(
       key: ResourceKey.driver(driverId, season),
@@ -129,7 +132,8 @@ class DriverRepositoryImpl extends SyncedRepository
       hasLocalRepresentation: entityRepresentation(
         () async => (await _local.countDriver(driverId)) > 0,
       ),
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 }

@@ -9,6 +9,15 @@
 class ResourceKey {
   const ResourceKey._();
 
+  /// The first-launch aggregate (`GET /v1/bootstrap`).
+  ///
+  /// Bootstrap is **one** HTTP representation with **one** ETag, so it owns a
+  /// single unscoped key. The compact families it carries never acquire
+  /// bootstrap's validator or provenance under their own keys — each individual
+  /// endpoint earns its own metadata only when its own representation is
+  /// refreshed (see ADR 0014).
+  static String bootstrap() => 'bootstrap';
+
   /// The current-season resource (`GET /v1/seasons/current`).
   static String currentSeason() => 'season:current';
 

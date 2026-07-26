@@ -46,7 +46,8 @@ class StandingsRepositoryImpl extends SyncedRepository
   @override
   Future<RefreshResult> refreshDriverStandings(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<List<DriverStandingDto>>(
       key: ResourceKey.driverStandings(season),
@@ -65,14 +66,16 @@ class StandingsRepositoryImpl extends SyncedRepository
             m.data.map(driverStandingFromDto).toList(growable: false),
           ),
       hasLocalRepresentation: collectionRepresentation,
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 
   @override
   Future<RefreshResult> refreshConstructorStandings(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<List<ConstructorStandingDto>>(
       key: ResourceKey.constructorStandings(season),
@@ -91,7 +94,8 @@ class StandingsRepositoryImpl extends SyncedRepository
             m.data.map(constructorStandingFromDto).toList(growable: false),
           ),
       hasLocalRepresentation: collectionRepresentation,
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 }

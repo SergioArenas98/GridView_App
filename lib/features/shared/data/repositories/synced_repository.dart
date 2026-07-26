@@ -98,7 +98,7 @@ abstract class SyncedRepository {
     required Future<void> Function(RemoteModified<T> modified) writeDomain,
     required LocalRepresentation hasLocalRepresentation,
     RemoteCancellation? cancellation,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
   }) {
     return coordinator.run(
       key,
@@ -110,7 +110,7 @@ abstract class SyncedRepository {
         writeDomain: writeDomain,
         hasLocalRepresentation: hasLocalRepresentation,
         cancellation: cancellation,
-        forceRefresh: forceRefresh,
+        bypassValidator: bypassValidator,
       ),
     );
   }
@@ -123,12 +123,12 @@ abstract class SyncedRepository {
     required Future<void> Function(RemoteModified<T>) writeDomain,
     required LocalRepresentation hasLocalRepresentation,
     required RemoteCancellation? cancellation,
-    required bool forceRefresh,
+    required bool bypassValidator,
   }) async {
     // Read the stored metadata once: its ETag drives the conditional request and
     // its success state feeds the resource-specific representation check.
     final ResourceSyncState? storedMeta = await sync.read(key);
-    final String? storedEtag = forceRefresh ? null : storedMeta?.etag;
+    final String? storedEtag = bypassValidator ? null : storedMeta?.etag;
     final RemoteResult<T> result = await fetch(
       etag: storedEtag,
       cancellation: cancellation,
@@ -145,7 +145,9 @@ abstract class SyncedRepository {
         // A present local representation (including a valid empty collection):
         // update synchronization metadata only, no domain write, no retry.
         await sync.recordNotModified(key, scope, now(), newEtag: result.etag);
-        return const RefreshSuccess(applied: false);
+        return const RefreshSuccess(
+          application: RefreshApplication.notModified,
+        );
       }
       // 304 but no local representation exists: the cache is inconsistent.
       // Retry exactly once, unconditionally (no If-None-Match).
@@ -199,10 +201,13 @@ abstract class SyncedRepository {
 
     switch (outcome) {
       case SnapshotConflictOutcome.apply:
-        return const RefreshSuccess(applied: true);
+        return const RefreshSuccess();
       case SnapshotConflictOutcome.skippedUpToDate:
+        return const RefreshSuccess(application: RefreshApplication.idempotent);
       case SnapshotConflictOutcome.rejectedOlder:
-        return const RefreshSuccess(applied: false);
+        return const RefreshSuccess(
+          application: RefreshApplication.rejectedOlder,
+        );
       case SnapshotConflictOutcome.rejectedInvalid:
         return const RefreshFailure(
           ApiFailure(kind: ApiFailureKind.invalidResponse),

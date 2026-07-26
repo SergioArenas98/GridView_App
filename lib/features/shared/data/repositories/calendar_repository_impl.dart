@@ -39,7 +39,8 @@ class CalendarRepositoryImpl extends SyncedRepository
   @override
   Future<RefreshResult> refreshCalendar(
     int season, {
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) {
     return refreshResource<List<GrandPrixSummaryDto>>(
       key: ResourceKey.calendar(season),
@@ -65,7 +66,8 @@ class CalendarRepositoryImpl extends SyncedRepository
       // A season calendar is an authoritative collection: a successful sync
       // materializes it even when the season legitimately has no events.
       hasLocalRepresentation: collectionRepresentation,
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 }

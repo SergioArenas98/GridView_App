@@ -27,7 +27,10 @@ class ContentRepositoryImpl extends SyncedRepository
       (await sync.read(ResourceKey.contentManifest()))?.contentVersion;
 
   @override
-  Future<RefreshResult> refreshContentManifest({bool forceRefresh = false}) {
+  Future<RefreshResult> refreshContentManifest({
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  }) {
     return refreshResource<ContentManifestDto>(
       key: ResourceKey.contentManifest(),
       scope: ResourceScope.none,
@@ -51,7 +54,8 @@ class ContentRepositoryImpl extends SyncedRepository
       // The manifest's representation is its persisted metadata, so a recorded
       // success is the presence signal (collection semantics).
       hasLocalRepresentation: collectionRepresentation,
-      forceRefresh: forceRefresh,
+      bypassValidator: bypassValidator,
+      cancellation: cancellation,
     );
   }
 }

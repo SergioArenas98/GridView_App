@@ -1,3 +1,4 @@
+import 'package:gridview/features/shared/data/remote/remote_cancellation.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/home_view.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
@@ -63,7 +64,10 @@ class FakeRaceWeekendRepository implements HomeRepository, GrandPrixRepository {
   }) => watchGrandPrix(season: season, round: round).first;
 
   @override
-  Future<RefreshResult> refreshHome({bool forceRefresh = false}) =>
+  Future<RefreshResult> refreshHome({
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  }) =>
       onRefreshHome?.call() ??
       Future<RefreshResult>.value(const RefreshSuccess());
 
@@ -71,7 +75,8 @@ class FakeRaceWeekendRepository implements HomeRepository, GrandPrixRepository {
   Future<RefreshResult> refreshGrandPrix({
     required int season,
     required int round,
-    bool forceRefresh = false,
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
   }) =>
       onRefreshGrandPrix?.call(season, round) ??
       Future<RefreshResult>.value(const RefreshSuccess());
