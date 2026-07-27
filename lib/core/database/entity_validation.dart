@@ -8,6 +8,8 @@
 /// are enforced here, transactionally, at the DAO write boundary.
 library;
 
+import 'unresolved_identity.dart';
+
 /// Thrown when a value written to the local database violates a scalar rule.
 /// The enclosing transaction is rolled back and no rows change.
 class InvalidEntityException implements Exception {
@@ -31,6 +33,21 @@ void validateSlug(String value, {required String field}) {
   if (value.isEmpty || value.length > 96 || !_kebab.hasMatch(value)) {
     throw InvalidEntityException(
       '$field "$value" is not a valid kebab-case identifier.',
+    );
+  }
+}
+
+/// An authoritative display name written to a `NOT NULL` name column.
+///
+/// It must not be the referential-stub marker ([kUnresolvedIdentityName]), so
+/// "stored name is the marker" means *unresolved identity* and nothing else. A
+/// blank-but-present name from a provider is rejected rather than silently
+/// persisted as an unresolved stub.
+void validateDisplayName(String value, {required String field}) {
+  if (isUnresolvedIdentityName(value) || value.trim().isEmpty) {
+    throw InvalidEntityException(
+      '$field must be a real display name, not blank: an empty name is '
+      'reserved for an unresolved referential stub.',
     );
   }
 }

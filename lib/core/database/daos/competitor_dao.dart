@@ -11,6 +11,7 @@ import '../competitor_tables.dart';
 import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../tables.dart';
+import '../unresolved_identity.dart';
 
 part 'competitor_dao.g.dart';
 
@@ -57,6 +58,7 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     return transaction(() async {
       for (final Driver d in items) {
         validateSlug(d.id, field: 'driver id');
+        validateDisplayName(d.fullName, field: 'driver fullName');
         validateCountryCode(d.countryCode, field: 'driver countryCode');
         await into(drivers).insertOnConflictUpdate(_driverCompanion(d));
         if (d.media != null) {
@@ -74,6 +76,7 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     return transaction(() async {
       for (final Constructor c in items) {
         validateSlug(c.id, field: 'constructor id');
+        validateDisplayName(c.name, field: 'constructor name');
         validateCountryCode(c.countryCode, field: 'constructor countryCode');
         await into(
           constructors,
@@ -96,6 +99,7 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     return transaction(() async {
       for (final Driver d in items) {
         validateSlug(d.id, field: 'driver id');
+        validateDisplayName(d.fullName, field: 'driver fullName');
         validateCountryCode(d.countryCode, field: 'driver countryCode');
         await into(drivers).insertOnConflictUpdate(_driverIdentityCompanion(d));
       }
@@ -109,6 +113,7 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     return transaction(() async {
       for (final Constructor c in items) {
         validateSlug(c.id, field: 'constructor id');
+        validateDisplayName(c.name, field: 'constructor name');
         validateCountryCode(c.countryCode, field: 'constructor countryCode');
         await into(
           constructors,
@@ -145,8 +150,8 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
         driverSeasonEntries,
       )..where((DriverSeasonEntries e) => e.season.equals(season))).go();
       for (final DriverSeasonEntry e in entries) {
-        await _ensureDriver(e.driverId);
-        await _ensureConstructor(e.constructorId);
+        await ensureDriverIdentity(e.driverId);
+        await ensureConstructorIdentity(e.constructorId);
         await into(driverSeasonEntries).insert(_driverEntryCompanion(e));
       }
     });
@@ -210,7 +215,7 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
         constructorSeasonEntries,
       )..where((ConstructorSeasonEntries e) => e.season.equals(season))).go();
       for (final ConstructorSeasonEntry e in entries) {
-        await _ensureConstructor(e.constructorId);
+        await ensureConstructorIdentity(e.constructorId);
         await into(
           constructorSeasonEntries,
         ).insert(_constructorEntryCompanion(e));
@@ -237,7 +242,10 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     final List<SeasonDriver> roster = <SeasonDriver>[];
     for (final DriverSeasonEntryRow e in entryRows) {
       final DriverRow? d = byId[e.driverId];
-      if (d == null) continue;
+      // An identity that is still an unresolved referential stub is not a
+      // domain driver, so the roster omits it rather than presenting a profile
+      // with no name.
+      if (d == null || isUnresolvedIdentityName(d.fullName)) continue;
       roster.add(
         SeasonDriver(driver: _driverFrom(d), entry: _driverEntryFrom(e)),
       );
@@ -259,7 +267,8 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     final List<SeasonConstructor> list = <SeasonConstructor>[];
     for (final ConstructorSeasonEntryRow e in entryRows) {
       final ConstructorRow? c = byId[e.constructorId];
-      if (c == null) continue;
+      // See driversForSeason: a referential stub is never a collection member.
+      if (c == null || isUnresolvedIdentityName(c.name)) continue;
       list.add(
         SeasonConstructor(
           constructor: _constructorFrom(c),
@@ -282,7 +291,10 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     final DriverRow? row = await (select(
       drivers,
     )..where((Drivers d) => d.id.equals(driverId))).getSingleOrNull();
-    if (row == null) return null;
+    // A row that exists only to satisfy a foreign key is not a materialized
+    // driver detail: the caller must see "not available yet", not a profile
+    // built around an unavailable name.
+    if (row == null || isUnresolvedIdentityName(row.fullName)) return null;
 
     final List<MediaAsset> media = await attachedDatabase.mediaDao
         .mediaForOwner(MediaEntityType.driver, driverId);
@@ -304,7 +316,8 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     final ConstructorRow? row = await (select(
       constructors,
     )..where((Constructors c) => c.id.equals(constructorId))).getSingleOrNull();
-    if (row == null) return null;
+    // See driverDetail: a referential stub is not a materialized detail.
+    if (row == null || isUnresolvedIdentityName(row.name)) return null;
 
     final List<MediaAsset> media = await attachedDatabase.mediaDao
         .mediaForOwner(MediaEntityType.constructor, constructorId);
@@ -481,15 +494,25 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     mode: InsertMode.insertOrIgnore,
   );
 
-  Future<void> _ensureDriver(String id) => into(drivers).insert(
-    DriversCompanion.insert(id: id, fullName: _humanizeSlug(id)),
+  /// Ensures a `drivers` row exists for [id] as a **referential stub** — the
+  /// single creation path for one, shared by every DAO that must satisfy the
+  /// foreign key before the driver collection has synchronised.
+  ///
+  /// The stored name is [kUnresolvedIdentityName], never a name derived from the
+  /// identifier. `INSERT OR IGNORE` makes this idempotent and means an identity
+  /// that has already synchronised is never downgraded.
+  Future<void> ensureDriverIdentity(String id) => into(drivers).insert(
+    DriversCompanion.insert(id: id, fullName: kUnresolvedIdentityName),
     mode: InsertMode.insertOrIgnore,
   );
 
-  Future<void> _ensureConstructor(String id) => into(constructors).insert(
-    ConstructorsCompanion.insert(id: id, name: _humanizeSlug(id)),
-    mode: InsertMode.insertOrIgnore,
-  );
+  /// Ensures a `constructors` row exists for [id] as a referential stub. See
+  /// [ensureDriverIdentity].
+  Future<void> ensureConstructorIdentity(String id) =>
+      into(constructors).insert(
+        ConstructorsCompanion.insert(id: id, name: kUnresolvedIdentityName),
+        mode: InsertMode.insertOrIgnore,
+      );
 
   // ---------------------------------------------------------------------------
   // Mapping
@@ -624,11 +647,4 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
         chassis: r.chassis,
         driverLineup: null,
       );
-
-  String _humanizeSlug(String slug) => slug
-      .split('-')
-      .map(
-        (String w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}',
-      )
-      .join(' ');
 }

@@ -126,7 +126,9 @@ non-null and `<= now`). A supplied UTC instant is used (the DAO never calls
 Conventions: stable GridView IDs are the only keys; enum values are stored as
 their wire token and read back through `fromWire` (unrecognised → `unknown`);
 optional values stay nullable (`null` ≠ `0`/`""`/`false`); country codes are
-ISO 3166-1 alpha-2.
+ISO 3166-1 alpha-2. A **required** display name whose identity has not
+synchronized yet is stored as an explicit referential stub, never as a name
+derived from the identifier — see §9.
 
 ### Relationships (v2)
 
@@ -291,3 +293,98 @@ inherits an ETag or a freshness window the server never issued for its URL.
 **Aggregate run state is not persisted.** `resource_sync_metadata` remains the
 only durable synchronization record; the application-level run state lives in
 memory and adds no table.
+
+## 9. Phase 7B — referential stubs for unsynchronized competitor identities
+
+Phase 7B adds **no** schema change: schema stays **v2**, the database file stays
+`gridview_v2.sqlite`, and both exported schema snapshots remain byte-identical to
+Phase 6A.
+
+### The problem
+
+`driver_standings`, `constructor_standings` and `race_result_entries` reference
+`drivers` / `constructors` by stable identifier, and all three can legitimately be
+persisted **before** the corresponding competitor collection has synchronized
+(bootstrap ordering, a season-scoped refresh that fails after the standings, or a
+historical season whose competitors were never fetched). The foreign keys must
+still hold, and `drivers.full_name` / `constructors.name` are `NOT NULL`, so the
+parent row has to carry some value.
+
+### The encoding
+
+The parent is created as an explicit **referential stub**: a row whose display
+name is `kUnresolvedIdentityName` — the empty string — defined once in
+`lib/core/database/unresolved_identity.dart`.
+
+It is deliberately **not** derived from the identifier. Humanising a slug
+(`unsynced-driver` → "Unsynced Driver") writes a real-looking name into a real
+row, which no reader can afterwards distinguish from an authoritative one; the
+invented text then reaches the user and suppresses the localized
+"unavailable" copy. That is the defect this encoding exists to prevent.
+
+The encoding is:
+
+- **deterministic** — one exact constant, tested only through
+  `isUnresolvedIdentityName`, never a heuristic or a name pattern;
+- **unambiguous** — `validateDisplayName` (in `entity_validation.dart`) rejects a
+  blank name on every authoritative identity upsert, so a stored empty name means
+  *unresolved* and nothing else, and a real identity can never be mistaken for a
+  stub;
+- **safe to fail on** — it carries no characters, so even a hypothetical leak past
+  a read could only render as nothing. It can never read as a plausible name,
+  which a humanised identifier always does.
+
+A referential stub is **persistence only**. It is not a domain `Driver` or
+`Constructor`, and it is not a display name.
+
+### Creation — one path
+
+`CompetitorDao.ensureDriverIdentity` / `ensureConstructorIdentity` are the single
+creation path. `StandingsDao` and `ResultsDao` delegate to them rather than
+writing a parent themselves, and no DAO humanises an identifier any more.
+
+Both use `INSERT OR IGNORE`, which gives three properties for free:
+
+- an identity that has already synchronized is **never** downgraded or
+  overwritten by a standings or classification write;
+- repeating a write before the identity arrives is **idempotent** (one row, no
+  churn, no stream re-emission);
+- the referencing row's stable identifier is untouched, so identity and routing
+  keep working while the name is unavailable.
+
+### Reads — the stub never escapes
+
+Every read that projects a competitor name goes through `resolvedDisplayName`,
+which maps the marker to `null`:
+
+- `StandingsDao.driverStandingEntries` → `driverName` is `null`;
+  `constructorStandingEntries` → `stableName` (and therefore `displayName`) is
+  `null`. The Standings screen renders its localized "Name unavailable" copy.
+- A driver standing whose `constructorId` is unresolved exposes no team name and
+  no team colour — and a team is never inferred from the driver's season entries.
+- `ResultsDao` resolves classification names from the stored profiles, so an
+  unresolved competitor simply has no name, exactly as if the row were absent.
+- `CompetitorDao.driverDetail` / `teamDetail` return `null` for a stub: a
+  referential stub is **not a materialized detail**.
+- `CompetitorDao.driversForSeason` / `constructorsForSeason` omit stubs: a
+  referential stub is **not a collection member**. The underlying
+  `driver_season_entries` / `constructor_season_entries` rows are untouched — only
+  the identity-shaped projection skips them.
+
+### Resolution
+
+A later authoritative `upsertDrivers` / `upsertConstructors` /
+`upsertDriverIdentities` / `upsertConstructorIdentities` replaces the stub row in
+place. Because it is the same row, every Drift stream watching `drivers` /
+`constructors` re-emits, and the standings and classifications that referenced it
+show the real name with no further synchronization. Nothing is deleted or
+rewritten to make that happen: no standings row, no season entry and no
+`resource_sync_metadata` row is involved in resolution, and `order_index` is
+preserved.
+
+### Not covered by this rule
+
+`circuits` rows are still ensured with a name derived from the identifier
+(`CalendarDao._ensureCircuit`, `VerticalSliceDao`). That is the same class of
+issue for a different family and is deliberately left unchanged in Phase 7B; it
+is recorded here so it is not mistaken for an accepted design.

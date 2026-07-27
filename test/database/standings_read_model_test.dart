@@ -179,35 +179,8 @@ void main() {
       },
     );
 
-    test('an unsynchronised competitor keeps its stable identity', () async {
-      // Standings persisted before their competitors were synchronised. The
-      // write path creates the minimal identity row required for referential
-      // integrity (`drivers.full_name` is NOT NULL, so it carries a humanised
-      // placeholder — Phase 6A persistence behaviour). The read model adds
-      // nothing of its own: it reports exactly what is stored, keeps the stable
-      // id intact for navigation, and leaves genuinely absent optional identity
-      // fields null rather than deriving them.
-      await dao.replaceDriverStandings(2026, <DriverStanding>[
-        const DriverStanding(
-          season: 2026,
-          driverId: 'unsynced-driver',
-          position: 1,
-          points: 1,
-        ),
-      ]);
-      final List<DriverStandingEntry> rows = await dao.driverStandingEntries(
-        2026,
-      );
-      expect(rows.single.driverId, 'unsynced-driver');
-      expect(rows.single.driverName, 'Unsynced Driver');
-      expect(rows.single.driverShortCode, isNull);
-      expect(rows.single.constructorName, isNull);
-    });
-
     test('a read model with no stored identity reports no name', () async {
-      // The defensive path: a row whose identity is not present locally at all
-      // reports a null name, which the screen renders as a localized
-      // "unavailable" fallback rather than as an invented name.
+      // The read model never derives a name from an identifier.
       const DriverStandingEntry entry = DriverStandingEntry(
         standing: DriverStanding(
           season: 2026,

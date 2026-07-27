@@ -259,7 +259,7 @@ ResourceSyncState syncedMetadata(
 /// order wins.
 DriverStandingEntry driverStandingEntry({
   required String driverId,
-  required String driverName,
+  String? driverName,
   required int order,
   required double points,
   int? position,

@@ -691,6 +691,62 @@ over fake repositories, and temporary on-disk files for the persistence suite.
   false zero), supplied values join on one secondary line, a two-digit position
   stays on a single line, and `semanticLabel` exposes one explicit reading order.
 
+### Referential stubs (Phase 7B correction)
+
+`test/database/unresolved_identity_test.dart` covers the persistence-only
+referential stub that satisfies a foreign key while a competitor identity has not
+synchronized (`GridView_Local_Data.md` §9). It is the one place allowed to read
+the stored name column raw; every other assertion goes through a DAO read.
+
+- **Standings before the identity** — a driver standing persists with its stable
+  identifier, position, fractional points and confirmed-zero statistics intact,
+  while the read model exposes no name at all: not the marker, not the raw
+  identifier and not a humanised identifier. The stored parent is asserted to be
+  the marker so a future regression to a fabricated name fails loudly. The
+  equivalent holds for a constructor standing (no season name, no stable name, no
+  display name, no colour).
+- **Idempotence** — repeating the standings write before identity synchronization
+  leaves exactly one identity row, still a stub, and one standing row.
+- **A missing team invents nothing** — a standing that names a constructor which
+  has not synchronized shows the real driver name with no team name and no team
+  colour.
+- **Resolution** — a later authoritative driver upsert resolves the stub *in
+  place*: a stream observed before the upsert emits the unnamed row first and the
+  real name second, and the standing's position, points, wins and `orderIndex`
+  survive. A constructor upsert resolves the stub, and a later season entry then
+  takes precedence over the stable name and supplies the accent colour.
+- **No downgrade** — repeated standings and constructor-standings writes never
+  overwrite an identity that already synchronized, and an authoritative upsert is
+  *rejected* when it tries to store a blank name (so the marker can only ever mean
+  "unresolved"), leaving no partial row behind.
+- **Not a domain entity** — `driverDetail` / `teamDetail` return `null` for a stub
+  and become materialized as soon as the identity arrives (with the standing still
+  attached); `driversForSeason` / `constructorsForSeason` omit stubs while the
+  underlying season-entry rows are proven still present; and a classification
+  exposes null competitor names rather than invented ones.
+- **On disk** — after a close/reopen of a real database file, an unresolved
+  standing is still readable, still nameless, still not a materialized detail, and
+  still resolvable by a later upsert.
+- **Historical seasons** — a past-season standings write may hold unresolved
+  identities without showing invented names and without touching the current
+  season.
+- **The projection is exhaustive** — every nullable name/colour a standings read
+  model exposes is asserted null for an unresolved pair, and the predicate itself
+  is asserted exact (a real name, an identifier and a blank-looking space are all
+  *not* the marker).
+
+`test/screens/standings_widget_test.dart` adds the screen-level half: an
+unresolved driver and an unresolved constructor both render the localized
+**"Name unavailable"** copy, never the identifier or a humanised form of it; the
+row still announces its position and points; an unresolved team leaves the row's
+secondary line without a dangling separator; and tapping the row still navigates
+by its stable id.
+
+`test/database/competitor_dao_test.dart` roster and detail cases now seed the
+authoritative identities they read, which is how season participation and the
+competitor collections actually arrive together. Their assertions (ordering, span
+selection, transactional rejection, preserved role) are unchanged.
+
 ### Phase 7B goldens
 
 `test/screens/screen_golden_test.dart` adds dark-theme goldens for the populated

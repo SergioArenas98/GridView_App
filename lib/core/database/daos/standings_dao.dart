@@ -8,6 +8,7 @@ import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../standing_tables.dart';
 import '../tables.dart';
+import '../unresolved_identity.dart';
 
 part 'standings_dao.g.dart';
 
@@ -191,11 +192,13 @@ class StandingsDao extends DatabaseAccessor<GridViewDatabase>
           return DriverStandingEntry(
             standing: _driverFrom(r),
             orderIndex: r.orderIndex,
-            driverName: identity?.fullName,
+            driverName: resolvedDisplayName(identity?.fullName),
             driverShortCode: identity?.shortCode,
             constructorName: teamId == null
                 ? null
-                : (entry?.fullName ?? entry?.shortName ?? team?.name),
+                : (entry?.fullName ??
+                      entry?.shortName ??
+                      resolvedDisplayName(team?.name)),
             teamColor: teamId == null
                 ? null
                 : (entry?.colorPrimary ?? team?.colorPrimary),
@@ -240,7 +243,7 @@ class StandingsDao extends DatabaseAccessor<GridViewDatabase>
             standing: _constructorFrom(r),
             orderIndex: r.orderIndex,
             seasonName: entry?.fullName ?? entry?.shortName,
-            stableName: identity?.name,
+            stableName: resolvedDisplayName(identity?.name),
             teamColor: entry?.colorPrimary ?? identity?.colorPrimary,
           );
         })
@@ -358,15 +361,15 @@ class StandingsDao extends DatabaseAccessor<GridViewDatabase>
     mode: InsertMode.insertOrIgnore,
   );
 
-  Future<void> _ensureDriver(String id) => into(drivers).insert(
-    DriversCompanion.insert(id: id, fullName: _humanizeSlug(id)),
-    mode: InsertMode.insertOrIgnore,
-  );
+  /// Standings can legitimately arrive before the competitor collections, so a
+  /// missing identity is created as a **referential stub** through the single
+  /// creation path in [CompetitorDao] — never as a name derived from the
+  /// identifier, and never overwriting an identity that already synchronised.
+  Future<void> _ensureDriver(String id) =>
+      attachedDatabase.competitorDao.ensureDriverIdentity(id);
 
-  Future<void> _ensureConstructor(String id) => into(constructors).insert(
-    ConstructorsCompanion.insert(id: id, name: _humanizeSlug(id)),
-    mode: InsertMode.insertOrIgnore,
-  );
+  Future<void> _ensureConstructor(String id) =>
+      attachedDatabase.competitorDao.ensureConstructorIdentity(id);
 
   // ---------------------------------------------------------------------------
   // Mapping
@@ -418,11 +421,4 @@ class StandingsDao extends DatabaseAccessor<GridViewDatabase>
         wins: r.wins,
         provisional: r.provisional,
       );
-
-  String _humanizeSlug(String slug) => slug
-      .split('-')
-      .map(
-        (String w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}',
-      )
-      .join(' ');
 }

@@ -7,6 +7,7 @@ import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../result_tables.dart';
 import '../tables.dart';
+import '../unresolved_identity.dart';
 
 part 'results_dao.g.dart';
 
@@ -174,11 +175,16 @@ class ResultsDao extends DatabaseAccessor<GridViewDatabase>
               ),
             ))
             .get();
+    // A referential stub carries no name, so it resolves to null exactly like a
+    // missing row: the classification shows the identifier's entry without
+    // inventing a display name for it.
     final Map<String, String> driverNames = <String, String>{
-      for (final DriverRow d in driverRows) d.id: d.fullName,
+      for (final DriverRow d in driverRows)
+        if (resolvedDisplayName(d.fullName) case final String name) d.id: name,
     };
     final Map<String, String> constructorNames = <String, String>{
-      for (final ConstructorRow c in constructorRows) c.id: c.name,
+      for (final ConstructorRow c in constructorRows)
+        if (resolvedDisplayName(c.name) case final String name) c.id: name,
     };
 
     return rows
@@ -196,15 +202,16 @@ class ResultsDao extends DatabaseAccessor<GridViewDatabase>
   // Reference ensuring
   // ---------------------------------------------------------------------------
 
-  Future<void> _ensureDriver(String id) => into(drivers).insert(
-    DriversCompanion.insert(id: id, fullName: _humanizeSlug(id)),
-    mode: InsertMode.insertOrIgnore,
-  );
+  /// A classification can legitimately arrive before the competitor
+  /// collections, so a missing identity is created as a **referential stub**
+  /// through the single creation path in [CompetitorDao] — never as a name
+  /// derived from the identifier, and never overwriting an identity that already
+  /// synchronised.
+  Future<void> _ensureDriver(String id) =>
+      attachedDatabase.competitorDao.ensureDriverIdentity(id);
 
-  Future<void> _ensureConstructor(String id) => into(constructors).insert(
-    ConstructorsCompanion.insert(id: id, name: _humanizeSlug(id)),
-    mode: InsertMode.insertOrIgnore,
-  );
+  Future<void> _ensureConstructor(String id) =>
+      attachedDatabase.competitorDao.ensureConstructorIdentity(id);
 
   // ---------------------------------------------------------------------------
   // Mapping
@@ -294,11 +301,4 @@ class ResultsDao extends DatabaseAccessor<GridViewDatabase>
 
   Duration? _durationOrNull(int? millis) =>
       millis == null ? null : Duration(milliseconds: millis);
-
-  String _humanizeSlug(String slug) => slug
-      .split('-')
-      .map(
-        (String w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}',
-      )
-      .join(' ');
 }

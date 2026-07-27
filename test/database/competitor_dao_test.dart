@@ -20,6 +20,31 @@ void main() {
   });
   tearDown(() => db.close());
 
+  /// Seeds the authoritative identities a roster/detail read needs.
+  ///
+  /// Season participation and the driver/constructor collections arrive from the
+  /// same synchronization, so a roster read in production always has real
+  /// identities. A row that exists only as a referential stub is deliberately
+  /// **not** a roster member or a materialized detail — that behaviour has its
+  /// own coverage in `standings_read_model_test.dart`.
+  Future<void> seedIdentities({
+    List<String> driverIds = const <String>[],
+    List<String> constructorIds = const <String>[],
+  }) async {
+    if (driverIds.isNotEmpty) {
+      await dao.upsertDrivers(<Driver>[
+        for (final String id in driverIds)
+          Driver(id: id, fullName: 'Driver $id'),
+      ]);
+    }
+    if (constructorIds.isNotEmpty) {
+      await dao.upsertConstructors(<Constructor>[
+        for (final String id in constructorIds)
+          Constructor(id: id, name: 'Team $id'),
+      ]);
+    }
+  }
+
   MediaAsset portrait(String id, String owner) => MediaAsset(
     id: id,
     entityType: MediaEntityType.driver,
@@ -79,6 +104,10 @@ void main() {
   test(
     'drivers-by-season roster orders by race number (unnumbered last)',
     () async {
+      await seedIdentities(
+        driverIds: <String>['a', 'b', 'c'],
+        constructorIds: <String>['t'],
+      );
       await dao.replaceDriverSeasonEntries(2026, <DriverSeasonEntry>[
         const DriverSeasonEntry(
           id: '2026-b',
@@ -176,6 +205,10 @@ void main() {
   test(
     'overlapping stints for the same driver are rejected transactionally',
     () async {
+      await seedIdentities(
+        driverIds: <String>['a'],
+        constructorIds: <String>['t', 'team-a', 'team-b'],
+      );
       // A valid single stint is cached first.
       await dao.replaceDriverSeasonEntries(2026, <DriverSeasonEntry>[
         const DriverSeasonEntry(
@@ -235,6 +268,10 @@ void main() {
   test(
     'non-overlapping consecutive stints for one driver are accepted',
     () async {
+      await seedIdentities(
+        driverIds: <String>['a'],
+        constructorIds: <String>['team-a', 'team-b'],
+      );
       await dao.replaceDriverSeasonEntries(2026, <DriverSeasonEntry>[
         const DriverSeasonEntry(
           id: '2026-a-1',
@@ -289,6 +326,10 @@ void main() {
   );
 
   test('an unknown driver role is preserved as unknown', () async {
+    await seedIdentities(
+      driverIds: <String>['x'],
+      constructorIds: <String>['t'],
+    );
     await dao.replaceDriverSeasonEntries(2026, <DriverSeasonEntry>[
       const DriverSeasonEntry(
         id: '2026-x',
@@ -305,6 +346,10 @@ void main() {
   test(
     'driver detail picks the open span for a mid-season team change',
     () async {
+      await seedIdentities(
+        driverIds: <String>['x'],
+        constructorIds: <String>['team-a', 'team-b'],
+      );
       await dao.replaceDriverSeasonEntries(2026, <DriverSeasonEntry>[
         const DriverSeasonEntry(
           id: '2026-x-team-a',

@@ -968,6 +968,12 @@ no `lastSuccessAt`. Consequently:
   agrees, one section-level notice represents the data; when rows disagree they
   are marked individually and no global claim is made. A null never means
   "final".
+- A competitor whose identity has not synchronized yet is a **referential stub**
+  in persistence (`GridView_Local_Data.md` §9): the read model reports no name at
+  all and the row shows the localized "unavailable" copy. A display name is never
+  derived from an identifier, the stable id stays available for identity and
+  routing, and a later authoritative upsert resolves the stub in place so the
+  local stream re-emits the real name.
 
 ### 13.6 Freshness and failure scoping
 

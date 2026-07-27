@@ -398,6 +398,118 @@ void main() {
     });
   });
 
+  group('unresolved identities', () {
+    testWidgets('an unresolved identity shows the localized fallback', (
+      WidgetTester tester,
+    ) async {
+      // The identity behind the standing has not synchronised yet, so the read
+      // model carries no name at all.
+      await pumpApp(
+        tester,
+        initialLocation: '/standings',
+        surfaceSize: _tallSurface,
+        standings: FakeStandingsRepository(
+          drivers: (int season) => <DriverStandingEntry>[
+            driverStandingEntry(
+              order: 0,
+              position: 1,
+              driverId: 'unsynced-driver',
+              driverName: null,
+              constructorId: 'unsynced-team',
+              points: 25,
+            ),
+          ],
+          constructors: (int season) => <ConstructorStandingEntry>[
+            constructorStandingEntry(
+              order: 0,
+              position: 1,
+              constructorId: 'unsynced-team',
+              points: 25,
+            ),
+          ],
+        ),
+      );
+
+      expect(find.text('Name unavailable'), findsOneWidget);
+      // Never the identifier, and never anything humanised from it.
+      expect(find.text('unsynced-driver'), findsNothing);
+      expect(find.text('Unsynced Driver'), findsNothing);
+      expect(find.textContaining('unsynced'), findsNothing);
+      // The row still announces its position and points.
+      expect(
+        find.bySemanticsLabel(
+          'Position 1, Name unavailable, 25 points, Championship leader',
+        ),
+        findsOneWidget,
+      );
+
+      // The same holds for the constructors' table.
+      await _selectConstructors(tester);
+      expect(find.text('Name unavailable'), findsOneWidget);
+      expect(find.text('unsynced-team'), findsNothing);
+      expect(find.text('Unsynced Team'), findsNothing);
+    });
+
+    testWidgets('an unresolved team leaves the row without a team line', (
+      WidgetTester tester,
+    ) async {
+      await pumpApp(
+        tester,
+        initialLocation: '/standings',
+        surfaceSize: _tallSurface,
+        standings: FakeStandingsRepository(
+          drivers: (int season) => <DriverStandingEntry>[
+            driverStandingEntry(
+              order: 0,
+              position: 1,
+              driverId: 'known-driver',
+              driverName: 'Known Driver',
+              constructorId: 'unsynced-team',
+              points: 25,
+              wins: 1,
+            ),
+          ],
+        ),
+      );
+      expect(find.text('Known Driver'), findsOneWidget);
+      // Wins render; the unavailable team contributes nothing and leaves no
+      // dangling separator.
+      expect(find.text('1 win'), findsOneWidget);
+      expect(find.textContaining('unsynced'), findsNothing);
+    });
+
+    testWidgets('a driver row still navigates by its stable id', (
+      WidgetTester tester,
+    ) async {
+      await pumpApp(
+        tester,
+        initialLocation: '/standings',
+        surfaceSize: _tallSurface,
+        standings: FakeStandingsRepository(
+          drivers: (int season) => <DriverStandingEntry>[
+            driverStandingEntry(
+              order: 0,
+              position: 1,
+              driverId: 'unsynced-driver',
+              driverName: null,
+              points: 25,
+            ),
+          ],
+        ),
+      );
+      await tester.tap(find.text('Name unavailable'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<DriverDetailScreen>(find.byType(DriverDetailScreen))
+            .driverId,
+        'unsynced-driver',
+        reason: 'identity and routing survive an unavailable name',
+      );
+    });
+  });
+
   group('provisional', () {
     testWidgets('rows that all agree show one section-level notice', (
       WidgetTester tester,
