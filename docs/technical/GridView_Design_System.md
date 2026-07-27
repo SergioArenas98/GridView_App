@@ -166,6 +166,37 @@ title readable and lets the value wrap.
 The component catalogue examples and the design-system tests were updated with
 these components.
 
+## 8c. Phase 7B component changes
+
+Two data-agnostic refinements were made while wiring the Standings feature. Both
+stay primitive: `GvStandingsRow` still takes only already-formatted strings and
+knows nothing about drivers, constructors, repositories, Riverpod, Drift or DTOs,
+and both championship tables use the same component.
+
+- **`GvStandingsRow`** gained optional `stat`, `badgeLabel` and `semanticLabel`.
+  `stat` and `badgeLabel` join the existing `team` on the row's secondary line
+  with the shared ` · ` separator; anything the caller omits is simply not
+  rendered, so a missing team leaves no dangling separator and a missing
+  statistic never becomes a false zero. `semanticLabel` replaces the row's merged
+  child semantics with one explicit label, so a screen reader announces position,
+  name, team, points, statistics and status (leader, tied leader, provisional) in
+  a useful order — leader emphasis therefore has a semantic equivalent and is
+  never carried by colour or elevation alone.
+- The row's **leading position slot** changed from a fixed 28 px box to a 32 px
+  *minimum* width with a single line. Single- and double-digit positions stay
+  aligned, while a wider value — a two-digit position at a large text scale, or
+  the localized unranked em dash — takes the room it needs instead of wrapping
+  onto a second line and misaligning the row. This regenerated the
+  `standings_row_leader` design-system golden.
+- **`GvTeamAccent.parse`** turns a contract `#RRGGBB` team colour into a `Color`,
+  returning `null` for a missing or malformed value. A team colour is decorative,
+  so an unparseable one renders no accent rather than failing or substituting a
+  fabricated default. Accents remain thin bars; they never carry meaning alone.
+
+The component catalogue gained a provisional row with a two-digit position and a
+row with no team and no statistics, and the design-system behaviour tests cover
+the new slots, the omission rules and the single-line position.
+
 ## 9. Rules
 
 - No raw colour/spacing/radius literals in widgets — use tokens.

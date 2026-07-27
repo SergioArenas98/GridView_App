@@ -877,15 +877,131 @@ record; ETags and freshness are never combined.
 - A `304` writes no domain rows, so no stream re-emits and no visible content
   changes.
 
-### 12.9 Phase 7B hand-off
+## 13. Feature ownership (Phase 7B: Standings)
 
-- Standings is season-scoped core (§11.8) and must follow the Calendar pattern:
-  no refresh on controller creation, mirror the coordinator for
-  `standings:drivers:<season>` / `standings:constructors:<season>`, and use
-  `manualCoreRefreshProvider` for a user-initiated refresh.
-- Driver, constructor and circuit **detail** are on-demand and must follow the
-  Grand Prix pattern: one request per opened route, cancellation on dispose,
-  cached content preserved through failures.
+Standings consumes the same Phase 6 layer with no new synchronization seam. The
+two championships are **independent remote resources** throughout:
+`standings:drivers:<season>` and `standings:constructors:<season>` have their own
+rows, their own ETags, their own freshness and their own refresh status. Nothing
+is ever derived from one for the other.
+
+### 13.1 Controller ownership
+
+`StandingsController` (`features/standings/application/standings_providers.dart`)
+owns **presentation** refresh status only; content always comes from the
+Drift-backed streams.
+
+- Creating it starts **no** refresh, and neither does a rebuild or a selector
+  change. Startup and foreground refresh of the current-season core set remain
+  the application coordinator's job (ADR 0015).
+- It mirrors `appSyncStateProvider` through `resourceRefreshStatus`, matched
+  strictly against `DriverStandingsSyncResource` / `ConstructorStandingsSyncResource`
+  for the rendered season. An unrelated core resource, another season, or the
+  *other* championship never becomes a table's error.
+- It is a family over `StandingsScope` — the route's season and championship, or
+  `null`/`null` at the season-agnostic branch root.
+
+### 13.2 Season resolution
+
+- `/standings` resolves the season from `currentSeasonProvider` and re-points
+  itself when the current season changes. Previous seasons stay on disk, simply
+  unwatched, and are never rendered under the new season.
+- `/standings/drivers/:season` and `/standings/constructors/:season` render their
+  exact validated route season and never substitute the current year.
+
+### 13.3 Manual refresh
+
+- **Current season** (branch root, or an explicit route whose season *is* the
+  locally current one): `manualCoreRefreshProvider` → `AppSyncCoordinator.refreshNow()`,
+  exactly once per user action. It forces eligibility for one run while keeping
+  conditional requests and persisted ETags, refreshes both standings resources,
+  and its report is then interpreted **per resource**.
+- **Historical explicit route**: one focused
+  `StandingsRepository.refresh{Driver,Constructor}Standings(routeSeason)` for the
+  selected championship only — conditional, with its own persisted ETag, never
+  touching the other championship and never a current-season key. The comparison
+  reads the locally stored current season through `currentSeasonResolverProvider`
+  (no request).
+- The refresh future always completes — success, failure or cancellation. A
+  cancelled request clears the transient state instead of surfacing an error.
+- Duplicate taps coalesce through the existing in-progress guard and the
+  coordinator's own deduplication. There is no lifecycle observer, no timer and
+  no `/v1/status` call inside Standings.
+
+### 13.4 Materialization
+
+Both tables use the shared `hasMaterializedCollection` rule
+(`features/shared/domain/collection_materialization.dart`) — the same one the
+Calendar delegates to, so the two can never drift apart. A table is materialized
+by either its **own** successful record or an **accepted bootstrap for that exact
+season**, never by a row count.
+
+Bootstrap applies both standings collections in one transaction, so an accepted
+same-season bootstrap materializes both. It still contributes **no** individual
+metadata: no ETag, no `generatedAt`/`sourceUpdatedAt`/`staleAfter`/`contentVersion`,
+no `lastSuccessAt`. Consequently:
+
+- a bootstrap-materialized table has `freshness == null` and shows **no** update
+  time (unknown is never presented as fresh and never as stale);
+- both resources remain due for their first individual synchronization, whose
+  first request sends no fabricated validator;
+- a `200` on one endpoint creates only its own metadata, and a later `304` uses
+  only its own persisted ETag.
+
+### 13.5 Ordering and value semantics
+
+- `order_index` is authoritative. Rows are never re-sorted by position, points or
+  name, and ties are never broken locally. Duplicated, null and non-monotonic
+  positions survive exactly as delivered.
+- A null position is unranked: it renders as a localized em dash with an explicit
+  accessible meaning, never as `0`, and never as the list index.
+- Leader emphasis comes only from a **confirmed** `position == 1` — never from a
+  maximum points total and never from the first row. Several confirmed leaders
+  are all treated (and announced) as tied.
+- Points are fractional-capable and formatted through the existing shared
+  `ResultFormatter`: the numeric value is preserved, the locale's decimal
+  separator is used and meaningless trailing zeros are dropped. Formatted strings
+  are presentation only and are never parsed back or persisted.
+- Optional statistics stay optional: a confirmed zero is shown, a null is omitted
+  rather than turned into a zero.
+- `provisional` is a per-row nullable boolean. When every row that states it
+  agrees, one section-level notice represents the data; when rows disagree they
+  are marked individually and no global claim is made. A null never means
+  "final".
+
+### 13.6 Freshness and failure scoping
+
+Everything is scoped to the **selected** table: its own `lastSuccessAt`, its own
+stale notice, its own non-blocking failure. The drivers' timestamp is never shown
+while Constructors is selected, and switching the selector switches that context
+immediately. Cached rows (and a valid empty representation) always stay visible
+through a refresh and through a failure; nothing is deleted because a later
+refresh failed.
+
+### 13.7 Presentation-only session state
+
+`standingsUiStateProvider` holds the selected championship and each table's
+remembered scroll offset. It performs no synchronization and reads no content.
+Selection defaults to Drivers on the first visit of an application session,
+survives branch switches and detail round trips, and is deliberately **not**
+persisted across launches in Phase 7B. Offsets are remembered per season, so a
+season transition starts the new season's tables at the top without corrupting
+anything on disk.
+
+### 13.8 Phase 7C hand-off
+
+- Driver and Constructor **detail** already have entry points: from the Standings
+  rows (by stable `driverId` / `constructorId`) and from Grand Prix results.
+- Detail resources stay **on demand** and must follow the Grand Prix pattern: one
+  request per opened route, cancellation on dispose, cached content preserved
+  through failures. They are never swept by an automatic run.
+- Explore collection screens use the current-season collection pattern
+  (`drivers:<season>`, `constructors:<season>`, `circuits:<season>`), which the
+  coordinator already plans.
+- Detail screens must reuse the stable identities and the season context they are
+  opened with; they must not re-resolve identity from a display name.
+- Standings controllers must **not** be modified to own detail synchronization.
 - Reuse `currentSeasonProvider`, `resourceSyncStateProvider`,
-  `resourceRefreshStatus` and `evaluateResourceFreshness`; do not add a second
-  result, error or state-management pattern.
+  `resourceRefreshStatus`, `evaluateResourceFreshness` and
+  `hasMaterializedCollection`; do not add a second result, error or
+  state-management pattern.

@@ -74,15 +74,30 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   requested at most once per opened route, each keeping its cached content
   through a refresh or a failure. See
   `docs/technical/GridView_Synchronization.md` §12 and
-  `docs/technical/GridView_Navigation.md` §9. Phases 7B-7D (standings, drivers,
-  teams, circuits) are not started.
+  `docs/technical/GridView_Navigation.md` §9.
+- Phase 7B - Drivers' and Constructors' standings: done. Both championship
+  tables render from Drift in their delivered `order_index` order — never
+  re-sorted, with duplicated and null positions preserved, fractional points
+  formatted for the locale and optional statistics never turned into false
+  zeroes. They are **independent** resources end to end: separate streams,
+  separate metadata, separate ETags, separate freshness and separate failures, so
+  one table's problem is never the other's. `/standings` resolves the current
+  season locally and opens on Drivers; the explicit season routes render their
+  exact season. The selector and both scroll positions are presentation state
+  that survives branch switches and detail round trips, and changing the
+  selection never issues a request. A refresh happens only when the user asks:
+  through the application coordinator for the current season, or through one
+  focused request for the exact resource on a historical season route. See
+  `docs/technical/GridView_Synchronization.md` §13 and
+  `docs/technical/GridView_Navigation.md` §10. Phases 7C-7D (driver, team and
+  circuit detail, and the Explore collections) are not started.
 
-Home's next-Grand-Prix hero, the Calendar and the Grand Prix detail screen are
-driven by a **Drift-backed** local store: content renders immediately from cache
-(offline included), a refresh writes one atomic snapshot transaction, and a
-failed refresh never erases cached content. The remaining screens (standings,
-drivers, teams, circuits) are still non-authoritative skeletons; no Firebase, ads
-or production provider is wired yet. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
+Home's next-Grand-Prix hero, the Calendar, the Grand Prix detail screen and both
+standings tables are driven by a **Drift-backed** local store: content renders
+immediately from cache (offline included), a refresh writes one atomic snapshot
+transaction, and a failed refresh never erases cached content. The remaining
+screens (drivers, teams, circuits) are still non-authoritative skeletons; no
+Firebase, ads or production provider is wired yet. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
 only under a deliberate `DATA_SOURCE=fixture` build define (never inferred from a
 missing `API_BASE_URL`) and show a "Sample data" banner; **production never
 constructs the fixture source** — an attempted fixture mode or a missing base URL

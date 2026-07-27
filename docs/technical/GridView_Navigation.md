@@ -128,16 +128,16 @@ production always uses the real compile-time environment.)
 
 ## 8. Presentation data
 
-The remaining skeleton screens (standings, drivers, teams, circuits) still
-consume `lib/features/shared/presentation/placeholder/placeholder_content.dart`
-— presentation-only models with deterministic mock values. **No API DTO or Drift
+The remaining skeleton screens (drivers, teams, circuits) still consume
+`lib/features/shared/presentation/placeholder/placeholder_content.dart` —
+presentation-only models with deterministic mock values. **No API DTO or Drift
 row is imported into a presentation widget.** Team colours appear only as
 restrained accents (a line, dot or small highlight), never as full row
 backgrounds.
 
 Home and Grand Prix detail were moved onto real Drift-backed domain read models
-in Phase 4; the Calendar followed in Phase 7A and no longer references the
-placeholder catalogue at all.
+in Phase 4; the Calendar followed in Phase 7A and Standings in Phase 7B, and
+neither references the placeholder catalogue at all.
 
 ## 9. Calendar and Grand Prix navigation (Phase 7A)
 
@@ -194,3 +194,61 @@ current Calendar season — Grand Prix detail is keyed by its own route values.
 An invalid season or round still resolves to the controlled invalid-parameter
 screen, and a Grand Prix that a successful refresh proves does not exist shows a
 controlled not-found state with a recovery action.
+
+## 10. Standings navigation (Phase 7B)
+
+### 10.1 Branch root and explicit season routes
+
+Three routes remain registered inside the Standings branch:
+
+- `/standings` — season- **and** championship-agnostic. It resolves the current
+  season locally and shows Drivers on the first visit of an application session.
+- `/standings/drivers/:season`
+- `/standings/constructors/:season`
+
+The explicit routes render their exact validated route season (an invalid season
+still resolves to the controlled invalid-parameter screen) and select the
+championship they encode, even when that season is not the current one.
+
+### 10.2 Selector and URL behaviour
+
+The championship selector is presentation, not navigation — it never issues a
+request.
+
+- On `/standings` a selector change stays internal to the screen: the
+  season-agnostic location is preserved and no season is invented in the URL.
+- On an explicit season route it `go`es to the **sibling** route for the same
+  season. Both routes are siblings at branch level, so this replaces the current
+  page: switching back and forth can never build a
+  Drivers → Constructors → Drivers stack.
+
+The selected championship lives in `standingsUiStateProvider` for the
+application session, so it survives a bottom-navigation branch switch and a
+Driver/Constructor detail round trip. Nothing is persisted across launches in
+Phase 7B: a fresh launch starts at Drivers.
+
+### 10.3 Independent scroll positions
+
+Each table has its **own** `ScrollController` — never one shared between them —
+plus a `PageStorageKey`, and the branch's remembered offsets live in
+`standingsUiStateProvider`. Switching Drivers → Constructors → Drivers restores
+each table's own position, as does a branch switch and a return from detail. A
+Drift emission or a background refresh never resets a list. Offsets are scoped to
+the season they were taken in, so a season transition starts the new season's
+tables at the top without disturbing the cached rows of any other season.
+
+### 10.4 Standings to Driver and Constructor
+
+Both use stable identifiers through `RoutePaths`, never a display name:
+
+- a drivers' row opens `/drivers/<driverId>`;
+- a constructors' row opens `/constructors/<constructorId>`.
+
+Both detail routes render on the **root navigator** (§4), so the Standings
+branch, its selected championship and both scroll positions are preserved
+underneath; back (app-bar or Android system back) returns to exactly that state.
+Immediate-loop prevention (§4) is unchanged, and only public go_router APIs are
+used.
+
+Driver and constructor detail **content** remains a skeleton until Phase 7C; only
+the entry points are wired.

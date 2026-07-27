@@ -618,3 +618,130 @@ Checklist:
 15. Confirm the **STAGING** badge is visible.
 16. Confirm **no "Sample data" banner** appears (staging with
     `DATA_SOURCE=remote` must never use fixtures).
+
+## Standings feature (Phase 7B)
+
+Both championship tables are covered without a Worker, network, admin token or
+device — pure functions, `ProviderContainer` over in-memory SQLite, widget tests
+over fake repositories, and temporary on-disk files for the persistence suite.
+
+- `test/database/standings_read_model_test.dart` — the presentation read models
+  over a real database: the drivers' table joins the stable driver identity and
+  prefers the season team branding over the stable constructor name; the team
+  comes from **exactly** `DriverStanding.constructorId`, so a null one guesses
+  nothing and a mid-season stint neither duplicates a row nor re-teams it; the
+  constructors' table prefers season branding then the stable identity and never
+  uses a name as identity; `order_index` wins over null, duplicated and
+  non-monotonic positions; fractional points, confirmed zeros and null
+  wins/podiums survive; other seasons are excluded and competitor identities are
+  never deleted; season branding is scoped to the read season; an empty season
+  yields an empty table rather than an error.
+- `test/application/standings_state_test.dart` — the pure state derivation for
+  both championships: unresolved season, unemitted stream and unloaded metadata
+  are loading and never "empty"; a settled run with no season is a controlled
+  recoverable error; direct metadata (with or without rows) materializes; an
+  accepted same-season bootstrap materializes **without** individual freshness or
+  an update time; an older season's bootstrap materializes nothing; one
+  championship never materializes the other; the shared
+  `hasMaterializedCollection` rule is the one used; cached rows survive a refresh
+  and a failure as a non-blocking notice; a refresh in flight hides the previous
+  failure; the `staleAfter` boundary; one table's failure is not the other's, and
+  the retained state is immediately available; and the provisional summary
+  (`unspecified` / `provisional` / `mixed` / `notProvisional`) never flattens a
+  disagreement into a false global state.
+- `test/application/standings_controller_test.dart` — ownership and refresh over
+  the real Drift + coordinator pipeline: creating the controller (root **or**
+  explicit route) issues no request, and neither does rebuilding the derived
+  state; one root user action runs the coordinator once for both tables and keeps
+  the persisted validators; duplicate taps coalesce; a cancelled run still
+  settles the refresh state; an unrelated core failure and the *other* table's
+  failure are never this table's error; a selected failure without
+  materialization is a first-load error and a retry issues a new request;
+  bootstrap creates no standings metadata or ETag, the first individual request
+  after it sends no validator and creates only its own metadata, and a later
+  refresh sends its own persisted ETag; a historical explicit route refreshes
+  **only** the selected championship for the exact route season (never the other
+  championship, never a current-season key), while an explicit route on the
+  current season uses the core path; a season transition switches the watched
+  keys and leaves the previous season on disk.
+- `test/screens/standings_widget_test.dart` — the screen: skeleton only while
+  unmaterialized, real empty states (including bootstrap-materialized empty),
+  bootstrap-only data claiming no update time, per-championship first-load
+  errors, populated tables with delivered order, an unranked em dash with an
+  accessible meaning, a row with no team leaving no dangling separator, leader
+  emphasis from a confirmed position 1 only, tied leaders, section-level vs
+  row-level provisional, the selected table's own timestamp and stale/failure
+  notices, selector behaviour (Drivers first, no request on switch, survives a
+  branch switch and a detail round trip, repeated taps stack nothing, a fresh
+  session returns to Drivers), independent scroll offsets across switches,
+  branch switches, detail round trips and stream emissions, navigation by stable
+  id, pull-to-refresh and the app-bar action, the historical-route refresh, and
+  accessibility (row reading order, selected semantics, explicit refresh label,
+  48 px targets, a 2x text scale and Spanish copy with a decimal comma).
+- `test/data/repositories/standings_offline_test.dart` — a real on-disk database:
+  both collections, their rows and their **separate** ETags survive a
+  close/reopen and render with zero network calls; a later revalidation sends the
+  selected resource's own validator and a `304` emits no false content change;
+  bootstrap-materialized rows (and a bootstrap-materialized *empty* table)
+  survive a reopen with no individual metadata; a failed refresh of one
+  championship preserves both caches and its own validator; an old season
+  survives a current-season transition.
+- `test/design_system/component_behavior_test.dart` — the extended
+  `GvStandingsRow`: omitted values render nothing (no dangling separator, no
+  false zero), supplied values join on one secondary line, a two-digit position
+  stays on a single line, and `semanticLabel` exposes one explicit reading order.
+
+### Phase 7B goldens
+
+`test/screens/screen_golden_test.dart` adds dark-theme goldens for the populated
+drivers' table, the populated constructors' table, a fractional/tied/unranked
+provisional table, the valid empty table, the stale/cached notice and a
+non-blocking refresh failure with the rows retained. The Phase 3
+`standings_skeleton` golden was **replaced** by `standings_loading` — a
+deliberate final-screen loading frame (the real screen with the selected table
+not yet materialized), so the skeleton-only golden no longer has a role. The
+`standings_row_leader` design-system golden was regenerated for the row's
+minimum-width position slot. Every changed golden was inspected; all other
+goldens are unchanged.
+
+### Manual staging validation (Phase 7B, non-CI)
+
+CI never depends on staging availability; this pass is manual and uses only
+public GET routes — no admin route and no `ADMIN_TOKEN`.
+
+Build and install a staging APK with an externally supplied base URL:
+
+```powershell
+flutter build apk --debug --flavor staging `
+  --dart-define=APP_ENV=staging `
+  --dart-define=DATA_SOURCE=remote `
+  --dart-define=API_BASE_URL=<staging base URL>
+```
+
+Checklist:
+
+1. Open **Standings** on an install that has already synchronised.
+2. Confirm **Drivers** is selected on the first visit.
+3. Verify the delivered positions, driver names, team names and points.
+4. Verify fractional points render with the locale's decimal separator, and that
+   a confirmed zero shows as zero while an unavailable statistic is absent.
+5. Switch to **Constructors**; verify season team names, positions and points.
+6. Scroll both tables to clearly different positions.
+7. Switch between them and confirm each position is preserved.
+8. Switch bottom-navigation branches and return; confirm the selected
+   championship and both positions survived.
+9. Open a **Driver** from the drivers' table and return; confirm the selection
+   and scroll position are preserved.
+10. Open a **Constructor** and return; confirm the same for that table.
+11. Manually refresh each selected view (pull-to-refresh and the app-bar action).
+12. Confirm the content stays visible during the refresh — no full-screen loader.
+13. Enable **airplane mode** now that the data is cached.
+14. Reopen Standings; confirm both tables are still available.
+15. Refresh offline; confirm the cached rows stay visible and the failure is a
+    non-blocking notice scoped to the selected table.
+16. Restore connectivity and revalidate; confirm the content updates (or that a
+    `304` leaves it visually unchanged).
+17. Confirm the freshness and error copy is scoped to the **selected** table —
+    switching the selector switches that context.
+18. Confirm the **STAGING** badge is visible.
+19. Confirm **no "Sample data" banner** appears.
