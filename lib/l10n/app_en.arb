@@ -372,6 +372,12 @@
   "fieldDeviceTimeZone": "Your time zone",
   "@fieldDeviceTimeZone": { "description": "Field label for the device's local time zone." },
 
+  "driverNameUnavailable": "Driver name unavailable",
+  "@driverNameUnavailable": { "description": "Shown in place of a driver's name when the driver's profile has not synchronised yet. Never a name derived from the stable identifier." },
+  "constructorNameUnavailable": "Team name unavailable",
+  "@constructorNameUnavailable": { "description": "Shown in place of a team's name when the constructor's profile has not synchronised yet. Never a name derived from the stable identifier." },
+  "grandPrixOpenConstructorUnnamed": "Open team",
+  "@grandPrixOpenConstructorUnnamed": { "description": "Accessibility label for navigating from a result row to a constructor whose name is not available yet." },
   "resultsFastestLap": "Fastest lap",
   "@resultsFastestLap": { "description": "Badge/label marking the fastest lap of a session." },
   "resultLapsBehind": "{laps, plural, =1{+1 lap} other{+{laps} laps}}",

@@ -67,9 +67,14 @@ class GrandPrixResultSection extends StatelessWidget {
     RaceResultEntry entry,
     String? fastestLapDriver,
   ) {
-    final String driverName = entry.driverName ?? _displayName(entry.driverId);
-    final String teamName =
-        entry.constructorName ?? _displayName(entry.constructorId);
+    // A competitor whose profile has not synchronised yet has no name (its
+    // identity is still a referential stub — GridView_Local_Data.md §9). The
+    // stable identifier is never turned into display text: the row shows
+    // localized unavailable copy, and the identifier keeps driving navigation.
+    final String? resolvedDriver = entry.driverName;
+    final String? resolvedTeam = entry.constructorName;
+    final String driverName = resolvedDriver ?? l10n.driverNameUnavailable;
+    final String teamName = resolvedTeam ?? l10n.constructorNameUnavailable;
     final String statusLabel = finishStatusLabel(l10n, entry.status);
     final String? points = formatter.points(entry.points);
     final String? timing = _timing(l10n, formatter, entry);
@@ -105,7 +110,11 @@ class GrandPrixResultSection extends StatelessWidget {
         onTap: () => context.openEntity(RoutePaths.driver(entry.driverId)),
         onTeamTap: () =>
             context.openEntity(RoutePaths.constructor(entry.constructorId)),
-        teamSemanticLabel: l10n.grandPrixOpenConstructor(teamName),
+        // The action label never embeds an identifier either: with no team name
+        // it is the plain localized action.
+        teamSemanticLabel: resolvedTeam == null
+            ? l10n.grandPrixOpenConstructorUnnamed
+            : l10n.grandPrixOpenConstructor(resolvedTeam),
       ),
     );
   }
@@ -126,13 +135,4 @@ class GrandPrixResultSection extends StatelessWidget {
     if (laps != null && laps > 0) return l10n.resultLapsBehind(laps);
     return entry.gapText;
   }
-
-  /// Fallback for a competitor whose profile has not been synchronised yet: the
-  /// stable identifier, humanised. Identifiers are never translated.
-  String _displayName(String id) => id
-      .split('-')
-      .map(
-        (String w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}',
-      )
-      .join(' ');
 }

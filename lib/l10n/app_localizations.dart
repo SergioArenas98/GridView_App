@@ -1034,6 +1034,24 @@ abstract class AppLocalizations {
   /// **'Your time zone'**
   String get fieldDeviceTimeZone;
 
+  /// Shown in place of a driver's name when the driver's profile has not synchronised yet. Never a name derived from the stable identifier.
+  ///
+  /// In en, this message translates to:
+  /// **'Driver name unavailable'**
+  String get driverNameUnavailable;
+
+  /// Shown in place of a team's name when the constructor's profile has not synchronised yet. Never a name derived from the stable identifier.
+  ///
+  /// In en, this message translates to:
+  /// **'Team name unavailable'**
+  String get constructorNameUnavailable;
+
+  /// Accessibility label for navigating from a result row to a constructor whose name is not available yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Open team'**
+  String get grandPrixOpenConstructorUnnamed;
+
   /// Badge/label marking the fastest lap of a session.
   ///
   /// In en, this message translates to:

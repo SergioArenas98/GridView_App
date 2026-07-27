@@ -819,4 +819,219 @@ void main() {
       expect(find.text('Tu zona horaria'), findsOneWidget);
     });
   });
+
+  group('unresolved competitor identities', () {
+    /// A classification whose competitors have not synchronised yet: the
+    /// document carries identifiers only, and the local profiles are still
+    /// referential stubs, so both names arrive null.
+    RaceResult unresolvedRace({String? driverName, String? constructorName}) =>
+        _race(
+          entries: <RaceResultEntry>[
+            RaceResultEntry(
+              driverId: 'unsynced-driver',
+              constructorId: 'unsynced-team',
+              driverName: driverName,
+              constructorName: constructorName,
+              position: 1,
+              points: 25,
+              status: FinishStatus.finished,
+              laps: 44,
+            ),
+          ],
+        );
+
+    /// Everything the removed fallback used to render, so a regression to it
+    /// fails loudly rather than quietly reappearing.
+    void expectNoIdentifierText(WidgetTester tester) {
+      for (final String forbidden in <String>[
+        'unsynced-driver',
+        'Unsynced Driver',
+        'unsynced-team',
+        'Unsynced Team',
+        'unsynced',
+        'Unsynced',
+      ]) {
+        expect(
+          find.textContaining(forbidden),
+          findsNothing,
+          reason: 'no raw or humanised identifier may be rendered: $forbidden',
+        );
+      }
+      // …and nothing in the semantics tree either.
+      expect(
+        find.bySemanticsLabel(RegExp('unsynced', caseSensitive: false)),
+        findsNothing,
+        reason: 'no identifier-derived text may reach an accessibility label',
+      );
+    }
+
+    testWidgets('an unresolved driver name shows the localized fallback', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        repository: _repo(
+          detail: _detail(status: EventStatus.completed, hasResults: true),
+          results: <RaceResult>[
+            unresolvedRace(constructorName: 'Red Bull Racing'),
+          ],
+        ),
+      );
+
+      expect(find.text('Driver name unavailable'), findsOneWidget);
+      // The rest of the row is unaffected.
+      expect(find.text('Red Bull Racing'), findsWidgets);
+      expect(find.text('25'), findsWidgets);
+      expectNoIdentifierText(tester);
+    });
+
+    testWidgets('an unresolved driver still navigates by its stable id', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        repository: _repo(
+          detail: _detail(status: EventStatus.completed, hasResults: true),
+          results: <RaceResult>[
+            unresolvedRace(constructorName: 'Red Bull Racing'),
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('Driver name unavailable'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DriverDetailScreen), findsOneWidget);
+      expect(
+        tester
+            .widget<DriverDetailScreen>(find.byType(DriverDetailScreen))
+            .driverId,
+        'unsynced-driver',
+      );
+    });
+
+    testWidgets('an unresolved team name shows the localized fallback', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        repository: _repo(
+          detail: _detail(status: EventStatus.completed, hasResults: true),
+          results: <RaceResult>[unresolvedRace(driverName: 'Max Verstappen')],
+        ),
+      );
+
+      expect(find.text('Team name unavailable'), findsWidgets);
+      expect(find.text('Max Verstappen'), findsWidgets);
+      // The team action is still a labelled button, with no identifier in it.
+      expect(find.bySemanticsLabel('Open team'), findsOneWidget);
+      expectNoIdentifierText(tester);
+    });
+
+    testWidgets('an unresolved team still navigates by its stable id', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        repository: _repo(
+          detail: _detail(status: EventStatus.completed, hasResults: true),
+          results: <RaceResult>[unresolvedRace(driverName: 'Max Verstappen')],
+        ),
+      );
+
+      await tester.tap(find.bySemanticsLabel('Open team'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ConstructorDetailScreen), findsOneWidget);
+      expect(
+        tester
+            .widget<ConstructorDetailScreen>(
+              find.byType(ConstructorDetailScreen),
+            )
+            .constructorId,
+        'unsynced-team',
+      );
+    });
+
+    testWidgets('both names unresolved stays readable and accessible', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        repository: _repo(
+          detail: _detail(status: EventStatus.completed, hasResults: true),
+          results: <RaceResult>[unresolvedRace()],
+        ),
+      );
+
+      // The two unavailable slots are distinguishable rather than one repeated
+      // word, so the row still reads unambiguously.
+      expect(find.text('Driver name unavailable'), findsOneWidget);
+      expect(find.text('Team name unavailable'), findsWidgets);
+      // The classification is still fully rendered: position, points, laps.
+      expect(find.text('1'), findsWidgets);
+      expect(find.text('25'), findsWidgets);
+      expect(tester.takeException(), isNull);
+      expectNoIdentifierText(tester);
+    });
+
+    testWidgets('the row semantics use localized unavailable wording', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        repository: _repo(
+          detail: _detail(status: EventStatus.completed, hasResults: true),
+          results: <RaceResult>[unresolvedRace()],
+        ),
+      );
+
+      expect(
+        find.bySemanticsLabel(
+          RegExp(
+            '1, Driver name unavailable, Team name unavailable, '
+            'Finished, 25 Points',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expectNoIdentifierText(tester);
+    });
+
+    testWidgets('Spanish renders the localized fallbacks', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        locale: const Locale('es'),
+        repository: _repo(
+          detail: _detail(status: EventStatus.completed, hasResults: true),
+          results: <RaceResult>[unresolvedRace()],
+        ),
+      );
+
+      expect(find.text('Nombre del piloto no disponible'), findsOneWidget);
+      expect(find.text('Nombre del equipo no disponible'), findsWidgets);
+      expect(find.bySemanticsLabel('Abrir el equipo'), findsOneWidget);
+      expectNoIdentifierText(tester);
+    });
+
+    testWidgets('a resolved classification is unchanged', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        repository: _repo(
+          detail: _detail(status: EventStatus.completed, hasResults: true),
+          results: <RaceResult>[_race()],
+        ),
+      );
+
+      expect(find.text('Max Verstappen'), findsWidgets);
+      expect(find.text('Red Bull Racing'), findsWidgets);
+      expect(find.text('Driver name unavailable'), findsNothing);
+      expect(find.text('Team name unavailable'), findsNothing);
+      expect(find.bySemanticsLabel('Open team Red Bull Racing'), findsWidgets);
+    });
+  });
 }

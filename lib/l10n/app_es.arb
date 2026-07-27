@@ -180,6 +180,9 @@
   "fieldEventTimeZone": "Zona horaria del evento",
   "fieldDeviceTimeZone": "Tu zona horaria",
 
+  "driverNameUnavailable": "Nombre del piloto no disponible",
+  "constructorNameUnavailable": "Nombre del equipo no disponible",
+  "grandPrixOpenConstructorUnnamed": "Abrir el equipo",
   "resultsFastestLap": "Vuelta rápida",
   "resultLapsBehind": "{laps, plural, =1{+1 vuelta} other{+{laps} vueltas}}",
   "resultStatusProvisional": "Provisional",

@@ -523,6 +523,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fieldDeviceTimeZone => 'Your time zone';
 
   @override
+  String get driverNameUnavailable => 'Driver name unavailable';
+
+  @override
+  String get constructorNameUnavailable => 'Team name unavailable';
+
+  @override
+  String get grandPrixOpenConstructorUnnamed => 'Open team';
+
+  @override
   String get resultsFastestLap => 'Fastest lap';
 
   @override
