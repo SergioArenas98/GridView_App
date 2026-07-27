@@ -742,6 +742,17 @@ row still announces its position and points; an unresolved team leaves the row's
 secondary line without a dangling separator; and tapping the row still navigates
 by its stable id.
 
+The same rules are covered for **circuits**, whose domain `name` is required, so
+an unresolved identity reads exactly like an absent row: an event persists and
+carries no circuit, `circuitName`/`locality`/`country` are all null, the stored
+parent is asserted to be the marker (never containing anything derived from
+`spa-francorchamps`), `circuitsForSeason` and `circuitDetail` exclude it, and
+`HomeView.circuit` / `GrandPrixDetailView.circuit` are null. A later
+`upsertCircuits` resolves it — observed as a calendar-stream emission — after
+which the circuit is a real collection member with its related events attached.
+Repeated calendar and Grand Prix snapshot writes never downgrade a synchronized
+circuit, and a blank circuit upsert is rejected.
+
 `test/database/competitor_dao_test.dart` roster and detail cases now seed the
 authoritative identities they read, which is how season participation and the
 competitor collections actually arrive together. Their assertions (ordering, span

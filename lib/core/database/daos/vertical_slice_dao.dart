@@ -12,6 +12,7 @@ import '../../../features/shared/domain/snapshot_conflict.dart';
 import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../tables.dart';
+import '../unresolved_identity.dart';
 
 part 'vertical_slice_dao.g.dart';
 
@@ -103,7 +104,7 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
       seasonYear: season,
       season: seasonRow == null ? null : _seasonFrom(seasonRow),
       featured: _grandPrixFrom(gpRow, sessions),
-      circuit: circuitRow == null ? null : _circuitFrom(circuitRow),
+      circuit: _resolvedCircuit(circuitRow),
       freshness: freshness,
     );
   }
@@ -152,7 +153,7 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     );
     return GrandPrixDetailView(
       grandPrix: _grandPrixFrom(gpRow, sessions),
-      circuit: circuitRow == null ? null : _circuitFrom(circuitRow),
+      circuit: _resolvedCircuit(circuitRow),
       freshness: snap == null ? null : _freshnessFrom(snap),
     );
   }
@@ -241,6 +242,7 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
       if (featured != null) {
         await _ensureSeason(featured.season);
         if (featuredCircuit != null) {
+          validateDisplayName(featuredCircuit.name, field: 'circuit name');
           await into(
             circuits,
           ).insertOnConflictUpdate(_circuitCompanion(featuredCircuit));
@@ -361,12 +363,11 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     mode: InsertMode.insertOrIgnore,
   );
 
-  /// Ensures a circuit row exists (non-authoritative name), preserving any
-  /// real name already synchronised from a Home/calendar snapshot.
-  Future<void> _ensureCircuit(String id) => into(circuits).insert(
-    CircuitsCompanion.insert(id: id, name: _humanizeSlug(id)),
-    mode: InsertMode.insertOrIgnore,
-  );
+  /// Ensures a `circuits` row exists as a **referential stub**, through the
+  /// single creation path in [CalendarDao] — never a name derived from the
+  /// identifier, and never overwriting a circuit that already synchronised.
+  Future<void> _ensureCircuit(String id) =>
+      attachedDatabase.calendarDao.ensureCircuitIdentity(id);
 
   // ---------------------------------------------------------------------------
   // Companion builders (domain -> Drift)
@@ -464,6 +465,15 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     isCurrent: r.isCurrent,
   );
 
+  /// The domain circuit for [row], or `null` when the row is absent **or** still
+  /// an unresolved referential stub: a stub is not a domain circuit, so a
+  /// composed view carries no circuit rather than a name derived from the
+  /// identifier.
+  Circuit? _resolvedCircuit(CircuitRow? row) =>
+      (row == null || isUnresolvedIdentityName(row.name))
+      ? null
+      : _circuitFrom(row);
+
   Circuit _circuitFrom(CircuitRow r) => Circuit(
     id: r.id,
     name: r.name,
@@ -516,11 +526,4 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     SessionType.race => 6,
     SessionType.unknown => 7,
   };
-
-  String _humanizeSlug(String slug) => slug
-      .split('-')
-      .map(
-        (String w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}',
-      )
-      .join(' ');
 }

@@ -973,7 +973,9 @@ no `lastSuccessAt`. Consequently:
   all and the row shows the localized "unavailable" copy. A display name is never
   derived from an identifier, the stable id stays available for identity and
   routing, and a later authoritative upsert resolves the stub in place so the
-  local stream re-emits the real name.
+  local stream re-emits the real name. The same rule covers circuits, so a
+  Calendar entry, Home hero or Grand Prix detail carries no circuit rather than a
+  name derived from its identifier.
 
 ### 13.6 Freshness and failure scoping
 

@@ -10,13 +10,21 @@ import 'package:gridview/core/database/daos/results_dao.dart';
 import 'package:gridview/core/database/daos/standings_dao.dart';
 import 'package:gridview/core/database/entity_validation.dart';
 import 'package:gridview/core/database/gridview_database.dart';
+import 'package:gridview/core/database/tables.dart';
 import 'package:gridview/core/database/unresolved_identity.dart';
+import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
+import 'package:gridview/features/shared/domain/entities/circuit.dart';
 import 'package:gridview/features/shared/domain/entities/constructor.dart';
 import 'package:gridview/features/shared/domain/entities/detail_views.dart';
 import 'package:gridview/features/shared/domain/entities/driver.dart';
 import 'package:gridview/features/shared/domain/entities/enums.dart';
+import 'package:gridview/features/shared/domain/entities/freshness.dart';
+import 'package:gridview/features/shared/domain/entities/grand_prix.dart';
+import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
+import 'package:gridview/features/shared/domain/entities/home_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
 import 'package:gridview/features/shared/domain/entities/season_entry.dart';
+import 'package:gridview/features/shared/domain/entities/session.dart';
 import 'package:gridview/features/shared/domain/entities/standing.dart';
 import 'package:gridview/features/shared/domain/entities/standing_entry.dart';
 
@@ -554,6 +562,180 @@ void main() {
         isUnresolvedIdentityName(await storedConstructorName('unsynced-team')),
         isTrue,
       );
+    });
+  });
+
+  group('circuits before the circuit identity', () {
+    /// A season with one event whose host circuit has not synchronised.
+    Future<void> persistCalendar() =>
+        db.calendarDao.replaceCalendar(2026, <GrandPrix>[
+          const GrandPrix(
+            id: '2026-belgian-grand-prix',
+            season: 2026,
+            round: 13,
+            eventSlug: 'belgian-grand-prix',
+            name: 'Belgian Grand Prix',
+            circuitId: 'spa-francorchamps',
+            status: EventStatus.upcoming,
+            format: WeekendFormat.sprint,
+            sessions: <Session>[],
+            hasResults: false,
+          ),
+        ], const <Circuit>[]);
+
+    test('the event persists and carries no circuit at all', () async {
+      await persistCalendar();
+      final CalendarEntry entry = (await db.calendarDao.calendarEntries(
+        2026,
+      )).single;
+
+      expect(entry.round, 13);
+      expect(entry.grandPrix.circuitId, 'spa-francorchamps');
+      // An unresolved circuit reads exactly like an absent one.
+      expect(entry.circuit, isNull);
+      expect(entry.circuitName, isNull);
+      expect(entry.locality, isNull);
+      expect(entry.country, isNull);
+    });
+
+    test('the stored stub is the marker, not a humanised identifier', () async {
+      await persistCalendar();
+      final CircuitRow? row =
+          await (db.select(db.circuits)
+                ..where((Circuits c) => c.id.equals('spa-francorchamps')))
+              .getSingleOrNull();
+      expect(row, isNotNull, reason: 'the FK parent must exist');
+      expect(isUnresolvedIdentityName(row!.name), isTrue);
+      expect(row.name, isNot(contains('Spa')));
+      expect(row.name, isNot(contains('Francorchamps')));
+    });
+
+    test('a stub is neither a collection member nor a detail', () async {
+      await persistCalendar();
+      expect(await db.calendarDao.circuitsForSeason(2026), isEmpty);
+      expect(await db.calendarDao.circuitDetail('spa-francorchamps'), isNull);
+    });
+
+    test('composed views carry no circuit while it is unresolved', () async {
+      await db.verticalSliceDao.writeHomeSnapshot(
+        homeSeason: 2026,
+        featured: const GrandPrix(
+          id: '2026-belgian-grand-prix',
+          season: 2026,
+          round: 13,
+          eventSlug: 'belgian-grand-prix',
+          name: 'Belgian Grand Prix',
+          circuitId: 'spa-francorchamps',
+          status: EventStatus.upcoming,
+          format: WeekendFormat.sprint,
+          sessions: <Session>[],
+          hasResults: false,
+        ),
+        freshness: DataFreshness(
+          generatedAt: DateTime.utc(2026, 7, 18, 12),
+          sourceUpdatedAt: DateTime.utc(2026, 7, 18, 11),
+        ),
+      );
+
+      final HomeView? home = await db.verticalSliceDao.watchHome().first;
+      expect(home?.featured?.circuitId, 'spa-francorchamps');
+      expect(home?.circuit, isNull);
+
+      final GrandPrixDetailView? detail = await db.verticalSliceDao
+          .watchGrandPrix(2026, 13)
+          .first;
+      expect(detail?.grandPrix.circuitId, 'spa-francorchamps');
+      expect(detail?.circuit, isNull);
+    });
+
+    test('a later authoritative upsert resolves the stub', () async {
+      await persistCalendar();
+
+      final List<List<CalendarEntry>> seen = <List<CalendarEntry>>[];
+      final StreamSubscription<List<CalendarEntry>> subscription = db
+          .calendarDao
+          .watchCalendarEntries(2026)
+          .listen(seen.add);
+      addTearDown(subscription.cancel);
+      await _until(() => seen.isNotEmpty);
+      expect(seen.single.single.circuitName, isNull);
+
+      await db.calendarDao.upsertCircuits(<Circuit>[
+        const Circuit(
+          id: 'spa-francorchamps',
+          name: 'Circuit de Spa-Francorchamps',
+          locality: 'Spa',
+          country: 'Belgium',
+          countryCode: 'BE',
+        ),
+      ]);
+      await _until(() => seen.length > 1);
+
+      expect(seen.last.single.circuitName, 'Circuit de Spa-Francorchamps');
+      expect(seen.last.single.locality, 'Spa');
+      expect(seen.last.single.country, 'Belgium');
+      // The event and its delivered round survived resolution.
+      expect(seen.last.single.round, 13);
+      // …and it is now a real collection member and a materialized detail.
+      expect(await db.calendarDao.circuitsForSeason(2026), hasLength(1));
+      final CircuitDetailView? detail = await db.calendarDao.circuitDetail(
+        'spa-francorchamps',
+      );
+      expect(detail?.circuit.name, 'Circuit de Spa-Francorchamps');
+      expect(detail?.relatedGrandPrix.map((GrandPrix g) => g.round), <int>[13]);
+    });
+
+    test(
+      'a synchronised circuit is never downgraded by an event write',
+      () async {
+        await db.calendarDao.upsertCircuits(<Circuit>[
+          const Circuit(
+            id: 'spa-francorchamps',
+            name: 'Circuit de Spa-Francorchamps',
+            locality: 'Spa',
+          ),
+        ]);
+        // Several event writes that only "ensure" the same circuit parent.
+        for (int i = 0; i < 3; i++) {
+          await persistCalendar();
+          await db.verticalSliceDao.writeGrandPrixSnapshot(
+            grandPrix: const GrandPrix(
+              id: '2026-belgian-grand-prix',
+              season: 2026,
+              round: 13,
+              eventSlug: 'belgian-grand-prix',
+              name: 'Belgian Grand Prix',
+              circuitId: 'spa-francorchamps',
+              status: EventStatus.upcoming,
+              format: WeekendFormat.sprint,
+              sessions: <Session>[],
+              hasResults: false,
+            ),
+            freshness: DataFreshness(
+              generatedAt: DateTime.utc(2026, 7, 18, 12),
+              sourceUpdatedAt: DateTime.utc(2026, 7, 18, 11),
+            ),
+            force: true,
+          );
+        }
+
+        final CalendarEntry entry = (await db.calendarDao.calendarEntries(
+          2026,
+        )).single;
+        expect(entry.circuitName, 'Circuit de Spa-Francorchamps');
+        expect(entry.locality, 'Spa');
+        expect(await db.calendarDao.circuitsForSeason(2026), hasLength(1));
+      },
+    );
+
+    test('an authoritative circuit upsert may not store the marker', () async {
+      await expectLater(
+        db.calendarDao.upsertCircuits(<Circuit>[
+          const Circuit(id: 'blank-circuit', name: kUnresolvedIdentityName),
+        ]),
+        throwsA(isA<InvalidEntityException>()),
+      );
+      expect(await db.calendarDao.countCircuit('blank-circuit'), 0);
     });
   });
 

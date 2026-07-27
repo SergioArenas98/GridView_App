@@ -294,7 +294,7 @@ inherits an ETag or a freshness window the server never issued for its URL.
 only durable synchronization record; the application-level run state lives in
 memory and adds no table.
 
-## 9. Phase 7B — referential stubs for unsynchronized competitor identities
+## 9. Phase 7B — referential stubs for unsynchronized identities
 
 Phase 7B adds **no** schema change: schema stays **v2**, the database file stays
 `gridview_v2.sqlite`, and both exported schema snapshots remain byte-identical to
@@ -303,12 +303,13 @@ Phase 6A.
 ### The problem
 
 `driver_standings`, `constructor_standings` and `race_result_entries` reference
-`drivers` / `constructors` by stable identifier, and all three can legitimately be
-persisted **before** the corresponding competitor collection has synchronized
-(bootstrap ordering, a season-scoped refresh that fails after the standings, or a
-historical season whose competitors were never fetched). The foreign keys must
-still hold, and `drivers.full_name` / `constructors.name` are `NOT NULL`, so the
-parent row has to carry some value.
+`drivers` / `constructors` by stable identifier, and `grand_prix` references
+`circuits`. All of them can legitimately be persisted **before** the corresponding
+collection has synchronized (bootstrap ordering, a season-scoped refresh that
+fails after the standings, a Home or Grand Prix snapshot that carries only a
+summary, or a historical season whose competitors were never fetched). The foreign
+keys must still hold, and `drivers.full_name`, `constructors.name` and
+`circuits.name` are `NOT NULL`, so the parent row has to carry some value.
 
 ### The encoding
 
@@ -334,14 +335,17 @@ The encoding is:
   a read could only render as nothing. It can never read as a plausible name,
   which a humanised identifier always does.
 
-A referential stub is **persistence only**. It is not a domain `Driver` or
-`Constructor`, and it is not a display name.
+A referential stub is **persistence only**. It is not a domain `Driver`,
+`Constructor` or `Circuit`, and it is not a display name.
 
 ### Creation — one path
 
-`CompetitorDao.ensureDriverIdentity` / `ensureConstructorIdentity` are the single
-creation path. `StandingsDao` and `ResultsDao` delegate to them rather than
-writing a parent themselves, and no DAO humanises an identifier any more.
+`CompetitorDao.ensureDriverIdentity` / `ensureConstructorIdentity` and
+`CalendarDao.ensureCircuitIdentity` are the single creation paths.
+`StandingsDao` and `ResultsDao` delegate to the competitor ones, and
+`VerticalSliceDao` delegates to the circuit one, rather than writing a parent
+themselves. **No DAO humanises an identifier any more** — `_humanizeSlug` is gone
+from the codebase.
 
 Both use `INSERT OR IGNORE`, which gives three properties for free:
 
@@ -366,25 +370,31 @@ which maps the marker to `null`:
   unresolved competitor simply has no name, exactly as if the row were absent.
 - `CompetitorDao.driverDetail` / `teamDetail` return `null` for a stub: a
   referential stub is **not a materialized detail**.
-- `CompetitorDao.driversForSeason` / `constructorsForSeason` omit stubs: a
-  referential stub is **not a collection member**. The underlying
-  `driver_season_entries` / `constructor_season_entries` rows are untouched — only
-  the identity-shaped projection skips them.
+- `CompetitorDao.driversForSeason` / `constructorsForSeason` and
+  `CalendarDao.circuitsForSeason` omit stubs: a referential stub is **not a
+  collection member**. The underlying `driver_season_entries` /
+  `constructor_season_entries` / `grand_prix` rows are untouched — only the
+  identity-shaped projection skips them.
+- For circuits, whose domain `name` is required, an unresolved identity reads
+  exactly like an **absent** row: `CalendarEntry.circuit`, `HomeView.circuit` and
+  `GrandPrixDetailView.circuit` are `null`, so `circuitName`, `locality` and
+  `country` are `null` too and the existing "a missing name stays missing"
+  contract holds. `CalendarDao.circuitDetail` returns `null`.
 
 ### Resolution
 
 A later authoritative `upsertDrivers` / `upsertConstructors` /
-`upsertDriverIdentities` / `upsertConstructorIdentities` replaces the stub row in
-place. Because it is the same row, every Drift stream watching `drivers` /
-`constructors` re-emits, and the standings and classifications that referenced it
-show the real name with no further synchronization. Nothing is deleted or
-rewritten to make that happen: no standings row, no season entry and no
-`resource_sync_metadata` row is involved in resolution, and `order_index` is
-preserved.
+`upsertDriverIdentities` / `upsertConstructorIdentities` / `upsertCircuits` /
+`upsertCircuitSummaries` replaces the stub row in place. Because it is the same row, every Drift stream watching `drivers`,
+`constructors` or `circuits` re-emits, and the standings, classifications and
+calendar entries that referenced it show the real name with no further
+synchronization. Nothing is deleted or rewritten to make that happen: no
+standings row, no season entry, no event row and no `resource_sync_metadata` row
+is involved in resolution, and `order_index` is preserved.
 
-### Not covered by this rule
+### Scope
 
-`circuits` rows are still ensured with a name derived from the identifier
-(`CalendarDao._ensureCircuit`, `VerticalSliceDao`). That is the same class of
-issue for a different family and is deliberately left unchanged in Phase 7B; it
-is recorded here so it is not mistaken for an accepted design.
+All three families that can be referenced before they synchronize are covered:
+`drivers`, `constructors` and `circuits`. `seasons` needs no stub rule — its only
+required column is the year that identifies it, so an ensured season row carries
+no invented content.

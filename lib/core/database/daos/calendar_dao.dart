@@ -11,6 +11,7 @@ import '../../../features/shared/domain/relevant_event.dart';
 import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../tables.dart';
+import '../unresolved_identity.dart';
 
 part 'calendar_dao.g.dart';
 
@@ -40,6 +41,7 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     return transaction(() async {
       for (final Circuit c in items) {
         validateSlug(c.id, field: 'circuit id');
+        validateDisplayName(c.name, field: 'circuit name');
         validateCountryCode(c.countryCode, field: 'circuit countryCode');
         await into(circuits).insertOnConflictUpdate(_circuitCompanion(c));
         if (c.media != null) {
@@ -64,6 +66,7 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     return transaction(() async {
       for (final Circuit c in items) {
         validateSlug(c.id, field: 'circuit id');
+        validateDisplayName(c.name, field: 'circuit name');
         validateCountryCode(c.countryCode, field: 'circuit countryCode');
         await into(
           circuits,
@@ -98,6 +101,7 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
       }
       for (final Circuit c in hostCircuits) {
         validateSlug(c.id, field: 'circuit id');
+        validateDisplayName(c.name, field: 'circuit name');
         validateCountryCode(c.countryCode, field: 'circuit countryCode');
       }
 
@@ -112,7 +116,7 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
       }
       // Ensure every referenced circuit exists (FK), without clobbering names.
       for (final GrandPrix e in events) {
-        await _ensureCircuit(e.circuitId);
+        await ensureCircuitIdentity(e.circuitId);
       }
 
       final Set<String> keepIds = events.map((GrandPrix e) => e.id).toSet();
@@ -148,8 +152,12 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     final List<CircuitRow> rows = await (select(
       circuits,
     )..where((Circuits c) => c.id.isIn(circuitIds))).get();
+    // An identity that is still an unresolved referential stub is not a domain
+    // circuit, so it is treated exactly like an absent row: the entry carries no
+    // circuit rather than a name derived from the identifier.
     final Map<String, Circuit> byId = <String, Circuit>{
-      for (final CircuitRow r in rows) r.id: _circuitFrom(r),
+      for (final CircuitRow r in rows)
+        if (!isUnresolvedIdentityName(r.name)) r.id: _circuitFrom(r),
     };
 
     return events
@@ -282,7 +290,11 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
                 (Circuits c) => OrderingTerm(expression: c.name),
               ]))
             .get();
-    return rows.map((CircuitRow r) => _circuitFrom(r)).toList(growable: false);
+    // A referential stub is never a collection member.
+    return rows
+        .where((CircuitRow r) => !isUnresolvedIdentityName(r.name))
+        .map((CircuitRow r) => _circuitFrom(r))
+        .toList(growable: false);
   }
 
   /// Streams the circuits used in a season (derived from the season's events);
@@ -322,7 +334,9 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     final CircuitRow? row = await (select(
       circuits,
     )..where((Circuits c) => c.id.equals(circuitId))).getSingleOrNull();
-    if (row == null) return null;
+    // A row that exists only to satisfy a foreign key is not a materialized
+    // circuit detail.
+    if (row == null || isUnresolvedIdentityName(row.name)) return null;
 
     final List<MediaAsset> media = await attachedDatabase.mediaDao
         .mediaForOwner(MediaEntityType.circuit, circuitId);
@@ -371,10 +385,15 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
         .asyncMap((_) => read());
   }
 
-  /// Ensures a circuit row exists (non-authoritative name), preserving any
-  /// real name already synchronised.
-  Future<void> _ensureCircuit(String id) => into(circuits).insert(
-    CircuitsCompanion.insert(id: id, name: _humanizeSlug(id)),
+  /// Ensures a `circuits` row exists for [id] as a **referential stub** — the
+  /// single creation path for one, shared with [VerticalSliceDao].
+  ///
+  /// An event can be persisted before the circuit collection has synchronised.
+  /// The stored name is [kUnresolvedIdentityName], never a name derived from the
+  /// identifier. `INSERT OR IGNORE` makes this idempotent and means a circuit
+  /// identity that already synchronised is never downgraded.
+  Future<void> ensureCircuitIdentity(String id) => into(circuits).insert(
+    CircuitsCompanion.insert(id: id, name: kUnresolvedIdentityName),
     mode: InsertMode.insertOrIgnore,
   );
 
@@ -416,13 +435,6 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
         timezone: Value<String?>(g.timezone),
         hasResults: Value<bool>(g.hasResults),
       );
-
-  String _humanizeSlug(String slug) => slug
-      .split('-')
-      .map(
-        (String w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}',
-      )
-      .join(' ');
 
   String _dateString(DateTime d) {
     final DateTime u = d.toUtc();
