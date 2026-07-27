@@ -163,6 +163,15 @@ class GvSessionRow extends StatelessWidget {
   }
 }
 
+/// A championship-table row: a displayed position, the competitor's name, an
+/// optional secondary line (team, statistics, a status marker), a score value
+/// and restrained leader emphasis.
+///
+/// Every value is a plain string the caller has already formatted, and every
+/// optional one is simply not rendered when absent — so a missing team leaves no
+/// dangling separator and a missing statistic never becomes a false zero. The
+/// component knows nothing about drivers, constructors, repositories, Riverpod,
+/// Drift or DTOs.
 class GvStandingsRow extends StatelessWidget {
   const GvStandingsRow({
     super.key,
@@ -170,35 +179,59 @@ class GvStandingsRow extends StatelessWidget {
     required this.name,
     this.team,
     required this.points,
+    this.stat,
+    this.badgeLabel,
     this.isLeader = false,
     this.accentColor,
     this.onTap,
+    this.semanticLabel,
   });
 
+  /// The displayed position exactly as the caller supplies it. Duplicates are
+  /// allowed, and a caller with no position supplies its own placeholder.
   final String position;
   final String name;
   final String? team;
   final String points;
+
+  /// A secondary statistic (e.g. wins), already formatted and localized.
+  final String? stat;
+
+  /// A short status marker for this row (e.g. a provisional marker).
+  final String? badgeLabel;
+
+  /// Restrained emphasis for a confirmed leader. Reinforced by [semanticLabel]
+  /// rather than carried by colour alone.
   final bool isLeader;
   final Color? accentColor;
   final VoidCallback? onTap;
 
+  /// Replaces the row's merged child semantics with one explicit reading order.
+  final String? semanticLabel;
+
   @override
   Widget build(BuildContext context) {
+    final List<String> details = <String>[?team, ?stat, ?badgeLabel];
     return _RowScaffold(
       onTap: onTap,
+      semanticLabel: semanticLabel,
       emphasized: isLeader,
       accentColor: accentColor,
-      leading: SizedBox(
-        width: 28,
+      // A minimum width keeps single- and double-digit positions aligned, while
+      // still letting a wider value (a two-digit position at a large text
+      // scale, or the unranked placeholder) take the room it needs on one line
+      // instead of wrapping into a second row.
+      leading: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 32),
         child: Text(
           position,
           textAlign: TextAlign.center,
+          maxLines: 1,
           style: GvTypography.statValue.copyWith(fontSize: 18),
         ),
       ),
       title: Text(name),
-      subtitle: team == null ? null : Text(team!),
+      subtitle: details.isEmpty ? null : Text(details.join(' · ')),
       trailing: Text(
         points,
         style: GvTypography.statValue.copyWith(fontSize: 18),

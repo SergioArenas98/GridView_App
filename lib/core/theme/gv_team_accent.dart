@@ -17,4 +17,18 @@ abstract final class GvTeamAccent {
   /// Whether a readable foreground on [background] is dark.
   static bool prefersDarkForeground(Color background) =>
       background.computeLuminance() > 0.45;
+
+  /// Parses a contract `#RRGGBB` team colour.
+  ///
+  /// Returns `null` for a missing or malformed value so a caller simply renders
+  /// no accent: a colour is decorative, so an unparseable one is never a failure
+  /// and never a fabricated default team colour.
+  static Color? parse(String? hex) {
+    if (hex == null) return null;
+    final String value = hex.trim();
+    if (value.length != 7 || !value.startsWith('#')) return null;
+    final int? rgb = int.tryParse(value.substring(1), radix: 16);
+    if (rgb == null) return null;
+    return Color(0xFF000000 | rgb);
+  }
 }

@@ -108,6 +108,93 @@ class AppLocalizationsEs extends AppLocalizations {
   String get standingsConstructors => 'Constructores';
 
   @override
+  String get standingsChampionshipSelector => 'Campeonato';
+
+  @override
+  String get standingsRefreshAction => 'Actualizar clasificaciones';
+
+  @override
+  String get standingsRefreshingLabel => 'Actualizando…';
+
+  @override
+  String get standingsDriversEmptyTitle =>
+      'Aún no hay clasificación de pilotos';
+
+  @override
+  String get standingsDriversEmptyMessage =>
+      'El campeonato de pilotos todavía no tiene entradas clasificadas para esta temporada. Aparecerán aquí en cuanto las haya.';
+
+  @override
+  String get standingsConstructorsEmptyTitle =>
+      'Aún no hay clasificación de constructores';
+
+  @override
+  String get standingsConstructorsEmptyMessage =>
+      'El campeonato de constructores todavía no tiene entradas clasificadas para esta temporada. Aparecerán aquí en cuanto las haya.';
+
+  @override
+  String get standingsDriversErrorTitle =>
+      'No se puede cargar la clasificación de pilotos';
+
+  @override
+  String get standingsConstructorsErrorTitle =>
+      'No se puede cargar la clasificación de constructores';
+
+  @override
+  String get standingsSeasonUnavailableTitle => 'Temporada no disponible';
+
+  @override
+  String get standingsSeasonUnavailableMessage =>
+      'GridView no ha podido determinar la temporada actual. Comprueba tu conexión e inténtalo de nuevo.';
+
+  @override
+  String get standingsUnrankedPosition => '—';
+
+  @override
+  String get standingsUnrankedSemantics => 'Posición no disponible';
+
+  @override
+  String standingsPositionSemantics(String position) {
+    return 'Posición $position';
+  }
+
+  @override
+  String standingsPointsSemantics(String points) {
+    return '$points puntos';
+  }
+
+  @override
+  String standingsWinsLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count victorias',
+      one: '1 victoria',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get standingsLeaderSemantics => 'Líder del campeonato';
+
+  @override
+  String get standingsTiedLeaderSemantics =>
+      'Empatado en el liderato del campeonato';
+
+  @override
+  String get standingsProvisionalBadge => 'Provisional';
+
+  @override
+  String get standingsProvisionalNotice =>
+      'Esta clasificación es provisional y todavía puede cambiar.';
+
+  @override
+  String get standingsNameUnavailable => 'Nombre no disponible';
+
+  @override
+  String get standingsValueUnavailable => 'No disponible';
+
+  @override
   String get exploreTitle => 'Explorar';
 
   @override

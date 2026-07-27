@@ -108,6 +108,91 @@ class AppLocalizationsEn extends AppLocalizations {
   String get standingsConstructors => 'Constructors';
 
   @override
+  String get standingsChampionshipSelector => 'Championship';
+
+  @override
+  String get standingsRefreshAction => 'Refresh standings';
+
+  @override
+  String get standingsRefreshingLabel => 'Refreshing…';
+
+  @override
+  String get standingsDriversEmptyTitle => 'No drivers\' standings yet';
+
+  @override
+  String get standingsDriversEmptyMessage =>
+      'The drivers\' championship has no classified entries for this season yet. They will appear here as soon as they do.';
+
+  @override
+  String get standingsConstructorsEmptyTitle =>
+      'No constructors\' standings yet';
+
+  @override
+  String get standingsConstructorsEmptyMessage =>
+      'The constructors\' championship has no classified entries for this season yet. They will appear here as soon as they do.';
+
+  @override
+  String get standingsDriversErrorTitle =>
+      'Can\'t load the drivers\' standings';
+
+  @override
+  String get standingsConstructorsErrorTitle =>
+      'Can\'t load the constructors\' standings';
+
+  @override
+  String get standingsSeasonUnavailableTitle => 'Season unavailable';
+
+  @override
+  String get standingsSeasonUnavailableMessage =>
+      'GridView could not determine the current season. Check your connection and try again.';
+
+  @override
+  String get standingsUnrankedPosition => '—';
+
+  @override
+  String get standingsUnrankedSemantics => 'Position unavailable';
+
+  @override
+  String standingsPositionSemantics(String position) {
+    return 'Position $position';
+  }
+
+  @override
+  String standingsPointsSemantics(String points) {
+    return '$points points';
+  }
+
+  @override
+  String standingsWinsLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count wins',
+      one: '1 win',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get standingsLeaderSemantics => 'Championship leader';
+
+  @override
+  String get standingsTiedLeaderSemantics => 'Tied for the championship lead';
+
+  @override
+  String get standingsProvisionalBadge => 'Provisional';
+
+  @override
+  String get standingsProvisionalNotice =>
+      'These standings are provisional and may still change.';
+
+  @override
+  String get standingsNameUnavailable => 'Name unavailable';
+
+  @override
+  String get standingsValueUnavailable => 'Not available';
+
+  @override
   String get exploreTitle => 'Explore';
 
   @override

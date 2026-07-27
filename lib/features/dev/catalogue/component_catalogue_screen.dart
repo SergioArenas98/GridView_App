@@ -159,8 +159,25 @@ class _ComponentCatalogueScreenState extends State<ComponentCatalogueScreen> {
                   position: '1',
                   name: 'Max Verstappen',
                   team: 'Red Bull',
+                  stat: '6 wins',
                   points: '210.5',
                   isLeader: true,
+                ),
+                // A provisional row with a two-digit position, and one with no
+                // team and no statistics at all: every optional value is simply
+                // absent rather than rendered as a zero or an empty slot.
+                const GvStandingsRow(
+                  position: '19',
+                  name: 'Franco Colapinto',
+                  team: 'Alpine',
+                  stat: '0 wins',
+                  badgeLabel: 'Provisional',
+                  points: '0',
+                ),
+                const GvStandingsRow(
+                  position: '—',
+                  name: 'Reserve Entrant',
+                  points: '0',
                 ),
                 const GvDriverRow(
                   name: 'Charles Leclerc',

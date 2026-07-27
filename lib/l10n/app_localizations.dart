@@ -284,6 +284,138 @@ abstract class AppLocalizations {
   /// **'Constructors'**
   String get standingsConstructors;
 
+  /// Accessibility label for the drivers/constructors championship selector.
+  ///
+  /// In en, this message translates to:
+  /// **'Championship'**
+  String get standingsChampionshipSelector;
+
+  /// Accessibility label for the Standings refresh action.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh standings'**
+  String get standingsRefreshAction;
+
+  /// Compact indication that the selected standings table is being refreshed.
+  ///
+  /// In en, this message translates to:
+  /// **'Refreshing…'**
+  String get standingsRefreshingLabel;
+
+  /// Title for a valid but empty drivers' championship table.
+  ///
+  /// In en, this message translates to:
+  /// **'No drivers\' standings yet'**
+  String get standingsDriversEmptyTitle;
+
+  /// Message for a valid but empty drivers' championship table.
+  ///
+  /// In en, this message translates to:
+  /// **'The drivers\' championship has no classified entries for this season yet. They will appear here as soon as they do.'**
+  String get standingsDriversEmptyMessage;
+
+  /// Title for a valid but empty constructors' championship table.
+  ///
+  /// In en, this message translates to:
+  /// **'No constructors\' standings yet'**
+  String get standingsConstructorsEmptyTitle;
+
+  /// Message for a valid but empty constructors' championship table.
+  ///
+  /// In en, this message translates to:
+  /// **'The constructors\' championship has no classified entries for this season yet. They will appear here as soon as they do.'**
+  String get standingsConstructorsEmptyMessage;
+
+  /// Title for the drivers' standings first-load error state.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t load the drivers\' standings'**
+  String get standingsDriversErrorTitle;
+
+  /// Title for the constructors' standings first-load error state.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t load the constructors\' standings'**
+  String get standingsConstructorsErrorTitle;
+
+  /// Title shown on Standings when no current season could be resolved locally.
+  ///
+  /// In en, this message translates to:
+  /// **'Season unavailable'**
+  String get standingsSeasonUnavailableTitle;
+
+  /// Message shown on Standings when no current season could be resolved locally.
+  ///
+  /// In en, this message translates to:
+  /// **'GridView could not determine the current season. Check your connection and try again.'**
+  String get standingsSeasonUnavailableMessage;
+
+  /// Displayed instead of a championship position when the standing is unranked. Never a zero.
+  ///
+  /// In en, this message translates to:
+  /// **'—'**
+  String get standingsUnrankedPosition;
+
+  /// Accessible meaning of an unranked championship position.
+  ///
+  /// In en, this message translates to:
+  /// **'Position unavailable'**
+  String get standingsUnrankedSemantics;
+
+  /// Accessible reading of a championship position.
+  ///
+  /// In en, this message translates to:
+  /// **'Position {position}'**
+  String standingsPositionSemantics(String position);
+
+  /// Accessible reading of a championship points total, already locale-formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'{points} points'**
+  String standingsPointsSemantics(String points);
+
+  /// Number of wins shown on a standings row. A confirmed zero is shown; an unavailable value is omitted.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 win} other{{count} wins}}'**
+  String standingsWinsLabel(int count);
+
+  /// Accessible equivalent of the leader emphasis, for a confirmed position 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Championship leader'**
+  String get standingsLeaderSemantics;
+
+  /// Accessible equivalent of the leader emphasis when several rows share a confirmed position 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Tied for the championship lead'**
+  String get standingsTiedLeaderSemantics;
+
+  /// Marks an individual standings row the contract reports as provisional.
+  ///
+  /// In en, this message translates to:
+  /// **'Provisional'**
+  String get standingsProvisionalBadge;
+
+  /// Section-level notice shown when every row that states it is provisional.
+  ///
+  /// In en, this message translates to:
+  /// **'These standings are provisional and may still change.'**
+  String get standingsProvisionalNotice;
+
+  /// Fallback shown when a competitor's name is not stored locally. Never replaces identity with an invented name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name unavailable'**
+  String get standingsNameUnavailable;
+
+  /// Accessible label for an optional statistic the contract did not supply.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available'**
+  String get standingsValueUnavailable;
+
   /// Explore screen title.
   ///
   /// In en, this message translates to:

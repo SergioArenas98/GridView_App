@@ -13,6 +13,7 @@ import '../../features/explore/presentation/explore_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/shared/presentation/not_found_screen.dart';
+import '../../features/standings/application/standings_state.dart';
 import '../../features/standings/presentation/standings_screen.dart';
 import 'app_shell.dart';
 import 'route_names.dart';
@@ -121,20 +122,22 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
               GoRoute(
                 path: RoutePaths.standings,
                 name: RouteNames.standings,
-                builder: (_, _) =>
-                    const StandingsScreen(tab: StandingsTab.drivers),
+                // Season- and championship-agnostic: the screen resolves the
+                // locally current season and defaults to Drivers on the first
+                // visit of an application session.
+                builder: (_, _) => const StandingsScreen(),
               ),
               GoRoute(
                 path: RoutePaths.standingsDriversPattern,
                 name: RouteNames.standingsDrivers,
                 builder: (BuildContext context, GoRouterState state) =>
-                    _standings(state, StandingsTab.drivers),
+                    _standings(state, StandingsChampionship.drivers),
               ),
               GoRoute(
                 path: RoutePaths.standingsConstructorsPattern,
                 name: RouteNames.standingsConstructors,
                 builder: (BuildContext context, GoRouterState state) =>
-                    _standings(state, StandingsTab.constructors),
+                    _standings(state, StandingsChampionship.constructors),
               ),
             ],
           ),
@@ -223,10 +226,10 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
   );
 }
 
-Widget _standings(GoRouterState state, StandingsTab tab) {
+Widget _standings(GoRouterState state, StandingsChampionship championship) {
   final int? season = RouteParams.season(state.pathParameters['season']);
   if (season == null) {
     return const NotFoundScreen(kind: NotFoundKind.invalidParameters);
   }
-  return StandingsScreen(tab: tab, season: season);
+  return StandingsScreen(championship: championship, season: season);
 }
