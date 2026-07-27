@@ -13,4 +13,5 @@ export 'season.dart';
 export 'season_entry.dart';
 export 'session.dart';
 export 'standing.dart';
+export 'standing_entry.dart';
 export 'sync_state.dart';

@@ -10,6 +10,8 @@ mixin _$StandingsDaoMixin on DatabaseAccessor<GridViewDatabase> {
   $DriverStandingsTable get driverStandings => attachedDatabase.driverStandings;
   $ConstructorStandingsTable get constructorStandings =>
       attachedDatabase.constructorStandings;
+  $ConstructorSeasonEntriesTable get constructorSeasonEntries =>
+      attachedDatabase.constructorSeasonEntries;
   StandingsDaoManager get managers => StandingsDaoManager(this);
 }
 
@@ -31,5 +33,10 @@ class StandingsDaoManager {
       $$ConstructorStandingsTableTableManager(
         _db.attachedDatabase,
         _db.constructorStandings,
+      );
+  $$ConstructorSeasonEntriesTableTableManager get constructorSeasonEntries =>
+      $$ConstructorSeasonEntriesTableTableManager(
+        _db.attachedDatabase,
+        _db.constructorSeasonEntries,
       );
 }

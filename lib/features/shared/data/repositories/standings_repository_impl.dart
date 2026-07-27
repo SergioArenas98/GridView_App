@@ -3,6 +3,7 @@ import '../../../../core/api/dto/standing_dto.dart';
 import '../../../../core/database/daos/standings_dao.dart';
 import '../../domain/entities/resource_key.dart';
 import '../../domain/entities/standing.dart';
+import '../../domain/entities/standing_entry.dart';
 import '../../domain/refresh_result.dart';
 import '../../domain/repositories/standings_repository.dart';
 import '../mappers/standing_mapper.dart';
@@ -42,6 +43,24 @@ class StandingsRepositoryImpl extends SyncedRepository
   @override
   Future<List<ConstructorStanding>> readConstructorStandings(int season) =>
       _local.constructorStandingsForSeason(season);
+
+  @override
+  Stream<List<DriverStandingEntry>> watchDriverStandingEntries(int season) =>
+      _local.watchDriverStandingEntries(season);
+
+  @override
+  Stream<List<ConstructorStandingEntry>> watchConstructorStandingEntries(
+    int season,
+  ) => _local.watchConstructorStandingEntries(season);
+
+  @override
+  Future<List<DriverStandingEntry>> readDriverStandingEntries(int season) =>
+      _local.driverStandingEntries(season);
+
+  @override
+  Future<List<ConstructorStandingEntry>> readConstructorStandingEntries(
+    int season,
+  ) => _local.constructorStandingEntries(season);
 
   @override
   Future<RefreshResult> refreshDriverStandings(
