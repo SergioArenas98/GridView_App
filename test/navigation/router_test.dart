@@ -115,26 +115,55 @@ void main() {
       );
       expect(find.byType(StandingsScreen), findsOneWidget);
       expect(shellLocation(router), '/standings');
-      // Drivers view initially (a driver name is shown, not a constructor).
-      expect(find.text('Alex Driver'), findsWidgets);
+      // Drivers on the first visit (a driver name is shown, not a team).
+      expect(find.text('Max Verstappen'), findsOneWidget);
+      expect(find.text('McLaren Formula 1 Team'), findsNothing);
 
-      // Switching segment resolves the mock active season into a season route.
+      // Switching championship at the root is internal to the screen: the
+      // season-agnostic location is preserved and no season is invented.
       await tester.tap(find.text('Constructors'));
       await tester.pumpAndSettle();
-      expect(shellLocation(router), '/standings/constructors/2026');
-      expect(find.text('Scuderia Rossa'), findsWidgets);
+      expect(shellLocation(router), '/standings');
+      expect(find.text('McLaren Formula 1 Team'), findsOneWidget);
+      expect(find.text('Max Verstappen'), findsNothing);
     });
 
-    testWidgets('season-specific standings deep links still resolve', (
+    testWidgets('season-specific standings deep links render their season', (
       WidgetTester tester,
     ) async {
       await pumpApp(tester, initialLocation: '/standings/constructors/2026');
       expect(find.byType(StandingsScreen), findsOneWidget);
-      expect(find.text('Scuderia Rossa'), findsWidgets);
+      expect(find.text('McLaren Formula 1 Team'), findsOneWidget);
 
       await pumpApp(tester, initialLocation: '/standings/drivers/2026');
       expect(find.byType(StandingsScreen), findsOneWidget);
-      expect(find.text('Alex Driver'), findsWidgets);
+      expect(find.text('Max Verstappen'), findsOneWidget);
+    });
+
+    testWidgets('an explicit sibling switch replaces instead of stacking', (
+      WidgetTester tester,
+    ) async {
+      final GoRouter router = await pumpApp(
+        tester,
+        initialLocation: '/standings/drivers/2026',
+      );
+
+      await tester.tap(find.text('Constructors'));
+      await tester.pumpAndSettle();
+      expect(shellLocation(router), '/standings/constructors/2026');
+      expect(find.byType(StandingsScreen), findsOneWidget);
+
+      await tester.tap(find.text('Drivers'));
+      await tester.pumpAndSettle();
+      expect(shellLocation(router), '/standings/drivers/2026');
+      expect(find.byType(StandingsScreen), findsOneWidget);
+
+      // Nothing was stacked to pop back to: system back does not peel off a
+      // sibling Standings page.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(shellLocation(router), '/standings/drivers/2026');
+      expect(find.byType(StandingsScreen), findsOneWidget);
     });
   });
 

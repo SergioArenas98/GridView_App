@@ -10,6 +10,7 @@ import 'package:gridview/features/shared/domain/entities/grand_prix.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
 import 'package:gridview/features/shared/domain/entities/session.dart';
+import 'package:gridview/features/shared/domain/entities/standing_entry.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
 
 import '../support/domain_fixtures.dart';
@@ -52,11 +53,23 @@ void main() {
     );
   });
 
-  testWidgets('golden: standings skeleton', (WidgetTester tester) async {
-    await _pump(tester, '/standings/drivers/2026');
+  // The deliberate Standings loading frame: the final screen with the selected
+  // table not yet materialized (this supersedes the Phase 3 skeleton golden).
+  testWidgets('golden: standings loading', (WidgetTester tester) async {
+    await pumpApp(
+      tester,
+      initialLocation: '/standings',
+      surfaceSize: _device,
+      disableAnimations: true,
+      syncMetadata: (String key) => null,
+      standings: FakeStandingsRepository(
+        drivers: (int season) => const <DriverStandingEntry>[],
+        constructors: (int season) => const <ConstructorStandingEntry>[],
+      ),
+    );
     await expectLater(
       find.byType(MaterialApp),
-      matchesGoldenFile('goldens/standings_skeleton.png'),
+      matchesGoldenFile('goldens/standings_loading.png'),
     );
   });
 
@@ -154,6 +167,150 @@ void main() {
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/grand_prix_completed_results.png'),
+    );
+  });
+
+  // --- Phase 7B: the Standings real-data screen -----------------------------
+
+  testWidgets('golden: drivers standings populated', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, '/standings');
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/standings_drivers_populated.png'),
+    );
+  });
+
+  testWidgets('golden: constructors standings populated', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, '/standings/constructors/2026');
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/standings_constructors_populated.png'),
+    );
+  });
+
+  // Fractional points, tied confirmed leaders, a duplicated position, an
+  // unranked row and a provisional table in one frame.
+  testWidgets('golden: fractional and tied standings', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(
+      tester,
+      initialLocation: '/standings',
+      surfaceSize: _device,
+      disableAnimations: true,
+      standings: FakeStandingsRepository(
+        drivers: (int season) => <DriverStandingEntry>[
+          driverStandingEntry(
+            order: 0,
+            position: 1,
+            driverId: 'tied-a',
+            driverName: 'Ada Tied',
+            constructorId: 'team-one',
+            constructorName: 'Team One',
+            teamColor: '#1E41FF',
+            points: 200.5,
+            wins: 4,
+            provisional: true,
+          ),
+          driverStandingEntry(
+            order: 1,
+            position: 1,
+            driverId: 'tied-b',
+            driverName: 'Bo Tied',
+            constructorId: 'team-two',
+            constructorName: 'Team Two',
+            teamColor: '#FF8000',
+            points: 200.5,
+            wins: 4,
+            provisional: true,
+          ),
+          driverStandingEntry(
+            order: 2,
+            position: 3,
+            driverId: 'zero-points',
+            driverName: 'Cal Zero',
+            constructorId: 'team-three',
+            constructorName: 'Team Three',
+            points: 0,
+            wins: 0,
+            provisional: true,
+          ),
+          driverStandingEntry(
+            order: 3,
+            driverId: 'unranked',
+            driverName: 'Dee Unranked',
+            points: 0,
+            provisional: true,
+          ),
+        ],
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/standings_fractional_tied.png'),
+    );
+  });
+
+  testWidgets('golden: standings empty', (WidgetTester tester) async {
+    await pumpApp(
+      tester,
+      initialLocation: '/standings',
+      surfaceSize: _device,
+      disableAnimations: true,
+      standings: FakeStandingsRepository(
+        drivers: (int season) => const <DriverStandingEntry>[],
+        constructors: (int season) => const <ConstructorStandingEntry>[],
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/standings_empty.png'),
+    );
+  });
+
+  testWidgets('golden: standings stale (cached data notice)', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(
+      tester,
+      initialLocation: '/standings',
+      surfaceSize: _device,
+      disableAnimations: true,
+      syncMetadata: (String key) =>
+          syncedMetadata(key, staleAfter: DateTime.utc(2026, 7, 18, 11)),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/standings_stale.png'),
+    );
+  });
+
+  testWidgets('golden: standings non-blocking refresh failure', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(
+      tester,
+      initialLocation: '/standings/drivers/2024',
+      surfaceSize: _device,
+      disableAnimations: true,
+      standings: FakeStandingsRepository(
+        drivers: (int season) => driverStandingsFixture(season: season),
+        constructors: (int season) =>
+            constructorStandingsFixture(season: season),
+        onRefreshDrivers: (int season) async => const RefreshFailure(
+          ApiFailure(kind: ApiFailureKind.networkUnavailable),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('standings-refresh')));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/standings_refresh_failure.png'),
     );
   });
 

@@ -28,6 +28,14 @@ FakeRaceWeekendRepository defaultFakeRepository() => FakeRaceWeekendRepository(
   grandPrix: (int season, int round) => grandPrixDetailFixture(season, round),
 );
 
+/// The default fake standings repository: both championship tables populated for
+/// any season, with a confirmed leader, fractional points, a confirmed zero and
+/// an unranked entrant.
+FakeStandingsRepository defaultFakeStandings() => FakeStandingsRepository(
+  drivers: (int season) => driverStandingsFixture(season: season),
+  constructors: (int season) => constructorStandingsFixture(season: season),
+);
+
 /// A test host that mirrors [GridViewApp] but exposes locale, text-scale,
 /// surface size and animation control so navigation, resilience and golden
 /// tests can drive the real router.
@@ -131,6 +139,7 @@ Future<GoRouter> pumpApp(
   bool disableAnimations = false,
   EdgeInsets padding = EdgeInsets.zero,
   FakeRaceWeekendRepository? repository,
+  FakeStandingsRepository? standings,
   DateTime? clock,
   AppEnvironment environment = AppEnvironment.development,
   bool mockData = false,
@@ -146,6 +155,8 @@ Future<GoRouter> pumpApp(
 
   final DateTime now = clock ?? DateTime.utc(2026, 7, 18, 12, 10);
   final FakeRaceWeekendRepository repo = repository ?? defaultFakeRepository();
+  final FakeStandingsRepository standingsRepo =
+      standings ?? defaultFakeStandings();
   final GoRouter router = buildGridViewRouter(initialLocation: initialLocation);
   await tester.pumpWidget(
     ProviderScope(
@@ -154,6 +165,7 @@ Future<GoRouter> pumpApp(
         calendarRepositoryProvider.overrideWithValue(repo),
         grandPrixRepositoryProvider.overrideWithValue(repo),
         resultRepositoryProvider.overrideWithValue(repo),
+        standingsRepositoryProvider.overrideWithValue(standingsRepo),
         clockProvider.overrideWithValue(() => now),
         // Pinned so rendering never depends on the host machine's time zone:
         // a developer machine and the Linux CI runner report different names

@@ -8,6 +8,8 @@ import 'package:gridview/features/shared/domain/entities/home_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
 import 'package:gridview/features/shared/domain/entities/season.dart';
 import 'package:gridview/features/shared/domain/entities/session.dart';
+import 'package:gridview/features/shared/domain/entities/standing.dart';
+import 'package:gridview/features/shared/domain/entities/standing_entry.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 
 /// Deterministic domain fixtures for the vertical-slice tests. These mirror the
@@ -249,6 +251,175 @@ ResourceSyncState syncedMetadata(
   lastSuccessAt: lastSuccessAt ?? DateTime.utc(2026, 7, 18, 12),
   serverStale: serverStale,
 );
+
+// --- Standings ------------------------------------------------------------
+
+/// One drivers' standing read model. [order] is the delivered order index, which
+/// is deliberately independent of [position] so a test can prove the delivered
+/// order wins.
+DriverStandingEntry driverStandingEntry({
+  required String driverId,
+  required String driverName,
+  required int order,
+  required double points,
+  int? position,
+  int season = 2026,
+  String? constructorId,
+  String? constructorName,
+  String? shortCode,
+  String? teamColor,
+  int? wins,
+  int? podiums,
+  bool? provisional,
+}) => DriverStandingEntry(
+  standing: DriverStanding(
+    season: season,
+    driverId: driverId,
+    constructorId: constructorId,
+    position: position,
+    points: points,
+    wins: wins,
+    podiums: podiums,
+    provisional: provisional,
+  ),
+  orderIndex: order,
+  driverName: driverName,
+  driverShortCode: shortCode,
+  constructorName: constructorName,
+  teamColor: teamColor,
+);
+
+/// One constructors' standing read model.
+ConstructorStandingEntry constructorStandingEntry({
+  required String constructorId,
+  required int order,
+  required double points,
+  String? seasonName,
+  String? stableName,
+  int? position,
+  int season = 2026,
+  String? teamColor,
+  int? wins,
+  bool? provisional,
+}) => ConstructorStandingEntry(
+  standing: ConstructorStanding(
+    season: season,
+    constructorId: constructorId,
+    position: position,
+    points: points,
+    wins: wins,
+    provisional: provisional,
+  ),
+  orderIndex: order,
+  seasonName: seasonName,
+  stableName: stableName,
+  teamColor: teamColor,
+);
+
+/// A realistic drivers' championship table: a confirmed leader, fractional
+/// points, a confirmed zero and an unranked entrant with no team.
+List<DriverStandingEntry> driverStandingsFixture({int season = 2026}) =>
+    <DriverStandingEntry>[
+      driverStandingEntry(
+        season: season,
+        order: 0,
+        position: 1,
+        driverId: 'max-verstappen',
+        driverName: 'Max Verstappen',
+        shortCode: 'VER',
+        constructorId: 'red-bull',
+        constructorName: 'Red Bull Racing',
+        teamColor: '#1E41FF',
+        points: 241,
+        wins: 6,
+        podiums: 9,
+      ),
+      driverStandingEntry(
+        season: season,
+        order: 1,
+        position: 2,
+        driverId: 'lando-norris',
+        driverName: 'Lando Norris',
+        shortCode: 'NOR',
+        constructorId: 'mclaren',
+        constructorName: 'McLaren',
+        teamColor: '#FF8000',
+        points: 232.5,
+        wins: 5,
+        podiums: 10,
+      ),
+      driverStandingEntry(
+        season: season,
+        order: 2,
+        position: 3,
+        driverId: 'charles-leclerc',
+        driverName: 'Charles Leclerc',
+        shortCode: 'LEC',
+        constructorId: 'ferrari',
+        constructorName: 'Ferrari',
+        teamColor: '#E8002D',
+        points: 165,
+        wins: 0,
+        podiums: 4,
+      ),
+      driverStandingEntry(
+        season: season,
+        order: 3,
+        position: 19,
+        driverId: 'franco-colapinto',
+        driverName: 'Franco Colapinto',
+        shortCode: 'COL',
+        constructorId: 'alpine',
+        constructorName: 'Alpine',
+        points: 0,
+        wins: 0,
+      ),
+      driverStandingEntry(
+        season: season,
+        order: 4,
+        driverId: 'reserve-entrant',
+        driverName: 'Reserve Entrant',
+        points: 0,
+      ),
+    ];
+
+/// A realistic constructors' championship table, using season branding.
+List<ConstructorStandingEntry> constructorStandingsFixture({
+  int season = 2026,
+}) => <ConstructorStandingEntry>[
+  constructorStandingEntry(
+    season: season,
+    order: 0,
+    position: 1,
+    constructorId: 'mclaren',
+    seasonName: 'McLaren Formula 1 Team',
+    stableName: 'McLaren',
+    teamColor: '#FF8000',
+    points: 460.5,
+    wins: 9,
+  ),
+  constructorStandingEntry(
+    season: season,
+    order: 1,
+    position: 2,
+    constructorId: 'red-bull',
+    seasonName: 'Oracle Red Bull Racing',
+    stableName: 'Red Bull Racing',
+    teamColor: '#1E41FF',
+    points: 331,
+    wins: 6,
+  ),
+  constructorStandingEntry(
+    season: season,
+    order: 2,
+    position: 3,
+    constructorId: 'ferrari',
+    stableName: 'Ferrari',
+    teamColor: '#E8002D',
+    points: 268,
+    wins: 0,
+  ),
+];
 
 /// A classification document for (season, round) with [entries] in the exact
 /// order supplied.

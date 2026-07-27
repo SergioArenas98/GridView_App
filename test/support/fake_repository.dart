@@ -3,11 +3,14 @@ import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/home_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
+import 'package:gridview/features/shared/domain/entities/standing.dart';
+import 'package:gridview/features/shared/domain/entities/standing_entry.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
 import 'package:gridview/features/shared/domain/repositories/calendar_repository.dart';
 import 'package:gridview/features/shared/domain/repositories/grand_prix_repository.dart';
 import 'package:gridview/features/shared/domain/repositories/home_repository.dart';
 import 'package:gridview/features/shared/domain/repositories/result_repository.dart';
+import 'package:gridview/features/shared/domain/repositories/standings_repository.dart';
 
 /// A plain-Dart fake for the Home, Calendar, Grand Prix and Result repositories,
 /// for widget tests.
@@ -178,6 +181,119 @@ class FakeRaceWeekendRepository
   }) {
     resultsRefreshCount++;
     return onRefreshResults?.call(season, round) ??
+        Future<RefreshResult>.value(const RefreshSuccess());
+  }
+}
+
+/// A plain-Dart fake [StandingsRepository] for widget tests.
+///
+/// The two championships are deliberately independent: separate streams,
+/// separate refresh hooks and separate call counters, so a test can prove that
+/// one table's failure never becomes the other's and that a rebuild or a selector
+/// change produced no request at all.
+class FakeStandingsRepository implements StandingsRepository {
+  FakeStandingsRepository({
+    this.drivers,
+    this.constructors,
+    this.driversStream,
+    this.constructorsStream,
+    this.onRefreshDrivers,
+    this.onRefreshConstructors,
+  });
+
+  /// Static drivers' table emitted once per season.
+  final List<DriverStandingEntry> Function(int season)? drivers;
+
+  /// Static constructors' table emitted once per season.
+  final List<ConstructorStandingEntry> Function(int season)? constructors;
+
+  /// Replaces a stream entirely (e.g. a never-emitting stream to hold loading).
+  final Stream<List<DriverStandingEntry>> Function(int season)? driversStream;
+  final Stream<List<ConstructorStandingEntry>> Function(int season)?
+  constructorsStream;
+
+  final Future<RefreshResult> Function(int season)? onRefreshDrivers;
+  final Future<RefreshResult> Function(int season)? onRefreshConstructors;
+
+  /// How many times each refresh entry point was called, and with which season,
+  /// so a test can assert that a historical route never touched the other
+  /// championship or the current season's keys.
+  final List<int> driverRefreshSeasons = <int>[];
+  final List<int> constructorRefreshSeasons = <int>[];
+
+  int get driversRefreshCount => driverRefreshSeasons.length;
+  int get constructorsRefreshCount => constructorRefreshSeasons.length;
+
+  @override
+  Stream<List<DriverStandingEntry>> watchDriverStandingEntries(int season) {
+    if (driversStream != null) return driversStream!(season);
+    return Stream<List<DriverStandingEntry>>.value(
+      drivers?.call(season) ?? const <DriverStandingEntry>[],
+    );
+  }
+
+  @override
+  Stream<List<ConstructorStandingEntry>> watchConstructorStandingEntries(
+    int season,
+  ) {
+    if (constructorsStream != null) return constructorsStream!(season);
+    return Stream<List<ConstructorStandingEntry>>.value(
+      constructors?.call(season) ?? const <ConstructorStandingEntry>[],
+    );
+  }
+
+  @override
+  Future<List<DriverStandingEntry>> readDriverStandingEntries(int season) =>
+      watchDriverStandingEntries(season).first;
+
+  @override
+  Future<List<ConstructorStandingEntry>> readConstructorStandingEntries(
+    int season,
+  ) => watchConstructorStandingEntries(season).first;
+
+  @override
+  Stream<List<DriverStanding>> watchDriverStandings(int season) =>
+      watchDriverStandingEntries(season).map(
+        (List<DriverStandingEntry> rows) => rows
+            .map((DriverStandingEntry r) => r.standing)
+            .toList(growable: false),
+      );
+
+  @override
+  Stream<List<ConstructorStanding>> watchConstructorStandings(int season) =>
+      watchConstructorStandingEntries(season).map(
+        (List<ConstructorStandingEntry> rows) => rows
+            .map((ConstructorStandingEntry r) => r.standing)
+            .toList(growable: false),
+      );
+
+  @override
+  Future<List<DriverStanding>> readDriverStandings(int season) =>
+      watchDriverStandings(season).first;
+
+  @override
+  Future<List<ConstructorStanding>> readConstructorStandings(int season) =>
+      watchConstructorStandings(season).first;
+
+  @override
+  Future<RefreshResult> refreshDriverStandings(
+    int season, {
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  }) {
+    driverRefreshSeasons.add(season);
+    return onRefreshDrivers?.call(season) ??
+        Future<RefreshResult>.value(const RefreshSuccess());
+  }
+
+  @override
+  Future<RefreshResult> refreshConstructorStandings(
+    int season, {
+    bool bypassValidator = false,
+    RemoteCancellation? cancellation,
+  }) {
+    constructorRefreshSeasons.add(season);
+    return onRefreshConstructors?.call(season) ??
         Future<RefreshResult>.value(const RefreshSuccess());
   }
 }
