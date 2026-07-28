@@ -240,36 +240,84 @@ class GvStandingsRow extends StatelessWidget {
   }
 }
 
+/// A driver list row: the driver's name, an optional already-composed secondary
+/// line, an optional short code and an optional number.
+///
+/// Every value is a plain string the caller has already formatted and
+/// localized, and every optional one is simply not rendered when absent — so a
+/// missing team leaves no dangling separator and a missing number never becomes
+/// a false zero. The component knows nothing about drivers as a domain, about
+/// repositories, Riverpod, Drift or DTOs.
 class GvDriverRow extends StatelessWidget {
   const GvDriverRow({
     super.key,
     required this.name,
     this.team,
+    this.subtitle,
     this.leading,
     this.number,
+    this.shortCode,
+    this.accentColor,
     this.onTap,
+    this.semanticLabel,
   });
 
   final String name;
+
+  /// A team name rendered as the secondary line. Superseded by [subtitle] when
+  /// the caller has composed a richer line of its own.
   final String? team;
+
+  /// An already-composed secondary line. Takes precedence over [team].
+  final String? subtitle;
+
   final Widget? leading;
   final String? number;
+
+  /// A short competitor code (e.g. `VER`), rendered beneath the number.
+  final String? shortCode;
+
+  /// A restrained team accent. Never the sole carrier of identity.
+  final Color? accentColor;
+
   final VoidCallback? onTap;
+
+  /// Replaces the row's merged child semantics with one explicit reading order.
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
+    final String? secondary = subtitle ?? team;
     return _RowScaffold(
       onTap: onTap,
       leading: leading,
+      accentColor: accentColor,
+      semanticLabel: semanticLabel,
       title: Text(name),
-      subtitle: team == null ? null : Text(team!),
-      trailing: number == null
-          ? null
-          : Text(number!, style: GvTypography.statValue.copyWith(fontSize: 18)),
+      subtitle: secondary == null ? null : Text(secondary),
+      trailing: _trailing(),
+    );
+  }
+
+  Widget? _trailing() {
+    final String? value = number;
+    final String? code = shortCode;
+    if (value == null && code == null) return null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        if (value != null)
+          Text(value, style: GvTypography.statValue.copyWith(fontSize: 18)),
+        if (code != null)
+          Text(code, style: GvTypography.label.copyWith(fontSize: 13)),
+      ],
     );
   }
 }
 
+/// A team list row: the team's display name, an optional secondary line and a
+/// restrained team accent.
 class GvTeamRow extends StatelessWidget {
   const GvTeamRow({
     super.key,
@@ -278,13 +326,18 @@ class GvTeamRow extends StatelessWidget {
     this.leading,
     this.accentColor,
     this.onTap,
+    this.semanticLabel,
   });
 
   final String name;
   final String? subtitle;
   final Widget? leading;
+
+  /// A restrained team accent. Never the sole carrier of identity.
   final Color? accentColor;
+
   final VoidCallback? onTap;
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -292,31 +345,40 @@ class GvTeamRow extends StatelessWidget {
       onTap: onTap,
       leading: leading,
       accentColor: accentColor,
+      semanticLabel: semanticLabel,
       title: Text(name),
       subtitle: subtitle == null ? null : Text(subtitle!),
     );
   }
 }
 
+/// A circuit list row: the circuit's name and an optional secondary line
+/// (location, related event, physical summary — already composed by the caller).
 class GvCircuitRow extends StatelessWidget {
   const GvCircuitRow({
     super.key,
     required this.name,
     this.location,
     this.leading,
+    this.trailing,
     this.onTap,
+    this.semanticLabel,
   });
 
   final String name;
   final String? location;
   final Widget? leading;
+  final Widget? trailing;
   final VoidCallback? onTap;
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
     return _RowScaffold(
       onTap: onTap,
       leading: leading,
+      trailing: trailing,
+      semanticLabel: semanticLabel,
       title: Text(name),
       subtitle: location == null ? null : Text(location!),
     );

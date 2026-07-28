@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../theme/tokens/tokens.dart';
 
 /// A section title with an optional trailing action (e.g. "See all").
+///
+/// The action shares the row's width with the title rather than taking its
+/// natural size, so a long localized action label (or a large text scale) makes
+/// both sides ellipsize instead of overflowing.
 class GvSectionHeader extends StatelessWidget {
   const GvSectionHeader({
     super.key,
@@ -29,12 +33,16 @@ class GvSectionHeader extends StatelessWidget {
             ),
           ),
           if (actionLabel != null && onAction != null)
-            TextButton(
-              onPressed: onAction,
-              child: Text(
-                actionLabel!,
-                style: GvTypography.label.copyWith(
-                  color: GvColors.accentSecondary,
+            Flexible(
+              child: TextButton(
+                onPressed: onAction,
+                child: Text(
+                  actionLabel!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GvTypography.label.copyWith(
+                    color: GvColors.accentSecondary,
+                  ),
                 ),
               ),
             ),
