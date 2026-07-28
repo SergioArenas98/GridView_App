@@ -9,11 +9,15 @@ import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
+import 'package:gridview/features/shared/domain/entities/season_card.dart';
 import 'package:gridview/features/shared/domain/entities/session.dart';
 import 'package:gridview/features/shared/domain/entities/standing_entry.dart';
+import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
 
 import '../support/domain_fixtures.dart';
+import '../support/entity_fixtures.dart';
+import '../support/fake_entity_repository.dart';
 import '../support/fake_repository.dart';
 import '../support/router_harness.dart';
 
@@ -33,6 +37,8 @@ Future<void> _pump(WidgetTester tester, String location) async {
 }
 
 void main() {
+  _phase7cGoldens();
+
   testWidgets('golden: primary shell pill navigation', (
     WidgetTester tester,
   ) async {
@@ -480,3 +486,181 @@ RaceResult _raceDocument() => raceResultFixture(
     ),
   ],
 );
+
+// --- Phase 7C: Explore collections and entity details ---------------------
+
+/// Explore and entity-detail goldens.
+///
+/// Every input is pinned — locale, clock, text scale, surface size, device time
+/// zone, provider overrides and the deterministic placeholder state — so the
+/// images depend on nothing outside the test. No remote image is ever
+/// requested: media is always the layout-reserving placeholder.
+void _phase7cGoldens() {
+  Future<void> pumpExplore(
+    WidgetTester tester,
+    String location, {
+    FakeDriverRepository? drivers,
+    FakeConstructorRepository? constructors,
+    FakeCircuitRepository? circuits,
+    ResourceSyncState? Function(String key)? syncMetadata,
+  }) => pumpApp(
+    tester,
+    initialLocation: location,
+    surfaceSize: _device,
+    disableAnimations: true,
+    drivers: drivers,
+    constructors: constructors,
+    circuits: circuits,
+    syncMetadata: syncMetadata,
+  );
+
+  testWidgets('golden: explore drivers populated', (WidgetTester tester) async {
+    await pumpExplore(tester, '/explore');
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/explore_drivers_populated.png'),
+    );
+  });
+
+  testWidgets('golden: explore teams populated', (WidgetTester tester) async {
+    await pumpExplore(tester, '/explore/teams');
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/explore_teams_populated.png'),
+    );
+  });
+
+  testWidgets('golden: explore circuits populated', (
+    WidgetTester tester,
+  ) async {
+    await pumpExplore(tester, '/explore/circuits');
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/explore_circuits_populated.png'),
+    );
+  });
+
+  // A materialized collection that legitimately carries no entities.
+  testWidgets('golden: explore empty', (WidgetTester tester) async {
+    await pumpExplore(
+      tester,
+      '/explore',
+      drivers: FakeDriverRepository(
+        cards: (int season) => const <SeasonDriverCard>[],
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/explore_empty.png'),
+    );
+  });
+
+  testWidgets('golden: driver detail complete', (WidgetTester tester) async {
+    await pumpExplore(tester, '/drivers/max-verstappen');
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/driver_detail_complete.png'),
+    );
+  });
+
+  // A collection-derived profile: real identity, no detail-owned sections and
+  // no media — the state Phase 7C must render honestly.
+  testWidgets('golden: driver detail partial', (WidgetTester tester) async {
+    await pumpExplore(
+      tester,
+      '/drivers/max-verstappen',
+      drivers: FakeDriverRepository(
+        profile: (int season, String id) =>
+            partialDriverProfileFixture(season: season, driverId: id),
+      ),
+      syncMetadata: (String key) => null,
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/driver_detail_partial.png'),
+    );
+  });
+
+  testWidgets('golden: team detail complete', (WidgetTester tester) async {
+    await pumpExplore(tester, '/constructors/alpine');
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/team_detail_complete.png'),
+    );
+  });
+
+  testWidgets('golden: team detail partial', (WidgetTester tester) async {
+    await pumpExplore(
+      tester,
+      '/constructors/alpine',
+      constructors: FakeConstructorRepository(
+        profile: (int season, String id) =>
+            partialTeamProfileFixture(season: season, constructorId: id),
+      ),
+      syncMetadata: (String key) => null,
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/team_detail_partial.png'),
+    );
+  });
+
+  testWidgets('golden: circuit detail complete', (WidgetTester tester) async {
+    await pumpExplore(tester, '/circuits/spa-francorchamps');
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/circuit_detail_complete.png'),
+    );
+  });
+
+  // No layout media, no physical facts and no related event this season: still
+  // a useful, controlled screen.
+  testWidgets('golden: circuit detail partial', (WidgetTester tester) async {
+    await pumpExplore(
+      tester,
+      '/circuits/monza',
+      circuits: FakeCircuitRepository(
+        profile: (int season, String id) => circuitProfileFixture(
+          season: season,
+          circuitId: id,
+          name: 'Autodromo Nazionale Monza',
+          locality: 'Monza',
+          country: 'Italy',
+          lengthMeters: null,
+          cornerCount: null,
+          direction: null,
+          firstGrandPrixYear: null,
+          withLapRecord: false,
+          withRelated: false,
+        ),
+      ),
+      syncMetadata: (String key) => null,
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/circuit_detail_partial.png'),
+    );
+  });
+
+  // Cached content with a non-blocking refresh failure: the content stays, the
+  // notice is discreet and nothing claims the device is offline.
+  testWidgets('golden: entity detail cached failure', (
+    WidgetTester tester,
+  ) async {
+    await pumpExplore(
+      tester,
+      '/drivers/max-verstappen',
+      drivers: FakeDriverRepository(
+        profile: (int season, String id) =>
+            driverProfileFixture(season: season, driverId: id),
+        onRefreshDetail: (String id, int season) async => const RefreshFailure(
+          ApiFailure(kind: ApiFailureKind.networkUnavailable),
+        ),
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/entity_detail_cached_failure.png'),
+    );
+  });
+}
