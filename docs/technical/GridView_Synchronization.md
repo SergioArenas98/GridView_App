@@ -1013,3 +1013,183 @@ anything on disk.
   `resourceRefreshStatus`, `evaluateResourceFreshness` and
   `hasMaterializedCollection`; do not add a second result, error or
   state-management pattern.
+
+## 14. Feature ownership (Phase 7C: Explore, Driver, Team and Circuit)
+
+Phase 7C adds no synchronization seam. It consumes the Phase 6 layer through two
+distinct ownership models that must not be conflated:
+
+| Resource family | Keys | Owner |
+|---|---|---|
+| Explore collections | `drivers:<season>`, `constructors:<season>`, `circuits:<season>` | the application coordinator (core set, ADR 0015) |
+| Entity details | `driver:<id>:<season>`, `constructor:<id>:<season>`, `circuit:<id>:<season>` | the opened detail controller, on demand |
+
+### 14.1 Explore collection ownership
+
+The three collections are **independent** current-season core resources. Each has
+its own row, its own ETag, its own freshness and its own refresh status; nothing
+is ever derived from one for another.
+
+`ExploreController` (`features/explore/application/explore_providers.dart`) owns
+**presentation** refresh status only.
+
+- Creating it starts **no** refresh. Neither does selecting a category, nor a
+  widget rebuild, nor a Drift emission. Startup and foreground refresh of the
+  current-season core set remain the coordinator's job (ADR 0015).
+- It mirrors `appSyncStateProvider` through `resourceRefreshStatus`, matched
+  strictly against `SeasonDriversSyncResource` / `SeasonConstructorsSyncResource`
+  / `SeasonCircuitsSyncResource` for the resolved season. Another season, another
+  category or an unrelated core resource never becomes this collection's error.
+- Selecting a category is **navigation state**, never remote-data state.
+
+### 14.2 Focused collection retry
+
+`ExploreController.retry(category)` is the only request this feature can produce.
+It is user-triggered feature recovery, not a second synchronization policy:
+
+- it issues **one** conditional request for exactly `<category>:<season>`,
+  retaining that resource's persisted ETag (`bypassValidator` is never set);
+- it touches nothing else — not Calendar, not Home, not Standings, not the other
+  two collections;
+- the season is read at retry time, so a retry can never target a season the
+  screen has moved on from, and never runs without one;
+- repeated taps collapse (the running status is claimed before the first await,
+  and `RefreshCoordinator` deduplicates per key as defence in depth);
+- it returns a typed `RefreshResult`, preserves cached cards throughout, and its
+  future always completes — after success, failure **or** cancellation.
+
+There is no general pull-to-refresh on Explore in Phase 7C.
+
+### 14.3 Collection materialization
+
+Materialization uses the shared `hasMaterializedCollection` rule unchanged — the
+collection's own `lastSuccessAt`, or an accepted bootstrap whose **own** season
+scope equals the resolved season. It is never inferred from a row count.
+
+| Local state | Result |
+|---|---|
+| own metadata + rows | ready, with individual freshness |
+| own metadata + zero rows | **empty**, with individual freshness |
+| same-season bootstrap + rows | ready, freshness `null` |
+| same-season bootstrap + zero rows | **empty**, freshness `null` |
+| older-season bootstrap | does **not** materialize the current season |
+| no matching record | loading, or a first-load error |
+
+A bootstrap-only collection therefore renders real content while claiming **no**
+update time and **no** staleness: unknown is presented as neither fresh nor
+stale. Bootstrap contributes no ETag and no provenance, so each collection stays
+due for its own first individual synchronization, and its first request after a
+bootstrap sends no fabricated validator (ADR 0014).
+
+### 14.4 Detail resource ownership
+
+Driver, Team and Circuit details remain **on demand**. `EntityDetailController`
+(`features/shared/application/entity_detail_controller.dart`) is the shared base:
+
+1. the local profile stream is subscribed immediately, and any authoritative
+   local identity renders **before** any request completes;
+2. **at most one** refresh of the exact detail key is triggered per opened page
+   with a resolved season;
+3. a widget rebuild or a Drift emission never schedules a duplicate — the request
+   is claimed once per resolved season;
+4. it cancels on dispose (`RemoteCancellation`), and a cancelled request is not a
+   user-facing failure;
+5. it stays retryable after a failure or a cancellation;
+6. `RefreshCoordinator` deduplication is relied on as defence in depth.
+
+Opening a detail never refreshes all Drivers, all Teams, all Circuits, Standings,
+Calendar or Home, and detail refresh never routes through the coordinator's
+core-resource plan.
+
+### 14.5 Collection / detail metadata isolation
+
+Collection and detail are separate representations with separate validators:
+
+- a collection `200` creates only its own metadata;
+- the **first** detail request after a collection or a bootstrap sends **no**
+  validator — a collection ETag is never reused for a detail, and vice versa;
+- a later detail `304` uses only that detail's persisted ETag;
+- collection freshness never becomes detail freshness; one entity's detail
+  freshness never becomes another's.
+
+### 14.6 Partial versus materialized details
+
+A local profile and a materialized detail are different claims.
+
+| Local state | Rendering |
+|---|---|
+| unresolved stub only, or no row | not renderable; one detail request when a season exists |
+| real identity / season summary, detail never synced | **partial**: render what exists, structured placeholders elsewhere, **no** detail freshness claimed |
+| exact detail resource has `lastSuccessAt` and a valid local representation | **materialized**: full detail, exact detail freshness |
+
+`EntityDetailReady.materialized` carries this distinction, and `freshness` is
+always `null` when it is `false`. Collection, bootstrap, Standings, Calendar,
+Home and Grand Prix data may supply useful summary content, but never prove that
+the detail endpoint was called.
+
+`404` handling depends on what exists locally:
+
+- with a **real** local summary, the summary stays visible and the detail-owned
+  sections report unavailable (focused, non-blocking);
+- with **no** real local entity, it is a definitive not-found;
+- an older or rejected detail response preserves newer local content
+  (`RefreshApplication.rejectedOlder`).
+
+### 14.7 Referential stubs and 304 recovery
+
+A referential stub satisfies a foreign key; it is **not** a local domain
+representation. The three detail repositories therefore check
+`hasResolvedDriver` / `hasResolvedConstructor` / `hasResolvedCircuit` rather than
+a raw row count, so a stub cannot suppress the single unconditional recovery
+request ADR 0012 requires after a `304`.
+
+For all three families:
+
+- stub-only local state plus a `304` produces exactly **one** unconditional
+  retry;
+- a successful retry resolves the identity and persists the detail normally;
+- a second `304` with still no representation produces one typed
+  `invalidResponse` failure, never a loop (exactly two requests in total);
+- a transient failure after the retry stays a typed failure and preserves the
+  stub's relationship rows;
+- a `304` against a **materialized** authoritative detail revalidates once and
+  never retries;
+- an existing real identity is never downgraded (`ensure*` is insert-or-ignore).
+
+### 14.8 Season context for detail resources
+
+The public detail routes carry only a stable entity id, while the detail
+resources are season-scoped. The missing half travels as typed, runtime-only
+navigation metadata (`EntityNavigationOrigin.season`) rather than by changing a
+route path or inventing a query parameter.
+
+| Origin | Season passed |
+|---|---|
+| Explore (current season) | the resolved current season |
+| current-season Standings | the current season |
+| historical Standings route | that route's exact season |
+| Driver to Team, Team to Driver | the originating detail's resolved season |
+| Grand Prix result to Driver / Team | the classification's own season |
+| Grand Prix to Circuit | the Grand Prix season |
+| Circuit to Grand Prix | the related event's exact season and round (in the path) |
+| direct deep link | none; the current season is resolved locally |
+
+`EntityDetailScope(entityId, originSeason)` keys every provider family, so the
+same entity in two seasons is two independent controllers reading two different
+metadata keys and validators. If neither an origin nor a local current season is
+available, the screen shows a controlled season-unavailable state with a retry
+and makes **no** season-scoped request.
+
+### 14.9 Phase 7D hand-off
+
+- Driver, Team and Circuit routes now render complete local features.
+- Home may link directly to them through stable identifiers, using
+  `context.openEntity(location, season: ...)`.
+- Home must **not** take ownership of detail synchronization: the detail
+  controllers already own exactly one request per opened page.
+- Home should reuse the existing entity read models (`SeasonDriverCard`,
+  `SeasonTeamCard`, `SeasonCircuitCard`, `DriverProfile`, `TeamProfile`,
+  `CircuitProfile`) and the existing navigation helpers.
+- Home must continue reading Drift only.
+- Phase 7D must not alter Explore or detail lifecycle ownership.
+- Real media downloading remains Phase 8 work; Phase 7C ships placeholders only.

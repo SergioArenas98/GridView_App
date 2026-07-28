@@ -197,6 +197,62 @@ The component catalogue gained a provisional row with a two-digit position and a
 row with no team and no statistics, and the design-system behaviour tests cover
 the new slots, the omission rules and the single-line position.
 
+
+## 8d. Phase 7C component changes
+
+Phase 7C introduced no new component. Three existing ones gained optional,
+backward-compatible parameters, and one layout defect was fixed.
+
+### `GvSectionHeader` — overflow-safe trailing action
+
+The trailing action is now `Flexible` with a single-line ellipsis, so a long
+localized label (Spanish `Ver clasificación de constructores`) or a large text
+scale no longer overflows the row.
+
+- The title (`Expanded`) and the action (`Flexible`) each have flex 1, so the
+  title always keeps at least half the row and stays usable.
+- Ellipsis is **visual only**: the complete label remains the semantic label, so
+  assistive technology reads the whole action.
+- The target still meets `GvLayout.minTouchTarget` in both dimensions.
+- No tooltip was added — the design system does not use tooltips for section
+  actions, and a truncated label must not silently acquire one.
+
+Verified in `test/design_system/section_header_test.dart` for both locales at 1x
+and 2x text scale, at 390 px and 320 px widths.
+
+### `GvDriverRow`
+
+- `subtitle` — an already-composed secondary line, taking precedence over the
+  existing `team` (which is retained, so existing call sites are unchanged).
+- `shortCode` — rendered beneath the number in the trailing slot.
+- `accentColor` — a restrained team accent, never the sole carrier of identity.
+- `semanticLabel` — one explicit reading order for the whole row.
+
+### `GvTeamRow` / `GvCircuitRow`
+
+- `semanticLabel` on both; `trailing` on `GvCircuitRow`.
+
+All new parameters are optional and default to the previous behaviour, so every
+existing user and every existing golden remains valid.
+
+### Media placeholder policy (Phase 7C)
+
+Phase 7C implements media **fallbacks**, not the Phase 8 media system.
+
+- Every hero and every row leading slot uses `GvImagePlaceholder`, which reserves
+  the intended aspect ratio so content never shifts.
+- Each placeholder carries a localized semantic label
+  (`driverPortraitPlaceholder`, `teamLogoPlaceholder`,
+  `circuitLayoutPlaceholder`).
+- **No remote image request is made anywhere.** No image-cache package was added,
+  no production asset URL is hardcoded, and no logo, portrait or circuit outline
+  is bundled.
+- Initials are never derived from an identifier; team treatment uses the
+  contrast-safe accent from `GvTeamAccent`, which returns `null` for a missing or
+  malformed colour rather than inventing one.
+- Missing media never removes core text content: every row and every detail
+  screen stays fully usable and navigable without it.
+
 ## 9. Rules
 
 - No raw colour/spacing/radius literals in widgets — use tokens.

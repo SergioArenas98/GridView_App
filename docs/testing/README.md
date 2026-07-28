@@ -812,3 +812,239 @@ Checklist:
     switching the selector switches that context.
 18. Confirm the **STAGING** badge is visible.
 19. Confirm **no "Sample data" banner** appears.
+
+## Explore, Driver, Team & Circuit features (Phase 7C)
+
+Phase 7C adds **232** tests (221 unit/widget/integration + 11 goldens), taking
+the Flutter suite from 844 to **1076** with **27** goldens. No existing
+assertion was weakened. Every test is deterministic and offline: none needs the
+internet, Cloudflare, `ADMIN_TOKEN`, a real provider or an Android device.
+
+### Support additions
+
+| File | Purpose |
+|---|---|
+| `test/support/entity_fixtures.dart` | Explore cards and entity profiles, including the awkward legal cases: a driver with no resolvable team, two mid-season spans, a rebranded constructor, an unranked entrant, a confirmed zero, fractional points and a circuit with no related event |
+| `test/support/fake_entity_repository.dart` | Independent fakes for the Driver, Constructor and Circuit repositories, each recording collection and detail refreshes separately so a test can prove exactly which resource was requested |
+
+`pumpApp` now also overrides the three entity repositories, so every navigation
+and rendering test runs against deterministic fakes rather than a database.
+
+### Collection read models — `test/database/entity_collection_read_model_test.dart` (25)
+
+Read from a real in-memory database:
+
+- the drivers collection contains the real current-season identities;
+- an unresolved driver stub is omitted while its relationship row survives;
+- the team comes from the exact `DriverSeasonEntry`, never from a standing that
+  names a different constructor;
+- an unresolved constructor contributes no team name and no team colour;
+- mid-season participation produces **one** card, not two, with `spanCount == 2`
+  and the open span as the relevant one;
+- optional values stay `null` and a confirmed zero survives;
+- standings enrichment does not reorder the collection, and repeated reads keep
+  the same order (unnumbered entrants last);
+- season branding takes precedence over the stable name, and a rebrand preserves
+  both the stable id and the collection position;
+- the line-up derives from participation entries, keeps both mid-season spans and
+  omits stubs;
+- circuits follow the **calendar** order (deliberately not alphabetical in the
+  fixture), the related Grand Prix uses the exact season and round, another
+  season contributes nothing, and stubs are omitted;
+- a driver profile carries every span in relevance order;
+- a stub never materializes a driver, team or circuit profile;
+- a later authoritative upsert resolves the same row in place;
+- a circuit profile resolves its lap-record holder's name, yields `null` for an
+  unresolvable one, and remains valid with no related event.
+
+### State derivation — `explore_state_test.dart` (19) and `entity_detail_state_test.dart` (14)
+
+Pure functions, no Riverpod and no widget tree.
+
+The full Explore materialization matrix (own metadata, same-season bootstrap,
+older-season bootstrap, nothing) crossed with rows/zero rows; the stale boundary;
+season-unresolved while settling versus settled; first-load error versus cached
+content preserved through a failure; a failure suppressed while a refresh is
+still running; three independently derived categories; progress scoped to the
+selected one.
+
+For details: season resolving / unavailable / refreshing; partial versus
+materialized and the `null` freshness that a partial state must claim; a stale
+materialized detail; `404` with and without a real local summary; not-found
+outranking a transient failure; cached content surviving a failure; and section
+availability on all three profile types.
+
+### Controllers — `explore_controller_test.dart` (14) and `entity_detail_controller_test.dart` (19)
+
+**Explore:** creating the controller, deriving every category, switching category
+repeatedly and re-reading a state all produce **zero** requests. The focused
+retry targets only the selected collection, for the exact resolved season, makes
+no request without one, collapses repeated taps, surfaces a failure without
+discarding cached cards, treats a cancellation as no failure, and always
+completes.
+
+**Details:** an origin season is used exactly and a deep link resolves the local
+current season; no resolvable season makes no request at all; the same entity in
+two seasons is two independent controllers; opening one detail requests only that
+detail and nothing else; rebuilds and repeated local emissions create no
+duplicate; a `404` with no entity is a definitive not-found while a `404` with a
+summary keeps the content; a transient failure stays retryable; a cancellation
+clears transient state; a successful retry clears a previous not-found; repeated
+retries collapse; and team/circuit season propagation is exact.
+
+### Metadata isolation — `test/data/repositories/entity_metadata_isolation_test.dart` (12)
+
+Through the real conditional pipeline: a collection `200` creates only its own
+metadata; the first detail request after a collection sends **no** validator; a
+later detail `304` uses only its own persisted ETag while the collection keeps a
+different one; a collection sync produces a real partial profile without
+materializing the detail; one collection failing leaves the other two untouched;
+and an older detail snapshot preserves newer local content.
+
+### Referential stubs and 304 recovery — `test/data/repositories/stub_recovery_test.dart` (25)
+
+The same eight cases run identically for **all three** detail families, so they
+cannot drift apart:
+
+1. a stub is never returned as detail content;
+2. stub-only state plus a `304` causes exactly one **unconditional** retry;
+3. a successful retry resolves the identity and persists the detail normally;
+4. a `304` after a materialized authoritative detail revalidates once and does
+   **not** retry;
+5. a persistent `304` with no representation yields one typed `invalidResponse`
+   failure after exactly two requests — it cannot loop;
+6. a transient failure after the retry stays a typed failure and preserves the
+   stub's relationship rows;
+7. an existing real identity is never downgraded by `ensure*`;
+8. a real identity makes a `304` a plain revalidation.
+
+Plus one shared check that the unresolved marker never leaks into a resolved
+name and never reaches a collection.
+
+### Offline and persistence — `test/data/repositories/entity_offline_test.dart` (6)
+
+Against a real on-disk database in a temporary directory:
+
+- all three collections and all three details survive a close/reopen and render
+  with **zero** network calls;
+- each resource keeps its own ETag across the reopen, and the next conditional
+  request sends exactly that validator;
+- a bootstrap-only state survives a reopen while the individual collections
+  remain due;
+- a failed detail refresh preserves the persisted content;
+- another season stays isolated (including a circuit that legitimately has no
+  related event in it);
+- an unresolved stub stays hidden after a reopen, then resolves and stays
+  resolved across a further reopen.
+
+### Widgets — `explore_widget_test.dart` (27) and `entity_detail_widget_test.dart` (29)
+
+Explore: `/explore` defaults to Drivers; each explicit category route opens its
+own collection; selecting a category replaces the page and produces no request;
+repeated taps do not stack; an invalid category is a controlled not-found; a
+materialized empty collection renders empty while an unmaterialized one stays
+loading; a bootstrap-only collection shows **no** fabricated timestamp; a
+first-load failure offers a retry that targets only the selected collection;
+cached cards survive a coordinator-reported failure; one category's failure never
+becomes another's; no placeholder catalogue data and no identifier appears
+anywhere; the selector exposes selected semantics; targets meet 48 px; large text
+does not break; all three rows navigate; the resolved season travels to the
+detail; and the three scroll offsets are independent and survive detail round
+trips and branch switches.
+
+Details: complete and partial profiles for all three entities; missing
+biography/birth data/standing/team/media hidden rather than shown empty; a
+mid-season driver showing both spans; localized role labels; unranked and
+confirmed-zero statistics; definitive not-found versus retained partial content;
+a retry from a first-load error; a non-blocking failure keeping cached content;
+semantic headings; large text; the team line-up and its navigation; localized
+kilometre and lap-time formatting; a missing lap-record driver using localized
+copy rather than an identifier; an unknown direction fallback; no related event
+as a valid state; and the exact season/round of the related event.
+
+### Cross-entity navigation — `test/navigation/entity_graph_navigation_test.dart` (16)
+
+Every entry point (Explore, Standings, constructors standings, Grand Prix
+result, Grand Prix, Driver detail, Team detail); the three immediate loops
+(Driver → Team → Driver, Team → Driver → Team, Grand Prix → Circuit → Grand
+Prix) popping rather than stacking; a different entity still pushing; Android
+back returning to the exact originating branch, category and scroll; a
+historical Standings season reaching the driver detail; and the Standings
+context surviving a detail round trip.
+
+### Design system — `test/design_system/section_header_test.dart` (15)
+
+`GvSectionHeader`'s overflow fix: no overflow for the longest English and Spanish
+actions at 1x and 2x text scale and at 320 px width; the title keeps at least
+half the row; the target meets the minimum touch size in both dimensions; the
+complete label survives visual truncation in semantics; the action stays a
+tappable button; the header is a heading; and no tooltip was introduced.
+
+### Goldens (11 new, 27 total)
+
+`explore_drivers_populated`, `explore_teams_populated`,
+`explore_circuits_populated`, `explore_empty`, `driver_detail_complete`,
+`driver_detail_partial`, `team_detail_complete`, `team_detail_partial`,
+`circuit_detail_complete`, `circuit_detail_partial`,
+`entity_detail_cached_failure`.
+
+All pin locale, clock, text scale, surface size, device time-zone label, every
+provider input and the deterministic placeholder state. No existing golden was
+regenerated or superseded — the Phase 3 Explore and entity skeleton screens had
+no goldens of their own.
+
+### Manual staging validation (Phase 7C, non-CI)
+
+CI never depends on staging availability or on a device; this pass is manual and
+uses only public GET routes — no admin route and no `ADMIN_TOKEN`.
+
+Build and install a staging APK with an externally supplied base URL:
+
+```powershell
+flutter build apk --debug --flavor staging `
+  --dart-define=APP_ENV=staging `
+  --dart-define=DATA_SOURCE=remote `
+  --dart-define=API_BASE_URL=<staging base URL>
+```
+
+Checklist:
+
+1. Open **Explore** on an install that has already synchronised.
+2. Confirm **Drivers** is the default category on the first visit.
+3. Browse Drivers; verify names, numbers, teams, nationalities and standings, and
+   that an unavailable value is absent rather than zero.
+4. Switch to **Teams**; verify season branding, power unit, standings and the
+   compact line-up summary.
+5. Switch to **Circuits**; verify names, locations, the related Grand Prix and
+   that the list follows the season's calendar order.
+6. Scroll each of the three lists to a clearly different position.
+7. Switch categories and confirm each scroll position is restored independently.
+8. Switch bottom-navigation branches and return; confirm the selected category
+   and all three positions survived.
+9. Open a **Driver** from Explore.
+10. Open a **Driver** from Standings.
+11. Open a **Driver** from a Grand Prix result.
+12. Confirm the profile content is consistent across all three entry points.
+13. From the driver, open the **Team**; navigate back and confirm you return to
+    the exact origin.
+14. Open a **Team** from Explore and from the constructors' standings.
+15. Inspect the season branding, the facts card and the derived line-up,
+    including any mid-season span.
+16. Open a **Driver** from the team, then re-open the same team: confirm it
+    returns rather than stacking a duplicate (loop prevention).
+17. Open a **Circuit** from Explore and from a Grand Prix.
+18. Inspect the physical facts, the lap record and the layout placeholder.
+19. Open the related **Grand Prix**, then re-open the same circuit: confirm the
+    Grand Prix ↔ Circuit loop is bounded.
+20. With all three lists and several details now cached, enable **airplane
+    mode**.
+21. Reopen Explore and the cached details; confirm everything still renders and
+    remains navigable.
+22. Where practical, reach an error state and trigger the focused retry; confirm
+    only that collection is affected.
+23. Restore connectivity and confirm a detail revalidates without visibly
+    changing content.
+24. Confirm **no raw identifier or humanised slug** appears anywhere — no
+    `max-verstappen`, no `Max-verstappen`, no `Red Bull` derived from `red-bull`.
+25. Confirm the **STAGING** badge remains visible.
+26. Confirm **no "Sample data" banner** appears.

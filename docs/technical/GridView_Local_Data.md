@@ -398,3 +398,116 @@ All three families that can be referenced before they synchronize are covered:
 `drivers`, `constructors` and `circuits`. `seasons` needs no stub rule — its only
 required column is the year that identifies it, so an ensured season row carries
 no invented content.
+
+## 10. Phase 7C — Explore collection and entity-detail read models
+
+Phase 7C adds **no** table, no column and no migration. `schemaVersion` stays
+`2`, `gridview_v2.sqlite` is unchanged, and both Drift schema snapshots remain
+byte-identical to the Phase 6A baseline. Everything below is a read model
+composed on read, plus two corrected queries.
+
+### 10.1 Read models
+
+Domain-only aggregates (no Drift rows, no DTOs) in
+`features/shared/domain/entities/`:
+
+| Type | File | Purpose |
+|---|---|---|
+| `SeasonDriverCard` | `season_card.dart` | one card per stable driver identity in a season |
+| `SeasonTeamCard` | `season_card.dart` | one card per constructor season entry, with its derived line-up |
+| `TeamLineupMember` | `season_card.dart` | one participation span of one real driver |
+| `SeasonCircuitCard` | `season_card.dart` | one card per circuit hosting a season event |
+| `RelatedGrandPrixSummary` | `season_card.dart` | the season-specific event a circuit hosts |
+| `DriverProfile` / `DriverParticipation` | `entity_profile.dart` | driver detail for one exact season, with **every** span |
+| `TeamProfile` | `entity_profile.dart` | team detail for one exact season |
+| `CircuitProfile` | `entity_profile.dart` | circuit detail plus the season's related event |
+
+Every optional value stays `null` when the contract did not supply it, so a
+missing statistic is never a zero and a missing name is never an identifier.
+
+### 10.2 Driver participation semantics
+
+`driver_season_entries` already models a mid-season move as **two rows** with
+different `start_round`/`end_round` spans; the driver identity never changes.
+
+- `CompetitorDao.seasonDriverCards` groups by `driver_id` and emits **one** card
+  per stable identity, carrying `spanCount` so presentation can tell that a
+  single "current team" statement would be incomplete. The relevant span is the
+  open one (`end_round IS NULL`), else the latest by `start_round`.
+- `CompetitorDao.driverProfile` carries **all** spans in relevance order, so the
+  detail screen can present them accurately instead of flattening them.
+- The team association comes from the **exact** `DriverSeasonEntry`, never from
+  `DriverStanding.constructorId`: a standing describes the championship table,
+  not participation history.
+
+### 10.3 Team rebranding and line-up
+
+- Stable identity lives in `constructors`; season branding lives in
+  `constructor_season_entries`. `SeasonTeamCard.displayName` and
+  `TeamProfile.displayName` prefer the season name and fall back to the stable
+  name — never to the identifier.
+- Rebranding varies the display name only. The collection is ordered by the
+  **stable** name, so a rebrand never moves a team.
+- The line-up is derived from the season's `driver_season_entries` — the single
+  local source of truth for membership. A supplied
+  `ConstructorSeasonEntry.driverLineup` is still deliberately not stored and not
+  consulted (see §2), so the relational source can never be contradicted.
+- Each span is its own line-up member, so a mid-season arrival and exit are both
+  representable and are never flattened into a false simultaneous line-up.
+
+### 10.4 Circuit identity versus event properties
+
+Circuit identity is **stable and season-independent**: name, locality, country,
+coordinates, length, corners, direction, first Grand Prix year and lap record.
+
+Only the *related event* is season-specific. Race distance and the event's lap
+count belong to the Grand Prix and deliberately never appear as circuit identity
+fields. `CircuitProfile.relatedGrandPrix` is read from the season's own
+`grand_prix_events` row — never inferred from the circuit's name, and never
+borrowed from another season. Hosting no event in the selected season is a valid
+state.
+
+### 10.5 Corrected queries (no schema change)
+
+Two read queries were corrected to use an authoritative order or a correct
+predicate. Neither changes the schema.
+
+- **Circuit collection order.** `CalendarDao.seasonCircuitCards` orders by the
+  hosting event's `round` — the season calendar's authoritative order — instead
+  of the circuit name. A circuit hosting more than one round is anchored to its
+  earliest round, keeping one card per identity and a deterministic order.
+- **Resolved-identity checks.** `hasResolvedDriver`, `hasResolvedConstructor`
+  and `hasResolvedCircuit` count only **real** identities. The previous
+  `count* > 0` checks counted referential stubs, which wrongly suppressed the
+  ADR 0012 `304` recovery retry.
+
+**Schema conflict reported, not worked around:** `driver_season_entries` and
+`constructor_season_entries` carry **no delivered-order column** (unlike
+`driver_standings.order_index`). Rather than invent an order from row insertion
+order — or change the schema, which Phase 7C forbids — the roster keeps its
+existing deterministic order (race number ascending, unnumbered last, then the
+stable display name) and the team list keeps the stable constructor name. Both
+are stable across repeated emissions, unaffected by standings enrichment and
+unaffected by rebranding. If a delivered collection order is later required, it
+needs a schema change and its own phase.
+
+### 10.6 Media availability
+
+`MediaDao.ownersWithMedia(type, ids)` reports, in **one** batched query per
+collection, which owners have at least one locally known asset. It reports local
+availability only — Phase 7C fetches and downloads nothing — and exists so a
+placeholder can describe itself accurately.
+
+### 10.7 Referential stubs (unchanged mechanism)
+
+The Phase 7B mechanism (§9) is preserved exactly and now also guards the Explore
+collections and the three detail profiles:
+
+- lists omit unresolved stubs (`seasonDriverCards`, `seasonTeamCards`,
+  `seasonCircuitCards`, and team line-ups);
+- `driverProfile`, `teamProfile` and `circuitProfile` return `null` for a stub,
+  so a stub never materializes a detail;
+- relationship-bearing rows are preserved throughout, and a later authoritative
+  upsert resolves the same row in place;
+- `isUnresolvedIdentityName` / `resolvedDisplayName` remain the single detection
+  path; no identifier is ever humanised into a display name.

@@ -252,3 +252,103 @@ used.
 
 Driver and constructor detail **content** remains a skeleton until Phase 7C; only
 the entry points are wired.
+
+## 11. Explore and entity-detail navigation (Phase 7C)
+
+### 11.1 Explore route and category model
+
+Explore has one screen and four route-addressable locations. The three category
+routes are **siblings** of the branch root, not children of it:
+
+| Location | Renders |
+|---|---|
+| `/explore` | `ExploreScreen` with the default category (Drivers) |
+| `/explore/drivers` | `ExploreScreen(category: drivers)` |
+| `/explore/teams` | `ExploreScreen(category: teams)` |
+| `/explore/circuits` | `ExploreScreen(category: circuits)` |
+
+Because they are siblings, selecting a category uses branch-level `go` semantics
+and **replaces** the Explore page inside its branch — a category switch can never
+stack a second Explore page, and repeated taps on the active category change
+nothing. An explicit URL opens the category it encodes; an unrecognised segment
+(`/explore/not-a-category`) falls through to the controlled not-found screen.
+
+The Phase 3 entry-card model is gone: category cards are not reintroduced as a
+second, competing navigation model. There is no Explore search in Phase 7C.
+
+Branch behaviour is unchanged from the approved shell rules: switching bottom
+navigation preserves the selected Explore route and every scroll offset, and
+re-selecting the active Explore item returns the branch to its root
+(`/explore`).
+
+### 11.2 Category and scroll preservation
+
+`ExploreUiState` (a root-scope, session-lived provider) remembers one scroll
+offset per category, plus the season those offsets belong to. The selected
+category itself is **route state**, not stored here.
+
+- One `ScrollController` per category, never shared, so the three lists keep
+  genuinely independent positions.
+- Offsets are recorded without rebuilding anything, so a Drift emission or a
+  focused refresh never resets a list.
+- A season transition starts the new season's lists at the top rather than at a
+  stale position; the previous season's rows on disk are untouched.
+- Returning from an entity detail restores the exact originating category and
+  offset, because details render above the shell.
+
+### 11.3 Season context on detail routes
+
+The public detail routes are unchanged and still carry only a stable identifier:
+
+- `/drivers/:driverId`
+- `/constructors/:constructorId`
+- `/circuits/:circuitId`
+
+The detail resources are season-scoped, so the season travels as typed,
+runtime-only navigation metadata:
+
+```dart
+context.openEntity(RoutePaths.driver(id), season: resolvedSeason);
+```
+
+`EntityNavigationOrigin` now carries an optional `season` alongside the origin
+location. It is never serialized, so a deep link simply arrives without one and
+the screen resolves the current season locally. No route path was changed, no
+query parameter was introduced, and no year is ever hardcoded. See
+`GridView_Synchronization.md` §14.8 for the full origin/season table.
+
+If neither an origin season nor a locally stored current season exists, the
+screen shows a controlled season-unavailable state with a retry and makes no
+season-scoped request.
+
+### 11.4 Cross-entity navigation
+
+| From | To | Route |
+|---|---|---|
+| Explore Drivers | Driver | `/drivers/<driverId>` |
+| Explore Teams | Team | `/constructors/<constructorId>` |
+| Explore Circuits | Circuit | `/circuits/<circuitId>` |
+| Standings row | Driver / Team | same, with the table's exact season |
+| Grand Prix result | Driver / Team | same, with the classification's season |
+| Grand Prix | Circuit | `/circuits/<circuitId>`, with the event's season |
+| Driver detail | Team | `/constructors/<constructorId>` |
+| Team detail | Driver | `/drivers/<driverId>` |
+| Driver / Team detail | Standings | `/standings/drivers|constructors/<season>` |
+| Circuit detail | Grand Prix | `/calendar/<season>/<round>` |
+
+Every route is built from a stable identifier through `RoutePaths`; no display
+name ever reaches a URL. Details remain on the root navigator above the shell, so
+Android back returns to the exact originating branch, category and scroll
+position.
+
+### 11.5 Loop prevention
+
+`GridViewNavigation.openEntity` is unchanged in principle: when the target is the
+page **directly beneath** the current one, it pops instead of pushing, so
+`A → B → A` collapses rather than accumulating duplicate entity pages. Adding the
+season to `EntityNavigationOrigin` does not affect the comparison, which is still
+by path.
+
+Covered by tests: Driver → Team → same Driver, Team → Driver → same Team, and
+Grand Prix → Circuit → same Grand Prix all pop; navigation to a *different*
+entity still pushes normally; repeated taps never stack identical routes.

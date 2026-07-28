@@ -89,15 +89,40 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   through the application coordinator for the current season, or through one
   focused request for the exact resource on a historical season route. See
   `docs/technical/GridView_Synchronization.md` §13 and
-  `docs/technical/GridView_Navigation.md` §10. Phases 7C-7D (driver, team and
-  circuit detail, and the Explore collections) are not started.
+  `docs/technical/GridView_Navigation.md` §10.
+- Phase 7C - Explore, Driver, Team and Circuit: done. Explore is a
+  route-addressable category selector (`/explore` opens Drivers;
+  `/explore/drivers`, `/explore/teams` and `/explore/circuits` are siblings, so
+  switching category replaces the page instead of stacking one). All three
+  collections render from Drift in their authoritative local order, keep
+  independent scroll positions across category switches, branch switches and
+  detail round trips, and **never** issue a request on creation, on a category
+  switch or on a rebuild — the only request the screen can produce is a focused
+  retry of exactly the selected collection. Driver, Team and Circuit detail
+  render local content immediately and trigger **one** on-demand refresh of their
+  exact resource, cancellable on dispose and retryable after a failure; opening a
+  detail refreshes nothing else. Collection and detail metadata stay isolated
+  (no collection ETag is ever reused for a detail, or vice versa), and a
+  collection-derived profile renders as an honest **partial** state that claims
+  no detail freshness. The season a detail is scoped to travels as typed
+  navigation metadata, so a historical Standings route opens that exact season
+  while a deep link resolves the current one locally — no year is ever
+  hardcoded. Mid-season driver participation keeps both spans, team rebranding
+  never rewrites stable identity, the line-up is derived from participation
+  entries, and circuit identity stays separate from event properties.
+  Unresolved referential stubs remain invisible and never materialize a detail.
+  Media is placeholder-only: no remote image request was added. See
+  `docs/technical/GridView_Synchronization.md` §14,
+  `docs/technical/GridView_Local_Data.md` §10 and
+  `docs/technical/GridView_Navigation.md` §11. Phase 7D (Home) is not started.
 
-Home's next-Grand-Prix hero, the Calendar, the Grand Prix detail screen and both
-standings tables are driven by a **Drift-backed** local store: content renders
+Home's next-Grand-Prix hero, the Calendar, the Grand Prix detail screen, both
+standings tables, the three Explore collections and the Driver, Team and Circuit
+detail screens are driven by a **Drift-backed** local store: content renders
 immediately from cache (offline included), a refresh writes one atomic snapshot
-transaction, and a failed refresh never erases cached content. The remaining
-screens (drivers, teams, circuits) are still non-authoritative skeletons; no
-Firebase, ads or production provider is wired yet. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
+transaction, and a failed refresh never erases cached content. Home is still a
+partial screen pending Phase 7D, and Settings remains a skeleton; real media
+downloading is Phase 8. No Firebase, ads or production provider is wired yet. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
 only under a deliberate `DATA_SOURCE=fixture` build define (never inferred from a
 missing `API_BASE_URL`) and show a "Sample data" banner; **production never
 constructs the fixture source** — an attempted fixture mode or a missing base URL
