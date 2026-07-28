@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import 'package:gridview/features/calendar/presentation/calendar_screen.dart';
 import 'package:gridview/features/drivers/presentation/driver_detail_screen.dart';
-import 'package:gridview/features/explore/presentation/driver_list_screen.dart';
 import 'package:gridview/features/explore/presentation/explore_screen.dart';
 import 'package:gridview/features/home/presentation/home_screen.dart';
 
@@ -23,25 +22,27 @@ double _homeScrollOffset(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('a branch preserves its navigation stack across tab switches', (
+  testWidgets('a branch preserves its selected route across tab switches', (
     WidgetTester tester,
   ) async {
-    await pumpApp(tester, initialLocation: '/explore');
+    final GoRouter router = await pumpApp(tester, initialLocation: '/explore');
     expect(find.byType(ExploreScreen), findsOneWidget);
 
-    // Push the drivers list within the Explore branch.
-    await tester.tap(find.text('Drivers'));
+    // Select a category. It replaces the Explore page inside the branch rather
+    // than stacking a second one.
+    await tester.tap(find.text('Circuits'));
     await tester.pumpAndSettle();
-    expect(find.byType(DriverListScreen), findsOneWidget);
+    expect(shellLocation(router), '/explore/circuits');
+    expect(find.byType(ExploreScreen), findsOneWidget);
 
-    // Leave and return to Explore: the pushed list is still there.
+    // Leave and return to Explore: the selected category is still there.
     await tapNav(tester, 'Home');
     await tapNav(tester, 'Explore');
-    expect(find.byType(DriverListScreen), findsOneWidget);
+    expect(shellLocation(router), '/explore/circuits');
 
     // Re-selecting the active branch returns it to its root.
     await tapNav(tester, 'Explore');
-    expect(find.byType(DriverListScreen), findsNothing);
+    expect(shellLocation(router), '/explore');
     expect(find.byType(ExploreScreen), findsOneWidget);
   });
 

@@ -5,9 +5,6 @@ import 'package:gridview/features/calendar/presentation/grand_prix_detail_screen
 import 'package:gridview/features/circuits/presentation/circuit_detail_screen.dart';
 import 'package:gridview/features/constructors/presentation/constructor_detail_screen.dart';
 import 'package:gridview/features/drivers/presentation/driver_detail_screen.dart';
-import 'package:gridview/features/explore/presentation/circuit_list_screen.dart';
-import 'package:gridview/features/explore/presentation/constructor_list_screen.dart';
-import 'package:gridview/features/explore/presentation/driver_list_screen.dart';
 import 'package:gridview/features/explore/presentation/explore_screen.dart';
 import 'package:gridview/features/home/presentation/home_screen.dart';
 import 'package:gridview/features/settings/presentation/settings_screen.dart';
@@ -26,9 +23,9 @@ void main() {
     ('/standings/drivers/2026', StandingsScreen),
     ('/standings/constructors/2026', StandingsScreen),
     ('/explore', ExploreScreen),
-    ('/explore/drivers', DriverListScreen),
-    ('/explore/teams', ConstructorListScreen),
-    ('/explore/circuits', CircuitListScreen),
+    ('/explore/drivers', ExploreScreen),
+    ('/explore/teams', ExploreScreen),
+    ('/explore/circuits', ExploreScreen),
     ('/drivers/a-driver', DriverDetailScreen),
     ('/constructors/scuderia-rossa', ConstructorDetailScreen),
     ('/circuits/northgate', CircuitDetailScreen),

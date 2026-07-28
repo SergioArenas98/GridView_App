@@ -22,10 +22,15 @@ abstract final class RoutePaths {
   static const String standingsConstructorsPattern =
       '/standings/constructors/:season';
 
-  /// Relative to [explore].
-  static const String exploreDriversRelative = 'drivers';
-  static const String exploreTeamsRelative = 'teams';
-  static const String exploreCircuitsRelative = 'circuits';
+  /// Explore's three route-addressable categories.
+  ///
+  /// They are **siblings** of [explore] rather than children of it, so selecting
+  /// a category replaces the Explore page within its branch instead of stacking
+  /// a second one on top. [explore] itself is the season-agnostic branch root and
+  /// opens the default category.
+  static const String exploreDriversPattern = '/explore/drivers';
+  static const String exploreTeamsPattern = '/explore/teams';
+  static const String exploreCircuitsPattern = '/explore/circuits';
 
   static const String driverPattern = '/drivers/:driverId';
   static const String constructorPattern = '/constructors/:constructorId';

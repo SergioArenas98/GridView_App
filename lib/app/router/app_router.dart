@@ -6,9 +6,7 @@ import '../../features/calendar/presentation/grand_prix_detail_screen.dart';
 import '../../features/circuits/presentation/circuit_detail_screen.dart';
 import '../../features/constructors/presentation/constructor_detail_screen.dart';
 import '../../features/drivers/presentation/driver_detail_screen.dart';
-import '../../features/explore/presentation/circuit_list_screen.dart';
-import '../../features/explore/presentation/constructor_list_screen.dart';
-import '../../features/explore/presentation/driver_list_screen.dart';
+import '../../features/explore/application/explore_state.dart';
 import '../../features/explore/presentation/explore_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
@@ -144,30 +142,36 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
           ),
 
           // --- Explore branch ---
+          // The three categories are route-addressable **siblings**, not
+          // children, so selecting one replaces the Explore page inside the
+          // branch instead of stacking a second Explore page on top of it. The
+          // branch root opens the default category (Drivers).
           StatefulShellBranch(
             navigatorKey: exploreNavigatorKey,
+            initialLocation: RoutePaths.explore,
             routes: <RouteBase>[
               GoRoute(
                 path: RoutePaths.explore,
                 name: RouteNames.explore,
                 builder: (_, _) => const ExploreScreen(),
-                routes: <RouteBase>[
-                  GoRoute(
-                    path: RoutePaths.exploreDriversRelative,
-                    name: RouteNames.exploreDrivers,
-                    builder: (_, _) => const DriverListScreen(),
-                  ),
-                  GoRoute(
-                    path: RoutePaths.exploreTeamsRelative,
-                    name: RouteNames.exploreTeams,
-                    builder: (_, _) => const ConstructorListScreen(),
-                  ),
-                  GoRoute(
-                    path: RoutePaths.exploreCircuitsRelative,
-                    name: RouteNames.exploreCircuits,
-                    builder: (_, _) => const CircuitListScreen(),
-                  ),
-                ],
+              ),
+              GoRoute(
+                path: RoutePaths.exploreDriversPattern,
+                name: RouteNames.exploreDrivers,
+                builder: (_, _) =>
+                    const ExploreScreen(category: ExploreCategory.drivers),
+              ),
+              GoRoute(
+                path: RoutePaths.exploreTeamsPattern,
+                name: RouteNames.exploreTeams,
+                builder: (_, _) =>
+                    const ExploreScreen(category: ExploreCategory.teams),
+              ),
+              GoRoute(
+                path: RoutePaths.exploreCircuitsPattern,
+                name: RouteNames.exploreCircuits,
+                builder: (_, _) =>
+                    const ExploreScreen(category: ExploreCategory.circuits),
               ),
             ],
           ),
