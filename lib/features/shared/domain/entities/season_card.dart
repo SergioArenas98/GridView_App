@@ -9,8 +9,11 @@ import 'enums.dart';
 ///   zero, an empty string or a humanised identifier;
 /// * an unresolved referential stub never becomes a card, and never contributes
 ///   a name or a colour to one;
-/// * [orderIndex] is the authoritative local collection order the query
-///   delivered — presentation renders it exactly and never re-sorts.
+/// * [orderIndex] is the position the collection query produced; presentation
+///   renders it exactly and never re-sorts. Only the circuits collection's
+///   order is remotely authoritative (the season calendar's round) — the
+///   drivers and teams orders are deterministic product rules, because the
+///   schema carries no delivered-order field for their season entries.
 
 /// One driver in a season's Explore roster.
 ///
@@ -47,7 +50,12 @@ class SeasonDriverCard {
   /// still an unresolved stub is omitted from the collection entirely.
   final String name;
 
-  /// The authoritative delivered position of this card in its collection.
+  /// This card's position in the roster.
+  ///
+  /// A deterministic **product ordering rule**, not a provider-delivered one:
+  /// race number ascending, unnumbered drivers last, stable name as the
+  /// tie-breaker. It can be replaced if the contract later supplies an explicit
+  /// collection order.
   final int orderIndex;
 
   final String? shortCode;
@@ -154,6 +162,11 @@ class SeasonTeamCard {
   /// The stable identity's name. Never null — an unresolved stub is omitted.
   final String stableName;
 
+  /// This card's position in the teams list.
+  ///
+  /// A deterministic **product ordering rule**, not a provider-delivered one:
+  /// the stable constructor name, which rebranding does not vary, so a rebrand
+  /// never moves a team.
   final int orderIndex;
 
   /// The season-specific brand name, when the season entry carries one.
@@ -231,7 +244,9 @@ class SeasonCircuitCard {
   /// Authoritative circuit name. Never null — an unresolved stub is omitted.
   final String name;
 
-  /// The season's authoritative calendar order (the hosting event's round).
+  /// The season's calendar order — the round of the event this circuit hosts.
+  /// Unlike the drivers and teams collections, this order **is** authoritative:
+  /// it comes from the provider's own calendar.
   final int orderIndex;
 
   final String? locality;

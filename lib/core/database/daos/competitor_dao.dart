@@ -357,9 +357,11 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
   /// roster never shows the same driver twice and never flattens two stints into
   /// one false statement.
   ///
-  /// Order is the roster's authoritative local order — the relevant span's race
-  /// number (unnumbered last), then the stable name. Standings enrichment is
-  /// applied **after** ordering and can never reorder the collection.
+  /// Order is a deterministic **product rule**, not a provider-delivered one:
+  /// the relevant span's race number (unnumbered last), then the stable name.
+  /// The schema carries no delivered-order column for driver season entries, so
+  /// this rule stands in until the contract supplies one. Standings enrichment
+  /// is applied **after** ordering and can never reorder the collection.
   ///
   /// Unresolved driver stubs are omitted; an unresolved constructor contributes
   /// no team name and no team colour.
@@ -461,9 +463,10 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     return List<SeasonDriverCard>.unmodifiable(cards);
   }
 
-  /// The season's teams as [SeasonTeamCard] read models, in the collection's
-  /// authoritative local order (the stable identity name, which rebranding does
-  /// not vary — so a rebranded team keeps its place).
+  /// The season's teams as [SeasonTeamCard] read models, in a deterministic
+  /// **product order** — the stable identity name, which rebranding does not
+  /// vary, so a rebranded team keeps its place. As with the roster, the schema
+  /// carries no delivered-order column for constructor season entries.
   ///
   /// The line-up is derived from the season's driver participation entries, the
   /// single source of truth for membership. Any

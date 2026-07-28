@@ -22,7 +22,8 @@ abstract interface class DriverRepository {
   });
 
   /// The season roster as presentation read models: one card per stable driver
-  /// identity, in the collection's authoritative local order.
+  /// identity, in the collection's deterministic local order (a product rule —
+  /// the schema has no delivered-order field for season entries).
   Stream<List<SeasonDriverCard>> watchSeasonDriverCards(int season);
   Future<List<SeasonDriverCard>> readSeasonDriverCards(int season);
 

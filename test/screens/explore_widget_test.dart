@@ -10,6 +10,7 @@ import 'package:gridview/features/explore/presentation/explore_screen.dart';
 import 'package:gridview/features/shared/domain/entities/season_card.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
+import 'package:gridview/features/shared/presentation/widgets/mock_data_banner.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
 import 'package:gridview/features/sync/domain/app_sync_state.dart';
 import 'package:gridview/features/sync/domain/sync_plan.dart';
@@ -347,6 +348,47 @@ void main() {
       // Teams has content even though Drivers is unmaterialized.
       expect(find.text('BWT Alpine Formula One Team'), findsOneWidget);
       expect(find.text("Can't load the drivers"), findsNothing);
+    });
+  });
+
+  group('header', () {
+    testWidgets('no sample-data banner appears in a build serving real data', (
+      WidgetTester tester,
+    ) async {
+      await pumpApp(
+        tester,
+        initialLocation: '/explore',
+        surfaceSize: _tallSurface,
+      );
+      expect(
+        find.byType(MockDataBanner),
+        findsNothing,
+        reason: 'a remote build must never claim its data is a sample',
+      );
+    });
+
+    testWidgets('the sample-data banner appears in a fixture build', (
+      WidgetTester tester,
+    ) async {
+      await pumpApp(
+        tester,
+        initialLocation: '/explore',
+        surfaceSize: _tallSurface,
+        mockData: true,
+      );
+      expect(find.byType(MockDataBanner), findsOneWidget);
+    });
+
+    testWidgets('the resolved season is shown as the screen context', (
+      WidgetTester tester,
+    ) async {
+      await pumpApp(
+        tester,
+        initialLocation: '/explore',
+        surfaceSize: _tallSurface,
+        currentSeason: 2024,
+      );
+      expect(find.text('2024 season'), findsOneWidget);
     });
   });
 

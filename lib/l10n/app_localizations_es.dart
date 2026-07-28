@@ -585,7 +585,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get finishStatusUnknown => 'Estado desconocido';
 
   @override
-  String get exploreCategorySelector => 'Categoría de Explorar';
+  String get exploreCategorySelector => 'Categoría';
 
   @override
   String get exploreDriversEmptyTitle => 'Todavía no hay pilotos';
@@ -632,17 +632,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String exploreOpenDriver(String name) {
-    return 'Abrir piloto $name';
+    return 'Abrir el piloto $name';
   }
 
   @override
   String exploreOpenTeam(String name) {
-    return 'Abrir equipo $name';
+    return 'Abrir el equipo $name';
   }
 
   @override
   String exploreOpenCircuit(String name) {
-    return 'Abrir circuito $name';
+    return 'Abrir el circuito $name';
   }
 
   @override
@@ -704,7 +704,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String driverOpenTeam(String name) {
-    return 'Abrir equipo $name';
+    return 'Abrir el equipo $name';
   }
 
   @override
@@ -736,7 +736,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String teamOpenDriver(String name) {
-    return 'Abrir piloto $name';
+    return 'Abrir el piloto $name';
   }
 
   @override
@@ -823,17 +823,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String participationFromRound(int round) {
-    return 'Desde la carrera $round';
+    return 'Desde la ronda $round';
   }
 
   @override
   String participationUntilRound(int round) {
-    return 'Hasta la carrera $round';
+    return 'Hasta la ronda $round';
   }
 
   @override
   String participationRoundRange(int start, int end) {
-    return 'Carreras $start–$end';
+    return 'Rondas $start–$end';
   }
 
   @override
@@ -844,4 +844,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get fieldParticipation => 'Participación';
+
+  @override
+  String get grandPrixNameUnavailable => 'Nombre del Gran Premio no disponible';
 }

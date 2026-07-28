@@ -837,4 +837,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fieldParticipation => 'Participation';
+
+  @override
+  String get grandPrixNameUnavailable => 'Grand Prix name unavailable';
 }

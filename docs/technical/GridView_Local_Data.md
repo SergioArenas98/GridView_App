@@ -481,15 +481,30 @@ predicate. Neither changes the schema.
   `count* > 0` checks counted referential stubs, which wrongly suppressed the
   ADR 0012 `304` recovery retry.
 
+### 10.5.1 Collection ordering: what is authoritative and what is not
+
+The three collections do **not** share one ordering story, and the distinction
+matters:
+
+| Collection | Order | Authority |
+|---|---|---|
+| Circuits | the round of the season event the circuit hosts | **Authoritative** — the provider's own calendar |
+| Drivers | race number ascending, unnumbered last, stable name as tie-breaker | a deterministic **product / presentation rule** |
+| Teams | the stable constructor name | a deterministic **product / presentation rule** |
+
 **Schema conflict reported, not worked around:** `driver_season_entries` and
 `constructor_season_entries` carry **no delivered-order column** (unlike
-`driver_standings.order_index`). Rather than invent an order from row insertion
-order — or change the schema, which Phase 7C forbids — the roster keeps its
-existing deterministic order (race number ascending, unnumbered last, then the
-stable display name) and the team list keeps the stable constructor name. Both
-are stable across repeated emissions, unaffected by standings enrichment and
-unaffected by rebranding. If a delivered collection order is later required, it
-needs a schema change and its own phase.
+`driver_standings.order_index`), and the contract supplies no explicit ordering
+for those collections. The Drivers and Teams orders are therefore **product
+decisions made by this application** — they must not be described as
+provider-delivered or remotely authoritative. They were chosen over inventing an
+order from row insertion order, and over changing the schema, which Phase 7C
+forbids.
+
+Both rules are stable across repeated emissions, unaffected by standings
+enrichment and unaffected by rebranding. If the provider contract later supplies
+an explicit collection order, these rules are the part to replace: it needs a
+schema change and its own phase.
 
 ### 10.6 Media availability
 

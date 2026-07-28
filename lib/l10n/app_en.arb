@@ -600,5 +600,7 @@
   "fieldRole": "Role",
   "@fieldRole": { "description": "Field label for a driver's role in a season entry." },
   "fieldParticipation": "Participation",
-  "@fieldParticipation": { "description": "Field label for a driver's participation span within a season." }
+  "@fieldParticipation": { "description": "Field label for a driver's participation span within a season." },
+  "grandPrixNameUnavailable": "Grand Prix name unavailable",
+  "@grandPrixNameUnavailable": { "description": "Shown in place of a Grand Prix name when the event's name has not synchronised yet. Never a name derived from the stable identifier." }
 }

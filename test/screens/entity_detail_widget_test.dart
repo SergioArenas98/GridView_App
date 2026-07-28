@@ -513,6 +513,27 @@ void main() {
       expect(find.text('Direction unavailable'), findsOneWidget);
     });
 
+    testWidgets('an unnamed related event uses localized unavailable copy', (
+      WidgetTester tester,
+    ) async {
+      await pumpApp(
+        tester,
+        initialLocation: '/circuits/monza',
+        surfaceSize: _tallSurface,
+        circuits: FakeCircuitRepository(
+          profile: (int s, String id) => circuitProfileFixture(
+            season: s,
+            circuitId: id,
+            related: relatedGrandPrix(season: s, name: null),
+          ),
+        ),
+      );
+      expect(find.text('Grand Prix name unavailable'), findsOneWidget);
+      // Never the Phase 3 skeleton placeholder, and never the identifier.
+      expect(find.text('Profile placeholder'), findsNothing);
+      expect(find.textContaining('spa-francorchamps'), findsNothing);
+    });
+
     testWidgets('no related event this season is a valid state', (
       WidgetTester tester,
     ) async {

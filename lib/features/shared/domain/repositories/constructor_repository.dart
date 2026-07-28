@@ -23,7 +23,8 @@ abstract interface class ConstructorRepository {
   });
 
   /// The season's teams as presentation read models, in the collection's
-  /// authoritative local order, each with its derived season line-up.
+  /// deterministic local order (a product rule — the schema has no
+  /// delivered-order field), each with its derived season line-up.
   Stream<List<SeasonTeamCard>> watchSeasonTeamCards(int season);
   Future<List<SeasonTeamCard>> readSeasonTeamCards(int season);
 

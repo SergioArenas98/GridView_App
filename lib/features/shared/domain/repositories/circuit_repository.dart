@@ -15,7 +15,8 @@ abstract interface class CircuitRepository {
   Future<CircuitDetailView?> readCircuit(String circuitId);
 
   /// The season's circuits as presentation read models, in the season's
-  /// authoritative calendar order, each with its season-specific related event.
+  /// authoritative calendar order (the hosting event's round), each with its
+  /// season-specific related event.
   Stream<List<SeasonCircuitCard>> watchSeasonCircuitCards(int season);
   Future<List<SeasonCircuitCard>> readSeasonCircuitCards(int season);
 

@@ -94,7 +94,9 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   route-addressable category selector (`/explore` opens Drivers;
   `/explore/drivers`, `/explore/teams` and `/explore/circuits` are siblings, so
   switching category replaces the page instead of stacking one). All three
-  collections render from Drift in their authoritative local order, keep
+  collections render from Drift in a deterministic local order — the provider's
+  calendar round for Circuits, and a documented product rule for Drivers and
+  Teams, whose season entries carry no delivered order — keep
   independent scroll positions across category switches, branch switches and
   detail round trips, and **never** issue a request on creation, on a category
   switch or on a rebuild — the only request the screen can produce is a focused

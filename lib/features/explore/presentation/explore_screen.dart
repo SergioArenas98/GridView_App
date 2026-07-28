@@ -6,6 +6,7 @@ import '../../../app/router/route_paths.dart';
 import '../../../core/theme/tokens/tokens.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../shared/application/providers.dart';
 import '../../shared/domain/entities/season_card.dart';
 import '../../shared/presentation/widgets/mock_data_banner.dart';
 import '../../shared/presentation/widgets/screen_scaffold.dart';
@@ -16,7 +17,7 @@ import 'explore_cards.dart';
 import 'explore_collection_view.dart';
 
 /// The Explore branch: the current season's Drivers, Teams and Circuits
-/// collections, read from Drift in their authoritative local order.
+/// collections, read from Drift in their deterministic local order.
 ///
 /// The three categories are **route-addressable** (`/explore/drivers`,
 /// `/explore/teams`, `/explore/circuits`) and rendered by this one screen, so a
@@ -180,9 +181,13 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   }
 }
 
-/// The season context and the mock-data banner. Freshness, notices and progress
-/// belong to the selected collection and are rendered with its content, so
-/// switching the selector immediately switches that context.
+/// The season context and, in a fixture build only, the sample-data banner.
+///
+/// Freshness, notices and progress belong to the selected collection and are
+/// rendered with its content, so switching the selector immediately switches
+/// that context. The layout deliberately mirrors the Standings header: the
+/// season leads as a section title, and the banner follows it only when the
+/// build actually serves fixtures.
 class _ExploreHeader extends ConsumerWidget {
   const _ExploreHeader({required this.season});
 
@@ -191,20 +196,25 @@ class _ExploreHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
+    final bool showMock = ref.watch(usesMockDataProvider);
     final int? value = season;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         GvLayout.screenPaddingHorizontal,
-        GvSpacing.sm,
+        GvSpacing.md,
         GvLayout.screenPaddingHorizontal,
         GvSpacing.sm,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const MockDataBanner(),
           if (value != null)
-            Text(l10n.seasonLabel('$value'), style: GvTypography.label),
+            Text(l10n.seasonLabel('$value'), style: GvTypography.sectionTitle),
+          if (showMock) ...<Widget>[
+            const SizedBox(height: GvSpacing.sm),
+            const MockDataBanner(),
+          ],
         ],
       ),
     );

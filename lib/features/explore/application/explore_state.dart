@@ -102,7 +102,7 @@ class ExploreCollectionEmpty<C> extends ExploreCollectionState<C> {
   bool get isStale => freshness == FreshnessState.stale;
 }
 
-/// Cached cards are available, in the collection's authoritative local order.
+/// Cached cards are available, in the collection's deterministic local order.
 class ExploreCollectionReady<C> extends ExploreCollectionState<C> {
   const ExploreCollectionReady({
     required this.season,
@@ -115,8 +115,10 @@ class ExploreCollectionReady<C> extends ExploreCollectionState<C> {
 
   final int season;
 
-  /// The collection's cards in their authoritative local order. Rendering
-  /// follows it exactly; standings enrichment never re-sorts it.
+  /// The collection's cards in their deterministic local order. Rendering
+  /// follows it exactly; standings enrichment never re-sorts it. Circuits use
+  /// the provider's calendar round; drivers and teams use a deterministic
+  /// product rule (see [SeasonDriverCard.orderIndex]).
   final List<C> cards;
 
   /// This resource's own freshness, or `null` when it has none of its own yet.

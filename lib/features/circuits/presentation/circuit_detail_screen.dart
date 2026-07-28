@@ -168,7 +168,9 @@ class CircuitDetailScreen extends ConsumerWidget {
       ];
     }
 
-    final String name = event.name ?? l10n.genericEntityName;
+    // A missing event name uses localized unavailable copy — never a skeleton
+    // placeholder string, and never a name derived from the identifier.
+    final String name = event.name ?? l10n.grandPrixNameUnavailable;
     return <Widget>[
       GvScreenSection(
         title: l10n.circuitRelatedGrandPrix,

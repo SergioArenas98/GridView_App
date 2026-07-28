@@ -1081,6 +1081,11 @@ stale. Bootstrap contributes no ETag and no provenance, so each collection stays
 due for its own first individual synchronization, and its first request after a
 bootstrap sends no fabricated validator (ADR 0014).
 
+Collection **ordering** is documented in `GridView_Local_Data.md` §10.5.1. Only
+the circuits order is provider-authoritative (the calendar round); the drivers
+and teams orders are deterministic product rules, because their season entries
+carry no delivered-order field.
+
 ### 14.4 Detail resource ownership
 
 Driver, Team and Circuit details remain **on demand**. `EntityDetailController`

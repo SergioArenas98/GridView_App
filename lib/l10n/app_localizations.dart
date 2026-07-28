@@ -1597,6 +1597,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Participation'**
   String get fieldParticipation;
+
+  /// Shown in place of a Grand Prix name when the event's name has not synchronised yet. Never a name derived from the stable identifier.
+  ///
+  /// In en, this message translates to:
+  /// **'Grand Prix name unavailable'**
+  String get grandPrixNameUnavailable;
 }
 
 class _AppLocalizationsDelegate
