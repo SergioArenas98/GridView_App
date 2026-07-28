@@ -4,16 +4,29 @@ import 'package:go_router/go_router.dart';
 import 'route_paths.dart';
 
 /// Marker carried as a route's `extra` to record the location a detail screen
-/// was opened from — i.e. the page directly beneath it.
+/// was opened from — i.e. the page directly beneath it — and the season context
+/// the origin was showing.
 ///
 /// It is runtime-only (never serialized), so a deep-linked detail screen simply
-/// arrives with no origin and pushes normally. Using a dedicated type keeps this
-/// bookkeeping unambiguous and separate from any real route payload.
+/// arrives with no origin and pushes normally, resolving the season locally.
+/// Using a dedicated type keeps this bookkeeping unambiguous and separate from
+/// any real route payload.
+///
+/// [season] exists because the public detail routes carry only a stable entity
+/// id (`/drivers/:driverId`), while the detail resources are season-scoped. The
+/// originating screen therefore hands over the exact season it was rendering —
+/// a historical Standings route passes its own route season, Explore passes the
+/// resolved current season — so a detail never has to guess or hardcode a year.
+/// It stays optional: no origin simply means "resolve the current season".
 @immutable
 class EntityNavigationOrigin {
-  const EntityNavigationOrigin(this.location);
+  const EntityNavigationOrigin(this.location, {this.season});
 
   final String location;
+
+  /// The exact season the originating screen was showing, or `null` when the
+  /// origin has no season context of its own.
+  final int? season;
 }
 
 /// Navigation helpers for opening entity detail screens and Settings.
@@ -31,15 +44,30 @@ class EntityNavigationOrigin {
 extension GridViewNavigation on BuildContext {
   /// Opens an entity/detail [location], collapsing an immediate back-and-forth
   /// loop into a `pop` so the stack never accumulates duplicate entity pages.
-  void openEntity(String location) {
+  ///
+  /// [season] is the season context the caller is currently rendering; it is
+  /// handed to the target so a season-scoped detail resource resolves the exact
+  /// same season the user came from. Omitting it leaves the target to resolve
+  /// the locally current season.
+  void openEntity(String location, {int? season}) {
     final GoRouterState state = GoRouterState.of(this);
     final Object? origin = state.extra;
     if (origin is EntityNavigationOrigin &&
         _samePath(origin.location, location)) {
       pop();
     } else {
-      push(location, extra: EntityNavigationOrigin(state.uri.toString()));
+      push(
+        location,
+        extra: EntityNavigationOrigin(state.uri.toString(), season: season),
+      );
     }
+  }
+
+  /// The season context this route was opened with, or `null` for a deep link
+  /// (or any origin that had no season of its own).
+  int? get entityOriginSeason {
+    final Object? origin = GoRouterState.of(this).extra;
+    return origin is EntityNavigationOrigin ? origin.season : null;
   }
 
   /// Opens Settings above the current screen without changing the active

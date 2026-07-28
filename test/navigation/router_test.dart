@@ -14,9 +14,13 @@ import 'package:gridview/features/drivers/presentation/driver_detail_screen.dart
 import 'package:gridview/features/explore/presentation/explore_screen.dart';
 import 'package:gridview/features/home/presentation/home_screen.dart';
 import 'package:gridview/features/settings/presentation/settings_screen.dart';
+import 'package:gridview/features/shared/domain/entities/entity_profile.dart';
+import 'package:gridview/features/shared/domain/entities/season_card.dart';
 import 'package:gridview/features/shared/presentation/not_found_screen.dart';
 import 'package:gridview/features/standings/presentation/standings_screen.dart';
 
+import '../support/entity_fixtures.dart';
+import '../support/fake_entity_repository.dart';
 import '../support/router_harness.dart';
 
 void main() {
@@ -212,9 +216,35 @@ void main() {
     testWidgets(
       'driver -> team -> the same driver collapses instead of stacking',
       (WidgetTester tester) async {
-        final GoRouter router = await pumpApp(tester);
+        // A coherent two-entity graph: the driver races for the team, and the
+        // team's derived line-up contains that driver.
+        final GoRouter router = await pumpApp(
+          tester,
+          drivers: FakeDriverRepository(
+            profile: (int season, String driverId) => driverProfileFixture(
+              season: season,
+              driverId: driverId,
+              participations: <DriverParticipation>[
+                participation(
+                  season: season,
+                  driverId: driverId,
+                  constructorId: 'red-bull',
+                  teamName: 'Oracle Red Bull Racing',
+                ),
+              ],
+            ),
+          ),
+          constructors: FakeConstructorRepository(
+            profile: (int season, String constructorId) => teamProfileFixture(
+              season: season,
+              constructorId: constructorId,
+              lineup: <TeamLineupMember>[
+                lineupMember(driverId: 'b-racer', name: 'Bruno Racer'),
+              ],
+            ),
+          ),
+        );
 
-        // Open a driver (Bruno Racer drives for Scuderia Rossa).
         unawaited(router.push('/drivers/b-racer'));
         await tester.pumpAndSettle();
         expect(find.byType(DriverDetailScreen), findsOneWidget);
@@ -227,7 +257,7 @@ void main() {
         // Re-opening the driver that is directly below returns to it instead of
         // pushing a duplicate.
         await tester.tap(
-          find.byKey(const ValueKey<String>('team-driver-b-racer')),
+          find.byKey(const ValueKey<String>('team-lineup-b-racer')),
         );
         await tester.pumpAndSettle();
         expect(find.byType(ConstructorDetailScreen), findsNothing);

@@ -1129,6 +1129,474 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Status unknown'**
   String get finishStatusUnknown;
+
+  /// Accessibility label for the Drivers/Teams/Circuits category selector.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore category'**
+  String get exploreCategorySelector;
+
+  /// Title shown when the season's driver collection has synchronised and legitimately contains no drivers.
+  ///
+  /// In en, this message translates to:
+  /// **'No drivers yet'**
+  String get exploreDriversEmptyTitle;
+
+  /// Body for the empty drivers collection.
+  ///
+  /// In en, this message translates to:
+  /// **'This season has no drivers listed yet. They will appear here as soon as they do.'**
+  String get exploreDriversEmptyMessage;
+
+  /// Title shown when the season's team collection has synchronised and legitimately contains no teams.
+  ///
+  /// In en, this message translates to:
+  /// **'No teams yet'**
+  String get exploreTeamsEmptyTitle;
+
+  /// Body for the empty teams collection.
+  ///
+  /// In en, this message translates to:
+  /// **'This season has no teams listed yet. They will appear here as soon as they do.'**
+  String get exploreTeamsEmptyMessage;
+
+  /// Title shown when the season's circuit collection has synchronised and legitimately contains no circuits.
+  ///
+  /// In en, this message translates to:
+  /// **'No circuits yet'**
+  String get exploreCircuitsEmptyTitle;
+
+  /// Body for the empty circuits collection.
+  ///
+  /// In en, this message translates to:
+  /// **'This season has no circuits listed yet. They will appear here as soon as they do.'**
+  String get exploreCircuitsEmptyMessage;
+
+  /// First-load error title for the drivers collection.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t load the drivers'**
+  String get exploreDriversErrorTitle;
+
+  /// First-load error title for the teams collection.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t load the teams'**
+  String get exploreTeamsErrorTitle;
+
+  /// First-load error title for the circuits collection.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t load the circuits'**
+  String get exploreCircuitsErrorTitle;
+
+  /// Shown when no current season could be resolved locally, so no season-scoped collection can be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Season unavailable'**
+  String get exploreSeasonUnavailableTitle;
+
+  /// Body for the unresolved-season state on Explore.
+  ///
+  /// In en, this message translates to:
+  /// **'GridView could not determine the current season. Check your connection and try again.'**
+  String get exploreSeasonUnavailableMessage;
+
+  /// Non-blocking notice shown with cached cards when a refresh of this collection failed. Deliberately does not claim the device is offline.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed'**
+  String get exploreUpdateFailed;
+
+  /// Notice shown when a collection is rendered from the local database and may be out of date.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing saved data'**
+  String get exploreCachedNotice;
+
+  /// Accessibility label for opening a driver from the Explore drivers list.
+  ///
+  /// In en, this message translates to:
+  /// **'Open driver {name}'**
+  String exploreOpenDriver(String name);
+
+  /// Accessibility label for opening a team from the Explore teams list.
+  ///
+  /// In en, this message translates to:
+  /// **'Open team {name}'**
+  String exploreOpenTeam(String name);
+
+  /// Accessibility label for opening a circuit from the Explore circuits list.
+  ///
+  /// In en, this message translates to:
+  /// **'Open circuit {name}'**
+  String exploreOpenCircuit(String name);
+
+  /// Title shown when an entity detail resource definitively reports the entity does not exist.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available'**
+  String get detailNotFoundTitle;
+
+  /// Body for a definitive entity not-found state.
+  ///
+  /// In en, this message translates to:
+  /// **'This profile is not available. It may have been removed, or the link may be out of date.'**
+  String get detailNotFoundMessage;
+
+  /// Shown when neither an origin season nor a locally stored current season is available, so no season-scoped detail request may be made.
+  ///
+  /// In en, this message translates to:
+  /// **'Season unavailable'**
+  String get detailSeasonUnavailableTitle;
+
+  /// Body for the unresolved-season state on an entity detail screen.
+  ///
+  /// In en, this message translates to:
+  /// **'GridView could not determine which season to show. Check your connection and try again.'**
+  String get detailSeasonUnavailableMessage;
+
+  /// Non-blocking notice shown with cached detail content when its refresh failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed'**
+  String get detailUpdateFailed;
+
+  /// Notice shown when detail content is rendered from the local database and may be out of date.
+  ///
+  /// In en, this message translates to:
+  /// **'Details may be outdated'**
+  String get detailCachedNotice;
+
+  /// Shown when only a collection-derived summary is available locally and the detail resource has never synchronised.
+  ///
+  /// In en, this message translates to:
+  /// **'Some profile information is unavailable'**
+  String get detailPartialNotice;
+
+  /// First-load error title for an entity detail screen with no local content.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t load this profile'**
+  String get detailLoadErrorTitle;
+
+  /// Section title for a driver's curated biography.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get driverAbout;
+
+  /// Section title for a driver's biographical facts.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get driverProfileSection;
+
+  /// Section title listing a driver's participation spans in the selected season.
+  ///
+  /// In en, this message translates to:
+  /// **'Season participation'**
+  String get driverParticipationSection;
+
+  /// Section title for a driver's championship summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Championship'**
+  String get driverChampionshipSection;
+
+  /// Field label for the driver's number in the selected season.
+  ///
+  /// In en, this message translates to:
+  /// **'Race number'**
+  String get driverRaceNumber;
+
+  /// Field label for the driver's permanent career number, distinct from the season race number.
+  ///
+  /// In en, this message translates to:
+  /// **'Permanent number'**
+  String get driverPermanentNumber;
+
+  /// Driver role: a race seat.
+  ///
+  /// In en, this message translates to:
+  /// **'Race driver'**
+  String get driverRoleRace;
+
+  /// Driver role: reserve.
+  ///
+  /// In en, this message translates to:
+  /// **'Reserve driver'**
+  String get driverRoleReserve;
+
+  /// Driver role: test.
+  ///
+  /// In en, this message translates to:
+  /// **'Test driver'**
+  String get driverRoleTest;
+
+  /// Fallback for a driver role this app version does not recognise, or one the contract did not supply.
+  ///
+  /// In en, this message translates to:
+  /// **'Role unavailable'**
+  String get driverRoleUnknown;
+
+  /// Accessibility label for opening a driver's team from the driver detail screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open team {name}'**
+  String driverOpenTeam(String name);
+
+  /// Action opening the drivers' championship table for the selected season.
+  ///
+  /// In en, this message translates to:
+  /// **'View drivers\' standings'**
+  String get driverViewStandings;
+
+  /// Shown when no authoritative team can be resolved for a driver's participation. Never an identifier.
+  ///
+  /// In en, this message translates to:
+  /// **'Team unavailable'**
+  String get driverTeamUnavailable;
+
+  /// Semantic label for the driver portrait placeholder. Phase 7C downloads no media.
+  ///
+  /// In en, this message translates to:
+  /// **'Driver portrait unavailable'**
+  String get driverPortraitPlaceholder;
+
+  /// Section title for a team's season line-up.
+  ///
+  /// In en, this message translates to:
+  /// **'Drivers'**
+  String get teamLineupSection;
+
+  /// Section title for a team's season facts (power unit, principal, base, chassis).
+  ///
+  /// In en, this message translates to:
+  /// **'Team details'**
+  String get teamFactsSection;
+
+  /// Section title for a team's constructors' championship summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Championship'**
+  String get teamChampionshipSection;
+
+  /// Section title for a team's curated biography.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get teamAbout;
+
+  /// Field label for the team principal.
+  ///
+  /// In en, this message translates to:
+  /// **'Team principal'**
+  String get fieldTeamPrincipal;
+
+  /// Field label for the season chassis designation.
+  ///
+  /// In en, this message translates to:
+  /// **'Chassis'**
+  String get fieldChassis;
+
+  /// Accessibility label for opening a line-up driver from the team detail screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open driver {name}'**
+  String teamOpenDriver(String name);
+
+  /// Action opening the constructors' championship table for the selected season.
+  ///
+  /// In en, this message translates to:
+  /// **'View constructors\' standings'**
+  String get teamViewStandings;
+
+  /// Shown when a team's season line-up cannot be derived from local participation data.
+  ///
+  /// In en, this message translates to:
+  /// **'Line-up unavailable'**
+  String get teamLineupUnavailable;
+
+  /// Semantic label for the team logo placeholder. Phase 7C downloads no media.
+  ///
+  /// In en, this message translates to:
+  /// **'Team logo unavailable'**
+  String get teamLogoPlaceholder;
+
+  /// Section title for a circuit's physical facts.
+  ///
+  /// In en, this message translates to:
+  /// **'Circuit facts'**
+  String get circuitFactsSection;
+
+  /// Section title for a circuit's lap record.
+  ///
+  /// In en, this message translates to:
+  /// **'Lap record'**
+  String get circuitLapRecordSection;
+
+  /// Field label for the number of corners.
+  ///
+  /// In en, this message translates to:
+  /// **'Corners'**
+  String get fieldCorners;
+
+  /// Field label for the racing direction.
+  ///
+  /// In en, this message translates to:
+  /// **'Direction'**
+  String get fieldDirection;
+
+  /// Field label for the year of the circuit's first Grand Prix.
+  ///
+  /// In en, this message translates to:
+  /// **'First Grand Prix'**
+  String get fieldFirstGrandPrix;
+
+  /// Field label for the lap-record time.
+  ///
+  /// In en, this message translates to:
+  /// **'Time'**
+  String get fieldLapRecordTime;
+
+  /// Field label for the lap-record holder.
+  ///
+  /// In en, this message translates to:
+  /// **'Driver'**
+  String get fieldLapRecordDriver;
+
+  /// Field label for the year the lap record was set.
+  ///
+  /// In en, this message translates to:
+  /// **'Year'**
+  String get fieldLapRecordYear;
+
+  /// A clockwise circuit.
+  ///
+  /// In en, this message translates to:
+  /// **'Clockwise'**
+  String get circuitDirectionClockwise;
+
+  /// A counter-clockwise circuit.
+  ///
+  /// In en, this message translates to:
+  /// **'Counter-clockwise'**
+  String get circuitDirectionCounterClockwise;
+
+  /// Safe fallback for an unknown or unsupplied racing direction.
+  ///
+  /// In en, this message translates to:
+  /// **'Direction unavailable'**
+  String get circuitDirectionUnknown;
+
+  /// Shown when the lap-record holder's name is not resolvable locally. Never the driver identifier.
+  ///
+  /// In en, this message translates to:
+  /// **'Driver unavailable'**
+  String get circuitLapRecordDriverUnavailable;
+
+  /// Shown when a circuit hosts no event in the selected season. A valid state, not an error.
+  ///
+  /// In en, this message translates to:
+  /// **'No Grand Prix this season'**
+  String get circuitNoRelatedGrandPrix;
+
+  /// Accessibility label for opening a circuit's related Grand Prix.
+  ///
+  /// In en, this message translates to:
+  /// **'Open {name}'**
+  String circuitOpenGrandPrix(String name);
+
+  /// Semantic label for the circuit layout placeholder. Phase 7C downloads no media.
+  ///
+  /// In en, this message translates to:
+  /// **'Circuit layout unavailable'**
+  String get circuitLayoutPlaceholder;
+
+  /// A circuit length converted from the stored metres to a localized kilometre display.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} km'**
+  String lengthKilometers(String value);
+
+  /// Field label for the number of wins.
+  ///
+  /// In en, this message translates to:
+  /// **'Wins'**
+  String get fieldWins;
+
+  /// Field label for the number of podium finishes.
+  ///
+  /// In en, this message translates to:
+  /// **'Podiums'**
+  String get fieldPodiums;
+
+  /// Field label for a nationality.
+  ///
+  /// In en, this message translates to:
+  /// **'Nationality'**
+  String get fieldNationality;
+
+  /// Field label for a date of birth.
+  ///
+  /// In en, this message translates to:
+  /// **'Date of birth'**
+  String get fieldDateOfBirth;
+
+  /// Field label for a place of birth.
+  ///
+  /// In en, this message translates to:
+  /// **'Place of birth'**
+  String get fieldPlaceOfBirth;
+
+  /// Field label for a team association.
+  ///
+  /// In en, this message translates to:
+  /// **'Team'**
+  String get fieldTeam;
+
+  /// A participation span covering the whole season.
+  ///
+  /// In en, this message translates to:
+  /// **'Full season'**
+  String get participationFullSeason;
+
+  /// A participation span that starts mid-season.
+  ///
+  /// In en, this message translates to:
+  /// **'From round {round}'**
+  String participationFromRound(int round);
+
+  /// A participation span that ends mid-season.
+  ///
+  /// In en, this message translates to:
+  /// **'Until round {round}'**
+  String participationUntilRound(int round);
+
+  /// A bounded participation span.
+  ///
+  /// In en, this message translates to:
+  /// **'Rounds {start}–{end}'**
+  String participationRoundRange(int start, int end);
+
+  /// Shown when a competitor has no championship position. Never rendered as zero.
+  ///
+  /// In en, this message translates to:
+  /// **'Unranked'**
+  String get positionUnranked;
+
+  /// Field label for a driver's role in a season entry.
+  ///
+  /// In en, this message translates to:
+  /// **'Role'**
+  String get fieldRole;
+
+  /// Field label for a driver's participation span within a season.
+  ///
+  /// In en, this message translates to:
+  /// **'Participation'**
+  String get fieldParticipation;
 }
 
 class _AppLocalizationsDelegate

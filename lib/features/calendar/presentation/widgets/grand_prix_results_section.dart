@@ -107,9 +107,15 @@ class GrandPrixResultSection extends StatelessWidget {
           ?timing,
           if (fastest) l10n.resultsFastestLap,
         ].join(', '),
-        onTap: () => context.openEntity(RoutePaths.driver(entry.driverId)),
-        onTeamTap: () =>
-            context.openEntity(RoutePaths.constructor(entry.constructorId)),
+        // The classification's own season travels with the competitor.
+        onTap: () => context.openEntity(
+          RoutePaths.driver(entry.driverId),
+          season: document.season,
+        ),
+        onTeamTap: () => context.openEntity(
+          RoutePaths.constructor(entry.constructorId),
+          season: document.season,
+        ),
         // The action label never embeds an identifier either: with no team name
         // it is the plain localized action.
         teamSemanticLabel: resolvedTeam == null

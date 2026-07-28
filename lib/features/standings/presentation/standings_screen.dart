@@ -322,6 +322,7 @@ class _DriversTable extends StatelessWidget {
           onRefresh: onRefresh,
         ),
       StandingsReady<DriverStandingEntry>(
+        :final int season,
         :final List<DriverStandingEntry> rows,
         :final StandingsProvisionalSummary provisional,
         :final DateTime? lastSuccessAt,
@@ -342,7 +343,10 @@ class _DriversTable extends StatelessWidget {
             provisional: provisional,
           ),
           rows: _driverRowViews(context, rows, provisional),
-          onOpen: (String id) => context.openEntity(RoutePaths.driver(id)),
+          // The table's exact season travels with the entity, so a historical
+          // route opens that season's profile rather than the current one.
+          onOpen: (String id) =>
+              context.openEntity(RoutePaths.driver(id), season: season),
         ),
     };
   }
@@ -391,6 +395,7 @@ class _ConstructorsTable extends StatelessWidget {
           onRefresh: onRefresh,
         ),
       StandingsReady<ConstructorStandingEntry>(
+        :final int season,
         :final List<ConstructorStandingEntry> rows,
         :final StandingsProvisionalSummary provisional,
         :final DateTime? lastSuccessAt,
@@ -411,7 +416,8 @@ class _ConstructorsTable extends StatelessWidget {
             provisional: provisional,
           ),
           rows: _constructorRowViews(context, rows, provisional),
-          onOpen: (String id) => context.openEntity(RoutePaths.constructor(id)),
+          onOpen: (String id) =>
+              context.openEntity(RoutePaths.constructor(id), season: season),
         ),
     };
   }

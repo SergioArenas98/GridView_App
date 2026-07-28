@@ -16,6 +16,7 @@ import '../../features/shared/presentation/not_found_screen.dart';
 import '../../features/standings/application/standings_state.dart';
 import '../../features/standings/presentation/standings_screen.dart';
 import 'app_shell.dart';
+import 'entity_navigation.dart';
 import 'route_names.dart';
 import 'route_params.dart';
 import 'route_paths.dart';
@@ -174,6 +175,10 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
       ),
 
       // --- Root-level detail + Settings routes (above the shell) ---
+      // Each detail route carries only the stable entity id. The season context
+      // travels as typed navigation metadata (`EntityNavigationOrigin`), so a
+      // historical origin keeps its exact season and a deep link (which carries
+      // none) resolves the current season locally.
       GoRoute(
         path: RoutePaths.driverPattern,
         name: RouteNames.driver,
@@ -185,7 +190,10 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
           if (id == null) {
             return const NotFoundScreen(kind: NotFoundKind.invalidParameters);
           }
-          return DriverDetailScreen(driverId: id);
+          return DriverDetailScreen(
+            driverId: id,
+            originSeason: _originSeason(state),
+          );
         },
       ),
       GoRoute(
@@ -199,7 +207,10 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
           if (id == null) {
             return const NotFoundScreen(kind: NotFoundKind.invalidParameters);
           }
-          return ConstructorDetailScreen(constructorId: id);
+          return ConstructorDetailScreen(
+            constructorId: id,
+            originSeason: _originSeason(state),
+          );
         },
       ),
       GoRoute(
@@ -213,7 +224,10 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
           if (id == null) {
             return const NotFoundScreen(kind: NotFoundKind.invalidParameters);
           }
-          return CircuitDetailScreen(circuitId: id);
+          return CircuitDetailScreen(
+            circuitId: id,
+            originSeason: _originSeason(state),
+          );
         },
       ),
       GoRoute(
@@ -224,6 +238,14 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
       ),
     ],
   );
+}
+
+/// The season context an entity route was opened with, or `null` for a deep
+/// link. Runtime-only metadata: it is never parsed from the URL and never
+/// substituted by a hardcoded year.
+int? _originSeason(GoRouterState state) {
+  final Object? extra = state.extra;
+  return extra is EntityNavigationOrigin ? extra.season : null;
 }
 
 Widget _standings(GoRouterState state, StandingsChampionship championship) {

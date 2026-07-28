@@ -64,8 +64,12 @@ class GrandPrixEventInfo extends StatelessWidget {
         GvSecondaryButton(
           label: l10n.grandPrixViewCircuit,
           icon: Icons.route_outlined,
-          onPressed: () =>
-              context.openEntity(RoutePaths.circuit(view.grandPrix.circuitId)),
+          // The event's own season travels with the circuit, so its related
+          // event resolves to this weekend rather than the current season.
+          onPressed: () => context.openEntity(
+            RoutePaths.circuit(view.grandPrix.circuitId),
+            season: view.grandPrix.season,
+          ),
         ),
       ],
     );

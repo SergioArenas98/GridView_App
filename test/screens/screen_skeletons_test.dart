@@ -14,6 +14,7 @@ import 'package:gridview/features/settings/presentation/settings_screen.dart';
 import 'package:gridview/features/shared/presentation/not_found_screen.dart';
 import 'package:gridview/features/standings/presentation/standings_screen.dart';
 
+import '../support/fake_entity_repository.dart';
 import '../support/router_harness.dart';
 
 void main() {
@@ -52,13 +53,21 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a valid but unknown entity id renders a generic placeholder', (
+  testWidgets('an entity id with no local identity never displays the id', (
     WidgetTester tester,
   ) async {
-    await pumpApp(tester, initialLocation: '/drivers/zz-unknown');
+    // No local identity yet, so the screen holds its loading state. Reduced
+    // motion makes the design system's skeleton render static, so the test
+    // settles deterministically instead of chasing a perpetual animation.
+    await pumpApp(
+      tester,
+      initialLocation: '/drivers/zz-unknown',
+      drivers: FakeDriverRepository(),
+      disableAnimations: true,
+    );
     expect(find.byType(DriverDetailScreen), findsOneWidget);
-    expect(find.text('Profile placeholder'), findsOneWidget);
-    // The stable id is still shown as a technical identifier, not as the name.
-    expect(find.text('zz-unknown'), findsOneWidget);
+    // The stable id is never shown, humanised or used as a display name.
+    expect(find.textContaining('zz-unknown'), findsNothing);
+    expect(find.textContaining('Zz Unknown'), findsNothing);
   });
 }

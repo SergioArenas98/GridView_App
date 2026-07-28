@@ -16,6 +16,8 @@ import 'package:gridview/features/sync/application/sync_providers.dart';
 import 'package:gridview/l10n/app_localizations.dart';
 
 import 'domain_fixtures.dart';
+import 'entity_fixtures.dart';
+import 'fake_entity_repository.dart';
 import 'fake_repository.dart';
 
 /// The default fake repository backing widget/navigation tests: a fresh Home
@@ -34,6 +36,31 @@ FakeRaceWeekendRepository defaultFakeRepository() => FakeRaceWeekendRepository(
 FakeStandingsRepository defaultFakeStandings() => FakeStandingsRepository(
   drivers: (int season) => driverStandingsFixture(season: season),
   constructors: (int season) => constructorStandingsFixture(season: season),
+);
+
+/// The default fake Explore/entity repositories: all three collections populated
+/// for any season, and a complete profile for any entity id.
+///
+/// Each is independent, with its own refresh counters, so a navigation or
+/// rendering test can prove that one collection's or one detail's request never
+/// touched another resource.
+FakeDriverRepository defaultFakeDrivers() => FakeDriverRepository(
+  cards: (int season) => seasonDriverCardsFixture(season: season),
+  profile: (int season, String driverId) =>
+      driverProfileFixture(season: season, driverId: driverId),
+);
+
+FakeConstructorRepository defaultFakeConstructors() =>
+    FakeConstructorRepository(
+      cards: (int season) => seasonTeamCardsFixture(season: season),
+      profile: (int season, String constructorId) =>
+          teamProfileFixture(season: season, constructorId: constructorId),
+    );
+
+FakeCircuitRepository defaultFakeCircuits() => FakeCircuitRepository(
+  cards: (int season) => seasonCircuitCardsFixture(season: season),
+  profile: (int season, String circuitId) =>
+      circuitProfileFixture(season: season, circuitId: circuitId),
 );
 
 /// A test host that mirrors [GridViewApp] but exposes locale, text-scale,
@@ -140,6 +167,9 @@ Future<GoRouter> pumpApp(
   EdgeInsets padding = EdgeInsets.zero,
   FakeRaceWeekendRepository? repository,
   FakeStandingsRepository? standings,
+  FakeDriverRepository? drivers,
+  FakeConstructorRepository? constructors,
+  FakeCircuitRepository? circuits,
   DateTime? clock,
   AppEnvironment environment = AppEnvironment.development,
   bool mockData = false,
@@ -157,6 +187,10 @@ Future<GoRouter> pumpApp(
   final FakeRaceWeekendRepository repo = repository ?? defaultFakeRepository();
   final FakeStandingsRepository standingsRepo =
       standings ?? defaultFakeStandings();
+  final FakeDriverRepository driverRepo = drivers ?? defaultFakeDrivers();
+  final FakeConstructorRepository constructorRepo =
+      constructors ?? defaultFakeConstructors();
+  final FakeCircuitRepository circuitRepo = circuits ?? defaultFakeCircuits();
   final GoRouter router = buildGridViewRouter(initialLocation: initialLocation);
   await tester.pumpWidget(
     ProviderScope(
@@ -166,6 +200,9 @@ Future<GoRouter> pumpApp(
         grandPrixRepositoryProvider.overrideWithValue(repo),
         resultRepositoryProvider.overrideWithValue(repo),
         standingsRepositoryProvider.overrideWithValue(standingsRepo),
+        driverRepositoryProvider.overrideWithValue(driverRepo),
+        constructorRepositoryProvider.overrideWithValue(constructorRepo),
+        circuitRepositoryProvider.overrideWithValue(circuitRepo),
         clockProvider.overrideWithValue(() => now),
         // Pinned so rendering never depends on the host machine's time zone:
         // a developer machine and the Linux CI runner report different names

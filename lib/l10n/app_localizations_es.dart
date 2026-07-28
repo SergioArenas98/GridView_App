@@ -583,4 +583,265 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get finishStatusUnknown => 'Estado desconocido';
+
+  @override
+  String get exploreCategorySelector => 'Categoría de Explorar';
+
+  @override
+  String get exploreDriversEmptyTitle => 'Todavía no hay pilotos';
+
+  @override
+  String get exploreDriversEmptyMessage =>
+      'Esta temporada aún no tiene pilotos publicados. Aparecerán aquí en cuanto los haya.';
+
+  @override
+  String get exploreTeamsEmptyTitle => 'Todavía no hay equipos';
+
+  @override
+  String get exploreTeamsEmptyMessage =>
+      'Esta temporada aún no tiene equipos publicados. Aparecerán aquí en cuanto los haya.';
+
+  @override
+  String get exploreCircuitsEmptyTitle => 'Todavía no hay circuitos';
+
+  @override
+  String get exploreCircuitsEmptyMessage =>
+      'Esta temporada aún no tiene circuitos publicados. Aparecerán aquí en cuanto los haya.';
+
+  @override
+  String get exploreDriversErrorTitle => 'No se pueden cargar los pilotos';
+
+  @override
+  String get exploreTeamsErrorTitle => 'No se pueden cargar los equipos';
+
+  @override
+  String get exploreCircuitsErrorTitle => 'No se pueden cargar los circuitos';
+
+  @override
+  String get exploreSeasonUnavailableTitle => 'Temporada no disponible';
+
+  @override
+  String get exploreSeasonUnavailableMessage =>
+      'GridView no ha podido determinar la temporada actual. Comprueba tu conexión e inténtalo de nuevo.';
+
+  @override
+  String get exploreUpdateFailed => 'No se pudo actualizar';
+
+  @override
+  String get exploreCachedNotice => 'Mostrando datos guardados';
+
+  @override
+  String exploreOpenDriver(String name) {
+    return 'Abrir piloto $name';
+  }
+
+  @override
+  String exploreOpenTeam(String name) {
+    return 'Abrir equipo $name';
+  }
+
+  @override
+  String exploreOpenCircuit(String name) {
+    return 'Abrir circuito $name';
+  }
+
+  @override
+  String get detailNotFoundTitle => 'No disponible';
+
+  @override
+  String get detailNotFoundMessage =>
+      'Este perfil no está disponible. Puede que se haya eliminado o que el enlace esté desactualizado.';
+
+  @override
+  String get detailSeasonUnavailableTitle => 'Temporada no disponible';
+
+  @override
+  String get detailSeasonUnavailableMessage =>
+      'GridView no ha podido determinar qué temporada mostrar. Comprueba tu conexión e inténtalo de nuevo.';
+
+  @override
+  String get detailUpdateFailed => 'No se pudo actualizar';
+
+  @override
+  String get detailCachedNotice => 'Los detalles pueden estar desactualizados';
+
+  @override
+  String get detailPartialNotice =>
+      'Parte de la información del perfil no está disponible';
+
+  @override
+  String get detailLoadErrorTitle => 'No se puede cargar este perfil';
+
+  @override
+  String get driverAbout => 'Biografía';
+
+  @override
+  String get driverProfileSection => 'Perfil';
+
+  @override
+  String get driverParticipationSection => 'Participación en la temporada';
+
+  @override
+  String get driverChampionshipSection => 'Campeonato';
+
+  @override
+  String get driverRaceNumber => 'Dorsal de la temporada';
+
+  @override
+  String get driverPermanentNumber => 'Dorsal permanente';
+
+  @override
+  String get driverRoleRace => 'Piloto titular';
+
+  @override
+  String get driverRoleReserve => 'Piloto reserva';
+
+  @override
+  String get driverRoleTest => 'Piloto de pruebas';
+
+  @override
+  String get driverRoleUnknown => 'Rol no disponible';
+
+  @override
+  String driverOpenTeam(String name) {
+    return 'Abrir equipo $name';
+  }
+
+  @override
+  String get driverViewStandings => 'Ver clasificación de pilotos';
+
+  @override
+  String get driverTeamUnavailable => 'Equipo no disponible';
+
+  @override
+  String get driverPortraitPlaceholder => 'Retrato del piloto no disponible';
+
+  @override
+  String get teamLineupSection => 'Pilotos';
+
+  @override
+  String get teamFactsSection => 'Datos del equipo';
+
+  @override
+  String get teamChampionshipSection => 'Campeonato';
+
+  @override
+  String get teamAbout => 'Historia';
+
+  @override
+  String get fieldTeamPrincipal => 'Director de equipo';
+
+  @override
+  String get fieldChassis => 'Chasis';
+
+  @override
+  String teamOpenDriver(String name) {
+    return 'Abrir piloto $name';
+  }
+
+  @override
+  String get teamViewStandings => 'Ver clasificación de constructores';
+
+  @override
+  String get teamLineupUnavailable => 'Alineación no disponible';
+
+  @override
+  String get teamLogoPlaceholder => 'Logotipo del equipo no disponible';
+
+  @override
+  String get circuitFactsSection => 'Datos del circuito';
+
+  @override
+  String get circuitLapRecordSection => 'Récord de vuelta';
+
+  @override
+  String get fieldCorners => 'Curvas';
+
+  @override
+  String get fieldDirection => 'Sentido';
+
+  @override
+  String get fieldFirstGrandPrix => 'Primer Gran Premio';
+
+  @override
+  String get fieldLapRecordTime => 'Tiempo';
+
+  @override
+  String get fieldLapRecordDriver => 'Piloto';
+
+  @override
+  String get fieldLapRecordYear => 'Año';
+
+  @override
+  String get circuitDirectionClockwise => 'Horario';
+
+  @override
+  String get circuitDirectionCounterClockwise => 'Antihorario';
+
+  @override
+  String get circuitDirectionUnknown => 'Sentido no disponible';
+
+  @override
+  String get circuitLapRecordDriverUnavailable => 'Piloto no disponible';
+
+  @override
+  String get circuitNoRelatedGrandPrix => 'Sin Gran Premio esta temporada';
+
+  @override
+  String circuitOpenGrandPrix(String name) {
+    return 'Abrir $name';
+  }
+
+  @override
+  String get circuitLayoutPlaceholder => 'Trazado del circuito no disponible';
+
+  @override
+  String lengthKilometers(String value) {
+    return '$value km';
+  }
+
+  @override
+  String get fieldWins => 'Victorias';
+
+  @override
+  String get fieldPodiums => 'Podios';
+
+  @override
+  String get fieldNationality => 'Nacionalidad';
+
+  @override
+  String get fieldDateOfBirth => 'Fecha de nacimiento';
+
+  @override
+  String get fieldPlaceOfBirth => 'Lugar de nacimiento';
+
+  @override
+  String get fieldTeam => 'Equipo';
+
+  @override
+  String get participationFullSeason => 'Temporada completa';
+
+  @override
+  String participationFromRound(int round) {
+    return 'Desde la carrera $round';
+  }
+
+  @override
+  String participationUntilRound(int round) {
+    return 'Hasta la carrera $round';
+  }
+
+  @override
+  String participationRoundRange(int start, int end) {
+    return 'Carreras $start–$end';
+  }
+
+  @override
+  String get positionUnranked => 'Sin clasificar';
+
+  @override
+  String get fieldRole => 'Rol';
+
+  @override
+  String get fieldParticipation => 'Participación';
 }
