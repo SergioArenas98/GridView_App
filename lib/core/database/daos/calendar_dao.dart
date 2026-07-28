@@ -3,11 +3,14 @@ import 'package:drift/drift.dart';
 import '../../../features/shared/domain/entities/calendar_entry.dart';
 import '../../../features/shared/domain/entities/circuit.dart';
 import '../../../features/shared/domain/entities/detail_views.dart';
+import '../../../features/shared/domain/entities/entity_profile.dart';
 import '../../../features/shared/domain/entities/enums.dart';
 import '../../../features/shared/domain/entities/grand_prix.dart';
 import '../../../features/shared/domain/entities/media.dart';
+import '../../../features/shared/domain/entities/season_card.dart';
 import '../../../features/shared/domain/entities/session.dart';
 import '../../../features/shared/domain/relevant_event.dart';
+import '../competitor_tables.dart';
 import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../tables.dart';
@@ -322,6 +325,166 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     )..where((Circuits c) => c.id.equals(id))).getSingleOrNull();
     return row == null ? 0 : 1;
   }
+
+  /// Whether a **real** circuit identity exists for [id].
+  ///
+  /// A referential stub is deliberately not counted: it satisfies a foreign key
+  /// but is not a materialized local representation of the circuit detail
+  /// resource, so it must not suppress the `304` recovery retry (ADR 0012).
+  Future<bool> hasResolvedCircuit(String id) async {
+    final CircuitRow? row = await (select(
+      circuits,
+    )..where((Circuits c) => c.id.equals(id))).getSingleOrNull();
+    return row != null && !isUnresolvedIdentityName(row.name);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Explore collection and detail read models
+  // ---------------------------------------------------------------------------
+
+  /// The season's circuits as [SeasonCircuitCard] read models, in the season's
+  /// **authoritative calendar order** — the round of the event each circuit
+  /// hosts, not the circuit name.
+  ///
+  /// A circuit hosting more than one round in a season (a rare but legal case)
+  /// is anchored to its earliest round, so the collection stays one card per
+  /// circuit identity and the order stays deterministic.
+  ///
+  /// Unresolved circuit stubs are omitted. The related event is season-specific:
+  /// another season's events never contribute to it.
+  Future<List<SeasonCircuitCard>> seasonCircuitCards(int season) async {
+    final List<GrandPrixRow> events =
+        await (select(grandPrixEvents)
+              ..where((GrandPrixEvents g) => g.season.equals(season))
+              ..orderBy(<OrderClauseGenerator<GrandPrixEvents>>[
+                (GrandPrixEvents g) => OrderingTerm(expression: g.round),
+              ]))
+            .get();
+    if (events.isEmpty) return const <SeasonCircuitCard>[];
+
+    // Earliest round per circuit: the calendar order, and the related event.
+    final Map<String, GrandPrixRow> firstEventByCircuit =
+        <String, GrandPrixRow>{};
+    for (final GrandPrixRow e in events) {
+      firstEventByCircuit.putIfAbsent(e.circuitId, () => e);
+    }
+
+    final List<CircuitRow> rows =
+        await (select(circuits)..where(
+              (Circuits c) => c.id.isIn(firstEventByCircuit.keys.toSet()),
+            ))
+            .get();
+    final Map<String, CircuitRow> byId = <String, CircuitRow>{
+      for (final CircuitRow r in rows) r.id: r,
+    };
+    final Set<String> withMedia = await attachedDatabase.mediaDao
+        .ownersWithMedia(MediaEntityType.circuit, byId.keys.toSet());
+
+    final List<SeasonCircuitCard> cards = <SeasonCircuitCard>[];
+    for (final MapEntry<String, GrandPrixRow> entry
+        in firstEventByCircuit.entries) {
+      final CircuitRow? row = byId[entry.key];
+      // A referential stub is never a collection member.
+      if (row == null || isUnresolvedIdentityName(row.name)) continue;
+      cards.add(
+        SeasonCircuitCard(
+          season: season,
+          circuitId: row.id,
+          name: row.name,
+          orderIndex: entry.value.round,
+          locality: row.locality,
+          country: row.country,
+          countryCode: row.countryCode,
+          lengthMeters: row.lengthMeters,
+          cornerCount: row.cornerCount,
+          relatedGrandPrix: _relatedGrandPrixFrom(entry.value),
+          hasLayoutMedia: withMedia.contains(row.id),
+        ),
+      );
+    }
+    cards.sort(
+      (SeasonCircuitCard a, SeasonCircuitCard b) =>
+          a.orderIndex.compareTo(b.orderIndex),
+    );
+    return List<SeasonCircuitCard>.unmodifiable(cards);
+  }
+
+  /// Circuit detail for one exact season, or `null` when no **real** identity
+  /// exists (a missing row, or one that is still a referential stub).
+  ///
+  /// The related Grand Prix is the season's own event for this circuit — never
+  /// inferred from the circuit's name, and never borrowed from another season.
+  /// Hosting no event in [season] is a valid state, not an error.
+  ///
+  /// The lap-record holder's name is resolved from the local driver identity;
+  /// an unknown or still-unresolved identity yields `null` so presentation can
+  /// use localized unavailable copy instead of the identifier.
+  Future<CircuitProfile?> circuitProfile(int season, String circuitId) async {
+    final CircuitRow? row = await (select(
+      circuits,
+    )..where((Circuits c) => c.id.equals(circuitId))).getSingleOrNull();
+    if (row == null || isUnresolvedIdentityName(row.name)) return null;
+
+    final List<MediaAsset> media = await attachedDatabase.mediaDao
+        .mediaForOwner(MediaEntityType.circuit, circuitId);
+    final GrandPrixRow? event =
+        await (select(grandPrixEvents)
+              ..where(
+                (GrandPrixEvents g) =>
+                    g.season.equals(season) & g.circuitId.equals(circuitId),
+              )
+              ..orderBy(<OrderClauseGenerator<GrandPrixEvents>>[
+                (GrandPrixEvents g) => OrderingTerm(expression: g.round),
+              ])
+              ..limit(1))
+            .getSingleOrNull();
+
+    return CircuitProfile(
+      circuit: _circuitFrom(row, media: media),
+      season: season,
+      relatedGrandPrix: event == null ? null : _relatedGrandPrixFrom(event),
+      lapRecordDriverName: await _lapRecordDriverName(row.lapRecordDriverId),
+    );
+  }
+
+  /// The authoritative display name of the lap-record holder, or `null` when the
+  /// identity is absent or still an unresolved referential stub.
+  Future<String?> _lapRecordDriverName(String? driverId) async {
+    if (driverId == null) return null;
+    final DriverRow? row = await (attachedDatabase.select(
+      attachedDatabase.drivers,
+    )..where((Drivers d) => d.id.equals(driverId))).getSingleOrNull();
+    return resolvedDisplayName(row?.fullName);
+  }
+
+  RelatedGrandPrixSummary _relatedGrandPrixFrom(GrandPrixRow r) =>
+      RelatedGrandPrixSummary(
+        season: r.season,
+        round: r.round,
+        name: r.name,
+        officialName: r.officialName,
+        startDate: r.startDate,
+        endDate: r.endDate,
+        status: EventStatus.fromWire(r.status),
+        format: WeekendFormat.fromWire(r.format),
+      );
+
+  Stream<List<SeasonCircuitCard>> watchSeasonCircuitCards(int season) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        grandPrixEvents,
+        circuits,
+        attachedDatabase.circuitMedia,
+      ], () => seasonCircuitCards(season));
+
+  Stream<CircuitProfile?> watchCircuitProfile(int season, String circuitId) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        circuits,
+        grandPrixEvents,
+        attachedDatabase.drivers,
+        attachedDatabase.circuitMedia,
+        attachedDatabase.mediaAssets,
+        attachedDatabase.mediaAssetVariants,
+      ], () => circuitProfile(season, circuitId));
 
   Future<int> countCircuits() async {
     final List<CircuitRow> rows = await select(circuits).get();

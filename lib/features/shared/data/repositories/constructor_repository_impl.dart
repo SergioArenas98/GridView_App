@@ -4,7 +4,9 @@ import '../../../../core/api/dto/summary_dto.dart';
 import '../../../../core/database/daos/competitor_dao.dart';
 import '../../domain/entities/constructor.dart';
 import '../../domain/entities/detail_views.dart';
+import '../../domain/entities/entity_profile.dart';
 import '../../domain/entities/resource_key.dart';
+import '../../domain/entities/season_card.dart';
 import '../../domain/refresh_result.dart';
 import '../../domain/repositories/constructor_repository.dart';
 import '../mappers/competitor_mapper.dart';
@@ -52,6 +54,26 @@ class ConstructorRepositoryImpl extends SyncedRepository
     required int season,
     required String constructorId,
   }) => _local.teamDetail(season, constructorId);
+
+  @override
+  Stream<List<SeasonTeamCard>> watchSeasonTeamCards(int season) =>
+      _local.watchSeasonTeamCards(season);
+
+  @override
+  Future<List<SeasonTeamCard>> readSeasonTeamCards(int season) =>
+      _local.seasonTeamCards(season);
+
+  @override
+  Stream<TeamProfile?> watchTeamProfile({
+    required int season,
+    required String constructorId,
+  }) => _local.watchTeamProfile(season, constructorId);
+
+  @override
+  Future<TeamProfile?> readTeamProfile({
+    required int season,
+    required String constructorId,
+  }) => _local.teamProfile(season, constructorId);
 
   @override
   Future<RefreshResult> refreshSeasonConstructors(
@@ -115,8 +137,10 @@ class ConstructorRepositoryImpl extends SyncedRepository
           _local.upsertConstructors(<Constructor>[
             constructorFromDto(m.data.constructor),
           ]),
+      // A referential stub is not a materialized team detail, so it must not
+      // suppress the `304` recovery retry.
       hasLocalRepresentation: entityRepresentation(
-        () async => (await _local.countConstructor(constructorId)) > 0,
+        () => _local.hasResolvedConstructor(constructorId),
       ),
       bypassValidator: bypassValidator,
       cancellation: cancellation,

@@ -3,8 +3,10 @@ import 'package:drift/drift.dart';
 import '../../../features/shared/domain/entities/constructor.dart';
 import '../../../features/shared/domain/entities/detail_views.dart';
 import '../../../features/shared/domain/entities/driver.dart';
+import '../../../features/shared/domain/entities/entity_profile.dart';
 import '../../../features/shared/domain/entities/enums.dart';
 import '../../../features/shared/domain/entities/media.dart';
+import '../../../features/shared/domain/entities/season_card.dart';
 import '../../../features/shared/domain/entities/season_entry.dart';
 import '../../../features/shared/domain/entities/standing.dart';
 import '../competitor_tables.dart';
@@ -344,6 +346,448 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
   }
 
   // ---------------------------------------------------------------------------
+  // Explore collection read models
+  // ---------------------------------------------------------------------------
+
+  /// The season's drivers as [SeasonDriverCard] read models.
+  ///
+  /// **One card per stable driver identity.** A mid-season move stores several
+  /// participation spans for the same driver; those collapse into the single
+  /// relevant span (the open one, else the latest) plus a span count, so the
+  /// roster never shows the same driver twice and never flattens two stints into
+  /// one false statement.
+  ///
+  /// Order is the roster's authoritative local order — the relevant span's race
+  /// number (unnumbered last), then the stable name. Standings enrichment is
+  /// applied **after** ordering and can never reorder the collection.
+  ///
+  /// Unresolved driver stubs are omitted; an unresolved constructor contributes
+  /// no team name and no team colour.
+  Future<List<SeasonDriverCard>> seasonDriverCards(int season) async {
+    final List<DriverSeasonEntryRow> entryRows = await (select(
+      driverSeasonEntries,
+    )..where((DriverSeasonEntries e) => e.season.equals(season))).get();
+    if (entryRows.isEmpty) return const <SeasonDriverCard>[];
+
+    final Map<String, List<DriverSeasonEntryRow>> byDriver =
+        <String, List<DriverSeasonEntryRow>>{};
+    for (final DriverSeasonEntryRow e in entryRows) {
+      (byDriver[e.driverId] ??= <DriverSeasonEntryRow>[]).add(e);
+    }
+
+    final Map<String, DriverRow> identities = await _driversById(
+      byDriver.keys.toSet(),
+    );
+
+    // One (identity, relevant span) pair per driver, stubs omitted.
+    final List<(DriverRow, DriverSeasonEntryRow, int)> selected =
+        <(DriverRow, DriverSeasonEntryRow, int)>[];
+    for (final MapEntry<String, List<DriverSeasonEntryRow>> group
+        in byDriver.entries) {
+      final DriverRow? identity = identities[group.key];
+      if (identity == null || isUnresolvedIdentityName(identity.fullName)) {
+        continue;
+      }
+      final List<DriverSeasonEntryRow> spans = _sortedSpans(group.value);
+      selected.add((identity, spans.first, spans.length));
+    }
+
+    selected.sort(
+      (
+        (DriverRow, DriverSeasonEntryRow, int) a,
+        (DriverRow, DriverSeasonEntryRow, int) b,
+      ) => _byRosterOrder(a.$1, a.$2, b.$1, b.$2),
+    );
+
+    final Set<String> teamIds = selected
+        .map(((DriverRow, DriverSeasonEntryRow, int) s) => s.$2.constructorId)
+        .toSet();
+    final Map<String, ConstructorRow> teams = await _constructorsById(teamIds);
+    final Map<String, ConstructorSeasonEntryRow> branding = await _brandingById(
+      season,
+      teamIds,
+    );
+    final Map<String, DriverStanding> standings = <String, DriverStanding>{
+      for (final DriverStanding s
+          in await attachedDatabase.standingsDao.driverStandingsForSeason(
+            season,
+          ))
+        s.driverId: s,
+    };
+    final Set<String> withMedia = await attachedDatabase.mediaDao
+        .ownersWithMedia(
+          MediaEntityType.driver,
+          selected
+              .map(((DriverRow, DriverSeasonEntryRow, int) s) => s.$1.id)
+              .toSet(),
+        );
+
+    final List<SeasonDriverCard> cards = <SeasonDriverCard>[];
+    for (int i = 0; i < selected.length; i++) {
+      final (DriverRow identity, DriverSeasonEntryRow entry, int spans) =
+          selected[i];
+      final ConstructorRow? team = teams[entry.constructorId];
+      final ConstructorSeasonEntryRow? brand = branding[entry.constructorId];
+      final DriverStanding? standing = standings[identity.id];
+      final String? teamName =
+          brand?.fullName ??
+          brand?.shortName ??
+          resolvedDisplayName(team?.name);
+      cards.add(
+        SeasonDriverCard(
+          season: season,
+          driverId: identity.id,
+          name: identity.fullName,
+          orderIndex: i,
+          shortCode: entry.shortCode ?? identity.shortCode,
+          raceNumber: entry.raceNumber,
+          role: entry.role == null ? null : DriverRole.fromWire(entry.role),
+          nationality: identity.nationality,
+          countryCode: identity.countryCode,
+          // Only a resolvable team contributes a name or a colour; the stable
+          // identifier is never shown in its place.
+          constructorId: entry.constructorId,
+          teamName: teamName,
+          teamColor: teamName == null
+              ? null
+              : (brand?.colorPrimary ?? team?.colorPrimary),
+          position: standing?.position,
+          points: standing?.points,
+          spanCount: spans,
+          hasPortraitMedia: withMedia.contains(identity.id),
+        ),
+      );
+    }
+    return List<SeasonDriverCard>.unmodifiable(cards);
+  }
+
+  /// The season's teams as [SeasonTeamCard] read models, in the collection's
+  /// authoritative local order (the stable identity name, which rebranding does
+  /// not vary — so a rebranded team keeps its place).
+  ///
+  /// The line-up is derived from the season's driver participation entries, the
+  /// single source of truth for membership. Any
+  /// [ConstructorSeasonEntry.driverLineup] the contract carries is deliberately
+  /// not stored and not consulted.
+  Future<List<SeasonTeamCard>> seasonTeamCards(int season) async {
+    final List<ConstructorSeasonEntryRow> entryRows = await (select(
+      constructorSeasonEntries,
+    )..where((ConstructorSeasonEntries e) => e.season.equals(season))).get();
+    if (entryRows.isEmpty) return const <SeasonTeamCard>[];
+
+    final Set<String> ids = entryRows
+        .map((ConstructorSeasonEntryRow e) => e.constructorId)
+        .toSet();
+    final Map<String, ConstructorRow> identities = await _constructorsById(ids);
+
+    final List<(ConstructorRow, ConstructorSeasonEntryRow)> selected =
+        <(ConstructorRow, ConstructorSeasonEntryRow)>[];
+    for (final ConstructorSeasonEntryRow e in entryRows) {
+      final ConstructorRow? identity = identities[e.constructorId];
+      // A referential stub is never a collection member.
+      if (identity == null || isUnresolvedIdentityName(identity.name)) continue;
+      selected.add((identity, e));
+    }
+    selected.sort(
+      (
+        (ConstructorRow, ConstructorSeasonEntryRow) a,
+        (ConstructorRow, ConstructorSeasonEntryRow) b,
+      ) => a.$1.name.compareTo(b.$1.name),
+    );
+
+    final Map<String, List<TeamLineupMember>> lineups = await _seasonLineups(
+      season,
+    );
+    final Map<String, ConstructorStanding> standings =
+        <String, ConstructorStanding>{
+          for (final ConstructorStanding s
+              in await attachedDatabase.standingsDao
+                  .constructorStandingsForSeason(season))
+            s.constructorId: s,
+        };
+    final Set<String> withMedia = await attachedDatabase.mediaDao
+        .ownersWithMedia(
+          MediaEntityType.constructor,
+          selected
+              .map(((ConstructorRow, ConstructorSeasonEntryRow) s) => s.$1.id)
+              .toSet(),
+        );
+
+    final List<SeasonTeamCard> cards = <SeasonTeamCard>[];
+    for (int i = 0; i < selected.length; i++) {
+      final (ConstructorRow identity, ConstructorSeasonEntryRow entry) =
+          selected[i];
+      final ConstructorStanding? standing = standings[identity.id];
+      cards.add(
+        SeasonTeamCard(
+          season: season,
+          constructorId: identity.id,
+          stableName: identity.name,
+          orderIndex: i,
+          seasonName: entry.fullName,
+          shortName: entry.shortName ?? identity.shortName,
+          teamColor: entry.colorPrimary ?? identity.colorPrimary,
+          nationality: identity.nationality,
+          countryCode: identity.countryCode,
+          powerUnit: entry.powerUnit,
+          position: standing?.position,
+          points: standing?.points,
+          lineup: lineups[identity.id] ?? const <TeamLineupMember>[],
+          hasLogoMedia: withMedia.contains(identity.id),
+        ),
+      );
+    }
+    return List<SeasonTeamCard>.unmodifiable(cards);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Detail read models
+  // ---------------------------------------------------------------------------
+
+  /// Driver detail for one exact season, or `null` when no **real** identity
+  /// exists (a missing row, or one that is still a referential stub).
+  ///
+  /// Every participation span in the season is carried, in relevance order, so a
+  /// mid-season move stays representable instead of collapsing into one
+  /// misleading "current team".
+  Future<DriverProfile?> driverProfile(int season, String driverId) async {
+    final DriverRow? row = await (select(
+      drivers,
+    )..where((Drivers d) => d.id.equals(driverId))).getSingleOrNull();
+    if (row == null || isUnresolvedIdentityName(row.fullName)) return null;
+
+    final List<MediaAsset> media = await attachedDatabase.mediaDao
+        .mediaForOwner(MediaEntityType.driver, driverId);
+    final List<DriverSeasonEntryRow> spans = _sortedSpans(
+      await (select(driverSeasonEntries)..where(
+            (DriverSeasonEntries e) =>
+                e.season.equals(season) & e.driverId.equals(driverId),
+          ))
+          .get(),
+    );
+
+    final Set<String> teamIds = spans
+        .map((DriverSeasonEntryRow e) => e.constructorId)
+        .toSet();
+    final Map<String, ConstructorRow> teams = await _constructorsById(teamIds);
+    final Map<String, ConstructorSeasonEntryRow> branding = await _brandingById(
+      season,
+      teamIds,
+    );
+
+    return DriverProfile(
+      driver: _driverFrom(row, media: media),
+      season: season,
+      participations: spans
+          .map((DriverSeasonEntryRow e) {
+            final ConstructorRow? team = teams[e.constructorId];
+            final ConstructorSeasonEntryRow? brand = branding[e.constructorId];
+            final String? teamName =
+                brand?.fullName ??
+                brand?.shortName ??
+                resolvedDisplayName(team?.name);
+            return DriverParticipation(
+              entry: _driverEntryFrom(e),
+              teamName: teamName,
+              teamColor: teamName == null
+                  ? null
+                  : (brand?.colorPrimary ?? team?.colorPrimary),
+            );
+          })
+          .toList(growable: false),
+      standing: await attachedDatabase.standingsDao.driverStanding(
+        season,
+        driverId,
+      ),
+    );
+  }
+
+  /// Team detail for one exact season, or `null` when no real identity exists.
+  ///
+  /// Season branding decides the display name; the stable identity is preserved
+  /// unchanged so rebranding never rewrites identity. The line-up is derived
+  /// from the season's driver participation entries.
+  Future<TeamProfile?> teamProfile(int season, String constructorId) async {
+    final ConstructorRow? row = await (select(
+      constructors,
+    )..where((Constructors c) => c.id.equals(constructorId))).getSingleOrNull();
+    if (row == null || isUnresolvedIdentityName(row.name)) return null;
+
+    final List<MediaAsset> media = await attachedDatabase.mediaDao
+        .mediaForOwner(MediaEntityType.constructor, constructorId);
+    final ConstructorSeasonEntryRow? entry =
+        await (select(constructorSeasonEntries)..where(
+              (ConstructorSeasonEntries e) =>
+                  e.season.equals(season) &
+                  e.constructorId.equals(constructorId),
+            ))
+            .getSingleOrNull();
+    final Map<String, List<TeamLineupMember>> lineups = await _seasonLineups(
+      season,
+    );
+
+    return TeamProfile(
+      constructor: _constructorFrom(row, media: media),
+      season: season,
+      seasonEntry: entry == null ? null : _constructorEntryFrom(entry),
+      standing: await attachedDatabase.standingsDao.constructorStanding(
+        season,
+        constructorId,
+      ),
+      lineup: lineups[constructorId] ?? const <TeamLineupMember>[],
+    );
+  }
+
+  /// Every team's season line-up, keyed by constructor id, derived in one pass
+  /// from the season's driver participation entries.
+  ///
+  /// Each span is its own member, so a driver who joins or leaves mid-season
+  /// stays visible with their exact span rather than being flattened into a
+  /// false simultaneous line-up. Unresolved driver stubs are omitted.
+  Future<Map<String, List<TeamLineupMember>>> _seasonLineups(int season) async {
+    final List<DriverSeasonEntryRow> entryRows = await (select(
+      driverSeasonEntries,
+    )..where((DriverSeasonEntries e) => e.season.equals(season))).get();
+    if (entryRows.isEmpty) return const <String, List<TeamLineupMember>>{};
+
+    final Map<String, DriverRow> identities = await _driversById(
+      entryRows.map((DriverSeasonEntryRow e) => e.driverId).toSet(),
+    );
+
+    final List<(DriverRow, DriverSeasonEntryRow)> members =
+        <(DriverRow, DriverSeasonEntryRow)>[];
+    for (final DriverSeasonEntryRow e in entryRows) {
+      final DriverRow? identity = identities[e.driverId];
+      if (identity == null || isUnresolvedIdentityName(identity.fullName)) {
+        continue;
+      }
+      members.add((identity, e));
+    }
+    members.sort(
+      (
+        (DriverRow, DriverSeasonEntryRow) a,
+        (DriverRow, DriverSeasonEntryRow) b,
+      ) => _byRosterOrder(a.$1, a.$2, b.$1, b.$2),
+    );
+
+    final Map<String, List<TeamLineupMember>> byTeam =
+        <String, List<TeamLineupMember>>{};
+    for (final (DriverRow identity, DriverSeasonEntryRow entry) in members) {
+      (byTeam[entry.constructorId] ??= <TeamLineupMember>[]).add(
+        TeamLineupMember(
+          driverId: identity.id,
+          name: identity.fullName,
+          shortCode: entry.shortCode ?? identity.shortCode,
+          raceNumber: entry.raceNumber,
+          role: entry.role == null ? null : DriverRole.fromWire(entry.role),
+          startRound: entry.startRound,
+          endRound: entry.endRound,
+        ),
+      );
+    }
+    return byTeam;
+  }
+
+  /// The season's constructor branding rows for [ids], keyed by constructor id.
+  Future<Map<String, ConstructorSeasonEntryRow>> _brandingById(
+    int season,
+    Set<String> ids,
+  ) async {
+    if (ids.isEmpty) return const <String, ConstructorSeasonEntryRow>{};
+    final List<ConstructorSeasonEntryRow> rows =
+        await (select(constructorSeasonEntries)..where(
+              (ConstructorSeasonEntries e) =>
+                  e.season.equals(season) & e.constructorId.isIn(ids),
+            ))
+            .get();
+    return <String, ConstructorSeasonEntryRow>{
+      for (final ConstructorSeasonEntryRow r in rows) r.constructorId: r,
+    };
+  }
+
+  /// A driver's spans in relevance order: the open span (`endRound == null`)
+  /// first, then the latest by `startRound`.
+  List<DriverSeasonEntryRow> _sortedSpans(List<DriverSeasonEntryRow> rows) {
+    final List<DriverSeasonEntryRow> sorted = List<DriverSeasonEntryRow>.of(
+      rows,
+    );
+    sorted.sort((DriverSeasonEntryRow a, DriverSeasonEntryRow b) {
+      if ((a.endRound == null) != (b.endRound == null)) {
+        return a.endRound == null ? -1 : 1;
+      }
+      return (b.startRound ?? 0).compareTo(a.startRound ?? 0);
+    });
+    return sorted;
+  }
+
+  /// The roster's authoritative order: race number ascending (unnumbered last),
+  /// then the stable display name. Deterministic and independent of row
+  /// insertion order and of standings.
+  int _byRosterOrder(
+    DriverRow aDriver,
+    DriverSeasonEntryRow aEntry,
+    DriverRow bDriver,
+    DriverSeasonEntryRow bEntry,
+  ) {
+    final int? na = aEntry.raceNumber;
+    final int? nb = bEntry.raceNumber;
+    if ((na == null) != (nb == null)) return na == null ? 1 : -1;
+    if (na != null && nb != null && na != nb) return na.compareTo(nb);
+    final int byName = aDriver.fullName.compareTo(bDriver.fullName);
+    if (byName != 0) return byName;
+    // Two spans of the same driver: the relevance order already applies.
+    return (aEntry.startRound ?? 0).compareTo(bEntry.startRound ?? 0);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Read-model streams
+  // ---------------------------------------------------------------------------
+
+  Stream<List<SeasonDriverCard>> watchSeasonDriverCards(int season) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        drivers,
+        driverSeasonEntries,
+        constructors,
+        constructorSeasonEntries,
+        attachedDatabase.driverStandings,
+        attachedDatabase.driverMedia,
+      ], () => seasonDriverCards(season));
+
+  Stream<List<SeasonTeamCard>> watchSeasonTeamCards(int season) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        constructors,
+        constructorSeasonEntries,
+        drivers,
+        driverSeasonEntries,
+        attachedDatabase.constructorStandings,
+        attachedDatabase.constructorMedia,
+      ], () => seasonTeamCards(season));
+
+  Stream<DriverProfile?> watchDriverProfile(int season, String driverId) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        drivers,
+        driverSeasonEntries,
+        constructors,
+        constructorSeasonEntries,
+        attachedDatabase.driverStandings,
+        attachedDatabase.driverMedia,
+        attachedDatabase.mediaAssets,
+        attachedDatabase.mediaAssetVariants,
+      ], () => driverProfile(season, driverId));
+
+  Stream<TeamProfile?> watchTeamProfile(int season, String constructorId) =>
+      _watch(<ResultSetImplementation<dynamic, dynamic>>[
+        constructors,
+        constructorSeasonEntries,
+        drivers,
+        driverSeasonEntries,
+        attachedDatabase.constructorStandings,
+        attachedDatabase.constructorMedia,
+        attachedDatabase.mediaAssets,
+        attachedDatabase.mediaAssetVariants,
+      ], () => teamProfile(season, constructorId));
+
+  // ---------------------------------------------------------------------------
   // Streams and counts
   // ---------------------------------------------------------------------------
 
@@ -406,6 +850,27 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
       constructors,
     )..where((Constructors c) => c.id.equals(id))).getSingleOrNull();
     return row == null ? 0 : 1;
+  }
+
+  /// Whether a **real** driver identity exists for [id].
+  ///
+  /// A referential stub is deliberately not counted: it exists only to satisfy a
+  /// foreign key, so it is not a materialized local representation of the driver
+  /// detail resource and must not suppress the `304` recovery retry (ADR 0012).
+  Future<bool> hasResolvedDriver(String id) async {
+    final DriverRow? row = await (select(
+      drivers,
+    )..where((Drivers d) => d.id.equals(id))).getSingleOrNull();
+    return row != null && !isUnresolvedIdentityName(row.fullName);
+  }
+
+  /// Whether a **real** constructor identity exists for [id]. See
+  /// [hasResolvedDriver].
+  Future<bool> hasResolvedConstructor(String id) async {
+    final ConstructorRow? row = await (select(
+      constructors,
+    )..where((Constructors c) => c.id.equals(id))).getSingleOrNull();
+    return row != null && !isUnresolvedIdentityName(row.name);
   }
 
   Stream<T> _watch<T>(

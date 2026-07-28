@@ -1,5 +1,7 @@
 import '../../data/remote/remote_cancellation.dart';
 import '../entities/detail_views.dart';
+import '../entities/entity_profile.dart';
+import '../entities/season_card.dart';
 import '../refresh_result.dart';
 
 /// Domain-facing repository for constructors: the season list and per-team
@@ -16,6 +18,22 @@ abstract interface class ConstructorRepository {
   });
   Future<List<SeasonConstructor>> readSeasonConstructors(int season);
   Future<TeamDetailView?> readConstructor({
+    required int season,
+    required String constructorId,
+  });
+
+  /// The season's teams as presentation read models, in the collection's
+  /// authoritative local order, each with its derived season line-up.
+  Stream<List<SeasonTeamCard>> watchSeasonTeamCards(int season);
+  Future<List<SeasonTeamCard>> readSeasonTeamCards(int season);
+
+  /// Team detail for one exact season, or `null` when no real identity exists
+  /// locally.
+  Stream<TeamProfile?> watchTeamProfile({
+    required int season,
+    required String constructorId,
+  });
+  Future<TeamProfile?> readTeamProfile({
     required int season,
     required String constructorId,
   });

@@ -5,7 +5,9 @@ import '../../../../core/database/daos/competitor_dao.dart';
 import '../../domain/entities/constructor.dart';
 import '../../domain/entities/detail_views.dart';
 import '../../domain/entities/driver.dart';
+import '../../domain/entities/entity_profile.dart';
 import '../../domain/entities/resource_key.dart';
+import '../../domain/entities/season_card.dart';
 import '../../domain/entities/season_entry.dart';
 import '../../domain/refresh_result.dart';
 import '../../domain/repositories/driver_repository.dart';
@@ -54,6 +56,26 @@ class DriverRepositoryImpl extends SyncedRepository
     required int season,
     required String driverId,
   }) => _local.driverDetail(season, driverId);
+
+  @override
+  Stream<List<SeasonDriverCard>> watchSeasonDriverCards(int season) =>
+      _local.watchSeasonDriverCards(season);
+
+  @override
+  Future<List<SeasonDriverCard>> readSeasonDriverCards(int season) =>
+      _local.seasonDriverCards(season);
+
+  @override
+  Stream<DriverProfile?> watchDriverProfile({
+    required int season,
+    required String driverId,
+  }) => _local.watchDriverProfile(season, driverId);
+
+  @override
+  Future<DriverProfile?> readDriverProfile({
+    required int season,
+    required String driverId,
+  }) => _local.driverProfile(season, driverId);
 
   @override
   Future<RefreshResult> refreshSeasonDrivers(
@@ -129,8 +151,10 @@ class DriverRepositoryImpl extends SyncedRepository
           ]);
         }
       },
+      // A referential stub satisfies a foreign key but is not a materialized
+      // driver detail, so it must not suppress the `304` recovery retry.
       hasLocalRepresentation: entityRepresentation(
-        () async => (await _local.countDriver(driverId)) > 0,
+        () => _local.hasResolvedDriver(driverId),
       ),
       bypassValidator: bypassValidator,
       cancellation: cancellation,

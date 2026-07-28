@@ -4,7 +4,9 @@ import '../../../../core/api/dto/detail_dto.dart';
 import '../../../../core/database/daos/calendar_dao.dart';
 import '../../domain/entities/circuit.dart';
 import '../../domain/entities/detail_views.dart';
+import '../../domain/entities/entity_profile.dart';
 import '../../domain/entities/resource_key.dart';
+import '../../domain/entities/season_card.dart';
 import '../../domain/refresh_result.dart';
 import '../../domain/repositories/circuit_repository.dart';
 import '../mappers/competitor_mapper.dart';
@@ -47,6 +49,26 @@ class CircuitRepositoryImpl extends SyncedRepository
   @override
   Future<CircuitDetailView?> readCircuit(String circuitId) =>
       _local.circuitDetail(circuitId);
+
+  @override
+  Stream<List<SeasonCircuitCard>> watchSeasonCircuitCards(int season) =>
+      _local.watchSeasonCircuitCards(season);
+
+  @override
+  Future<List<SeasonCircuitCard>> readSeasonCircuitCards(int season) =>
+      _local.seasonCircuitCards(season);
+
+  @override
+  Stream<CircuitProfile?> watchCircuitProfile({
+    required int season,
+    required String circuitId,
+  }) => _local.watchCircuitProfile(season, circuitId);
+
+  @override
+  Future<CircuitProfile?> readCircuitProfile({
+    required int season,
+    required String circuitId,
+  }) => _local.circuitProfile(season, circuitId);
 
   @override
   Future<RefreshResult> refreshSeasonCircuits(
@@ -94,8 +116,10 @@ class CircuitRepositoryImpl extends SyncedRepository
           RemoteSnapshotMeta.fromMeta(m.meta, etag: m.etag),
       writeDomain: (RemoteModified<CircuitDetailDto> m) =>
           _local.upsertCircuits(<Circuit>[circuitFromDto(m.data.circuit)]),
+      // A referential stub is not a materialized circuit detail, so it must not
+      // suppress the `304` recovery retry.
       hasLocalRepresentation: entityRepresentation(
-        () async => (await _local.countCircuit(circuitId)) > 0,
+        () => _local.hasResolvedCircuit(circuitId),
       ),
       bypassValidator: bypassValidator,
       cancellation: cancellation,

@@ -233,6 +233,44 @@ class MediaDao extends DatabaseAccessor<GridViewDatabase> with _$MediaDaoMixin {
   // Reads
   // ---------------------------------------------------------------------------
 
+  /// Which of [ownerIds] own at least one media asset of [ownerType].
+  ///
+  /// One batched query for a whole collection, so a list read never issues a
+  /// per-row media lookup. It reports **local availability only** — nothing is
+  /// fetched or downloaded — and exists so a placeholder can describe itself
+  /// accurately rather than to render a remote image.
+  Future<Set<String>> ownersWithMedia(
+    MediaEntityType ownerType,
+    Set<String> ownerIds,
+  ) async {
+    if (ownerIds.isEmpty) return const <String>{};
+    switch (ownerType) {
+      case MediaEntityType.driver:
+        final List<DriverMediaRow> rows = await (select(
+          driverMedia,
+        )..where((DriverMedia t) => t.driverId.isIn(ownerIds))).get();
+        return rows.map((DriverMediaRow r) => r.driverId).toSet();
+      case MediaEntityType.constructor:
+        final List<ConstructorMediaRow> rows = await (select(
+          constructorMedia,
+        )..where((ConstructorMedia t) => t.constructorId.isIn(ownerIds))).get();
+        return rows.map((ConstructorMediaRow r) => r.constructorId).toSet();
+      case MediaEntityType.circuit:
+        final List<CircuitMediaRow> rows = await (select(
+          circuitMedia,
+        )..where((CircuitMedia t) => t.circuitId.isIn(ownerIds))).get();
+        return rows.map((CircuitMediaRow r) => r.circuitId).toSet();
+      case MediaEntityType.grandPrix:
+        final List<GrandPrixMediaRow> rows = await (select(
+          grandPrixMedia,
+        )..where((GrandPrixMedia t) => t.grandPrixId.isIn(ownerIds))).get();
+        return rows.map((GrandPrixMediaRow r) => r.grandPrixId).toSet();
+      case MediaEntityType.placeholder:
+      case MediaEntityType.unknown:
+        return const <String>{};
+    }
+  }
+
   /// Reads the ordered media owned by [ownerId] of [ownerType]. Returns an empty
   /// list when the owner has no media (never `null`).
   Future<List<MediaAsset>> mediaForOwner(
