@@ -1198,3 +1198,113 @@ and makes **no** season-scoped request.
 - Home must continue reading Drift only.
 - Phase 7D must not alter Explore or detail lifecycle ownership.
 - Real media downloading remains Phase 8 work; Phase 7C ships placeholders only.
+
+---
+
+## 15. Feature ownership (Phase 7D: Home)
+
+Home is the season-focused dashboard. It reads **only** local domain read models
+and owns **no** synchronization of its own.
+
+### 15.1 Composition sources and provenance
+
+Home combines several independent resources. The composition
+(`HomeDashboardDao`) reads each module from the resource that already owns it,
+so no semantic fact is cached twice and every module keeps its own provenance:
+
+| Module | Content source | Provenance key |
+| --- | --- | --- |
+| Season heading / context | `seasons` row | — (never shown as a timestamp) |
+| Featured Grand Prix, its circuit and sessions | Home snapshot `focusSeason`/`focusRound`, resolved against the calendar rows | `home:<season>` |
+| Featured event via the calendar fallback | season calendar | `calendar:<season>` |
+| Latest completed Grand Prix | season calendar | `calendar:<season>` |
+| Upcoming events | season calendar | `calendar:<season>` |
+| Drivers' leader | `driver_standings` + identities + season branding | `standings:drivers:<season>` |
+| Teams' leader | `constructor_standings` + identities + branding | `standings:constructors:<season>` |
+| Cached race-result enrichment | `race_results` for the latest completed round | `grand-prix-results:<season>:<round>` |
+
+The contract's `HomeData` also carries `latestCompletedEvent`, `driverLeader`,
+`constructorLeader` and `upcomingEvents`. **None of them is persisted a second
+time under the Home snapshot**: each is reconstructed from the normalized
+resource above, which is what keeps Home from ever disagreeing with the Calendar
+or the Standings screens. No OpenAPI field required a schema workaround, and no
+schema change was made.
+
+### 15.2 Materialization
+
+A Home representation is materialized for a season when the persisted Home
+snapshot's `focusSeason` equals that exact season. It does **not** require a
+featured event: a season with nothing scheduled is a valid, materialized,
+season-empty Home. Materialization is never inferred from featured-event
+presence, session count, calendar row count, standings row count or raw
+snapshot-row existence without season validation, and it survives a database
+close/reopen.
+
+A bootstrap-only Home is materialized and ready, but has **no** individual
+`home:<season>` metadata (ADR 0014): Home therefore shows no update time at all
+for it, the first individual Home request sends no fabricated `If-None-Match`,
+and the resource stays due for a later refresh.
+
+### 15.3 Refresh ownership
+
+`HomeController` starts **no** refresh on creation, on widget build, on a Drift
+emission, on a detail round trip, on branch selection or on temporal
+recomputation. `AppSyncCoordinator` remains the only owner of startup and
+foreground refresh (ADR 0015).
+
+Pull-to-refresh and the app-bar action call the approved manual seam
+(`manualCoreRefreshProvider` → `AppSyncCoordinator.refreshNow`) exactly once per
+user action. It forces eligibility for one run while keeping conditional
+requests and persisted ETags, coalesces repeated taps, and always completes
+after success, failure or cancellation. A first-load retry uses the same
+boundary — it creates no second startup policy.
+
+Home never refreshes a Grand Prix, a result document or an entity detail. The
+optional race-result enrichment renders only what is *already* cached.
+
+### 15.4 Failure scoping
+
+The controller mirrors the coordinator's report per resource:
+
+- only a `home:<season>` failure can become a Home-level error, and only when no
+  representation is materialized;
+- a `calendar:<season>` failure is scoped to the calendar-derived modules and
+  never removes a valid Home snapshot;
+- each championship's failure is scoped to its own leader module;
+- an unrelated Explore collection failure is ignored entirely;
+- a result-resource failure never removes the latest-event card;
+- a `304` is successful validation, never a failure.
+
+### 15.5 Freshness communication
+
+Home publishes **no** single screen-wide "updated" time. An exact timestamp is
+shown only for the Home resource itself, and only once that resource has
+synchronised under its own key. Anything wider is expressed as safe aggregate
+uncertainty ("Some information may be outdated"). Freshness is evaluated with
+`evaluateResourceFreshness` and the injected clock; no parallel evaluator
+exists. One stale section never makes fresh sections stale.
+
+### 15.6 Season transitions
+
+No season is hardcoded. Home watches `currentSeasonProvider`; when the current
+season changes it re-points at the new season's resources, the old season's rows
+and metadata stay untouched on disk, an old-season dashboard is never rendered
+as the new season, and the new season's materialization is evaluated
+independently. Home's remembered scroll offset is season-scoped, so a transition
+starts the new season at the top while leaving the branch valid.
+
+### 15.7 Phase 8 hand-off
+
+- Every primary screen (Home, Calendar, Grand Prix, Standings, Explore and the
+  three detail profiles) now renders from local data under a single
+  synchronization policy. Phase 8 adds cross-cutting capabilities on top; it
+  does **not** need to change refresh ownership again.
+- Media is still placeholder-only everywhere, Home included. The remote image
+  component, its disk-cache policy and the media manifest are Phase 8 work, and
+  the `media` rows already carry the single-owner integrity the loader needs.
+- Localization is complete for the shipped screens: both ARBs carry the same
+  keys and no user-facing string is hardcoded. Phase 8 owns the remaining
+  fallback-language and text-expansion verification.
+- Settings, Firebase and platform services remain unimplemented and own no
+  synchronization; anything they add must go through `AppSyncCoordinator`
+  (ADR 0015) rather than introduce a second policy.
