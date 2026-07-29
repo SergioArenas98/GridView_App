@@ -579,17 +579,103 @@ void main() {
       expect(state.event.focus.grandPrix.name, 'Belgian Grand Prix');
     });
 
-    test('metadata that has not been read yet never claims unavailable', () {
+    test('metadata that has not been read yet is resolving — neither empty nor '
+        'unavailable', () {
       final HomeReady state = upcomingState(
         bootstrapMaterialized: false,
         metadataReady: false,
       );
 
+      expect(state.upcoming.availability, HomeModuleAvailability.resolving);
+      expect(
+        state.upcoming.availability.isEmptyResult,
+        isFalse,
+        reason: 'an unread resource has not answered with nothing',
+      );
+      expect(state.upcoming.availability.isUnavailable, isFalse);
+      expect(state.isPartial, isFalse);
+    });
+
+    test('an unread standings record leaves both leaders resolving', () {
+      final HomeReady state =
+          compute(
+                dashboard: homeDashboardFixture(
+                  driverLeaders: const <DriverStandingEntry>[],
+                  constructorLeaders: const <ConstructorStandingEntry>[],
+                ),
+                homeMetadata: synced(),
+                metadataReady: false,
+              )
+              as HomeReady;
+
+      expect(state.driverLeader.availability, HomeModuleAvailability.resolving);
+      expect(state.teamLeader.availability, HomeModuleAvailability.resolving);
+      expect(state.isPartial, isFalse);
+    });
+
+    test('an unread record claims no freshness and no update time', () {
+      final HomeReady state = upcomingState(
+        calendarMetadata: syncedMetadata('calendar:2026'),
+        metadataReady: false,
+      );
+
+      expect(state.upcoming.availability, HomeModuleAvailability.resolving);
+      expect(
+        state.upcoming.provenance.freshness,
+        isNull,
+        reason: 'nothing is claimed about a record still being read',
+      );
+      expect(state.upcoming.provenance.lastSuccessAt, isNull);
+      expect(state.hasStaleSection, isFalse);
+    });
+
+    test('content already stored stays in the module while resolving', () {
+      final HomeReady state = upcomingState(
+        upcoming: calendarFixture(
+          season: 2026,
+        ).where((CalendarEntry e) => e.round == 14).toList(growable: false),
+        metadataReady: false,
+      );
+
       expect(
         state.upcoming.availability,
-        HomeModuleAvailability.availableEmpty,
+        HomeModuleAvailability.resolving,
+        reason: 'materialization is not inferred from the rows themselves',
+      );
+      expect(
+        state.upcoming.events,
+        hasLength(1),
+        reason: 'the stored events stay renderable throughout',
       );
       expect(state.isPartial, isFalse);
+    });
+
+    test('resolving settles into exactly one resolved state', () {
+      expect(
+        upcomingState(metadataReady: false).upcoming.availability,
+        HomeModuleAvailability.resolving,
+      );
+      expect(
+        upcomingState(
+          calendarMetadata: syncedMetadata('calendar:2026'),
+        ).upcoming.availability,
+        HomeModuleAvailability.availableEmpty,
+        reason: 'a materialized calendar with nothing left',
+      );
+      expect(
+        upcomingState(bootstrapMaterialized: false).upcoming.availability,
+        HomeModuleAvailability.unavailable,
+        reason: 'no record of any kind',
+      );
+      expect(
+        upcomingState(
+          upcoming: calendarFixture(
+            season: 2026,
+          ).where((CalendarEntry e) => e.round == 14).toList(growable: false),
+          calendarMetadata: syncedMetadata('calendar:2026'),
+        ).upcoming.availability,
+        HomeModuleAvailability.available,
+      );
     });
 
     test('a materialized calendar with one upcoming event is available', () {

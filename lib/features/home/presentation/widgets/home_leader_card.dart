@@ -10,8 +10,10 @@ import '../home_formatting.dart';
 
 /// One championship-leader module.
 ///
-/// The three representable states are distinct and never blurred together:
+/// The representable states are distinct and never blurred together:
 ///
+/// - while the standings materialization is still being read the card asserts
+///   **nothing**: no leader, no empty result and no unavailability;
 /// - a **single confirmed leader** shows the authoritative name, the confirmed
 ///   points and the team association, and opens that competitor's detail;
 /// - **tied leaders** are announced as tied. No competitor is promoted to "the
@@ -105,14 +107,16 @@ class HomeLeaderCard extends StatelessWidget {
               l10n.standingsPointsSemantics(format.pointsNumber(points)),
           ].join(', '),
         ),
-      // No leader to name. Which of the two reasons applies is a real
-      // distinction: a materialized table that has simply not produced a leader
-      // yet has answered, and saying its information is unavailable would be
-      // false.
+      // No leader to name. Which reason applies is a real distinction: a
+      // materialized table that has simply not produced a leader yet has
+      // answered, and saying its information is unavailable would be false —
+      // as would saying either one before the materialization read completes.
+      HomeLeaderUnavailable() when module.availability.isResolving =>
+        _ResolvingLeader(cardKey: cardKey),
       HomeLeaderUnavailable() => () {
-        final String title = module.availability.isAvailable
-            ? l10n.homeNoLeaderYet
-            : l10n.homeLeaderUnavailable;
+        final String title = module.availability.isUnavailable
+            ? l10n.homeLeaderUnavailable
+            : l10n.homeNoLeaderYet;
         return _card(
           context: context,
           l10n: l10n,
@@ -198,4 +202,28 @@ class HomeLeaderCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A championship module whose standings materialization has not been read yet.
+///
+/// It says nothing at all: naming no leader and calling the table unavailable
+/// are both claims about stored state that has not been consulted. The card
+/// shell keeps the section's height stable, carries no copy, no semantics
+/// beyond the championship name, no action and no animation.
+class _ResolvingLeader extends StatelessWidget {
+  const _ResolvingLeader({required this.cardKey});
+
+  final String cardKey;
+
+  @override
+  Widget build(BuildContext context) => GvContentCard(
+    key: ValueKey<String>('$cardKey-resolving'),
+    child: Container(
+      height: 24,
+      decoration: BoxDecoration(
+        color: GvColors.surfaceElevatedAlt,
+        borderRadius: GvRadii.smAll,
+      ),
+    ),
+  );
 }

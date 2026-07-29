@@ -245,9 +245,21 @@ class _HomeDashboard extends ConsumerWidget {
             title: l10n.homeUpcoming,
             actionLabel: l10n.homeViewCalendar,
             onAction: () => _goToBranch(context, RoutePaths.calendar),
-            // Three distinct outcomes, never blurred into one: the calendar
-            // cannot answer; it answered that no races remain; it listed them.
+            // Four distinct outcomes, never blurred into one: nothing is known
+            // yet; the calendar cannot answer; it answered that no races
+            // remain; it listed them. Events already stored stay on screen
+            // while the first two are being told apart.
             child: switch (state.upcoming.availability) {
+              HomeModuleAvailability.resolving =>
+                state.upcoming.events.isEmpty
+                    ? const _ResolvingModule(
+                        moduleKey: 'home-upcoming-resolving',
+                      )
+                    : HomeUpcomingList(
+                        module: state.upcoming,
+                        onOpen: (CalendarEntry entry) =>
+                            openGrandPrix(entry.round),
+                      ),
               HomeModuleAvailability.unavailable => _EmptyModule(
                 message: l10n.homeUpcomingUnavailable,
               ),
@@ -465,6 +477,28 @@ class _HomeNotices extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A module whose materialization has not been read yet.
+///
+/// Deliberately silent: it asserts neither "nothing here" nor "unavailable",
+/// because neither is known. A restrained static block keeps the section's
+/// height stable so the resolved content does not jump into place — it is not
+/// animated, it triggers nothing, and it never replaces the page with a loader.
+class _ResolvingModule extends StatelessWidget {
+  const _ResolvingModule({required this.moduleKey});
+
+  final String moduleKey;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: ValueKey<String>(moduleKey),
+    height: 44,
+    decoration: BoxDecoration(
+      color: GvColors.surfaceElevated,
+      borderRadius: GvRadii.smAll,
+    ),
+  );
 }
 
 /// A module that is genuinely unavailable: one concise line rather than an empty

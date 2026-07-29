@@ -273,17 +273,18 @@ class HomeReady extends HomeState {
   /// screen can show one concise partial-data notice instead of a page-level
   /// error.
   ///
-  /// Strictly availability, never cardinality: a module whose resource is
-  /// materialized has answered, and an empty answer is an answer. No upcoming
+  /// Strictly a resolved absence of information. A module whose resource is
+  /// materialized has answered, and an empty answer is an answer: no upcoming
   /// events after the finale, no confirmed leader yet, no cached classification
-  /// and no completed event yet are all valid, complete states — none of them
-  /// is partial. Staleness and refresh failures are separate conditions with
-  /// their own notices and never make a module unavailable either.
+  /// and no completed event yet are all valid, complete states. A module whose
+  /// materialization is still being read has not answered *yet*, which is not
+  /// missing information either. Staleness and refresh failures are separate
+  /// conditions with their own notices and never make a module unavailable.
   bool get isPartial => <HomeModuleAvailability>[
     driverLeader.availability,
     teamLeader.availability,
     upcoming.availability,
-  ].any((HomeModuleAvailability a) => !a.isAvailable);
+  ].any((HomeModuleAvailability a) => a.isUnavailable);
 
   /// Whether **any** visible module is currently stale, so one safe aggregate
   /// notice can describe the uncertainty without claiming a false global time.
@@ -347,8 +348,14 @@ class HomeStateInputs {
   final ResourceSyncState? bootstrapMetadata;
 
   /// Whether the persisted metadata above has actually been read. While it is
-  /// false no module is declared unavailable, because unavailability is a fact
-  /// about stored state rather than an assumption made during loading.
+  /// false every module reports [HomeModuleAvailability.resolving], because
+  /// both "materialized and empty" and "not materialized" are facts about
+  /// stored state rather than assumptions made during a read.
+  ///
+  /// Deliberately one flag for all of the records: they are read from the same
+  /// local store, and reporting *any* module as resolved while another record
+  /// is still in flight would risk a claim the database has not confirmed. The
+  /// conservative direction is the safe one — it only delays assertions.
   final bool metadataReady;
 
   final bool refreshing;
@@ -365,6 +372,18 @@ class HomeStateInputs {
   final bool syncSettled;
 
   final DateTime now;
+
+  /// One resource's provenance, suppressed entirely until its record has been
+  /// read.
+  ///
+  /// An unresolved read claims no freshness and no update time: showing either
+  /// would assert something about stored state that has not been consulted, and
+  /// a value that arrives with the record is not yet known to be the current
+  /// one.
+  HomeSectionFreshness provenanceOf(ResourceSyncState? metadata) =>
+      metadataReady
+      ? HomeSectionFreshness.of(metadata, now)
+      : const HomeSectionFreshness();
 
   /// Classifies one season collection Home derives a module from.
   ///
@@ -397,13 +416,11 @@ HomeState computeHomeState(HomeStateInputs input) {
   final HomeDashboardView? dashboard = input.dashboard;
   final int? season = input.season;
 
-  final HomeSectionFreshness homeProvenance = HomeSectionFreshness.of(
+  final HomeSectionFreshness homeProvenance = input.provenanceOf(
     input.homeMetadata,
-    input.now,
   );
-  final HomeSectionFreshness calendarProvenance = HomeSectionFreshness.of(
+  final HomeSectionFreshness calendarProvenance = input.provenanceOf(
     input.calendarMetadata,
-    input.now,
   );
   final ApiFailure? refreshError = input.refreshing ? null : input.lastFailure;
 
@@ -472,10 +489,7 @@ HomeState computeHomeState(HomeStateInputs input) {
         input.driverStandingsMetadata,
         isEmpty: driverLeader is HomeLeaderUnavailable,
       ),
-      provenance: HomeSectionFreshness.of(
-        input.driverStandingsMetadata,
-        input.now,
-      ),
+      provenance: input.provenanceOf(input.driverStandingsMetadata),
       failed: input.driverStandingsFailed,
     ),
     teamLeader: HomeLeaderModule(
@@ -484,10 +498,7 @@ HomeState computeHomeState(HomeStateInputs input) {
         input.constructorStandingsMetadata,
         isEmpty: teamLeader is HomeLeaderUnavailable,
       ),
-      provenance: HomeSectionFreshness.of(
-        input.constructorStandingsMetadata,
-        input.now,
-      ),
+      provenance: input.provenanceOf(input.constructorStandingsMetadata),
       failed: input.constructorStandingsFailed,
     ),
     latestResult: latest == null
@@ -499,7 +510,7 @@ HomeState computeHomeState(HomeStateInputs input) {
             // stored result represents no result resource at all.
             resultProvenance: dashboard.latestRaceResult == null
                 ? null
-                : HomeSectionFreshness.of(input.resultMetadata, input.now),
+                : input.provenanceOf(input.resultMetadata),
             winner: resolveHomeRaceWinner(dashboard.latestRaceResult),
             resultStatus: dashboard.latestRaceResult?.status,
           ),

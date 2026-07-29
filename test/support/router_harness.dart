@@ -139,6 +139,10 @@ Future<GoRouter> pumpApp(
   bool mockData = false,
   int? currentSeason = 2026,
   ResourceSyncState? Function(String key)? syncMetadata,
+
+  /// Full control of each metadata stream, so a test can hold a record
+  /// unresolved and then emit it. Takes precedence over [syncMetadata].
+  Stream<ResourceSyncState?> Function(String key)? syncMetadataStream,
   ManualCoreRefresh? onManualRefresh,
   String deviceTimeZone = 'UTC',
 }) async {
@@ -200,9 +204,11 @@ Future<GoRouter> pumpApp(
               },
         ),
         resourceSyncStateProvider.overrideWith(
-          (Ref ref, String key) => Stream<ResourceSyncState?>.value(
-            syncMetadata == null ? syncedMetadata(key) : syncMetadata(key),
-          ),
+          (Ref ref, String key) =>
+              syncMetadataStream?.call(key) ??
+              Stream<ResourceSyncState?>.value(
+                syncMetadata == null ? syncedMetadata(key) : syncMetadata(key),
+              ),
         ),
       ],
       // No startup stand-in: every Phase 7 screen reads its content from a

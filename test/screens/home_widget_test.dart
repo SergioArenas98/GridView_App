@@ -43,6 +43,7 @@ Future<void> pumpHome(
   DateTime? clock,
   int? currentSeason = 2026,
   ResourceSyncState? Function(String key)? syncMetadata,
+  Stream<ResourceSyncState?> Function(String key)? syncMetadataStream,
   ManualCoreRefresh? onManualRefresh,
 }) => pumpApp(
   tester,
@@ -53,6 +54,7 @@ Future<void> pumpHome(
   clock: clock,
   currentSeason: currentSeason,
   syncMetadata: syncMetadata,
+  syncMetadataStream: syncMetadataStream,
   onManualRefresh: onManualRefresh,
   disableAnimations: true,
   repository: FakeRaceWeekendRepository(
@@ -700,6 +702,170 @@ void main() {
         reason: 'a complete empty answer is not missing information',
       );
       expect(find.byType(GvOfflineNotice), findsNothing);
+    });
+
+    // While the materialization records are still being read, neither "nothing
+    // here" nor "unavailable" is known, so Home asserts neither.
+    group('unresolved materialization', () {
+      /// Holds every metadata record unresolved until [emit] is called.
+      ({
+        Stream<ResourceSyncState?> Function(String key) streams,
+        void Function(ResourceSyncState? Function(String key) value) emit,
+      })
+      pending() {
+        final Map<String, StreamController<ResourceSyncState?>> controllers =
+            <String, StreamController<ResourceSyncState?>>{};
+        return (
+          streams: (String key) => controllers
+              .putIfAbsent(key, StreamController<ResourceSyncState?>.broadcast)
+              .stream,
+          emit: (ResourceSyncState? Function(String key) value) {
+            for (final MapEntry<String, StreamController<ResourceSyncState?>> e
+                in controllers.entries) {
+              e.value.add(value(e.key));
+            }
+          },
+        );
+      }
+
+      testWidgets('an empty upcoming module asserts nothing while its record '
+          'is being read', (WidgetTester tester) async {
+        await pumpHome(
+          tester,
+          dashboard: homeDashboardFixture(upcoming: const <CalendarEntry>[]),
+          syncMetadataStream: pending().streams,
+        );
+
+        expect(
+          find.byKey(const ValueKey<String>('home-upcoming-resolving')),
+          findsOneWidget,
+        );
+        expect(find.text('No upcoming events'), findsNothing);
+        expect(find.text('Upcoming events unavailable'), findsNothing);
+        expect(find.text('Some information is unavailable'), findsNothing);
+        expect(find.byType(GvOfflineNotice), findsNothing);
+      });
+
+      testWidgets('neither leader asserts anything while its table is being '
+          'read', (WidgetTester tester) async {
+        await pumpHome(
+          tester,
+          dashboard: homeDashboardFixture(
+            driverLeaders: const <DriverStandingEntry>[],
+            constructorLeaders: const <ConstructorStandingEntry>[],
+          ),
+          syncMetadataStream: pending().streams,
+        );
+
+        expect(
+          find.byKey(const ValueKey<String>('home-driver-leader-resolving')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey<String>('home-team-leader-resolving')),
+          findsOneWidget,
+        );
+        expect(find.text('No leader yet'), findsNothing);
+        expect(find.text('Leader unavailable'), findsNothing);
+        expect(find.text('Some information is unavailable'), findsNothing);
+      });
+
+      testWidgets('stored content stays visible, without a freshness claim', (
+        WidgetTester tester,
+      ) async {
+        await pumpHome(tester, syncMetadataStream: pending().streams);
+
+        expect(find.text('Belgian Grand Prix'), findsWidgets);
+        expect(
+          find.text('Max Verstappen'),
+          findsWidgets,
+          reason: 'a stored leader keeps rendering while its record is read',
+        );
+        expect(find.text('Italian Grand Prix'), findsWidgets);
+        expect(
+          find.textContaining('Updated'),
+          findsNothing,
+          reason: 'no update time is claimed from an unread record',
+        );
+        expect(find.text('Some information may be outdated'), findsNothing);
+        expect(find.byType(GvOfflineNotice), findsNothing);
+      });
+
+      testWidgets('resolving settles into the valid empty result', (
+        WidgetTester tester,
+      ) async {
+        final ({
+          Stream<ResourceSyncState?> Function(String key) streams,
+          void Function(ResourceSyncState? Function(String key) value) emit,
+        })
+        records = pending();
+        await pumpHome(
+          tester,
+          dashboard: homeDashboardFixture(
+            focus: homeFocusFixture(status: EventStatus.completed),
+            upcoming: const <CalendarEntry>[],
+          ),
+          syncMetadataStream: records.streams,
+        );
+        expect(find.text('No upcoming events'), findsNothing);
+
+        records.emit((String key) => syncedMetadata(key));
+        await tester.pumpAndSettle();
+
+        expect(find.text('No upcoming events'), findsOneWidget);
+        expect(find.text('Upcoming events unavailable'), findsNothing);
+        expect(find.byType(GvOfflineNotice), findsNothing);
+      });
+
+      testWidgets('resolving settles into unavailable', (
+        WidgetTester tester,
+      ) async {
+        final ({
+          Stream<ResourceSyncState?> Function(String key) streams,
+          void Function(ResourceSyncState? Function(String key) value) emit,
+        })
+        records = pending();
+        await pumpHome(
+          tester,
+          dashboard: homeDashboardFixture(upcoming: const <CalendarEntry>[]),
+          syncMetadataStream: records.streams,
+        );
+        expect(find.text('Upcoming events unavailable'), findsNothing);
+        expect(find.byType(GvOfflineNotice), findsNothing);
+
+        records.emit(unmaterialized(<String>{'calendar:2026'}));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Upcoming events unavailable'), findsOneWidget);
+        expect(find.text('Some information is unavailable'), findsOneWidget);
+      });
+
+      testWidgets('resolving settles into available content', (
+        WidgetTester tester,
+      ) async {
+        final ({
+          Stream<ResourceSyncState?> Function(String key) streams,
+          void Function(ResourceSyncState? Function(String key) value) emit,
+        })
+        records = pending();
+        int refreshes = 0;
+        await pumpHome(
+          tester,
+          syncMetadataStream: records.streams,
+          onManualRefresh: () async => refreshes++,
+        );
+        expect(find.text('Dutch Grand Prix'), findsWidgets);
+
+        records.emit((String key) => syncedMetadata(key));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Dutch Grand Prix'), findsWidgets);
+        expect(
+          refreshes,
+          0,
+          reason: 'resolving metadata triggers no refresh of any kind',
+        );
+      });
     });
 
     testWidgets('an unmaterialized calendar reports upcoming as unavailable', (

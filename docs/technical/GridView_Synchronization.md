@@ -1279,9 +1279,10 @@ The controller mirrors the coordinator's report per resource:
 
 Availability and cardinality are **independent**. "Can this module answer?" is
 decided by materialization; "what did it answer?" is decided by content. Home
-keeps them apart in the model (`HomeModuleAvailability`: `unavailable`,
-`availableEmpty`, `available`) so an empty answer is never reported as missing
-information.
+keeps them apart in the model (`HomeModuleAvailability`: `resolving`,
+`unavailable`, `availableEmpty`, `available`) so an empty answer is never
+reported as missing information — and neither is reported before the local read
+that decides it has finished.
 
 Materialization reuses the single approved rule shared with the Calendar and
 Standings screens (`hasMaterializedCollection`): the collection's **own**
@@ -1291,9 +1292,23 @@ season**. It is never inferred from a row count in either direction — rows
 without a record do not make a module available, and a materialized module with
 no rows is not unavailable. Bootstrap is consulted for materialization only and
 still lends no ETag, provenance or freshness (ADR 0014), so a bootstrap-only
-module is available and shows no update time. While the persisted metadata has
-not been read yet, no module is declared unavailable: unavailability is a
-finding about stored state, never an assumption made during loading.
+module is available and shows no update time.
+
+**`resolving` is neutral.** Until the persisted record has actually been read,
+every module reports `resolving`, because `availableEmpty` and `unavailable` are
+both positive findings about stored state: the first asserts that the resource
+*is* materialized and evaluated to nothing, the second that it is *not*
+materialized. Neither may be claimed from a read still in flight, and neither is
+ever inferred from a row count in the meantime. `resolving` therefore claims
+**no** missing information, **no** valid empty result and **no** freshness or
+update time; it never marks Home partial, and it never triggers a request — it
+is a local read, not a synchronization state. Content the module already holds
+stays visible throughout, with only the freshness and availability claims
+suppressed; an empty module renders a restrained static placeholder rather than
+empty-state or unavailable copy, and the page is never replaced by a loader.
+One flag covers all of the records deliberately: they come from the same local
+store, and resolving one module while another record is still in flight would
+risk a claim the database has not confirmed.
 
 Consequently:
 
@@ -1317,15 +1332,18 @@ and absent media are all normal, complete states and none of them is partial.
 
 The four conditions stay distinct and are never collapsed into one another:
 
-| Condition | Meaning | Notice |
-|---|---|---|
-| empty | a materialized resource answered with nothing | the module's own empty line |
-| stale | a materialized resource's freshness window passed | aggregate "may be outdated" |
-| partial | some module has no materialized representation | "Some information is unavailable" |
-| refresh failure | a run failed over content that is still valid | scoped, non-blocking "Update failed" |
+| Condition | Meaning | Notice | Partial? |
+|---|---|---|---|
+| resolving | the materialization record has not been read yet | none — a restrained placeholder at most | no |
+| unavailable | no materialized representation for this season | "Some information is unavailable" | **yes** |
+| empty | a materialized resource answered with nothing | the module's own empty line | no |
+| available | a materialized resource answered with content | the content itself | no |
+| stale | a materialized resource's freshness window passed | aggregate "may be outdated" | no |
+| refresh failure | a run failed over content that is still valid | scoped, non-blocking "Update failed" | no |
 
 A stale module stays available; a failed refresh over cached rows never makes a
-module unavailable and never discards its valid empty or non-empty result.
+module unavailable and never discards its valid empty or non-empty result; and
+an unresolved read is none of the other five.
 
 ### 15.6 Freshness communication
 
