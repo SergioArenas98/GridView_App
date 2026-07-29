@@ -13,19 +13,24 @@ Future<void> _expectGolden(
   Widget target,
   String name, {
   Size size = const Size(360, 140),
+  Brightness brightness = Brightness.dark,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: buildGridViewDarkTheme(),
+      theme: brightness == Brightness.dark
+          ? buildGridViewDarkTheme()
+          : buildGridViewLightTheme(),
       home: Scaffold(
         body: Center(
           child: RepaintBoundary(
             key: const Key('golden'),
             child: ColoredBox(
-              color: GvColors.background,
+              color: brightness == Brightness.dark
+                  ? GvColors.background
+                  : GvColorsLight.background,
               child: Padding(
                 padding: const EdgeInsets.all(GvSpacing.md),
                 child: target,
@@ -93,6 +98,63 @@ void main() {
         accentColor: Color(0xFF1E41FF),
       ),
       'standings_row_leader',
+    );
+  });
+
+  // One light-theme component sheet rather than a light copy of every dark
+  // golden. It puts the roles that carry meaning side by side on a light
+  // surface — status tones, the filled primary control, a statistic card and a
+  // standings row with a decorative team accent — because those are the roles a
+  // light-palette regression would break first.
+  testWidgets('golden: component sheet light', (WidgetTester tester) async {
+    await _expectGolden(
+      tester,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Wrap(
+            spacing: GvSpacing.xs,
+            runSpacing: GvSpacing.xs,
+            children: <Widget>[
+              GvStatusChip(label: 'Upcoming', tone: GvStatusTone.info),
+              GvStatusChip(label: 'Live', tone: GvStatusTone.live),
+              GvStatusChip(label: 'Completed', tone: GvStatusTone.success),
+              GvStatusChip(label: 'Postponed', tone: GvStatusTone.warning),
+            ],
+          ),
+          const SizedBox(height: GvSpacing.md),
+          GvPrimaryButton(label: 'View results', onPressed: () {}),
+          const SizedBox(height: GvSpacing.md),
+          const GvDataCard(
+            label: 'Points',
+            value: '210.5',
+            caption: 'Championship leader',
+          ),
+          const SizedBox(height: GvSpacing.md),
+          const GvStandingsRow(
+            position: '1',
+            name: 'Max Verstappen',
+            team: 'Red Bull',
+            points: '210.5',
+            isLeader: true,
+            accentColor: Color(0xFF1E41FF),
+          ),
+          const SizedBox(height: GvSpacing.md),
+          // A placeholder must stay visible on a light surface: no
+          // light-icon-on-light-fill.
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 96,
+              child: GvImagePlaceholder(semanticLabel: 'Driver portrait'),
+            ),
+          ),
+        ],
+      ),
+      'component_sheet_light',
+      size: const Size(360, 500),
+      brightness: Brightness.light,
     );
   });
 }

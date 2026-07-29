@@ -16,6 +16,7 @@ import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/settings/application/app_info.dart';
 import 'package:gridview/features/settings/application/external_links.dart';
 import 'package:gridview/features/shared/application/providers.dart';
+import 'package:gridview/features/shared/domain/entities/media.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
 import 'package:gridview/l10n/app_localizations.dart';
@@ -185,11 +186,27 @@ Future<GoRouter> pumpApp(
   AppInfoReader appInfoReader = const FakeAppInfoReader(
     AppInfo(appName: 'GridView', version: '9.9.9', buildNumber: '42'),
   ),
+
+  /// The platform brightness the app sees, pinned so `AppThemePreference.system`
+  /// is deterministic in tests and goldens.
+  Brightness platformBrightness = Brightness.dark,
+
+  /// The stored media credits the acknowledgements screen reads. Supplied here
+  /// rather than through a database, because these tests deliberately replace
+  /// the data layer with fakes and never open Drift.
+  List<MediaAttribution> mediaAttributions = const <MediaAttribution>[],
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
     addTearDown(() => tester.binding.setSurfaceSize(null));
   }
+
+  // Pinned on the platform dispatcher, not in a MediaQuery below the app:
+  // `ThemeMode.system` is resolved by MaterialApp itself, from the brightness
+  // reported *above* it, so an override installed in `builder:` would never
+  // reach theme selection and every test would silently get the host default.
+  tester.platformDispatcher.platformBrightnessTestValue = platformBrightness;
+  addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
 
   final DateTime now = clock ?? DateTime.utc(2026, 7, 18, 12, 10);
   final FakeRaceWeekendRepository repo = repository ?? defaultFakeRepository();
@@ -237,6 +254,9 @@ Future<GoRouter> pumpApp(
           linkLauncher ?? RecordingExternalLinkLauncher(),
         ),
         appInfoReaderProvider.overrideWithValue(appInfoReader),
+        mediaAttributionsProvider.overrideWith(
+          (Ref ref) async => mediaAttributions,
+        ),
         appEnvironmentProvider.overrideWithValue(environment),
         usesMockDataProvider.overrideWithValue(mockData),
         // Home, Calendar and Standings are season-scoped. Widget tests replace
