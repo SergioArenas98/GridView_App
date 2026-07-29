@@ -31,6 +31,17 @@ dependencies:
   # IANA timezone conversion for DST-correct event-local session times
   # (TRD §11.4 / Domain Model §5.3). Time zones are never inferred from country.
   timezone: ^0.9.4
+  # Typed persisted user preferences (Phase 8 §4). Preferences never use Drift.
+  shared_preferences: ^2.5.5
+  # Real package metadata for the Settings "Application information" screen
+  # (Phase 8 §10). Never a hardcoded version string.
+  package_info_plus: ^9.0.1
+  # Allow-listed https/mailto launching for privacy and feedback actions
+  # (Phase 8 §10). Arbitrary URLs from API content are never launched.
+  url_launcher: ^6.3.2
+  # Bounded on-disk image byte cache (Phase 8 §14). Image bytes never enter
+  # Drift; this package owns the only media byte cache in the app.
+  flutter_cache_manager: ^3.4.1
 
 dev_dependencies:
   flutter_test:
