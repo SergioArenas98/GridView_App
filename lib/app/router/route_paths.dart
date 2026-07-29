@@ -37,6 +37,26 @@ abstract final class RoutePaths {
   static const String circuitPattern = '/circuits/:circuitId';
   static const String settings = '/settings';
 
+  // --- Settings sub-screens ------------------------------------------------
+  // Registered as children of [settings] on the root navigator, so each one
+  // pushes above the shell and Android back walks straight back to the origin
+  // the user opened Settings from.
+  static const String settingsLanguageRelative = 'language';
+  static const String settingsThemeRelative = 'theme';
+  static const String settingsTimeRelative = 'time';
+  static const String settingsDataRelative = 'data';
+  static const String settingsAcknowledgementsRelative = 'acknowledgements';
+  static const String settingsPrivacyRelative = 'privacy';
+  static const String settingsAboutRelative = 'about';
+
+  static const String settingsLanguage = '/settings/language';
+  static const String settingsTheme = '/settings/theme';
+  static const String settingsTime = '/settings/time';
+  static const String settingsData = '/settings/data';
+  static const String settingsAcknowledgements = '/settings/acknowledgements';
+  static const String settingsPrivacy = '/settings/privacy';
+  static const String settingsAbout = '/settings/about';
+
   // --- Typed location builders --------------------------------------------
   static String grandPrix({required int season, required int round}) =>
       '/calendar/$season/$round';

@@ -17,6 +17,41 @@ class MediaVariants {
   final MediaVariant? hero;
 }
 
+/// One credit line that must be displayed for stored media.
+///
+/// The unit of an acknowledgement is the *credit*, not the asset and certainly
+/// not the size variant: several variants of one asset — and several assets from
+/// one rights holder — collapse to a single line. It deliberately carries no
+/// media id and no URL, because neither is a human-readable label.
+class MediaAttribution {
+  const MediaAttribution({
+    required this.category,
+    required this.attribution,
+    this.license,
+  });
+
+  /// What kind of media the credit covers, so a line stays associated with a
+  /// meaningful subject rather than floating free.
+  final MediaCategory category;
+
+  /// The credit text exactly as the rights record supplied it.
+  final String attribution;
+
+  /// The licence or permission basis, when one was supplied.
+  final String? license;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MediaAttribution &&
+          other.category == category &&
+          other.attribution == attribution &&
+          other.license == license;
+
+  @override
+  int get hashCode => Object.hash(category, attribution, license);
+}
+
 class MediaAsset {
   const MediaAsset({
     required this.id,

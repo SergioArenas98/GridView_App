@@ -271,6 +271,49 @@ class MediaDao extends DatabaseAccessor<GridViewDatabase> with _$MediaDaoMixin {
     }
   }
 
+  /// Every distinct credit line that must be displayed for the stored media.
+  ///
+  /// Deduplicated and deterministically ordered, so the acknowledgements screen
+  /// is a pure read of what is already persisted: it needs no network, works
+  /// offline, and renders the same list every time. Assets with no attribution
+  /// text contribute nothing — an absent credit is not a credit for "unknown".
+  ///
+  /// Size variants are irrelevant here: they live in their own table and are
+  /// never joined, so one asset in four sizes still produces one line.
+  Future<List<MediaAttribution>> readAttributions() async {
+    final List<MediaAssetRow> rows = await (select(
+      mediaAssets,
+    )..where((MediaAssets m) => m.attribution.isNotNull())).get();
+
+    final Set<MediaAttribution> unique = <MediaAttribution>{};
+    for (final MediaAssetRow row in rows) {
+      final String text = (row.attribution ?? '').trim();
+      if (text.isEmpty) continue;
+      unique.add(
+        MediaAttribution(
+          category: MediaCategory.fromWire(row.category),
+          attribution: text,
+          license: _blankToNull(row.license),
+        ),
+      );
+    }
+
+    final List<MediaAttribution> ordered = unique.toList()
+      ..sort((MediaAttribution a, MediaAttribution b) {
+        final int byText = a.attribution.toLowerCase().compareTo(
+          b.attribution.toLowerCase(),
+        );
+        if (byText != 0) return byText;
+        return a.category.wire.compareTo(b.category.wire);
+      });
+    return ordered;
+  }
+
+  String? _blankToNull(String? value) {
+    final String? trimmed = value?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+
   /// Reads the ordered media owned by [ownerId] of [ownerType]. Returns an empty
   /// list when the owner has no media (never `null`).
   Future<List<MediaAsset>> mediaForOwner(

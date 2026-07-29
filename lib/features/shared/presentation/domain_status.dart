@@ -123,3 +123,18 @@ String failureMessage(AppLocalizations l10n, ApiFailure failure) =>
       ApiFailureKind.configuration ||
       ApiFailureKind.unknown => l10n.errorGeneric,
     };
+
+/// The localized label for a media category.
+///
+/// An unrecognised category from the contract falls back to a neutral "Image"
+/// rather than exposing its wire token: a category is metadata, never copy.
+String mediaCategoryLabel(AppLocalizations l10n, MediaCategory category) =>
+    switch (category) {
+      MediaCategory.portrait => l10n.mediaCategoryPortrait,
+      MediaCategory.logo => l10n.mediaCategoryLogo,
+      MediaCategory.car => l10n.mediaCategoryCar,
+      MediaCategory.circuitLayout => l10n.mediaCategoryCircuitLayout,
+      MediaCategory.hero => l10n.mediaCategoryHero,
+      MediaCategory.thumbnail => l10n.mediaCategoryThumbnail,
+      MediaCategory.unknown => l10n.mediaCategoryOther,
+    };

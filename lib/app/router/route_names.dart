@@ -18,5 +18,12 @@ abstract final class RouteNames {
   static const String constructor = 'constructor';
   static const String circuit = 'circuit';
   static const String settings = 'settings';
+  static const String settingsLanguage = 'settings-language';
+  static const String settingsTheme = 'settings-theme';
+  static const String settingsTime = 'settings-time';
+  static const String settingsData = 'settings-data';
+  static const String settingsAcknowledgements = 'settings-acknowledgements';
+  static const String settingsPrivacy = 'settings-privacy';
+  static const String settingsAbout = 'settings-about';
   static const String notFound = 'not-found';
 }

@@ -274,29 +274,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTitle => 'Settings';
 
   @override
-  String get settingsSectionGeneral => 'General';
-
-  @override
-  String get settingsSectionAbout => 'About';
-
-  @override
   String get settingsSectionDeveloper => 'Developer';
 
   @override
   String get settingsLanguage => 'Language';
 
   @override
-  String get settingsLanguageValue => 'System default';
-
-  @override
   String get settingsTheme => 'Theme';
-
-  @override
-  String get settingsThemeValue => 'Dark';
-
-  @override
-  String get settingsThemeNote =>
-      'Only a dark theme is available in this version.';
 
   @override
   String get settingsPrivacy => 'Privacy';
@@ -964,4 +948,175 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeUpdateFailed => 'Update failed';
+
+  @override
+  String get settingsSectionPreferences => 'Preferences';
+
+  @override
+  String get settingsSectionDataApp => 'Data and application';
+
+  @override
+  String get settingsSectionPrivacySupport => 'Privacy and support';
+
+  @override
+  String get settingsTimeDisplay => 'Time display';
+
+  @override
+  String get settingsDataAndUpdates => 'Data and updates';
+
+  @override
+  String get settingsFeedback => 'Send feedback';
+
+  @override
+  String get settingsLanguageSystem => 'System default';
+
+  @override
+  String get settingsLanguageSystemDescription =>
+      'Use the device language when GridView supports it, otherwise English.';
+
+  @override
+  String get settingsLanguageEnglish => 'English';
+
+  @override
+  String get settingsLanguageSpanish => 'Español';
+
+  @override
+  String get settingsThemeSystem => 'System';
+
+  @override
+  String get settingsThemeSystemDescription =>
+      'Follow the device light or dark setting.';
+
+  @override
+  String get settingsThemeDark => 'Dark';
+
+  @override
+  String get settingsThemeLight => 'Light';
+
+  @override
+  String get settingsTimeDevice => 'Device time';
+
+  @override
+  String get settingsTimeDeviceDescription =>
+      'Show session times in your device\'s time zone.';
+
+  @override
+  String get settingsTimeEvent => 'Event time';
+
+  @override
+  String get settingsTimeEventDescription =>
+      'Show session times in the circuit\'s local time zone.';
+
+  @override
+  String get settingsTimeBoth => 'Both';
+
+  @override
+  String get settingsTimeBothDescription =>
+      'Show the event time and your device time together.';
+
+  @override
+  String get settingsDataEnvironment => 'Environment';
+
+  @override
+  String get settingsDataSource => 'Data source';
+
+  @override
+  String get settingsDataSourceRemote => 'GridView service';
+
+  @override
+  String get settingsDataSourceSample => 'Sample data';
+
+  @override
+  String get settingsDataSourceUnavailable => 'Not configured';
+
+  @override
+  String get settingsDataApiVersion => 'API version';
+
+  @override
+  String get settingsDataCurrentSeason => 'Current season';
+
+  @override
+  String get settingsDataCurrentSeasonUnresolved => 'Not available yet';
+
+  @override
+  String get settingsDataOfflineExplanation =>
+      'GridView keeps the season on your device, so it opens and works without a connection. New information is downloaded when the app starts and when you refresh.';
+
+  @override
+  String get settingsAboutApplication => 'Application';
+
+  @override
+  String get settingsAboutBuild => 'Build';
+
+  @override
+  String get settingsAboutUnofficial =>
+      'GridView is an independent application. It is not associated with, endorsed by or affiliated with Formula 1, the FIA or any team.';
+
+  @override
+  String get settingsPrivacyAndLegal => 'Privacy and legal';
+
+  @override
+  String get settingsPrivacyPolicyOpen => 'Read the privacy policy';
+
+  @override
+  String get settingsPrivacyPolicyUnavailable =>
+      'No privacy policy is configured in this build.';
+
+  @override
+  String get settingsPrivacyCrashReporting => 'Crash reporting';
+
+  @override
+  String get settingsPrivacyPerformance => 'Performance monitoring';
+
+  @override
+  String get settingsPrivacyAdvertising => 'Advertising';
+
+  @override
+  String get settingsPrivacyEnabled => 'Enabled';
+
+  @override
+  String get settingsPrivacyDisabled => 'Disabled';
+
+  @override
+  String get settingsAcknowledgementsEmpty => 'No attributions are stored yet.';
+
+  @override
+  String get settingsAcknowledgementsData => 'Data';
+
+  @override
+  String get settingsAcknowledgementsMedia => 'Images';
+
+  @override
+  String get settingsFeedbackUnavailable => 'No contact address is configured.';
+
+  @override
+  String get settingsOpenFailed => 'That link could not be opened.';
+
+  @override
+  String get settingsSaveFailed =>
+      'That setting could not be saved. Please try again.';
+
+  @override
+  String get settingsSelected => 'Selected';
+
+  @override
+  String get mediaCategoryPortrait => 'Portrait';
+
+  @override
+  String get mediaCategoryLogo => 'Logo';
+
+  @override
+  String get mediaCategoryCar => 'Car';
+
+  @override
+  String get mediaCategoryCircuitLayout => 'Circuit layout';
+
+  @override
+  String get mediaCategoryHero => 'Feature image';
+
+  @override
+  String get mediaCategoryThumbnail => 'Thumbnail';
+
+  @override
+  String get mediaCategoryOther => 'Image';
 }

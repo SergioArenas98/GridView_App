@@ -4,683 +4,1498 @@
   "@appTitle": {
     "description": "Application name shown in the app bar and task switcher."
   },
-
   "navHome": "Home",
-  "@navHome": { "description": "Bottom navigation label for the Home branch." },
+  "@navHome": {
+    "description": "Bottom navigation label for the Home branch."
+  },
   "navCalendar": "Calendar",
-  "@navCalendar": { "description": "Bottom navigation label for the Calendar branch." },
+  "@navCalendar": {
+    "description": "Bottom navigation label for the Calendar branch."
+  },
   "navStandings": "Standings",
-  "@navStandings": { "description": "Bottom navigation label for the Standings branch." },
+  "@navStandings": {
+    "description": "Bottom navigation label for the Standings branch."
+  },
   "navExplore": "Explore",
-  "@navExplore": { "description": "Bottom navigation label for the Explore branch." },
-
+  "@navExplore": {
+    "description": "Bottom navigation label for the Explore branch."
+  },
   "seasonLabel": "{season} season",
   "@seasonLabel": {
     "description": "Season context header, e.g. '2026 season'.",
-    "placeholders": { "season": { "type": "String", "example": "2026" } }
+    "placeholders": {
+      "season": {
+        "type": "String",
+        "example": "2026"
+      }
+    }
   },
   "roundLabel": "Round {round}",
   "@roundLabel": {
     "description": "Grand Prix round label, e.g. 'Round 3'.",
-    "placeholders": { "round": { "type": "String", "example": "3" } }
+    "placeholders": {
+      "round": {
+        "type": "String",
+        "example": "3"
+      }
+    }
   },
   "seeAll": "See all",
-  "@seeAll": { "description": "Section action that opens the full list." },
+  "@seeAll": {
+    "description": "Section action that opens the full list."
+  },
   "settingsOpen": "Open settings",
-  "@settingsOpen": { "description": "Accessibility label for the settings action in the app bar." },
+  "@settingsOpen": {
+    "description": "Accessibility label for the settings action in the app bar."
+  },
   "previewDataNotice": "Preview layout. Live data arrives in a later update.",
-  "@previewDataNotice": { "description": "Notice that the screen shows placeholder content." },
-
+  "@previewDataNotice": {
+    "description": "Notice that the screen shows placeholder content."
+  },
   "eventStateCompleted": "Completed",
-  "@eventStateCompleted": { "description": "Status for a finished Grand Prix." },
+  "@eventStateCompleted": {
+    "description": "Status for a finished Grand Prix."
+  },
   "eventStateCurrent": "This weekend",
-  "@eventStateCurrent": { "description": "Status for the current Grand Prix." },
+  "@eventStateCurrent": {
+    "description": "Status for the current Grand Prix."
+  },
   "eventStateUpcoming": "Upcoming",
-  "@eventStateUpcoming": { "description": "Status for a future Grand Prix." },
-
+  "@eventStateUpcoming": {
+    "description": "Status for a future Grand Prix."
+  },
   "homeNextGrandPrix": "Next Grand Prix",
-  "@homeNextGrandPrix": { "description": "Home hero section title." },
+  "@homeNextGrandPrix": {
+    "description": "Home hero section title."
+  },
   "homeSessions": "Weekend sessions",
-  "@homeSessions": { "description": "Home sessions/status block title." },
+  "@homeSessions": {
+    "description": "Home sessions/status block title."
+  },
   "homeLatestResult": "Latest result",
-  "@homeLatestResult": { "description": "Home latest-result section title." },
+  "@homeLatestResult": {
+    "description": "Home latest-result section title."
+  },
   "homeUpcoming": "Upcoming events",
-  "@homeUpcoming": { "description": "Home upcoming-events section title." },
+  "@homeUpcoming": {
+    "description": "Home upcoming-events section title."
+  },
   "homeOpenGrandPrix": "View Grand Prix",
-  "@homeOpenGrandPrix": { "description": "Action opening the featured Grand Prix." },
-
+  "@homeOpenGrandPrix": {
+    "description": "Action opening the featured Grand Prix."
+  },
   "calendarTitle": "Calendar",
-  "@calendarTitle": { "description": "Calendar screen title." },
-
+  "@calendarTitle": {
+    "description": "Calendar screen title."
+  },
   "grandPrixTitle": "Grand Prix",
-  "@grandPrixTitle": { "description": "Grand Prix detail screen title." },
+  "@grandPrixTitle": {
+    "description": "Grand Prix detail screen title."
+  },
   "grandPrixCircuit": "Circuit",
-  "@grandPrixCircuit": { "description": "Grand Prix detail circuit section title." },
+  "@grandPrixCircuit": {
+    "description": "Grand Prix detail circuit section title."
+  },
   "grandPrixSessions": "Sessions",
-  "@grandPrixSessions": { "description": "Grand Prix detail sessions section title." },
+  "@grandPrixSessions": {
+    "description": "Grand Prix detail sessions section title."
+  },
   "grandPrixResults": "Results",
-  "@grandPrixResults": { "description": "Grand Prix detail results section title." },
+  "@grandPrixResults": {
+    "description": "Grand Prix detail results section title."
+  },
   "grandPrixResultsPending": "Results will appear once the session is complete.",
-  "@grandPrixResultsPending": { "description": "Placeholder shown when results are not yet available." },
+  "@grandPrixResultsPending": {
+    "description": "Placeholder shown when results are not yet available."
+  },
   "grandPrixViewCircuit": "View circuit",
-  "@grandPrixViewCircuit": { "description": "Navigation to the circuit detail." },
-
+  "@grandPrixViewCircuit": {
+    "description": "Navigation to the circuit detail."
+  },
   "standingsTitle": "Standings",
-  "@standingsTitle": { "description": "Standings screen title." },
+  "@standingsTitle": {
+    "description": "Standings screen title."
+  },
   "standingsDrivers": "Drivers",
-  "@standingsDrivers": { "description": "Drivers standings segment label." },
+  "@standingsDrivers": {
+    "description": "Drivers standings segment label."
+  },
   "standingsConstructors": "Constructors",
-  "@standingsConstructors": { "description": "Constructors standings segment label." },
+  "@standingsConstructors": {
+    "description": "Constructors standings segment label."
+  },
   "standingsChampionshipSelector": "Championship",
-  "@standingsChampionshipSelector": { "description": "Accessibility label for the drivers/constructors championship selector." },
+  "@standingsChampionshipSelector": {
+    "description": "Accessibility label for the drivers/constructors championship selector."
+  },
   "standingsRefreshAction": "Refresh standings",
-  "@standingsRefreshAction": { "description": "Accessibility label for the Standings refresh action." },
+  "@standingsRefreshAction": {
+    "description": "Accessibility label for the Standings refresh action."
+  },
   "standingsRefreshingLabel": "Refreshing…",
-  "@standingsRefreshingLabel": { "description": "Compact indication that the selected standings table is being refreshed." },
+  "@standingsRefreshingLabel": {
+    "description": "Compact indication that the selected standings table is being refreshed."
+  },
   "standingsDriversEmptyTitle": "No drivers' standings yet",
-  "@standingsDriversEmptyTitle": { "description": "Title for a valid but empty drivers' championship table." },
+  "@standingsDriversEmptyTitle": {
+    "description": "Title for a valid but empty drivers' championship table."
+  },
   "standingsDriversEmptyMessage": "The drivers' championship has no classified entries for this season yet. They will appear here as soon as they do.",
-  "@standingsDriversEmptyMessage": { "description": "Message for a valid but empty drivers' championship table." },
+  "@standingsDriversEmptyMessage": {
+    "description": "Message for a valid but empty drivers' championship table."
+  },
   "standingsConstructorsEmptyTitle": "No constructors' standings yet",
-  "@standingsConstructorsEmptyTitle": { "description": "Title for a valid but empty constructors' championship table." },
+  "@standingsConstructorsEmptyTitle": {
+    "description": "Title for a valid but empty constructors' championship table."
+  },
   "standingsConstructorsEmptyMessage": "The constructors' championship has no classified entries for this season yet. They will appear here as soon as they do.",
-  "@standingsConstructorsEmptyMessage": { "description": "Message for a valid but empty constructors' championship table." },
+  "@standingsConstructorsEmptyMessage": {
+    "description": "Message for a valid but empty constructors' championship table."
+  },
   "standingsDriversErrorTitle": "Can't load the drivers' standings",
-  "@standingsDriversErrorTitle": { "description": "Title for the drivers' standings first-load error state." },
+  "@standingsDriversErrorTitle": {
+    "description": "Title for the drivers' standings first-load error state."
+  },
   "standingsConstructorsErrorTitle": "Can't load the constructors' standings",
-  "@standingsConstructorsErrorTitle": { "description": "Title for the constructors' standings first-load error state." },
+  "@standingsConstructorsErrorTitle": {
+    "description": "Title for the constructors' standings first-load error state."
+  },
   "standingsSeasonUnavailableTitle": "Season unavailable",
-  "@standingsSeasonUnavailableTitle": { "description": "Title shown on Standings when no current season could be resolved locally." },
+  "@standingsSeasonUnavailableTitle": {
+    "description": "Title shown on Standings when no current season could be resolved locally."
+  },
   "standingsSeasonUnavailableMessage": "GridView could not determine the current season. Check your connection and try again.",
-  "@standingsSeasonUnavailableMessage": { "description": "Message shown on Standings when no current season could be resolved locally." },
+  "@standingsSeasonUnavailableMessage": {
+    "description": "Message shown on Standings when no current season could be resolved locally."
+  },
   "standingsUnrankedPosition": "—",
-  "@standingsUnrankedPosition": { "description": "Displayed instead of a championship position when the standing is unranked. Never a zero." },
+  "@standingsUnrankedPosition": {
+    "description": "Displayed instead of a championship position when the standing is unranked. Never a zero."
+  },
   "standingsUnrankedSemantics": "Position unavailable",
-  "@standingsUnrankedSemantics": { "description": "Accessible meaning of an unranked championship position." },
+  "@standingsUnrankedSemantics": {
+    "description": "Accessible meaning of an unranked championship position."
+  },
   "standingsPositionSemantics": "Position {position}",
   "@standingsPositionSemantics": {
     "description": "Accessible reading of a championship position.",
-    "placeholders": { "position": { "type": "String", "example": "1" } }
+    "placeholders": {
+      "position": {
+        "type": "String",
+        "example": "1"
+      }
+    }
   },
   "standingsPointsSemantics": "{points} points",
   "@standingsPointsSemantics": {
     "description": "Accessible reading of a championship points total, already locale-formatted.",
-    "placeholders": { "points": { "type": "String", "example": "25.5" } }
+    "placeholders": {
+      "points": {
+        "type": "String",
+        "example": "25.5"
+      }
+    }
   },
   "standingsWinsLabel": "{count, plural, =1{1 win} other{{count} wins}}",
   "@standingsWinsLabel": {
     "description": "Number of wins shown on a standings row. A confirmed zero is shown; an unavailable value is omitted.",
-    "placeholders": { "count": { "type": "int", "example": "5" } }
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
   },
   "standingsLeaderSemantics": "Championship leader",
-  "@standingsLeaderSemantics": { "description": "Accessible equivalent of the leader emphasis, for a confirmed position 1." },
+  "@standingsLeaderSemantics": {
+    "description": "Accessible equivalent of the leader emphasis, for a confirmed position 1."
+  },
   "standingsTiedLeaderSemantics": "Tied for the championship lead",
-  "@standingsTiedLeaderSemantics": { "description": "Accessible equivalent of the leader emphasis when several rows share a confirmed position 1." },
+  "@standingsTiedLeaderSemantics": {
+    "description": "Accessible equivalent of the leader emphasis when several rows share a confirmed position 1."
+  },
   "standingsProvisionalBadge": "Provisional",
-  "@standingsProvisionalBadge": { "description": "Marks an individual standings row the contract reports as provisional." },
+  "@standingsProvisionalBadge": {
+    "description": "Marks an individual standings row the contract reports as provisional."
+  },
   "standingsProvisionalNotice": "These standings are provisional and may still change.",
-  "@standingsProvisionalNotice": { "description": "Section-level notice shown when every row that states it is provisional." },
+  "@standingsProvisionalNotice": {
+    "description": "Section-level notice shown when every row that states it is provisional."
+  },
   "standingsNameUnavailable": "Name unavailable",
-  "@standingsNameUnavailable": { "description": "Fallback shown when a competitor's name is not stored locally. Never replaces identity with an invented name." },
+  "@standingsNameUnavailable": {
+    "description": "Fallback shown when a competitor's name is not stored locally. Never replaces identity with an invented name."
+  },
   "standingsValueUnavailable": "Not available",
-  "@standingsValueUnavailable": { "description": "Accessible label for an optional statistic the contract did not supply." },
-
+  "@standingsValueUnavailable": {
+    "description": "Accessible label for an optional statistic the contract did not supply."
+  },
   "exploreTitle": "Explore",
-  "@exploreTitle": { "description": "Explore screen title." },
+  "@exploreTitle": {
+    "description": "Explore screen title."
+  },
   "exploreDrivers": "Drivers",
-  "@exploreDrivers": { "description": "Explore drivers entry / list title." },
+  "@exploreDrivers": {
+    "description": "Explore drivers entry / list title."
+  },
   "exploreTeams": "Teams",
-  "@exploreTeams": { "description": "Explore teams entry / list title." },
+  "@exploreTeams": {
+    "description": "Explore teams entry / list title."
+  },
   "exploreCircuits": "Circuits",
-  "@exploreCircuits": { "description": "Explore circuits entry / list title." },
+  "@exploreCircuits": {
+    "description": "Explore circuits entry / list title."
+  },
   "exploreDriversDescription": "Every driver on the current grid",
-  "@exploreDriversDescription": { "description": "Explore drivers entry-card description." },
+  "@exploreDriversDescription": {
+    "description": "Explore drivers entry-card description."
+  },
   "exploreTeamsDescription": "Every constructor this season",
-  "@exploreTeamsDescription": { "description": "Explore teams entry-card description." },
+  "@exploreTeamsDescription": {
+    "description": "Explore teams entry-card description."
+  },
   "exploreCircuitsDescription": "Every circuit on the calendar",
-  "@exploreCircuitsDescription": { "description": "Explore circuits entry-card description." },
-
+  "@exploreCircuitsDescription": {
+    "description": "Explore circuits entry-card description."
+  },
   "driverTitle": "Driver",
-  "@driverTitle": { "description": "Driver detail screen title." },
+  "@driverTitle": {
+    "description": "Driver detail screen title."
+  },
   "driverCurrentTeam": "Current team",
-  "@driverCurrentTeam": { "description": "Driver detail current-team section." },
+  "@driverCurrentTeam": {
+    "description": "Driver detail current-team section."
+  },
   "driverSeasonStanding": "Season standing",
-  "@driverSeasonStanding": { "description": "Driver detail season-standing section." },
+  "@driverSeasonStanding": {
+    "description": "Driver detail season-standing section."
+  },
   "driverStatistics": "Statistics",
-  "@driverStatistics": { "description": "Driver detail statistics section." },
-
+  "@driverStatistics": {
+    "description": "Driver detail statistics section."
+  },
   "constructorTitle": "Team",
-  "@constructorTitle": { "description": "Constructor (team) detail screen title." },
+  "@constructorTitle": {
+    "description": "Constructor (team) detail screen title."
+  },
   "constructorDrivers": "Current drivers",
-  "@constructorDrivers": { "description": "Constructor detail drivers section." },
+  "@constructorDrivers": {
+    "description": "Constructor detail drivers section."
+  },
   "constructorStanding": "Constructor standing",
-  "@constructorStanding": { "description": "Constructor detail standing section." },
+  "@constructorStanding": {
+    "description": "Constructor detail standing section."
+  },
   "constructorInformation": "Team information",
-  "@constructorInformation": { "description": "Constructor detail information section." },
-
+  "@constructorInformation": {
+    "description": "Constructor detail information section."
+  },
   "circuitTitle": "Circuit",
-  "@circuitTitle": { "description": "Circuit detail screen title." },
+  "@circuitTitle": {
+    "description": "Circuit detail screen title."
+  },
   "circuitInformation": "Circuit information",
-  "@circuitInformation": { "description": "Circuit detail information section." },
+  "@circuitInformation": {
+    "description": "Circuit detail information section."
+  },
   "circuitLayout": "Layout",
-  "@circuitLayout": { "description": "Circuit detail layout section." },
+  "@circuitLayout": {
+    "description": "Circuit detail layout section."
+  },
   "circuitRelatedGrandPrix": "This season's Grand Prix",
-  "@circuitRelatedGrandPrix": { "description": "Circuit detail related-event section." },
-
+  "@circuitRelatedGrandPrix": {
+    "description": "Circuit detail related-event section."
+  },
   "fieldIdentifier": "Identifier",
-  "@fieldIdentifier": { "description": "Label for the stable technical id shown on detail screens." },
+  "@fieldIdentifier": {
+    "description": "Label for the stable technical id shown on detail screens."
+  },
   "fieldNumber": "Number",
-  "@fieldNumber": { "description": "Driver car-number field label." },
+  "@fieldNumber": {
+    "description": "Driver car-number field label."
+  },
   "fieldPoints": "Points",
-  "@fieldPoints": { "description": "Points field label." },
+  "@fieldPoints": {
+    "description": "Points field label."
+  },
   "fieldPosition": "Position",
-  "@fieldPosition": { "description": "Championship-position field label." },
+  "@fieldPosition": {
+    "description": "Championship-position field label."
+  },
   "fieldPowerUnit": "Power unit",
-  "@fieldPowerUnit": { "description": "Constructor power-unit field label." },
+  "@fieldPowerUnit": {
+    "description": "Constructor power-unit field label."
+  },
   "fieldBase": "Base",
-  "@fieldBase": { "description": "Constructor base field label." },
+  "@fieldBase": {
+    "description": "Constructor base field label."
+  },
   "fieldCountry": "Country",
-  "@fieldCountry": { "description": "Circuit country field label." },
+  "@fieldCountry": {
+    "description": "Circuit country field label."
+  },
   "fieldLength": "Length",
-  "@fieldLength": { "description": "Circuit length field label." },
+  "@fieldLength": {
+    "description": "Circuit length field label."
+  },
   "fieldLaps": "Laps",
-  "@fieldLaps": { "description": "Circuit laps field label." },
+  "@fieldLaps": {
+    "description": "Circuit laps field label."
+  },
   "genericEntityName": "Profile placeholder",
-  "@genericEntityName": { "description": "Fallback display name for an entity that is not in the placeholder catalogue." },
-
+  "@genericEntityName": {
+    "description": "Fallback display name for an entity that is not in the placeholder catalogue."
+  },
   "settingsTitle": "Settings",
-  "@settingsTitle": { "description": "Settings screen title." },
-  "settingsSectionGeneral": "General",
-  "@settingsSectionGeneral": { "description": "Settings general section header." },
-  "settingsSectionAbout": "About",
-  "@settingsSectionAbout": { "description": "Settings about section header." },
+  "@settingsTitle": {
+    "description": "Settings screen title."
+  },
   "settingsSectionDeveloper": "Developer",
-  "@settingsSectionDeveloper": { "description": "Settings developer section header (non-production only)." },
+  "@settingsSectionDeveloper": {
+    "description": "Settings developer section header (non-production only)."
+  },
   "settingsLanguage": "Language",
-  "@settingsLanguage": { "description": "Language setting label." },
-  "settingsLanguageValue": "System default",
-  "@settingsLanguageValue": { "description": "Current language value." },
+  "@settingsLanguage": {
+    "description": "Language setting label."
+  },
   "settingsTheme": "Theme",
-  "@settingsTheme": { "description": "Theme setting label." },
-  "settingsThemeValue": "Dark",
-  "@settingsThemeValue": { "description": "Current theme value (dark only in v1)." },
-  "settingsThemeNote": "Only a dark theme is available in this version.",
-  "@settingsThemeNote": { "description": "Explains the dark-only theme." },
+  "@settingsTheme": {
+    "description": "Theme setting label."
+  },
   "settingsPrivacy": "Privacy",
-  "@settingsPrivacy": { "description": "Privacy setting label." },
+  "@settingsPrivacy": {
+    "description": "Privacy setting label."
+  },
   "settingsAcknowledgements": "Acknowledgements",
-  "@settingsAcknowledgements": { "description": "Acknowledgements setting label." },
+  "@settingsAcknowledgements": {
+    "description": "Acknowledgements setting label."
+  },
   "settingsAppInformation": "App information",
-  "@settingsAppInformation": { "description": "App information setting label." },
+  "@settingsAppInformation": {
+    "description": "App information setting label."
+  },
   "settingsVersion": "Version",
-  "@settingsVersion": { "description": "Version field label." },
+  "@settingsVersion": {
+    "description": "Version field label."
+  },
   "settingsComponentCatalogue": "Component catalogue",
-  "@settingsComponentCatalogue": { "description": "Developer entry to the component catalogue." },
+  "@settingsComponentCatalogue": {
+    "description": "Developer entry to the component catalogue."
+  },
   "settingsComponentCatalogueDescription": "Development-only design-system gallery",
-  "@settingsComponentCatalogueDescription": { "description": "Component catalogue entry description." },
-
+  "@settingsComponentCatalogueDescription": {
+    "description": "Component catalogue entry description."
+  },
   "notFoundTitle": "Screen not found",
-  "@notFoundTitle": { "description": "Not-found screen title." },
+  "@notFoundTitle": {
+    "description": "Not-found screen title."
+  },
   "notFoundMessage": "We couldn't open this page. It may have moved or never existed.",
-  "@notFoundMessage": { "description": "Not-found screen message." },
+  "@notFoundMessage": {
+    "description": "Not-found screen message."
+  },
   "invalidRouteTitle": "Invalid link",
-  "@invalidRouteTitle": { "description": "Invalid-parameter screen title." },
+  "@invalidRouteTitle": {
+    "description": "Invalid-parameter screen title."
+  },
   "invalidRouteMessage": "This link points to something that doesn't exist.",
-  "@invalidRouteMessage": { "description": "Invalid-parameter screen message." },
+  "@invalidRouteMessage": {
+    "description": "Invalid-parameter screen message."
+  },
   "notFoundGoHome": "Go to Home",
-  "@notFoundGoHome": { "description": "Recovery action returning to Home." },
-
+  "@notFoundGoHome": {
+    "description": "Recovery action returning to Home."
+  },
   "homeUpdated": "Updated {time}",
   "@homeUpdated": {
     "description": "Freshness caption showing when content was last synced.",
-    "placeholders": { "time": { "type": "String", "example": "12:00" } }
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "12:00"
+      }
+    }
   },
   "offlineStaleNotice": "This data may be out of date — showing the last saved version.",
-  "@offlineStaleNotice": { "description": "Notice shown when cached content is stale." },
+  "@offlineStaleNotice": {
+    "description": "Notice shown when cached content is stale."
+  },
   "refreshFailedNotice": "Couldn't refresh — showing saved data.",
-  "@refreshFailedNotice": { "description": "Notice shown when a refresh failed but cached content is visible." },
+  "@refreshFailedNotice": {
+    "description": "Notice shown when a refresh failed but cached content is visible."
+  },
   "retry": "Try again",
-  "@retry": { "description": "Retry action for a recoverable error." },
-
+  "@retry": {
+    "description": "Retry action for a recoverable error."
+  },
   "homeErrorTitle": "Can't load Home",
-  "@homeErrorTitle": { "description": "Title for the Home first-load error state." },
-
+  "@homeErrorTitle": {
+    "description": "Title for the Home first-load error state."
+  },
   "errorOffline": "You appear to be offline.",
-  "@errorOffline": { "description": "User-facing message for a network-unavailable failure." },
+  "@errorOffline": {
+    "description": "User-facing message for a network-unavailable failure."
+  },
   "errorTimeout": "The connection timed out.",
-  "@errorTimeout": { "description": "User-facing message for a timeout failure." },
+  "@errorTimeout": {
+    "description": "User-facing message for a timeout failure."
+  },
   "errorServer": "The service is temporarily unavailable.",
-  "@errorServer": { "description": "User-facing message for a server-unavailable failure." },
+  "@errorServer": {
+    "description": "User-facing message for a server-unavailable failure."
+  },
   "errorNotFound": "That data isn't available.",
-  "@errorNotFound": { "description": "User-facing message for a not-found failure." },
+  "@errorNotFound": {
+    "description": "User-facing message for a not-found failure."
+  },
   "errorUnsupported": "Please update GridView to continue.",
-  "@errorUnsupported": { "description": "User-facing message for an unsupported API/schema version." },
+  "@errorUnsupported": {
+    "description": "User-facing message for an unsupported API/schema version."
+  },
   "errorGeneric": "Something went wrong.",
-  "@errorGeneric": { "description": "User-facing message for an unknown or invalid failure." },
-
+  "@errorGeneric": {
+    "description": "User-facing message for an unknown or invalid failure."
+  },
   "grandPrixNotFoundTitle": "Grand Prix not found",
-  "@grandPrixNotFoundTitle": { "description": "Title for the Grand Prix not-found state." },
+  "@grandPrixNotFoundTitle": {
+    "description": "Title for the Grand Prix not-found state."
+  },
   "grandPrixNotFoundMessage": "We couldn't find this Grand Prix on the calendar.",
-  "@grandPrixNotFoundMessage": { "description": "Message for the Grand Prix not-found state." },
+  "@grandPrixNotFoundMessage": {
+    "description": "Message for the Grand Prix not-found state."
+  },
   "grandPrixErrorTitle": "Can't load this Grand Prix",
-  "@grandPrixErrorTitle": { "description": "Title for the Grand Prix detail error state." },
+  "@grandPrixErrorTitle": {
+    "description": "Title for the Grand Prix detail error state."
+  },
   "grandPrixResultsAvailable": "Results are available.",
-  "@grandPrixResultsAvailable": { "description": "Shown when a Grand Prix has classified results." },
-
+  "@grandPrixResultsAvailable": {
+    "description": "Shown when a Grand Prix has classified results."
+  },
   "eventStateScheduled": "Scheduled",
-  "@eventStateScheduled": { "description": "Status for a scheduled Grand Prix." },
+  "@eventStateScheduled": {
+    "description": "Status for a scheduled Grand Prix."
+  },
   "eventStateLive": "Live",
-  "@eventStateLive": { "description": "Status for an in-progress Grand Prix or session." },
+  "@eventStateLive": {
+    "description": "Status for an in-progress Grand Prix or session."
+  },
   "eventStatePostponed": "Postponed",
-  "@eventStatePostponed": { "description": "Status for a postponed Grand Prix." },
+  "@eventStatePostponed": {
+    "description": "Status for a postponed Grand Prix."
+  },
   "eventStateCancelled": "Cancelled",
-  "@eventStateCancelled": { "description": "Status for a cancelled Grand Prix or session." },
+  "@eventStateCancelled": {
+    "description": "Status for a cancelled Grand Prix or session."
+  },
   "sessionStateScheduled": "Scheduled",
-  "@sessionStateScheduled": { "description": "Status for a scheduled session." },
+  "@sessionStateScheduled": {
+    "description": "Status for a scheduled session."
+  },
   "sessionStateCompleted": "Completed",
-  "@sessionStateCompleted": { "description": "Status for a completed session." },
-
+  "@sessionStateCompleted": {
+    "description": "Status for a completed session."
+  },
   "mockDataBanner": "Sample data — not live results",
-  "@mockDataBanner": { "description": "Banner shown in dev/staging builds that use fixture data." },
-
+  "@mockDataBanner": {
+    "description": "Banner shown in dev/staging builds that use fixture data."
+  },
   "lastUpdatedLabel": "Updated {time}",
   "@lastUpdatedLabel": {
     "description": "Caption showing when a resource was last synchronised successfully.",
-    "placeholders": { "time": { "type": "String", "example": "12:00" } }
+    "placeholders": {
+      "time": {
+        "type": "String",
+        "example": "12:00"
+      }
+    }
   },
   "eventStateUnknown": "Status unknown",
-  "@eventStateUnknown": { "description": "Fallback label for an event status this app version does not recognise." },
+  "@eventStateUnknown": {
+    "description": "Fallback label for an event status this app version does not recognise."
+  },
   "sessionStateUnknown": "Status unknown",
-  "@sessionStateUnknown": { "description": "Fallback label for a session status this app version does not recognise." },
+  "@sessionStateUnknown": {
+    "description": "Fallback label for a session status this app version does not recognise."
+  },
   "sessionNameUnknown": "Session",
-  "@sessionNameUnknown": { "description": "Fallback name for a session whose type this app version does not recognise." },
+  "@sessionNameUnknown": {
+    "description": "Fallback name for a session whose type this app version does not recognise."
+  },
   "weekendFormatStandard": "Standard weekend",
-  "@weekendFormatStandard": { "description": "Label for a standard (non-sprint) Grand Prix weekend." },
+  "@weekendFormatStandard": {
+    "description": "Label for a standard (non-sprint) Grand Prix weekend."
+  },
   "weekendFormatSprint": "Sprint weekend",
-  "@weekendFormatSprint": { "description": "Label for a sprint Grand Prix weekend." },
+  "@weekendFormatSprint": {
+    "description": "Label for a sprint Grand Prix weekend."
+  },
   "weekendFormatUnknown": "Format unknown",
-  "@weekendFormatUnknown": { "description": "Fallback label for a weekend format this app version does not recognise." },
-
+  "@weekendFormatUnknown": {
+    "description": "Fallback label for a weekend format this app version does not recognise."
+  },
   "calendarNextLabel": "Next",
-  "@calendarNextLabel": { "description": "Marks the next relevant event in the calendar list." },
+  "@calendarNextLabel": {
+    "description": "Marks the next relevant event in the calendar list."
+  },
   "calendarEmptyTitle": "No races scheduled yet",
-  "@calendarEmptyTitle": { "description": "Title for a valid but empty season calendar." },
+  "@calendarEmptyTitle": {
+    "description": "Title for a valid but empty season calendar."
+  },
   "calendarEmptyMessage": "The calendar for this season has not been published. It will appear here as soon as it is.",
-  "@calendarEmptyMessage": { "description": "Message for a valid but empty season calendar." },
+  "@calendarEmptyMessage": {
+    "description": "Message for a valid but empty season calendar."
+  },
   "calendarErrorTitle": "Can't load the calendar",
-  "@calendarErrorTitle": { "description": "Title for the Calendar first-load error state." },
+  "@calendarErrorTitle": {
+    "description": "Title for the Calendar first-load error state."
+  },
   "calendarSeasonUnavailableTitle": "Season not available yet",
-  "@calendarSeasonUnavailableTitle": { "description": "Title shown when no current season could be resolved locally." },
+  "@calendarSeasonUnavailableTitle": {
+    "description": "Title shown when no current season could be resolved locally."
+  },
   "calendarSeasonUnavailableMessage": "GridView could not determine the current season. Check your connection and try again.",
-  "@calendarSeasonUnavailableMessage": { "description": "Message shown when no current season could be resolved locally." },
+  "@calendarSeasonUnavailableMessage": {
+    "description": "Message shown when no current season could be resolved locally."
+  },
   "calendarRefreshAction": "Refresh calendar",
-  "@calendarRefreshAction": { "description": "Accessibility label for the Calendar refresh action." },
+  "@calendarRefreshAction": {
+    "description": "Accessibility label for the Calendar refresh action."
+  },
   "calendarEventSemantics": "{name}, round {round}, {status}",
   "@calendarEventSemantics": {
     "description": "Accessibility label for a calendar event card.",
     "placeholders": {
-      "name": { "type": "String", "example": "Belgian Grand Prix" },
-      "round": { "type": "String", "example": "13" },
-      "status": { "type": "String", "example": "Upcoming" }
+      "name": {
+        "type": "String",
+        "example": "Belgian Grand Prix"
+      },
+      "round": {
+        "type": "String",
+        "example": "13"
+      },
+      "status": {
+        "type": "String",
+        "example": "Upcoming"
+      }
     }
   },
-
   "grandPrixNoSessionsTitle": "Schedule not available",
-  "@grandPrixNoSessionsTitle": { "description": "Title shown when a Grand Prix has no persisted sessions." },
+  "@grandPrixNoSessionsTitle": {
+    "description": "Title shown when a Grand Prix has no persisted sessions."
+  },
   "grandPrixNoSessionsMessage": "Session times for this weekend have not been published yet.",
-  "@grandPrixNoSessionsMessage": { "description": "Message shown when a Grand Prix has no persisted sessions." },
+  "@grandPrixNoSessionsMessage": {
+    "description": "Message shown when a Grand Prix has no persisted sessions."
+  },
   "grandPrixSprintResults": "Sprint results",
-  "@grandPrixSprintResults": { "description": "Section title for a sprint classification." },
+  "@grandPrixSprintResults": {
+    "description": "Section title for a sprint classification."
+  },
   "grandPrixRaceResults": "Race results",
-  "@grandPrixRaceResults": { "description": "Section title for a race classification." },
+  "@grandPrixRaceResults": {
+    "description": "Section title for a race classification."
+  },
   "grandPrixResultsUnavailableTitle": "Results not available yet",
-  "@grandPrixResultsUnavailableTitle": { "description": "Title shown when an event has no classification yet." },
+  "@grandPrixResultsUnavailableTitle": {
+    "description": "Title shown when an event has no classification yet."
+  },
   "grandPrixResultsErrorTitle": "Can't load results",
-  "@grandPrixResultsErrorTitle": { "description": "Title for a recoverable result-section error." },
+  "@grandPrixResultsErrorTitle": {
+    "description": "Title for a recoverable result-section error."
+  },
   "grandPrixOpenDriver": "Open driver {name}",
   "@grandPrixOpenDriver": {
     "description": "Accessibility label for navigating from a result row to a driver.",
-    "placeholders": { "name": { "type": "String", "example": "Max Verstappen" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Max Verstappen"
+      }
+    }
   },
   "grandPrixOpenConstructor": "Open team {name}",
   "@grandPrixOpenConstructor": {
     "description": "Accessibility label for navigating from a result row to a constructor.",
-    "placeholders": { "name": { "type": "String", "example": "Red Bull" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Red Bull"
+      }
+    }
   },
   "fieldCircuit": "Circuit",
-  "@fieldCircuit": { "description": "Circuit field label on the Grand Prix detail." },
+  "@fieldCircuit": {
+    "description": "Circuit field label on the Grand Prix detail."
+  },
   "fieldLocation": "Location",
-  "@fieldLocation": { "description": "Locality/country field label." },
+  "@fieldLocation": {
+    "description": "Locality/country field label."
+  },
   "fieldDates": "Dates",
-  "@fieldDates": { "description": "Weekend date-range field label." },
+  "@fieldDates": {
+    "description": "Weekend date-range field label."
+  },
   "fieldEventTimeZone": "Event time zone",
-  "@fieldEventTimeZone": { "description": "Field label for the event's own IANA time zone." },
+  "@fieldEventTimeZone": {
+    "description": "Field label for the event's own IANA time zone."
+  },
   "fieldDeviceTimeZone": "Your time zone",
-  "@fieldDeviceTimeZone": { "description": "Field label for the device's local time zone." },
-
+  "@fieldDeviceTimeZone": {
+    "description": "Field label for the device's local time zone."
+  },
   "driverNameUnavailable": "Driver name unavailable",
-  "@driverNameUnavailable": { "description": "Shown in place of a driver's name when the driver's profile has not synchronised yet. Never a name derived from the stable identifier." },
+  "@driverNameUnavailable": {
+    "description": "Shown in place of a driver's name when the driver's profile has not synchronised yet. Never a name derived from the stable identifier."
+  },
   "constructorNameUnavailable": "Team name unavailable",
-  "@constructorNameUnavailable": { "description": "Shown in place of a team's name when the constructor's profile has not synchronised yet. Never a name derived from the stable identifier." },
+  "@constructorNameUnavailable": {
+    "description": "Shown in place of a team's name when the constructor's profile has not synchronised yet. Never a name derived from the stable identifier."
+  },
   "grandPrixOpenConstructorUnnamed": "Open team",
-  "@grandPrixOpenConstructorUnnamed": { "description": "Accessibility label for navigating from a result row to a constructor whose name is not available yet." },
+  "@grandPrixOpenConstructorUnnamed": {
+    "description": "Accessibility label for navigating from a result row to a constructor whose name is not available yet."
+  },
   "resultsFastestLap": "Fastest lap",
-  "@resultsFastestLap": { "description": "Badge/label marking the fastest lap of a session." },
+  "@resultsFastestLap": {
+    "description": "Badge/label marking the fastest lap of a session."
+  },
   "resultLapsBehind": "{laps, plural, =1{+1 lap} other{+{laps} laps}}",
   "@resultLapsBehind": {
     "description": "How many whole laps behind the leader a classified driver finished.",
-    "placeholders": { "laps": { "type": "int", "example": "2" } }
+    "placeholders": {
+      "laps": {
+        "type": "int",
+        "example": "2"
+      }
+    }
   },
   "resultStatusProvisional": "Provisional",
-  "@resultStatusProvisional": { "description": "A classification that is not yet final." },
+  "@resultStatusProvisional": {
+    "description": "A classification that is not yet final."
+  },
   "resultStatusFinal": "Final",
-  "@resultStatusFinal": { "description": "A final classification." },
+  "@resultStatusFinal": {
+    "description": "A final classification."
+  },
   "resultStatusUnavailable": "Not available",
-  "@resultStatusUnavailable": { "description": "A classification that has not been produced yet." },
+  "@resultStatusUnavailable": {
+    "description": "A classification that has not been produced yet."
+  },
   "resultStatusUnknown": "Status unknown",
-  "@resultStatusUnknown": { "description": "Fallback for a result status this app version does not recognise." },
+  "@resultStatusUnknown": {
+    "description": "Fallback for a result status this app version does not recognise."
+  },
   "finishStatusFinished": "Finished",
-  "@finishStatusFinished": { "description": "Driver finished the session." },
+  "@finishStatusFinished": {
+    "description": "Driver finished the session."
+  },
   "finishStatusLapped": "Lapped",
-  "@finishStatusLapped": { "description": "Driver finished one or more laps behind." },
+  "@finishStatusLapped": {
+    "description": "Driver finished one or more laps behind."
+  },
   "finishStatusDnf": "DNF",
-  "@finishStatusDnf": { "description": "Did not finish." },
+  "@finishStatusDnf": {
+    "description": "Did not finish."
+  },
   "finishStatusDns": "DNS",
-  "@finishStatusDns": { "description": "Did not start." },
+  "@finishStatusDns": {
+    "description": "Did not start."
+  },
   "finishStatusDsq": "DSQ",
-  "@finishStatusDsq": { "description": "Disqualified." },
+  "@finishStatusDsq": {
+    "description": "Disqualified."
+  },
   "finishStatusDnq": "DNQ",
-  "@finishStatusDnq": { "description": "Did not qualify." },
+  "@finishStatusDnq": {
+    "description": "Did not qualify."
+  },
   "finishStatusUnknown": "Status unknown",
-  "@finishStatusUnknown": { "description": "Fallback for a finish status this app version does not recognise." },
+  "@finishStatusUnknown": {
+    "description": "Fallback for a finish status this app version does not recognise."
+  },
   "exploreCategorySelector": "Explore category",
-  "@exploreCategorySelector": { "description": "Accessibility label for the Drivers/Teams/Circuits category selector." },
+  "@exploreCategorySelector": {
+    "description": "Accessibility label for the Drivers/Teams/Circuits category selector."
+  },
   "exploreDriversEmptyTitle": "No drivers yet",
-  "@exploreDriversEmptyTitle": { "description": "Title shown when the season's driver collection has synchronised and legitimately contains no drivers." },
+  "@exploreDriversEmptyTitle": {
+    "description": "Title shown when the season's driver collection has synchronised and legitimately contains no drivers."
+  },
   "exploreDriversEmptyMessage": "This season has no drivers listed yet. They will appear here as soon as they do.",
-  "@exploreDriversEmptyMessage": { "description": "Body for the empty drivers collection." },
+  "@exploreDriversEmptyMessage": {
+    "description": "Body for the empty drivers collection."
+  },
   "exploreTeamsEmptyTitle": "No teams yet",
-  "@exploreTeamsEmptyTitle": { "description": "Title shown when the season's team collection has synchronised and legitimately contains no teams." },
+  "@exploreTeamsEmptyTitle": {
+    "description": "Title shown when the season's team collection has synchronised and legitimately contains no teams."
+  },
   "exploreTeamsEmptyMessage": "This season has no teams listed yet. They will appear here as soon as they do.",
-  "@exploreTeamsEmptyMessage": { "description": "Body for the empty teams collection." },
+  "@exploreTeamsEmptyMessage": {
+    "description": "Body for the empty teams collection."
+  },
   "exploreCircuitsEmptyTitle": "No circuits yet",
-  "@exploreCircuitsEmptyTitle": { "description": "Title shown when the season's circuit collection has synchronised and legitimately contains no circuits." },
+  "@exploreCircuitsEmptyTitle": {
+    "description": "Title shown when the season's circuit collection has synchronised and legitimately contains no circuits."
+  },
   "exploreCircuitsEmptyMessage": "This season has no circuits listed yet. They will appear here as soon as they do.",
-  "@exploreCircuitsEmptyMessage": { "description": "Body for the empty circuits collection." },
+  "@exploreCircuitsEmptyMessage": {
+    "description": "Body for the empty circuits collection."
+  },
   "exploreDriversErrorTitle": "Can't load the drivers",
-  "@exploreDriversErrorTitle": { "description": "First-load error title for the drivers collection." },
+  "@exploreDriversErrorTitle": {
+    "description": "First-load error title for the drivers collection."
+  },
   "exploreTeamsErrorTitle": "Can't load the teams",
-  "@exploreTeamsErrorTitle": { "description": "First-load error title for the teams collection." },
+  "@exploreTeamsErrorTitle": {
+    "description": "First-load error title for the teams collection."
+  },
   "exploreCircuitsErrorTitle": "Can't load the circuits",
-  "@exploreCircuitsErrorTitle": { "description": "First-load error title for the circuits collection." },
+  "@exploreCircuitsErrorTitle": {
+    "description": "First-load error title for the circuits collection."
+  },
   "exploreSeasonUnavailableTitle": "Season unavailable",
-  "@exploreSeasonUnavailableTitle": { "description": "Shown when no current season could be resolved locally, so no season-scoped collection can be read." },
+  "@exploreSeasonUnavailableTitle": {
+    "description": "Shown when no current season could be resolved locally, so no season-scoped collection can be read."
+  },
   "exploreSeasonUnavailableMessage": "GridView could not determine the current season. Check your connection and try again.",
-  "@exploreSeasonUnavailableMessage": { "description": "Body for the unresolved-season state on Explore." },
+  "@exploreSeasonUnavailableMessage": {
+    "description": "Body for the unresolved-season state on Explore."
+  },
   "exploreUpdateFailed": "Update failed",
-  "@exploreUpdateFailed": { "description": "Non-blocking notice shown with cached cards when a refresh of this collection failed. Deliberately does not claim the device is offline." },
+  "@exploreUpdateFailed": {
+    "description": "Non-blocking notice shown with cached cards when a refresh of this collection failed. Deliberately does not claim the device is offline."
+  },
   "exploreCachedNotice": "Showing saved data",
-  "@exploreCachedNotice": { "description": "Notice shown when a collection is rendered from the local database and may be out of date." },
+  "@exploreCachedNotice": {
+    "description": "Notice shown when a collection is rendered from the local database and may be out of date."
+  },
   "exploreOpenDriver": "Open driver {name}",
   "@exploreOpenDriver": {
     "description": "Accessibility label for opening a driver from the Explore drivers list.",
-    "placeholders": { "name": { "type": "String", "example": "Max Verstappen" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Max Verstappen"
+      }
+    }
   },
   "exploreOpenTeam": "Open team {name}",
   "@exploreOpenTeam": {
     "description": "Accessibility label for opening a team from the Explore teams list.",
-    "placeholders": { "name": { "type": "String", "example": "Oracle Red Bull Racing" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Oracle Red Bull Racing"
+      }
+    }
   },
   "exploreOpenCircuit": "Open circuit {name}",
   "@exploreOpenCircuit": {
     "description": "Accessibility label for opening a circuit from the Explore circuits list.",
-    "placeholders": { "name": { "type": "String", "example": "Circuit de Monaco" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Circuit de Monaco"
+      }
+    }
   },
-
   "detailNotFoundTitle": "Not available",
-  "@detailNotFoundTitle": { "description": "Title shown when an entity detail resource definitively reports the entity does not exist." },
+  "@detailNotFoundTitle": {
+    "description": "Title shown when an entity detail resource definitively reports the entity does not exist."
+  },
   "detailNotFoundMessage": "This profile is not available. It may have been removed, or the link may be out of date.",
-  "@detailNotFoundMessage": { "description": "Body for a definitive entity not-found state." },
+  "@detailNotFoundMessage": {
+    "description": "Body for a definitive entity not-found state."
+  },
   "detailSeasonUnavailableTitle": "Season unavailable",
-  "@detailSeasonUnavailableTitle": { "description": "Shown when neither an origin season nor a locally stored current season is available, so no season-scoped detail request may be made." },
+  "@detailSeasonUnavailableTitle": {
+    "description": "Shown when neither an origin season nor a locally stored current season is available, so no season-scoped detail request may be made."
+  },
   "detailSeasonUnavailableMessage": "GridView could not determine which season to show. Check your connection and try again.",
-  "@detailSeasonUnavailableMessage": { "description": "Body for the unresolved-season state on an entity detail screen." },
+  "@detailSeasonUnavailableMessage": {
+    "description": "Body for the unresolved-season state on an entity detail screen."
+  },
   "detailUpdateFailed": "Update failed",
-  "@detailUpdateFailed": { "description": "Non-blocking notice shown with cached detail content when its refresh failed." },
+  "@detailUpdateFailed": {
+    "description": "Non-blocking notice shown with cached detail content when its refresh failed."
+  },
   "detailCachedNotice": "Details may be outdated",
-  "@detailCachedNotice": { "description": "Notice shown when detail content is rendered from the local database and may be out of date." },
+  "@detailCachedNotice": {
+    "description": "Notice shown when detail content is rendered from the local database and may be out of date."
+  },
   "detailPartialNotice": "Some profile information is unavailable",
-  "@detailPartialNotice": { "description": "Shown when only a collection-derived summary is available locally and the detail resource has never synchronised." },
+  "@detailPartialNotice": {
+    "description": "Shown when only a collection-derived summary is available locally and the detail resource has never synchronised."
+  },
   "detailLoadErrorTitle": "Can't load this profile",
-  "@detailLoadErrorTitle": { "description": "First-load error title for an entity detail screen with no local content." },
-
+  "@detailLoadErrorTitle": {
+    "description": "First-load error title for an entity detail screen with no local content."
+  },
   "driverAbout": "About",
-  "@driverAbout": { "description": "Section title for a driver's curated biography." },
+  "@driverAbout": {
+    "description": "Section title for a driver's curated biography."
+  },
   "driverProfileSection": "Profile",
-  "@driverProfileSection": { "description": "Section title for a driver's biographical facts." },
+  "@driverProfileSection": {
+    "description": "Section title for a driver's biographical facts."
+  },
   "driverParticipationSection": "Season participation",
-  "@driverParticipationSection": { "description": "Section title listing a driver's participation spans in the selected season." },
+  "@driverParticipationSection": {
+    "description": "Section title listing a driver's participation spans in the selected season."
+  },
   "driverChampionshipSection": "Championship",
-  "@driverChampionshipSection": { "description": "Section title for a driver's championship summary." },
+  "@driverChampionshipSection": {
+    "description": "Section title for a driver's championship summary."
+  },
   "driverRaceNumber": "Race number",
-  "@driverRaceNumber": { "description": "Field label for the driver's number in the selected season." },
+  "@driverRaceNumber": {
+    "description": "Field label for the driver's number in the selected season."
+  },
   "driverPermanentNumber": "Permanent number",
-  "@driverPermanentNumber": { "description": "Field label for the driver's permanent career number, distinct from the season race number." },
+  "@driverPermanentNumber": {
+    "description": "Field label for the driver's permanent career number, distinct from the season race number."
+  },
   "driverRoleRace": "Race driver",
-  "@driverRoleRace": { "description": "Driver role: a race seat." },
+  "@driverRoleRace": {
+    "description": "Driver role: a race seat."
+  },
   "driverRoleReserve": "Reserve driver",
-  "@driverRoleReserve": { "description": "Driver role: reserve." },
+  "@driverRoleReserve": {
+    "description": "Driver role: reserve."
+  },
   "driverRoleTest": "Test driver",
-  "@driverRoleTest": { "description": "Driver role: test." },
+  "@driverRoleTest": {
+    "description": "Driver role: test."
+  },
   "driverRoleUnknown": "Role unavailable",
-  "@driverRoleUnknown": { "description": "Fallback for a driver role this app version does not recognise, or one the contract did not supply." },
+  "@driverRoleUnknown": {
+    "description": "Fallback for a driver role this app version does not recognise, or one the contract did not supply."
+  },
   "driverOpenTeam": "Open team {name}",
   "@driverOpenTeam": {
     "description": "Accessibility label for opening a driver's team from the driver detail screen.",
-    "placeholders": { "name": { "type": "String", "example": "Oracle Red Bull Racing" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Oracle Red Bull Racing"
+      }
+    }
   },
   "driverViewStandings": "View drivers' standings",
-  "@driverViewStandings": { "description": "Action opening the drivers' championship table for the selected season." },
+  "@driverViewStandings": {
+    "description": "Action opening the drivers' championship table for the selected season."
+  },
   "driverTeamUnavailable": "Team unavailable",
-  "@driverTeamUnavailable": { "description": "Shown when no authoritative team can be resolved for a driver's participation. Never an identifier." },
+  "@driverTeamUnavailable": {
+    "description": "Shown when no authoritative team can be resolved for a driver's participation. Never an identifier."
+  },
   "driverPortraitPlaceholder": "Driver portrait unavailable",
-  "@driverPortraitPlaceholder": { "description": "Semantic label for the driver portrait placeholder. Phase 7C downloads no media." },
-
+  "@driverPortraitPlaceholder": {
+    "description": "Semantic label for the driver portrait placeholder. Phase 7C downloads no media."
+  },
   "teamLineupSection": "Drivers",
-  "@teamLineupSection": { "description": "Section title for a team's season line-up." },
+  "@teamLineupSection": {
+    "description": "Section title for a team's season line-up."
+  },
   "teamFactsSection": "Team details",
-  "@teamFactsSection": { "description": "Section title for a team's season facts (power unit, principal, base, chassis)." },
+  "@teamFactsSection": {
+    "description": "Section title for a team's season facts (power unit, principal, base, chassis)."
+  },
   "teamChampionshipSection": "Championship",
-  "@teamChampionshipSection": { "description": "Section title for a team's constructors' championship summary." },
+  "@teamChampionshipSection": {
+    "description": "Section title for a team's constructors' championship summary."
+  },
   "teamAbout": "About",
-  "@teamAbout": { "description": "Section title for a team's curated biography." },
+  "@teamAbout": {
+    "description": "Section title for a team's curated biography."
+  },
   "fieldTeamPrincipal": "Team principal",
-  "@fieldTeamPrincipal": { "description": "Field label for the team principal." },
+  "@fieldTeamPrincipal": {
+    "description": "Field label for the team principal."
+  },
   "fieldChassis": "Chassis",
-  "@fieldChassis": { "description": "Field label for the season chassis designation." },
+  "@fieldChassis": {
+    "description": "Field label for the season chassis designation."
+  },
   "teamOpenDriver": "Open driver {name}",
   "@teamOpenDriver": {
     "description": "Accessibility label for opening a line-up driver from the team detail screen.",
-    "placeholders": { "name": { "type": "String", "example": "Max Verstappen" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Max Verstappen"
+      }
+    }
   },
   "teamViewStandings": "View constructors' standings",
-  "@teamViewStandings": { "description": "Action opening the constructors' championship table for the selected season." },
+  "@teamViewStandings": {
+    "description": "Action opening the constructors' championship table for the selected season."
+  },
   "teamLineupUnavailable": "Line-up unavailable",
-  "@teamLineupUnavailable": { "description": "Shown when a team's season line-up cannot be derived from local participation data." },
+  "@teamLineupUnavailable": {
+    "description": "Shown when a team's season line-up cannot be derived from local participation data."
+  },
   "teamLogoPlaceholder": "Team logo unavailable",
-  "@teamLogoPlaceholder": { "description": "Semantic label for the team logo placeholder. Phase 7C downloads no media." },
-
+  "@teamLogoPlaceholder": {
+    "description": "Semantic label for the team logo placeholder. Phase 7C downloads no media."
+  },
   "circuitFactsSection": "Circuit facts",
-  "@circuitFactsSection": { "description": "Section title for a circuit's physical facts." },
+  "@circuitFactsSection": {
+    "description": "Section title for a circuit's physical facts."
+  },
   "circuitLapRecordSection": "Lap record",
-  "@circuitLapRecordSection": { "description": "Section title for a circuit's lap record." },
+  "@circuitLapRecordSection": {
+    "description": "Section title for a circuit's lap record."
+  },
   "fieldCorners": "Corners",
-  "@fieldCorners": { "description": "Field label for the number of corners." },
+  "@fieldCorners": {
+    "description": "Field label for the number of corners."
+  },
   "fieldDirection": "Direction",
-  "@fieldDirection": { "description": "Field label for the racing direction." },
+  "@fieldDirection": {
+    "description": "Field label for the racing direction."
+  },
   "fieldFirstGrandPrix": "First Grand Prix",
-  "@fieldFirstGrandPrix": { "description": "Field label for the year of the circuit's first Grand Prix." },
+  "@fieldFirstGrandPrix": {
+    "description": "Field label for the year of the circuit's first Grand Prix."
+  },
   "fieldLapRecordTime": "Time",
-  "@fieldLapRecordTime": { "description": "Field label for the lap-record time." },
+  "@fieldLapRecordTime": {
+    "description": "Field label for the lap-record time."
+  },
   "fieldLapRecordDriver": "Driver",
-  "@fieldLapRecordDriver": { "description": "Field label for the lap-record holder." },
+  "@fieldLapRecordDriver": {
+    "description": "Field label for the lap-record holder."
+  },
   "fieldLapRecordYear": "Year",
-  "@fieldLapRecordYear": { "description": "Field label for the year the lap record was set." },
+  "@fieldLapRecordYear": {
+    "description": "Field label for the year the lap record was set."
+  },
   "circuitDirectionClockwise": "Clockwise",
-  "@circuitDirectionClockwise": { "description": "A clockwise circuit." },
+  "@circuitDirectionClockwise": {
+    "description": "A clockwise circuit."
+  },
   "circuitDirectionCounterClockwise": "Counter-clockwise",
-  "@circuitDirectionCounterClockwise": { "description": "A counter-clockwise circuit." },
+  "@circuitDirectionCounterClockwise": {
+    "description": "A counter-clockwise circuit."
+  },
   "circuitDirectionUnknown": "Direction unavailable",
-  "@circuitDirectionUnknown": { "description": "Safe fallback for an unknown or unsupplied racing direction." },
+  "@circuitDirectionUnknown": {
+    "description": "Safe fallback for an unknown or unsupplied racing direction."
+  },
   "circuitLapRecordDriverUnavailable": "Driver unavailable",
-  "@circuitLapRecordDriverUnavailable": { "description": "Shown when the lap-record holder's name is not resolvable locally. Never the driver identifier." },
+  "@circuitLapRecordDriverUnavailable": {
+    "description": "Shown when the lap-record holder's name is not resolvable locally. Never the driver identifier."
+  },
   "circuitNoRelatedGrandPrix": "No Grand Prix this season",
-  "@circuitNoRelatedGrandPrix": { "description": "Shown when a circuit hosts no event in the selected season. A valid state, not an error." },
+  "@circuitNoRelatedGrandPrix": {
+    "description": "Shown when a circuit hosts no event in the selected season. A valid state, not an error."
+  },
   "circuitOpenGrandPrix": "Open {name}",
   "@circuitOpenGrandPrix": {
     "description": "Accessibility label for opening a circuit's related Grand Prix.",
-    "placeholders": { "name": { "type": "String", "example": "Monaco Grand Prix" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Monaco Grand Prix"
+      }
+    }
   },
   "circuitLayoutPlaceholder": "Circuit layout unavailable",
-  "@circuitLayoutPlaceholder": { "description": "Semantic label for the circuit layout placeholder. Phase 7C downloads no media." },
+  "@circuitLayoutPlaceholder": {
+    "description": "Semantic label for the circuit layout placeholder. Phase 7C downloads no media."
+  },
   "lengthKilometers": "{value} km",
   "@lengthKilometers": {
     "description": "A circuit length converted from the stored metres to a localized kilometre display.",
-    "placeholders": { "value": { "type": "String", "example": "5,412" } }
+    "placeholders": {
+      "value": {
+        "type": "String",
+        "example": "5,412"
+      }
+    }
   },
-
   "fieldWins": "Wins",
-  "@fieldWins": { "description": "Field label for the number of wins." },
+  "@fieldWins": {
+    "description": "Field label for the number of wins."
+  },
   "fieldPodiums": "Podiums",
-  "@fieldPodiums": { "description": "Field label for the number of podium finishes." },
+  "@fieldPodiums": {
+    "description": "Field label for the number of podium finishes."
+  },
   "fieldNationality": "Nationality",
-  "@fieldNationality": { "description": "Field label for a nationality." },
+  "@fieldNationality": {
+    "description": "Field label for a nationality."
+  },
   "fieldDateOfBirth": "Date of birth",
-  "@fieldDateOfBirth": { "description": "Field label for a date of birth." },
+  "@fieldDateOfBirth": {
+    "description": "Field label for a date of birth."
+  },
   "fieldPlaceOfBirth": "Place of birth",
-  "@fieldPlaceOfBirth": { "description": "Field label for a place of birth." },
+  "@fieldPlaceOfBirth": {
+    "description": "Field label for a place of birth."
+  },
   "fieldTeam": "Team",
-  "@fieldTeam": { "description": "Field label for a team association." },
+  "@fieldTeam": {
+    "description": "Field label for a team association."
+  },
   "participationFullSeason": "Full season",
-  "@participationFullSeason": { "description": "A participation span covering the whole season." },
+  "@participationFullSeason": {
+    "description": "A participation span covering the whole season."
+  },
   "participationFromRound": "From round {round}",
   "@participationFromRound": {
     "description": "A participation span that starts mid-season.",
-    "placeholders": { "round": { "type": "int", "example": "5" } }
+    "placeholders": {
+      "round": {
+        "type": "int",
+        "example": "5"
+      }
+    }
   },
   "participationUntilRound": "Until round {round}",
   "@participationUntilRound": {
     "description": "A participation span that ends mid-season.",
-    "placeholders": { "round": { "type": "int", "example": "12" } }
+    "placeholders": {
+      "round": {
+        "type": "int",
+        "example": "12"
+      }
+    }
   },
   "participationRoundRange": "Rounds {start}–{end}",
   "@participationRoundRange": {
     "description": "A bounded participation span.",
     "placeholders": {
-      "start": { "type": "int", "example": "5" },
-      "end": { "type": "int", "example": "12" }
+      "start": {
+        "type": "int",
+        "example": "5"
+      },
+      "end": {
+        "type": "int",
+        "example": "12"
+      }
     }
   },
   "positionUnranked": "Unranked",
-  "@positionUnranked": { "description": "Shown when a competitor has no championship position. Never rendered as zero." },
+  "@positionUnranked": {
+    "description": "Shown when a competitor has no championship position. Never rendered as zero."
+  },
   "fieldRole": "Role",
-  "@fieldRole": { "description": "Field label for a driver's role in a season entry." },
+  "@fieldRole": {
+    "description": "Field label for a driver's role in a season entry."
+  },
   "fieldParticipation": "Participation",
-  "@fieldParticipation": { "description": "Field label for a driver's participation span within a season." },
+  "@fieldParticipation": {
+    "description": "Field label for a driver's participation span within a season."
+  },
   "grandPrixNameUnavailable": "Grand Prix name unavailable",
-  "@grandPrixNameUnavailable": { "description": "Shown in place of a Grand Prix name when the event's name has not synchronised yet. Never a name derived from the stable identifier." },
+  "@grandPrixNameUnavailable": {
+    "description": "Shown in place of a Grand Prix name when the event's name has not synchronised yet. Never a name derived from the stable identifier."
+  },
   "homeRefreshAction": "Refresh Home",
-  "@homeRefreshAction": { "description": "App-bar action that refreshes the Home dashboard." },
+  "@homeRefreshAction": {
+    "description": "App-bar action that refreshes the Home dashboard."
+  },
   "homeCurrentGrandPrix": "Current Grand Prix",
-  "@homeCurrentGrandPrix": { "description": "Hero section title while the featured event's weekend is under way." },
+  "@homeCurrentGrandPrix": {
+    "description": "Hero section title while the featured event's weekend is under way."
+  },
   "homeLatestGrandPrix": "Latest Grand Prix",
-  "@homeLatestGrandPrix": { "description": "Hero section title when the featured event is already completed." },
+  "@homeLatestGrandPrix": {
+    "description": "Hero section title when the featured event is already completed."
+  },
   "homeRaceWeekend": "Race weekend",
-  "@homeRaceWeekend": { "description": "Badge shown on the hero while the race weekend is under way." },
+  "@homeRaceWeekend": {
+    "description": "Badge shown on the hero while the race weekend is under way."
+  },
   "homeLiveNow": "Live now",
-  "@homeLiveNow": { "description": "Relative-timing label for a session that is authoritatively live." },
+  "@homeLiveNow": {
+    "description": "Relative-timing label for a session that is authoritatively live."
+  },
   "homeStartingSoon": "Starting soon",
-  "@homeStartingSoon": { "description": "Relative-timing label for a session starting within the next minute." },
+  "@homeStartingSoon": {
+    "description": "Relative-timing label for a session starting within the next minute."
+  },
   "homeStartsInMinutes": "{count, plural, =1{Starts in 1 minute} other{Starts in {count} minutes}}",
   "@homeStartsInMinutes": {
     "description": "Relative-timing label, less than an hour away.",
-    "placeholders": { "count": { "type": "int", "example": "45" } }
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "45"
+      }
+    }
   },
   "homeStartsInHours": "{count, plural, =1{Starts in 1 hour} other{Starts in {count} hours}}",
   "@homeStartsInHours": {
     "description": "Relative-timing label, less than a day away.",
-    "placeholders": { "count": { "type": "int", "example": "6" } }
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "6"
+      }
+    }
   },
   "homeStartsInDays": "{count, plural, =1{Starts in 1 day} other{Starts in {count} days}}",
   "@homeStartsInDays": {
     "description": "Relative-timing label, a day or more away.",
-    "placeholders": { "count": { "type": "int", "example": "12" } }
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
   },
   "homeCurrentSession": "Current session",
-  "@homeCurrentSession": { "description": "Label for the session that is running now." },
+  "@homeCurrentSession": {
+    "description": "Label for the session that is running now."
+  },
   "homeNextSession": "Next session",
-  "@homeNextSession": { "description": "Label for the next session of the weekend." },
+  "@homeNextSession": {
+    "description": "Label for the next session of the weekend."
+  },
   "homeSessionUnavailable": "Session times not available",
-  "@homeSessionUnavailable": { "description": "Shown when the weekend supplied no usable session times." },
+  "@homeSessionUnavailable": {
+    "description": "Shown when the weekend supplied no usable session times."
+  },
   "homeSeasonUnavailableTitle": "Season not available",
-  "@homeSeasonUnavailableTitle": { "description": "Title when no current season could be resolved." },
+  "@homeSeasonUnavailableTitle": {
+    "description": "Title when no current season could be resolved."
+  },
   "homeSeasonUnavailableMessage": "GridView could not determine the current season. Check your connection and try again.",
-  "@homeSeasonUnavailableMessage": { "description": "Message when no current season could be resolved." },
+  "@homeSeasonUnavailableMessage": {
+    "description": "Message when no current season could be resolved."
+  },
   "homeCalendarUnavailableTitle": "Calendar not available",
-  "@homeCalendarUnavailableTitle": { "description": "Title for a valid season with no known events." },
+  "@homeCalendarUnavailableTitle": {
+    "description": "Title for a valid season with no known events."
+  },
   "homeCalendarUnavailableMessage": "This season has no published events yet. Home will fill in as soon as it does.",
-  "@homeCalendarUnavailableMessage": { "description": "Message for a valid season with no known events." },
+  "@homeCalendarUnavailableMessage": {
+    "description": "Message for a valid season with no known events."
+  },
   "homeDriversLeaderTitle": "Drivers' Championship leader",
-  "@homeDriversLeaderTitle": { "description": "Section title for the drivers' championship leader module." },
+  "@homeDriversLeaderTitle": {
+    "description": "Section title for the drivers' championship leader module."
+  },
   "homeTeamsLeaderTitle": "Teams' Championship leader",
-  "@homeTeamsLeaderTitle": { "description": "Section title for the teams' championship leader module." },
+  "@homeTeamsLeaderTitle": {
+    "description": "Section title for the teams' championship leader module."
+  },
   "homeTiedLeaders": "Tied leaders",
-  "@homeTiedLeaders": { "description": "Shown when several competitors share a confirmed position 1." },
+  "@homeTiedLeaders": {
+    "description": "Shown when several competitors share a confirmed position 1."
+  },
   "homeLeaderUnavailable": "Leader unavailable",
-  "@homeLeaderUnavailable": { "description": "Shown when the standings table has no materialized local representation, so no leader can be calculated." },
+  "@homeLeaderUnavailable": {
+    "description": "Shown when the standings table has no materialized local representation, so no leader can be calculated."
+  },
   "homeNoLeaderYet": "No leader yet",
-  "@homeNoLeaderYet": { "description": "Shown when the standings table is available and simply names no confirmed leader yet." },
+  "@homeNoLeaderYet": {
+    "description": "Shown when the standings table is available and simply names no confirmed leader yet."
+  },
   "homePointsValue": "{points} pts",
   "@homePointsValue": {
     "description": "A compact championship points total.",
-    "placeholders": { "points": { "type": "String", "example": "310,5" } }
+    "placeholders": {
+      "points": {
+        "type": "String",
+        "example": "310,5"
+      }
+    }
   },
   "homeWinnerLabel": "Winner",
-  "@homeWinnerLabel": { "description": "Label preceding the winner of the latest race." },
+  "@homeWinnerLabel": {
+    "description": "Label preceding the winner of the latest race."
+  },
   "homeWinnerUnavailable": "Winner unavailable",
-  "@homeWinnerUnavailable": { "description": "Shown when the cached classification names no resolvable winner." },
+  "@homeWinnerUnavailable": {
+    "description": "Shown when the cached classification names no resolvable winner."
+  },
   "homeResultUnavailable": "Result unavailable",
-  "@homeResultUnavailable": { "description": "Shown when no classification is cached for the latest event." },
+  "@homeResultUnavailable": {
+    "description": "Shown when no classification is cached for the latest event."
+  },
   "homeNoUpcomingEvents": "No upcoming events",
-  "@homeNoUpcomingEvents": { "description": "Shown when the calendar is available and the season legitimately has no further scheduled events." },
+  "@homeNoUpcomingEvents": {
+    "description": "Shown when the calendar is available and the season legitimately has no further scheduled events."
+  },
   "homeUpcomingUnavailable": "Upcoming events unavailable",
-  "@homeUpcomingUnavailable": { "description": "Shown when the season calendar has no materialized local representation, so upcoming events cannot be calculated." },
+  "@homeUpcomingUnavailable": {
+    "description": "Shown when the season calendar has no materialized local representation, so upcoming events cannot be calculated."
+  },
   "homeViewCalendar": "View Calendar",
-  "@homeViewCalendar": { "description": "Action opening the Calendar branch." },
+  "@homeViewCalendar": {
+    "description": "Action opening the Calendar branch."
+  },
   "homeQuickLinks": "Explore",
-  "@homeQuickLinks": { "description": "Section title for the Drivers / Teams / Circuits shortcuts." },
+  "@homeQuickLinks": {
+    "description": "Section title for the Drivers / Teams / Circuits shortcuts."
+  },
   "homeOpenDrivers": "Open Drivers",
-  "@homeOpenDrivers": { "description": "Accessible label for the Drivers shortcut." },
+  "@homeOpenDrivers": {
+    "description": "Accessible label for the Drivers shortcut."
+  },
   "homeOpenTeams": "Open Teams",
-  "@homeOpenTeams": { "description": "Accessible label for the Teams shortcut." },
+  "@homeOpenTeams": {
+    "description": "Accessible label for the Teams shortcut."
+  },
   "homeOpenCircuits": "Open Circuits",
-  "@homeOpenCircuits": { "description": "Accessible label for the Circuits shortcut." },
+  "@homeOpenCircuits": {
+    "description": "Accessible label for the Circuits shortcut."
+  },
   "homeOpenDriver": "Open Driver {name}",
   "@homeOpenDriver": {
     "description": "Accessible label for opening the leading driver.",
-    "placeholders": { "name": { "type": "String", "example": "Max Verstappen" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Max Verstappen"
+      }
+    }
   },
   "homeOpenTeam": "Open Team {name}",
   "@homeOpenTeam": {
     "description": "Accessible label for opening the leading team.",
-    "placeholders": { "name": { "type": "String", "example": "Red Bull Racing" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Red Bull Racing"
+      }
+    }
   },
   "homeSomeInformationUnavailable": "Some information is unavailable",
-  "@homeSomeInformationUnavailable": { "description": "Concise notice when one or more optional Home modules are missing." },
+  "@homeSomeInformationUnavailable": {
+    "description": "Concise notice when one or more optional Home modules are missing."
+  },
   "homeSomeInformationOutdated": "Some information may be outdated",
-  "@homeSomeInformationOutdated": { "description": "Aggregate notice when at least one visible Home module is stale." },
+  "@homeSomeInformationOutdated": {
+    "description": "Aggregate notice when at least one visible Home module is stale."
+  },
   "homeCachedNotice": "Showing cached data",
-  "@homeCachedNotice": { "description": "Notice that Home is rendering saved content." },
+  "@homeCachedNotice": {
+    "description": "Notice that Home is rendering saved content."
+  },
   "homeUpdateFailed": "Update failed",
-  "@homeUpdateFailed": { "description": "Non-blocking notice that the last Home refresh failed." }
+  "@homeUpdateFailed": {
+    "description": "Non-blocking notice that the last Home refresh failed."
+  },
+  "settingsSectionPreferences": "Preferences",
+  "@settingsSectionPreferences": {
+    "description": "Settings section for user preferences."
+  },
+  "settingsSectionDataApp": "Data and application",
+  "@settingsSectionDataApp": {
+    "description": "Settings section for data and application information."
+  },
+  "settingsSectionPrivacySupport": "Privacy and support",
+  "@settingsSectionPrivacySupport": {
+    "description": "Settings section for privacy and support."
+  },
+  "settingsTimeDisplay": "Time display",
+  "@settingsTimeDisplay": {
+    "description": "Time-display setting label."
+  },
+  "settingsDataAndUpdates": "Data and updates",
+  "@settingsDataAndUpdates": {
+    "description": "Entry to the data-source and update information screen."
+  },
+  "settingsFeedback": "Send feedback",
+  "@settingsFeedback": {
+    "description": "Entry that opens the configured contact address."
+  },
+  "settingsLanguageSystem": "System default",
+  "@settingsLanguageSystem": {
+    "description": "Language option that follows the device language."
+  },
+  "settingsLanguageSystemDescription": "Use the device language when GridView supports it, otherwise English.",
+  "@settingsLanguageSystemDescription": {
+    "description": "Explains the system language option."
+  },
+  "settingsLanguageEnglish": "English",
+  "@settingsLanguageEnglish": {
+    "description": "English language option, always shown in English."
+  },
+  "settingsLanguageSpanish": "Español",
+  "@settingsLanguageSpanish": {
+    "description": "Spanish language option, always shown in Spanish."
+  },
+  "settingsThemeSystem": "System",
+  "@settingsThemeSystem": {
+    "description": "Theme option that follows the device setting."
+  },
+  "settingsThemeSystemDescription": "Follow the device light or dark setting.",
+  "@settingsThemeSystemDescription": {
+    "description": "Explains the system theme option."
+  },
+  "settingsThemeDark": "Dark",
+  "@settingsThemeDark": {
+    "description": "Dark theme option."
+  },
+  "settingsThemeLight": "Light",
+  "@settingsThemeLight": {
+    "description": "Light theme option."
+  },
+  "settingsTimeDevice": "Device time",
+  "@settingsTimeDevice": {
+    "description": "Time-display option using the device time zone."
+  },
+  "settingsTimeDeviceDescription": "Show session times in your device's time zone.",
+  "@settingsTimeDeviceDescription": {
+    "description": "Explains the device time option."
+  },
+  "settingsTimeEvent": "Event time",
+  "@settingsTimeEvent": {
+    "description": "Time-display option using the event time zone."
+  },
+  "settingsTimeEventDescription": "Show session times in the circuit's local time zone.",
+  "@settingsTimeEventDescription": {
+    "description": "Explains the event time option."
+  },
+  "settingsTimeBoth": "Both",
+  "@settingsTimeBoth": {
+    "description": "Time-display option showing both time zones."
+  },
+  "settingsTimeBothDescription": "Show the event time and your device time together.",
+  "@settingsTimeBothDescription": {
+    "description": "Explains the both option."
+  },
+  "settingsDataEnvironment": "Environment",
+  "@settingsDataEnvironment": {
+    "description": "Label for the build environment."
+  },
+  "settingsDataSource": "Data source",
+  "@settingsDataSource": {
+    "description": "Label for the active data source."
+  },
+  "settingsDataSourceRemote": "GridView service",
+  "@settingsDataSourceRemote": {
+    "description": "The app is reading the real GridView service."
+  },
+  "settingsDataSourceSample": "Sample data",
+  "@settingsDataSourceSample": {
+    "description": "The app is reading bundled sample data."
+  },
+  "settingsDataSourceUnavailable": "Not configured",
+  "@settingsDataSourceUnavailable": {
+    "description": "The data source is not configured in this build."
+  },
+  "settingsDataApiVersion": "API version",
+  "@settingsDataApiVersion": {
+    "description": "Label for the API version."
+  },
+  "settingsDataCurrentSeason": "Current season",
+  "@settingsDataCurrentSeason": {
+    "description": "Label for the locally resolved season."
+  },
+  "settingsDataCurrentSeasonUnresolved": "Not available yet",
+  "@settingsDataCurrentSeasonUnresolved": {
+    "description": "Shown when no season has been stored locally yet."
+  },
+  "settingsDataOfflineExplanation": "GridView keeps the season on your device, so it opens and works without a connection. New information is downloaded when the app starts and when you refresh.",
+  "@settingsDataOfflineExplanation": {
+    "description": "Explains the offline-first behaviour."
+  },
+  "settingsAboutApplication": "Application",
+  "@settingsAboutApplication": {
+    "description": "Label for the application name."
+  },
+  "settingsAboutBuild": "Build",
+  "@settingsAboutBuild": {
+    "description": "Label for the build number."
+  },
+  "settingsAboutUnofficial": "GridView is an independent application. It is not associated with, endorsed by or affiliated with Formula 1, the FIA or any team.",
+  "@settingsAboutUnofficial": {
+    "description": "Mandatory unofficial-application disclosure."
+  },
+  "settingsPrivacyAndLegal": "Privacy and legal",
+  "@settingsPrivacyAndLegal": {
+    "description": "Entry to the privacy and legal screen."
+  },
+  "settingsPrivacyPolicyOpen": "Read the privacy policy",
+  "@settingsPrivacyPolicyOpen": {
+    "description": "Action that opens the configured privacy policy."
+  },
+  "settingsPrivacyPolicyUnavailable": "No privacy policy is configured in this build.",
+  "@settingsPrivacyPolicyUnavailable": {
+    "description": "Shown when no privacy policy URL is configured."
+  },
+  "settingsPrivacyCrashReporting": "Crash reporting",
+  "@settingsPrivacyCrashReporting": {
+    "description": "Label for the crash-reporting status."
+  },
+  "settingsPrivacyPerformance": "Performance monitoring",
+  "@settingsPrivacyPerformance": {
+    "description": "Label for the performance-monitoring status."
+  },
+  "settingsPrivacyAdvertising": "Advertising",
+  "@settingsPrivacyAdvertising": {
+    "description": "Label for the advertising status."
+  },
+  "settingsPrivacyEnabled": "Enabled",
+  "@settingsPrivacyEnabled": {
+    "description": "A platform service is enabled."
+  },
+  "settingsPrivacyDisabled": "Disabled",
+  "@settingsPrivacyDisabled": {
+    "description": "A platform service is disabled."
+  },
+  "settingsAcknowledgementsEmpty": "No attributions are stored yet.",
+  "@settingsAcknowledgementsEmpty": {
+    "description": "Empty state for the acknowledgements screen."
+  },
+  "settingsAcknowledgementsData": "Data",
+  "@settingsAcknowledgementsData": {
+    "description": "Section header for the data-source acknowledgement."
+  },
+  "settingsAcknowledgementsMedia": "Images",
+  "@settingsAcknowledgementsMedia": {
+    "description": "Section header for media attributions."
+  },
+  "settingsFeedbackUnavailable": "No contact address is configured.",
+  "@settingsFeedbackUnavailable": {
+    "description": "Shown when no feedback contact is configured."
+  },
+  "settingsOpenFailed": "That link could not be opened.",
+  "@settingsOpenFailed": {
+    "description": "Non-fatal failure when an external link cannot be opened."
+  },
+  "settingsSaveFailed": "That setting could not be saved. Please try again.",
+  "@settingsSaveFailed": {
+    "description": "Non-fatal failure when a preference write fails."
+  },
+  "settingsSelected": "Selected",
+  "@settingsSelected": {
+    "description": "Accessibility state for the chosen option in a settings list."
+  },
+  "mediaCategoryPortrait": "Portrait",
+  "@mediaCategoryPortrait": {
+    "description": "Media category: a driver portrait."
+  },
+  "mediaCategoryLogo": "Logo",
+  "@mediaCategoryLogo": {
+    "description": "Media category: a team logo."
+  },
+  "mediaCategoryCar": "Car",
+  "@mediaCategoryCar": {
+    "description": "Media category: a car image."
+  },
+  "mediaCategoryCircuitLayout": "Circuit layout",
+  "@mediaCategoryCircuitLayout": {
+    "description": "Media category: a circuit layout diagram."
+  },
+  "mediaCategoryHero": "Feature image",
+  "@mediaCategoryHero": {
+    "description": "Media category: a large feature image."
+  },
+  "mediaCategoryThumbnail": "Thumbnail",
+  "@mediaCategoryThumbnail": {
+    "description": "Media category: a small thumbnail."
+  },
+  "mediaCategoryOther": "Image",
+  "@mediaCategoryOther": {
+    "description": "Media category used when the contract supplies an unrecognised category."
+  }
 }

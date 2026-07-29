@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/app/router/app_router.dart';
+import 'package:gridview/core/preferences/locale_resolution.dart';
 import 'package:gridview/core/preferences/preference_store.dart';
 import 'package:gridview/core/preferences/preference_values.dart';
 import 'package:gridview/core/preferences/preferences_providers.dart';
@@ -12,6 +13,8 @@ import 'package:gridview/core/preferences/preferences_repository.dart';
 import 'package:gridview/core/theme/gridview_theme.dart';
 import 'package:gridview/core/time/device_time_zone.dart';
 import 'package:gridview/core/widgets/widgets.dart';
+import 'package:gridview/features/settings/application/app_info.dart';
+import 'package:gridview/features/settings/application/external_links.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
@@ -69,7 +72,7 @@ FakeCircuitRepository defaultFakeCircuits() => FakeCircuitRepository(
 /// A test host that mirrors [GridViewApp] but exposes locale, text-scale,
 /// surface size and animation control so navigation, resilience and golden
 /// tests can drive the real router.
-class TestApp extends StatelessWidget {
+class TestApp extends ConsumerWidget {
   const TestApp({
     super.key,
     required this.router,
@@ -86,11 +89,24 @@ class TestApp extends StatelessWidget {
   final EdgeInsets padding;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Theme and language resolve from the seeded preferences by exactly the
+    // production rules, so a test exercises the real behaviour: [locale] is the
+    // *platform* locale here, and an explicit language preference overrides it
+    // just as it does on a device.
+    final AppLanguagePreference language = ref.watch(
+      appPreferencesProvider.select((AppPreferences p) => p.language),
+    );
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
-      theme: buildGridViewDarkTheme(),
-      locale: locale,
+      theme: buildGridViewLightTheme(),
+      darkTheme: buildGridViewDarkTheme(),
+      themeMode: ref.watch(themeModeProvider),
+      locale: resolveAppLocale(
+        preference: language,
+        platformLocales: <Locale>[locale],
+        supportedLocales: AppLocalizations.supportedLocales,
+      ),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       routerConfig: router,
@@ -155,6 +171,20 @@ Future<GoRouter> pumpApp(
   /// real in-memory repository rather than stubbed, so a test exercises the same
   /// read path production does.
   AppPreferences preferences = AppPreferences.defaults,
+
+  /// Public external configuration. Defaults to nothing configured, so a test
+  /// must opt in to a policy URL or contact address.
+  ExternalLinkConfig linkConfig = const ExternalLinkConfig(),
+
+  /// Records external launches instead of performing them, so no test ever opens
+  /// a browser or an email client.
+  ExternalLinkLauncher? linkLauncher,
+
+  /// Package metadata. Defaults to a deterministic fake, never a platform
+  /// channel.
+  AppInfoReader appInfoReader = const FakeAppInfoReader(
+    AppInfo(appName: 'GridView', version: '9.9.9', buildNumber: '42'),
+  ),
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
@@ -202,6 +232,11 @@ Future<GoRouter> pumpApp(
         appPreferencesRepositoryProvider.overrideWithValue(
           preferenceRepository,
         ),
+        externalLinkConfigProvider.overrideWithValue(linkConfig),
+        externalLinkLauncherProvider.overrideWithValue(
+          linkLauncher ?? RecordingExternalLinkLauncher(),
+        ),
+        appInfoReaderProvider.overrideWithValue(appInfoReader),
         appEnvironmentProvider.overrideWithValue(environment),
         usesMockDataProvider.overrideWithValue(mockData),
         // Home, Calendar and Standings are season-scoped. Widget tests replace
@@ -260,7 +295,12 @@ Future<void> pumpStandalone(
   WidgetTester tester,
   Widget child, {
   Locale locale = const Locale('en'),
+  Size? surfaceSize,
 }) async {
+  if (surfaceSize != null) {
+    await tester.binding.setSurfaceSize(surfaceSize);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+  }
   await tester.pumpWidget(
     ProviderScope(
       child: MaterialApp(

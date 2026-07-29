@@ -196,6 +196,9 @@ void main() {
       await pumpStandalone(
         tester,
         const SettingsScreen(environmentOverride: AppEnvironment.development),
+        // Tall enough that the whole Settings list is laid out, so the
+        // production assertion below cannot pass merely by being off-screen.
+        surfaceSize: const Size(400, 1600),
       );
       expect(find.text('Component catalogue'), findsOneWidget);
     });
@@ -206,6 +209,7 @@ void main() {
       await pumpStandalone(
         tester,
         const SettingsScreen(environmentOverride: AppEnvironment.production),
+        surfaceSize: const Size(400, 1600),
       );
       expect(find.text('Component catalogue'), findsNothing);
       expect(find.text('Developer'), findsNothing);

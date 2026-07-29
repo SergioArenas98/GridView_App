@@ -1,5 +1,11 @@
 import '../../app/environment/app_environment.dart';
 
+/// The major version of the GridView API contract this client implements.
+///
+/// A compile-time fact about the client, not something read from the service, so
+/// reporting it in Settings costs no network request.
+const String kGridViewApiVersion = '1';
+
 /// Networking configuration for the GridView remote API boundary.
 ///
 /// The base URL is supplied at build time with

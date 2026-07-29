@@ -1,32 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/environment/app_environment.dart';
+import '../../../app/router/route_paths.dart';
+import '../../../core/preferences/preference_values.dart';
+import '../../../core/preferences/preferences_providers.dart';
 import '../../../core/theme/theme.dart';
-import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../dev/catalogue/component_catalogue_screen.dart';
+import '../../shared/application/providers.dart';
 import '../../shared/presentation/widgets/screen_scaffold.dart';
 import '../../shared/presentation/widgets/screen_sections.dart';
+import '../application/external_links.dart';
+import '../domain/preference_labels.dart';
+import 'information_screens.dart';
+import 'widgets/settings_rows.dart';
 
-/// Settings skeleton (App Flow §13). Theme is shown as dark-only for v1. The
-/// component-catalogue entry appears only outside production so the catalogue
+/// The Settings root (App Flow §13, Phase 8 §8).
+///
+/// A secondary screen: it lives on the root navigator, outside bottom
+/// navigation, so opening it never changes the active branch and Android back
+/// always returns to the exact origin — including its scroll position — rather
+/// than to a default tab.
+///
+/// Each preference row shows its own current value in localized copy and opens a
+/// focused selection screen; a wire token is never shown as display copy. The
+/// Developer section exists only outside production, so the component catalogue
 /// stays unreachable in production builds.
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key, this.environmentOverride});
 
   /// Test seam only. Production builds pass nothing, so the developer section is
   /// gated on the real compile-time [AppEnvironment.current].
   final AppEnvironment? environmentOverride;
 
-  // Mirrors pubspec `version: 1.2.1+7`. Shown as a static placeholder in this
-  // data-independent skeleton (no package_info dependency is introduced).
-  static const String _versionLabel = '1.2.1 (7)';
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AppEnvironment environment =
-        environmentOverride ?? AppEnvironment.current;
+        environmentOverride ?? ref.watch(appEnvironmentProvider);
+    final AppPreferences preferences = ref.watch(appPreferencesProvider);
+    final ExternalLink? contact = ref
+        .watch(externalLinkConfigProvider)
+        .supportContact;
 
     return GvScreenScaffold(
       title: l10n.settingsTitle,
@@ -39,23 +56,29 @@ class SettingsScreen extends StatelessWidget {
         ),
         children: <Widget>[
           GvScreenSection(
-            title: l10n.settingsSectionGeneral,
+            title: l10n.settingsSectionPreferences,
             child: GvInfoCard(
               children: <Widget>[
-                GvDetailField(
-                  label: l10n.settingsLanguage,
-                  value: l10n.settingsLanguageValue,
+                GvSettingsRow(
+                  key: const ValueKey<String>('settings-language'),
+                  title: l10n.settingsLanguage,
+                  value: PreferenceLabels.language(l10n, preferences.language),
+                  onTap: () => context.push(RoutePaths.settingsLanguage),
                 ),
-                GvDetailField(
-                  label: l10n.settingsTheme,
-                  value: l10n.settingsThemeValue,
+                GvSettingsRow(
+                  key: const ValueKey<String>('settings-theme'),
+                  title: l10n.settingsTheme,
+                  value: PreferenceLabels.theme(l10n, preferences.theme),
+                  onTap: () => context.push(RoutePaths.settingsTheme),
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(top: GvSpacing.xxs),
-                  child: Text(
-                    l10n.settingsThemeNote,
-                    style: context.gvText.caption,
+                GvSettingsRow(
+                  key: const ValueKey<String>('settings-time'),
+                  title: l10n.settingsTimeDisplay,
+                  value: PreferenceLabels.timeDisplay(
+                    l10n,
+                    preferences.timeDisplay,
                   ),
+                  onTap: () => context.push(RoutePaths.settingsTime),
                 ),
               ],
             ),
@@ -63,56 +86,70 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: GvSpacing.xl),
 
           GvScreenSection(
-            title: l10n.settingsSectionAbout,
+            title: l10n.settingsSectionDataApp,
             child: GvInfoCard(
               children: <Widget>[
-                GvDetailField(label: l10n.settingsPrivacy, value: ''),
-                GvDetailField(label: l10n.settingsAcknowledgements, value: ''),
-                GvDetailField(
-                  label: l10n.settingsVersion,
-                  value: _versionLabel,
+                GvSettingsRow(
+                  key: const ValueKey<String>('settings-data'),
+                  title: l10n.settingsDataAndUpdates,
+                  onTap: () => context.push(RoutePaths.settingsData),
+                ),
+                GvSettingsRow(
+                  key: const ValueKey<String>('settings-acknowledgements'),
+                  title: l10n.settingsAcknowledgements,
+                  onTap: () =>
+                      context.push(RoutePaths.settingsAcknowledgements),
+                ),
+                GvSettingsRow(
+                  key: const ValueKey<String>('settings-about'),
+                  title: l10n.settingsAppInformation,
+                  onTap: () => context.push(RoutePaths.settingsAbout),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: GvSpacing.xl),
+
+          GvScreenSection(
+            title: l10n.settingsSectionPrivacySupport,
+            child: GvInfoCard(
+              children: <Widget>[
+                GvSettingsRow(
+                  key: const ValueKey<String>('settings-privacy'),
+                  title: l10n.settingsPrivacyAndLegal,
+                  onTap: () => context.push(RoutePaths.settingsPrivacy),
+                ),
+                // Feedback is an action rather than a route. With no configured
+                // contact the row states so instead of offering a dead control.
+                GvSettingsRow(
+                  key: const ValueKey<String>('settings-feedback'),
+                  title: l10n.settingsFeedback,
+                  description: contact == null
+                      ? l10n.settingsFeedbackUnavailable
+                      : null,
+                  icon: contact == null ? null : Icons.mail_outline,
+                  onTap: contact == null
+                      ? null
+                      : () => openExternalLink(context, ref, contact),
                 ),
               ],
             ),
           ),
 
-          // Developer-only entry to the component catalogue (dev/staging only).
           if (!environment.isProduction) ...<Widget>[
             const SizedBox(height: GvSpacing.xl),
             GvScreenSection(
               title: l10n.settingsSectionDeveloper,
-              child: GvContentCard(
-                onTap: () => ComponentCatalogueScreen.open(context),
-                child: Row(
-                  children: <Widget>[
-                    Icon(
-                      Icons.widgets_outlined,
-                      size: GvIconSizes.lg,
-                      color: context.gvColors.accentSecondary,
-                    ),
-                    const SizedBox(width: GvSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            l10n.settingsComponentCatalogue,
-                            style: context.gvText.cardTitle,
-                          ),
-                          const SizedBox(height: GvSpacing.xxs),
-                          Text(
-                            l10n.settingsComponentCatalogueDescription,
-                            style: context.gvText.bodyM,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.chevron_right,
-                      color: context.gvColors.textMuted,
-                    ),
-                  ],
-                ),
+              child: GvInfoCard(
+                children: <Widget>[
+                  GvSettingsRow(
+                    key: const ValueKey<String>('settings-catalogue'),
+                    title: l10n.settingsComponentCatalogue,
+                    description: l10n.settingsComponentCatalogueDescription,
+                    icon: Icons.widgets_outlined,
+                    onTap: () => ComponentCatalogueScreen.open(context),
+                  ),
+                ],
               ),
             ),
           ],

@@ -23,6 +23,7 @@ import '../data/repositories/season_repository_impl.dart';
 import '../data/repositories/standings_repository_impl.dart';
 import '../data/sync/refresh_coordinator.dart';
 import '../data/sync/resource_sync.dart';
+import '../domain/entities/media.dart';
 import '../domain/entities/season.dart';
 import '../domain/entities/sync_state.dart';
 import '../domain/repositories/bootstrap_repository.dart';
@@ -65,6 +66,15 @@ final Provider<String> deviceTimeZoneLabelProvider = Provider<String>((
       .timeZoneName;
   return name.isEmpty ? 'local' : name;
 });
+
+/// Every credit line that must be displayed for the locally stored media.
+///
+/// A pure local read, so the acknowledgements screen never issues a request and
+/// works offline as soon as the content manifest has synchronised once.
+final FutureProvider<List<MediaAttribution>> mediaAttributionsProvider =
+    FutureProvider<List<MediaAttribution>>(
+      (Ref ref) => ref.watch(databaseProvider).mediaDao.readAttributions(),
+    );
 
 /// The build environment. Overridable in tests.
 final Provider<AppEnvironment> appEnvironmentProvider =

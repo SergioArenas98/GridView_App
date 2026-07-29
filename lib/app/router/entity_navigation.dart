@@ -72,7 +72,17 @@ extension GridViewNavigation on BuildContext {
 
   /// Opens Settings above the current screen without changing the active
   /// primary branch (App Flow §13.3).
-  void openSettings() => push(RoutePaths.settings);
+  ///
+  /// A repeated tap can never stack a second Settings page: when Settings — or
+  /// one of its sub-screens — is already the current route, the call is a no-op.
+  void openSettings() {
+    final String current = GoRouterState.of(this).uri.path;
+    if (current == RoutePaths.settings ||
+        current.startsWith('${RoutePaths.settings}/')) {
+      return;
+    }
+    push(RoutePaths.settings);
+  }
 }
 
 bool _samePath(String a, String b) => Uri.parse(a).path == Uri.parse(b).path;

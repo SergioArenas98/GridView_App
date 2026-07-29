@@ -9,6 +9,9 @@ import '../../features/drivers/presentation/driver_detail_screen.dart';
 import '../../features/explore/application/explore_state.dart';
 import '../../features/explore/presentation/explore_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/settings/presentation/acknowledgements_screen.dart';
+import '../../features/settings/presentation/information_screens.dart';
+import '../../features/settings/presentation/preference_screens.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/shared/presentation/not_found_screen.dart';
 import '../../features/standings/application/standings_state.dart';
@@ -234,11 +237,59 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
           );
         },
       ),
+      // Settings and every one of its sub-screens live on the root navigator.
+      // Settings is therefore never a shell branch: opening it leaves the active
+      // primary branch — and its scroll position — exactly as the user left it,
+      // and back walks down through the Settings stack to that same origin.
       GoRoute(
         path: RoutePaths.settings,
         name: RouteNames.settings,
         parentNavigatorKey: rootNavigatorKey,
         builder: (_, _) => const SettingsScreen(),
+        routes: <RouteBase>[
+          GoRoute(
+            path: RoutePaths.settingsLanguageRelative,
+            name: RouteNames.settingsLanguage,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, _) => const LanguageSettingsScreen(),
+          ),
+          GoRoute(
+            path: RoutePaths.settingsThemeRelative,
+            name: RouteNames.settingsTheme,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, _) => const ThemeSettingsScreen(),
+          ),
+          GoRoute(
+            path: RoutePaths.settingsTimeRelative,
+            name: RouteNames.settingsTime,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, _) => const TimeDisplaySettingsScreen(),
+          ),
+          GoRoute(
+            path: RoutePaths.settingsDataRelative,
+            name: RouteNames.settingsData,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, _) => const DataSettingsScreen(),
+          ),
+          GoRoute(
+            path: RoutePaths.settingsAcknowledgementsRelative,
+            name: RouteNames.settingsAcknowledgements,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, _) => const AcknowledgementsScreen(),
+          ),
+          GoRoute(
+            path: RoutePaths.settingsPrivacyRelative,
+            name: RouteNames.settingsPrivacy,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, _) => const PrivacySettingsScreen(),
+          ),
+          GoRoute(
+            path: RoutePaths.settingsAboutRelative,
+            name: RouteNames.settingsAbout,
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (_, _) => const AboutSettingsScreen(),
+          ),
+        ],
       ),
     ],
   );

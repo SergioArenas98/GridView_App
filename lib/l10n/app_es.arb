@@ -1,37 +1,30 @@
 {
   "@@locale": "es",
   "appTitle": "GridView",
-
   "navHome": "Inicio",
   "navCalendar": "Calendario",
   "navStandings": "Clasificaciones",
   "navExplore": "Explorar",
-
   "seasonLabel": "Temporada {season}",
   "roundLabel": "Ronda {round}",
   "seeAll": "Ver todo",
   "settingsOpen": "Abrir ajustes",
   "previewDataNotice": "Diseño de vista previa. Los datos reales llegarán en una próxima actualización.",
-
   "eventStateCompleted": "Finalizado",
   "eventStateCurrent": "Este fin de semana",
   "eventStateUpcoming": "Próximo",
-
   "homeNextGrandPrix": "Próximo Gran Premio",
   "homeSessions": "Sesiones del fin de semana",
   "homeLatestResult": "Último resultado",
   "homeUpcoming": "Próximos eventos",
   "homeOpenGrandPrix": "Ver Gran Premio",
-
   "calendarTitle": "Calendario",
-
   "grandPrixTitle": "Gran Premio",
   "grandPrixCircuit": "Circuito",
   "grandPrixSessions": "Sesiones",
   "grandPrixResults": "Resultados",
   "grandPrixResultsPending": "Los resultados aparecerán cuando finalice la sesión.",
   "grandPrixViewCircuit": "Ver circuito",
-
   "standingsTitle": "Clasificaciones",
   "standingsDrivers": "Pilotos",
   "standingsConstructors": "Constructores",
@@ -57,7 +50,6 @@
   "standingsProvisionalNotice": "Esta clasificación es provisional y todavía puede cambiar.",
   "standingsNameUnavailable": "Nombre no disponible",
   "standingsValueUnavailable": "No disponible",
-
   "exploreTitle": "Explorar",
   "exploreDrivers": "Pilotos",
   "exploreTeams": "Equipos",
@@ -65,22 +57,18 @@
   "exploreDriversDescription": "Todos los pilotos de la parrilla actual",
   "exploreTeamsDescription": "Todos los constructores de esta temporada",
   "exploreCircuitsDescription": "Todos los circuitos del calendario",
-
   "driverTitle": "Piloto",
   "driverCurrentTeam": "Equipo actual",
   "driverSeasonStanding": "Clasificación de la temporada",
   "driverStatistics": "Estadísticas",
-
   "constructorTitle": "Equipo",
   "constructorDrivers": "Pilotos actuales",
   "constructorStanding": "Clasificación de constructores",
   "constructorInformation": "Información del equipo",
-
   "circuitTitle": "Circuito",
   "circuitInformation": "Información del circuito",
   "circuitLayout": "Trazado",
   "circuitRelatedGrandPrix": "El Gran Premio de esta temporada",
-
   "fieldIdentifier": "Identificador",
   "fieldNumber": "Número",
   "fieldPoints": "Puntos",
@@ -91,57 +79,43 @@
   "fieldLength": "Longitud",
   "fieldLaps": "Vueltas",
   "genericEntityName": "Perfil de marcador de posición",
-
   "settingsTitle": "Ajustes",
-  "settingsSectionGeneral": "General",
-  "settingsSectionAbout": "Acerca de",
   "settingsSectionDeveloper": "Desarrollo",
   "settingsLanguage": "Idioma",
-  "settingsLanguageValue": "Predeterminado del sistema",
   "settingsTheme": "Tema",
-  "settingsThemeValue": "Oscuro",
-  "settingsThemeNote": "En esta versión solo está disponible el tema oscuro.",
   "settingsPrivacy": "Privacidad",
   "settingsAcknowledgements": "Agradecimientos",
   "settingsAppInformation": "Información de la aplicación",
   "settingsVersion": "Versión",
   "settingsComponentCatalogue": "Catálogo de componentes",
   "settingsComponentCatalogueDescription": "Galería del sistema de diseño solo para desarrollo",
-
   "notFoundTitle": "Pantalla no encontrada",
   "notFoundMessage": "No pudimos abrir esta página. Puede que se haya movido o que nunca existiera.",
   "invalidRouteTitle": "Enlace no válido",
   "invalidRouteMessage": "Este enlace apunta a algo que no existe.",
   "notFoundGoHome": "Ir a Inicio",
-
   "homeUpdated": "Actualizado {time}",
   "offlineStaleNotice": "Estos datos pueden estar desactualizados — mostrando la última versión guardada.",
   "refreshFailedNotice": "No se pudo actualizar — mostrando datos guardados.",
   "retry": "Reintentar",
-
   "homeErrorTitle": "No se puede cargar Inicio",
-
   "errorOffline": "Parece que no tienes conexión.",
   "errorTimeout": "Se agotó el tiempo de conexión.",
   "errorServer": "El servicio no está disponible temporalmente.",
   "errorNotFound": "Esos datos no están disponibles.",
   "errorUnsupported": "Actualiza GridView para continuar.",
   "errorGeneric": "Algo salió mal.",
-
   "grandPrixNotFoundTitle": "Gran Premio no encontrado",
   "grandPrixNotFoundMessage": "No pudimos encontrar este Gran Premio en el calendario.",
   "grandPrixErrorTitle": "No se puede cargar este Gran Premio",
   "grandPrixResultsAvailable": "Los resultados están disponibles.",
-
   "eventStateScheduled": "Programado",
   "eventStateLive": "En directo",
   "eventStatePostponed": "Aplazado",
   "eventStateCancelled": "Cancelado",
   "sessionStateScheduled": "Programada",
   "sessionStateCompleted": "Finalizada",
-
   "mockDataBanner": "Datos de muestra — no son resultados reales",
-
   "lastUpdatedLabel": "Actualizado {time}",
   "eventStateUnknown": "Estado desconocido",
   "sessionStateUnknown": "Estado desconocido",
@@ -149,7 +123,6 @@
   "weekendFormatStandard": "Fin de semana estándar",
   "weekendFormatSprint": "Fin de semana al sprint",
   "weekendFormatUnknown": "Formato desconocido",
-
   "calendarNextLabel": "Siguiente",
   "calendarEmptyTitle": "Todavía no hay carreras programadas",
   "calendarEmptyMessage": "El calendario de esta temporada aún no se ha publicado. Aparecerá aquí en cuanto lo esté.",
@@ -158,7 +131,6 @@
   "calendarSeasonUnavailableMessage": "GridView no ha podido determinar la temporada actual. Comprueba tu conexión e inténtalo de nuevo.",
   "calendarRefreshAction": "Actualizar el calendario",
   "calendarEventSemantics": "{name}, ronda {round}, {status}",
-
   "grandPrixNoSessionsTitle": "Horario no disponible",
   "grandPrixNoSessionsMessage": "Los horarios de las sesiones de este fin de semana aún no se han publicado.",
   "grandPrixSprintResults": "Resultados del sprint",
@@ -172,7 +144,6 @@
   "fieldDates": "Fechas",
   "fieldEventTimeZone": "Zona horaria del evento",
   "fieldDeviceTimeZone": "Tu zona horaria",
-
   "driverNameUnavailable": "Nombre del piloto no disponible",
   "constructorNameUnavailable": "Nombre del equipo no disponible",
   "grandPrixOpenConstructorUnnamed": "Abrir el equipo",
@@ -206,7 +177,6 @@
   "exploreOpenDriver": "Abrir el piloto {name}",
   "exploreOpenTeam": "Abrir el equipo {name}",
   "exploreOpenCircuit": "Abrir el circuito {name}",
-
   "detailNotFoundTitle": "No disponible",
   "detailNotFoundMessage": "Este perfil no está disponible. Puede que se haya eliminado o que el enlace esté desactualizado.",
   "detailSeasonUnavailableTitle": "Temporada no disponible",
@@ -215,7 +185,6 @@
   "detailCachedNotice": "Los detalles pueden estar desactualizados",
   "detailPartialNotice": "Parte de la información del perfil no está disponible",
   "detailLoadErrorTitle": "No se puede cargar este perfil",
-
   "driverAbout": "Biografía",
   "driverProfileSection": "Perfil",
   "driverParticipationSection": "Participación en la temporada",
@@ -230,7 +199,6 @@
   "driverViewStandings": "Ver clasificación de pilotos",
   "driverTeamUnavailable": "Equipo no disponible",
   "driverPortraitPlaceholder": "Retrato del piloto no disponible",
-
   "teamLineupSection": "Pilotos",
   "teamFactsSection": "Datos del equipo",
   "teamChampionshipSection": "Campeonato",
@@ -241,7 +209,6 @@
   "teamViewStandings": "Ver clasificación de constructores",
   "teamLineupUnavailable": "Alineación no disponible",
   "teamLogoPlaceholder": "Logotipo del equipo no disponible",
-
   "circuitFactsSection": "Datos del circuito",
   "circuitLapRecordSection": "Récord de vuelta",
   "fieldCorners": "Curvas",
@@ -258,7 +225,6 @@
   "circuitOpenGrandPrix": "Abrir {name}",
   "circuitLayoutPlaceholder": "Trazado del circuito no disponible",
   "lengthKilometers": "{value} km",
-
   "fieldWins": "Victorias",
   "fieldPodiums": "Podios",
   "fieldNationality": "Nacionalidad",
@@ -274,97 +240,245 @@
   "fieldParticipation": "Participación",
   "grandPrixNameUnavailable": "Nombre del Gran Premio no disponible",
   "homeRefreshAction": "Actualizar Inicio",
-  "@homeRefreshAction": { "description": "App-bar action that refreshes the Home dashboard." },
+  "@homeRefreshAction": {
+    "description": "App-bar action that refreshes the Home dashboard."
+  },
   "homeCurrentGrandPrix": "Gran Premio actual",
-  "@homeCurrentGrandPrix": { "description": "Hero section title while the featured event's weekend is under way." },
+  "@homeCurrentGrandPrix": {
+    "description": "Hero section title while the featured event's weekend is under way."
+  },
   "homeLatestGrandPrix": "Último Gran Premio",
-  "@homeLatestGrandPrix": { "description": "Hero section title when the featured event is already completed." },
+  "@homeLatestGrandPrix": {
+    "description": "Hero section title when the featured event is already completed."
+  },
   "homeRaceWeekend": "Fin de semana de carrera",
-  "@homeRaceWeekend": { "description": "Badge shown on the hero while the race weekend is under way." },
+  "@homeRaceWeekend": {
+    "description": "Badge shown on the hero while the race weekend is under way."
+  },
   "homeLiveNow": "En directo ahora",
-  "@homeLiveNow": { "description": "Relative-timing label for a session that is authoritatively live." },
+  "@homeLiveNow": {
+    "description": "Relative-timing label for a session that is authoritatively live."
+  },
   "homeStartingSoon": "Empieza en breve",
-  "@homeStartingSoon": { "description": "Relative-timing label for a session starting within the next minute." },
+  "@homeStartingSoon": {
+    "description": "Relative-timing label for a session starting within the next minute."
+  },
   "homeStartsInMinutes": "{count, plural, =1{Empieza en 1 minuto} other{Empieza en {count} minutos}}",
   "@homeStartsInMinutes": {
     "description": "Relative-timing label, less than an hour away.",
-    "placeholders": { "count": { "type": "int", "example": "45" } }
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "45"
+      }
+    }
   },
   "homeStartsInHours": "{count, plural, =1{Empieza en 1 hora} other{Empieza en {count} horas}}",
   "@homeStartsInHours": {
     "description": "Relative-timing label, less than a day away.",
-    "placeholders": { "count": { "type": "int", "example": "6" } }
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "6"
+      }
+    }
   },
   "homeStartsInDays": "{count, plural, =1{Empieza en 1 día} other{Empieza en {count} días}}",
   "@homeStartsInDays": {
     "description": "Relative-timing label, a day or more away.",
-    "placeholders": { "count": { "type": "int", "example": "12" } }
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
   },
   "homeCurrentSession": "Sesión actual",
-  "@homeCurrentSession": { "description": "Label for the session that is running now." },
+  "@homeCurrentSession": {
+    "description": "Label for the session that is running now."
+  },
   "homeNextSession": "Próxima sesión",
-  "@homeNextSession": { "description": "Label for the next session of the weekend." },
+  "@homeNextSession": {
+    "description": "Label for the next session of the weekend."
+  },
   "homeSessionUnavailable": "Horarios de sesión no disponibles",
-  "@homeSessionUnavailable": { "description": "Shown when the weekend supplied no usable session times." },
+  "@homeSessionUnavailable": {
+    "description": "Shown when the weekend supplied no usable session times."
+  },
   "homeSeasonUnavailableTitle": "Temporada no disponible",
-  "@homeSeasonUnavailableTitle": { "description": "Title when no current season could be resolved." },
+  "@homeSeasonUnavailableTitle": {
+    "description": "Title when no current season could be resolved."
+  },
   "homeSeasonUnavailableMessage": "GridView no ha podido determinar la temporada actual. Comprueba tu conexión e inténtalo de nuevo.",
-  "@homeSeasonUnavailableMessage": { "description": "Message when no current season could be resolved." },
+  "@homeSeasonUnavailableMessage": {
+    "description": "Message when no current season could be resolved."
+  },
   "homeCalendarUnavailableTitle": "Calendario no disponible",
-  "@homeCalendarUnavailableTitle": { "description": "Title for a valid season with no known events." },
+  "@homeCalendarUnavailableTitle": {
+    "description": "Title for a valid season with no known events."
+  },
   "homeCalendarUnavailableMessage": "Esta temporada todavía no tiene eventos publicados. La pantalla de inicio se completará en cuanto los haya.",
-  "@homeCalendarUnavailableMessage": { "description": "Message for a valid season with no known events." },
+  "@homeCalendarUnavailableMessage": {
+    "description": "Message for a valid season with no known events."
+  },
   "homeDriversLeaderTitle": "Líder del Campeonato de Pilotos",
-  "@homeDriversLeaderTitle": { "description": "Section title for the drivers' championship leader module." },
+  "@homeDriversLeaderTitle": {
+    "description": "Section title for the drivers' championship leader module."
+  },
   "homeTeamsLeaderTitle": "Líder del Campeonato de Constructores",
-  "@homeTeamsLeaderTitle": { "description": "Section title for the teams' championship leader module." },
+  "@homeTeamsLeaderTitle": {
+    "description": "Section title for the teams' championship leader module."
+  },
   "homeTiedLeaders": "Líderes empatados",
-  "@homeTiedLeaders": { "description": "Shown when several competitors share a confirmed position 1." },
+  "@homeTiedLeaders": {
+    "description": "Shown when several competitors share a confirmed position 1."
+  },
   "homeLeaderUnavailable": "Líder no disponible",
-  "@homeLeaderUnavailable": { "description": "Shown when the standings table has no materialized local representation, so no leader can be calculated." },
+  "@homeLeaderUnavailable": {
+    "description": "Shown when the standings table has no materialized local representation, so no leader can be calculated."
+  },
   "homeNoLeaderYet": "Aún no hay líder",
-  "@homeNoLeaderYet": { "description": "Shown when the standings table is available and simply names no confirmed leader yet." },
+  "@homeNoLeaderYet": {
+    "description": "Shown when the standings table is available and simply names no confirmed leader yet."
+  },
   "homePointsValue": "{points} pts",
   "@homePointsValue": {
     "description": "A compact championship points total.",
-    "placeholders": { "points": { "type": "String", "example": "310,5" } }
+    "placeholders": {
+      "points": {
+        "type": "String",
+        "example": "310,5"
+      }
+    }
   },
   "homeWinnerLabel": "Ganador",
-  "@homeWinnerLabel": { "description": "Label preceding the winner of the latest race." },
+  "@homeWinnerLabel": {
+    "description": "Label preceding the winner of the latest race."
+  },
   "homeWinnerUnavailable": "Ganador no disponible",
-  "@homeWinnerUnavailable": { "description": "Shown when the cached classification names no resolvable winner." },
+  "@homeWinnerUnavailable": {
+    "description": "Shown when the cached classification names no resolvable winner."
+  },
   "homeResultUnavailable": "Resultado no disponible",
-  "@homeResultUnavailable": { "description": "Shown when no classification is cached for the latest event." },
+  "@homeResultUnavailable": {
+    "description": "Shown when no classification is cached for the latest event."
+  },
   "homeNoUpcomingEvents": "No hay próximos eventos",
-  "@homeNoUpcomingEvents": { "description": "Shown when the calendar is available and the season legitimately has no further scheduled events." },
+  "@homeNoUpcomingEvents": {
+    "description": "Shown when the calendar is available and the season legitimately has no further scheduled events."
+  },
   "homeUpcomingUnavailable": "Próximos eventos no disponibles",
-  "@homeUpcomingUnavailable": { "description": "Shown when the season calendar has no materialized local representation, so upcoming events cannot be calculated." },
+  "@homeUpcomingUnavailable": {
+    "description": "Shown when the season calendar has no materialized local representation, so upcoming events cannot be calculated."
+  },
   "homeViewCalendar": "Ver calendario",
-  "@homeViewCalendar": { "description": "Action opening the Calendar branch." },
+  "@homeViewCalendar": {
+    "description": "Action opening the Calendar branch."
+  },
   "homeQuickLinks": "Explorar",
-  "@homeQuickLinks": { "description": "Section title for the Drivers / Teams / Circuits shortcuts." },
+  "@homeQuickLinks": {
+    "description": "Section title for the Drivers / Teams / Circuits shortcuts."
+  },
   "homeOpenDrivers": "Abrir Pilotos",
-  "@homeOpenDrivers": { "description": "Accessible label for the Drivers shortcut." },
+  "@homeOpenDrivers": {
+    "description": "Accessible label for the Drivers shortcut."
+  },
   "homeOpenTeams": "Abrir Equipos",
-  "@homeOpenTeams": { "description": "Accessible label for the Teams shortcut." },
+  "@homeOpenTeams": {
+    "description": "Accessible label for the Teams shortcut."
+  },
   "homeOpenCircuits": "Abrir Circuitos",
-  "@homeOpenCircuits": { "description": "Accessible label for the Circuits shortcut." },
+  "@homeOpenCircuits": {
+    "description": "Accessible label for the Circuits shortcut."
+  },
   "homeOpenDriver": "Abrir el piloto {name}",
   "@homeOpenDriver": {
     "description": "Accessible label for opening the leading driver.",
-    "placeholders": { "name": { "type": "String", "example": "Max Verstappen" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Max Verstappen"
+      }
+    }
   },
   "homeOpenTeam": "Abrir el equipo {name}",
   "@homeOpenTeam": {
     "description": "Accessible label for opening the leading team.",
-    "placeholders": { "name": { "type": "String", "example": "Red Bull Racing" } }
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Red Bull Racing"
+      }
+    }
   },
   "homeSomeInformationUnavailable": "Parte de la información no está disponible",
-  "@homeSomeInformationUnavailable": { "description": "Concise notice when one or more optional Home modules are missing." },
+  "@homeSomeInformationUnavailable": {
+    "description": "Concise notice when one or more optional Home modules are missing."
+  },
   "homeSomeInformationOutdated": "Parte de la información puede estar desactualizada",
-  "@homeSomeInformationOutdated": { "description": "Aggregate notice when at least one visible Home module is stale." },
+  "@homeSomeInformationOutdated": {
+    "description": "Aggregate notice when at least one visible Home module is stale."
+  },
   "homeCachedNotice": "Mostrando datos guardados",
-  "@homeCachedNotice": { "description": "Notice that Home is rendering saved content." },
+  "@homeCachedNotice": {
+    "description": "Notice that Home is rendering saved content."
+  },
   "homeUpdateFailed": "No se pudo actualizar",
-  "@homeUpdateFailed": { "description": "Non-blocking notice that the last Home refresh failed." }
+  "@homeUpdateFailed": {
+    "description": "Non-blocking notice that the last Home refresh failed."
+  },
+  "settingsSectionPreferences": "Preferencias",
+  "settingsSectionDataApp": "Datos y aplicación",
+  "settingsSectionPrivacySupport": "Privacidad y soporte",
+  "settingsTimeDisplay": "Horario mostrado",
+  "settingsDataAndUpdates": "Datos y actualizaciones",
+  "settingsFeedback": "Enviar comentarios",
+  "settingsLanguageSystem": "Predeterminado del sistema",
+  "settingsLanguageSystemDescription": "Usar el idioma del dispositivo cuando GridView lo admita; si no, inglés.",
+  "settingsLanguageEnglish": "English",
+  "settingsLanguageSpanish": "Español",
+  "settingsThemeSystem": "Sistema",
+  "settingsThemeSystemDescription": "Seguir el ajuste claro u oscuro del dispositivo.",
+  "settingsThemeDark": "Oscuro",
+  "settingsThemeLight": "Claro",
+  "settingsTimeDevice": "Hora del dispositivo",
+  "settingsTimeDeviceDescription": "Mostrar las horas de las sesiones en la zona horaria de tu dispositivo.",
+  "settingsTimeEvent": "Hora del evento",
+  "settingsTimeEventDescription": "Mostrar las horas de las sesiones en la zona horaria local del circuito.",
+  "settingsTimeBoth": "Ambas",
+  "settingsTimeBothDescription": "Mostrar juntas la hora del evento y la de tu dispositivo.",
+  "settingsDataEnvironment": "Entorno",
+  "settingsDataSource": "Origen de datos",
+  "settingsDataSourceRemote": "Servicio de GridView",
+  "settingsDataSourceSample": "Datos de ejemplo",
+  "settingsDataSourceUnavailable": "Sin configurar",
+  "settingsDataApiVersion": "Versión de la API",
+  "settingsDataCurrentSeason": "Temporada actual",
+  "settingsDataCurrentSeasonUnresolved": "Todavía no disponible",
+  "settingsDataOfflineExplanation": "GridView guarda la temporada en tu dispositivo, así que se abre y funciona sin conexión. La información nueva se descarga al abrir la aplicación y al actualizar.",
+  "settingsAboutApplication": "Aplicación",
+  "settingsAboutBuild": "Compilación",
+  "settingsAboutUnofficial": "GridView es una aplicación independiente. No está asociada, respaldada ni afiliada a la Fórmula 1, la FIA ni a ningún equipo.",
+  "settingsPrivacyAndLegal": "Privacidad y aviso legal",
+  "settingsPrivacyPolicyOpen": "Leer la política de privacidad",
+  "settingsPrivacyPolicyUnavailable": "Esta compilación no tiene configurada una política de privacidad.",
+  "settingsPrivacyCrashReporting": "Informes de fallos",
+  "settingsPrivacyPerformance": "Supervisión del rendimiento",
+  "settingsPrivacyAdvertising": "Publicidad",
+  "settingsPrivacyEnabled": "Activado",
+  "settingsPrivacyDisabled": "Desactivado",
+  "settingsAcknowledgementsEmpty": "Todavía no hay atribuciones guardadas.",
+  "settingsAcknowledgementsData": "Datos",
+  "settingsAcknowledgementsMedia": "Imágenes",
+  "settingsFeedbackUnavailable": "No hay ninguna dirección de contacto configurada.",
+  "settingsOpenFailed": "No se pudo abrir ese enlace.",
+  "settingsSaveFailed": "No se pudo guardar ese ajuste. Inténtalo de nuevo.",
+  "settingsSelected": "Seleccionado",
+  "mediaCategoryPortrait": "Retrato",
+  "mediaCategoryLogo": "Logotipo",
+  "mediaCategoryCar": "Coche",
+  "mediaCategoryCircuitLayout": "Trazado del circuito",
+  "mediaCategoryHero": "Imagen destacada",
+  "mediaCategoryThumbnail": "Miniatura",
+  "mediaCategoryOther": "Imagen"
 }

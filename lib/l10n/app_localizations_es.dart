@@ -278,29 +278,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsTitle => 'Ajustes';
 
   @override
-  String get settingsSectionGeneral => 'General';
-
-  @override
-  String get settingsSectionAbout => 'Acerca de';
-
-  @override
   String get settingsSectionDeveloper => 'Desarrollo';
 
   @override
   String get settingsLanguage => 'Idioma';
 
   @override
-  String get settingsLanguageValue => 'Predeterminado del sistema';
-
-  @override
   String get settingsTheme => 'Tema';
-
-  @override
-  String get settingsThemeValue => 'Oscuro';
-
-  @override
-  String get settingsThemeNote =>
-      'En esta versión solo está disponible el tema oscuro.';
 
   @override
   String get settingsPrivacy => 'Privacidad';
@@ -972,4 +956,177 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeUpdateFailed => 'No se pudo actualizar';
+
+  @override
+  String get settingsSectionPreferences => 'Preferencias';
+
+  @override
+  String get settingsSectionDataApp => 'Datos y aplicación';
+
+  @override
+  String get settingsSectionPrivacySupport => 'Privacidad y soporte';
+
+  @override
+  String get settingsTimeDisplay => 'Horario mostrado';
+
+  @override
+  String get settingsDataAndUpdates => 'Datos y actualizaciones';
+
+  @override
+  String get settingsFeedback => 'Enviar comentarios';
+
+  @override
+  String get settingsLanguageSystem => 'Predeterminado del sistema';
+
+  @override
+  String get settingsLanguageSystemDescription =>
+      'Usar el idioma del dispositivo cuando GridView lo admita; si no, inglés.';
+
+  @override
+  String get settingsLanguageEnglish => 'English';
+
+  @override
+  String get settingsLanguageSpanish => 'Español';
+
+  @override
+  String get settingsThemeSystem => 'Sistema';
+
+  @override
+  String get settingsThemeSystemDescription =>
+      'Seguir el ajuste claro u oscuro del dispositivo.';
+
+  @override
+  String get settingsThemeDark => 'Oscuro';
+
+  @override
+  String get settingsThemeLight => 'Claro';
+
+  @override
+  String get settingsTimeDevice => 'Hora del dispositivo';
+
+  @override
+  String get settingsTimeDeviceDescription =>
+      'Mostrar las horas de las sesiones en la zona horaria de tu dispositivo.';
+
+  @override
+  String get settingsTimeEvent => 'Hora del evento';
+
+  @override
+  String get settingsTimeEventDescription =>
+      'Mostrar las horas de las sesiones en la zona horaria local del circuito.';
+
+  @override
+  String get settingsTimeBoth => 'Ambas';
+
+  @override
+  String get settingsTimeBothDescription =>
+      'Mostrar juntas la hora del evento y la de tu dispositivo.';
+
+  @override
+  String get settingsDataEnvironment => 'Entorno';
+
+  @override
+  String get settingsDataSource => 'Origen de datos';
+
+  @override
+  String get settingsDataSourceRemote => 'Servicio de GridView';
+
+  @override
+  String get settingsDataSourceSample => 'Datos de ejemplo';
+
+  @override
+  String get settingsDataSourceUnavailable => 'Sin configurar';
+
+  @override
+  String get settingsDataApiVersion => 'Versión de la API';
+
+  @override
+  String get settingsDataCurrentSeason => 'Temporada actual';
+
+  @override
+  String get settingsDataCurrentSeasonUnresolved => 'Todavía no disponible';
+
+  @override
+  String get settingsDataOfflineExplanation =>
+      'GridView guarda la temporada en tu dispositivo, así que se abre y funciona sin conexión. La información nueva se descarga al abrir la aplicación y al actualizar.';
+
+  @override
+  String get settingsAboutApplication => 'Aplicación';
+
+  @override
+  String get settingsAboutBuild => 'Compilación';
+
+  @override
+  String get settingsAboutUnofficial =>
+      'GridView es una aplicación independiente. No está asociada, respaldada ni afiliada a la Fórmula 1, la FIA ni a ningún equipo.';
+
+  @override
+  String get settingsPrivacyAndLegal => 'Privacidad y aviso legal';
+
+  @override
+  String get settingsPrivacyPolicyOpen => 'Leer la política de privacidad';
+
+  @override
+  String get settingsPrivacyPolicyUnavailable =>
+      'Esta compilación no tiene configurada una política de privacidad.';
+
+  @override
+  String get settingsPrivacyCrashReporting => 'Informes de fallos';
+
+  @override
+  String get settingsPrivacyPerformance => 'Supervisión del rendimiento';
+
+  @override
+  String get settingsPrivacyAdvertising => 'Publicidad';
+
+  @override
+  String get settingsPrivacyEnabled => 'Activado';
+
+  @override
+  String get settingsPrivacyDisabled => 'Desactivado';
+
+  @override
+  String get settingsAcknowledgementsEmpty =>
+      'Todavía no hay atribuciones guardadas.';
+
+  @override
+  String get settingsAcknowledgementsData => 'Datos';
+
+  @override
+  String get settingsAcknowledgementsMedia => 'Imágenes';
+
+  @override
+  String get settingsFeedbackUnavailable =>
+      'No hay ninguna dirección de contacto configurada.';
+
+  @override
+  String get settingsOpenFailed => 'No se pudo abrir ese enlace.';
+
+  @override
+  String get settingsSaveFailed =>
+      'No se pudo guardar ese ajuste. Inténtalo de nuevo.';
+
+  @override
+  String get settingsSelected => 'Seleccionado';
+
+  @override
+  String get mediaCategoryPortrait => 'Retrato';
+
+  @override
+  String get mediaCategoryLogo => 'Logotipo';
+
+  @override
+  String get mediaCategoryCar => 'Coche';
+
+  @override
+  String get mediaCategoryCircuitLayout => 'Trazado del circuito';
+
+  @override
+  String get mediaCategoryHero => 'Imagen destacada';
+
+  @override
+  String get mediaCategoryThumbnail => 'Miniatura';
+
+  @override
+  String get mediaCategoryOther => 'Imagen';
 }

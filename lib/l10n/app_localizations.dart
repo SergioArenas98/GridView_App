@@ -578,18 +578,6 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get settingsTitle;
 
-  /// Settings general section header.
-  ///
-  /// In en, this message translates to:
-  /// **'General'**
-  String get settingsSectionGeneral;
-
-  /// Settings about section header.
-  ///
-  /// In en, this message translates to:
-  /// **'About'**
-  String get settingsSectionAbout;
-
   /// Settings developer section header (non-production only).
   ///
   /// In en, this message translates to:
@@ -602,29 +590,11 @@ abstract class AppLocalizations {
   /// **'Language'**
   String get settingsLanguage;
 
-  /// Current language value.
-  ///
-  /// In en, this message translates to:
-  /// **'System default'**
-  String get settingsLanguageValue;
-
   /// Theme setting label.
   ///
   /// In en, this message translates to:
   /// **'Theme'**
   String get settingsTheme;
-
-  /// Current theme value (dark only in v1).
-  ///
-  /// In en, this message translates to:
-  /// **'Dark'**
-  String get settingsThemeValue;
-
-  /// Explains the dark-only theme.
-  ///
-  /// In en, this message translates to:
-  /// **'Only a dark theme is available in this version.'**
-  String get settingsThemeNote;
 
   /// Privacy setting label.
   ///
@@ -1789,6 +1759,330 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update failed'**
   String get homeUpdateFailed;
+
+  /// Settings section for user preferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferences'**
+  String get settingsSectionPreferences;
+
+  /// Settings section for data and application information.
+  ///
+  /// In en, this message translates to:
+  /// **'Data and application'**
+  String get settingsSectionDataApp;
+
+  /// Settings section for privacy and support.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy and support'**
+  String get settingsSectionPrivacySupport;
+
+  /// Time-display setting label.
+  ///
+  /// In en, this message translates to:
+  /// **'Time display'**
+  String get settingsTimeDisplay;
+
+  /// Entry to the data-source and update information screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Data and updates'**
+  String get settingsDataAndUpdates;
+
+  /// Entry that opens the configured contact address.
+  ///
+  /// In en, this message translates to:
+  /// **'Send feedback'**
+  String get settingsFeedback;
+
+  /// Language option that follows the device language.
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get settingsLanguageSystem;
+
+  /// Explains the system language option.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the device language when GridView supports it, otherwise English.'**
+  String get settingsLanguageSystemDescription;
+
+  /// English language option, always shown in English.
+  ///
+  /// In en, this message translates to:
+  /// **'English'**
+  String get settingsLanguageEnglish;
+
+  /// Spanish language option, always shown in Spanish.
+  ///
+  /// In en, this message translates to:
+  /// **'Español'**
+  String get settingsLanguageSpanish;
+
+  /// Theme option that follows the device setting.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get settingsThemeSystem;
+
+  /// Explains the system theme option.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow the device light or dark setting.'**
+  String get settingsThemeSystemDescription;
+
+  /// Dark theme option.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get settingsThemeDark;
+
+  /// Light theme option.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get settingsThemeLight;
+
+  /// Time-display option using the device time zone.
+  ///
+  /// In en, this message translates to:
+  /// **'Device time'**
+  String get settingsTimeDevice;
+
+  /// Explains the device time option.
+  ///
+  /// In en, this message translates to:
+  /// **'Show session times in your device\'s time zone.'**
+  String get settingsTimeDeviceDescription;
+
+  /// Time-display option using the event time zone.
+  ///
+  /// In en, this message translates to:
+  /// **'Event time'**
+  String get settingsTimeEvent;
+
+  /// Explains the event time option.
+  ///
+  /// In en, this message translates to:
+  /// **'Show session times in the circuit\'s local time zone.'**
+  String get settingsTimeEventDescription;
+
+  /// Time-display option showing both time zones.
+  ///
+  /// In en, this message translates to:
+  /// **'Both'**
+  String get settingsTimeBoth;
+
+  /// Explains the both option.
+  ///
+  /// In en, this message translates to:
+  /// **'Show the event time and your device time together.'**
+  String get settingsTimeBothDescription;
+
+  /// Label for the build environment.
+  ///
+  /// In en, this message translates to:
+  /// **'Environment'**
+  String get settingsDataEnvironment;
+
+  /// Label for the active data source.
+  ///
+  /// In en, this message translates to:
+  /// **'Data source'**
+  String get settingsDataSource;
+
+  /// The app is reading the real GridView service.
+  ///
+  /// In en, this message translates to:
+  /// **'GridView service'**
+  String get settingsDataSourceRemote;
+
+  /// The app is reading bundled sample data.
+  ///
+  /// In en, this message translates to:
+  /// **'Sample data'**
+  String get settingsDataSourceSample;
+
+  /// The data source is not configured in this build.
+  ///
+  /// In en, this message translates to:
+  /// **'Not configured'**
+  String get settingsDataSourceUnavailable;
+
+  /// Label for the API version.
+  ///
+  /// In en, this message translates to:
+  /// **'API version'**
+  String get settingsDataApiVersion;
+
+  /// Label for the locally resolved season.
+  ///
+  /// In en, this message translates to:
+  /// **'Current season'**
+  String get settingsDataCurrentSeason;
+
+  /// Shown when no season has been stored locally yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available yet'**
+  String get settingsDataCurrentSeasonUnresolved;
+
+  /// Explains the offline-first behaviour.
+  ///
+  /// In en, this message translates to:
+  /// **'GridView keeps the season on your device, so it opens and works without a connection. New information is downloaded when the app starts and when you refresh.'**
+  String get settingsDataOfflineExplanation;
+
+  /// Label for the application name.
+  ///
+  /// In en, this message translates to:
+  /// **'Application'**
+  String get settingsAboutApplication;
+
+  /// Label for the build number.
+  ///
+  /// In en, this message translates to:
+  /// **'Build'**
+  String get settingsAboutBuild;
+
+  /// Mandatory unofficial-application disclosure.
+  ///
+  /// In en, this message translates to:
+  /// **'GridView is an independent application. It is not associated with, endorsed by or affiliated with Formula 1, the FIA or any team.'**
+  String get settingsAboutUnofficial;
+
+  /// Entry to the privacy and legal screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy and legal'**
+  String get settingsPrivacyAndLegal;
+
+  /// Action that opens the configured privacy policy.
+  ///
+  /// In en, this message translates to:
+  /// **'Read the privacy policy'**
+  String get settingsPrivacyPolicyOpen;
+
+  /// Shown when no privacy policy URL is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'No privacy policy is configured in this build.'**
+  String get settingsPrivacyPolicyUnavailable;
+
+  /// Label for the crash-reporting status.
+  ///
+  /// In en, this message translates to:
+  /// **'Crash reporting'**
+  String get settingsPrivacyCrashReporting;
+
+  /// Label for the performance-monitoring status.
+  ///
+  /// In en, this message translates to:
+  /// **'Performance monitoring'**
+  String get settingsPrivacyPerformance;
+
+  /// Label for the advertising status.
+  ///
+  /// In en, this message translates to:
+  /// **'Advertising'**
+  String get settingsPrivacyAdvertising;
+
+  /// A platform service is enabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get settingsPrivacyEnabled;
+
+  /// A platform service is disabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get settingsPrivacyDisabled;
+
+  /// Empty state for the acknowledgements screen.
+  ///
+  /// In en, this message translates to:
+  /// **'No attributions are stored yet.'**
+  String get settingsAcknowledgementsEmpty;
+
+  /// Section header for the data-source acknowledgement.
+  ///
+  /// In en, this message translates to:
+  /// **'Data'**
+  String get settingsAcknowledgementsData;
+
+  /// Section header for media attributions.
+  ///
+  /// In en, this message translates to:
+  /// **'Images'**
+  String get settingsAcknowledgementsMedia;
+
+  /// Shown when no feedback contact is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'No contact address is configured.'**
+  String get settingsFeedbackUnavailable;
+
+  /// Non-fatal failure when an external link cannot be opened.
+  ///
+  /// In en, this message translates to:
+  /// **'That link could not be opened.'**
+  String get settingsOpenFailed;
+
+  /// Non-fatal failure when a preference write fails.
+  ///
+  /// In en, this message translates to:
+  /// **'That setting could not be saved. Please try again.'**
+  String get settingsSaveFailed;
+
+  /// Accessibility state for the chosen option in a settings list.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get settingsSelected;
+
+  /// Media category: a driver portrait.
+  ///
+  /// In en, this message translates to:
+  /// **'Portrait'**
+  String get mediaCategoryPortrait;
+
+  /// Media category: a team logo.
+  ///
+  /// In en, this message translates to:
+  /// **'Logo'**
+  String get mediaCategoryLogo;
+
+  /// Media category: a car image.
+  ///
+  /// In en, this message translates to:
+  /// **'Car'**
+  String get mediaCategoryCar;
+
+  /// Media category: a circuit layout diagram.
+  ///
+  /// In en, this message translates to:
+  /// **'Circuit layout'**
+  String get mediaCategoryCircuitLayout;
+
+  /// Media category: a large feature image.
+  ///
+  /// In en, this message translates to:
+  /// **'Feature image'**
+  String get mediaCategoryHero;
+
+  /// Media category: a small thumbnail.
+  ///
+  /// In en, this message translates to:
+  /// **'Thumbnail'**
+  String get mediaCategoryThumbnail;
+
+  /// Media category used when the contract supplies an unrecognised category.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get mediaCategoryOther;
 }
 
 class _AppLocalizationsDelegate
