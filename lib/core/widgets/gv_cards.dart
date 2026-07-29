@@ -63,14 +63,21 @@ class GvHeroCard extends StatelessWidget {
         child: Stack(
           children: <Widget>[
             if (background != null) Positioned.fill(child: background!),
+            // The scrim fades the image toward the page background so the hero's
+            // text always has a readable base. Both stops come from the theme:
+            // a hardcoded dark scrim would render the light theme's dark text
+            // dark-on-dark.
             if (background != null)
-              const Positioned.fill(
+              Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: <Color>[Color(0x33000000), Color(0xCC0B0D12)],
+                      colors: <Color>[
+                        context.gvColors.heroScrimTop,
+                        context.gvColors.heroScrimBottom,
+                      ],
                     ),
                   ),
                 ),

@@ -28,6 +28,8 @@ class GvSemanticColors extends ThemeExtension<GvSemanticColors> {
     required this.accentSecondary,
     required this.onAccentPrimary,
     required this.onAccentSecondary,
+    required this.heroScrimTop,
+    required this.heroScrimBottom,
     required this.success,
     required this.warning,
     required this.info,
@@ -60,6 +62,16 @@ class GvSemanticColors extends ThemeExtension<GvSemanticColors> {
   final Color onAccentPrimary;
   final Color onAccentSecondary;
 
+  /// The two stops of the hero scrim, top then bottom.
+  ///
+  /// A hero draws text over arbitrary imagery, so the image is faded toward the
+  /// page background to give that text a readable base. Both stops are therefore
+  /// theme-owned: a hardcoded dark scrim would turn the light theme's dark text
+  /// into dark-on-dark. The bottom stop is the theme background at 80%, which is
+  /// what makes the fade read as "into the page" rather than as a grey wash.
+  final Color heroScrimTop;
+  final Color heroScrimBottom;
+
   // Status.
   final Color success;
   final Color warning;
@@ -83,6 +95,8 @@ class GvSemanticColors extends ThemeExtension<GvSemanticColors> {
     accentSecondary: GvColors.accentSecondary,
     onAccentPrimary: GvColors.onAccentPrimary,
     onAccentSecondary: GvColors.onAccentSecondary,
+    heroScrimTop: Color(0x33000000),
+    heroScrimBottom: Color(0xCC0B0D12),
     success: GvColors.success,
     warning: GvColors.warning,
     info: GvColors.accentSecondary,
@@ -106,6 +120,8 @@ class GvSemanticColors extends ThemeExtension<GvSemanticColors> {
     accentSecondary: GvColorsLight.accentSecondary,
     onAccentPrimary: GvColorsLight.onAccentPrimary,
     onAccentSecondary: GvColorsLight.onAccentSecondary,
+    heroScrimTop: Color(0x33FFFFFF),
+    heroScrimBottom: Color(0xCCF1F4F9),
     success: GvColorsLight.success,
     warning: GvColorsLight.warning,
     info: GvColorsLight.accentSecondary,
@@ -129,6 +145,8 @@ class GvSemanticColors extends ThemeExtension<GvSemanticColors> {
     Color? accentSecondary,
     Color? onAccentPrimary,
     Color? onAccentSecondary,
+    Color? heroScrimTop,
+    Color? heroScrimBottom,
     Color? success,
     Color? warning,
     Color? info,
@@ -150,6 +168,8 @@ class GvSemanticColors extends ThemeExtension<GvSemanticColors> {
       accentSecondary: accentSecondary ?? this.accentSecondary,
       onAccentPrimary: onAccentPrimary ?? this.onAccentPrimary,
       onAccentSecondary: onAccentSecondary ?? this.onAccentSecondary,
+      heroScrimTop: heroScrimTop ?? this.heroScrimTop,
+      heroScrimBottom: heroScrimBottom ?? this.heroScrimBottom,
       success: success ?? this.success,
       warning: warning ?? this.warning,
       info: info ?? this.info,
@@ -188,6 +208,8 @@ class GvSemanticColors extends ThemeExtension<GvSemanticColors> {
         other.onAccentSecondary,
         t,
       )!,
+      heroScrimTop: Color.lerp(heroScrimTop, other.heroScrimTop, t)!,
+      heroScrimBottom: Color.lerp(heroScrimBottom, other.heroScrimBottom, t)!,
       success: Color.lerp(success, other.success, t)!,
       warning: Color.lerp(warning, other.warning, t)!,
       info: Color.lerp(info, other.info, t)!,
