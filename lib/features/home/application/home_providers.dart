@@ -143,13 +143,46 @@ final Provider<HomeState> homeStateProvider = Provider<HomeState>((Ref ref) {
   // record is deliberately not consulted here: it materializes content but
   // contributes no ETag, provenance or freshness to any individual resource
   // (ADR 0014), so a bootstrap-only Home correctly shows no update time.
-  ResourceSyncState? metadata(String? key) =>
-      key == null ? null : ref.watch(resourceSyncStateProvider(key)).value;
+  bool metadataReady = true;
+  ResourceSyncState? metadata(String? key) {
+    if (key == null) return null;
+    final AsyncValue<ResourceSyncState?> record = ref.watch(
+      resourceSyncStateProvider(key),
+    );
+    metadataReady = metadataReady && record.hasValue;
+    return record.value;
+  }
 
   final HomeDashboardView? view = dashboard.value;
   final int? resultRound = view?.latestRaceResult == null
       ? null
       : view!.latestCompleted?.round;
+
+  // Read every record first, so `metadataReady` below reflects all of them
+  // regardless of argument evaluation order.
+  final ResourceSyncState? homeMetadata = metadata(
+    season == null ? null : ResourceKey.home(season),
+  );
+  final ResourceSyncState? calendarMetadata = metadata(
+    season == null ? null : ResourceKey.calendar(season),
+  );
+  final ResourceSyncState? driverStandingsMetadata = metadata(
+    season == null ? null : ResourceKey.driverStandings(season),
+  );
+  final ResourceSyncState? constructorStandingsMetadata = metadata(
+    season == null ? null : ResourceKey.constructorStandings(season),
+  );
+  final ResourceSyncState? resultMetadata = metadata(
+    season == null || resultRound == null
+        ? null
+        : ResourceKey.grandPrixResults(season, resultRound),
+  );
+  // Bootstrap's own record, read for one thing only: whether an accepted
+  // bootstrap materialized *this* season's collections. It contributes no ETag,
+  // provenance or freshness to any of them (ADR 0014).
+  final ResourceSyncState? bootstrapMetadata = metadata(
+    ResourceKey.bootstrap(),
+  );
 
   return computeHomeState(
     HomeStateInputs(
@@ -157,21 +190,13 @@ final Provider<HomeState> homeStateProvider = Provider<HomeState>((Ref ref) {
       seasonReady: resolvedSeason.hasValue,
       dashboard: view,
       dashboardReady: dashboard.hasValue,
-      homeMetadata: metadata(season == null ? null : ResourceKey.home(season)),
-      calendarMetadata: metadata(
-        season == null ? null : ResourceKey.calendar(season),
-      ),
-      driverStandingsMetadata: metadata(
-        season == null ? null : ResourceKey.driverStandings(season),
-      ),
-      constructorStandingsMetadata: metadata(
-        season == null ? null : ResourceKey.constructorStandings(season),
-      ),
-      resultMetadata: metadata(
-        season == null || resultRound == null
-            ? null
-            : ResourceKey.grandPrixResults(season, resultRound),
-      ),
+      homeMetadata: homeMetadata,
+      calendarMetadata: calendarMetadata,
+      driverStandingsMetadata: driverStandingsMetadata,
+      constructorStandingsMetadata: constructorStandingsMetadata,
+      resultMetadata: resultMetadata,
+      bootstrapMetadata: bootstrapMetadata,
+      metadataReady: metadataReady,
       refreshing: status.refreshing,
       // Only the Home resource's own failure can become a Home-level error. A
       // calendar or standings failure is scoped to the modules it derives.

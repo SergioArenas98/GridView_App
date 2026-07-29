@@ -333,8 +333,8 @@ void main() {
         isNull,
         reason: 'the failure is scoped to the drivers module',
       );
-      expect(ready.driverLeader!.failed, isTrue);
-      expect(ready.teamLeader!.failed, isFalse);
+      expect(ready.driverLeader.failed, isTrue);
+      expect(ready.teamLeader.failed, isFalse);
     });
 
     test(
@@ -353,8 +353,8 @@ void main() {
         await _settle();
 
         final HomeReady ready = c.read(homeStateProvider) as HomeReady;
-        expect(ready.teamLeader!.failed, isTrue);
-        expect(ready.driverLeader!.failed, isFalse);
+        expect(ready.teamLeader.failed, isTrue);
+        expect(ready.driverLeader.failed, isFalse);
         expect(ready.refreshError, isNull);
       },
     );
@@ -374,7 +374,7 @@ void main() {
 
       final HomeReady ready = c.read(homeStateProvider) as HomeReady;
       expect(ready.refreshError, isNull);
-      expect(ready.driverLeader!.failed, isFalse);
+      expect(ready.driverLeader.failed, isFalse);
     });
 
     test('a calendar failure keeps a valid Home snapshot visible', () async {

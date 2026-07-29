@@ -1,4 +1,5 @@
 import '../../../core/api/errors/api_failure.dart';
+import '../../shared/domain/collection_materialization.dart';
 import '../../shared/domain/entities/calendar_entry.dart';
 import '../../shared/domain/entities/enums.dart';
 import '../../shared/domain/entities/home_dashboard.dart';
@@ -7,6 +8,7 @@ import '../../shared/domain/entities/session.dart';
 import '../../shared/domain/entities/sync_state.dart';
 import '../../shared/domain/freshness_evaluator.dart';
 import '../domain/home_leader.dart';
+import '../domain/home_module_availability.dart';
 import '../domain/home_race_winner.dart';
 import '../domain/home_session_focus.dart';
 import '../domain/home_temporal_state.dart';
@@ -77,18 +79,30 @@ class HomeEventModule {
 class HomeLeaderModule {
   const HomeLeaderModule({
     required this.leader,
+    required this.availability,
     required this.provenance,
     this.failed = false,
   });
 
   final HomeLeader leader;
+
+  /// Whether this championship's standings table can answer at all, from its
+  /// materialization rather than from how many rows it holds. A materialized
+  /// table that names no confirmed leader yet — before the first race, or while
+  /// a table is genuinely tied at zero — is a valid empty answer, not missing
+  /// information.
+  final HomeModuleAvailability availability;
+
   final HomeSectionFreshness provenance;
 
   /// Whether this championship's own resource failed its last refresh. Scoped
   /// strictly to this table — the other championship's failure is never here.
+  /// A failure over cached rows never makes the module unavailable.
   final bool failed;
 
-  bool get isAvailable => leader is! HomeLeaderUnavailable;
+  /// Whether a leader is actually named. Distinct from [availability]: an
+  /// available table can legitimately name none.
+  bool get hasLeader => leader is! HomeLeaderUnavailable;
 }
 
 /// The latest completed Grand Prix, with optional already-cached race-result
@@ -132,12 +146,27 @@ class HomeLatestResultModule {
 }
 
 /// The upcoming-events module.
+///
+/// Always present in a ready dashboard. Whether it can answer is
+/// [availability]; how much it has to say is [events]. An empty list from a
+/// materialized calendar is the complete and correct answer after the season
+/// finale — the module is not missing, the season simply has no races left.
 class HomeUpcomingModule {
-  const HomeUpcomingModule({required this.events, required this.provenance});
+  const HomeUpcomingModule({
+    required this.events,
+    required this.availability,
+    required this.provenance,
+  });
 
   /// Already bounded and already ordered by the composition; a widget never
   /// re-sorts or re-slices it while building.
   final List<CalendarEntry> events;
+
+  /// Whether the season calendar has a materialized local representation, so a
+  /// reliable upcoming calculation can be made at all. Never derived from the
+  /// number of events, and never downgraded by a stale record or by a refresh
+  /// failure over a valid cached calendar.
+  final HomeModuleAvailability availability;
 
   /// The calendar's provenance.
   final HomeSectionFreshness provenance;
@@ -201,10 +230,10 @@ class HomeReady extends HomeState {
     required this.season,
     required this.event,
     required this.homeProvenance,
-    this.driverLeader,
-    this.teamLeader,
+    required this.driverLeader,
+    required this.teamLeader,
+    required this.upcoming,
     this.latestResult,
-    this.upcoming,
     this.refreshing = false,
     this.refreshError,
   });
@@ -219,10 +248,17 @@ class HomeReady extends HomeState {
   /// The Home resource's **own** provenance, used only for Home-owned content.
   final HomeSectionFreshness homeProvenance;
 
-  final HomeLeaderModule? driverLeader;
-  final HomeLeaderModule? teamLeader;
+  final HomeLeaderModule driverLeader;
+  final HomeLeaderModule teamLeader;
+
+  /// The upcoming events. Always present: whether the calendar can answer is
+  /// carried by its own availability rather than by making the module null.
+  final HomeUpcomingModule upcoming;
+
+  /// The latest completed Grand Prix, absent only when the season has none yet.
+  /// Its absence is by design, never a data gap, so it is not part of
+  /// [isPartial].
   final HomeLatestResultModule? latestResult;
-  final HomeUpcomingModule? upcoming;
 
   /// A refresh is in flight; every cached module stays visible throughout.
   final bool refreshing;
@@ -233,25 +269,32 @@ class HomeReady extends HomeState {
 
   HomeTemporalPhase get phase => event.phase;
 
-  /// Whether any optional module is unavailable, so the screen can show one
-  /// concise partial-data notice instead of a page-level error.
-  bool get isPartial =>
-      driverLeader == null ||
-      teamLeader == null ||
-      driverLeader?.isAvailable == false ||
-      teamLeader?.isAvailable == false ||
-      upcoming == null;
+  /// Whether some module's information is genuinely **unavailable**, so the
+  /// screen can show one concise partial-data notice instead of a page-level
+  /// error.
+  ///
+  /// Strictly availability, never cardinality: a module whose resource is
+  /// materialized has answered, and an empty answer is an answer. No upcoming
+  /// events after the finale, no confirmed leader yet, no cached classification
+  /// and no completed event yet are all valid, complete states — none of them
+  /// is partial. Staleness and refresh failures are separate conditions with
+  /// their own notices and never make a module unavailable either.
+  bool get isPartial => <HomeModuleAvailability>[
+    driverLeader.availability,
+    teamLeader.availability,
+    upcoming.availability,
+  ].any((HomeModuleAvailability a) => !a.isAvailable);
 
   /// Whether **any** visible module is currently stale, so one safe aggregate
   /// notice can describe the uncertainty without claiming a false global time.
   bool get hasStaleSection => <HomeSectionFreshness?>[
     homeProvenance,
     event.provenance,
-    driverLeader?.provenance,
-    teamLeader?.provenance,
+    driverLeader.provenance,
+    teamLeader.provenance,
     latestResult?.provenance,
     latestResult?.resultProvenance,
-    upcoming?.provenance,
+    upcoming.provenance,
   ].any((HomeSectionFreshness? s) => s?.isStale ?? false);
 }
 
@@ -271,6 +314,8 @@ class HomeStateInputs {
     required this.driverStandingsMetadata,
     required this.constructorStandingsMetadata,
     required this.resultMetadata,
+    required this.bootstrapMetadata,
+    required this.metadataReady,
     required this.refreshing,
     required this.lastFailure,
     required this.driverStandingsFailed,
@@ -296,6 +341,16 @@ class HomeStateInputs {
   /// one is cached.
   final ResourceSyncState? resultMetadata;
 
+  /// Bootstrap's **own** record, consulted for one thing only: whether an
+  /// accepted bootstrap materialized this exact season's collections. It
+  /// contributes no ETag, provenance or freshness to any resource (ADR 0014).
+  final ResourceSyncState? bootstrapMetadata;
+
+  /// Whether the persisted metadata above has actually been read. While it is
+  /// false no module is declared unavailable, because unavailability is a fact
+  /// about stored state rather than an assumption made during loading.
+  final bool metadataReady;
+
   final bool refreshing;
 
   /// The Home resource's own last failure. Another resource's failure is never
@@ -310,6 +365,26 @@ class HomeStateInputs {
   final bool syncSettled;
 
   final DateTime now;
+
+  /// Classifies one season collection Home derives a module from.
+  ///
+  /// Materialization comes from the single approved rule shared with the
+  /// Calendar and Standings screens ([hasMaterializedCollection]): the
+  /// collection's own successful record, or an accepted bootstrap for this exact
+  /// season. Nothing here fabricates metadata, freshness or an ETag, and nothing
+  /// infers materialization from how many rows arrived.
+  HomeModuleAvailability availabilityOf(
+    ResourceSyncState? metadata, {
+    required bool isEmpty,
+  }) => resolveHomeModuleAvailability(
+    materialized: hasMaterializedCollection(
+      season: season,
+      metadata: metadata,
+      bootstrapMetadata: bootstrapMetadata,
+    ),
+    materializationKnown: metadataReady && season != null,
+    isEmpty: isEmpty,
+  );
 }
 
 /// Derives the Home state from the composed local dashboard, each contributing
@@ -382,13 +457,21 @@ HomeState computeHomeState(HomeStateInputs input) {
   );
 
   final CalendarEntry? latest = dashboard.latestCompleted;
+  final HomeLeader driverLeader = resolveDriverLeader(dashboard.driverLeaders);
+  final HomeLeader teamLeader = resolveConstructorLeader(
+    dashboard.constructorLeaders,
+  );
   return HomeReady(
     seasonYear: dashboard.seasonYear,
     season: dashboard.season,
     event: event,
     homeProvenance: homeProvenance,
     driverLeader: HomeLeaderModule(
-      leader: resolveDriverLeader(dashboard.driverLeaders),
+      leader: driverLeader,
+      availability: input.availabilityOf(
+        input.driverStandingsMetadata,
+        isEmpty: driverLeader is HomeLeaderUnavailable,
+      ),
       provenance: HomeSectionFreshness.of(
         input.driverStandingsMetadata,
         input.now,
@@ -396,7 +479,11 @@ HomeState computeHomeState(HomeStateInputs input) {
       failed: input.driverStandingsFailed,
     ),
     teamLeader: HomeLeaderModule(
-      leader: resolveConstructorLeader(dashboard.constructorLeaders),
+      leader: teamLeader,
+      availability: input.availabilityOf(
+        input.constructorStandingsMetadata,
+        isEmpty: teamLeader is HomeLeaderUnavailable,
+      ),
       provenance: HomeSectionFreshness.of(
         input.constructorStandingsMetadata,
         input.now,
@@ -416,12 +503,17 @@ HomeState computeHomeState(HomeStateInputs input) {
             winner: resolveHomeRaceWinner(dashboard.latestRaceResult),
             resultStatus: dashboard.latestRaceResult?.status,
           ),
-    upcoming: dashboard.upcoming.isEmpty
-        ? null
-        : HomeUpcomingModule(
-            events: dashboard.upcoming,
-            provenance: calendarProvenance,
-          ),
+    upcoming: HomeUpcomingModule(
+      events: dashboard.upcoming,
+      // A materialized calendar has answered even when the answer is "no races
+      // left": after the finale, and when every later event is excluded by the
+      // approved upcoming rule, the empty list is the complete result.
+      availability: input.availabilityOf(
+        input.calendarMetadata,
+        isEmpty: dashboard.upcoming.isEmpty,
+      ),
+      provenance: calendarProvenance,
+    ),
     refreshing: input.refreshing,
     refreshError: refreshError,
   );

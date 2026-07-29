@@ -7,6 +7,7 @@ import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/home_dashboard.dart';
 import 'package:gridview/features/shared/domain/entities/home_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
+import 'package:gridview/features/shared/domain/entities/resource_key.dart';
 import 'package:gridview/features/shared/domain/entities/season.dart';
 import 'package:gridview/features/shared/domain/entities/session.dart';
 import 'package:gridview/features/shared/domain/entities/standing.dart';
@@ -305,6 +306,18 @@ List<CalendarEntry> calendarFixture({int season = 2026}) => <CalendarEntry>[
     circuit: const Circuit(id: 'zandvoort', name: 'Zandvoort'),
   ),
 ];
+
+/// A `syncMetadata` override describing an app in which [keys] have **no**
+/// materialized local representation at all.
+///
+/// The bootstrap record is dropped alongside them: an accepted bootstrap for
+/// the same season materializes every collection it applies, so leaving it in
+/// place would keep those resources available and the premise would be wrong.
+/// Every other resource stays synchronised normally.
+ResourceSyncState? Function(String key) unmaterialized(Set<String> keys) =>
+    (String key) => keys.contains(key) || key == ResourceKey.bootstrap()
+    ? null
+    : syncedMetadata(key);
 
 /// Synchronization metadata for a resource that synchronised successfully.
 ResourceSyncState syncedMetadata(

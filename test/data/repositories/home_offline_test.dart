@@ -7,6 +7,9 @@ import 'package:gridview/core/api/dto/standing_dto.dart';
 import 'package:gridview/core/api/dto/view_dto.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/database/gridview_database.dart';
+import 'package:gridview/features/home/application/home_state.dart';
+import 'package:gridview/features/home/domain/home_module_availability.dart';
+import 'package:gridview/features/home/domain/home_temporal_state.dart';
 import 'package:gridview/features/shared/data/remote/remote_result.dart';
 import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/home_dashboard.dart';
@@ -99,6 +102,147 @@ void main() {
 
   Future<HomeDashboardView?> readDashboard(GridViewDatabase db) =>
       db.homeDashboardDao.readDashboard(now);
+
+  /// After every 2026 event has finished: the season finale is behind us and no
+  /// eligible upcoming event exists.
+  final DateTime afterFinale = DateTime.utc(2026, 12, 31, 12);
+
+  /// The Home presentation state derived from **real persisted** synchronization
+  /// metadata, so materialization is proven from disk rather than from a stub.
+  Future<HomeState> stateFrom(GridViewDatabase db, DateTime at) async {
+    Future<ResourceSyncState?> record(String key) =>
+        db.syncMetadataDao.read(key);
+    return computeHomeState(
+      HomeStateInputs(
+        season: 2026,
+        seasonReady: true,
+        dashboard: await db.homeDashboardDao.readDashboard(at),
+        dashboardReady: true,
+        homeMetadata: await record(ResourceKey.home(2026)),
+        calendarMetadata: await record(ResourceKey.calendar(2026)),
+        driverStandingsMetadata: await record(
+          ResourceKey.driverStandings(2026),
+        ),
+        constructorStandingsMetadata: await record(
+          ResourceKey.constructorStandings(2026),
+        ),
+        resultMetadata: null,
+        bootstrapMetadata: await record(ResourceKey.bootstrap()),
+        metadataReady: true,
+        refreshing: false,
+        lastFailure: null,
+        driverStandingsFailed: false,
+        constructorStandingsFailed: false,
+        syncSettled: true,
+        now: at,
+      ),
+    );
+  }
+
+  test('a season finale with no races left reopens as a valid empty result, '
+      'never as partial', () async {
+    final Map<String, dynamic> home = Map<String, dynamic>.from(homeJson());
+    final Map<String, dynamic> featured = Map<String, dynamic>.from(
+      home['featuredEvent'] as Map<String, dynamic>,
+    );
+    featured['status'] = 'completed';
+    home['featuredEvent'] = featured;
+
+    final GridViewDatabase db1 = open();
+    final ScriptedGridViewApi api1 = ScriptedGridViewApi();
+    await syncEverything(RepositoryHarness(db1, api1), api1, home: home);
+    final HomeReady before = await stateFrom(db1, afterFinale) as HomeReady;
+    expect(before.upcoming.availability, HomeModuleAvailability.availableEmpty);
+    expect(before.isPartial, isFalse);
+    await db1.close();
+
+    // --- A cold open with an API that answers nothing. ---
+    final GridViewDatabase db2 = open();
+    addTearDown(db2.close);
+    final ScriptedGridViewApi offline = ScriptedGridViewApi();
+    RepositoryHarness(db2, offline);
+
+    final HomeReady after = await stateFrom(db2, afterFinale) as HomeReady;
+    expect(after.phase, HomeTemporalPhase.postRace);
+    expect(after.upcoming.events, isEmpty);
+    expect(
+      after.upcoming.availability,
+      HomeModuleAvailability.availableEmpty,
+      reason: 'the stored calendar still answers; it has nothing left to list',
+    );
+    expect(
+      after.isPartial,
+      isFalse,
+      reason: 'an empty answer from an available calendar is not a data gap',
+    );
+    expect(after.latestResult, isNotNull);
+    expect(offline.calls, isEmpty);
+  });
+
+  test('a bootstrap-materialized calendar with no races left is available and '
+      'empty, with no fabricated metadata', () async {
+    final GridViewDatabase db1 = open();
+    final ScriptedGridViewApi api1 = ScriptedGridViewApi();
+    final RepositoryHarness h1 = RepositoryHarness(db1, api1);
+    api1.bootstrap = (_) => bootstrapModified(bootstrapEnvelope());
+    expect(await h1.bootstrap.refreshBootstrap(), isA<RefreshSuccess>());
+    await db1.close();
+
+    final GridViewDatabase db2 = open();
+    addTearDown(db2.close);
+    final ScriptedGridViewApi offline = ScriptedGridViewApi();
+    RepositoryHarness(db2, offline);
+
+    expect(
+      await db2.syncMetadataDao.read(ResourceKey.calendar(2026)),
+      isNull,
+      reason: 'bootstrap creates no individual calendar record (ADR 0014)',
+    );
+
+    final HomeReady state = await stateFrom(db2, afterFinale) as HomeReady;
+    expect(
+      state.upcoming.availability,
+      HomeModuleAvailability.availableEmpty,
+      reason: 'an accepted bootstrap for this season materializes its calendar',
+    );
+    expect(
+      state.upcoming.provenance.lastSuccessAt,
+      isNull,
+      reason: 'materialization borrows no provenance from bootstrap',
+    );
+    expect(state.upcoming.provenance.freshness, isNull);
+    expect(state.isPartial, isFalse);
+    expect(offline.calls, isEmpty);
+  });
+
+  test('a calendar with no materialized representation is unavailable', () async {
+    final GridViewDatabase db = open();
+    addTearDown(db.close);
+    final ScriptedGridViewApi api = ScriptedGridViewApi();
+    final RepositoryHarness h = RepositoryHarness(db, api);
+
+    // Only Home itself is synchronised. Its snapshot persists the featured
+    // event, so calendar **rows** exist while `calendar:2026` has no record and
+    // no bootstrap was ever accepted: rows alone must not make the module
+    // available, exactly as materialization is never inferred from cardinality.
+    await h.db.seasonDao.upsertSeason(
+      const Season(year: 2026, status: SeasonStatus.active, isCurrent: true),
+    );
+    api.home = (_) => homeResult();
+    expect(await h.home.refreshHome(season: 2026), isA<RefreshSuccess>());
+    expect(await db.syncMetadataDao.read(ResourceKey.calendar(2026)), isNull);
+    expect(await db.syncMetadataDao.read(ResourceKey.bootstrap()), isNull);
+    expect(await db.calendarDao.calendar(2026), isNotEmpty);
+
+    final HomeReady ready = await stateFrom(db, now) as HomeReady;
+    expect(ready.upcoming.availability, HomeModuleAvailability.unavailable);
+    expect(ready.isPartial, isTrue);
+    expect(
+      ready.event.focus.grandPrix.name,
+      isNotEmpty,
+      reason: 'the rest of the dashboard still renders',
+    );
+  });
 
   test(
     'a complete dashboard survives a close/reopen with no network',

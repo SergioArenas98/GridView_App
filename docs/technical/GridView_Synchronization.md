@@ -1275,7 +1275,59 @@ The controller mirrors the coordinator's report per resource:
 - a result-resource failure never removes the latest-event card;
 - a `304` is successful validation, never a failure.
 
-### 15.5 Freshness communication
+### 15.5 Module availability and partial data
+
+Availability and cardinality are **independent**. "Can this module answer?" is
+decided by materialization; "what did it answer?" is decided by content. Home
+keeps them apart in the model (`HomeModuleAvailability`: `unavailable`,
+`availableEmpty`, `available`) so an empty answer is never reported as missing
+information.
+
+Materialization reuses the single approved rule shared with the Calendar and
+Standings screens (`hasMaterializedCollection`): the collection's **own**
+successful record (`calendar:<season>`, `standings:drivers:<season>`,
+`standings:constructors:<season>`), or an **accepted bootstrap for that exact
+season**. It is never inferred from a row count in either direction — rows
+without a record do not make a module available, and a materialized module with
+no rows is not unavailable. Bootstrap is consulted for materialization only and
+still lends no ETag, provenance or freshness (ADR 0014), so a bootstrap-only
+module is available and shows no update time. While the persisted metadata has
+not been read yet, no module is declared unavailable: unavailability is a
+finding about stored state, never an assumption made during loading.
+
+Consequently:
+
+- **no upcoming events after the season finale** — or when every later event is
+  excluded by the approved upcoming rule, such as a cancelled one — is a
+  complete, valid empty result. Home stays `HomeReady`, keeps its post-race
+  emphasis, and shows "No upcoming events" with **no** partial-data notice;
+- an unmaterialized calendar is genuinely unavailable: the module says so and
+  Home is partial while the rest of the dashboard still renders;
+- a championship whose table is materialized but names no confirmed leader yet
+  says "No leader yet" and is not partial; only an unmaterialized table is
+  reported as unavailable;
+- a season with no events at all remains `HomeSeasonEmpty` and is never turned
+  into a partial `HomeReady`.
+
+**Partial means required information is unavailable, not merely absent by
+design.** Only module availability feeds `HomeReady.isPartial`. A single
+confirmed leader (rather than a tie), a never-cached race classification, a
+season with no completed event yet, an absent optional circuit or location field
+and absent media are all normal, complete states and none of them is partial.
+
+The four conditions stay distinct and are never collapsed into one another:
+
+| Condition | Meaning | Notice |
+|---|---|---|
+| empty | a materialized resource answered with nothing | the module's own empty line |
+| stale | a materialized resource's freshness window passed | aggregate "may be outdated" |
+| partial | some module has no materialized representation | "Some information is unavailable" |
+| refresh failure | a run failed over content that is still valid | scoped, non-blocking "Update failed" |
+
+A stale module stays available; a failed refresh over cached rows never makes a
+module unavailable and never discards its valid empty or non-empty result.
+
+### 15.6 Freshness communication
 
 Home publishes **no** single screen-wide "updated" time. An exact timestamp is
 shown only for the Home resource itself, and only once that resource has
@@ -1284,7 +1336,7 @@ uncertainty ("Some information may be outdated"). Freshness is evaluated with
 `evaluateResourceFreshness` and the injected clock; no parallel evaluator
 exists. One stale section never makes fresh sections stale.
 
-### 15.6 Season transitions
+### 15.7 Season transitions
 
 No season is hardcoded. Home watches `currentSeasonProvider`; when the current
 season changes it re-points at the new season's resources, the old season's rows
@@ -1293,7 +1345,7 @@ as the new season, and the new season's materialization is evaluated
 independently. Home's remembered scroll offset is season-scoped, so a transition
 starts the new season at the top while leaving the branch valid.
 
-### 15.7 Phase 8 hand-off
+### 15.8 Phase 8 hand-off
 
 - Every primary screen (Home, Calendar, Grand Prix, Standings, Explore and the
   three detail profiles) now renders from local data under a single

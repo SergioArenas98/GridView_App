@@ -1676,11 +1676,17 @@ abstract class AppLocalizations {
   /// **'Tied leaders'**
   String get homeTiedLeaders;
 
-  /// Shown when no confirmed leader can be named.
+  /// Shown when the standings table has no materialized local representation, so no leader can be calculated.
   ///
   /// In en, this message translates to:
   /// **'Leader unavailable'**
   String get homeLeaderUnavailable;
+
+  /// Shown when the standings table is available and simply names no confirmed leader yet.
+  ///
+  /// In en, this message translates to:
+  /// **'No leader yet'**
+  String get homeNoLeaderYet;
 
   /// A compact championship points total.
   ///
@@ -1706,11 +1712,17 @@ abstract class AppLocalizations {
   /// **'Result unavailable'**
   String get homeResultUnavailable;
 
-  /// Shown when the season has no further scheduled events.
+  /// Shown when the calendar is available and the season legitimately has no further scheduled events.
   ///
   /// In en, this message translates to:
   /// **'No upcoming events'**
   String get homeNoUpcomingEvents;
+
+  /// Shown when the season calendar has no materialized local representation, so upcoming events cannot be calculated.
+  ///
+  /// In en, this message translates to:
+  /// **'Upcoming events unavailable'**
+  String get homeUpcomingUnavailable;
 
   /// Action opening the Calendar branch.
   ///

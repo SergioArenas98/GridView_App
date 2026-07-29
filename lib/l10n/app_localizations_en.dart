@@ -905,6 +905,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeLeaderUnavailable => 'Leader unavailable';
 
   @override
+  String get homeNoLeaderYet => 'No leader yet';
+
+  @override
   String homePointsValue(String points) {
     return '$points pts';
   }
@@ -920,6 +923,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeNoUpcomingEvents => 'No upcoming events';
+
+  @override
+  String get homeUpcomingUnavailable => 'Upcoming events unavailable';
 
   @override
   String get homeViewCalendar => 'View Calendar';

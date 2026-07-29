@@ -17,8 +17,13 @@ import '../home_formatting.dart';
 /// - **tied leaders** are announced as tied. No competitor is promoted to "the
 ///   leader" and none of them becomes the primary action — the card opens the
 ///   complete standings instead;
-/// - an **unavailable** leader shows controlled localized copy and still offers
-///   the standings action, so the section is never a dead end.
+/// - **no leader yet** — the table is materialized and has simply not produced
+///   one — says exactly that, because an available table has answered;
+/// - an **unavailable** table, one with no materialized representation for the
+///   season, shows controlled localized copy instead.
+///
+/// The last two both offer the standings action, so the section is never a dead
+/// end.
 ///
 /// A stable identifier drives the route and is never displayed; a competitor
 /// whose identity is not stored locally is treated as unavailable rather than
@@ -100,13 +105,22 @@ class HomeLeaderCard extends StatelessWidget {
               l10n.standingsPointsSemantics(format.pointsNumber(points)),
           ].join(', '),
         ),
-      HomeLeaderUnavailable() => _card(
-        context: context,
-        l10n: l10n,
-        title: l10n.homeLeaderUnavailable,
-        onTap: onOpenStandings,
-        semanticLabel: '$championshipLabel, ${l10n.homeLeaderUnavailable}',
-      ),
+      // No leader to name. Which of the two reasons applies is a real
+      // distinction: a materialized table that has simply not produced a leader
+      // yet has answered, and saying its information is unavailable would be
+      // false.
+      HomeLeaderUnavailable() => () {
+        final String title = module.availability.isAvailable
+            ? l10n.homeNoLeaderYet
+            : l10n.homeLeaderUnavailable;
+        return _card(
+          context: context,
+          l10n: l10n,
+          title: title,
+          onTap: onOpenStandings,
+          semanticLabel: '$championshipLabel, $title',
+        );
+      }(),
     };
   }
 

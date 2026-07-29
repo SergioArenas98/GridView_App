@@ -390,7 +390,7 @@ void main() {
       );
     });
 
-    testWidgets('an unavailable leader keeps the standings action', (
+    testWidgets('an unavailable table keeps the standings action', (
       WidgetTester tester,
     ) async {
       await pumpHome(
@@ -398,9 +398,25 @@ void main() {
         dashboard: homeDashboardFixture(
           driverLeaders: const <DriverStandingEntry>[],
         ),
+        syncMetadata: unmaterialized(<String>{'standings:drivers:2026'}),
       );
 
       expect(find.text('Leader unavailable'), findsOneWidget);
+      expect(find.text("View drivers' standings"), findsOneWidget);
+    });
+
+    testWidgets('a materialized table with no leader yet says so, and is not '
+        'reported as missing information', (WidgetTester tester) async {
+      await pumpHome(
+        tester,
+        dashboard: homeDashboardFixture(
+          driverLeaders: const <DriverStandingEntry>[],
+        ),
+      );
+
+      expect(find.text('No leader yet'), findsOneWidget);
+      expect(find.text('Leader unavailable'), findsNothing);
+      expect(find.text('Some information is unavailable'), findsNothing);
       expect(find.text("View drivers' standings"), findsOneWidget);
     });
 
@@ -421,7 +437,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Leader unavailable'), findsOneWidget);
+      expect(find.text('No leader yet'), findsOneWidget);
       final String all = renderedText(tester).join(' ');
       expect(all, isNot(contains('max-verstappen')));
       expect(all, isNot(contains('Max-Verstappen')));
@@ -477,7 +493,7 @@ void main() {
           driverLeaders: const <DriverStandingEntry>[],
         ),
       );
-      expect(find.text('Leader unavailable'), findsOneWidget);
+      expect(find.text('No leader yet'), findsOneWidget);
       expect(find.text("Teams' Championship leader"), findsOneWidget);
       expect(find.text('McLaren Formula 1 Team'), findsWidgets);
     });
@@ -607,6 +623,11 @@ void main() {
       );
       expect(find.text('No upcoming events'), findsOneWidget);
       expect(find.text('Belgian Grand Prix'), findsWidgets);
+      expect(
+        find.byType(GvOfflineNotice),
+        findsNothing,
+        reason: 'an available calendar with nothing left is not a data gap',
+      );
     });
   });
 
@@ -646,7 +667,7 @@ void main() {
       expect(find.text('Belgian Grand Prix'), findsWidgets);
     });
 
-    testWidgets('a partial dashboard shows one concise notice', (
+    testWidgets('a genuinely unavailable module shows one concise notice', (
       WidgetTester tester,
     ) async {
       await pumpHome(
@@ -654,9 +675,49 @@ void main() {
         dashboard: homeDashboardFixture(
           driverLeaders: const <DriverStandingEntry>[],
         ),
+        syncMetadata: unmaterialized(<String>{'standings:drivers:2026'}),
       );
       expect(find.text('Some information is unavailable'), findsOneWidget);
       expect(find.byType(GvOfflineNotice), findsOneWidget);
+    });
+
+    testWidgets('the season finale is never reported as missing information', (
+      WidgetTester tester,
+    ) async {
+      await pumpHome(
+        tester,
+        dashboard: homeDashboardFixture(
+          focus: homeFocusFixture(status: EventStatus.completed),
+          upcoming: const <CalendarEntry>[],
+        ),
+      );
+
+      expect(find.text('No upcoming events'), findsOneWidget);
+      expect(find.text('Upcoming events unavailable'), findsNothing);
+      expect(
+        find.text('Some information is unavailable'),
+        findsNothing,
+        reason: 'a complete empty answer is not missing information',
+      );
+      expect(find.byType(GvOfflineNotice), findsNothing);
+    });
+
+    testWidgets('an unmaterialized calendar reports upcoming as unavailable', (
+      WidgetTester tester,
+    ) async {
+      await pumpHome(
+        tester,
+        dashboard: homeDashboardFixture(upcoming: const <CalendarEntry>[]),
+        syncMetadata: unmaterialized(<String>{'calendar:2026'}),
+      );
+
+      expect(find.text('Upcoming events unavailable'), findsOneWidget);
+      expect(find.text('Some information is unavailable'), findsOneWidget);
+      expect(
+        find.text('Belgian Grand Prix'),
+        findsWidgets,
+        reason: 'the rest of the dashboard still renders',
+      );
     });
   });
 

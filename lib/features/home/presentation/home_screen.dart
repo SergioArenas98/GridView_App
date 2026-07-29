@@ -17,6 +17,7 @@ import '../../shared/presentation/widgets/screen_sections.dart';
 import '../application/home_providers.dart';
 import '../application/home_state.dart';
 import '../application/home_ui_state.dart';
+import '../domain/home_module_availability.dart';
 import 'home_formatting.dart';
 import 'widgets/home_hero.dart';
 import 'widgets/home_latest_result_card.dart';
@@ -185,52 +186,46 @@ class _HomeDashboard extends ConsumerWidget {
           const SizedBox(height: GvSpacing.xl),
 
           // --- Championship snapshot ---------------------------------------
-          if (state.driverLeader case final driverLeader?) ...<Widget>[
-            GvScreenSection(
-              title: l10n.homeDriversLeaderTitle,
-              actionLabel: l10n.driverViewStandings,
-              onAction: () =>
+          GvScreenSection(
+            title: l10n.homeDriversLeaderTitle,
+            actionLabel: l10n.driverViewStandings,
+            onAction: () =>
+                _goToBranch(context, RoutePaths.standingsDrivers(season)),
+            child: HomeLeaderCard(
+              cardKey: 'home-driver-leader',
+              championshipLabel: l10n.homeDriversLeaderTitle,
+              module: state.driverLeader,
+              format: format,
+              onOpenStandings: () =>
                   _goToBranch(context, RoutePaths.standingsDrivers(season)),
-              child: HomeLeaderCard(
-                cardKey: 'home-driver-leader',
-                championshipLabel: l10n.homeDriversLeaderTitle,
-                module: driverLeader,
-                format: format,
-                onOpenStandings: () =>
-                    _goToBranch(context, RoutePaths.standingsDrivers(season)),
-                onOpenEntity: (String id) =>
-                    context.openEntity(RoutePaths.driver(id), season: season),
-                openEntitySemanticLabel: l10n.homeOpenDriver,
-              ),
+              onOpenEntity: (String id) =>
+                  context.openEntity(RoutePaths.driver(id), season: season),
+              openEntitySemanticLabel: l10n.homeOpenDriver,
             ),
-            const SizedBox(height: GvSpacing.lg),
-          ],
-          if (state.teamLeader case final teamLeader?) ...<Widget>[
-            GvScreenSection(
-              title: l10n.homeTeamsLeaderTitle,
-              actionLabel: l10n.teamViewStandings,
-              onAction: () => _goToBranch(
+          ),
+          const SizedBox(height: GvSpacing.lg),
+          GvScreenSection(
+            title: l10n.homeTeamsLeaderTitle,
+            actionLabel: l10n.teamViewStandings,
+            onAction: () =>
+                _goToBranch(context, RoutePaths.standingsConstructors(season)),
+            child: HomeLeaderCard(
+              cardKey: 'home-team-leader',
+              championshipLabel: l10n.homeTeamsLeaderTitle,
+              module: state.teamLeader,
+              format: format,
+              onOpenStandings: () => _goToBranch(
                 context,
                 RoutePaths.standingsConstructors(season),
               ),
-              child: HomeLeaderCard(
-                cardKey: 'home-team-leader',
-                championshipLabel: l10n.homeTeamsLeaderTitle,
-                module: teamLeader,
-                format: format,
-                onOpenStandings: () => _goToBranch(
-                  context,
-                  RoutePaths.standingsConstructors(season),
-                ),
-                onOpenEntity: (String id) => context.openEntity(
-                  RoutePaths.constructor(id),
-                  season: season,
-                ),
-                openEntitySemanticLabel: l10n.homeOpenTeam,
+              onOpenEntity: (String id) => context.openEntity(
+                RoutePaths.constructor(id),
+                season: season,
               ),
+              openEntitySemanticLabel: l10n.homeOpenTeam,
             ),
-            const SizedBox(height: GvSpacing.xl),
-          ],
+          ),
+          const SizedBox(height: GvSpacing.xl),
 
           // --- Latest completed Grand Prix ----------------------------------
           if (state.latestResult case final latest?) ...<Widget>[
@@ -250,12 +245,20 @@ class _HomeDashboard extends ConsumerWidget {
             title: l10n.homeUpcoming,
             actionLabel: l10n.homeViewCalendar,
             onAction: () => _goToBranch(context, RoutePaths.calendar),
-            child: state.upcoming == null
-                ? _EmptyModule(message: l10n.homeNoUpcomingEvents)
-                : HomeUpcomingList(
-                    module: state.upcoming!,
-                    onOpen: (CalendarEntry entry) => openGrandPrix(entry.round),
-                  ),
+            // Three distinct outcomes, never blurred into one: the calendar
+            // cannot answer; it answered that no races remain; it listed them.
+            child: switch (state.upcoming.availability) {
+              HomeModuleAvailability.unavailable => _EmptyModule(
+                message: l10n.homeUpcomingUnavailable,
+              ),
+              HomeModuleAvailability.availableEmpty => _EmptyModule(
+                message: l10n.homeNoUpcomingEvents,
+              ),
+              HomeModuleAvailability.available => HomeUpcomingList(
+                module: state.upcoming,
+                onOpen: (CalendarEntry entry) => openGrandPrix(entry.round),
+              ),
+            },
           ),
           const SizedBox(height: GvSpacing.xl),
 

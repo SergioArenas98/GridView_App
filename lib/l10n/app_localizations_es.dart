@@ -912,6 +912,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeLeaderUnavailable => 'Líder no disponible';
 
   @override
+  String get homeNoLeaderYet => 'Aún no hay líder';
+
+  @override
   String homePointsValue(String points) {
     return '$points pts';
   }
@@ -927,6 +930,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeNoUpcomingEvents => 'No hay próximos eventos';
+
+  @override
+  String get homeUpcomingUnavailable => 'Próximos eventos no disponibles';
 
   @override
   String get homeViewCalendar => 'Ver calendario';

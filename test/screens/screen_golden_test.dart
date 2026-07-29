@@ -776,6 +776,10 @@ void _phase7dHomeGoldens() {
     );
   });
 
+  // Genuinely unavailable modules: neither the drivers' standings nor the
+  // calendar has a materialized representation, so Home really is missing
+  // information. An empty-but-available module is a different picture and is
+  // covered by the season-finale golden below.
   testWidgets('golden: home partial data', (WidgetTester tester) async {
     await pumpHomeGolden(
       tester,
@@ -783,10 +787,30 @@ void _phase7dHomeGoldens() {
         driverLeaders: const <DriverStandingEntry>[],
         upcoming: const <CalendarEntry>[],
       ),
+      syncMetadata: unmaterialized(<String>{
+        'standings:drivers:2026',
+        'calendar:2026',
+      }),
     );
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/home_partial.png'),
+    );
+  });
+
+  testWidgets('golden: home season finale with no races left', (
+    WidgetTester tester,
+  ) async {
+    await pumpHomeGolden(
+      tester,
+      dashboard: homeDashboardFixture(
+        focus: homeFocusFixture(status: EventStatus.completed),
+        upcoming: const <CalendarEntry>[],
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/home_season_finale.png'),
     );
   });
 
