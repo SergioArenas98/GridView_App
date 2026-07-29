@@ -1,124 +1,446 @@
-import 'dart:async';
-
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gridview/core/api/dto/event_dto.dart';
+import 'package:gridview/core/api/dto/season_dto.dart';
+import 'package:gridview/core/api/dto/standing_dto.dart';
+import 'package:gridview/core/api/dto/summary_dto.dart';
+import 'package:gridview/core/api/dto/view_dto.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/database/gridview_database.dart';
 import 'package:gridview/features/home/application/home_providers.dart';
 import 'package:gridview/features/home/application/home_state.dart';
 import 'package:gridview/features/shared/application/providers.dart';
-import 'package:gridview/features/shared/domain/freshness_evaluator.dart';
+import 'package:gridview/features/shared/data/remote/remote_result.dart';
+import 'package:gridview/features/sync/application/sync_providers.dart';
 
-import '../support/fake_api.dart';
+import '../support/bootstrap_fixture.dart';
+import '../support/scripted_api.dart';
 
-Future<void> _settle([int iterations = 40]) async {
+Future<void> _settle([int iterations = 60]) async {
   for (int i = 0; i < iterations; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 1));
   }
 }
 
-ProviderContainer _container(FakeGridViewApi api, DateTime now) {
-  final GridViewDatabase db = GridViewDatabase.forTesting(
-    NativeDatabase.memory(),
-  );
-  addTearDown(db.close);
-  final ProviderContainer container = ProviderContainer(
+/// Inside the fixture season and before the fixtures' `staleAfter`, so content
+/// reads as fresh. Every assertion below is pinned to this instant.
+final DateTime _now = DateTime.utc(2026, 7, 18, 12);
+
+ProviderContainer _container(GridViewDatabase db, ScriptedGridViewApi api) {
+  final ProviderContainer c = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
       remoteApiProvider.overrideWithValue(api),
-      clockProvider.overrideWithValue(() => now),
-      // Home is season-scoped: its controller needs a resolved season before it
-      // can build the canonical `home:<year>` key.
-      currentSeasonResolverProvider.overrideWithValue(() async => 2026),
+      clockProvider.overrideWithValue(() => _now),
     ],
   );
-  addTearDown(container.dispose);
-  return container;
+  addTearDown(c.dispose);
+  return c;
 }
 
-/// Stands in for the application-level coordinator's startup run: Home no
-/// longer refreshes itself on creation, so the one automatic refresh is
-/// triggered from outside, exactly as the coordinator does after the first
-/// frame.
-void _startupRefresh(ProviderContainer c) {
-  unawaited(c.read(homeControllerProvider.notifier).refresh());
+Map<String, dynamic> _meta(String requestId) => <String, dynamic>{
+  'apiVersion': '1',
+  'generatedAt': '2026-07-18T12:00:00Z',
+  'sourceUpdatedAt': '2026-07-18T11:55:00Z',
+  'requestId': requestId,
+};
+
+RemoteResult<SeasonDto> _seasonResult() => modifiedFromJson<SeasonDto>(
+  <String, dynamic>{'data': seasonJson(2026), 'meta': _meta('r-season')},
+  (Object? d) => SeasonDto.fromJson(d! as Map<String, dynamic>),
+  etag: 'W/"season"',
+);
+
+RemoteResult<HomeDataDto> _homeResult() => modifiedFromJson<HomeDataDto>(
+  <String, dynamic>{'data': homeJson(), 'meta': _meta('r-home')},
+  (Object? d) => HomeDataDto.fromJson(d! as Map<String, dynamic>),
+  etag: 'W/"home"',
+);
+
+/// Scripts every endpoint an ordinary current-season core run touches.
+void _scriptCore(ScriptedGridViewApi api) {
+  api.currentSeason = (String? etag) => _seasonResult();
+  api.season = (String? etag) => _seasonResult();
+  api.home = (String? etag) => _homeResult();
+  api.calendar = (String? etag) => modifiedListFromFixture<GrandPrixSummaryDto>(
+    'calendar/2026.json',
+    GrandPrixSummaryDto.fromJson,
+    etag: 'W/"cal"',
+  );
+  api.driverStandings = (String? etag) =>
+      modifiedListFromJson<DriverStandingDto>(
+        <String, dynamic>{
+          'data': driverStandingsJson(2026),
+          'meta': _meta('r-ds'),
+        },
+        DriverStandingDto.fromJson,
+        etag: 'W/"ds"',
+      );
+  api.constructorStandings = (String? etag) =>
+      modifiedListFromJson<ConstructorStandingDto>(
+        <String, dynamic>{
+          'data': constructorStandingsJson(2026),
+          'meta': _meta('r-cs'),
+        },
+        ConstructorStandingDto.fromJson,
+        etag: 'W/"cs"',
+      );
 }
+
+/// Runs the one first-use bootstrap so the database holds a current season and
+/// a materialized Home, then clears the call log.
+Future<void> _primeFirstUse(
+  ProviderContainer c,
+  ScriptedGridViewApi api,
+) async {
+  api.bootstrap = (String? etag) => bootstrapModified(bootstrapEnvelope());
+  await c.read(appSyncCoordinatorProvider).start();
+  await _settle();
+  api.bootstrap = null;
+  api.calls.clear();
+  api.lastEtag.clear();
+}
+
+void _watch(ProviderContainer c) =>
+    c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
 
 void main() {
-  final DateTime fresh = DateTime.utc(2026, 7, 18, 12, 10); // before staleAfter
-  final DateTime late = DateTime.utc(2026, 7, 18, 12, 20); // after staleAfter
+  late GridViewDatabase db;
+  late ScriptedGridViewApi api;
 
-  test('Home does not launch its own refresh on creation', () async {
-    final FakeGridViewApi api = FakeGridViewApi();
-    final ProviderContainer c = _container(api, fresh);
-    c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
+  setUp(() {
+    db = GridViewDatabase.forTesting(NativeDatabase.memory());
+    api = ScriptedGridViewApi();
+  });
+  tearDown(() => db.close());
 
-    await _settle();
-    expect(api.homeCalls, 0);
-    expect(c.read(homeStateProvider), isA<HomeLoading>());
+  group('refresh ownership', () {
+    test('creating the controller performs no request', () async {
+      final ProviderContainer c = _container(db, api);
+      _watch(c);
+      c.read(homeControllerProvider);
+      await _settle();
+
+      expect(api.calls, isEmpty, reason: 'Home never self-refreshes');
+    });
+
+    test('rebuilding the derived state creates no request', () async {
+      final ProviderContainer c = _container(db, api);
+      _watch(c);
+      for (int i = 0; i < 5; i++) {
+        c.read(homeStateProvider);
+        await _settle(5);
+      }
+      expect(api.calls, isEmpty);
+    });
+
+    test('watching the dashboard stream creates no request', () async {
+      final ProviderContainer c = _container(db, api);
+      c.listen(homeDashboardProvider, (_, _) {}, fireImmediately: true);
+      await _settle();
+      expect(api.calls, isEmpty);
+    });
+
+    test('a local commit re-emits without producing a request', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _watch(c);
+      await _settle();
+      expect(c.read(homeStateProvider), isA<HomeReady>());
+
+      // A later local write — exactly what another feature's sync commits.
+      await db.seasonDao.ensureSeason(2025);
+      await _settle();
+
+      expect(api.calls, isEmpty);
+      expect(c.read(homeStateProvider), isA<HomeReady>());
+    });
+
+    test('Home issues no detail or result request of its own', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      _watch(c);
+
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
+      expect(api.callsFor('grandPrix'), 0);
+      expect(api.callsFor('results'), 0);
+      expect(api.callsFor('driver'), 0);
+      expect(api.callsFor('constructor'), 0);
+      expect(api.callsFor('circuit'), 0);
+    });
   });
 
-  test(
-    'initial state is loading, then a successful refresh yields fresh data',
-    () async {
-      final FakeGridViewApi api = FakeGridViewApi();
-      final ProviderContainer c = _container(api, fresh);
-      c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
+  group('manual refresh', () {
+    test('one user action runs the current-season core set once', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      _watch(c);
 
-      expect(c.read(homeStateProvider), isA<HomeLoading>());
-      _startupRefresh(c);
-
+      await c.read(homeControllerProvider.notifier).refresh();
       await _settle();
+
+      expect(api.callsFor('home'), 1);
+      expect(api.callsFor('calendar'), 1);
+      expect(api.callsFor('driverStandings'), 1);
+    });
+
+    test('a duplicate tap while one run is in flight is coalesced', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      _watch(c);
+
+      final Future<void> first = c
+          .read(homeControllerProvider.notifier)
+          .refresh();
+      final Future<void> second = c
+          .read(homeControllerProvider.notifier)
+          .refresh();
+      await Future.wait(<Future<void>>[first, second]);
+      await _settle();
+
+      expect(api.callsFor('home'), 1);
+    });
+
+    test('forcing eligibility keeps the persisted validator', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      _watch(c);
+
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
+      expect(api.callsFor('home'), 2);
+      expect(
+        api.lastEtag['home'],
+        'W/"home"',
+        reason: 'forcing eligibility never discards the stored validator',
+      );
+    });
+
+    test('a 304 is a success, not a failure', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      _watch(c);
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
+      api.home = (String? etag) => const RemoteNotModified<HomeDataDto>();
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
+      final HomeReady ready = c.read(homeStateProvider) as HomeReady;
+      expect(ready.refreshError, isNull);
+      expect(ready.refreshing, isFalse);
+    });
+
+    test('the refresh always completes after a failure', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      api.home = (String? etag) => const RemoteFailure<HomeDataDto>(
+        ApiFailure(kind: ApiFailureKind.networkUnavailable),
+      );
+      _watch(c);
+
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
+      final HomeReady ready = c.read(homeStateProvider) as HomeReady;
+      expect(ready.refreshing, isFalse);
+      expect(ready.refreshError?.kind, ApiFailureKind.networkUnavailable);
+    });
+
+    test('a retry works after a failure', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      api.home = (String? etag) => const RemoteFailure<HomeDataDto>(
+        ApiFailure(kind: ApiFailureKind.networkUnavailable),
+      );
+      _watch(c);
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
+      _scriptCore(api);
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
+      expect((c.read(homeStateProvider) as HomeReady).refreshError, isNull);
+    });
+  });
+
+  group('failure scoping', () {
+    test('a Home failure with a cache is non-blocking', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      api.home = (String? etag) => const RemoteFailure<HomeDataDto>(
+        ApiFailure(kind: ApiFailureKind.serverUnavailable),
+      );
+      _watch(c);
+
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
       final HomeState state = c.read(homeStateProvider);
       expect(state, isA<HomeReady>());
-      expect((state as HomeReady).freshness, FreshnessState.fresh);
-      expect(api.homeCalls, 1);
-    },
-  );
+      expect((state as HomeReady).event.focus.grandPrix.name, isNotEmpty);
+    });
 
-  test('a stale cache is reported stale but still visible', () async {
-    final FakeGridViewApi api = FakeGridViewApi();
-    final ProviderContainer c = _container(api, late);
-    c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
-    _startupRefresh(c);
+    test(
+      'a Home failure without a representation is a first-load error',
+      () async {
+        final ProviderContainer c = _container(db, api);
+        _scriptCore(api);
+        api.home = (String? etag) => const RemoteFailure<HomeDataDto>(
+          ApiFailure(kind: ApiFailureKind.networkUnavailable),
+        );
+        _watch(c);
 
-    await _settle();
-    final HomeReady ready = c.read(homeStateProvider) as HomeReady;
-    expect(ready.freshness, FreshnessState.stale);
-    expect(ready.view.featured!.id, '2026-belgian-grand-prix');
+        await c.read(homeControllerProvider.notifier).refresh();
+        await _settle();
+
+        expect(c.read(homeStateProvider), isA<HomeFirstLoadError>());
+      },
+    );
+
+    test('a drivers-standings failure never becomes a Home error', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      api.driverStandings = (String? etag) =>
+          const RemoteFailure<List<DriverStandingDto>>(
+            ApiFailure(kind: ApiFailureKind.serverUnavailable),
+          );
+      _watch(c);
+
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
+      final HomeReady ready = c.read(homeStateProvider) as HomeReady;
+      expect(
+        ready.refreshError,
+        isNull,
+        reason: 'the failure is scoped to the drivers module',
+      );
+      expect(ready.driverLeader!.failed, isTrue);
+      expect(ready.teamLeader!.failed, isFalse);
+    });
+
+    test(
+      'a constructors-standings failure never affects the drivers',
+      () async {
+        final ProviderContainer c = _container(db, api);
+        await _primeFirstUse(c, api);
+        _scriptCore(api);
+        api.constructorStandings = (String? etag) =>
+            const RemoteFailure<List<ConstructorStandingDto>>(
+              ApiFailure(kind: ApiFailureKind.serverUnavailable),
+            );
+        _watch(c);
+
+        await c.read(homeControllerProvider.notifier).refresh();
+        await _settle();
+
+        final HomeReady ready = c.read(homeStateProvider) as HomeReady;
+        expect(ready.teamLeader!.failed, isTrue);
+        expect(ready.driverLeader!.failed, isFalse);
+        expect(ready.refreshError, isNull);
+      },
+    );
+
+    test('an unrelated Explore collection failure is ignored', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      api.seasonDrivers = (String? etag) =>
+          const RemoteFailure<List<SeasonDriverSummaryDto>>(
+            ApiFailure(kind: ApiFailureKind.serverUnavailable),
+          );
+      _watch(c);
+
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
+      final HomeReady ready = c.read(homeStateProvider) as HomeReady;
+      expect(ready.refreshError, isNull);
+      expect(ready.driverLeader!.failed, isFalse);
+    });
+
+    test('a calendar failure keeps a valid Home snapshot visible', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      api.calendar = (String? etag) =>
+          const RemoteFailure<List<GrandPrixSummaryDto>>(
+            ApiFailure(kind: ApiFailureKind.serverUnavailable),
+          );
+      _watch(c);
+
+      await c.read(homeControllerProvider.notifier).refresh();
+      await _settle();
+
+      final HomeState state = c.read(homeStateProvider);
+      expect(state, isA<HomeReady>());
+      expect((state as HomeReady).refreshError, isNull);
+    });
   });
 
-  test(
-    'first-load failure with no cache surfaces a recoverable error',
-    () async {
-      final FakeGridViewApi api = FakeGridViewApi()
-        ..homeFailure = const ApiFailure(
-          kind: ApiFailureKind.networkUnavailable,
+  group('bootstrap provenance', () {
+    test(
+      'a bootstrap-only Home is ready with no individual freshness',
+      () async {
+        final ProviderContainer c = _container(db, api);
+        await _primeFirstUse(c, api);
+        _watch(c);
+        await _settle();
+
+        final HomeReady ready = c.read(homeStateProvider) as HomeReady;
+        expect(ready.homeProvenance.lastSuccessAt, isNull);
+        expect(ready.homeProvenance.freshness, isNull);
+      },
+    );
+
+    test(
+      'the first individual Home request sends no fabricated ETag',
+      () async {
+        final ProviderContainer c = _container(db, api);
+        await _primeFirstUse(c, api);
+        _scriptCore(api);
+        _watch(c);
+
+        await c.read(homeControllerProvider.notifier).refresh();
+        await _settle();
+
+        expect(
+          api.lastEtag['home'],
+          isNull,
+          reason: "the bootstrap validator never becomes Home's",
         );
-      final ProviderContainer c = _container(api, fresh);
-      c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
-      _startupRefresh(c);
+      },
+    );
 
+    test('after a direct Home sync the module reports its own time', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _scriptCore(api);
+      _watch(c);
+
+      await c.read(homeControllerProvider.notifier).refresh();
       await _settle();
-      expect(c.read(homeStateProvider), isA<HomeFirstLoadError>());
-    },
-  );
 
-  test('a refresh failure after a success keeps the cached content', () async {
-    final FakeGridViewApi api = FakeGridViewApi();
-    final ProviderContainer c = _container(api, fresh);
-    c.listen(homeStateProvider, (_, _) {}, fireImmediately: true);
-    _startupRefresh(c);
-    await _settle();
-    expect(c.read(homeStateProvider), isA<HomeReady>());
-
-    api.homeFailure = const ApiFailure(kind: ApiFailureKind.serverUnavailable);
-    await c.read(homeControllerProvider.notifier).refresh();
-    await _settle();
-
-    final HomeReady ready = c.read(homeStateProvider) as HomeReady;
-    expect(ready.refreshError?.kind, ApiFailureKind.serverUnavailable);
-    expect(ready.view.featured!.id, '2026-belgian-grand-prix');
+      final HomeReady ready = c.read(homeStateProvider) as HomeReady;
+      expect(ready.homeProvenance.lastSuccessAt, isNotNull);
+    });
   });
 }

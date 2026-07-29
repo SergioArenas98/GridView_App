@@ -1,15 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/calendar/presentation/grand_prix_detail_screen.dart';
-import 'package:gridview/features/home/presentation/home_screen.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
-import 'package:gridview/features/shared/domain/entities/home_view.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
-import 'package:gridview/features/shared/presentation/widgets/mock_data_banner.dart';
 
 import '../support/domain_fixtures.dart';
 import '../support/fake_repository.dart';
@@ -22,95 +17,9 @@ import '../support/router_harness.dart';
 const Size _tallDetail = Size(400, 1600);
 
 void main() {
-  group('Home states', () {
-    testWidgets('shows a skeleton when there is no cached content', (
-      WidgetTester tester,
-    ) async {
-      final FakeRaceWeekendRepository repo = FakeRaceWeekendRepository(
-        homeStream: Stream<HomeView?>.fromFuture(Completer<HomeView?>().future),
-        onRefreshHome: () => Completer<RefreshResult>().future,
-      );
-      await pumpApp(tester, repository: repo, disableAnimations: true);
-
-      expect(find.byType(GvSkeletonCard), findsOneWidget);
-      expect(find.text('Belgian Grand Prix'), findsNothing);
-    });
-
-    testWidgets('renders cached next Grand Prix content', (
-      WidgetTester tester,
-    ) async {
-      await pumpApp(tester);
-      expect(find.byType(HomeScreen), findsOneWidget);
-      expect(find.text('Belgian Grand Prix'), findsOneWidget);
-      expect(find.text('View Grand Prix'), findsOneWidget);
-    });
-
-    testWidgets('keeps content visible during a background refresh', (
-      WidgetTester tester,
-    ) async {
-      final FakeRaceWeekendRepository repo = FakeRaceWeekendRepository(
-        home: homeViewFixture(),
-        onRefreshHome: () => Completer<RefreshResult>().future, // stays running
-      );
-      await pumpApp(tester, repository: repo, disableAnimations: true);
-      expect(find.text('Belgian Grand Prix'), findsOneWidget);
-    });
-
-    testWidgets('shows an offline/stale notice while retaining content', (
-      WidgetTester tester,
-    ) async {
-      final FakeRaceWeekendRepository repo = FakeRaceWeekendRepository(
-        home: homeViewFixture(
-          withFreshness: freshness(
-            generatedAt: DateTime.utc(2026, 7, 18, 11),
-            staleAfter: DateTime.utc(2026, 7, 18, 12, 5), // before the clock
-          ),
-        ),
-      );
-      await pumpApp(tester, repository: repo, disableAnimations: true);
-
-      expect(find.byType(GvOfflineNotice), findsOneWidget);
-      expect(find.text('Belgian Grand Prix'), findsOneWidget);
-    });
-
-    testWidgets(
-      'first-load failure shows a recoverable error and retry works',
-      (WidgetTester tester) async {
-        int refreshCalls = 0;
-        final FakeRaceWeekendRepository repo = FakeRaceWeekendRepository(
-          homeStream: Stream<HomeView?>.value(null),
-          onRefreshHome: () async {
-            refreshCalls++;
-            return const RefreshFailure(
-              ApiFailure(kind: ApiFailureKind.networkUnavailable),
-            );
-          },
-        );
-        await pumpApp(tester, repository: repo, disableAnimations: true);
-
-        expect(find.text("Can't load Home"), findsOneWidget);
-        expect(find.text('Try again'), findsOneWidget);
-        expect(refreshCalls, 1);
-
-        await tester.tap(find.text('Try again'));
-        await tester.pumpAndSettle();
-        expect(refreshCalls, 2);
-      },
-    );
-
-    testWidgets('shows the dev mock-data banner when mock data is used', (
-      WidgetTester tester,
-    ) async {
-      await pumpApp(tester, mockData: true, disableAnimations: true);
-      expect(find.byType(MockDataBanner), findsOneWidget);
-    });
-
-    testWidgets('renders Spanish content', (WidgetTester tester) async {
-      await pumpApp(tester, locale: const Locale('es'));
-      expect(find.text('Próximo Gran Premio'), findsOneWidget);
-    });
-  });
-
+  // The Home dashboard's own states, navigation, accessibility and offline
+  // behaviour are covered in full by `home_widget_test.dart`; what remains here
+  // is the Home -> Grand Prix hand-off and the Grand Prix screen itself.
   group('Home -> Grand Prix detail', () {
     testWidgets('opens Grand Prix detail from the Home hero', (
       WidgetTester tester,

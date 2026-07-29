@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,7 +7,6 @@ import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/app/router/app_router.dart';
 import 'package:gridview/core/theme/gridview_theme.dart';
 import 'package:gridview/core/widgets/widgets.dart';
-import 'package:gridview/features/home/application/home_providers.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
@@ -26,6 +23,7 @@ import 'fake_repository.dart';
 /// DAO/repository/controller tests.
 FakeRaceWeekendRepository defaultFakeRepository() => FakeRaceWeekendRepository(
   home: homeViewFixture(),
+  dashboard: homeDashboardFixture(),
   calendar: (int season) => calendarFixture(season: season),
   grandPrix: (int season, int round) => grandPrixDetailFixture(season, round),
 );
@@ -118,40 +116,6 @@ class TestApp extends StatelessWidget {
   }
 }
 
-/// Stands in for the application-level synchronization coordinator.
-///
-/// Home no longer launches its own startup refresh — that is the app
-/// coordinator's job — so widget tests that exercise Home's *rendering* need
-/// something outside Home to kick off exactly one refresh, just as the
-/// coordinator does after the first frame in the real app. Mounting the real
-/// coordinator here would drag in the database and the whole repository graph,
-/// which these rendering tests deliberately replace with fakes.
-class StartupRefreshStandIn extends ConsumerStatefulWidget {
-  const StartupRefreshStandIn({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  ConsumerState<StartupRefreshStandIn> createState() =>
-      _StartupRefreshStandInState();
-}
-
-class _StartupRefreshStandInState extends ConsumerState<StartupRefreshStandIn> {
-  @override
-  void initState() {
-    super.initState();
-    // After the first frame, exactly like the real coordinator: rendering never
-    // waits for a refresh, and no provider is modified during a build.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      unawaited(ref.read(homeControllerProvider.notifier).refresh());
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
-}
-
 /// Pumps the GridView router at [initialLocation] and settles. Wraps the app in
 /// a [ProviderScope] backed by the deterministic [defaultFakeRepository] and a
 /// fixed clock (before the fixtures' `staleAfter`, so content is fresh).
@@ -241,14 +205,16 @@ Future<GoRouter> pumpApp(
           ),
         ),
       ],
-      child: StartupRefreshStandIn(
-        child: TestApp(
-          router: router,
-          textScale: textScale,
-          locale: locale,
-          disableAnimations: disableAnimations,
-          padding: padding,
-        ),
+      // No startup stand-in: every Phase 7 screen reads its content from a
+      // Drift-backed stream and refreshes nothing on creation (ADR 0015), so a
+      // pumped screen produces no request at all. `onManualRefresh` therefore
+      // counts only genuine user actions.
+      child: TestApp(
+        router: router,
+        textScale: textScale,
+        locale: locale,
+        disableAnimations: disableAnimations,
+        padding: padding,
       ),
     ),
   );

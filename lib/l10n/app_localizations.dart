@@ -188,24 +188,6 @@ abstract class AppLocalizations {
   /// **'Weekend sessions'**
   String get homeSessions;
 
-  /// Home championship-leaders section title.
-  ///
-  /// In en, this message translates to:
-  /// **'Championship leaders'**
-  String get homeLeaders;
-
-  /// Label for the leading driver summary.
-  ///
-  /// In en, this message translates to:
-  /// **'Drivers\' leader'**
-  String get homeLeaderDrivers;
-
-  /// Label for the leading constructor summary.
-  ///
-  /// In en, this message translates to:
-  /// **'Constructors\' leader'**
-  String get homeLeaderConstructors;
-
   /// Home latest-result section title.
   ///
   /// In en, this message translates to:
@@ -739,30 +721,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Can\'t load Home'**
   String get homeErrorTitle;
-
-  /// Title for the non-authoritative placeholder section on Home.
-  ///
-  /// In en, this message translates to:
-  /// **'More coming soon'**
-  String get homeMoreComingTitle;
-
-  /// Explains the non-authoritative placeholder section on Home.
-  ///
-  /// In en, this message translates to:
-  /// **'Championship standings and results arrive in a later update.'**
-  String get homeMoreComingMessage;
-
-  /// Title shown on Home when the current season has no events yet.
-  ///
-  /// In en, this message translates to:
-  /// **'No races scheduled yet'**
-  String get homeNoEventsTitle;
-
-  /// Explains the empty Home state for a season with no events.
-  ///
-  /// In en, this message translates to:
-  /// **'The calendar for this season has not been published. Home will fill in as soon as it is.'**
-  String get homeNoEventsMessage;
 
   /// User-facing message for a network-unavailable failure.
   ///
@@ -1603,6 +1561,222 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Grand Prix name unavailable'**
   String get grandPrixNameUnavailable;
+
+  /// App-bar action that refreshes the Home dashboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh Home'**
+  String get homeRefreshAction;
+
+  /// Hero section title while the featured event's weekend is under way.
+  ///
+  /// In en, this message translates to:
+  /// **'Current Grand Prix'**
+  String get homeCurrentGrandPrix;
+
+  /// Hero section title when the featured event is already completed.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest Grand Prix'**
+  String get homeLatestGrandPrix;
+
+  /// Badge shown on the hero while the race weekend is under way.
+  ///
+  /// In en, this message translates to:
+  /// **'Race weekend'**
+  String get homeRaceWeekend;
+
+  /// Relative-timing label for a session that is authoritatively live.
+  ///
+  /// In en, this message translates to:
+  /// **'Live now'**
+  String get homeLiveNow;
+
+  /// Relative-timing label for a session starting within the next minute.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting soon'**
+  String get homeStartingSoon;
+
+  /// Relative-timing label, less than an hour away.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Starts in 1 minute} other{Starts in {count} minutes}}'**
+  String homeStartsInMinutes(int count);
+
+  /// Relative-timing label, less than a day away.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Starts in 1 hour} other{Starts in {count} hours}}'**
+  String homeStartsInHours(int count);
+
+  /// Relative-timing label, a day or more away.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Starts in 1 day} other{Starts in {count} days}}'**
+  String homeStartsInDays(int count);
+
+  /// Label for the session that is running now.
+  ///
+  /// In en, this message translates to:
+  /// **'Current session'**
+  String get homeCurrentSession;
+
+  /// Label for the next session of the weekend.
+  ///
+  /// In en, this message translates to:
+  /// **'Next session'**
+  String get homeNextSession;
+
+  /// Shown when the weekend supplied no usable session times.
+  ///
+  /// In en, this message translates to:
+  /// **'Session times not available'**
+  String get homeSessionUnavailable;
+
+  /// Title when no current season could be resolved.
+  ///
+  /// In en, this message translates to:
+  /// **'Season not available'**
+  String get homeSeasonUnavailableTitle;
+
+  /// Message when no current season could be resolved.
+  ///
+  /// In en, this message translates to:
+  /// **'GridView could not determine the current season. Check your connection and try again.'**
+  String get homeSeasonUnavailableMessage;
+
+  /// Title for a valid season with no known events.
+  ///
+  /// In en, this message translates to:
+  /// **'Calendar not available'**
+  String get homeCalendarUnavailableTitle;
+
+  /// Message for a valid season with no known events.
+  ///
+  /// In en, this message translates to:
+  /// **'This season has no published events yet. Home will fill in as soon as it does.'**
+  String get homeCalendarUnavailableMessage;
+
+  /// Section title for the drivers' championship leader module.
+  ///
+  /// In en, this message translates to:
+  /// **'Drivers\' Championship leader'**
+  String get homeDriversLeaderTitle;
+
+  /// Section title for the teams' championship leader module.
+  ///
+  /// In en, this message translates to:
+  /// **'Teams\' Championship leader'**
+  String get homeTeamsLeaderTitle;
+
+  /// Shown when several competitors share a confirmed position 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Tied leaders'**
+  String get homeTiedLeaders;
+
+  /// Shown when no confirmed leader can be named.
+  ///
+  /// In en, this message translates to:
+  /// **'Leader unavailable'**
+  String get homeLeaderUnavailable;
+
+  /// A compact championship points total.
+  ///
+  /// In en, this message translates to:
+  /// **'{points} pts'**
+  String homePointsValue(String points);
+
+  /// Label preceding the winner of the latest race.
+  ///
+  /// In en, this message translates to:
+  /// **'Winner'**
+  String get homeWinnerLabel;
+
+  /// Shown when the cached classification names no resolvable winner.
+  ///
+  /// In en, this message translates to:
+  /// **'Winner unavailable'**
+  String get homeWinnerUnavailable;
+
+  /// Shown when no classification is cached for the latest event.
+  ///
+  /// In en, this message translates to:
+  /// **'Result unavailable'**
+  String get homeResultUnavailable;
+
+  /// Shown when the season has no further scheduled events.
+  ///
+  /// In en, this message translates to:
+  /// **'No upcoming events'**
+  String get homeNoUpcomingEvents;
+
+  /// Action opening the Calendar branch.
+  ///
+  /// In en, this message translates to:
+  /// **'View Calendar'**
+  String get homeViewCalendar;
+
+  /// Section title for the Drivers / Teams / Circuits shortcuts.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get homeQuickLinks;
+
+  /// Accessible label for the Drivers shortcut.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Drivers'**
+  String get homeOpenDrivers;
+
+  /// Accessible label for the Teams shortcut.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Teams'**
+  String get homeOpenTeams;
+
+  /// Accessible label for the Circuits shortcut.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Circuits'**
+  String get homeOpenCircuits;
+
+  /// Accessible label for opening the leading driver.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Driver {name}'**
+  String homeOpenDriver(String name);
+
+  /// Accessible label for opening the leading team.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Team {name}'**
+  String homeOpenTeam(String name);
+
+  /// Concise notice when one or more optional Home modules are missing.
+  ///
+  /// In en, this message translates to:
+  /// **'Some information is unavailable'**
+  String get homeSomeInformationUnavailable;
+
+  /// Aggregate notice when at least one visible Home module is stale.
+  ///
+  /// In en, this message translates to:
+  /// **'Some information may be outdated'**
+  String get homeSomeInformationOutdated;
+
+  /// Notice that Home is rendering saved content.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing cached data'**
+  String get homeCachedNotice;
+
+  /// Non-blocking notice that the last Home refresh failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed'**
+  String get homeUpdateFailed;
 }
 
 class _AppLocalizationsDelegate

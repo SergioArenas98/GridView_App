@@ -8,6 +8,7 @@ import 'package:gridview/features/shared/domain/entities/circuit.dart';
 import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
+import 'package:gridview/features/shared/domain/entities/home_dashboard.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
 import 'package:gridview/features/shared/domain/entities/season_card.dart';
 import 'package:gridview/features/shared/domain/entities/session.dart';
@@ -38,6 +39,7 @@ Future<void> _pump(WidgetTester tester, String location) async {
 
 void main() {
   _phase7cGoldens();
+  _phase7dHomeGoldens();
 
   testWidgets('golden: primary shell pill navigation', (
     WidgetTester tester,
@@ -49,15 +51,8 @@ void main() {
     );
   });
 
-  testWidgets('golden: home loaded (cached next Grand Prix)', (
-    WidgetTester tester,
-  ) async {
-    await _pump(tester, '/');
-    await expectLater(
-      find.byType(MaterialApp),
-      matchesGoldenFile('goldens/home_loaded.png'),
-    );
-  });
+  // The Phase 4 `home_loaded` golden is intentionally superseded by the Phase 7D
+  // dashboard set below: Home is no longer a single cached-event card.
 
   // The deliberate Standings loading frame: the final screen with the selected
   // table not yet materialized (this supersedes the Phase 3 skeleton golden).
@@ -661,6 +656,199 @@ void _phase7cGoldens() {
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/entity_detail_cached_failure.png'),
+    );
+  });
+}
+
+// --- Phase 7D: the complete Home dashboard --------------------------------
+//
+// Every input is pinned: locale, clock, device time-zone label, surface size,
+// text scale, provider metadata, media-placeholder state and the remote-data
+// mode. Because the test font renders no glyph shapes, each golden below is
+// paired with exact widget/semantics assertions in `home_widget_test.dart`.
+void _phase7dHomeGoldens() {
+  Future<void> pumpHomeGolden(
+    WidgetTester tester, {
+    HomeDashboardView? dashboard,
+    ResourceSyncState? Function(String key)? syncMetadata,
+    Size surfaceSize = _device,
+    double textScale = 1.0,
+    Locale locale = const Locale('en'),
+  }) => pumpApp(
+    tester,
+    initialLocation: '/',
+    surfaceSize: surfaceSize,
+    textScale: textScale,
+    locale: locale,
+    disableAnimations: true,
+    syncMetadata: syncMetadata,
+    repository: FakeRaceWeekendRepository(
+      home: homeViewFixture(),
+      dashboard: dashboard ?? homeDashboardFixture(),
+      calendar: (int season) => calendarFixture(season: season),
+      grandPrix: (int season, int round) =>
+          grandPrixDetailFixture(season, round),
+    ),
+  );
+
+  testWidgets('golden: home pre-event', (WidgetTester tester) async {
+    await pumpHomeGolden(tester);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/home_pre_event.png'),
+    );
+  });
+
+  testWidgets('golden: home race weekend with a live session', (
+    WidgetTester tester,
+  ) async {
+    await pumpHomeGolden(
+      tester,
+      dashboard: homeDashboardFixture(
+        focus: homeFocusFixture(
+          status: EventStatus.inProgress,
+          sessions: <Session>[
+            Session(
+              id: '2026-belgian-grand-prix-qualifying',
+              type: SessionType.qualifying,
+              name: 'Qualifying',
+              startTime: DateTime.utc(2026, 7, 18, 10),
+              status: SessionStatus.completed,
+            ),
+            Session(
+              id: '2026-belgian-grand-prix-race',
+              type: SessionType.race,
+              name: 'Race',
+              startTime: DateTime.utc(2026, 7, 18, 11, 30),
+              status: SessionStatus.live,
+            ),
+          ],
+        ),
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/home_race_weekend.png'),
+    );
+  });
+
+  testWidgets('golden: home post-race with a cached winner', (
+    WidgetTester tester,
+  ) async {
+    await pumpHomeGolden(
+      tester,
+      dashboard: homeDashboardFixture(
+        focus: homeFocusFixture(status: EventStatus.completed),
+        latestRaceResult: raceResultFixture(
+          sessionType: SessionType.race,
+          round: 12,
+          entries: const <RaceResultEntry>[
+            RaceResultEntry(
+              driverId: 'max-verstappen',
+              constructorId: 'red-bull',
+              driverName: 'Max Verstappen',
+              constructorName: 'Red Bull Racing',
+              position: 1,
+              status: FinishStatus.finished,
+            ),
+          ],
+        ),
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/home_post_race.png'),
+    );
+  });
+
+  testWidgets('golden: home season empty', (WidgetTester tester) async {
+    await pumpHomeGolden(
+      tester,
+      dashboard: homeDashboardFixture(
+        withFocus: false,
+        withLatestCompleted: false,
+        upcoming: const <CalendarEntry>[],
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/home_season_empty.png'),
+    );
+  });
+
+  testWidgets('golden: home partial data', (WidgetTester tester) async {
+    await pumpHomeGolden(
+      tester,
+      dashboard: homeDashboardFixture(
+        driverLeaders: const <DriverStandingEntry>[],
+        upcoming: const <CalendarEntry>[],
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/home_partial.png'),
+    );
+  });
+
+  testWidgets('golden: home cached with a stale section', (
+    WidgetTester tester,
+  ) async {
+    await pumpHomeGolden(
+      tester,
+      syncMetadata: (String key) => syncedMetadata(
+        key,
+        staleAfter: key == 'standings:drivers:2026'
+            ? DateTime.utc(2026, 7, 18, 11)
+            : null,
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/home_cached_stale.png'),
+    );
+  });
+
+  testWidgets('golden: home tied championship leaders', (
+    WidgetTester tester,
+  ) async {
+    await pumpHomeGolden(
+      tester,
+      dashboard: homeDashboardFixture(
+        driverLeaders: <DriverStandingEntry>[
+          driverStandingEntry(
+            driverId: 'max-verstappen',
+            driverName: 'Max Verstappen',
+            order: 0,
+            position: 1,
+            points: 241.5,
+          ),
+          driverStandingEntry(
+            driverId: 'lando-norris',
+            driverName: 'Lando Norris',
+            order: 1,
+            position: 1,
+            points: 241.5,
+          ),
+        ],
+      ),
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/home_tied_leaders.png'),
+    );
+  });
+
+  testWidgets('golden: home at a large text scale on a narrow phone', (
+    WidgetTester tester,
+  ) async {
+    await pumpHomeGolden(
+      tester,
+      surfaceSize: const Size(320, 900),
+      textScale: 1.6,
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/home_large_text_narrow.png'),
     );
   });
 }

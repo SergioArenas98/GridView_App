@@ -477,6 +477,9 @@ void main() {
     ) async {
       final FakeRaceWeekendRepository repo = FakeRaceWeekendRepository(
         home: homeViewFixture(),
+        // This test switches through Home, so Home needs its dashboard: a
+        // first-load skeleton pulses (by design) and would never settle.
+        dashboard: homeDashboardFixture(),
         calendar: (int season) => _fullSeason(),
       );
       await pumpApp(

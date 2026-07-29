@@ -1,96 +1,186 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/api/errors/api_failure.dart';
 import '../../shared/application/providers.dart';
 import '../../shared/application/refresh_status.dart';
-import '../../shared/domain/entities/home_view.dart';
-import '../../shared/domain/refresh_result.dart';
+import '../../shared/domain/entities/home_dashboard.dart';
+import '../../shared/domain/entities/resource_key.dart';
+import '../../shared/domain/entities/sync_state.dart';
 import '../../sync/application/resource_refresh_status.dart';
 import '../../sync/application/sync_providers.dart';
 import '../../sync/domain/app_sync_state.dart';
 import '../../sync/domain/sync_resource.dart';
 import 'home_state.dart';
 
-/// The Drift-backed Home stream. Keep-alive so Home content persists across
-/// normal branch navigation without re-fetching. This is the only source of
-/// Home content — the refresh status below never carries data.
-final StreamProvider<HomeView?> homeCacheProvider = StreamProvider<HomeView?>(
-  (Ref ref) => ref.watch(homeRepositoryProvider).watchHome(),
-);
+/// The Drift-backed Home dashboard stream — the **only** source of Home content.
+///
+/// Watching it composes what is already stored and can never produce a request:
+/// no Grand Prix detail, no result document and no entity profile is fetched
+/// because Home displays a summary of one.
+final StreamProvider<HomeDashboardView?> homeDashboardProvider =
+    StreamProvider<HomeDashboardView?>(
+      (Ref ref) => ref.watch(homeRepositoryProvider).watchHomeDashboard(),
+    );
 
 /// Owns Home's *presentation* refresh status.
 ///
-/// Automatic startup and foreground refreshes of Home belong to the single
-/// application-level synchronization coordinator, so this controller no longer
-/// launches one of its own: a second competing startup request would be a known
-/// duplicate that per-key deduplication should never have to absorb. Instead it
-/// mirrors the coordinator's outcome for the Home resource, and keeps
-/// [refresh] for the user's explicit retry / pull-to-refresh.
-class HomeController extends Notifier<RefreshStatus> {
+/// Startup and foreground refreshes belong to the single application-level
+/// synchronization coordinator (ADR 0015), so this controller launches **none**
+/// of its own: creating it, rebuilding the widget, receiving a Drift emission,
+/// returning from a detail screen or switching bottom-navigation branch all
+/// produce exactly zero requests. It mirrors the coordinator's per-resource
+/// report, and exposes [refresh] for the user's explicit pull-to-refresh/retry.
+class HomeController extends Notifier<HomeRefreshState> {
   @override
-  RefreshStatus build() {
+  HomeRefreshState build() {
     ref.listen<AppSyncState>(appSyncStateProvider, (
       AppSyncState? _,
       AppSyncState next,
     ) {
-      final RefreshStatus? mapped = _statusFor(next);
-      if (mapped != null) state = mapped;
+      state = _mirror(next, state);
     });
-    return _statusFor(ref.read(appSyncStateProvider)) ?? RefreshStatus.idle;
+    return _mirror(ref.read(appSyncStateProvider), const HomeRefreshState());
   }
 
-  /// The user's explicit refresh. It still deduplicates against itself, and the
-  /// repository's per-key coordinator collapses it with any concurrent
-  /// application-level refresh of the same resource.
+  /// The user's explicit refresh of the current-season core set.
   ///
-  /// Home is season-scoped, so without a locally resolved season there is no
-  /// canonical `home:<year>` key to refresh: the retry is a no-op rather than an
-  /// unscoped request. Resolving the season is the application coordinator's
-  /// job, and its run reports `AppSyncSeasonContextUnavailable` when it cannot.
+  /// It goes through the approved manual entry point — the one implementation in
+  /// the application — which forces eligibility for a single run while keeping
+  /// conditional requests and persisted ETags. Repeated taps coalesce, and the
+  /// returned future always completes after success, failure or cancellation, so
+  /// a refresh indicator can never hang.
+  ///
+  /// Detail resources are never in scope: Home owns no Grand Prix, result,
+  /// Driver, Team or Circuit synchronization.
   Future<void> refresh() async {
-    if (state.inProgress) return;
-    final int? season = await ref.read(currentSeasonResolverProvider)();
-    if (season == null) return;
-
-    state = RefreshStatus.running;
-    final RefreshResult result = await ref
-        .read(homeRepositoryProvider)
-        .refreshHome(season: season);
-    if (!ref.mounted) return;
-    state = switch (result) {
-      RefreshSuccess() => RefreshStatus.idle,
-      RefreshFailure(:final ApiFailure failure) => RefreshStatus.idle.failed(
-        failure,
-      ),
-    };
+    if (state.home.inProgress) return;
+    state = const HomeRefreshState(
+      home: RefreshStatus.running,
+      driverStandings: RefreshStatus.running,
+      constructorStandings: RefreshStatus.running,
+    );
+    try {
+      await refreshCurrentSeasonCore(ref);
+    } finally {
+      // The listener above normally publishes the terminal statuses; settle them
+      // here too in case the run ended without emitting anything new.
+      if (ref.mounted && state.home.inProgress) {
+        state = _mirror(
+          ref.read(appSyncStateProvider),
+          const HomeRefreshState(),
+        );
+      }
+    }
   }
 
-  /// Maps an application-level state onto Home's status, or null when it says
-  /// nothing about Home (an idle coordinator, or a finished run that never
-  /// planned Home).
+  /// Projects an application-level state onto each resource Home renders.
   ///
-  /// The Home outcome is matched by parsing the canonical key through the shared
-  /// parser rather than by comparing strings, so this never has to know which
-  /// season the run was for.
-  static RefreshStatus? _statusFor(AppSyncState state) => resourceRefreshStatus(
-    state,
-    (SyncResource resource) => resource is HomeSyncResource,
-  );
+  /// Matching is strictly per resource, so an unrelated Explore collection's
+  /// failure is never Home's error, and one championship's failure never becomes
+  /// the other's.
+  static HomeRefreshState _mirror(AppSyncState sync, HomeRefreshState current) {
+    RefreshStatus? statusOf(bool Function(SyncResource) matches) =>
+        resourceRefreshStatus(sync, matches);
+
+    return HomeRefreshState(
+      home: statusOf((SyncResource r) => r is HomeSyncResource) ?? current.home,
+      calendar:
+          statusOf((SyncResource r) => r is CalendarSyncResource) ??
+          current.calendar,
+      driverStandings:
+          statusOf((SyncResource r) => r is DriverStandingsSyncResource) ??
+          current.driverStandings,
+      constructorStandings:
+          statusOf((SyncResource r) => r is ConstructorStandingsSyncResource) ??
+          current.constructorStandings,
+    );
+  }
 }
 
-final NotifierProvider<HomeController, RefreshStatus> homeControllerProvider =
-    NotifierProvider<HomeController, RefreshStatus>(HomeController.new);
+/// The transient refresh status of each resource Home renders, kept apart.
+///
+/// One resource's failure is never another's: the Home hero's status comes only
+/// from `home:<season>`, the calendar-derived modules only from
+/// `calendar:<season>`, and each championship only from its own standings key.
+class HomeRefreshState {
+  const HomeRefreshState({
+    this.home = RefreshStatus.idle,
+    this.calendar = RefreshStatus.idle,
+    this.driverStandings = RefreshStatus.idle,
+    this.constructorStandings = RefreshStatus.idle,
+  });
+
+  final RefreshStatus home;
+  final RefreshStatus calendar;
+  final RefreshStatus driverStandings;
+  final RefreshStatus constructorStandings;
+
+  /// Whether the manual core run is in flight. Cached content stays visible
+  /// throughout; this only drives the progress affordance.
+  bool get refreshing =>
+      home.inProgress ||
+      calendar.inProgress ||
+      driverStandings.inProgress ||
+      constructorStandings.inProgress;
+}
+
+final NotifierProvider<HomeController, HomeRefreshState>
+homeControllerProvider = NotifierProvider<HomeController, HomeRefreshState>(
+  HomeController.new,
+);
 
 /// The derived, typed Home presentation state.
 final Provider<HomeState> homeStateProvider = Provider<HomeState>((Ref ref) {
-  final AsyncValue<HomeView?> cache = ref.watch(homeCacheProvider);
-  final RefreshStatus status = ref.watch(homeControllerProvider);
+  final AsyncValue<int?> resolvedSeason = ref.watch(currentSeasonProvider);
+  final int? season = resolvedSeason.value;
+  final AsyncValue<HomeDashboardView?> dashboard = ref.watch(
+    homeDashboardProvider,
+  );
+  final HomeRefreshState status = ref.watch(homeControllerProvider);
+  final AppSyncState sync = ref.watch(appSyncStateProvider);
   final DateTime now = ref.watch(clockProvider)();
+
+  // Each module's provenance is read from its own canonical key. Bootstrap's
+  // record is deliberately not consulted here: it materializes content but
+  // contributes no ETag, provenance or freshness to any individual resource
+  // (ADR 0014), so a bootstrap-only Home correctly shows no update time.
+  ResourceSyncState? metadata(String? key) =>
+      key == null ? null : ref.watch(resourceSyncStateProvider(key)).value;
+
+  final HomeDashboardView? view = dashboard.value;
+  final int? resultRound = view?.latestRaceResult == null
+      ? null
+      : view!.latestCompleted?.round;
+
   return computeHomeState(
-    cache: cache.value,
-    streamReady: cache.hasValue,
-    refreshing: status.inProgress,
-    lastFailure: status.lastFailure,
-    now: now,
+    HomeStateInputs(
+      season: season,
+      seasonReady: resolvedSeason.hasValue,
+      dashboard: view,
+      dashboardReady: dashboard.hasValue,
+      homeMetadata: metadata(season == null ? null : ResourceKey.home(season)),
+      calendarMetadata: metadata(
+        season == null ? null : ResourceKey.calendar(season),
+      ),
+      driverStandingsMetadata: metadata(
+        season == null ? null : ResourceKey.driverStandings(season),
+      ),
+      constructorStandingsMetadata: metadata(
+        season == null ? null : ResourceKey.constructorStandings(season),
+      ),
+      resultMetadata: metadata(
+        season == null || resultRound == null
+            ? null
+            : ResourceKey.grandPrixResults(season, resultRound),
+      ),
+      refreshing: status.refreshing,
+      // Only the Home resource's own failure can become a Home-level error. A
+      // calendar or standings failure is scoped to the modules it derives.
+      lastFailure: status.home.lastFailure,
+      driverStandingsFailed: status.driverStandings.lastFailure != null,
+      constructorStandingsFailed:
+          status.constructorStandings.lastFailure != null,
+      syncSettled: sync is! AppSyncIdle && sync is! AppSyncRunning,
+      now: now,
+    ),
   );
 });

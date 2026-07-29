@@ -59,15 +59,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeSessions => 'Sesiones del fin de semana';
 
   @override
-  String get homeLeaders => 'Líderes del campeonato';
-
-  @override
-  String get homeLeaderDrivers => 'Líder de pilotos';
-
-  @override
-  String get homeLeaderConstructors => 'Líder de constructores';
-
-  @override
   String get homeLatestResult => 'Último resultado';
 
   @override
@@ -364,20 +355,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeErrorTitle => 'No se puede cargar Inicio';
-
-  @override
-  String get homeMoreComingTitle => 'Próximamente';
-
-  @override
-  String get homeMoreComingMessage =>
-      'Las clasificaciones y los resultados del campeonato llegarán en una próxima actualización.';
-
-  @override
-  String get homeNoEventsTitle => 'Todavía no hay carreras programadas';
-
-  @override
-  String get homeNoEventsMessage =>
-      'El calendario de esta temporada aún no se ha publicado. El inicio se completará en cuanto lo esté.';
 
   @override
   String get errorOffline => 'Parece que no tienes conexión.';
@@ -847,4 +824,146 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get grandPrixNameUnavailable => 'Nombre del Gran Premio no disponible';
+
+  @override
+  String get homeRefreshAction => 'Actualizar Inicio';
+
+  @override
+  String get homeCurrentGrandPrix => 'Gran Premio actual';
+
+  @override
+  String get homeLatestGrandPrix => 'Último Gran Premio';
+
+  @override
+  String get homeRaceWeekend => 'Fin de semana de carrera';
+
+  @override
+  String get homeLiveNow => 'En directo ahora';
+
+  @override
+  String get homeStartingSoon => 'Empieza en breve';
+
+  @override
+  String homeStartsInMinutes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Empieza en $count minutos',
+      one: 'Empieza en 1 minuto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String homeStartsInHours(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Empieza en $count horas',
+      one: 'Empieza en 1 hora',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String homeStartsInDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Empieza en $count días',
+      one: 'Empieza en 1 día',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeCurrentSession => 'Sesión actual';
+
+  @override
+  String get homeNextSession => 'Próxima sesión';
+
+  @override
+  String get homeSessionUnavailable => 'Horarios de sesión no disponibles';
+
+  @override
+  String get homeSeasonUnavailableTitle => 'Temporada no disponible';
+
+  @override
+  String get homeSeasonUnavailableMessage =>
+      'GridView no ha podido determinar la temporada actual. Comprueba tu conexión e inténtalo de nuevo.';
+
+  @override
+  String get homeCalendarUnavailableTitle => 'Calendario no disponible';
+
+  @override
+  String get homeCalendarUnavailableMessage =>
+      'Esta temporada todavía no tiene eventos publicados. La pantalla de inicio se completará en cuanto los haya.';
+
+  @override
+  String get homeDriversLeaderTitle => 'Líder del Campeonato de Pilotos';
+
+  @override
+  String get homeTeamsLeaderTitle => 'Líder del Campeonato de Constructores';
+
+  @override
+  String get homeTiedLeaders => 'Líderes empatados';
+
+  @override
+  String get homeLeaderUnavailable => 'Líder no disponible';
+
+  @override
+  String homePointsValue(String points) {
+    return '$points pts';
+  }
+
+  @override
+  String get homeWinnerLabel => 'Ganador';
+
+  @override
+  String get homeWinnerUnavailable => 'Ganador no disponible';
+
+  @override
+  String get homeResultUnavailable => 'Resultado no disponible';
+
+  @override
+  String get homeNoUpcomingEvents => 'No hay próximos eventos';
+
+  @override
+  String get homeViewCalendar => 'Ver calendario';
+
+  @override
+  String get homeQuickLinks => 'Explorar';
+
+  @override
+  String get homeOpenDrivers => 'Abrir Pilotos';
+
+  @override
+  String get homeOpenTeams => 'Abrir Equipos';
+
+  @override
+  String get homeOpenCircuits => 'Abrir Circuitos';
+
+  @override
+  String homeOpenDriver(String name) {
+    return 'Abrir el piloto $name';
+  }
+
+  @override
+  String homeOpenTeam(String name) {
+    return 'Abrir el equipo $name';
+  }
+
+  @override
+  String get homeSomeInformationUnavailable =>
+      'Parte de la información no está disponible';
+
+  @override
+  String get homeSomeInformationOutdated =>
+      'Parte de la información puede estar desactualizada';
+
+  @override
+  String get homeCachedNotice => 'Mostrando datos guardados';
+
+  @override
+  String get homeUpdateFailed => 'No se pudo actualizar';
 }

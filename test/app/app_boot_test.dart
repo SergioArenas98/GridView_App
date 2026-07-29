@@ -6,8 +6,10 @@ import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/home/presentation/home_screen.dart';
 import 'package:gridview/features/shared/application/providers.dart';
+import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/l10n/app_localizations.dart';
 
+import '../support/domain_fixtures.dart';
 import '../support/fake_repository.dart';
 import '../support/router_harness.dart';
 
@@ -22,6 +24,20 @@ void main() {
           homeRepositoryProvider.overrideWithValue(repo),
           grandPrixRepositoryProvider.overrideWithValue(repo),
           clockProvider.overrideWithValue(() => DateTime.utc(2026, 7, 18, 12)),
+          // Home is season-scoped and resolves its season from the local
+          // database; these tests replace the data layer with fakes, so the
+          // season is supplied directly rather than opening a database (whose
+          // stream timers are incompatible with pumpAndSettle).
+          currentSeasonResolverProvider.overrideWithValue(() async => 2026),
+          currentSeasonProvider.overrideWith(
+            (Ref ref) => Stream<int?>.value(2026),
+          ),
+          // Home reads each module's provenance from persisted metadata; the
+          // record is supplied directly for the same reason.
+          resourceSyncStateProvider.overrideWith(
+            (Ref ref, String key) =>
+                Stream<ResourceSyncState?>.value(syncedMetadata(key)),
+          ),
           appEnvironmentProvider.overrideWithValue(AppEnvironment.development),
           usesMockDataProvider.overrideWithValue(false),
         ],

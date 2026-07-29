@@ -4,6 +4,7 @@ import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/freshness.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
+import 'package:gridview/features/shared/domain/entities/home_dashboard.dart';
 import 'package:gridview/features/shared/domain/entities/home_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
 import 'package:gridview/features/shared/domain/entities/season.dart';
@@ -55,18 +56,22 @@ GrandPrix belgianGrandPrix({
   EventStatus status = EventStatus.upcoming,
   bool hasResults = false,
   String? officialName,
+  int season = 2026,
+  int round = 13,
+  String? startDate = '2026-07-24',
+  String? endDate = '2026-07-26',
 }) => GrandPrix(
-  id: '2026-belgian-grand-prix',
-  season: 2026,
-  round: 13,
+  id: '$season-belgian-grand-prix',
+  season: season,
+  round: round,
   eventSlug: 'belgian-grand-prix',
   name: 'Belgian Grand Prix',
   officialName: officialName,
   circuitId: 'spa-francorchamps',
   status: status,
   format: WeekendFormat.sprint,
-  startDate: '2026-07-24',
-  endDate: '2026-07-26',
+  startDate: startDate,
+  endDate: endDate,
   timezone: 'Europe/Brussels',
   sessions: sessions ?? <Session>[raceSessionBelgian()],
   hasResults: hasResults,
@@ -137,6 +142,74 @@ HomeView homeViewFixture({
         generatedAt: DateTime.utc(2026, 7, 18, 12),
         staleAfter: DateTime.utc(2026, 7, 18, 12, 15),
       ),
+);
+
+/// The composed Home dashboard the Home screen renders.
+///
+/// Defaults describe a healthy pre-event dashboard for the Belgian GP: a
+/// contract-defined Home focus with the full sprint-weekend schedule, the
+/// calendar-derived latest completed event and upcoming rounds, and one
+/// confirmed leader in each championship. Every part is overridable so a test
+/// can isolate exactly one module.
+HomeDashboardView homeDashboardFixture({
+  int seasonYear = 2026,
+  Season? season,
+  HomeFocus? focus,
+  bool withFocus = true,
+  CalendarEntry? latestCompleted,
+  bool withLatestCompleted = true,
+  RaceResult? latestRaceResult,
+  List<CalendarEntry>? upcoming,
+  List<DriverStandingEntry>? driverLeaders,
+  List<ConstructorStandingEntry>? constructorLeaders,
+}) {
+  final List<CalendarEntry> calendar = calendarFixture(season: seasonYear);
+  CalendarEntry entryForRound(int round) =>
+      calendar.firstWhere((CalendarEntry e) => e.round == round);
+
+  return HomeDashboardView(
+    seasonYear: seasonYear,
+    season: season ?? season2026(),
+    focus: withFocus ? (focus ?? homeFocusFixture(season: seasonYear)) : null,
+    latestCompleted: withLatestCompleted
+        ? (latestCompleted ?? entryForRound(12))
+        : null,
+    latestRaceResult: latestRaceResult,
+    upcoming: upcoming ?? <CalendarEntry>[entryForRound(14), entryForRound(15)],
+    driverLeaders:
+        driverLeaders ??
+        <DriverStandingEntry>[driverStandingsFixture(season: seasonYear).first],
+    constructorLeaders:
+        constructorLeaders ??
+        <ConstructorStandingEntry>[
+          constructorStandingsFixture(season: seasonYear).first,
+        ],
+  );
+}
+
+/// The Home focus for the Belgian GP, with the full sprint-weekend schedule.
+HomeFocus homeFocusFixture({
+  int season = 2026,
+  int round = 13,
+  EventStatus status = EventStatus.upcoming,
+  List<Session>? sessions,
+  Circuit? circuit = const Circuit(
+    id: 'spa-francorchamps',
+    name: 'Circuit de Spa-Francorchamps',
+    locality: 'Stavelot',
+    country: 'Belgium',
+    countryCode: 'BE',
+  ),
+  HomeFocusSource source = HomeFocusSource.homeSnapshot,
+}) => HomeFocus(
+  grandPrix: belgianGrandPrix(
+    season: season,
+    round: round,
+    status: status,
+    sessions: sessions ?? belgianSprintSessions(),
+  ),
+  circuit: circuit,
+  source: source,
 );
 
 /// A calendar entry for a season/round with explicit dates and status, so a
