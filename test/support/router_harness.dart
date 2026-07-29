@@ -5,7 +5,12 @@ import 'package:go_router/go_router.dart';
 
 import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/app/router/app_router.dart';
+import 'package:gridview/core/preferences/preference_store.dart';
+import 'package:gridview/core/preferences/preference_values.dart';
+import 'package:gridview/core/preferences/preferences_providers.dart';
+import 'package:gridview/core/preferences/preferences_repository.dart';
 import 'package:gridview/core/theme/gridview_theme.dart';
+import 'package:gridview/core/time/device_time_zone.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
@@ -145,6 +150,11 @@ Future<GoRouter> pumpApp(
   Stream<ResourceSyncState?> Function(String key)? syncMetadataStream,
   ManualCoreRefresh? onManualRefresh,
   String deviceTimeZone = 'UTC',
+
+  /// The persisted preference snapshot the app starts from. Seeded through a
+  /// real in-memory repository rather than stubbed, so a test exercises the same
+  /// read path production does.
+  AppPreferences preferences = AppPreferences.defaults,
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
@@ -160,6 +170,17 @@ Future<GoRouter> pumpApp(
       constructors ?? defaultFakeConstructors();
   final FakeCircuitRepository circuitRepo = circuits ?? defaultFakeCircuits();
   final GoRouter router = buildGridViewRouter(initialLocation: initialLocation);
+  final AppPreferencesRepository preferenceRepository =
+      AppPreferencesRepository(
+        store: InMemoryPreferenceStore(
+          initial: <String, String>{
+            PreferenceKeys.language: preferences.language.wire,
+            PreferenceKeys.theme: preferences.theme.wire,
+            PreferenceKeys.timeDisplay: preferences.timeDisplay.wire,
+          },
+        ),
+      );
+  addTearDown(preferenceRepository.dispose);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -175,7 +196,12 @@ Future<GoRouter> pumpApp(
         // Pinned so rendering never depends on the host machine's time zone:
         // a developer machine and the Linux CI runner report different names
         // for the same instant, which would make goldens machine-specific.
-        deviceTimeZoneProvider.overrideWithValue(deviceTimeZone),
+        deviceTimeZoneProvider.overrideWithValue(
+          DeviceTimeZone.iana(deviceTimeZone),
+        ),
+        appPreferencesRepositoryProvider.overrideWithValue(
+          preferenceRepository,
+        ),
         appEnvironmentProvider.overrideWithValue(environment),
         usesMockDataProvider.overrideWithValue(mockData),
         // Home, Calendar and Standings are season-scoped. Widget tests replace

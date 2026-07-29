@@ -86,7 +86,7 @@ class _DetailContent extends ConsumerWidget {
     final GrandPrixResultsState results = ref.watch(
       grandPrixResultsStateProvider(gpKey),
     );
-    final String deviceTimeZone = ref.watch(deviceTimeZoneProvider);
+    final String deviceTimeZone = ref.watch(deviceTimeZoneLabelProvider);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(

@@ -126,7 +126,7 @@ class HomeSessionBlock extends ConsumerWidget {
           padding: const EdgeInsets.only(top: GvSpacing.xs),
           child: Text(
             '${l10n.fieldDeviceTimeZone}: '
-            '${ref.watch(deviceTimeZoneProvider)}',
+            '${ref.watch(deviceTimeZoneLabelProvider)}',
             style: context.gvText.caption,
           ),
         ),
@@ -174,7 +174,7 @@ class HomeSessionFocusView {
     final focus = module.sessionFocus;
     if (focus == null) return null;
     final Session session = focus.session;
-    final DisplayedTime? shown = format.time.formatInstant(
+    final PresentedTime? shown = format.time.present(
       session.startTime,
       eventTimeZone: module.focus.grandPrix.timezone,
     );
@@ -182,7 +182,19 @@ class HomeSessionFocusView {
     final String status = requiredSessionStatusLabel(l10n, session.status);
     final String? time = shown == null
         ? null
-        : '${shown.weekday} ${shown.dayMonth} · ${shown.time} ${shown.zoneLabel}';
+        : <String>[
+            '${shown.primary.dayLabel} · '
+                '${shown.primary.time} ${shown.primary.zoneLabel}',
+            // The second clock only appears when the user asked for both and the
+            // two actually differ; the day is repeated only when the conversion
+            // lands on a different date.
+            if (shown.secondary case final DisplayedTime other)
+              <String>[
+                if (shown.crossesDay) '${other.dayLabel} ·',
+                other.time,
+                other.zoneLabel,
+              ].join(' '),
+          ].join('\n');
     final String? relative = format.relativeStart(focus, now);
     return HomeSessionFocusView(
       label: format.sessionFocusLabel(focus),

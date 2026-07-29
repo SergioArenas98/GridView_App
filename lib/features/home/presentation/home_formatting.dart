@@ -12,13 +12,12 @@ import '../domain/home_temporal_state.dart';
 /// did not supply stays `null` and is simply not rendered, and no identifier is
 /// ever humanised into a display name.
 class HomeFormatter {
-  HomeFormatter(this.l10n, String locale)
+  /// [time] is the one application-wide presentation-time policy, supplied by
+  /// the caller rather than constructed here, so Home cannot end up applying a
+  /// different Device/Event/Both policy from Calendar or Grand Prix.
+  HomeFormatter(this.l10n, String locale, SessionTimePresenter time)
     : _numbers = ResultFormatter(locale),
-      // The one event-zone/device-zone policy the Grand Prix screen already
-      // applies: event-local time when the event's IANA zone resolves, else the
-      // device clock — and always with an explicit zone label, so which clock is
-      // shown is never ambiguous. A zone is never inferred from a country.
-      _time = SessionTimePresenter(locale: locale);
+      _time = time;
 
   final AppLocalizations l10n;
   final ResultFormatter _numbers;

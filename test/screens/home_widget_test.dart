@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
+import 'package:gridview/core/preferences/preference_values.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/home/presentation/home_screen.dart';
 import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
@@ -45,6 +46,7 @@ Future<void> pumpHome(
   ResourceSyncState? Function(String key)? syncMetadata,
   Stream<ResourceSyncState?> Function(String key)? syncMetadataStream,
   ManualCoreRefresh? onManualRefresh,
+  AppPreferences preferences = AppPreferences.defaults,
 }) => pumpApp(
   tester,
   surfaceSize: surfaceSize,
@@ -56,6 +58,7 @@ Future<void> pumpHome(
   syncMetadata: syncMetadata,
   syncMetadataStream: syncMetadataStream,
   onManualRefresh: onManualRefresh,
+  preferences: preferences,
   disableAnimations: true,
   repository: FakeRaceWeekendRepository(
     dashboard: dashboardStream == null
@@ -285,11 +288,58 @@ void main() {
       // The Belgian weekend opens 2026-07-24 10:30Z and the pinned clock is
       // 2026-07-18 12:10Z, so the label coarsens to whole days.
       expect(find.text('Starts in 5 days'), findsWidgets);
-      // The explicit localized time is always present too, in the event's own
-      // zone and with that zone stated.
-      expect(find.textContaining('CEST'), findsWidgets);
-      // …and the reader's own zone is stated as well (pinned by the harness).
+      // The explicit localized time is always present too. The default policy is
+      // the device clock, pinned to UTC by the harness, and the zone is stated.
+      expect(find.textContaining('UTC'), findsWidgets);
+      expect(find.textContaining('CEST'), findsNothing);
+      // …and the reader's own zone is stated as well.
       expect(find.text('Your time zone: UTC'), findsOneWidget);
+    });
+
+    testWidgets('event mode shows the event zone instead of the device zone', (
+      WidgetTester tester,
+    ) async {
+      await pumpHome(
+        tester,
+        preferences: AppPreferences.defaults.copyWith(
+          timeDisplay: TimeDisplayPreference.event,
+        ),
+      );
+
+      // Spa-Francorchamps is Europe/Brussels: CEST in July.
+      expect(find.textContaining('CEST'), findsWidgets);
+    });
+
+    testWidgets('both mode shows the event and device clocks together', (
+      WidgetTester tester,
+    ) async {
+      await pumpHome(
+        tester,
+        preferences: AppPreferences.defaults.copyWith(
+          timeDisplay: TimeDisplayPreference.both,
+        ),
+      );
+
+      final String rendered = renderedText(tester).join(' ');
+      expect(rendered, contains('CEST'));
+      expect(rendered, contains('UTC'));
+    });
+
+    testWidgets('the time preference causes no synchronization request', (
+      WidgetTester tester,
+    ) async {
+      int refreshes = 0;
+      for (final TimeDisplayPreference preference
+          in TimeDisplayPreference.values) {
+        await pumpHome(
+          tester,
+          preferences: AppPreferences.defaults.copyWith(
+            timeDisplay: preference,
+          ),
+          onManualRefresh: () async => refreshes++,
+        );
+      }
+      expect(refreshes, 0);
     });
   });
 

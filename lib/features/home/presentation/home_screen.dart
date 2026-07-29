@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../app/router/entity_navigation.dart';
 import '../../../app/router/route_paths.dart';
 import '../../../core/theme/theme.dart';
+import '../../../core/time/session_time_scope.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/providers.dart';
@@ -133,7 +134,7 @@ class _HomeDashboard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final HomeFormatter format = _formatter(context);
+    final HomeFormatter format = _formatter(context, ref);
     final DateTime now = ref.watch(clockProvider)();
     final int season = state.seasonYear;
     final bool showMock = ref.watch(usesMockDataProvider);
@@ -583,7 +584,8 @@ class _HomeSkeleton extends StatelessWidget {
 /// is used.
 void _goToBranch(BuildContext context, String location) => context.go(location);
 
-HomeFormatter _formatter(BuildContext context) => HomeFormatter(
+HomeFormatter _formatter(BuildContext context, WidgetRef ref) => HomeFormatter(
   AppLocalizations.of(context),
   Localizations.localeOf(context).toLanguageTag(),
+  sessionTimePresenterOf(context, ref),
 );

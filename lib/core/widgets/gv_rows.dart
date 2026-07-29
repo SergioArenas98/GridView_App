@@ -134,6 +134,7 @@ class GvSessionRow extends StatelessWidget {
     super.key,
     required this.name,
     this.time,
+    this.secondaryTime,
     this.tone = GvStatusTone.neutral,
     this.statusLabel,
     this.onTap,
@@ -141,6 +142,14 @@ class GvSessionRow extends StatelessWidget {
 
   final String name;
   final String? time;
+
+  /// A second clock for the same instant, shown under [time].
+  ///
+  /// Only supplied when the user asked to see both clocks *and* the two differ;
+  /// the caller never passes the same value twice. It is rendered smaller and
+  /// muted so the pair reads as one time with two zones rather than as two
+  /// competing times.
+  final String? secondaryTime;
   final GvStatusTone tone;
   final String? statusLabel;
   final VoidCallback? onTap;
@@ -156,9 +165,28 @@ class GvSessionRow extends StatelessWidget {
           : gvToneColor(context, tone),
       title: Text(name),
       subtitle: statusLabel == null ? null : Text(statusLabel!),
-      trailing: time == null
-          ? null
-          : Text(time!, style: context.gvText.label.copyWith(fontSize: 13)),
+      trailing: time == null ? null : _time(context),
+    );
+  }
+
+  Widget _time(BuildContext context) {
+    final Text primary = Text(
+      time!,
+      textAlign: TextAlign.end,
+      style: context.gvText.label.copyWith(fontSize: 13),
+    );
+    if (secondaryTime == null) return primary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        primary,
+        Text(
+          secondaryTime!,
+          textAlign: TextAlign.end,
+          style: context.gvText.caption,
+        ),
+      ],
     );
   }
 }

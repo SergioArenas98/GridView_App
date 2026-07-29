@@ -5,6 +5,7 @@ import '../../../core/database/gridview_database.dart';
 import '../../../core/network/api_config.dart';
 import '../../../core/network/data_source_config.dart';
 import '../../../core/network/gridview_dio.dart';
+import '../../../core/time/device_time_zone.dart';
 import '../data/remote/dio_gridview_api.dart';
 import '../data/remote/fixture_gridview_api.dart';
 import '../data/remote/gridview_api.dart';
@@ -40,14 +41,30 @@ import '../domain/repositories/standings_repository.dart';
 final Provider<DateTime Function()> clockProvider =
     Provider<DateTime Function()>((Ref ref) => DateTime.now);
 
+/// The clock the device is on.
+///
+/// Production defers to the platform, so the device's own daylight-saving
+/// transitions are handled for instants arbitrarily far ahead. Tests override it
+/// with a pinned IANA zone so a widget test or golden never depends on the host
+/// machine (a developer machine and the CI runner convert the same instant
+/// differently and report different zone names for it).
+final Provider<DeviceTimeZone> deviceTimeZoneProvider =
+    Provider<DeviceTimeZone>((Ref ref) => const DeviceTimeZone.system());
+
 /// The device's current time-zone label, as shown to the user.
 ///
-/// Derived from the injected clock rather than read ad hoc, and overridable so a
-/// widget test or golden never depends on the host machine's zone (a developer
-/// machine and the CI runner report different names for the same instant).
-final Provider<String> deviceTimeZoneProvider = Provider<String>(
-  (Ref ref) => ref.watch(clockProvider)().toLocal().timeZoneName,
-);
+/// Derived from [deviceTimeZoneProvider] and the injected clock, so the label
+/// and the conversion can never disagree about which zone the user is reading.
+final Provider<String> deviceTimeZoneLabelProvider = Provider<String>((
+  Ref ref,
+) {
+  final DateTime now = ref.watch(clockProvider)();
+  final String name = ref
+      .watch(deviceTimeZoneProvider)
+      .toDeviceTime(now)
+      .timeZoneName;
+  return name.isEmpty ? 'local' : name;
+});
 
 /// The build environment. Overridable in tests.
 final Provider<AppEnvironment> appEnvironmentProvider =
