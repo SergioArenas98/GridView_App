@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 
 /// Standard content card: an elevated surface with a child slot.
 class GvContentCard extends StatelessWidget {
@@ -19,7 +19,7 @@ class GvContentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final Widget content = Padding(padding: padding, child: child);
     return Material(
-      color: GvColors.surfaceElevated,
+      color: context.gvColors.surfaceElevated,
       borderRadius: GvRadii.lgAll,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -59,7 +59,7 @@ class GvHeroCard extends StatelessWidget {
       borderRadius: GvRadii.xlAll,
       child: Container(
         constraints: BoxConstraints(minHeight: height),
-        color: GvColors.surfaceElevatedAlt,
+        color: context.gvColors.surfaceElevatedAlt,
         child: Stack(
           children: <Widget>[
             if (background != null) Positioned.fill(child: background!),
@@ -106,16 +106,16 @@ class GvDataCard extends StatelessWidget {
         children: <Widget>[
           Text(
             label,
-            style: GvTypography.label,
+            style: context.gvText.label,
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: GvSpacing.xs),
-          Text(value, style: GvTypography.statValue),
+          Text(value, style: context.gvText.statValue),
           if (caption != null) ...<Widget>[
             const SizedBox(height: GvSpacing.xxs),
             Text(
               caption!,
-              style: GvTypography.caption,
+              style: context.gvText.caption,
               overflow: TextOverflow.ellipsis,
             ),
           ],

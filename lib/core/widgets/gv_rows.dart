@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 import 'gv_status_chip.dart';
 
 /// Shared layout for GridView list-row shells: an optional leading slot and left
@@ -44,7 +44,7 @@ class _RowScaffold extends StatelessWidget {
 
   Widget _row(BuildContext context) {
     return Material(
-      color: emphasized ? GvColors.surfaceElevated : Colors.transparent,
+      color: emphasized ? context.gvColors.surfaceElevated : Colors.transparent,
       borderRadius: GvRadii.mdAll,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -58,7 +58,7 @@ class _RowScaffold extends StatelessWidget {
             ),
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) =>
-                  _content(constraints.maxWidth),
+                  _content(context, constraints.maxWidth),
             ),
           ),
         ),
@@ -70,7 +70,7 @@ class _RowScaffold extends StatelessWidget {
   /// slot can be capped rather than laid out unbounded (a Row gives a non-flex
   /// child infinite width, which turns a long value at a large text scale into
   /// an overflow instead of a wrap).
-  Widget _content(double width) {
+  Widget _content(BuildContext context, double width) {
     final double? trailingMax = width.isFinite
         ? width * _trailingMaxFraction
         : null;
@@ -97,14 +97,14 @@ class _RowScaffold extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               DefaultTextStyle.merge(
-                style: GvTypography.cardTitle.copyWith(fontSize: 16),
+                style: context.gvText.cardTitle.copyWith(fontSize: 16),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 child: title,
               ),
               if (subtitle != null)
                 DefaultTextStyle.merge(
-                  style: GvTypography.label,
+                  style: context.gvText.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   child: subtitle!,
@@ -158,7 +158,7 @@ class GvSessionRow extends StatelessWidget {
       subtitle: statusLabel == null ? null : Text(statusLabel!),
       trailing: time == null
           ? null
-          : Text(time!, style: GvTypography.label.copyWith(fontSize: 13)),
+          : Text(time!, style: context.gvText.label.copyWith(fontSize: 13)),
     );
   }
 }
@@ -227,14 +227,14 @@ class GvStandingsRow extends StatelessWidget {
           position,
           textAlign: TextAlign.center,
           maxLines: 1,
-          style: GvTypography.statValue.copyWith(fontSize: 18),
+          style: context.gvText.statValue.copyWith(fontSize: 18),
         ),
       ),
       title: Text(name),
       subtitle: details.isEmpty ? null : Text(details.join(' · ')),
       trailing: Text(
         points,
-        style: GvTypography.statValue.copyWith(fontSize: 18),
+        style: context.gvText.statValue.copyWith(fontSize: 18),
       ),
     );
   }
@@ -295,11 +295,11 @@ class GvDriverRow extends StatelessWidget {
       semanticLabel: semanticLabel,
       title: Text(name),
       subtitle: secondary == null ? null : Text(secondary),
-      trailing: _trailing(),
+      trailing: _trailing(context),
     );
   }
 
-  Widget? _trailing() {
+  Widget? _trailing(BuildContext context) {
     final String? value = number;
     final String? code = shortCode;
     if (value == null && code == null) return null;
@@ -308,9 +308,9 @@ class GvDriverRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         if (value != null)
-          Text(value, style: GvTypography.statValue.copyWith(fontSize: 18)),
+          Text(value, style: context.gvText.statValue.copyWith(fontSize: 18)),
         if (code != null)
-          Text(code, style: GvTypography.label.copyWith(fontSize: 13)),
+          Text(code, style: context.gvText.label.copyWith(fontSize: 13)),
       ],
     );
   }
@@ -453,12 +453,12 @@ class GvResultRow extends StatelessWidget {
         child: Text(
           position,
           textAlign: TextAlign.center,
-          style: GvTypography.statValue.copyWith(fontSize: 18),
+          style: context.gvText.statValue.copyWith(fontSize: 18),
         ),
       ),
       title: Text(driverName),
       subtitle: _subtitle(teamText, inlineTeam: !hasSecondaryAction),
-      trailing: _trailing(),
+      trailing: _trailing(context),
     );
 
     if (!hasSecondaryAction) return primary;
@@ -495,7 +495,7 @@ class GvResultRow extends StatelessWidget {
                           teamText,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GvTypography.label,
+                          style: context.gvText.label,
                         ),
                       ),
                     ),
@@ -518,7 +518,7 @@ class GvResultRow extends StatelessWidget {
     return parts.isEmpty ? null : Text(parts.join(' · '));
   }
 
-  Widget? _trailing() {
+  Widget? _trailing(BuildContext context) {
     final String? time = timeOrGap;
     final String? value = score;
     if (time == null && value == null) return null;
@@ -527,9 +527,9 @@ class GvResultRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         if (value != null)
-          Text(value, style: GvTypography.statValue.copyWith(fontSize: 18)),
+          Text(value, style: context.gvText.statValue.copyWith(fontSize: 18)),
         if (time != null)
-          Text(time, style: GvTypography.label.copyWith(fontSize: 13)),
+          Text(time, style: context.gvText.label.copyWith(fontSize: 13)),
       ],
     );
   }

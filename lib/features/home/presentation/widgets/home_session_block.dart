@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../../core/time/session_time.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../../l10n/app_localizations.dart';
@@ -53,7 +53,9 @@ class HomeSessionBlock extends ConsumerWidget {
       return GvContentCard(
         child: Text(
           l10n.homeSessionUnavailable,
-          style: GvTypography.bodyM.copyWith(color: GvColors.textSecondary),
+          style: context.gvText.bodyM.copyWith(
+            color: context.gvColors.textSecondary,
+          ),
         ),
       );
     }
@@ -78,7 +80,7 @@ class HomeSessionBlock extends ConsumerWidget {
                         Expanded(
                           child: Text(
                             focus.label,
-                            style: GvTypography.label,
+                            style: context.gvText.label,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -93,17 +95,17 @@ class HomeSessionBlock extends ConsumerWidget {
                       focus.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: GvTypography.cardTitle,
+                      style: context.gvText.cardTitle,
                     ),
                     if (focus.time case final String time)
                       Padding(
                         padding: const EdgeInsets.only(top: GvSpacing.xxs),
-                        child: Text(time, style: GvTypography.bodyM),
+                        child: Text(time, style: context.gvText.bodyM),
                       ),
                     if (focus.relative case final String relative)
                       Padding(
                         padding: const EdgeInsets.only(top: GvSpacing.xxs),
-                        child: Text(relative, style: GvTypography.label),
+                        child: Text(relative, style: context.gvText.label),
                       ),
                   ],
                 ),
@@ -125,7 +127,7 @@ class HomeSessionBlock extends ConsumerWidget {
           child: Text(
             '${l10n.fieldDeviceTimeZone}: '
             '${ref.watch(deviceTimeZoneProvider)}',
-            style: GvTypography.caption,
+            style: context.gvText.caption,
           ),
         ),
       ],

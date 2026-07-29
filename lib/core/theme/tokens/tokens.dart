@@ -1,4 +1,5 @@
 export 'gv_colors.dart';
+export 'gv_colors_light.dart';
 export 'gv_elevation.dart';
 export 'gv_icon_sizes.dart';
 export 'gv_layout.dart';

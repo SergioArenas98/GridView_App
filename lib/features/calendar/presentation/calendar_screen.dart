@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../app/router/entity_navigation.dart';
 import '../../../app/router/route_paths.dart';
-import '../../../core/theme/tokens/tokens.dart';
+import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/providers.dart';
@@ -128,7 +128,7 @@ class _CalendarHeader extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(l10n.seasonLabel('$season'), style: GvTypography.sectionTitle),
+          Text(l10n.seasonLabel('$season'), style: context.gvText.sectionTitle),
           if (refreshing || updated != null) ...<Widget>[
             const SizedBox(height: GvSpacing.xxs),
             Text(
@@ -139,7 +139,7 @@ class _CalendarHeader extends ConsumerWidget {
                         Localizations.localeOf(context).languageCode,
                       ).format(updated!.toLocal()),
               ),
-              style: GvTypography.caption,
+              style: context.gvText.caption,
             ),
           ],
           if (showMock) ...<Widget>[

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/entity_navigation.dart';
 import '../../../app/router/route_paths.dart';
-import '../../../core/theme/tokens/tokens.dart';
+import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/entity_detail_scope.dart';
@@ -187,14 +187,14 @@ class CircuitDetailScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Text(name, style: GvTypography.cardTitle),
+                  Text(name, style: context.gvText.cardTitle),
                   const SizedBox(height: GvSpacing.xxs),
                   if (EntityFormatter.joinDetails(<String?>[
                         l10n.roundLabel('${event.round}'),
                         fmt.calendarDate(event.startDate),
                       ])
                       case final String line)
-                    Text(line, style: GvTypography.bodyM),
+                    Text(line, style: context.gvText.bodyM),
                   const SizedBox(height: GvSpacing.xs),
                   Wrap(
                     spacing: GvSpacing.xs,
@@ -248,9 +248,9 @@ class _CircuitHero extends StatelessWidget {
         children: <Widget>[
           Semantics(
             header: true,
-            child: Text(profile.circuit.name, style: GvTypography.pageTitle),
+            child: Text(profile.circuit.name, style: context.gvText.pageTitle),
           ),
-          if (location != null) Text(location, style: GvTypography.bodyM),
+          if (location != null) Text(location, style: context.gvText.bodyM),
         ],
       ),
     );

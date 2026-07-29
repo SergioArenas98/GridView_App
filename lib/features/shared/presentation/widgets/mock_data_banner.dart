@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/gv_semantic_colors.dart';
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../../l10n/app_localizations.dart';
 
 /// A persistent, clearly-visible banner shown in dev/staging builds that serve
@@ -22,7 +21,7 @@ class MockDataBanner extends StatelessWidget {
           vertical: GvSpacing.sm,
         ),
         decoration: BoxDecoration(
-          color: GvColors.surfaceElevated,
+          color: context.gvColors.surfaceElevated,
           borderRadius: GvRadii.mdAll,
           border: Border.all(color: colors.warning),
         ),
@@ -37,8 +36,8 @@ class MockDataBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 l10n.mockDataBanner,
-                style: GvTypography.label.copyWith(
-                  color: GvColors.textSecondary,
+                style: context.gvText.label.copyWith(
+                  color: context.gvColors.textSecondary,
                 ),
               ),
             ),

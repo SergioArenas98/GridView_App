@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../placeholder/placeholder_content.dart';
@@ -36,8 +36,8 @@ class EventRow extends StatelessWidget {
             Container(
               width: 4,
               height: 36,
-              decoration: const BoxDecoration(
-                color: GvColors.accentPrimary,
+              decoration: BoxDecoration(
+                color: context.gvColors.accentPrimary,
                 borderRadius: GvRadii.pillAll,
               ),
             ),
@@ -48,7 +48,7 @@ class EventRow extends StatelessWidget {
             child: Text(
               '${event.round}',
               textAlign: TextAlign.center,
-              style: GvTypography.statValue.copyWith(fontSize: 18),
+              style: context.gvText.statValue.copyWith(fontSize: 18),
             ),
           ),
           const SizedBox(width: GvSpacing.sm),
@@ -61,13 +61,13 @@ class EventRow extends StatelessWidget {
                   event.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GvTypography.cardTitle.copyWith(fontSize: 16),
+                  style: context.gvText.cardTitle.copyWith(fontSize: 16),
                 ),
                 Text(
                   '${event.circuitName} · ${event.dateRange}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GvTypography.label,
+                  style: context.gvText.label,
                 ),
                 const SizedBox(height: GvSpacing.xs),
                 // The status chip lives in the column (bounded width) so it

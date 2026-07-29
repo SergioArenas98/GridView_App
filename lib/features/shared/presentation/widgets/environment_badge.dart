@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/environment/app_environment.dart';
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../application/providers.dart';
 
 /// A small non-production build badge (e.g. `DEV` / `STAGING`) that identifies
@@ -26,14 +26,14 @@ class GvEnvironmentBadge extends ConsumerWidget {
           vertical: GvSpacing.xxs,
         ),
         decoration: BoxDecoration(
-          color: GvColors.surfaceElevated,
+          color: context.gvColors.surfaceElevated,
           borderRadius: GvRadii.pillAll,
-          border: Border.all(color: GvColors.accentSecondary),
+          border: Border.all(color: context.gvColors.accentSecondary),
         ),
         child: Text(
           environment.label,
-          style: GvTypography.label.copyWith(
-            color: GvColors.accentSecondary,
+          style: context.gvText.label.copyWith(
+            color: context.gvColors.accentSecondary,
             fontWeight: FontWeight.w700,
           ),
         ),

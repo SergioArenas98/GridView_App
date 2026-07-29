@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 
 /// A reserved, layout-stable advertisement slot. It performs **no** ad SDK
 /// initialization or network work — it only reserves space so that real ad
@@ -25,13 +25,15 @@ class GvAdContainer extends StatelessWidget {
         height: height,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: GvColors.surface,
+          color: context.gvColors.surface,
           borderRadius: GvRadii.mdAll,
-          border: Border.all(color: GvColors.divider),
+          border: Border.all(color: context.gvColors.divider),
         ),
         child: Text(
           label,
-          style: GvTypography.caption.copyWith(color: GvColors.textDisabled),
+          style: context.gvText.caption.copyWith(
+            color: context.gvColors.textDisabled,
+          ),
         ),
       ),
     );

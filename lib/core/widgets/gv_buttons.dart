@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 
 /// Primary call-to-action button (filled red). A null [onPressed] disables it;
 /// [isLoading] shows a spinner and blocks input while preserving size.
@@ -21,12 +21,12 @@ class GvPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Widget child = isLoading
-        ? const SizedBox(
+        ? SizedBox(
             height: GvIconSizes.md,
             width: GvIconSizes.md,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: GvColors.onAccentPrimary,
+              color: context.gvColors.onAccentPrimary,
             ),
           )
         : _LabelWithIcon(label: label, icon: icon);

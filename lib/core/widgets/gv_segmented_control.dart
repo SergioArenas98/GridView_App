@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 
 /// Pill-style segmented control (e.g. Drivers / Constructors). Selected segments
 /// are both colour-highlighted and weight-emphasised, and expose a selected
@@ -21,8 +21,8 @@ class GvSegmentedControl extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(GvSpacing.xxs),
-      decoration: const BoxDecoration(
-        color: GvColors.surfaceElevatedAlt,
+      decoration: BoxDecoration(
+        color: context.gvColors.surfaceElevatedAlt,
         borderRadius: GvRadii.pillAll,
       ),
       child: Row(
@@ -71,18 +71,20 @@ class _Segment extends StatelessWidget {
             ),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? GvColors.accentPrimary : Colors.transparent,
+              color: selected
+                  ? context.gvColors.accentPrimary
+                  : Colors.transparent,
               borderRadius: GvRadii.pillAll,
             ),
             child: Text(
               label,
               overflow: TextOverflow.ellipsis,
-              style: GvTypography.label.copyWith(
+              style: context.gvText.label.copyWith(
                 fontSize: 14,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                 color: selected
-                    ? GvColors.onAccentPrimary
-                    : GvColors.textSecondary,
+                    ? context.gvColors.onAccentPrimary
+                    : context.gvColors.textSecondary,
               ),
             ),
           ),

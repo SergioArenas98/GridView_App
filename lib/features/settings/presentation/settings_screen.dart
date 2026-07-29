@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/environment/app_environment.dart';
-import '../../../core/theme/tokens/tokens.dart';
+import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../dev/catalogue/component_catalogue_screen.dart';
@@ -54,7 +54,7 @@ class SettingsScreen extends StatelessWidget {
                   padding: const EdgeInsets.only(top: GvSpacing.xxs),
                   child: Text(
                     l10n.settingsThemeNote,
-                    style: GvTypography.caption,
+                    style: context.gvText.caption,
                   ),
                 ),
               ],
@@ -85,10 +85,10 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () => ComponentCatalogueScreen.open(context),
                 child: Row(
                   children: <Widget>[
-                    const Icon(
+                    Icon(
                       Icons.widgets_outlined,
                       size: GvIconSizes.lg,
-                      color: GvColors.accentSecondary,
+                      color: context.gvColors.accentSecondary,
                     ),
                     const SizedBox(width: GvSpacing.md),
                     Expanded(
@@ -97,17 +97,20 @@ class SettingsScreen extends StatelessWidget {
                         children: <Widget>[
                           Text(
                             l10n.settingsComponentCatalogue,
-                            style: GvTypography.cardTitle,
+                            style: context.gvText.cardTitle,
                           ),
                           const SizedBox(height: GvSpacing.xxs),
                           Text(
                             l10n.settingsComponentCatalogueDescription,
-                            style: GvTypography.bodyM,
+                            style: context.gvText.bodyM,
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.chevron_right, color: GvColors.textMuted),
+                    Icon(
+                      Icons.chevron_right,
+                      color: context.gvColors.textMuted,
+                    ),
                   ],
                 ),
               ),

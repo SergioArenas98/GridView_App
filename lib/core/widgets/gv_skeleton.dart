@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 
 /// A pulsing placeholder block used while content loads. Respects the platform
 /// reduced-motion setting (renders static when animations are disabled).
@@ -56,7 +56,7 @@ class _GvSkeletonBlockState extends State<GvSkeletonBlock>
         width: widget.width,
         height: widget.height,
         decoration: BoxDecoration(
-          color: GvColors.surfaceElevatedAlt,
+          color: context.gvColors.surfaceElevatedAlt,
           borderRadius: widget.borderRadius,
         ),
       ),
@@ -72,8 +72,8 @@ class GvSkeletonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(GvSpacing.md),
-      decoration: const BoxDecoration(
-        color: GvColors.surfaceElevated,
+      decoration: BoxDecoration(
+        color: context.gvColors.surfaceElevated,
         borderRadius: GvRadii.lgAll,
       ),
       child: Column(

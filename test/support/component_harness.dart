@@ -3,14 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:gridview/core/theme/gridview_theme.dart';
 
-/// Pumps a design-system component inside the GridView dark theme, optionally
-/// at a fixed text scale, surface size and locale.
+/// Pumps a design-system component inside a GridView theme, optionally at a
+/// fixed text scale, surface size, locale and brightness.
+///
+/// [brightness] selects the dark (default, flagship) or light theme so a single
+/// component test can assert the same behaviour in both.
 Future<void> pumpComponent(
   WidgetTester tester,
   Widget child, {
   double textScale = 1.0,
   Size? surfaceSize,
   Locale locale = const Locale('en'),
+  Brightness brightness = Brightness.dark,
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
@@ -19,7 +23,9 @@ Future<void> pumpComponent(
   await tester.pumpWidget(
     MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: buildGridViewDarkTheme(),
+      theme: brightness == Brightness.dark
+          ? buildGridViewDarkTheme()
+          : buildGridViewLightTheme(),
       locale: locale,
       home: Scaffold(
         body: MediaQuery.withClampedTextScaling(

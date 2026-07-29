@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/environment/app_environment.dart';
-import '../../../core/theme/tokens/tokens.dart';
+import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
 
 /// A development-only gallery of every shared design-system component and its
@@ -105,12 +105,12 @@ class _ComponentCatalogueScreenState extends State<ComponentCatalogueScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                const GvHeroCard(
+                GvHeroCard(
                   child: Align(
                     alignment: Alignment.bottomLeft,
                     child: Text(
                       'Next Grand Prix',
-                      style: GvTypography.pageTitle,
+                      style: context.gvText.pageTitle,
                     ),
                   ),
                 ),
@@ -133,9 +133,9 @@ class _ComponentCatalogueScreenState extends State<ComponentCatalogueScreen> {
                 const SizedBox(height: GvSpacing.sm),
                 GvContentCard(
                   onTap: () {},
-                  child: const Text(
+                  child: Text(
                     'Standard content card',
-                    style: GvTypography.bodyL,
+                    style: context.gvText.bodyL,
                   ),
                 ),
               ],
@@ -276,10 +276,14 @@ class _ComponentCatalogueScreenState extends State<ComponentCatalogueScreen> {
           _Section(
             title: 'Long text (English / Spanish)',
             child: Column(
-              children: const <Widget>[
-                GvContentCard(child: Text(_longEn, style: GvTypography.bodyM)),
-                SizedBox(height: GvSpacing.sm),
-                GvContentCard(child: Text(_longEs, style: GvTypography.bodyM)),
+              children: <Widget>[
+                GvContentCard(
+                  child: Text(_longEn, style: context.gvText.bodyM),
+                ),
+                const SizedBox(height: GvSpacing.sm),
+                GvContentCard(
+                  child: Text(_longEs, style: context.gvText.bodyM),
+                ),
               ],
             ),
           ),

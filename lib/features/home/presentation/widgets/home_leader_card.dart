@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/gv_team_accent.dart';
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../application/home_state.dart';
@@ -172,14 +171,14 @@ class HomeLeaderCard extends StatelessWidget {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: GvTypography.cardTitle,
+                      style: context.gvText.cardTitle,
                     ),
                     if (subtitle != null)
                       Text(
                         subtitle,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: GvTypography.label,
+                        style: context.gvText.label,
                       ),
                     if (badge != null)
                       Padding(
@@ -193,7 +192,7 @@ class HomeLeaderCard extends StatelessWidget {
                 const SizedBox(width: GvSpacing.sm),
                 Text(
                   value,
-                  style: GvTypography.statValue.copyWith(fontSize: 18),
+                  style: context.gvText.statValue.copyWith(fontSize: 18),
                 ),
               ],
             ],
@@ -221,7 +220,7 @@ class _ResolvingLeader extends StatelessWidget {
     child: Container(
       height: 24,
       decoration: BoxDecoration(
-        color: GvColors.surfaceElevatedAlt,
+        color: context.gvColors.surfaceElevatedAlt,
         borderRadius: GvRadii.smAll,
       ),
     ),

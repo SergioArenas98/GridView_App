@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 
 /// A layout-reserving placeholder shown where a remote image will render. It
 /// keeps the aspect ratio so content does not shift when the image loads.
@@ -27,14 +27,14 @@ class GvImagePlaceholder extends StatelessWidget {
         aspectRatio: aspectRatio,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: GvColors.surfaceElevatedAlt,
+            color: context.gvColors.surfaceElevatedAlt,
             borderRadius: borderRadius,
           ),
           child: Center(
             child: Icon(
               icon,
               size: GvIconSizes.xl,
-              color: GvColors.textDisabled,
+              color: context.gvColors.textDisabled,
             ),
           ),
         ),

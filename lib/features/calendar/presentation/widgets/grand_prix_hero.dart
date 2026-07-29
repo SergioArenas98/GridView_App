@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../../core/time/session_time.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../../l10n/app_localizations.dart';
@@ -50,11 +50,11 @@ class GrandPrixHero extends StatelessWidget {
             ],
           ),
           const SizedBox(height: GvSpacing.sm),
-          Text(view.grandPrix.name, style: GvTypography.pageTitle),
+          Text(view.grandPrix.name, style: context.gvText.pageTitle),
           // The official name is only useful when it says something the short
           // name does not.
           if (officialName != null && officialName != view.grandPrix.name)
-            Text(officialName, style: GvTypography.label),
+            Text(officialName, style: context.gvText.label),
           const SizedBox(height: GvSpacing.xxs),
           Text(
             <String>[
@@ -63,7 +63,7 @@ class GrandPrixHero extends StatelessWidget {
               ?location,
               ?dateRange,
             ].join(' · '),
-            style: GvTypography.bodyM,
+            style: context.gvText.bodyM,
           ),
         ],
       ),

@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../app/router/entity_navigation.dart';
 import '../../../app/router/route_paths.dart';
-import '../../../core/theme/tokens/tokens.dart';
+import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/providers.dart';
@@ -199,7 +199,10 @@ class _StandingsHeader extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (season != null)
-            Text(l10n.seasonLabel('$season'), style: GvTypography.sectionTitle),
+            Text(
+              l10n.seasonLabel('$season'),
+              style: context.gvText.sectionTitle,
+            ),
           if (showMock) ...<Widget>[
             const SizedBox(height: GvSpacing.sm),
             const MockDataBanner(),
@@ -252,7 +255,7 @@ class _TableStatus extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (refreshing)
-            Text(l10n.standingsRefreshingLabel, style: GvTypography.caption)
+            Text(l10n.standingsRefreshingLabel, style: context.gvText.caption)
           else if (updated != null)
             Text(
               l10n.lastUpdatedLabel(
@@ -260,11 +263,14 @@ class _TableStatus extends StatelessWidget {
                   Localizations.localeOf(context).languageCode,
                 ).format(updated.toLocal()),
               ),
-              style: GvTypography.caption,
+              style: context.gvText.caption,
             ),
           if (showProvisional) ...<Widget>[
             const SizedBox(height: GvSpacing.xxs),
-            Text(l10n.standingsProvisionalNotice, style: GvTypography.caption),
+            Text(
+              l10n.standingsProvisionalNotice,
+              style: context.gvText.caption,
+            ),
           ],
           if (failure != null || isStale) ...<Widget>[
             const SizedBox(height: GvSpacing.sm),

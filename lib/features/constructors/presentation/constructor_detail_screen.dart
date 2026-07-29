@@ -3,8 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/router/entity_navigation.dart';
 import '../../../app/router/route_paths.dart';
-import '../../../core/theme/gv_team_accent.dart';
-import '../../../core/theme/tokens/tokens.dart';
+import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/entity_detail_scope.dart';
@@ -218,7 +217,7 @@ class ConstructorDetailScreen extends ConsumerWidget {
         GvScreenSection(
           title: l10n.teamAbout,
           child: GvContentCard(
-            child: Text(biography, style: GvTypography.bodyM),
+            child: Text(biography, style: context.gvText.bodyM),
           ),
         ),
         const SizedBox(height: GvSpacing.xl),
@@ -270,9 +269,9 @@ class _TeamHero extends StatelessWidget {
           ],
           Semantics(
             header: true,
-            child: Text(profile.displayName, style: GvTypography.pageTitle),
+            child: Text(profile.displayName, style: context.gvText.pageTitle),
           ),
-          if (subtitle != null) Text(subtitle, style: GvTypography.bodyM),
+          if (subtitle != null) Text(subtitle, style: context.gvText.bodyM),
         ],
       ),
     );

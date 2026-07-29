@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../../core/time/session_time.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../../l10n/app_localizations.dart';
@@ -97,7 +97,7 @@ class CalendarEventCard extends StatelessWidget {
                   child: Text(
                     '${entry.round}',
                     textAlign: TextAlign.center,
-                    style: GvTypography.statValue.copyWith(fontSize: 18),
+                    style: context.gvText.statValue.copyWith(fontSize: 18),
                   ),
                 ),
                 const SizedBox(width: GvSpacing.sm),
@@ -110,14 +110,14 @@ class CalendarEventCard extends StatelessWidget {
                         entry.grandPrix.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: GvTypography.cardTitle.copyWith(fontSize: 16),
+                        style: context.gvText.cardTitle.copyWith(fontSize: 16),
                       ),
                       if (_subtitle(dateRange, location) case final String s)
                         Text(
                           s,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: GvTypography.label,
+                          style: context.gvText.label,
                         ),
                       const SizedBox(height: GvSpacing.xs),
                       // Chips live inside the bounded column so they ellipsise

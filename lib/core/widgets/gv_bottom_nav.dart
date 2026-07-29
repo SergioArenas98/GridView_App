@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 
 /// A destination in [GvBottomNav].
 class GvBottomNavItem {
@@ -35,7 +35,7 @@ class GvBottomNav extends StatelessWidget {
         ),
         child: Container(
           decoration: BoxDecoration(
-            color: GvColors.surfaceElevated,
+            color: context.gvColors.surfaceElevated,
             borderRadius: GvRadii.xlAll,
             boxShadow: GvElevation.low,
           ),
@@ -74,7 +74,9 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = selected ? GvColors.accentPrimary : GvColors.textMuted;
+    final Color color = selected
+        ? context.gvColors.accentPrimary
+        : context.gvColors.textMuted;
     return Semantics(
       button: true,
       selected: selected,
@@ -97,7 +99,7 @@ class _NavItem extends StatelessWidget {
                 Text(
                   item.label,
                   overflow: TextOverflow.ellipsis,
-                  style: GvTypography.caption.copyWith(
+                  style: context.gvText.caption.copyWith(
                     color: color,
                     fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                   ),

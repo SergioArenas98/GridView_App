@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../shared/domain/entities/enums.dart';
@@ -79,7 +79,7 @@ class HomeLatestResultCard extends StatelessWidget {
                 module.event.grandPrix.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: GvTypography.cardTitle,
+                style: context.gvText.cardTitle,
               ),
               Text(
                 <String>[
@@ -89,7 +89,7 @@ class HomeLatestResultCard extends StatelessWidget {
                 ].join(' · '),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: GvTypography.label,
+                style: context.gvText.label,
               ),
               const SizedBox(height: GvSpacing.xs),
               Wrap(
@@ -110,7 +110,7 @@ class HomeLatestResultCard extends StatelessWidget {
               if (winner != null)
                 Row(
                   children: <Widget>[
-                    Text(l10n.homeWinnerLabel, style: GvTypography.label),
+                    Text(l10n.homeWinnerLabel, style: context.gvText.label),
                     const SizedBox(width: GvSpacing.sm),
                     Expanded(
                       child: Text(
@@ -118,8 +118,8 @@ class HomeLatestResultCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.right,
-                        style: GvTypography.bodyM.copyWith(
-                          color: GvColors.textPrimary,
+                        style: context.gvText.bodyM.copyWith(
+                          color: context.gvColors.textPrimary,
                         ),
                       ),
                     ),
@@ -132,8 +132,8 @@ class HomeLatestResultCard extends StatelessWidget {
                   resultStatus == null
                       ? l10n.homeResultUnavailable
                       : l10n.homeWinnerUnavailable,
-                  style: GvTypography.bodyM.copyWith(
-                    color: GvColors.textSecondary,
+                  style: context.gvText.bodyM.copyWith(
+                    color: context.gvColors.textSecondary,
                   ),
                 ),
             ],

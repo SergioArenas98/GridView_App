@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/router/entity_navigation.dart';
 import '../../../../app/router/route_paths.dart';
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../../core/time/session_time.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../../l10n/app_localizations.dart';

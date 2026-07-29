@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../../core/widgets/widgets.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../shared/domain/entities/enums.dart';
@@ -84,13 +84,13 @@ class HomeHero extends StatelessWidget {
                     event.name,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: GvTypography.pageTitle,
+                    style: context.gvText.pageTitle,
                   ),
                 ),
                 const SizedBox(height: GvSpacing.xxs),
                 Text(
                   l10n.roundLabel('${event.round}'),
-                  style: GvTypography.label,
+                  style: context.gvText.label,
                 ),
                 if (_subtitle(location, dateRange) case final String subtitle)
                   Padding(
@@ -99,13 +99,13 @@ class HomeHero extends StatelessWidget {
                       subtitle,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: GvTypography.bodyM,
+                      style: context.gvText.bodyM,
                     ),
                   ),
                 if (relative != null)
                   Padding(
                     padding: const EdgeInsets.only(top: GvSpacing.xs),
-                    child: Text(relative, style: GvTypography.label),
+                    child: Text(relative, style: context.gvText.label),
                   ),
               ],
             ),

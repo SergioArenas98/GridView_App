@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 
 /// A section title with an optional trailing action (e.g. "See all").
 ///
@@ -28,7 +28,7 @@ class GvSectionHeader extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: GvTypography.sectionTitle,
+              style: context.gvText.sectionTitle,
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -40,8 +40,8 @@ class GvSectionHeader extends StatelessWidget {
                   actionLabel!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GvTypography.label.copyWith(
-                    color: GvColors.accentSecondary,
+                  style: context.gvText.label.copyWith(
+                    color: context.gvColors.accentSecondary,
                   ),
                 ),
               ),

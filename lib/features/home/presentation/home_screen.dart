@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../app/router/entity_navigation.dart';
 import '../../../app/router/route_paths.dart';
-import '../../../core/theme/tokens/tokens.dart';
+import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/providers.dart';
@@ -413,7 +413,7 @@ class _SeasonHeading extends StatelessWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return Semantics(
       header: true,
-      child: Text(l10n.seasonLabel('$season'), style: GvTypography.displayL),
+      child: Text(l10n.seasonLabel('$season'), style: context.gvText.displayL),
     );
   }
 }
@@ -447,7 +447,7 @@ class _HomeNotices extends StatelessWidget {
             padding: const EdgeInsets.only(top: GvSpacing.xs),
             child: Text(
               l10n.standingsRefreshingLabel,
-              style: GvTypography.caption,
+              style: context.gvText.caption,
             ),
           )
         else if (updated != null)
@@ -459,7 +459,7 @@ class _HomeNotices extends StatelessWidget {
                   Localizations.localeOf(context).languageCode,
                 ).format(updated.toLocal()),
               ),
-              style: GvTypography.caption,
+              style: context.gvText.caption,
             ),
           ),
         if (failed || state.hasStaleSection || state.isPartial)
@@ -495,7 +495,7 @@ class _ResolvingModule extends StatelessWidget {
     key: ValueKey<String>(moduleKey),
     height: 44,
     decoration: BoxDecoration(
-      color: GvColors.surfaceElevated,
+      color: context.gvColors.surfaceElevated,
       borderRadius: GvRadii.smAll,
     ),
   );
@@ -511,7 +511,7 @@ class _EmptyModule extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     message,
-    style: GvTypography.bodyM.copyWith(color: GvColors.textSecondary),
+    style: context.gvText.bodyM.copyWith(color: context.gvColors.textSecondary),
   );
 }
 

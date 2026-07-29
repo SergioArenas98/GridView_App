@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/gv_semantic_colors.dart';
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 import 'gv_buttons.dart';
 
 /// Empty state: explains why there is nothing to show, optionally with an action.
@@ -25,7 +24,7 @@ class GvEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _CenteredState(
       icon: icon,
-      iconColor: GvColors.textMuted,
+      iconColor: context.gvColors.textMuted,
       title: title,
       message: message,
       action: (actionLabel != null && onAction != null)
@@ -56,7 +55,7 @@ class GvErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _CenteredState(
       icon: icon,
-      iconColor: GvColors.accentPrimary,
+      iconColor: context.gvColors.accentPrimary,
       title: title,
       message: message,
       action: (retryLabel != null && onRetry != null)
@@ -85,7 +84,7 @@ class GvOfflineNotice extends StatelessWidget {
           vertical: GvSpacing.sm,
         ),
         decoration: BoxDecoration(
-          color: GvColors.surfaceElevated,
+          color: context.gvColors.surfaceElevated,
           borderRadius: GvRadii.mdAll,
           border: Border.all(color: colors.stale),
         ),
@@ -100,8 +99,8 @@ class GvOfflineNotice extends StatelessWidget {
             Expanded(
               child: Text(
                 message,
-                style: GvTypography.bodyM.copyWith(
-                  color: GvColors.textSecondary,
+                style: context.gvText.bodyM.copyWith(
+                  color: context.gvColors.textSecondary,
                 ),
               ),
             ),
@@ -139,13 +138,13 @@ class _CenteredState extends StatelessWidget {
             const SizedBox(height: GvSpacing.md),
             Text(
               title,
-              style: GvTypography.cardTitle,
+              style: context.gvText.cardTitle,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: GvSpacing.xs),
             Text(
               message,
-              style: GvTypography.bodyM,
+              style: context.gvText.bodyM,
               textAlign: TextAlign.center,
             ),
             if (action != null) ...<Widget>[

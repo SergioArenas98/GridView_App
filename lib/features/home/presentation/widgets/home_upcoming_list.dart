@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../calendar/presentation/widgets/calendar_event_card.dart';
 import '../../../shared/domain/entities/calendar_entry.dart';
 import '../../application/home_state.dart';

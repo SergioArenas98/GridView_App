@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/gv_semantic_colors.dart';
-import '../theme/tokens/tokens.dart';
+import '../theme/theme.dart';
 
 /// Visual tone of a status chip. The design system does not know about domain
 /// enums; feature code maps its own states (e.g. EventStatus) onto a tone.
@@ -15,7 +14,7 @@ Color gvToneColor(BuildContext context, GvStatusTone tone) {
   return switch (tone) {
     GvStatusTone.neutral => colors.textMuted,
     GvStatusTone.info => colors.info,
-    GvStatusTone.live => GvColors.accentPrimary,
+    GvStatusTone.live => context.gvColors.accentPrimary,
     GvStatusTone.success => colors.success,
     GvStatusTone.warning => colors.warning,
   };
@@ -44,8 +43,8 @@ class GvStatusChip extends StatelessWidget {
             horizontal: GvSpacing.sm,
             vertical: GvSpacing.xxs,
           ),
-          decoration: const BoxDecoration(
-            color: GvColors.surfaceElevatedAlt,
+          decoration: BoxDecoration(
+            color: context.gvColors.surfaceElevatedAlt,
             borderRadius: GvRadii.pillAll,
           ),
           child: Row(
@@ -68,8 +67,8 @@ class GvStatusChip extends StatelessWidget {
                   maxLines: 1,
                   softWrap: false,
                   overflow: TextOverflow.ellipsis,
-                  style: GvTypography.label.copyWith(
-                    color: GvColors.textSecondary,
+                  style: context.gvText.label.copyWith(
+                    color: context.gvColors.textSecondary,
                   ),
                 ),
               ),

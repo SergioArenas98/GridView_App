@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/tokens/tokens.dart';
+import '../../../../core/theme/theme.dart';
 import '../../../../core/widgets/widgets.dart';
 
 /// A titled section: a [GvSectionHeader] with an optional trailing action, then
@@ -51,13 +51,15 @@ class GvDetailField extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Expanded(child: Text(label, style: GvTypography.label)),
+          Expanded(child: Text(label, style: context.gvText.label)),
           const SizedBox(width: GvSpacing.md),
           Expanded(
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: GvTypography.bodyM.copyWith(color: GvColors.textPrimary),
+              style: context.gvText.bodyM.copyWith(
+                color: context.gvColors.textPrimary,
+              ),
             ),
           ),
         ],
