@@ -35,7 +35,7 @@ dependencies:
   shared_preferences: ^2.5.5
   # Real package metadata for the Settings "Application information" screen
   # (Phase 8 §10). Never a hardcoded version string.
-  package_info_plus: ^9.0.1
+  package_info_plus: ^10.2.1
   # Allow-listed https/mailto launching for privacy and feedback actions
   # (Phase 8 §10). Arbitrary URLs from API content are never launched.
   url_launcher: ^6.3.2
