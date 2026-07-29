@@ -36,7 +36,7 @@ class RelevantEvent {
 /// - Missing or malformed dates simply make an event ineligible for the
 ///   date-based rules; they never throw.
 RelevantEvent? resolveRelevantEvent(Iterable<GrandPrix> events, DateTime now) {
-  final String today = _dateString(now);
+  final String today = utcDateString(now);
 
   GrandPrix? live;
   for (final GrandPrix event in events) {
@@ -52,23 +52,87 @@ RelevantEvent? resolveRelevantEvent(Iterable<GrandPrix> events, DateTime now) {
   for (final GrandPrix event in events) {
     if (event.status == EventStatus.cancelled) continue;
     if (event.status == EventStatus.completed) continue;
-    final String? start = _calendarDate(event.startDate);
+    final String? start = calendarDateOf(event.startDate);
     if (start == null || start.compareTo(today) < 0) continue;
     if (next == null || _isEarlier(event, start, next)) next = event;
   }
   return next == null ? null : RelevantEvent(event: next, inProgress: false);
 }
 
+/// The season's most recently finished event at [now]: the latest event whose
+/// end date is strictly before today.
+///
+/// The single rule shared by the calendar query and the Home dashboard, so the
+/// two can never name a different "latest completed Grand Prix". Ordering is by
+/// end date descending with `round` as the stable tie-breaker; an event with no
+/// usable end date is simply not a candidate, and nothing is inferred from list
+/// position.
+GrandPrix? resolveLatestCompletedEvent(
+  Iterable<GrandPrix> events,
+  DateTime now,
+) {
+  final String today = utcDateString(now);
+  GrandPrix? latest;
+  String? latestEnd;
+  for (final GrandPrix event in events) {
+    final String? end = calendarDateOf(event.endDate);
+    if (end == null || end.compareTo(today) >= 0) continue;
+    if (latest == null ||
+        end.compareTo(latestEnd!) > 0 ||
+        (end == latestEnd && event.round > latest.round)) {
+      latest = event;
+      latestEnd = end;
+    }
+  }
+  return latest;
+}
+
+/// The season's upcoming events at [now], in the delivered calendar order.
+///
+/// Policy, applied in exactly one place so Home cannot disagree with the
+/// Calendar screen:
+/// - **cancelled** events are excluded — a cancelled race is not something the
+///   user is waiting for (its status stays visible on the Calendar itself);
+/// - **completed** events are excluded;
+/// - **postponed** events are kept, so their real status stays visible;
+/// - an event with no usable start date is excluded rather than guessed at;
+/// - [excludeRound] drops the round already featured elsewhere on the screen,
+///   so the same Grand Prix is never shown twice;
+/// - [limit] bounds the result; a non-positive limit returns nothing.
+///
+/// The delivered chronology is authoritative: the input order is preserved and
+/// nothing is re-sorted by name or identifier.
+List<GrandPrix> resolveUpcomingEvents(
+  Iterable<GrandPrix> events,
+  DateTime now, {
+  int? excludeRound,
+  int limit = 3,
+}) {
+  if (limit <= 0) return const <GrandPrix>[];
+  final String today = utcDateString(now);
+  final List<GrandPrix> upcoming = <GrandPrix>[];
+  for (final GrandPrix event in events) {
+    if (event.status == EventStatus.cancelled) continue;
+    if (event.status == EventStatus.completed) continue;
+    if (excludeRound != null && event.round == excludeRound) continue;
+    final String? start = calendarDateOf(event.startDate);
+    if (start == null || start.compareTo(today) < 0) continue;
+    upcoming.add(event);
+    if (upcoming.length == limit) break;
+  }
+  return List<GrandPrix>.unmodifiable(upcoming);
+}
+
 bool _isInProgress(GrandPrix event, String today) {
   if (event.status == EventStatus.inProgress) return true;
-  final String? start = _calendarDate(event.startDate);
+  final String? start = calendarDateOf(event.startDate);
   if (start == null) return false;
-  final String end = _calendarDate(event.endDate) ?? start;
+  final String end = calendarDateOf(event.endDate) ?? start;
   return start.compareTo(today) <= 0 && today.compareTo(end) <= 0;
 }
 
 bool _isEarlier(GrandPrix candidate, String candidateStart, GrandPrix current) {
-  final String? currentStart = _calendarDate(current.startDate);
+  final String? currentStart = calendarDateOf(current.startDate);
   if (currentStart == null) return true;
   final int byDate = candidateStart.compareTo(currentStart);
   if (byDate != 0) return byDate < 0;
@@ -80,7 +144,11 @@ bool _roundIsAfter(GrandPrix candidate, GrandPrix current) =>
 
 /// Accepts a `YYYY-MM-DD` calendar date, rejecting anything else (including a
 /// partial or malformed value) rather than guessing.
-String? _calendarDate(String? value) {
+///
+/// Public because every rule that compares an event to "today" — the calendar
+/// chronology here and the Home temporal phase — must parse dates identically;
+/// a second private copy is exactly how the two would drift apart.
+String? calendarDateOf(String? value) {
   if (value == null || value.length < 10) return null;
   final String date = value.substring(0, 10);
   if (date[4] != '-' || date[7] != '-') return null;
@@ -91,7 +159,9 @@ String? _calendarDate(String? value) {
   return date;
 }
 
-String _dateString(DateTime instant) {
+/// The UTC calendar date of [instant] as `YYYY-MM-DD`, for comparison against
+/// [calendarDateOf].
+String utcDateString(DateTime instant) {
   final DateTime utc = instant.toUtc();
   final String year = utc.year.toString().padLeft(4, '0');
   final String month = utc.month.toString().padLeft(2, '0');

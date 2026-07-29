@@ -1,8 +1,10 @@
 // ignore_for_file: prefer_initializing_formals
 import '../../../../core/api/dto/event_dto.dart';
 import '../../../../core/api/dto/view_dto.dart';
+import '../../../../core/database/daos/home_dashboard_dao.dart';
 import '../../../../core/database/daos/vertical_slice_dao.dart';
 import '../../domain/entities/grand_prix.dart';
+import '../../domain/entities/home_dashboard.dart';
 import '../../domain/entities/home_view.dart';
 import '../../domain/entities/resource_key.dart';
 import '../../domain/entities/session.dart';
@@ -16,10 +18,14 @@ import '../remote/remote_result.dart';
 import '../sync/resource_snapshot.dart';
 import 'synced_repository.dart';
 
-/// Reads the Home view from the local database and refreshes it via a
-/// conditional remote read, writing the snapshot atomically through the shared
-/// pipeline. A Home snapshot with no featured event cannot drive the view, so it
-/// is rejected as a typed invalid-response failure that preserves the cache.
+/// Reads the Home view and the composed Home dashboard from the local database,
+/// and refreshes the Home representation via a conditional remote read that
+/// writes the snapshot atomically through the shared pipeline.
+///
+/// A Home snapshot with **no featured event** is a season with nothing scheduled
+/// yet: a valid, materialized representation rather than an invalid payload. The
+/// dashboard read is composition only — it issues no request of any kind, and in
+/// particular never asks for a Grand Prix detail or a result document.
 class HomeRepositoryImpl extends SyncedRepository implements HomeRepository {
   HomeRepositoryImpl({
     required super.remote,
@@ -27,12 +33,22 @@ class HomeRepositoryImpl extends SyncedRepository implements HomeRepository {
     required super.coordinator,
     required super.now,
     required VerticalSliceDao local,
-  }) : _local = local;
+    required HomeDashboardDao dashboard,
+  }) : _local = local,
+       _dashboard = dashboard;
 
   final VerticalSliceDao _local;
+  final HomeDashboardDao _dashboard;
 
   @override
   Stream<HomeView?> watchHome() => _local.watchHome();
+
+  /// Composes the dashboard against [SyncedRepository]'s injected clock — the
+  /// one the rest of this repository already reads time from, so a test pins a
+  /// single "now" rather than two that can silently disagree.
+  @override
+  Stream<HomeDashboardView?> watchHomeDashboard() =>
+      _dashboard.watchDashboard(now);
 
   @override
   Future<HomeView?> readHome() => _local.watchHome().first;

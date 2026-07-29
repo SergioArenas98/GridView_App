@@ -1,4 +1,5 @@
 import '../../data/remote/remote_cancellation.dart';
+import '../entities/home_dashboard.dart';
 import '../entities/home_view.dart';
 import '../refresh_result.dart';
 
@@ -10,6 +11,15 @@ import '../refresh_result.dart';
 abstract interface class HomeRepository {
   Stream<HomeView?> watchHome();
   Future<HomeView?> readHome();
+
+  /// The complete Home dashboard composed from the local data: the Home
+  /// snapshot's featured event plus the calendar-, standings- and result-owned
+  /// modules around it.
+  ///
+  /// Read-only and request-free — it composes what is already stored and never
+  /// synchronises anything, so watching it can never produce a request. Emits
+  /// `null` until a Home representation has been materialized for a season.
+  Stream<HomeDashboardView?> watchHomeDashboard();
 
   /// The season of the locally materialized Home representation, or `null` when
   /// none has been materialized.

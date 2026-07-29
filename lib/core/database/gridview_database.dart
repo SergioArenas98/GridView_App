@@ -4,6 +4,7 @@ import 'competitor_tables.dart';
 import 'connection/open_connection.dart';
 import 'daos/calendar_dao.dart';
 import 'daos/competitor_dao.dart';
+import 'daos/home_dashboard_dao.dart';
 import 'daos/media_dao.dart';
 import 'daos/results_dao.dart';
 import 'daos/season_dao.dart';
@@ -65,6 +66,7 @@ part 'gridview_database.g.dart';
   ],
   daos: <Type>[
     VerticalSliceDao,
+    HomeDashboardDao,
     MediaDao,
     StandingsDao,
     ResultsDao,

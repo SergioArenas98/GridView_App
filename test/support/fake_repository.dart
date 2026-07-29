@@ -1,6 +1,7 @@
 import 'package:gridview/features/shared/data/remote/remote_cancellation.dart';
 import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
+import 'package:gridview/features/shared/domain/entities/home_dashboard.dart';
 import 'package:gridview/features/shared/domain/entities/home_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
 import 'package:gridview/features/shared/domain/entities/standing.dart';
@@ -32,6 +33,8 @@ class FakeRaceWeekendRepository
         ResultRepository {
   FakeRaceWeekendRepository({
     this.home,
+    this.dashboard,
+    this.dashboardStream,
     this.calendar,
     this.grandPrix,
     this.results,
@@ -47,6 +50,14 @@ class FakeRaceWeekendRepository
 
   /// Static Home value emitted once (used when [homeStream] is null).
   final HomeView? home;
+
+  /// The composed Home dashboard emitted once (used when [dashboardStream] is
+  /// null). This is what the Home screen actually renders.
+  final HomeDashboardView? dashboard;
+
+  /// Overrides the dashboard stream entirely (e.g. a never-emitting stream to
+  /// hold the first-load state).
+  final Stream<HomeDashboardView?>? dashboardStream;
 
   /// Static calendar emitted once per season (used when [calendarStream] is
   /// null).
@@ -85,6 +96,10 @@ class FakeRaceWeekendRepository
 
   @override
   Future<HomeView?> readHome() => watchHome().first;
+
+  @override
+  Stream<HomeDashboardView?> watchHomeDashboard() =>
+      dashboardStream ?? Stream<HomeDashboardView?>.value(dashboard);
 
   @override
   Stream<List<CalendarEntry>> watchCalendar(int season) {

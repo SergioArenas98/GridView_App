@@ -225,6 +225,7 @@ final Provider<HomeRepository> homeRepositoryProvider =
         coordinator: ref.watch(refreshCoordinatorProvider),
         now: ref.watch(clockProvider),
         local: ref.watch(databaseProvider).verticalSliceDao,
+        dashboard: ref.watch(databaseProvider).homeDashboardDao,
       ),
     );
 

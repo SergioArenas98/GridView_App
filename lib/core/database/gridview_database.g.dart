@@ -11457,6 +11457,9 @@ abstract class _$GridViewDatabase extends GeneratedDatabase {
   late final VerticalSliceDao verticalSliceDao = VerticalSliceDao(
     this as GridViewDatabase,
   );
+  late final HomeDashboardDao homeDashboardDao = HomeDashboardDao(
+    this as GridViewDatabase,
+  );
   late final MediaDao mediaDao = MediaDao(this as GridViewDatabase);
   late final StandingsDao standingsDao = StandingsDao(this as GridViewDatabase);
   late final ResultsDao resultsDao = ResultsDao(this as GridViewDatabase);

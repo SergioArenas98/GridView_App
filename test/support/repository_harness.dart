@@ -61,6 +61,7 @@ class RepositoryHarness {
     coordinator: coordinator,
     now: now,
     local: db.verticalSliceDao,
+    dashboard: db.homeDashboardDao,
   );
 
   CalendarRepositoryImpl get calendar => CalendarRepositoryImpl(

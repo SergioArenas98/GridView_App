@@ -251,6 +251,7 @@ void main() {
           coordinator: perResource,
           now: DateTime.now,
           local: db.verticalSliceDao,
+          dashboard: db.homeDashboardDao,
         );
         return AppSyncCoordinator(
           dispatcher: ResourceRefreshDispatcher(

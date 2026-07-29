@@ -225,29 +225,13 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
 
   /// The most recently finished event of the season: the latest event whose
   /// end date is strictly before [now].
-  Future<GrandPrix?> latestCompletedEvent(int season, DateTime now) async {
-    final String today = _dateString(now);
-    final GrandPrixRow? row =
-        await (select(grandPrixEvents)
-              ..where(
-                (GrandPrixEvents g) =>
-                    g.season.equals(season) &
-                    g.endDate.isNotNull() &
-                    g.endDate.isSmallerThanValue(today),
-              )
-              ..orderBy(<OrderClauseGenerator<GrandPrixEvents>>[
-                (GrandPrixEvents g) => OrderingTerm(
-                  expression: g.endDate,
-                  mode: OrderingMode.desc,
-                ),
-                (GrandPrixEvents g) =>
-                    OrderingTerm(expression: g.round, mode: OrderingMode.desc),
-              ])
-              ..limit(1))
-            .getSingleOrNull();
-    if (row == null) return null;
-    return _grandPrixFrom(row, await _sessionsFor(row.id));
-  }
+  ///
+  /// Like [nextEvent], the rule itself lives in the shared domain
+  /// ([resolveLatestCompletedEvent]) so the Calendar and the Home dashboard can
+  /// never name a different "latest completed Grand Prix"; the DAO only supplies
+  /// the authoritative chronology it already stores.
+  Future<GrandPrix?> latestCompletedEvent(int season, DateTime now) async =>
+      resolveLatestCompletedEvent(await calendar(season), now);
 
   /// The session in progress at [now] (its window contains [now]); the latest
   /// such session wins when several qualify. Returns `null` when none is live.
@@ -598,14 +582,6 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
         timezone: Value<String?>(g.timezone),
         hasResults: Value<bool>(g.hasResults),
       );
-
-  String _dateString(DateTime d) {
-    final DateTime u = d.toUtc();
-    final String y = u.year.toString().padLeft(4, '0');
-    final String m = u.month.toString().padLeft(2, '0');
-    final String day = u.day.toString().padLeft(2, '0');
-    return '$y-$m-$day';
-  }
 
   // ---------------------------------------------------------------------------
   // Mapping (row -> domain)
