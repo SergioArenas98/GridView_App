@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../app/environment/app_environment.dart';
+
 /// The only external destinations GridView is allowed to open.
 ///
 /// An allow-list by construction: a link is either a validated `https` URL or a
@@ -123,6 +125,20 @@ class ExternalLinkConfig {
   final ExternalLink? privacyPolicy;
   final ExternalLink? supportContact;
 }
+
+/// Whether an *absent* external configuration may be explained to the reader.
+///
+/// Outside production a missing policy URL or contact address is useful
+/// information for whoever is building the app, so a localized, non-technical
+/// status is shown — never a build-define key or an internal configuration name.
+///
+/// In production it is not: a user has no way to act on it, a row that explains
+/// its own absence reads as a fault, and a tappable action that cannot open
+/// anything is worse. The affordance is therefore omitted entirely. The absence
+/// itself is a release blocker tracked in the documentation, not a runtime
+/// message.
+bool showsConfigurationStatus(AppEnvironment environment) =>
+    !environment.isProduction;
 
 /// The active external-link configuration. Overridable in tests.
 final Provider<ExternalLinkConfig> externalLinkConfigProvider =

@@ -139,6 +139,9 @@ class PrivacySettingsScreen extends ConsumerWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final ExternalLinkConfig config = ref.watch(externalLinkConfigProvider);
     final ExternalLink? policy = config.privacyPolicy;
+    final bool explainsAbsence = showsConfigurationStatus(
+      ref.watch(appEnvironmentProvider),
+    );
 
     return GvScreenScaffold(
       title: l10n.settingsPrivacyAndLegal,
@@ -168,19 +171,25 @@ class PrivacySettingsScreen extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: GvSpacing.lg),
-          if (policy == null)
-            Text(
-              l10n.settingsPrivacyPolicyUnavailable,
-              style: context.gvText.bodyM,
-            )
-          else
+          if (policy != null) ...<Widget>[
+            const SizedBox(height: GvSpacing.lg),
             GvSettingsRow(
               key: const ValueKey<String>('settings-privacy-policy'),
               title: l10n.settingsPrivacyPolicyOpen,
               icon: Icons.open_in_new,
               onTap: () => openExternalLink(context, ref, policy),
             ),
+          ]
+          // With no configured policy, production shows nothing at all: the
+          // reader cannot act on it and a self-explaining absence reads as a
+          // fault. Outside production the status is useful to whoever builds.
+          else if (explainsAbsence) ...<Widget>[
+            const SizedBox(height: GvSpacing.lg),
+            Text(
+              l10n.settingsPrivacyPolicyUnavailable,
+              style: context.gvText.bodyM,
+            ),
+          ],
         ],
       ),
     );

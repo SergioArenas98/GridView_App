@@ -119,19 +119,27 @@ class SettingsScreen extends ConsumerWidget {
                   title: l10n.settingsPrivacyAndLegal,
                   onTap: () => context.push(RoutePaths.settingsPrivacy),
                 ),
-                // Feedback is an action rather than a route. With no configured
-                // contact the row states so instead of offering a dead control.
-                GvSettingsRow(
-                  key: const ValueKey<String>('settings-feedback'),
-                  title: l10n.settingsFeedback,
-                  description: contact == null
-                      ? l10n.settingsFeedbackUnavailable
-                      : null,
-                  icon: contact == null ? null : Icons.mail_outline,
-                  onTap: contact == null
-                      ? null
-                      : () => openExternalLink(context, ref, contact),
-                ),
+                // Feedback is an action rather than a route.
+                //
+                // With a configured contact it is a normal tappable row. With
+                // none, production omits it entirely — a row that explains its
+                // own absence reads as a fault to a user who cannot act on it —
+                // while dev and staging state the status, which is useful to
+                // whoever is building. Either way there is never a tappable
+                // control that cannot open anything.
+                if (contact != null)
+                  GvSettingsRow(
+                    key: const ValueKey<String>('settings-feedback'),
+                    title: l10n.settingsFeedback,
+                    icon: Icons.mail_outline,
+                    onTap: () => openExternalLink(context, ref, contact),
+                  )
+                else if (showsConfigurationStatus(environment))
+                  GvSettingsRow(
+                    key: const ValueKey<String>('settings-feedback'),
+                    title: l10n.settingsFeedback,
+                    description: l10n.settingsFeedbackUnavailable,
+                  ),
               ],
             ),
           ),

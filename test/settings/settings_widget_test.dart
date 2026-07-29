@@ -340,8 +340,8 @@ void main() {
       expect(find.text('Enabled'), findsNothing);
     });
 
-    testWidgets('an unconfigured privacy policy says so instead of offering a '
-        'dead action', (WidgetTester tester) async {
+    testWidgets('outside production an unconfigured privacy policy says so '
+        'instead of offering a dead action', (WidgetTester tester) async {
       await pumpSettings(tester, location: '/settings/privacy');
       await tester.pumpAndSettle();
 
@@ -352,6 +352,52 @@ void main() {
       expect(
         find.byKey(const ValueKey<String>('settings-privacy-policy')),
         findsNothing,
+      );
+    });
+
+    testWidgets('production omits the policy affordance entirely and keeps the '
+        'truthful service summary', (WidgetTester tester) async {
+      await pumpSettings(
+        tester,
+        location: '/settings/privacy',
+        environment: AppEnvironment.production,
+      );
+      await tester.pumpAndSettle();
+
+      // No dead action, and no diagnostic explaining the absence.
+      expect(
+        find.byKey(const ValueKey<String>('settings-privacy-policy')),
+        findsNothing,
+      );
+      expect(
+        find.text('No privacy policy is configured in this build.'),
+        findsNothing,
+      );
+      // The locally verifiable facts are still stated.
+      expect(find.text('Crash reporting'), findsOneWidget);
+      expect(find.text('Disabled'), findsNWidgets(3));
+      expect(
+        renderedText(tester).join(' '),
+        contains('independent application'),
+      );
+    });
+
+    testWidgets('production still shows a configured policy link', (
+      WidgetTester tester,
+    ) async {
+      await pumpSettings(
+        tester,
+        location: '/settings/privacy',
+        environment: AppEnvironment.production,
+        linkConfig: ExternalLinkConfig(
+          privacyPolicy: ExternalLink.parse('https://example.org/privacy'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('settings-privacy-policy')),
+        findsOneWidget,
       );
     });
 
@@ -424,9 +470,63 @@ void main() {
       expect(launcher.opened.single.scheme, 'mailto');
     });
 
-    testWidgets('an unconfigured contact shows no tappable action', (
+    testWidgets('production omits the feedback row entirely when no contact '
+        'is configured', (WidgetTester tester) async {
+      await pumpSettings(tester, environment: AppEnvironment.production);
+
+      // Nothing tappable and nothing that explains its own absence: a user
+      // cannot act on missing configuration, so it is not shown at all.
+      expect(
+        find.byKey(const ValueKey<String>('settings-feedback')),
+        findsNothing,
+      );
+      expect(find.text('No contact address is configured.'), findsNothing);
+      // The rest of the section is unaffected.
+      expect(
+        find.byKey(const ValueKey<String>('settings-privacy')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('production shows a working feedback row when a contact is '
+        'configured', (WidgetTester tester) async {
+      final RecordingExternalLinkLauncher launcher =
+          RecordingExternalLinkLauncher();
+      await pumpSettings(
+        tester,
+        environment: AppEnvironment.production,
+        linkConfig: ExternalLinkConfig(
+          supportContact: ExternalLink.parse('support@example.org'),
+        ),
+        linkLauncher: launcher,
+      );
+
+      await tester.tap(find.byKey(const ValueKey<String>('settings-feedback')));
+      await tester.pumpAndSettle();
+      expect(launcher.opened.single.scheme, 'mailto');
+    });
+
+    testWidgets('a non-production status note names no build define', (
       WidgetTester tester,
     ) async {
+      await pumpSettings(tester, environment: AppEnvironment.staging);
+      final String all = renderedText(tester).join(' ');
+
+      expect(all, contains('No contact address is configured.'));
+      for (final String internal in <String>[
+        'SUPPORT_CONTACT',
+        'PRIVACY_POLICY_URL',
+        'dart-define',
+        'API_BASE_URL',
+        'DATA_SOURCE',
+        'APP_ENV',
+      ]) {
+        expect(all, isNot(contains(internal)), reason: internal);
+      }
+    });
+
+    testWidgets('an unconfigured contact shows no tappable action outside '
+        'production', (WidgetTester tester) async {
       await pumpSettings(tester);
 
       expect(find.text('No contact address is configured.'), findsOneWidget);
