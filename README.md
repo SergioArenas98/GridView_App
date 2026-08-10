@@ -116,15 +116,42 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   Media is placeholder-only: no remote image request was added. See
   `docs/technical/GridView_Synchronization.md` §14,
   `docs/technical/GridView_Local_Data.md` §10 and
-  `docs/technical/GridView_Navigation.md` §11. Phase 7D (Home) is not started.
+  `docs/technical/GridView_Navigation.md` §11.
+- Phase 7D - Home: done. Home composes the season dashboard from independently
+  materialized modules. Module availability comes from **materialization**, never
+  from row count: a valid empty result (a season finale with no next race, a
+  championship with no confirmed leader) is an honest empty state, never a
+  "partial" or an error. A module whose materialization read is still in flight
+  renders a neutral unresolved state rather than asserting anything about stored
+  data. See `docs/technical/GridView_Synchronization.md` §15.
+- Phase 8A - preferences, theming, localization, time display and Settings:
+  done (local only; **Phase 8 as a whole is not complete**). Three typed
+  persisted preferences (language, theme, time display) each store a stable wire
+  token, resolve unknown or corrupted values to a documented safe default, and
+  are read synchronously during bootstrap so the first frame already has the
+  right theme and language. A full light theme joins the flagship dark one:
+  both are produced by one builder from one component configuration, so only the
+  palette differs, and every semantic pair is contrast-asserted for both
+  palettes. One presentation-time policy (Device/Event/Both) serves every live
+  session-time surface; an event zone is never inferred, and a missing one falls
+  back to the device clock and is labelled as such. Settings is a secondary
+  screen on the root navigator with seven sub-routes, so opening it never changes
+  the active branch and back returns to the exact origin. Outside production an
+  absent policy URL or contact address is explained; in production the
+  affordance is omitted entirely rather than shown as a dead control. See
+  `docs/technical/GridView_Preferences_And_Settings.md`.
+  Phase 8B (media) and Phase 8C (observability, hardening, closure) are not
+  started.
 
 Home's next-Grand-Prix hero, the Calendar, the Grand Prix detail screen, both
 standings tables, the three Explore collections and the Driver, Team and Circuit
 detail screens are driven by a **Drift-backed** local store: content renders
 immediately from cache (offline included), a refresh writes one atomic snapshot
-transaction, and a failed refresh never erases cached content. Home is still a
-partial screen pending Phase 7D, and Settings remains a skeleton; real media
-downloading is Phase 8. No Firebase, ads or production provider is wired yet. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
+transaction, and a failed refresh never erases cached content. Settings is
+implemented (Phase 8A); real media downloading is Phase 8B. No Firebase SDK, ads
+SDK or production provider is wired yet — the production Firebase configuration
+and AdMob application ID are preserved for the published app's identity, but
+nothing initializes or reads them. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
 only under a deliberate `DATA_SOURCE=fixture` build define (never inferred from a
 missing `API_BASE_URL`) and show a "Sample data" banner; **production never
 constructs the fixture source** — an attempted fixture mode or a missing base URL
@@ -146,6 +173,9 @@ an explicit `API_BASE_URL`, simulating offline/stale, and clearing the local
 database — is documented in `docs/technical/GridView_Synchronization.md` §9.
 Flavors, environment defines, Firebase/AdMob state and the edge API
 environments are documented in `docs/technical/GridView_Environments.md`.
+User preferences, the two themes, the presentation-time policy and the Settings
+information architecture are documented in
+`docs/technical/GridView_Preferences_And_Settings.md`.
 The edge API has its own instructions in `services/edge-api/README.md`.
 
 ## Release constraints

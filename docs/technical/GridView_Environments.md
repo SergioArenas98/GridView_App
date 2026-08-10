@@ -105,6 +105,13 @@ environment-specific interval.
   without approval.
 - The Firebase Dart SDKs are integrated in Phase 8 (Implementation Plan,
   section 13.5).
+- **Phase 8A did not integrate them.** There is still no FlutterFire
+  dependency, no `firebase_options.dart` and no Firebase initialization
+  anywhere in the shell, so Crashlytics and Performance Monitoring must not be
+  claimed to work. The configuration is production-only and therefore
+  incomplete; activation is an external blocker. The platform-neutral
+  observability boundary is Phase 8C. See
+  `GridView_Preferences_And_Settings.md` §6.2 and §7.
 
 ## Advertising
 
@@ -114,6 +121,12 @@ environment-specific interval.
 - No ads SDK is included in the shell and no advertisement is requested in
   any flavor. When advertising is integrated (Phase 8), dev and staging must
   use Google test ad units exclusively.
+- **Decision for v1: advertising is not retained.** No `google_mobile_ads` or
+  consent-SDK dependency exists, no ad unit IDs exist, and no approval to ship
+  advertising exists in the repository. The preserved manifest `meta-data` is an
+  identifier for the published app, not an integration. The Settings → Privacy
+  screen reports advertising as disabled, truthfully. See
+  `GridView_Preferences_And_Settings.md` §6.1.
 
 ## Edge API (Cloudflare Worker)
 
