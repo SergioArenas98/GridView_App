@@ -105,8 +105,14 @@ void main() {
     await _expectGolden(tester, 'light_standings_stale');
   });
 
-  // A valid-but-empty season: the empty state must not read as an error.
-  testWidgets('golden: empty state light', (WidgetTester tester) async {
+  // A never-materialized resource that nonetheless has local content: the rows
+  // render and no stale or error affordance appears, because "not yet
+  // synchronised" is not "wrong". The light empty state itself is *not* pinned
+  // here — the circuits fixture is populated — and remains covered only in dark
+  // (`explore_empty`).
+  testWidgets('golden: unsynchronised collection light', (
+    WidgetTester tester,
+  ) async {
     await _pumpLight(tester, '/explore/circuits', syncMetadata: (_) => null);
     await _expectGolden(tester, 'light_explore_first_load');
   });
