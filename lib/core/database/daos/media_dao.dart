@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../../../features/shared/domain/entities/enums.dart';
 import '../../../features/shared/domain/entities/media.dart';
+import '../../../features/shared/domain/media/media_presentation.dart';
 import '../entity_validation.dart';
 import '../gridview_database.dart';
 import '../media_tables.dart';
@@ -43,11 +44,12 @@ class InvalidMediaOwnershipException implements Exception {
 class MediaDao extends DatabaseAccessor<GridViewDatabase> with _$MediaDaoMixin {
   MediaDao(super.db);
 
-  /// The ordered `MediaVariants` slot names persisted in `media_variants`.
-  static const String _thumbnail = 'thumbnail';
-  static const String _card = 'card';
-  static const String _detail = 'detail';
-  static const String _hero = 'hero';
+  /// The `media_variants.variantName` tokens. [MediaVariantSlot] owns them so
+  /// persistence and presentation cannot drift apart.
+  static String get _thumbnail => MediaVariantSlot.thumbnail.wire;
+  static String get _card => MediaVariantSlot.card.wire;
+  static String get _detail => MediaVariantSlot.detail.wire;
+  static String get _hero => MediaVariantSlot.hero.wire;
 
   // ---------------------------------------------------------------------------
   // Writes
@@ -233,44 +235,6 @@ class MediaDao extends DatabaseAccessor<GridViewDatabase> with _$MediaDaoMixin {
   // Reads
   // ---------------------------------------------------------------------------
 
-  /// Which of [ownerIds] own at least one media asset of [ownerType].
-  ///
-  /// One batched query for a whole collection, so a list read never issues a
-  /// per-row media lookup. It reports **local availability only** — nothing is
-  /// fetched or downloaded — and exists so a placeholder can describe itself
-  /// accurately rather than to render a remote image.
-  Future<Set<String>> ownersWithMedia(
-    MediaEntityType ownerType,
-    Set<String> ownerIds,
-  ) async {
-    if (ownerIds.isEmpty) return const <String>{};
-    switch (ownerType) {
-      case MediaEntityType.driver:
-        final List<DriverMediaRow> rows = await (select(
-          driverMedia,
-        )..where((DriverMedia t) => t.driverId.isIn(ownerIds))).get();
-        return rows.map((DriverMediaRow r) => r.driverId).toSet();
-      case MediaEntityType.constructor:
-        final List<ConstructorMediaRow> rows = await (select(
-          constructorMedia,
-        )..where((ConstructorMedia t) => t.constructorId.isIn(ownerIds))).get();
-        return rows.map((ConstructorMediaRow r) => r.constructorId).toSet();
-      case MediaEntityType.circuit:
-        final List<CircuitMediaRow> rows = await (select(
-          circuitMedia,
-        )..where((CircuitMedia t) => t.circuitId.isIn(ownerIds))).get();
-        return rows.map((CircuitMediaRow r) => r.circuitId).toSet();
-      case MediaEntityType.grandPrix:
-        final List<GrandPrixMediaRow> rows = await (select(
-          grandPrixMedia,
-        )..where((GrandPrixMedia t) => t.grandPrixId.isIn(ownerIds))).get();
-        return rows.map((GrandPrixMediaRow r) => r.grandPrixId).toSet();
-      case MediaEntityType.placeholder:
-      case MediaEntityType.unknown:
-        return const <String>{};
-    }
-  }
-
   /// Every distinct credit line that must be displayed for the stored media.
   ///
   /// Deduplicated and deterministically ordered, so the acknowledgements screen
@@ -351,6 +315,128 @@ class MediaDao extends DatabaseAccessor<GridViewDatabase> with _$MediaDaoMixin {
       );
     }
     return result;
+  }
+
+  /// The ordered media owned by each of [ownerIds], keyed by owner id.
+  ///
+  /// The batched counterpart of [mediaForOwner], for collection screens: three
+  /// queries for a whole roster rather than three per row. Owners with no media
+  /// are simply absent from the result — an owner without imagery is an ordinary
+  /// condition, not a missing entry to be reported.
+  ///
+  /// Reports **local availability only**: nothing is fetched or downloaded, and
+  /// no image byte is touched. Returns domain [MediaAsset]s; no Drift row
+  /// escapes.
+  Future<Map<String, List<MediaAsset>>> mediaForOwners(
+    MediaEntityType ownerType,
+    Set<String> ownerIds,
+  ) async {
+    if (ownerIds.isEmpty || !_isRealOwner(ownerType)) {
+      return const <String, List<MediaAsset>>{};
+    }
+
+    // (ownerId, mediaId) in stored order, one query.
+    final List<(String, String)> associations = await _orderedAssociations(
+      ownerType,
+      ownerIds,
+    );
+    if (associations.isEmpty) return const <String, List<MediaAsset>>{};
+
+    final Set<String> mediaIds = associations
+        .map(((String, String) a) => a.$2)
+        .toSet();
+
+    final List<MediaAssetRow> assetRows = await (select(
+      mediaAssets,
+    )..where((MediaAssets m) => m.id.isIn(mediaIds))).get();
+    final Map<String, MediaAssetRow> assetsById = <String, MediaAssetRow>{
+      for (final MediaAssetRow r in assetRows) r.id: r,
+    };
+
+    final List<MediaVariantRow> variantRows = await (select(
+      mediaAssetVariants,
+    )..where((MediaAssetVariants v) => v.mediaId.isIn(mediaIds))).get();
+    final Map<String, List<MediaVariantRow>> variantsByMedia =
+        <String, List<MediaVariantRow>>{};
+    for (final MediaVariantRow v in variantRows) {
+      (variantsByMedia[v.mediaId] ??= <MediaVariantRow>[]).add(v);
+    }
+
+    final Map<String, List<MediaAsset>> result = <String, List<MediaAsset>>{};
+    for (final (String ownerId, String mediaId) in associations) {
+      final MediaAssetRow? row = assetsById[mediaId];
+      if (row == null) continue;
+      (result[ownerId] ??= <MediaAsset>[]).add(
+        _assetFrom(row, variantsByMedia[mediaId] ?? const <MediaVariantRow>[]),
+      );
+    }
+    return result;
+  }
+
+  /// `(ownerId, mediaId)` pairs for [ownerIds], ordered by owner then by the
+  /// stored `orderIndex`, so a collection read reproduces the same order as the
+  /// per-owner read.
+  Future<List<(String, String)>> _orderedAssociations(
+    MediaEntityType ownerType,
+    Set<String> ownerIds,
+  ) async {
+    switch (ownerType) {
+      case MediaEntityType.driver:
+        final List<DriverMediaRow> rows =
+            await (select(driverMedia)
+                  ..where((DriverMedia t) => t.driverId.isIn(ownerIds))
+                  ..orderBy(<OrderClauseGenerator<DriverMedia>>[
+                    (DriverMedia t) => OrderingTerm(expression: t.driverId),
+                    (DriverMedia t) => OrderingTerm(expression: t.orderIndex),
+                  ]))
+                .get();
+        return rows.map((DriverMediaRow r) => (r.driverId, r.mediaId)).toList();
+      case MediaEntityType.constructor:
+        final List<ConstructorMediaRow> rows =
+            await (select(constructorMedia)
+                  ..where(
+                    (ConstructorMedia t) => t.constructorId.isIn(ownerIds),
+                  )
+                  ..orderBy(<OrderClauseGenerator<ConstructorMedia>>[
+                    (ConstructorMedia t) =>
+                        OrderingTerm(expression: t.constructorId),
+                    (ConstructorMedia t) =>
+                        OrderingTerm(expression: t.orderIndex),
+                  ]))
+                .get();
+        return rows
+            .map((ConstructorMediaRow r) => (r.constructorId, r.mediaId))
+            .toList();
+      case MediaEntityType.circuit:
+        final List<CircuitMediaRow> rows =
+            await (select(circuitMedia)
+                  ..where((CircuitMedia t) => t.circuitId.isIn(ownerIds))
+                  ..orderBy(<OrderClauseGenerator<CircuitMedia>>[
+                    (CircuitMedia t) => OrderingTerm(expression: t.circuitId),
+                    (CircuitMedia t) => OrderingTerm(expression: t.orderIndex),
+                  ]))
+                .get();
+        return rows
+            .map((CircuitMediaRow r) => (r.circuitId, r.mediaId))
+            .toList();
+      case MediaEntityType.grandPrix:
+        final List<GrandPrixMediaRow> rows =
+            await (select(grandPrixMedia)
+                  ..where((GrandPrixMedia t) => t.grandPrixId.isIn(ownerIds))
+                  ..orderBy(<OrderClauseGenerator<GrandPrixMedia>>[
+                    (GrandPrixMedia t) =>
+                        OrderingTerm(expression: t.grandPrixId),
+                    (GrandPrixMedia t) =>
+                        OrderingTerm(expression: t.orderIndex),
+                  ]))
+                .get();
+        return rows
+            .map((GrandPrixMediaRow r) => (r.grandPrixId, r.mediaId))
+            .toList();
+      case MediaEntityType.placeholder:
+      case MediaEntityType.unknown:
+        return const <(String, String)>[];
+    }
   }
 
   Future<List<String>> _orderedOwnedMediaIds(

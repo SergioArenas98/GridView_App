@@ -6,6 +6,7 @@ import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/season_card.dart';
 import 'package:gridview/features/shared/domain/entities/season_entry.dart';
 import 'package:gridview/features/shared/domain/entities/standing.dart';
+import 'package:gridview/features/shared/domain/media/media_presentation.dart';
 
 /// Deterministic Explore/entity-detail fixtures.
 ///
@@ -32,7 +33,7 @@ SeasonDriverCard driverCard({
   int? position,
   double? points,
   int spanCount = 1,
-  bool hasPortraitMedia = false,
+  EntityMedia? media,
 }) => SeasonDriverCard(
   season: season,
   driverId: driverId,
@@ -49,7 +50,7 @@ SeasonDriverCard driverCard({
   position: position,
   points: points,
   spanCount: spanCount,
-  hasPortraitMedia: hasPortraitMedia,
+  media: media,
 );
 
 /// A realistic drivers collection: a leader, a fractional-points entrant, a
@@ -152,7 +153,7 @@ SeasonTeamCard teamCard({
   int? position,
   double? points,
   List<TeamLineupMember> lineup = const <TeamLineupMember>[],
-  bool hasLogoMedia = false,
+  EntityMedia? media,
 }) => SeasonTeamCard(
   season: season,
   constructorId: constructorId,
@@ -167,7 +168,7 @@ SeasonTeamCard teamCard({
   position: position,
   points: points,
   lineup: lineup,
-  hasLogoMedia: hasLogoMedia,
+  media: media,
 );
 
 /// A realistic teams collection, including a rebranded constructor whose stable
@@ -279,7 +280,7 @@ SeasonCircuitCard circuitCard({
   int? lengthMeters,
   int? cornerCount,
   RelatedGrandPrixSummary? related,
-  bool hasLayoutMedia = false,
+  EntityMedia? media,
 }) => SeasonCircuitCard(
   season: season,
   circuitId: circuitId,
@@ -291,7 +292,7 @@ SeasonCircuitCard circuitCard({
   lengthMeters: lengthMeters,
   cornerCount: cornerCount,
   relatedGrandPrix: related,
-  hasLayoutMedia: hasLayoutMedia,
+  media: media,
 );
 
 /// A realistic circuits collection in **calendar** order (round), which is

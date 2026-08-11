@@ -9,6 +9,7 @@ import '../../../features/shared/domain/entities/grand_prix.dart';
 import '../../../features/shared/domain/entities/media.dart';
 import '../../../features/shared/domain/entities/season_card.dart';
 import '../../../features/shared/domain/entities/session.dart';
+import '../../../features/shared/domain/media/media_presentation.dart';
 import '../../../features/shared/domain/relevant_event.dart';
 import '../competitor_tables.dart';
 import '../entity_validation.dart';
@@ -361,8 +362,11 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     final Map<String, CircuitRow> byId = <String, CircuitRow>{
       for (final CircuitRow r in rows) r.id: r,
     };
-    final Set<String> withMedia = await attachedDatabase.mediaDao
-        .ownersWithMedia(MediaEntityType.circuit, byId.keys.toSet());
+    // One batched media read for the whole collection: a list screen never
+    // issues a per-row media lookup.
+    final Map<String, List<MediaAsset>> mediaByCircuit = await attachedDatabase
+        .mediaDao
+        .mediaForOwners(MediaEntityType.circuit, byId.keys.toSet());
 
     final List<SeasonCircuitCard> cards = <SeasonCircuitCard>[];
     for (final MapEntry<String, GrandPrixRow> entry
@@ -382,7 +386,11 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
           lengthMeters: row.lengthMeters,
           cornerCount: row.cornerCount,
           relatedGrandPrix: _relatedGrandPrixFrom(entry.value),
-          hasLayoutMedia: withMedia.contains(row.id),
+          media: EntityMedia.from(
+            MediaEntityType.circuit,
+            row.id,
+            mediaByCircuit[row.id] ?? const <MediaAsset>[],
+          ),
         ),
       );
     }

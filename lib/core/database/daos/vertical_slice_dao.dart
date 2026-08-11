@@ -6,6 +6,7 @@ import '../../../features/shared/domain/entities/freshness.dart';
 import '../../../features/shared/domain/entities/grand_prix.dart';
 import '../../../features/shared/domain/entities/grand_prix_view.dart';
 import '../../../features/shared/domain/entities/home_view.dart';
+import '../../../features/shared/domain/entities/media.dart';
 import '../../../features/shared/domain/entities/season.dart';
 import '../../../features/shared/domain/entities/session.dart';
 import '../../../features/shared/domain/snapshot_conflict.dart';
@@ -61,6 +62,16 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
 
   /// Streams the Home aggregate. Emits `null` until a Home snapshot exists.
   /// Re-emits whenever the Home snapshot is (re)written.
+  /// Each emission re-reads the owner's media, so imagery becomes visible as soon
+  /// as it is persisted. Media never *gates* the view: an emission with no
+  /// imagery is a complete Home, not a partial one.
+  ///
+  /// The trigger stays the Home snapshot row alone, deliberately. Media for the
+  /// featured event is written in the same transaction as that row, so the
+  /// existing emission already carries it; widening the trigger to the media
+  /// tables would replace Drift's result-deduplicating query stream with an
+  /// emit-per-update one and produce updates where nothing the view shows has
+  /// changed.
   Stream<HomeView?> watchHome() {
     final query = select(snapshots)
       ..where((Snapshots s) => s.key.equals(homeSnapshotKey));
@@ -103,11 +114,24 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     return HomeView(
       seasonYear: season,
       season: seasonRow == null ? null : _seasonFrom(seasonRow),
-      featured: _grandPrixFrom(gpRow, sessions),
-      circuit: _resolvedCircuit(circuitRow),
+      featured: _grandPrixFrom(
+        gpRow,
+        sessions,
+        media: await _mediaFor(MediaEntityType.grandPrix, gpRow.id),
+      ),
+      circuit: _resolvedCircuit(
+        circuitRow,
+        media: await _mediaFor(MediaEntityType.circuit, gpRow.circuitId),
+      ),
       freshness: freshness,
     );
   }
+
+  /// The media owned by one entity, read locally. Never fetches and never
+  /// downloads: composing a view only reports what is already persisted, so a
+  /// Home or detail read stays a pure local read even when no imagery exists.
+  Future<List<MediaAsset>> _mediaFor(MediaEntityType type, String ownerId) =>
+      attachedDatabase.mediaDao.mediaForOwner(type, ownerId);
 
   /// The season of the materialized Home representation, or `null` when no Home
   /// snapshot has been materialized.
@@ -128,6 +152,8 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
   /// Streams the Grand Prix detail aggregate for (season, round). Emits `null`
   /// until the Grand Prix has been cached. Re-emits whenever its row is written
   /// (both Home and detail syncs upsert the row).
+  /// As with [watchHome], each emission re-reads media; the trigger stays the
+  /// Grand Prix row, which every media write for the event accompanies.
   Stream<GrandPrixDetailView?> watchGrandPrix(int season, int round) {
     final query = select(grandPrixEvents)
       ..where(
@@ -152,8 +178,18 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
       grandPrixSnapshotKey(season, round),
     );
     return GrandPrixDetailView(
-      grandPrix: _grandPrixFrom(gpRow, sessions),
-      circuit: _resolvedCircuit(circuitRow),
+      grandPrix: _grandPrixFrom(
+        gpRow,
+        sessions,
+        media: await _mediaFor(MediaEntityType.grandPrix, gpRow.id),
+      ),
+      // The circuit's own media travels with the circuit. The Grand Prix hero may
+      // fall back to it, but the two owners stay distinguishable so presentation
+      // can say which image it is actually showing.
+      circuit: _resolvedCircuit(
+        circuitRow,
+        media: await _mediaFor(MediaEntityType.circuit, gpRow.circuitId),
+      ),
       freshness: snap == null ? null : _freshnessFrom(snap),
     );
   }
@@ -469,17 +505,18 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
   /// an unresolved referential stub: a stub is not a domain circuit, so a
   /// composed view carries no circuit rather than a name derived from the
   /// identifier.
-  Circuit? _resolvedCircuit(CircuitRow? row) =>
+  Circuit? _resolvedCircuit(CircuitRow? row, {List<MediaAsset>? media}) =>
       (row == null || isUnresolvedIdentityName(row.name))
       ? null
-      : _circuitFrom(row);
+      : _circuitFrom(row, media: media);
 
-  Circuit _circuitFrom(CircuitRow r) => Circuit(
+  Circuit _circuitFrom(CircuitRow r, {List<MediaAsset>? media}) => Circuit(
     id: r.id,
     name: r.name,
     locality: r.locality,
     country: r.country,
     countryCode: r.countryCode,
+    media: media,
   );
 
   Session _sessionFrom(SessionRow r) => Session(
@@ -491,7 +528,11 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     status: SessionStatus.fromWire(r.status),
   );
 
-  GrandPrix _grandPrixFrom(GrandPrixRow r, List<Session> sessions) => GrandPrix(
+  GrandPrix _grandPrixFrom(
+    GrandPrixRow r,
+    List<Session> sessions, {
+    List<MediaAsset>? media,
+  }) => GrandPrix(
     id: r.id,
     season: r.season,
     round: r.round,
@@ -506,6 +547,7 @@ class VerticalSliceDao extends DatabaseAccessor<GridViewDatabase>
     timezone: r.timezone,
     sessions: sessions,
     hasResults: r.hasResults,
+    media: media,
   );
 
   DataFreshness _freshnessFrom(SnapshotRow r) => DataFreshness(

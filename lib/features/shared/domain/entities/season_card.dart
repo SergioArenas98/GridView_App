@@ -1,3 +1,4 @@
+import '../media/media_presentation.dart';
 import 'enums.dart';
 
 /// Domain-facing collection read models for the Explore categories.
@@ -37,7 +38,7 @@ class SeasonDriverCard {
     this.position,
     this.points,
     this.spanCount = 1,
-    this.hasPortraitMedia = false,
+    this.media,
   });
 
   final int season;
@@ -95,9 +96,13 @@ class SeasonDriverCard {
   /// incomplete.
   final int spanCount;
 
-  /// Whether a portrait asset is known locally. Phase 7C downloads nothing; this
-  /// only refines placeholder semantics.
-  final bool hasPortraitMedia;
+  /// The media this **stable driver identity** owns locally, or `null` when the
+  /// driver owns none.
+  ///
+  /// Local availability only: composing the card fetches and downloads nothing.
+  /// Ownership is by stable driver, not by participation span, because the
+  /// contract attaches media to `Driver` and carries no season-entry media.
+  final EntityMedia? media;
 
   bool get hasMultipleSpans => spanCount > 1;
 }
@@ -151,7 +156,7 @@ class SeasonTeamCard {
     this.position,
     this.points,
     this.lineup = const <TeamLineupMember>[],
-    this.hasLogoMedia = false,
+    this.media,
   });
 
   final int season;
@@ -183,7 +188,13 @@ class SeasonTeamCard {
   /// The season line-up in the roster's authoritative order.
   final List<TeamLineupMember> lineup;
 
-  final bool hasLogoMedia;
+  /// The media this **stable constructor identity** owns locally, or `null` when
+  /// it owns none.
+  ///
+  /// Deliberately *not* season livery. The contract attaches media to
+  /// `Constructor`, and `ConstructorSeasonEntry` carries no media field, so a
+  /// stable team asset is never presented as this season's car or livery.
+  final EntityMedia? media;
 
   /// Season branding takes precedence for display; the stable identity is the
   /// fallback. Never the identifier.
@@ -233,7 +244,7 @@ class SeasonCircuitCard {
     this.lengthMeters,
     this.cornerCount,
     this.relatedGrandPrix,
-    this.hasLayoutMedia = false,
+    this.media,
   });
 
   final int season;
@@ -262,5 +273,7 @@ class SeasonCircuitCard {
   /// in this season. Never inferred from the circuit's name.
   final RelatedGrandPrixSummary? relatedGrandPrix;
 
-  final bool hasLayoutMedia;
+  /// The media this circuit owns locally, or `null` when it owns none. Circuit
+  /// media belongs to the circuit, never to the event it hosts.
+  final EntityMedia? media;
 }
