@@ -109,11 +109,67 @@ Under `test/design_system/` (harness: `test/support/component_harness.dart`):
 
 `test/flutter_test_config.dart` installs a tolerant golden comparator with a **2%**
 differing-pixel threshold. It exists **only** to absorb cross-platform font
-antialiasing/rasterization drift (~1% measured between the developer machine and
-the Linux CI runner). It must **not** be used to hide layout, spacing, colour or
-component regressions — those change a large fraction of pixels and are expected
-to fail. Do not regenerate goldens per platform; regenerate only when appearance
-changes intentionally.
+antialiasing/rasterization drift between a developer machine and the Linux CI
+runner. It must **not** be used to hide layout, spacing, colour or component
+regressions — those change a large fraction of pixels and are expected to fail.
+Do not regenerate goldens per platform; regenerate only when appearance changes
+intentionally.
+
+### Linux is the canonical golden environment
+
+**Golden baselines are authored on Linux**, because CI is the authoritative gate:
+a baseline that matches the runner exactly leaves the only rendering drift on
+developer machines, where the tolerant comparator absorbs it. Windows and macOS
+are supported *execution* environments — `flutter test` is expected to pass there
+— but they are not authoring environments.
+
+Author a baseline with the **Render canonical goldens** workflow
+(`.github/workflows/render-canonical-goldens.yml`, manual dispatch): render the
+commit, download the `canonical-goldens` artifact, inspect what changed, copy only
+the approved images into the branch, commit. No developer needs Linux, WSL or
+Docker installed.
+
+### Two complementary golden gates
+
+Tolerance is an **execution allowance**. It is not evidence that a baseline is
+current. Those are separate concerns and are now checked separately:
+
+| Gate | Where | Allowance | Catches |
+|---|---|---|---|
+| `flutter test` | any platform | 2% | meaningful visual regressions beyond tolerance |
+| **Canonical golden freshness** | Linux CI only | **zero** | a baseline that no longer matches what the code renders |
+
+The freshness job regenerates every golden on Linux and requires
+`git diff --exit-code` over the three golden directories to be clean. It also
+self-tests: it modifies a golden, asserts the gate reports it, and restores the
+tree — so a wrong path can never make the check pass vacuously.
+
+**Neither gate may be removed or weakened.**
+
+#### Why this was introduced
+
+Phase 8A commit `07efdd5` changed a visible line break. The affected baselines
+drifted ~1.7% from what the code rendered — real visual drift, but under 2%, so
+every local run stayed green and the staleness survived five commits. Ordinary
+Windows/Linux rendering variance (~0.5%) then pushed five of those stale baselines
+past the tolerance in CI.
+
+**2% is not an error and was not reduced.** The defect was using one number for
+two jobs: a cross-platform execution allowance *and* an implicit "the baselines
+are current" check.
+
+#### Why a magnitude-aware comparator was rejected
+
+A per-channel tolerance was considered and **measured to be unsafe**. Rendering
+the whole corpus on both platforms from the same commit showed genuine
+Windows/Linux noise reaching **1.64%** of pixels with per-channel deltas up to
+**234** — the test font draws solid boxes, so a sub-pixel edge shift flips a pixel
+between background and foreground rather than producing a soft gradient. The
+semantic regression the gate must still catch, the primary-button correction
+`#FF3B30 → #DC2626`, has a per-channel delta of only **35**. No magnitude
+threshold can accept the platform noise while rejecting the colour change, so
+per-channel tolerance, platform-specific expected images and per-platform skips
+are all ruled out.
 
 ## Navigation & screen skeletons (Phase 3B)
 
@@ -141,8 +197,9 @@ Router and screens are covered end-to-end through the real `GoRouter` via
   inset; reduced-motion rendering.
 - `test/screens/screen_golden_test.dart` — four full-screen goldens (primary
   shell pill navigation, Home loaded, Standings, Grand Prix detail loaded) at the
-  2% tolerance, committed under `test/screens/goldens/`. Regenerate with
-  `flutter test --update-goldens test/screens/screen_golden_test.dart`.
+  2% tolerance, committed under `test/screens/goldens/`. Regenerate through the
+  **Render canonical goldens** workflow — baselines are authored on Linux, not
+  locally (see "Linux is the canonical golden environment" above).
 
 ## Offline-first vertical slice (Phase 4)
 

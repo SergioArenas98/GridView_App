@@ -68,6 +68,95 @@ jobs:
       - name: Build dev debug APK
         run: flutter build apk --debug --flavor dev --dart-define=APP_ENV=development
 
+  # ---------------------------------------------------------------------------
+  # Canonical golden freshness.
+  #
+  # `flutter test` above compares goldens through a 2% tolerant comparator, which
+  # is required so the suite can also run on Windows and macOS developer
+  # machines. That tolerance is an *execution* allowance; it is not evidence that
+  # the committed baselines are current.
+  #
+  # Phase 8A proved the difference matters. Commit 07efdd5 changed a visible line
+  # break, moving the affected baselines ~1.7% away from what the code renders.
+  # That is real visual drift, but it sat under 2%, so every local run stayed
+  # green and the staleness went unnoticed for five commits - until ordinary
+  # Windows/Linux rendering variance pushed five of those stale baselines past
+  # the tolerance in CI.
+  #
+  # This job separates the two concerns. Linux is the canonical authoring
+  # environment, and here the allowance is zero: regenerate every golden and
+  # require that not a single committed byte changes.
+  #
+  # 2% is NOT an error and is not being reduced - it stays exactly as it is for
+  # cross-platform execution. What changes is that it is no longer doing double
+  # duty as an implicit "the baselines are current" check.
+  golden-freshness:
+    name: Canonical golden freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read pinned Flutter version from .fvmrc
+        id: fvm
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.fvm.outputs.version }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # The complete set of suites that own a `matchesGoldenFile` assertion,
+      # enumerated from the repository rather than globbed, so an unrelated unit
+      # test is never re-run here and a new golden suite cannot be silently
+      # omitted.
+      - name: Regenerate every golden on the canonical platform
+        run: |
+          flutter test \
+            test/design_system/golden_test.dart \
+            test/screens/screen_golden_test.dart \
+            test/screens/light_theme_golden_test.dart \
+            test/settings/settings_golden_test.dart \
+            --update-goldens
+
+      # Explicit directories: CI shells do not enable globstar, so `test/**`
+      # would silently match nothing and the gate would pass vacuously.
+      - name: Require zero drift in every committed golden
+        run: |
+          git diff --exit-code -- \
+            test/design_system/goldens \
+            test/screens/goldens \
+            test/settings/goldens
+
+      # Proves the gate is actually wired to the goldens. Without this, a wrong
+      # path or a stale directory list would make the step above pass whatever
+      # happened, which is exactly the class of silent failure this job exists to
+      # prevent.
+      - name: Prove the gate detects a changed golden
+        run: |
+          set -e
+          printf 'drift' >> test/screens/goldens/home_pre_event.png
+          if git diff --exit-code -- \
+               test/design_system/goldens \
+               test/screens/goldens \
+               test/settings/goldens > /dev/null 2>&1; then
+            echo "::error::the freshness gate did not detect a modified golden"
+            exit 1
+          fi
+          echo "gate correctly reported the modified golden"
+          git checkout -- \
+            test/design_system/goldens \
+            test/screens/goldens \
+            test/settings/goldens
+          git diff --exit-code -- \
+            test/design_system/goldens \
+            test/screens/goldens \
+            test/settings/goldens
+          echo "repository restored and clean"
+
   edge-api:
     name: Edge API quality gates
     runs-on: ubuntu-latest

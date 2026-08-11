@@ -1,0 +1,92 @@
+# Renders the golden baselines on the canonical platform (Linux) and hands them
+# back as a downloadable artifact.
+#
+# Goldens are authored on Linux because CI is the authoritative gate: a baseline
+# that matches the runner exactly leaves the only rendering drift on developer
+# machines, where the tolerant comparator absorbs it and a surprise is cheap.
+# The reverse - Windows-authored baselines - puts the drift in CI, where it is
+# expensive and lands after merge.
+#
+# This exists so that authoring a baseline never requires installing Linux, WSL
+# or Docker. It is manual only, commits nothing, pushes nothing, needs no secret
+# and no service beyond the normal Flutter setup.
+#
+# Usage:
+#   1. make the intentional visual change and run `flutter test` locally;
+#   2. run this workflow against your branch or commit;
+#   3. download the `canonical-goldens` artifact;
+#   4. inspect the images that changed - this is the review step, do not skip it;
+#   5. copy only the approved baselines into your branch and commit them;
+#   6. normal CI then verifies both tolerant rendering and exact freshness.
+name: Render canonical goldens
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to render (defaults to the selected branch)
+        required: false
+        default: ''
+
+jobs:
+  render:
+    name: Render canonical goldens (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Read pinned Flutter version from .fvmrc
+        id: fvm
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+
+      # The same pinned SDK and the same action as the quality gates, so the
+      # artifact is rendered by the environment that will later judge it.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.fvm.outputs.version }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Only the suites that own a golden assertion.
+      - name: Render every golden
+        run: |
+          flutter test \
+            test/design_system/golden_test.dart \
+            test/screens/screen_golden_test.dart \
+            test/screens/light_theme_golden_test.dart \
+            test/settings/settings_golden_test.dart \
+            --update-goldens
+
+      - name: Report which baselines would change
+        run: |
+          {
+            echo "=== commit rendered ==="
+            git rev-parse HEAD
+            echo
+            echo "=== Flutter ==="
+            flutter --version
+            echo
+            echo "=== baselines this run would change ==="
+            git status --porcelain -- \
+              test/design_system/goldens \
+              test/screens/goldens \
+              test/settings/goldens
+            echo
+            echo "(empty above means the committed baselines are already canonical)"
+          } | tee canonical-goldens-report.txt
+
+      - name: Upload the canonical goldens
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-goldens
+          if-no-files-found: error
+          path: |
+            test/design_system/goldens
+            test/screens/goldens
+            test/settings/goldens
+            canonical-goldens-report.txt

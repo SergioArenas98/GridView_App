@@ -494,6 +494,14 @@ animations disabled so no frame is captured mid-transition.
 
 Media renders as placeholders because Phase 8B has not started.
 
+**Baselines are authored on Linux.** After Phase 8A the whole golden corpus was
+canonicalized on the CI platform: `07efdd5` changed a visible line break without
+regenerating the affected baselines, and the 2% execution tolerance was large
+enough to hide that ~1.7% drift locally until cross-platform variance exposed it
+in CI. A Linux-only **canonical golden freshness** gate now requires zero drift,
+and the **Render canonical goldens** workflow lets any developer author a baseline
+without installing Linux. See `docs/testing/README.md`.
+
 **The `flutter_test` font draws no real glyphs.** These images therefore verify
 layout, colour, hierarchy, wrapping and clipping only. Visible copy — that a
 preference value is localized rather than a wire token, that the Data screen
