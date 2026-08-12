@@ -14,8 +14,9 @@ export default tseslint.config(
     },
   },
   {
-    // Node ESM tooling scripts (schema/fixture validation).
-    files: ['scripts/**/*.mjs', 'test/**/*.test.mjs'],
+    // Node ESM tooling scripts (schema/fixture validation, media publication).
+    // These run in Node, not in the Worker runtime, so they get Node globals.
+    files: ['scripts/**/*.mjs', 'scripts/**/*.ts', 'test/**/*.test.mjs'],
     languageOptions: {
       globals: { ...globals.node },
     },

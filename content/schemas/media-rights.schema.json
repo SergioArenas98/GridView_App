@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/media-rights.schema.json",
+  "title": "GridView media rights register",
+  "description": "The publication gate's input. One record per media asset that may be processed and published. Absence of a record is itself a refusal: the gate fails closed, so an asset with no entry here can never be processed, uploaded or referenced from a manifest. This file records the *existence* of a permission, never its evidence: no contract, credential or confidential document belongs here, only a reference to where the signed record is held.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "assets"],
+  "properties": {
+    "kind": { "const": "media-rights" },
+    "status": {
+      "description": "`authoritative` is the real approved inventory that production publication reads. `mock`/`development` mark non-authoritative data. An authoritative inventory with no assets is valid and is the honest state until real approvals exist.",
+      "enum": ["authoritative", "mock", "development"]
+    },
+    "note": { "type": "string" },
+    "assets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rightsRecord" }
+    }
+  },
+  "$defs": {
+    "rightsRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assetId",
+        "entityType",
+        "entityId",
+        "category",
+        "version",
+        "sourceFile",
+        "sourceReference",
+        "rightsHolder",
+        "licenceBasis",
+        "attribution",
+        "attributionPlacement",
+        "territories",
+        "expiresAt",
+        "approvedForCommercialUse",
+        "derivativesAllowed",
+        "approvalStatus",
+        "provenanceNote"
+      ],
+      "properties": {
+        "assetId": {
+          "$ref": "common.schema.json#/$defs/gridviewId",
+          "description": "The MediaAsset id this record authorises."
+        },
+        "entityType": {
+          "description": "Only the four real owner types. `placeholder` and `unknown` are descriptors, not owners, and nothing owning nothing is publishable.",
+          "enum": ["driver", "constructor", "circuit", "grand_prix"]
+        },
+        "entityId": { "$ref": "common.schema.json#/$defs/gridviewId" },
+        "category": {
+          "enum": ["portrait", "logo", "car", "circuit_layout", "hero", "thumbnail"]
+        },
+        "version": {
+          "type": "string",
+          "description": "Immutable version token, e.g. `v1`. Part of every object key: republishing different content requires a new version rather than an overwrite.",
+          "pattern": "^v[0-9]+$"
+        },
+        "sourceFile": {
+          "type": "string",
+          "description": "Path to the source master, relative to the inventory file. The master itself is only committed when GridView owns it outright.",
+          "minLength": 1
+        },
+        "sourceReference": {
+          "type": "string",
+          "description": "Where the master came from, as a reference a human can follow. Not the asset itself and not a credential.",
+          "minLength": 1
+        },
+        "rightsHolder": { "type": "string", "minLength": 1 },
+        "licenceBasis": {
+          "type": "string",
+          "description": "The licence or permission this publication rests on, e.g. an SPDX identifier or a reference to a signed grant held outside the repository.",
+          "minLength": 1
+        },
+        "attribution": {
+          "description": "The exact credit text to display, or null when the licence genuinely requires none. Null with `attributionPlacement` other than `none` is a contradiction the gate rejects.",
+          "type": ["string", "null"]
+        },
+        "attributionPlacement": {
+          "description": "Where the licence requires the credit to appear. GridView implements a central acknowledgements screen only, so `adjacent` is not publishable under the current UI model and the gate refuses it rather than quietly treating the central page as sufficient.",
+          "enum": ["none", "central", "adjacent"]
+        },
+        "territories": {
+          "type": "array",
+          "description": "Where distribution is permitted. `WORLDWIDE`, or ISO 3166-1 alpha-2 codes.",
+          "minItems": 1,
+          "items": {
+            "anyOf": [
+              { "const": "WORLDWIDE" },
+              { "$ref": "common.schema.json#/$defs/countryCode" }
+            ]
+          }
+        },
+        "expiresAt": {
+          "description": "When the permission lapses, or null when it does not. A lapsed permission is refused.",
+          "anyOf": [{ "$ref": "common.schema.json#/$defs/dateTime" }, { "type": "null" }]
+        },
+        "approvedForCommercialUse": { "type": "boolean" },
+        "derivativesAllowed": {
+          "type": "boolean",
+          "description": "Whether resizing and format conversion are permitted. The pipeline always derives, so false means the asset cannot be processed at all."
+        },
+        "approvalStatus": {
+          "description": "Only `approved` permits publication. Everything else, including absence, is a refusal.",
+          "enum": ["approved", "pending", "rejected", "expired"]
+        },
+        "provenanceNote": {
+          "type": "string",
+          "description": "Who approved this and against what record. A reference, never the confidential document itself.",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

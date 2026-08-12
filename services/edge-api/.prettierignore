@@ -4,3 +4,5 @@ dist/
 package-lock.json
 # Throwaway wrangler-generated types (see validate:worker-config).
 worker-configuration.d.ts
+# Media dry-run output.
+.media-out/
