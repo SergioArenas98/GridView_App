@@ -273,6 +273,23 @@ class MediaDao extends DatabaseAccessor<GridViewDatabase> with _$MediaDaoMixin {
     return ordered;
   }
 
+  /// Streaming form of [readAttributions].
+  ///
+  /// Re-emits after any media commit, so a credit whose asset a replacement
+  /// snapshot removed disappears from the acknowledgements screen without the
+  /// screen asking for anything. Still a pure local read: no request is made and
+  /// none is triggered.
+  Stream<List<MediaAttribution>> watchAttributions() async* {
+    yield await readAttributions();
+    yield* attachedDatabase
+        .tableUpdates(
+          TableUpdateQuery.onAllTables(
+            <ResultSetImplementation<dynamic, dynamic>>[mediaAssets],
+          ),
+        )
+        .asyncMap((_) => readAttributions());
+  }
+
   String? _blankToNull(String? value) {
     final String? trimmed = value?.trim();
     return (trimmed == null || trimmed.isEmpty) ? null : trimmed;

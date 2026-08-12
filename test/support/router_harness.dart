@@ -255,7 +255,7 @@ Future<GoRouter> pumpApp(
         ),
         appInfoReaderProvider.overrideWithValue(appInfoReader),
         mediaAttributionsProvider.overrideWith(
-          (Ref ref) async => mediaAttributions,
+          (Ref ref) => Stream<List<MediaAttribution>>.value(mediaAttributions),
         ),
         appEnvironmentProvider.overrideWithValue(environment),
         usesMockDataProvider.overrideWithValue(mockData),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/theme.dart';
+import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/providers.dart';
 import '../../shared/domain/entities/media.dart';
@@ -28,9 +29,9 @@ class AcknowledgementsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final bool usesMockData = ref.watch(usesMockDataProvider);
-    final List<MediaAttribution> credits =
-        ref.watch(mediaAttributionsProvider).value ??
-        const <MediaAttribution>[];
+    final AsyncValue<List<MediaAttribution>> credits = ref.watch(
+      mediaAttributionsProvider,
+    );
 
     return GvScreenScaffold(
       title: l10n.settingsAcknowledgements,
@@ -62,30 +63,61 @@ class AcknowledgementsScreen extends ConsumerWidget {
 
           GvScreenSection(
             title: l10n.settingsAcknowledgementsMedia,
-            child: credits.isEmpty
-                ? GvInfoCard(
-                    children: <Widget>[
-                      Text(
-                        l10n.settingsAcknowledgementsEmpty,
-                        style: context.gvText.bodyM,
-                      ),
-                    ],
-                  )
-                : GvInfoCard(
-                    children: <Widget>[
-                      for (final MediaAttribution credit in credits)
-                        GvSettingsField(
-                          label: mediaCategoryLabel(l10n, credit.category),
-                          value: <String>[
-                            credit.attribution,
-                            ?credit.license,
-                          ].join(' · '),
-                        ),
-                    ],
-                  ),
+            child: _credits(context, l10n, credits),
           ),
         ],
       ),
     );
   }
+
+  /// The credits section.
+  ///
+  /// "No attributions are stored yet" is a **statement about stored data**, so it
+  /// may only be made once the read has actually answered. While it is in flight
+  /// this renders a neutral reserved block instead: claiming there are no credits
+  /// before knowing would be asserting something the screen has not yet
+  /// established, and for a legal notice that is the worst possible moment to be
+  /// wrong. A stream error is treated the same way — unknown, not empty.
+  Widget _credits(
+    BuildContext context,
+    AppLocalizations l10n,
+    AsyncValue<List<MediaAttribution>> credits,
+  ) {
+    final List<MediaAttribution>? resolved = credits.hasValue
+        ? credits.requireValue
+        : null;
+    if (resolved == null) {
+      return const GvInfoCard(
+        key: resolvingKey,
+        children: <Widget>[GvSkeletonBlock(height: 20)],
+      );
+    }
+    if (resolved.isEmpty) {
+      return GvInfoCard(
+        key: emptyKey,
+        children: <Widget>[
+          Text(l10n.settingsAcknowledgementsEmpty, style: context.gvText.bodyM),
+        ],
+      );
+    }
+    return GvInfoCard(
+      key: creditsKey,
+      children: <Widget>[
+        for (final MediaAttribution credit in resolved)
+          GvSettingsField(
+            // The subject of the credit, localized. Never the media id, the owner
+            // id, the URL or the wire category token.
+            label: mediaCategoryLabel(l10n, credit.category),
+            value: <String>[credit.attribution, ?credit.license].join(' · '),
+          ),
+      ],
+    );
+  }
+
+  /// Which of the three credit states is rendered. Test-visible only.
+  static const Key resolvingKey = ValueKey<String>(
+    'acknowledgements-resolving',
+  );
+  static const Key emptyKey = ValueKey<String>('acknowledgements-empty');
+  static const Key creditsKey = ValueKey<String>('acknowledgements-credits');
 }
