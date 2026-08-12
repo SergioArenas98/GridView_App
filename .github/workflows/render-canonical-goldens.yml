@@ -60,6 +60,7 @@ jobs:
             test/screens/screen_golden_test.dart \
             test/screens/light_theme_golden_test.dart \
             test/settings/settings_golden_test.dart \
+            test/media/media_golden_test.dart \
             --update-goldens
 
       - name: Report which baselines would change
@@ -75,7 +76,8 @@ jobs:
             git status --porcelain -- \
               test/design_system/goldens \
               test/screens/goldens \
-              test/settings/goldens
+              test/settings/goldens \
+              test/media/goldens
             echo
             echo "(empty above means the committed baselines are already canonical)"
           } | tee canonical-goldens-report.txt
@@ -89,4 +91,5 @@ jobs:
             test/design_system/goldens
             test/screens/goldens
             test/settings/goldens
+            test/media/goldens
             canonical-goldens-report.txt
