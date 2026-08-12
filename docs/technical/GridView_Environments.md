@@ -142,6 +142,37 @@ No Cloudflare account resources (KV namespaces, R2 buckets, routes, domains,
 secrets) exist yet; provisioning happens in Phase 5 with approval. The mobile
 shell does not call the Worker.
 
+## Media delivery
+
+| Environment | Media R2 bucket | Public media base URL |
+|---|---|---|
+| development | none | none |
+| staging | **not provisioned** | none |
+| production | **not provisioned** | none |
+
+`wrangler.toml` binds a KV namespace for staging and nothing else. **No media
+bucket exists in any environment**, so no image has ever been published and no
+production CDN host appears anywhere in this repository — fabricating one would
+put URLs into a manifest that nothing serves.
+
+The public media base URL is therefore always supplied by the operator at
+publication time and validated with the same HTTPS rule the app applies to a
+media URL.
+
+On the client, media URL policy is decided by `MediaUrlPolicy`, not by
+environment inference:
+
+| Policy | Accepts |
+|---|---|
+| `MediaUrlPolicy.strict` (staging, production) | HTTPS only, non-empty host, no embedded credentials, no control characters |
+| `MediaUrlPolicy.developmentLoopback` | the above, plus `http` on `localhost` / `127.0.0.1` |
+
+The loopback relaxation must be **injected explicitly**. No environment
+selects it, and there is no configuration that makes arbitrary `http`
+acceptable. Tests use a fake loader rather than relaxing the policy.
+
+See [GridView_Media.md](GridView_Media.md).
+
 ## Flutter SDK pin
 
 The exact Flutter SDK is pinned with FVM in `.fvmrc` and CI reads the same

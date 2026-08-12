@@ -49,3 +49,26 @@ CI runs this via `npm run validate`. Failures report the file, instance path and
 failing schema path.
 
 Model and identity rules: `../docs/technical/GridView_Domain_Model.md`.
+
+## Media rights register
+
+`media/media-rights.json` (`kind: media-rights`) is the **authoritative approved
+inventory** the publication gate reads, and it is deliberately **empty**: no
+Formula 1 media rights have been cleared for GridView.
+
+Because the gate fails closed, an empty inventory means nothing can be processed,
+uploaded or referenced from a manifest. That is the intended behaviour, not a gap
+to work around — **do not add a record here to make a build or a test pass.**
+Automated tests use synthetic records built inside the test run, outside
+`content/` entirely.
+
+A record belongs here only once a real permission exists and is recorded outside
+this repository. The register captures the *existence* of a permission and a
+reference to where the signed record is held; it never contains a contract, a
+credential or a confidential document. No image binary is committed under
+`content/` at all, and CI asserts that.
+
+`media/media-assets.mock.json` remains non-authoritative development data on a
+non-routable `.local` host, and is never a publication source.
+
+See `../docs/technical/GridView_Media.md`.

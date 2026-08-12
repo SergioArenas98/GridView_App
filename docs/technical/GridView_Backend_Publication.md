@@ -107,3 +107,58 @@ and which URLs are purged.
   degrades to a revalidation rather than stale-forever content.
 
 No ETag depends on JSON serialization order.
+
+## Media publication (Phase 8B)
+
+Media objects are published **beside** the snapshot mechanism, not through it.
+Snapshots are versioned JSON documents behind the `active:{season}` pointer;
+media objects are immutable binaries whose URLs appear inside those documents.
+No second active-pointer model was created.
+
+### Rights gate
+
+`content/media/media-rights.json` is the authoritative approved inventory and is
+**empty**. The gate fails closed, so an empty inventory means nothing can be
+processed, uploaded or referenced from a manifest — the intended behaviour, not a
+gap. It refuses on a missing or duplicated record, a non-affirmative approval,
+missing commercial or derivative permission, a lapsed or unparseable expiry,
+missing required attribution, a licence requiring *adjacent* attribution (which
+GridView's central acknowledgements screen does not satisfy), an uncovered
+territory, or a missing or unreadable master. None of these is a warning.
+
+The register records the *existence* of a permission, never its evidence: no
+contract, credential or confidential document belongs in the repository.
+
+### Object layout
+
+```
+media/<owner>/<stable-id>/<version>/<variant>.<ext>
+```
+
+Stable GridView identity only — no localized name, no provider id, no secret and
+no timestamp acting as the version boundary. An existing key whose content hash
+differs is a conflict: publication is blocked and a version bump is required.
+Identical content at an existing key is a no-op, so a re-run is idempotent.
+
+### Order of operations
+
+Rights for **every** asset, then processing, then a conflict check across the
+whole object set, then writes. A conflict cannot be discovered mid-upload,
+because that would leave half a version published. One unapproved asset blocks
+the publication in full rather than being skipped.
+
+### Dry-run and upload
+
+`npm run media:dry-run` requires no Cloudflare credential, no bucket and no
+network, and is the only media path ordinary pull-request CI exercises. Upload
+defaults to off; production is refused by default even when an upload is
+explicitly requested. The public media base URL is always supplied by the
+operator and validated as HTTPS — no production host is hardcoded anywhere.
+
+### Operational blocker
+
+**No R2 media bucket is provisioned in any environment.** `wrangler.toml` gives
+staging a KV namespace and nothing else; production has no bindings at all. No
+live media publication has been executed, and none is claimed.
+
+Full detail: [GridView_Media.md](GridView_Media.md).

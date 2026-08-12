@@ -316,6 +316,36 @@ Built exclusively via `ResourceKey` (stable ids only, season-scoped):
 `circuits:2026`, `circuit:spa-francorchamps:2026`, `grand-prix:2026:13`,
 `grand-prix-results:2026:13`, `content:manifest`.
 
+### 10.7a Media metadata ownership (Phase 8B)
+
+Media metadata is carried by the four **detail** resources — `Driver`,
+`Constructor`, `Circuit`, `GrandPrix` — and by nothing else. No summary schema,
+no season entry, `HomeData` and `BootstrapData` carry media, so media arrives
+only through `driver:*`, `constructor:*`, `circuit:*` and `grand-prix:*`, under
+those resources' own metadata. Imagery on a collection screen is therefore
+whatever previous detail synchronisations happened to persist, read locally.
+
+Phase 8B created **no new freshness hierarchy**:
+
+- an individual resource ETag is never fabricated from `content:manifest`;
+- `content:manifest` remains version metadata only (`contentVersion`,
+  `mediaVersion`, `supportedSeasons`, `attributionVersion`,
+  `minimumApiSchemaVersion`) and gained no asset inventory;
+- media freshness is never fabricated from image cache age.
+
+**Image bytes are a separate system.** Disk-cache age is not GridView freshness:
+no "updated at" is derived from a cache file, no stale notice comes from an old
+image, and no resource refresh is triggered by an expired cache entry. A
+versioned immutable URL is the invalidation boundary — new metadata means a new
+cache identity, and superseded bytes are left to normal eviction rather than
+purged eagerly, because nothing references them any more.
+
+Nothing on the media path calls `GridViewApi`, a repository,
+`AppSyncCoordinator`, a detail refresh or a content-manifest refresh. There is no
+startup media prefetch, no background media job, no global download queue, no
+second coordinator and no additional lifecycle observer. See
+[GridView_Media.md](GridView_Media.md).
+
 ### 10.8 Development / production isolation
 
 Per §8 and extended to every repository: the bundled fixture source is used only

@@ -1105,3 +1105,64 @@ Checklist:
     `max-verstappen`, no `Max-verstappen`, no `Red Bull` derived from `red-bull`.
 25. Confirm the **STAGING** badge remains visible.
 26. Confirm **no "Sample data" banner** appears.
+
+## Media (Phase 8B)
+
+124 Flutter tests under `test/media/`, plus 74 Edge tests under
+`services/edge-api/test/media/`. None touches the network.
+
+### Test media is always generated
+
+GridView has no approved Formula 1 media, so **every image any test or golden
+renders is generated at run time**: flat geometric bands from
+`test/support/synthetic_png.dart` (Flutter) and `sharp` (tooling). Nothing in the
+suite is a driver photograph, a team logo, a Formula 1 mark, circuit photography,
+a screenshot or a provider URL, and no image binary is committed under
+`content/`. Every test URL uses the reserved, non-routable host
+`https://media.gridview.invalid`.
+
+The PNG encoder is written by hand rather than pulled from a package so its
+output is byte-identical every run, which is what a stable golden needs.
+
+`services/edge-api/test/media/inventory-isolation.test.ts` enforces the
+separation: the production register must be authoritative and empty, the gate
+must consequently approve nothing, no synthetic test asset id may appear anywhere
+under `content/`, and no image binary may be committed there. A fixture drifting
+into the production directory would otherwise be indistinguishable from a real
+approval.
+
+### No test can reach the network by accident
+
+`pumpApp` installs a `MediaLoaderScope` only when a test passes `mediaLoader`.
+Without one, every remote image slot renders its placeholder and issues no
+request — so the many widget tests that are not about media cannot make a request
+even by mistake, and a media test asserts exactly which requests it caused.
+
+`FakeMediaImageLoader` counts cache probes and fetches. Requests are asserted on
+the **cache key**, not on rendered pixels, so "a 40px Explore row never fetches a
+hero" is checked on the thing that would actually cost bandwidth.
+
+| Suite | Covers |
+| --- | --- |
+| `media_url_policy_test.dart` | scheme, host, credential, control-character and redaction rules |
+| `variant_selector_test.dart` | DPR 1/2/3, smallest-adequate, undersized fallback, unknown dimensions, determinism, cache identity |
+| `media_ownership_test.dart` | single-owner integrity, descriptors, replacement, batched reads, slot policy, GP hero fallback, reopen |
+| `media_loader_test.dart` | cache hit/miss, exception mapping, no retry, enforceable limits |
+| `gv_remote_image_test.dart` | every no-image state, layout stability, duplicate requests, semantics, themes, reduced motion |
+| `media_slot_integration_test.dart` | live slots, row-sized requests, failure resilience, acknowledgements |
+| `rights.test.ts` | every publication refusal |
+| `process.test.ts` | object keys, no-upscale, WebP/PNG, orientation, metadata stripping, determinism |
+| `publish.test.ts` | dry-run, refusals, production protection, immutable conflicts, idempotence |
+| `inventory-isolation.test.ts` | test/production media separation |
+
+### Media goldens
+
+Media goldens follow the Linux-canonical workflow like every other golden: final
+PNGs are rendered by `Render canonical goldens` and never authored on Windows.
+Loader state and cache state are pinned alongside locale, theme, DPR, dimensions,
+clock, timezone and preferences, so a media golden is as deterministic as any
+other.
+
+The 2% cross-platform comparator is unchanged and must not be raised because an
+image introduces platform variance; a new golden approaching that threshold is a
+signal to diagnose, not to weaken the gate.
