@@ -75,7 +75,11 @@ class MediaUrlPolicy {
 
     final Uri? uri = Uri.tryParse(url);
     if (uri == null) return MediaUrlRejection.malformed;
-    if (!uri.hasScheme || !uri.isAbsolute) return MediaUrlRejection.notAbsolute;
+    // Deliberately `hasScheme` rather than `isAbsolute`: Dart calls a URI
+    // absolute only when it has a scheme *and no fragment*, so `isAbsolute`
+    // would report a perfectly well-formed `https://host/a#b` as "not
+    // absolute" and hide the real reason it is refused.
+    if (!uri.hasScheme) return MediaUrlRejection.notAbsolute;
 
     final String scheme = uri.scheme.toLowerCase();
     if (scheme != 'https' && scheme != 'http') {
@@ -131,7 +135,7 @@ class MediaUrlPolicy {
   static String describe(String? url) {
     if (url == null || url.trim().isEmpty) return '(empty)';
     final Uri? uri = Uri.tryParse(url);
-    if (uri == null || !uri.isAbsolute || uri.host.isEmpty) {
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
       return '(unparseable)';
     }
     final String suffix = uri.path.isEmpty || uri.path == '/' ? '' : '/…';

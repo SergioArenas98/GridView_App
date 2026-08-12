@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/app/router/app_router.dart';
+import 'package:gridview/core/media/media_image_loader.dart';
+import 'package:gridview/core/media/media_loader_scope.dart';
 import 'package:gridview/core/preferences/locale_resolution.dart';
 import 'package:gridview/core/preferences/preference_store.dart';
 import 'package:gridview/core/preferences/preference_values.dart';
@@ -81,6 +83,7 @@ class TestApp extends ConsumerWidget {
     this.locale = const Locale('en'),
     this.disableAnimations = false,
     this.padding = EdgeInsets.zero,
+    this.mediaLoader,
   });
 
   final GoRouter router;
@@ -88,6 +91,14 @@ class TestApp extends ConsumerWidget {
   final Locale locale;
   final bool disableAnimations;
   final EdgeInsets padding;
+
+  /// The media loader for this app, or `null` for none.
+  ///
+  /// `null` is the deliberate default: without a loader every remote image slot
+  /// renders its placeholder and issues no request, so the many widget tests
+  /// that are not about media cannot accidentally reach the network. A media
+  /// test supplies a fake and then asserts exactly which requests it caused.
+  final MediaImageLoader? mediaLoader;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -132,6 +143,10 @@ class TestApp extends ConsumerWidget {
             child: content,
           );
         }
+        final MediaImageLoader? loader = mediaLoader;
+        if (loader != null) {
+          content = MediaLoaderScope(loader: loader, child: content);
+        }
         return content;
       },
     );
@@ -167,6 +182,10 @@ Future<GoRouter> pumpApp(
   Stream<ResourceSyncState?> Function(String key)? syncMetadataStream,
   ManualCoreRefresh? onManualRefresh,
   String deviceTimeZone = 'UTC',
+
+  /// The media loader installed above the router. Omit it (the default) and no
+  /// remote image slot issues any request at all.
+  MediaImageLoader? mediaLoader,
 
   /// The persisted preference snapshot the app starts from. Seeded through a
   /// real in-memory repository rather than stubbed, so a test exercises the same
@@ -302,6 +321,7 @@ Future<GoRouter> pumpApp(
         locale: locale,
         disableAnimations: disableAnimations,
         padding: padding,
+        mediaLoader: mediaLoader,
       ),
     ),
   );
