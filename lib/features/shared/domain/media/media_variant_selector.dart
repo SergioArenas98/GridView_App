@@ -49,6 +49,20 @@ class MediaSelection {
 
   /// Whether the choice was made on measured dimensions rather than on a name.
   bool get wasMeasured => (width ?? 0) > 0;
+
+  /// The immutable identity this image is cached under.
+  ///
+  /// Composite rather than the bare URL, so the three things that must never
+  /// share a cache entry are distinguished by construction rather than by
+  /// trusting a URL to have the right shape: the asset, its immutable version
+  /// and the variant. `v1` and `v2` of one asset therefore cannot collide, and
+  /// neither can a thumbnail and a hero.
+  ///
+  /// The URL is part of the key as well, so republishing an asset to a different
+  /// URL without bumping its version still produces a distinct entry instead of
+  /// serving superseded bytes. Nothing localized and nothing display-derived
+  /// appears here — only immutable identity.
+  String get cacheKey => '$mediaId|$version|${slot.wire}|$url';
 }
 
 /// What the caller is about to draw.

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/media/media_cache.dart';
+import '../core/media/media_image_loader.dart';
+import '../core/media/media_loader_scope.dart';
 import '../core/preferences/locale_resolution.dart';
 import '../core/preferences/preference_values.dart';
 import '../core/preferences/preferences_providers.dart';
@@ -36,6 +39,14 @@ class GridViewApp extends ConsumerStatefulWidget {
 class _GridViewAppState extends ConsumerState<GridViewApp> {
   late final GoRouter _router = widget.router ?? buildGridViewRouter();
 
+  /// The one media loader for the application's lifetime, over the one shared
+  /// disk cache. Built here rather than per screen so there is exactly one cache
+  /// owner, and built lazily so no image work happens before the first frame:
+  /// nothing about Home's first useful render waits on this.
+  late final MediaImageLoader _mediaLoader = CachedMediaImageLoader(
+    FlutterCacheManagerMediaCache(),
+  );
+
   @override
   Widget build(BuildContext context) {
     final AppLanguagePreference language = ref.watch(
@@ -62,8 +73,10 @@ class _GridViewAppState extends ConsumerState<GridViewApp> {
                 supportedLocales: supported,
               ),
       routerConfig: _router,
-      builder: (BuildContext context, Widget? child) =>
-          EnvironmentBadgeOverlay(child: child ?? const SizedBox.shrink()),
+      builder: (BuildContext context, Widget? child) => MediaLoaderScope(
+        loader: _mediaLoader,
+        child: EnvironmentBadgeOverlay(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }
