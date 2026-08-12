@@ -1,6 +1,9 @@
+import '../media/media_presentation.dart';
 import 'calendar_entry.dart';
 import 'circuit.dart';
+import 'enums.dart';
 import 'grand_prix.dart';
+import 'media.dart';
 import 'race_result.dart';
 import 'season.dart';
 import 'session.dart';
@@ -42,6 +45,26 @@ class HomeFocus {
 
   int get season => grandPrix.season;
   int get round => grandPrix.round;
+
+  /// The event's own media, read locally. Empty is ordinary: the hero has an
+  /// approved circuit fallback, and beyond that a placeholder.
+  EntityMedia get eventMedia => EntityMedia.from(
+    MediaEntityType.grandPrix,
+    grandPrix.id,
+    grandPrix.media ?? const <MediaAsset>[],
+  );
+
+  /// The host circuit's own media, or `null` when there is no resolved circuit.
+  /// Kept separate from [eventMedia] so the hero can say which owner it drew on.
+  EntityMedia? get circuitMedia {
+    final Circuit? host = circuit;
+    if (host == null) return null;
+    return EntityMedia.from(
+      MediaEntityType.circuit,
+      host.id,
+      host.media ?? const <MediaAsset>[],
+    );
+  }
 
   /// The event's sessions in their persisted order. Authoritative — never
   /// re-sorted, and never filled in with an expected weekend shape.

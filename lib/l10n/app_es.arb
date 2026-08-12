@@ -224,6 +224,7 @@
   "circuitNoRelatedGrandPrix": "Sin Gran Premio esta temporada",
   "circuitOpenGrandPrix": "Abrir {name}",
   "circuitLayoutPlaceholder": "Trazado del circuito no disponible",
+  "circuitLayoutImage": "Trazado de {circuit}",
   "lengthKilometers": "{value} km",
   "fieldWins": "Victorias",
   "fieldPodiums": "Podios",

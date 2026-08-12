@@ -6,7 +6,10 @@ import '../../../core/theme/gv_team_accent.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/domain/entities/season_card.dart';
+import '../../shared/domain/media/media_slot_policy.dart';
+import '../../shared/domain/media/media_variant_selector.dart';
 import '../../shared/presentation/entity_formatting.dart';
+import '../../shared/presentation/media_slot.dart';
 
 /// The three Explore row presentations.
 ///
@@ -15,7 +18,16 @@ import '../../shared/presentation/entity_formatting.dart';
 /// no dangling separator, a missing statistic never becomes a false zero, and no
 /// stable identifier is ever displayed or turned into a name.
 ///
-/// Media placeholders reserve their layout without requesting a remote image.
+/// The leading slot shows the owner's own media when a size-appropriate variant
+/// is available locally, and the same layout-reserving placeholder otherwise.
+/// Rows ask for a **thumbnail** at their real rendered width, so scrolling the
+/// roster never fetches a detail or hero file, and every row image is decorative:
+/// the row already carries an explicit semantic label naming the entity, so
+/// announcing the picture as well would repeat it.
+
+/// The leading media slot's rendered width in logical pixels. Rows are
+/// width-constrained and square, so this is also the height.
+const double _rowMediaSize = 40;
 
 /// One driver in the Explore drivers collection.
 class ExploreDriverCardRow extends StatelessWidget {
@@ -56,11 +68,20 @@ class ExploreDriverCardRow extends StatelessWidget {
         standing,
       ], separator: ', '),
       leading: SizedBox(
-        width: 40,
-        child: GvImagePlaceholder(
+        width: _rowMediaSize,
+        child: GvRemoteImage(
+          request: resolveMediaSlot(
+            context,
+            media: card.media,
+            preference: MediaSlotPolicy.driverPortrait,
+            role: MediaDisplayRole.thumbnail,
+            logicalWidth: _rowMediaSize,
+            logicalHeight: _rowMediaSize,
+          ),
           aspectRatio: 1,
-          icon: Icons.person_outline,
-          semanticLabel: l10n.driverPortraitPlaceholder,
+          logicalWidth: _rowMediaSize,
+          placeholderIcon: Icons.person_outline,
+          decorative: true,
         ),
       ),
       onTap: () => context.openEntity(
@@ -113,11 +134,22 @@ class ExploreTeamCardRow extends StatelessWidget {
         lineup,
       ], separator: ', '),
       leading: SizedBox(
-        width: 40,
-        child: GvImagePlaceholder(
+        width: _rowMediaSize,
+        child: GvRemoteImage(
+          request: resolveMediaSlot(
+            context,
+            // The team's stable mark. Not season livery: the contract carries no
+            // season-entry media, so nothing here claims to be this year's car.
+            media: card.media,
+            preference: MediaSlotPolicy.constructorMark,
+            role: MediaDisplayRole.thumbnail,
+            logicalWidth: _rowMediaSize,
+            logicalHeight: _rowMediaSize,
+          ),
           aspectRatio: 1,
-          icon: Icons.shield_outlined,
-          semanticLabel: l10n.teamLogoPlaceholder,
+          logicalWidth: _rowMediaSize,
+          placeholderIcon: Icons.shield_outlined,
+          decorative: true,
         ),
       ),
       onTap: () => context.openEntity(
@@ -168,11 +200,20 @@ class ExploreCircuitCardRow extends StatelessWidget {
         event?.name,
       ], separator: ', '),
       leading: SizedBox(
-        width: 40,
-        child: GvImagePlaceholder(
+        width: _rowMediaSize,
+        child: GvRemoteImage(
+          request: resolveMediaSlot(
+            context,
+            media: card.media,
+            preference: MediaSlotPolicy.circuitLayout,
+            role: MediaDisplayRole.thumbnail,
+            logicalWidth: _rowMediaSize,
+            logicalHeight: _rowMediaSize,
+          ),
           aspectRatio: 1,
-          icon: Icons.route_outlined,
-          semanticLabel: l10n.circuitLayoutPlaceholder,
+          logicalWidth: _rowMediaSize,
+          placeholderIcon: Icons.route_outlined,
+          decorative: true,
         ),
       ),
       onTap: () => context.openEntity(

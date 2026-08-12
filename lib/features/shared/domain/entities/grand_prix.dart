@@ -40,4 +40,25 @@ class GrandPrix {
   final List<Session> sessions;
   final bool hasResults;
   final List<MediaAsset>? media;
+
+  /// A copy carrying [media]. Used where a composed read attaches locally stored
+  /// imagery to an event it already resolved, without rebuilding it field by
+  /// field and without mutating the original.
+  GrandPrix copyWithMedia(List<MediaAsset> media) => GrandPrix(
+    id: id,
+    season: season,
+    round: round,
+    eventSlug: eventSlug,
+    name: name,
+    officialName: officialName,
+    circuitId: circuitId,
+    status: status,
+    format: format,
+    startDate: startDate,
+    endDate: endDate,
+    timezone: timezone,
+    sessions: sessions,
+    hasResults: hasResults,
+    media: media,
+  );
 }

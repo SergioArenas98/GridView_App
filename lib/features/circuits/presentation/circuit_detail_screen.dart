@@ -10,9 +10,14 @@ import '../../shared/application/entity_detail_scope.dart';
 import '../../shared/application/entity_detail_state.dart';
 import '../../shared/domain/entities/circuit.dart';
 import '../../shared/domain/entities/entity_profile.dart';
+import '../../shared/domain/entities/enums.dart';
 import '../../shared/domain/entities/season_card.dart';
+import '../../shared/domain/media/media_presentation.dart';
+import '../../shared/domain/media/media_slot_policy.dart';
+import '../../shared/domain/media/media_variant_selector.dart';
 import '../../shared/presentation/domain_status.dart';
 import '../../shared/presentation/entity_formatting.dart';
+import '../../shared/presentation/media_slot.dart';
 import '../../shared/presentation/widgets/entity_detail_scaffold.dart';
 import '../../shared/presentation/widgets/screen_sections.dart';
 import '../application/circuit_detail_providers.dart';
@@ -219,9 +224,14 @@ class CircuitDetailScreen extends ConsumerWidget {
   }
 }
 
-/// The circuit hero: authoritative name and location with a layout-reserving
-/// track placeholder. No remote image is requested, and the identifier is never
-/// shown.
+/// The circuit hero: authoritative name and location over the circuit's own media
+/// when it is available locally. The identifier is never shown.
+///
+/// This is the one entity hero whose image can be **informative**. A track layout
+/// diagram conveys the shape of the circuit, which no adjacent text states, so it
+/// is labelled. An environmental photograph conveys nothing the name and location
+/// do not, so it is decorative and stays out of the semantics tree — the two are
+/// distinguished by the selected asset's own category rather than assumed.
 class _CircuitHero extends StatelessWidget {
   const _CircuitHero({required this.profile});
 
@@ -235,12 +245,32 @@ class _CircuitHero extends StatelessWidget {
       profile.circuit.country,
     ], separator: ', ');
 
+    final double width = MediaQuery.sizeOf(context).width;
+    final MediaPresentation? asset = profile.media.preferred(
+      MediaSlotPolicy.circuitLayout,
+    );
+    final bool isLayoutDiagram = asset?.category == MediaCategory.circuitLayout;
+
     return GvHeroCard(
-      background: GvImagePlaceholder(
+      background: GvRemoteImage(
+        request: asset == null
+            ? null
+            : requestForAsset(
+                context,
+                asset: asset,
+                role: MediaDisplayRole.detail,
+                logicalWidth: width,
+              ),
         aspectRatio: 16 / 9,
-        icon: Icons.route_outlined,
+        logicalWidth: width,
+        placeholderIcon: Icons.route_outlined,
         borderRadius: BorderRadius.zero,
-        semanticLabel: l10n.circuitLayoutPlaceholder,
+        // A diagram is described; a photograph is not. The label names the
+        // circuit, never the media id, the category token or the URL.
+        decorative: !isLayoutDiagram,
+        semanticLabel: isLayoutDiagram
+            ? l10n.circuitLayoutImage(profile.circuit.name)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

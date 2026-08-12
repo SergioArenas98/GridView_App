@@ -1436,11 +1436,17 @@ abstract class AppLocalizations {
   /// **'Open {name}'**
   String circuitOpenGrandPrix(String name);
 
-  /// Semantic label for the circuit layout placeholder. Phase 7C downloads no media.
+  /// Semantic label for the circuit layout placeholder when no layout media is available.
   ///
   /// In en, this message translates to:
   /// **'Circuit layout unavailable'**
   String get circuitLayoutPlaceholder;
+
+  /// Semantic label for a loaded circuit-layout diagram. This image is informative rather than decorative: the shape of the track is information the adjacent text does not convey. Never contains an identifier, a filename or a URL.
+  ///
+  /// In en, this message translates to:
+  /// **'Track layout of {circuit}'**
+  String circuitLayoutImage(String circuit);
 
   /// A circuit length converted from the stored metres to a localized kilometre display.
   ///
