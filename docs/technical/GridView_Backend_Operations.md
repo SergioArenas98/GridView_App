@@ -7,6 +7,13 @@ the operational model behind it.
 
 ## Local Commands
 
+The edge toolchain is Node 22 and **npm 10.9.9** - the exact version
+`services/edge-api/package-lock.json` was resolved under, declared as
+`packageManager` in `package.json` and installed and asserted by the CI edge job
+before `npm ci`. Regenerate the lockfile only with
+`npx --yes npm@10.9.9 install --package-lock-only`; see
+`services/edge-api/README.md` for why npm 11 must not be used.
+
 ```text
 cd services/edge-api
 npm install

@@ -10,6 +10,26 @@ by the deterministic mock provider (`PROVIDER_MODE = mock`). The full staging
 deploy/seed/verify/rollback procedure is in
 `../../docs/operations/GridView_Staging_Edge_Runbook.md`.
 
+## Toolchain
+
+Node 22 and **npm 10.9.9** (recorded in `package.json` as `packageManager`, and
+installed and asserted by the CI edge job before `npm ci`). 10.9.9 was the
+latest published npm 10 release when this pin was established on 2026-08-13, and
+it is the exact version `package-lock.json` was resolved under.
+
+Regenerate the lockfile only with that version:
+
+```text
+npx --yes npm@10.9.9 install --package-lock-only
+```
+
+Never regenerate it with npm 11. npm 11 computes different hoisting and, on
+Windows, prunes optional platform-transitive dependencies that Linux needs - it
+re-nests `@emnapi/core` and `@emnapi/runtime`, which `@img/sharp-wasm32`
+requires, and `npm ci` then fails on Linux before any gate can run. `npm ci`
+still succeeds on Windows with that lockfile, so local verification cannot catch
+it. This broke master once; see commit `f2183ba`.
+
 ## Local Setup
 
 ```text
