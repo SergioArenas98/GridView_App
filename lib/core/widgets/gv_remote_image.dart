@@ -176,12 +176,14 @@ class _GvRemoteImageState extends State<GvRemoteImage> {
 
   @override
   Widget build(BuildContext context) {
+    // The clip lives around the *image* only, in `_body`. The placeholder
+    // already rounds itself through its own decoration, so clipping it again
+    // would add a redundant layer to every row of the most scroll-heavy screens
+    // in the app — and, because a clip subtly changes corner antialiasing, it
+    // also shifted five approved Phase 8A baselines for no visible gain.
     final Widget content = AspectRatio(
       aspectRatio: widget.aspectRatio,
-      child: ClipRRect(
-        borderRadius: widget.borderRadius,
-        child: _body(context),
-      ),
+      child: _body(context),
     );
     if (widget.decorative) return ExcludeSemantics(child: content);
     // An informative image is announced once, by its own label. There is no
@@ -216,8 +218,15 @@ class _GvRemoteImageState extends State<GvRemoteImage> {
       gaplessPlayback: true,
     );
 
-    if (_wasCached || MediaQuery.disableAnimationsOf(context)) return image;
-    return _FadeIn(child: image);
+    // A `cover` fit deliberately overflows its box, so the image — and only the
+    // image — has to be clipped to the slot's radius.
+    final Widget clipped = ClipRRect(
+      borderRadius: widget.borderRadius,
+      child: image,
+    );
+
+    if (_wasCached || MediaQuery.disableAnimationsOf(context)) return clipped;
+    return _FadeIn(child: clipped);
   }
 
   /// The physical width to decode at, or `null` when the slot's width is unknown
