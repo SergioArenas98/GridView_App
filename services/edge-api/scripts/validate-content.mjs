@@ -38,6 +38,7 @@ const kindToSchemaId = {
   'constructor-season-entries':
     'https://gridview.local/schemas/constructor-season-entries.schema.json',
   'media-assets': 'https://gridview.local/schemas/media-assets.schema.json',
+  'media-rights': 'https://gridview.local/schemas/media-rights.schema.json',
   'provider-mappings':
     'https://gridview.local/schemas/provider-mappings.schema.json',
   overrides: 'https://gridview.local/schemas/overrides.schema.json',

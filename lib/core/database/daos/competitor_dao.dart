@@ -9,6 +9,7 @@ import '../../../features/shared/domain/entities/media.dart';
 import '../../../features/shared/domain/entities/season_card.dart';
 import '../../../features/shared/domain/entities/season_entry.dart';
 import '../../../features/shared/domain/entities/standing.dart';
+import '../../../features/shared/domain/media/media_presentation.dart';
 import '../competitor_tables.dart';
 import '../entity_validation.dart';
 import '../gridview_database.dart';
@@ -416,8 +417,11 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
           ))
         s.driverId: s,
     };
-    final Set<String> withMedia = await attachedDatabase.mediaDao
-        .ownersWithMedia(
+    // One batched media read for the whole roster: a list screen never issues a
+    // per-row media lookup.
+    final Map<String, List<MediaAsset>> mediaByDriver = await attachedDatabase
+        .mediaDao
+        .mediaForOwners(
           MediaEntityType.driver,
           selected
               .map(((DriverRow, DriverSeasonEntryRow, int) s) => s.$1.id)
@@ -456,7 +460,11 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
           position: standing?.position,
           points: standing?.points,
           spanCount: spans,
-          hasPortraitMedia: withMedia.contains(identity.id),
+          media: EntityMedia.from(
+            MediaEntityType.driver,
+            identity.id,
+            mediaByDriver[identity.id] ?? const <MediaAsset>[],
+          ),
         ),
       );
     }
@@ -508,8 +516,9 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
                   .constructorStandingsForSeason(season))
             s.constructorId: s,
         };
-    final Set<String> withMedia = await attachedDatabase.mediaDao
-        .ownersWithMedia(
+    final Map<String, List<MediaAsset>> mediaByTeam = await attachedDatabase
+        .mediaDao
+        .mediaForOwners(
           MediaEntityType.constructor,
           selected
               .map(((ConstructorRow, ConstructorSeasonEntryRow) s) => s.$1.id)
@@ -536,7 +545,11 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
           position: standing?.position,
           points: standing?.points,
           lineup: lineups[identity.id] ?? const <TeamLineupMember>[],
-          hasLogoMedia: withMedia.contains(identity.id),
+          media: EntityMedia.from(
+            MediaEntityType.constructor,
+            identity.id,
+            mediaByTeam[identity.id] ?? const <MediaAsset>[],
+          ),
         ),
       );
     }

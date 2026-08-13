@@ -6,6 +6,7 @@ import '../../../../l10n/app_localizations.dart';
 import '../../../shared/domain/entities/enums.dart';
 import '../../../shared/domain/entities/grand_prix.dart';
 import '../../../shared/presentation/domain_status.dart';
+import '../../../shared/presentation/widgets/event_hero_image.dart';
 import '../../application/home_state.dart';
 import '../../domain/home_temporal_state.dart';
 import '../home_formatting.dart';
@@ -15,9 +16,14 @@ import '../home_formatting.dart';
 /// It stays useful when the image, the circuit, the location, the exact timing
 /// or the sessions are missing: every line is built only from values that
 /// actually exist, and the event name, status and primary action are always
-/// present. No remote image is requested — Phase 7D uses a layout-reserving
-/// placeholder only — and the placeholder never grows large enough to push the
-/// timing below the fold on a narrow phone.
+/// present.
+///
+/// The hero shows the event's own imagery when it is available locally, falling
+/// back to the host circuit's — the fallback the imagery strategy in
+/// `GridView_UI_UX_Design.md` §12.3 approves for this slot. Nothing here requests
+/// a refresh, touches the content manifest, or waits on an image: the hero's text
+/// is rendered from local data on the first frame, and whether an image ever
+/// arrives cannot change Home's ready or partial state.
 class HomeHero extends StatelessWidget {
   const HomeHero({
     super.key,
@@ -47,11 +53,10 @@ class HomeHero extends StatelessWidget {
         Semantics(
           container: true,
           child: GvHeroCard(
-            background: const ExcludeSemantics(
-              child: GvImagePlaceholder(
-                aspectRatio: 16 / 9,
-                icon: Icons.flag_outlined,
-              ),
+            background: EventHeroImage(
+              eventMedia: module.focus.eventMedia,
+              circuitMedia: module.focus.circuitMedia,
+              circuitName: module.focus.circuit?.name,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

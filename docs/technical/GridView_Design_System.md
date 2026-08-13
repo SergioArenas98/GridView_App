@@ -235,23 +235,43 @@ and 2x text scale, at 390 px and 320 px widths.
 All new parameters are optional and default to the previous behaviour, so every
 existing user and every existing golden remains valid.
 
-### Media placeholder policy (Phase 7C)
+### Media policy (Phase 8B)
 
-Phase 7C implements media **fallbacks**, not the Phase 8 media system.
+Phase 7C shipped media **fallbacks**; Phase 8B added the media system around
+them. `GvImagePlaceholder` is unchanged and remains the fallback for every
+no-image state.
 
-- Every hero and every row leading slot uses `GvImagePlaceholder`, which reserves
-  the intended aspect ratio so content never shifts.
-- Each placeholder carries a localized semantic label
-  (`driverPortraitPlaceholder`, `teamLogoPlaceholder`,
-  `circuitLayoutPlaceholder`).
-- **No remote image request is made anywhere.** No image-cache package was added,
-  no production asset URL is hardcoded, and no logo, portrait or circuit outline
+`GvRemoteImage` renders remote imagery. It takes **primitives only** — a
+validated URL, a cache identity, a size, a placeholder icon, an optional label —
+and knows nothing about `Driver`, `Constructor`, `Circuit`, `GrandPrix`,
+`MediaAsset`, a repository, a Riverpod `Ref`, a Drift row or a DTO. Choosing
+*which* image belongs in a slot happens before the widget is built, in a pure
+selector.
+
+- Every hero and every row leading slot reserves its aspect ratio from the first
+  frame, so content never shifts when bytes arrive or fail to.
+- No media, loading, a rejected URL, a network failure, an HTTP failure, a decode
+  failure and a missing loader all resolve to the **same placeholder at the same
+  size**. There is no broken-image icon, no error text, no exception, no URL and
+  no identifier on screen.
+- A failure never produces a page-level error and never touches the surrounding
+  text or navigation.
+- A subtree with no `MediaLoaderScope` renders placeholders and requests nothing,
+  so no widget test can reach the network by accident.
+- No production asset URL is hardcoded, and no logo, portrait or circuit outline
   is bundled.
 - Initials are never derived from an identifier; team treatment uses the
   contrast-safe accent from `GvTeamAccent`, which returns `null` for a missing or
   malformed colour rather than inventing one.
+- Accessibility is decided slot by slot rather than by marking every image
+  informative: an image beside text that already names its subject is decorative,
+  while a circuit layout diagram is informative, because the shape of the track is
+  information no adjacent text states.
 - Missing media never removes core text content: every row and every detail
   screen stays fully usable and navigable without it.
+
+Full architecture — ownership, variant selection, URL policy, cache limits, the
+loader boundary and publication — is in [GridView_Media.md](GridView_Media.md).
 
 ## 9. Rules
 

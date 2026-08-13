@@ -4,6 +4,7 @@ export 'gv_bottom_nav.dart';
 export 'gv_buttons.dart';
 export 'gv_cards.dart';
 export 'gv_image_placeholder.dart';
+export 'gv_remote_image.dart';
 export 'gv_rows.dart';
 export 'gv_section_header.dart';
 export 'gv_segmented_control.dart';

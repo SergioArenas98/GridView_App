@@ -12,7 +12,10 @@ import '../../shared/domain/entities/entity_profile.dart';
 import '../../shared/domain/entities/season_card.dart';
 import '../../shared/domain/entities/season_entry.dart';
 import '../../shared/domain/entities/standing.dart';
+import '../../shared/domain/media/media_slot_policy.dart';
+import '../../shared/domain/media/media_variant_selector.dart';
 import '../../shared/presentation/entity_formatting.dart';
+import '../../shared/presentation/media_slot.dart';
 import '../../shared/presentation/widgets/entity_detail_scaffold.dart';
 import '../../shared/presentation/widgets/screen_sections.dart';
 import '../application/team_detail_providers.dart';
@@ -227,8 +230,14 @@ class ConstructorDetailScreen extends ConsumerWidget {
 }
 
 /// The team hero: season branding, the stable fallback name when it differs, a
-/// contrast-safe team colour and a layout-reserving logo placeholder. No remote
-/// image is requested.
+/// contrast-safe team colour and the constructor's own mark when one is available
+/// locally.
+///
+/// The image is the constructor's **stable** identity imagery, never presented as
+/// this season's livery: `ConstructorSeasonEntry` carries no media field, so the
+/// contract cannot express season-specific branding and this build does not
+/// pretend otherwise — even though [TeamProfile.displayName] above it may well be
+/// a season brand. It is decorative, because that name is the adjacent heading.
 class _TeamHero extends StatelessWidget {
   const _TeamHero({required this.profile});
 
@@ -236,7 +245,6 @@ class _TeamHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
     final Color? accent = GvTeamAccent.parse(
       profile.seasonEntry?.colorPrimary ?? profile.constructor.colorPrimary,
     );
@@ -246,11 +254,19 @@ class _TeamHero extends StatelessWidget {
     ]);
 
     return GvHeroCard(
-      background: GvImagePlaceholder(
+      background: GvRemoteImage(
+        request: resolveMediaSlot(
+          context,
+          media: profile.media,
+          preference: MediaSlotPolicy.constructorMark,
+          role: MediaDisplayRole.detail,
+          logicalWidth: MediaQuery.sizeOf(context).width,
+        ),
         aspectRatio: 16 / 9,
-        icon: Icons.shield_outlined,
+        logicalWidth: MediaQuery.sizeOf(context).width,
+        placeholderIcon: Icons.shield_outlined,
         borderRadius: BorderRadius.zero,
-        semanticLabel: l10n.teamLogoPlaceholder,
+        decorative: true,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

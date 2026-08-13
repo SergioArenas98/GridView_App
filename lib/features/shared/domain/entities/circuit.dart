@@ -39,4 +39,21 @@ class Circuit {
   final int? firstGrandPrixYear;
   final LapRecord? lapRecord;
   final List<MediaAsset>? media;
+
+  /// A copy carrying [media]. See `GrandPrix.copyWithMedia`.
+  Circuit copyWithMedia(List<MediaAsset> media) => Circuit(
+    id: id,
+    name: name,
+    locality: locality,
+    country: country,
+    countryCode: countryCode,
+    latitude: latitude,
+    longitude: longitude,
+    lengthMeters: lengthMeters,
+    cornerCount: cornerCount,
+    direction: direction,
+    firstGrandPrixYear: firstGrandPrixYear,
+    lapRecord: lapRecord,
+    media: media,
+  );
 }

@@ -1004,7 +1004,17 @@
   },
   "circuitLayoutPlaceholder": "Circuit layout unavailable",
   "@circuitLayoutPlaceholder": {
-    "description": "Semantic label for the circuit layout placeholder. Phase 7C downloads no media."
+    "description": "Semantic label for the circuit layout placeholder when no layout media is available."
+  },
+  "circuitLayoutImage": "Track layout of {circuit}",
+  "@circuitLayoutImage": {
+    "description": "Semantic label for a loaded circuit-layout diagram. This image is informative rather than decorative: the shape of the track is information the adjacent text does not convey. Never contains an identifier, a filename or a URL.",
+    "placeholders": {
+      "circuit": {
+        "type": "String",
+        "example": "Autodromo Nazionale Monza"
+      }
+    }
   },
   "lengthKilometers": "{value} km",
   "@lengthKilometers": {

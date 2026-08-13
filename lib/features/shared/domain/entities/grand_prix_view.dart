@@ -1,6 +1,9 @@
+import '../media/media_presentation.dart';
 import 'circuit.dart';
+import 'enums.dart';
 import 'freshness.dart';
 import 'grand_prix.dart';
+import 'media.dart';
 
 /// The Grand Prix detail vertical-slice aggregate read from the local database.
 ///
@@ -19,4 +22,24 @@ class GrandPrixDetailView {
   final GrandPrix grandPrix;
   final Circuit? circuit;
   final DataFreshness? freshness;
+
+  /// The event's own media, read locally. Kept distinct from [circuitMedia]:
+  /// Grand Prix media and circuit media are different owners, and the hero has to
+  /// know which one it is showing to describe it correctly.
+  EntityMedia get eventMedia => EntityMedia.from(
+    MediaEntityType.grandPrix,
+    grandPrix.id,
+    grandPrix.media ?? const <MediaAsset>[],
+  );
+
+  /// The host circuit's own media, or `null` when no resolved circuit exists.
+  EntityMedia? get circuitMedia {
+    final Circuit? host = circuit;
+    if (host == null) return null;
+    return EntityMedia.from(
+      MediaEntityType.circuit,
+      host.id,
+      host.media ?? const <MediaAsset>[],
+    );
+  }
 }

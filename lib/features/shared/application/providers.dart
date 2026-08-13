@@ -70,10 +70,15 @@ final Provider<String> deviceTimeZoneLabelProvider = Provider<String>((
 /// Every credit line that must be displayed for the locally stored media.
 ///
 /// A pure local read, so the acknowledgements screen never issues a request and
-/// works offline as soon as the content manifest has synchronised once.
-final FutureProvider<List<MediaAttribution>> mediaAttributionsProvider =
-    FutureProvider<List<MediaAttribution>>(
-      (Ref ref) => ref.watch(databaseProvider).mediaDao.readAttributions(),
+/// works offline as soon as media metadata has been persisted once.
+///
+/// A stream rather than a one-shot read: when a replacement snapshot removes an
+/// asset, the credit it required stops being displayed on its own. The screen is
+/// then a straight rendering of what is currently stored, which is the only claim
+/// it is entitled to make.
+final StreamProvider<List<MediaAttribution>> mediaAttributionsProvider =
+    StreamProvider<List<MediaAttribution>>(
+      (Ref ref) => ref.watch(databaseProvider).mediaDao.watchAttributions(),
     );
 
 /// The build environment. Overridable in tests.

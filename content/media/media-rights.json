@@ -1,0 +1,7 @@
+{
+  "$schema": "../schemas/media-rights.schema.json",
+  "kind": "media-rights",
+  "status": "authoritative",
+  "note": "The approved media inventory production publication reads. It is EMPTY, and that is the accurate state: no Formula 1 media rights have been cleared for GridView. Because the publication gate fails closed, an empty inventory means nothing can be processed, uploaded or referenced from a manifest - which is the intended behaviour, not a gap to work around. Do not add a record here to make a test or a build pass: automated tests use clearly synthetic fixtures outside content/. A record belongs here only once a real permission exists and is recorded outside this repository.",
+  "assets": []
+}

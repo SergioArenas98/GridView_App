@@ -120,6 +120,7 @@ jobs:
             test/screens/screen_golden_test.dart \
             test/screens/light_theme_golden_test.dart \
             test/settings/settings_golden_test.dart \
+            test/media/media_golden_test.dart \
             --update-goldens
 
       # Explicit directories: CI shells do not enable globstar, so `test/**`
@@ -129,7 +130,8 @@ jobs:
           git diff --exit-code -- \
             test/design_system/goldens \
             test/screens/goldens \
-            test/settings/goldens
+            test/settings/goldens \
+            test/media/goldens
 
       # Proves the gate is actually wired to the goldens. Without this, a wrong
       # path or a stale directory list would make the step above pass whatever
@@ -142,7 +144,8 @@ jobs:
           if git diff --exit-code -- \
                test/design_system/goldens \
                test/screens/goldens \
-               test/settings/goldens > /dev/null 2>&1; then
+               test/settings/goldens \
+               test/media/goldens > /dev/null 2>&1; then
             echo "::error::the freshness gate did not detect a modified golden"
             exit 1
           fi
@@ -150,11 +153,13 @@ jobs:
           git checkout -- \
             test/design_system/goldens \
             test/screens/goldens \
-            test/settings/goldens
+            test/settings/goldens \
+            test/media/goldens
           git diff --exit-code -- \
             test/design_system/goldens \
             test/screens/goldens \
-            test/settings/goldens
+            test/settings/goldens \
+            test/media/goldens
           echo "repository restored and clean"
 
   edge-api:
@@ -189,6 +194,44 @@ jobs:
 
       - name: Validate contract, content, fixtures and Worker config
         run: npm run validate
+
+      # The media publication pipeline, end to end, with nothing secret.
+      #
+      # This runs rights validation, image processing and manifest generation
+      # against the real production register - which is authoritative and empty,
+      # so the expected result is an empty inventory. That is the point: the gate
+      # fails closed, and CI proves it stays closed rather than proving an upload
+      # works.
+      #
+      # No R2 credential, no Cloudflare API token, no bucket, no media URL and no
+      # third-party image is involved, and no upload path is reachable from here:
+      # the CLI refuses anything but `dry-run`.
+      - name: Media publication dry-run
+        run: npm run media:dry-run
+
+      # A dry-run must produce a manifest and an inventory even when there is
+      # nothing approved, and must never invent an asset.
+      - name: Verify the dry-run produced an empty, valid inventory
+        run: |
+          set -e
+          node -e "
+            const fs = require('node:fs');
+            const manifest = JSON.parse(fs.readFileSync('.media-out/media-manifest.json', 'utf8'));
+            const objects = JSON.parse(fs.readFileSync('.media-out/object-inventory.json', 'utf8'));
+            if (!Array.isArray(manifest.assets) || !Array.isArray(objects)) {
+              throw new Error('dry-run output is not the expected shape');
+            }
+            if (manifest.assets.length !== 0 || objects.length !== 0) {
+              throw new Error(
+                'The approved media inventory is expected to be empty. If real rights now exist, update this gate deliberately.'
+              );
+            }
+            console.log('dry-run produced an empty inventory, as expected');
+          "
+
+      # The dry-run writes only to its ignored output directory.
+      - name: Require the dry-run to leave the repository unchanged
+        run: git diff --exit-code
 
   secret-scan:
     name: Secret scan

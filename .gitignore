@@ -71,6 +71,11 @@ services/edge-api/dist/
 # parent dir on a fresh checkout, so the artifact is generated in place here).
 services/edge-api/worker-configuration.d.ts
 
+# Media dry-run output: generated variants, the manifest fragment and the object
+# inventory. Regenerated on demand and never committed - a published asset lives
+# in R2, not in Git.
+services/edge-api/.media-out/
+
 /backend/
 
 # Golden-test diff artifacts written by `flutter test` on a mismatch. They are

@@ -508,10 +508,25 @@ schema change and its own phase.
 
 ### 10.6 Media availability
 
-`MediaDao.ownersWithMedia(type, ids)` reports, in **one** batched query per
-collection, which owners have at least one locally known asset. It reports local
-availability only — Phase 7C fetches and downloads nothing — and exists so a
-placeholder can describe itself accurately.
+`MediaDao.mediaForOwners(type, ids)` returns, in **one** batched read per
+collection, the ordered media each owner holds locally. A collection screen
+therefore costs three queries for a whole roster rather than three per row.
+
+It reports **local availability only**: composing a read model fetches nothing,
+downloads nothing and refreshes nothing. An owner with no imagery is simply
+absent from the result — that is an ordinary condition, not a missing entry.
+
+It replaced the Phase 7C `ownersWithMedia`, whose boolean answer existed only so
+a placeholder could describe itself. From Phase 8B the read models carry the
+actual assets, because a slot has to choose a *variant*, not merely know that
+something exists.
+
+Media ownership, presentation read models, variant selection, caching and the
+publication pipeline are documented in full in
+[GridView_Media.md](GridView_Media.md). The invariants that matter here: a real
+asset has at most one real owner; `placeholder` and `unknown` never receive an
+association row; and **image bytes never enter Drift** — no cache path, no
+download state and no download failure is stored in any row.
 
 ### 10.7 Referential stubs (unchanged mechanism)
 

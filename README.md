@@ -113,7 +113,7 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   never rewrites stable identity, the line-up is derived from participation
   entries, and circuit identity stays separate from event properties.
   Unresolved referential stubs remain invisible and never materialize a detail.
-  Media is placeholder-only: no remote image request was added. See
+  See
   `docs/technical/GridView_Synchronization.md` §14,
   `docs/technical/GridView_Local_Data.md` §10 and
   `docs/technical/GridView_Navigation.md` §11.
@@ -140,8 +140,23 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   absent policy URL or contact address is explained; in production the
   affordance is omitted entirely rather than shown as a dead control. See
   `docs/technical/GridView_Preferences_And_Settings.md`.
-  Phase 8B (media) and Phase 8C (observability, hardening, closure) are not
-  started.
+- Phase 8B - media: **code-complete and locally verified; live media
+  publication blocked.** Persisted media metadata now reaches the product
+  through domain-facing read models, a pure size-and-DPR variant selector, a
+  strict HTTPS URL policy, one shared bounded disk cache and one reviewed image
+  loader, behind a data-agnostic `GvRemoteImage`. The governing rule is that
+  **domain data availability is not media availability**: a missing, failed,
+  rejected or uncached image never makes Home, Calendar, Explore, Grand Prix or a
+  detail screen partial, and image bytes never enter Drift. Media appears only in
+  slots the approved design already has, so Calendar rows, standings and results
+  stay information-led. On the publication side, a fail-closed rights register
+  gates deterministic WebP processing that never upscales and never overwrites an
+  immutable object key, with an offline dry-run that needs no credentials.
+  **No Formula 1 media rights have been cleared and no R2 media bucket is
+  provisioned**, so the approved inventory is empty and no image has been
+  published — both are external operational blockers, not defects. See
+  `docs/technical/GridView_Media.md`.
+- Phase 8C (observability, hardening, closure) is not started.
 
 Home's next-Grand-Prix hero, the Calendar, the Grand Prix detail screen, both
 standings tables, the three Explore collections and the Driver, Team and Circuit

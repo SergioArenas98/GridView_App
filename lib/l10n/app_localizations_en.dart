@@ -750,6 +750,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get circuitLayoutPlaceholder => 'Circuit layout unavailable';
 
   @override
+  String circuitLayoutImage(String circuit) {
+    return 'Track layout of $circuit';
+  }
+
+  @override
   String lengthKilometers(String value) {
     return '$value km';
   }

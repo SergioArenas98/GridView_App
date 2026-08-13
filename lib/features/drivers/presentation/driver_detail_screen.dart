@@ -10,7 +10,10 @@ import '../../shared/application/entity_detail_scope.dart';
 import '../../shared/application/entity_detail_state.dart';
 import '../../shared/domain/entities/entity_profile.dart';
 import '../../shared/domain/entities/standing.dart';
+import '../../shared/domain/media/media_slot_policy.dart';
+import '../../shared/domain/media/media_variant_selector.dart';
 import '../../shared/presentation/entity_formatting.dart';
+import '../../shared/presentation/media_slot.dart';
 import '../../shared/presentation/widgets/entity_detail_scaffold.dart';
 import '../../shared/presentation/widgets/screen_sections.dart';
 import '../application/driver_detail_providers.dart';
@@ -248,8 +251,14 @@ class DriverDetailScreen extends ConsumerWidget {
   }
 }
 
-/// The driver hero: identity, season number, short code and nationality, with a
-/// layout-reserving portrait placeholder. No remote image is requested.
+/// The driver hero: identity, season number, short code and nationality, over the
+/// driver's own portrait when one is available locally.
+///
+/// Driver-owned media only. The portrait is decorative: the driver's name is the
+/// heading immediately in front of it, so announcing the picture as well would
+/// repeat what the screen reader has just said. Initials are never derived from
+/// the driver identifier, and a missing, failed or uncached image leaves the
+/// hero's text, chips and navigation exactly as they are.
 class _DriverHero extends StatelessWidget {
   const _DriverHero({
     required this.profile,
@@ -263,7 +272,6 @@ class _DriverHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
     // The season race number when the season supplies one, else the permanent
     // number. The two are never conflated in the labelled fields below.
     final String? number = formatter.count(
@@ -279,11 +287,19 @@ class _DriverHero extends StatelessWidget {
     ]);
 
     return GvHeroCard(
-      background: GvImagePlaceholder(
+      background: GvRemoteImage(
+        request: resolveMediaSlot(
+          context,
+          media: profile.media,
+          preference: MediaSlotPolicy.driverPortrait,
+          role: MediaDisplayRole.detail,
+          logicalWidth: MediaQuery.sizeOf(context).width,
+        ),
         aspectRatio: 1,
-        icon: Icons.person_outline,
+        logicalWidth: MediaQuery.sizeOf(context).width,
+        placeholderIcon: Icons.person_outline,
         borderRadius: BorderRadius.zero,
-        semanticLabel: l10n.driverPortraitPlaceholder,
+        decorative: true,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

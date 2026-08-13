@@ -1,7 +1,9 @@
+import '../media/media_presentation.dart';
 import 'circuit.dart';
 import 'constructor.dart';
 import 'driver.dart';
 import 'enums.dart';
+import 'media.dart';
 import 'season_card.dart';
 import 'season_entry.dart';
 import 'standing.dart';
@@ -70,6 +72,17 @@ class DriverProfile {
 
   String get driverId => driver.id;
 
+  /// The driver's own media as a presentation read model.
+  ///
+  /// Driver-owned only: the contract attaches media to `Driver`, so a
+  /// participation span never contributes imagery and a team asset is never
+  /// borrowed for a portrait.
+  EntityMedia get media => EntityMedia.from(
+    MediaEntityType.driver,
+    driver.id,
+    driver.media ?? const <MediaAsset>[],
+  );
+
   /// The single relevant span, or `null` when the season has none: the open span
   /// (`endRound == null`) if any, else the latest by `startRound`.
   DriverParticipation? get relevantParticipation =>
@@ -116,6 +129,17 @@ class TeamProfile {
   final List<TeamLineupMember> lineup;
 
   String get constructorId => constructor.id;
+
+  /// The constructor's own media as a presentation read model.
+  ///
+  /// This is the team's **stable** imagery. `ConstructorSeasonEntry` carries no
+  /// media field, so nothing here may be presented as this season's livery even
+  /// when [displayName] is a season brand.
+  EntityMedia get media => EntityMedia.from(
+    MediaEntityType.constructor,
+    constructor.id,
+    constructor.media ?? const <MediaAsset>[],
+  );
 
   /// Season branding first, then the stable identity. Never the identifier.
   String get displayName =>
@@ -164,6 +188,14 @@ class CircuitProfile {
   final String? lapRecordDriverName;
 
   String get circuitId => circuit.id;
+
+  /// The circuit's own media as a presentation read model. Circuit imagery
+  /// belongs to the circuit, never to the event it hosts.
+  EntityMedia get media => EntityMedia.from(
+    MediaEntityType.circuit,
+    circuit.id,
+    circuit.media ?? const <MediaAsset>[],
+  );
 
   /// Whether any physical fact is present, so an empty facts card is never
   /// shown. Race distance and event lap count are deliberately absent: they

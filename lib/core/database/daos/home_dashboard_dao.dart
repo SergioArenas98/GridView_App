@@ -1,9 +1,11 @@
 import 'package:drift/drift.dart';
 
 import '../../../features/shared/domain/entities/calendar_entry.dart';
+import '../../../features/shared/domain/entities/circuit.dart';
 import '../../../features/shared/domain/entities/enums.dart';
 import '../../../features/shared/domain/entities/grand_prix.dart';
 import '../../../features/shared/domain/entities/home_dashboard.dart';
+import '../../../features/shared/domain/entities/media.dart';
 import '../../../features/shared/domain/entities/race_result.dart';
 import '../../../features/shared/domain/entities/season.dart';
 import '../../../features/shared/domain/entities/standing_entry.dart';
@@ -75,6 +77,10 @@ class HomeDashboardDao extends DatabaseAccessor<GridViewDatabase>
         driverStandings,
         constructorStandings,
         raceResults,
+        attachedDatabase.grandPrixMedia,
+        attachedDatabase.circuitMedia,
+        attachedDatabase.mediaAssets,
+        attachedDatabase.mediaAssetVariants,
       ], () => readDashboard(now()));
 
   /// Reads the Home dashboard once at [now].
@@ -100,7 +106,9 @@ class HomeDashboardDao extends DatabaseAccessor<GridViewDatabase>
     final List<CalendarEntry> entries = await attachedDatabase.calendarDao
         .calendarEntries(season);
 
-    final HomeFocus? focus = _resolveFocus(entries, snapshot.focusRound, now);
+    final HomeFocus? focus = await _withHeroMedia(
+      _resolveFocus(entries, snapshot.focusRound, now),
+    );
     final CalendarEntry? latest = _entryFor(
       entries,
       resolveLatestCompletedEvent(
@@ -128,6 +136,38 @@ class HomeDashboardDao extends DatabaseAccessor<GridViewDatabase>
               .toList(growable: false),
       driverLeaders: await _driverLeaders(season),
       constructorLeaders: await _constructorLeaders(season),
+    );
+  }
+
+  /// Attaches the locally stored media of the **focused event only** — the one
+  /// slot on Home that has an approved image.
+  ///
+  /// Scoped to the focus deliberately. Reading media for the whole calendar would
+  /// cost a query per event to feed rows that have no image slot, and Calendar
+  /// rows are information-led by design.
+  ///
+  /// Purely additive: it reads what is already persisted and never fetches,
+  /// downloads or refreshes anything. A focus with no imagery is returned
+  /// unchanged, which is a complete Home — media availability is not domain
+  /// availability, so nothing here can make Home partial.
+  Future<HomeFocus?> _withHeroMedia(HomeFocus? focus) async {
+    if (focus == null) return null;
+    final GrandPrix event = focus.grandPrix;
+    final List<MediaAsset> eventMedia = await attachedDatabase.mediaDao
+        .mediaForOwner(MediaEntityType.grandPrix, event.id);
+    final Circuit? circuit = focus.circuit;
+    final List<MediaAsset> circuitMedia = circuit == null
+        ? const <MediaAsset>[]
+        : await attachedDatabase.mediaDao.mediaForOwner(
+            MediaEntityType.circuit,
+            circuit.id,
+          );
+    if (eventMedia.isEmpty && circuitMedia.isEmpty) return focus;
+
+    return HomeFocus(
+      grandPrix: event.copyWithMedia(eventMedia),
+      circuit: circuit?.copyWithMedia(circuitMedia),
+      source: focus.source,
     );
   }
 
