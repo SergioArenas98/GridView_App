@@ -4,6 +4,7 @@
   "private": true,
   "description": "GridView edge API - Cloudflare Worker serving the GridView API contract.",
   "type": "module",
+  "packageManager": "npm@10.9.9",
   "scripts": {
     "dev": "wrangler dev",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",

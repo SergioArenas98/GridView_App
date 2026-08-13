@@ -177,6 +177,46 @@ jobs:
           cache: npm
           cache-dependency-path: services/edge-api/package-lock.json
 
+      # `node-version: 22` pins Node but says nothing about npm, and the npm
+      # bundled with Node 22 has moved 10.9.4 -> 10.9.7 -> 10.9.8 across its
+      # patch releases. So the resolver that installs this lockfile drifted
+      # silently with the runner image, and nothing in the repository recorded
+      # which resolver the lockfile was written for.
+      #
+      # That gap already broke master once. The Phase 8B lockfile was
+      # regenerated under npm 11 on Windows while CI installed it under npm 10
+      # on Linux; npm 11 re-nested @emnapi/core and @emnapi/runtime under
+      # @rolldown/binding-wasm32-wasi, @img/sharp-wasm32 declares
+      # @emnapi/runtime, and `npm ci` failed on Linux with
+      # "Missing: @emnapi/runtime@1.11.3 from lock file" before any other Edge
+      # gate could run (repaired in f2183ba). `npm ci` succeeds on Windows with
+      # that same broken lock, so local verification cannot catch it - only a
+      # pinned, stated resolver can.
+      #
+      # 10.9.9 was the latest published npm 10 release when this pin was
+      # established on 2026-08-13, and it is the exact version that authored the
+      # committed lockfile - so the resolver that writes the lock and the one
+      # that installs it are now the same and cannot drift apart again.
+      #
+      # This must replace the npm on PATH. A `packageManager` or `engines.npm`
+      # field is descriptive only - npm does not enforce either - and `engines`
+      # would additionally be recorded in package-lock.json, forcing a lockfile
+      # regeneration this change deliberately avoids.
+      - name: Pin npm to the version this lockfile was resolved under
+        run: npm install --global npm@10.9.9
+
+      - name: Assert the pinned toolchain before installing
+        run: |
+          set -e
+          node_version="$(node --version)"
+          npm_version="$(npm --version)"
+          echo "node ${node_version}"
+          echo "npm  ${npm_version}"
+          if [ "${npm_version}" != "10.9.9" ]; then
+            echo "::error::expected npm 10.9.9 on PATH, found ${npm_version}"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 
