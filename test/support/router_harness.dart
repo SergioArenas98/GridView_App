@@ -7,6 +7,8 @@ import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/app/router/app_router.dart';
 import 'package:gridview/core/media/media_image_loader.dart';
 import 'package:gridview/core/media/media_loader_scope.dart';
+import 'package:gridview/core/observability/observability.dart';
+import 'package:gridview/core/observability/observability_providers.dart';
 import 'package:gridview/core/preferences/locale_resolution.dart';
 import 'package:gridview/core/preferences/preference_store.dart';
 import 'package:gridview/core/preferences/preference_values.dart';
@@ -214,6 +216,10 @@ Future<GoRouter> pumpApp(
   /// rather than through a database, because these tests deliberately replace
   /// the data layer with fakes and never open Drift.
   List<MediaAttribution> mediaAttributions = const <MediaAttribution>[],
+
+  /// The observability surface. Defaults to the inert one, so no test reports,
+  /// traces or reaches Firebase unless it deliberately asks for a fake.
+  Observability observability = const Observability.disabled(),
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
@@ -277,6 +283,7 @@ Future<GoRouter> pumpApp(
           (Ref ref) => Stream<List<MediaAttribution>>.value(mediaAttributions),
         ),
         appEnvironmentProvider.overrideWithValue(environment),
+        observabilityProvider.overrideWithValue(observability),
         usesMockDataProvider.overrideWithValue(mockData),
         // Home, Calendar and Standings are season-scoped. Widget tests replace
         // the data layer with fakes, so the season they render is supplied

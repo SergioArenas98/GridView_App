@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:gridview/core/database/gridview_database.dart';
+import 'package:gridview/core/observability/performance_tracer.dart';
 import 'package:gridview/features/sync/application/app_sync_coordinator.dart';
 import 'package:gridview/features/sync/data/resource_refresh_dispatcher.dart';
 
@@ -18,6 +19,7 @@ class SyncHarness {
     this.api, {
     DateTime? now,
     int maxConcurrency = kDefaultSyncConcurrency,
+    PerformanceTracer tracer = const NoopPerformanceTracer(),
   }) : repositories = RepositoryHarness(db, api, now: now) {
     coordinator = AppSyncCoordinator(
       dispatcher: ResourceRefreshDispatcher(
@@ -39,6 +41,7 @@ class SyncHarness {
       metadata: db.syncMetadataDao,
       now: repositories.now,
       maxConcurrency: maxConcurrency,
+      tracer: tracer,
     );
   }
 
