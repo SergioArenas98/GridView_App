@@ -1448,6 +1448,18 @@
   "@settingsPrivacyEnabled": {
     "description": "A platform service is enabled."
   },
+  "settingsPrivacyStarting": "Starting",
+  "@settingsPrivacyStarting": {
+    "description": "Diagnostics status while the reporting service is still starting up."
+  },
+  "settingsPrivacyUnavailable": "Unavailable",
+  "@settingsPrivacyUnavailable": {
+    "description": "Diagnostics status when the reporting service could not start."
+  },
+  "settingsPrivacyDiagnosticsNote": "Diagnostic components are included in every version of the app. Crash and performance information is only sent while the status above says Enabled.",
+  "@settingsPrivacyDiagnosticsNote": {
+    "description": "Explains that the diagnostics components ship in all builds but only transmit when enabled."
+  },
   "settingsPrivacyDisabled": "Disabled",
   "@settingsPrivacyDisabled": {
     "description": "A platform service is disabled."

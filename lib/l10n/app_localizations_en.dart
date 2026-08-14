@@ -1080,6 +1080,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPrivacyEnabled => 'Enabled';
 
   @override
+  String get settingsPrivacyStarting => 'Starting';
+
+  @override
+  String get settingsPrivacyUnavailable => 'Unavailable';
+
+  @override
+  String get settingsPrivacyDiagnosticsNote =>
+      'Diagnostic components are included in every version of the app. Crash and performance information is only sent while the status above says Enabled.';
+
+  @override
   String get settingsPrivacyDisabled => 'Disabled';
 
   @override

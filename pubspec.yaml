@@ -42,6 +42,16 @@ dependencies:
   # Bounded on-disk image byte cache (Phase 8 §14). Image bytes never enter
   # Drift; this package owns the only media byte cache in the app.
   flutter_cache_manager: ^3.4.1
+  # Observability (Phase 8C-1). Imported by exactly one file,
+  # lib/core/observability/firebase/firebase_observability.dart; the rest of the
+  # app depends on ErrorReporter/PerformanceTracer. Initialized in production
+  # only — the sole Firebase configuration this repository owns is registered
+  # for com.sejuma.gridview, and the Google Services Gradle plugin is applied to
+  # production tasks only. Deliberately NOT added: firebase_analytics (not
+  # authorized), Remote Config, Messaging and Authentication (out of scope).
+  firebase_core: ^4.13.0
+  firebase_crashlytics: ^5.2.7
+  firebase_performance: ^0.11.4+6
 
 dev_dependencies:
   flutter_test:

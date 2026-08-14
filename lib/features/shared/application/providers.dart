@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/environment/app_environment.dart';
+import '../../../core/database/connection/open_connection.dart';
 import '../../../core/database/gridview_database.dart';
 import '../../../core/network/api_config.dart';
 import '../../../core/network/data_source_config.dart';
 import '../../../core/network/gridview_dio.dart';
+import '../../../core/observability/observability_providers.dart';
 import '../../../core/time/device_time_zone.dart';
 import '../data/remote/dio_gridview_api.dart';
 import '../data/remote/fixture_gridview_api.dart';
@@ -23,6 +25,7 @@ import '../data/repositories/season_repository_impl.dart';
 import '../data/repositories/standings_repository_impl.dart';
 import '../data/sync/refresh_coordinator.dart';
 import '../data/sync/resource_sync.dart';
+import '../data/sync/sync_observation.dart';
 import '../domain/entities/media.dart';
 import '../domain/entities/season.dart';
 import '../domain/entities/sync_state.dart';
@@ -99,10 +102,17 @@ final Provider<DataSourceMode> dataSourceModeProvider =
     );
 
 /// The application database. Opened once and closed with the scope.
+///
+/// The open is traced (once per process, on first use) because it is the one
+/// unavoidable local I/O step between launching and rendering cached content:
+/// if it regresses, every screen starts late and nothing else in the app
+/// explains why.
 final Provider<GridViewDatabase> databaseProvider = Provider<GridViewDatabase>((
   Ref ref,
 ) {
-  final GridViewDatabase db = GridViewDatabase();
+  final GridViewDatabase db = GridViewDatabase(
+    connection: openAppConnection(tracer: ref.watch(performanceTracerProvider)),
+  );
   ref.onDispose(db.close);
   return db;
 });
@@ -207,15 +217,36 @@ final resourceSyncStateProvider =
 
 /// The transactional resource-sync writer (conflict rule + metadata), bound to
 /// the single application database.
+///
+/// Its apply-error observer is the application's single materialization report:
+/// one wiring here covers all twelve repositories.
 final Provider<ResourceSync> resourceSyncProvider = Provider<ResourceSync>(
-  (Ref ref) => ResourceSync(ref.watch(databaseProvider)),
+  (Ref ref) => ResourceSync(
+    ref.watch(databaseProvider),
+    onApplyError: observeSnapshotApplyErrors(
+      reporter: ref.watch(errorReporterProvider),
+      environment: ref.watch(appEnvironmentProvider),
+    ),
+  ),
 );
 
 /// The shared per-resource in-flight coordinator. One instance deduplicates
 /// concurrent refreshes by canonical resource key across every repository;
 /// different keys never block one another (no global lock).
+///
+/// Its outcome observer is the application's single refresh-failure report:
+/// because every repository refresh runs through this one object, the reporting
+/// policy is applied in exactly one place and collapsed duplicate refreshes are
+/// reported once rather than once per caller.
 final Provider<RefreshCoordinator> refreshCoordinatorProvider =
-    Provider<RefreshCoordinator>((Ref ref) => RefreshCoordinator());
+    Provider<RefreshCoordinator>(
+      (Ref ref) => RefreshCoordinator(
+        onOutcome: observeRefreshOutcomes(
+          reporter: ref.watch(errorReporterProvider),
+          environment: ref.watch(appEnvironmentProvider),
+        ),
+      ),
+    );
 
 // --- Repositories -------------------------------------------------------
 

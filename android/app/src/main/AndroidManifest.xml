@@ -31,6 +31,38 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Firebase collection policy: OFF for every flavor at process start.
+
+             This is a native boundary, and it exists because the Dart policy
+             cannot be one. Android instantiates FirebaseInitProvider (and the
+             Crashlytics, Performance, Sessions, Installations and Remote Config
+             component registrars that ship in every flavor) during application
+             startup, before any Dart code runs. A Dart-side eligibility check
+             therefore cannot prevent native collection from beginning - it can
+             only decide what the Dart adapters do afterwards.
+
+             Declaring both flags false makes the packaged SDKs inert by default
+             in dev, staging and production alike. The eligible production build
+             turns them on explicitly at runtime, after the Dart policy has been
+             established, via setCrashlyticsCollectionEnabled(true) and
+             setPerformanceCollectionEnabled(true).
+
+             Dev and staging additionally have no google_app_id resource, so the
+             default FirebaseApp cannot initialize there at all - but that is a
+             consequence of configuration being absent, not a policy. These flags
+             are the policy, and they stay correct even if a configuration file
+             is introduced later by accident.
+
+             firebase_performance_collection_deactivated is deliberately NOT
+             used: it is permanent and cannot be reversed at runtime, which would
+             also disable the production build this integration exists for. -->
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            android:value="false" />
+        <meta-data
+            android:name="firebase_performance_collection_enabled"
+            android:value="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

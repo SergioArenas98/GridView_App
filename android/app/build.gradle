@@ -12,9 +12,59 @@ plugins {
 // could point non-production builds at the production Firebase project.
 // Dev/staging Firebase configurations are pending; see
 // docs/technical/GridView_Environments.md.
-if (gradle.startParameter.taskRequests.toString().toLowerCase().contains("production")) {
+//
+// The two Firebase build-time plugins are applied under the same condition and
+// for the same reason: both read the Google services configuration, so applying
+// them to dev/staging would break builds that must stay usable with no Firebase
+// configuration at all. This is the "narrowly justified adjustment" to the
+// existing conditional rather than a new mechanism.
+def isProductionBuild =
+    gradle.startParameter.taskRequests.toString().toLowerCase().contains("production")
+
+if (isProductionBuild) {
     apply plugin: "com.google.gms.google-services"
+    apply plugin: "com.google.firebase.crashlytics"
+    apply plugin: "com.google.firebase.firebase-perf"
 }
+
+/// Reads one `--dart-define` value passed through by the Flutter Gradle plugin.
+///
+/// Flutter forwards defines as a comma-separated list of base64-encoded
+/// `KEY=VALUE` pairs in the `dart-defines` project property. Returns null when
+/// the property is absent (a raw Gradle invocation) or the key is not set.
+def dartDefine(String key) {
+    if (!project.hasProperty("dart-defines")) {
+        return null
+    }
+    for (String encoded : project.property("dart-defines").toString().split(",")) {
+        if (encoded == null || encoded.trim().isEmpty()) {
+            continue
+        }
+        String decoded = new String(encoded.trim().decodeBase64(), "UTF-8")
+        int separator = decoded.indexOf("=")
+        if (separator <= 0) {
+            continue
+        }
+        if (decoded.substring(0, separator) == key) {
+            return decoded.substring(separator + 1)
+        }
+    }
+    return null
+}
+
+/// The single source of truth for which `APP_ENV` each product flavor requires.
+///
+/// Two independent environment identities used to exist — the Android product
+/// flavor and the Dart `APP_ENV` define — and nothing compared them until after
+/// native startup. That allowed a production artifact whose Dart layer believed
+/// observability was disabled while the native SDKs were fully configured, and
+/// the inverse, a dev artifact claiming production status. This map makes the
+/// pairing declarative and the build enforces it.
+ext.requiredAppEnvForFlavor = [
+    dev       : "development",
+    staging   : "staging",
+    production: "production",
+]
 
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file("key.properties")
@@ -77,6 +127,130 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Build gates.
+//
+// Every variant gets both gates as independently runnable tasks, and they are
+// wired into the build graph of the variant actually being assembled, so an
+// invalid combination fails deterministically during the supported
+// `flutter build` flow before an installable artifact is accepted — not at
+// runtime, and not only in a review.
+//
+// The wiring is scoped by the requested task name rather than attached to every
+// variant's preBuild: `variant.preBuildProvider` resolves to a shared lifecycle
+// task here, so an unscoped `dependsOn` made a dev build run the production
+// validator and fail. Task-name scoping matches the existing google-services
+// conditional above and keeps `gradlew :app:dependencies` (which resolves a
+// production configuration by name) free of build gates.
+// -----------------------------------------------------------------------------
+def requestedTaskNames = gradle.startParameter.taskNames.join(" ").toLowerCase()
+def isAssemblyRequest = ["assemble", "bundle", "install"].any {
+    requestedTaskNames.contains(it)
+}
+
+android.applicationVariants.all { variant ->
+    def flavor = variant.flavorName
+    def expectedEnv = project.ext.requiredAppEnvForFlavor[flavor]
+    def variantName = variant.name.capitalize()
+
+    // Gate 1: the product flavor and APP_ENV must agree.
+    def validateEnv = tasks.register("validate${variantName}Environment") {
+        group = "verification"
+        description = "Fails unless APP_ENV matches the ${flavor} product flavor."
+        doLast {
+            if (expectedEnv == null) {
+                throw new GradleException(
+                    "No APP_ENV is declared for product flavor '${flavor}'. " +
+                    "Add it to requiredAppEnvForFlavor in android/app/build.gradle."
+                )
+            }
+            def actual = dartDefine("APP_ENV")
+            if (actual == null || actual.trim().isEmpty()) {
+                throw new GradleException(
+                    "Missing --dart-define=APP_ENV for the '${flavor}' flavor.\n" +
+                    "The '${flavor}' flavor requires APP_ENV=${expectedEnv}.\n" +
+                    "An absent APP_ENV resolves to 'development' in Dart, which would " +
+                    "produce a ${flavor} artifact whose observability policy contradicts " +
+                    "its native Firebase configuration."
+                )
+            }
+            if (actual.trim() != expectedEnv) {
+                throw new GradleException(
+                    "Flavor/APP_ENV mismatch: the '${flavor}' flavor requires " +
+                    "APP_ENV=${expectedEnv} but the build passed APP_ENV=${actual.trim()}.\n" +
+                    "Android flavor and Dart environment must describe the same build; " +
+                    "see docs/technical/GridView_Observability.md."
+                )
+            }
+            logger.lifecycle("APP_ENV=${expectedEnv} matches the ${flavor} flavor.")
+        }
+    }
+
+    // Gate 2: the resolved Android Firebase dependency set is the intended one.
+    //
+    // Reads Gradle's resolution result — actual resolved module identities, not
+    // console tree text — so it cannot be fooled by formatting, and it sees the
+    // transitive native artifacts a Dart lockfile can never show.
+    def verifyDeps = tasks.register("verify${variantName}FirebaseDependencies") {
+        group = "verification"
+        description = "Asserts the resolved Firebase artifacts for ${variant.name}."
+        doLast {
+            def configuration = configurations.getByName("${variant.name}RuntimeClasspath")
+            def modules = configuration.incoming.resolutionResult.allComponents
+                .findAll { it.id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+                .collect { "${it.moduleVersion.group}:${it.moduleVersion.name}".toString() }
+                .toSet()
+
+            // Intentional, and the transitive components Performance brings for
+            // its own internal configuration. Documented, not hidden.
+            def expected = [
+                "com.google.firebase:firebase-crashlytics",
+                "com.google.firebase:firebase-perf",
+                "com.google.firebase:firebase-config",
+                "com.google.firebase:firebase-abt",
+                "com.google.firebase:firebase-installations",
+                "com.google.firebase:firebase-sessions",
+            ]
+            // Never packaged. firebase-measurement-connector is deliberately not
+            // listed here: it is a transitive interop stub, not an Analytics
+            // implementation, and asserting its absence would be false.
+            def forbidden = [
+                "com.google.firebase:firebase-analytics",
+                "com.google.firebase:firebase-analytics-impl",
+                "com.google.android.gms:play-services-measurement",
+                "com.google.android.gms:play-services-measurement-api",
+                "com.google.android.gms:play-services-ads",
+                "com.google.android.gms:play-services-ads-identifier",
+                "com.google.firebase:firebase-messaging",
+                "com.google.firebase:firebase-auth",
+                "com.google.firebase:firebase-crashlytics-ndk",
+            ]
+
+            def missing = expected.findAll { !modules.contains(it) }
+            def present = forbidden.findAll { modules.contains(it) }
+            if (!missing.isEmpty() || !present.isEmpty()) {
+                throw new GradleException(
+                    "Firebase dependency policy violated for ${variant.name}.\n" +
+                    (missing.isEmpty() ? "" : "  expected but missing : ${missing}\n") +
+                    (present.isEmpty() ? "" : "  forbidden but present: ${present}\n") +
+                    "See docs/technical/GridView_Observability.md."
+                )
+            }
+            logger.lifecycle(
+                "${variant.name}: Firebase dependency policy satisfied " +
+                "(${expected.size()} expected present, ${forbidden.size()} forbidden absent)."
+            )
+        }
+    }
+
+    if (isAssemblyRequest && requestedTaskNames.contains(variant.name.toLowerCase())) {
+        variant.preBuildProvider.configure {
+            dependsOn(validateEnv)
+            dependsOn(verifyDeps)
         }
     }
 }

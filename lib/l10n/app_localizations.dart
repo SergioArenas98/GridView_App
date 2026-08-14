@@ -2000,6 +2000,24 @@ abstract class AppLocalizations {
   /// **'Enabled'**
   String get settingsPrivacyEnabled;
 
+  /// Diagnostics status while the reporting service is still starting up.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting'**
+  String get settingsPrivacyStarting;
+
+  /// Diagnostics status when the reporting service could not start.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get settingsPrivacyUnavailable;
+
+  /// Explains that the diagnostics components ship in all builds but only transmit when enabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostic components are included in every version of the app. Crash and performance information is only sent while the status above says Enabled.'**
+  String get settingsPrivacyDiagnosticsNote;
+
   /// A platform service is disabled.
   ///
   /// In en, this message translates to:

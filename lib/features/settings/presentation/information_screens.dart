@@ -1,9 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/environment/app_environment.dart';
 import '../../../core/network/api_config.dart';
 import '../../../core/network/data_source_config.dart';
+import '../../../core/observability/observability_providers.dart';
+import '../../../core/observability/observability_status.dart';
 import '../../../core/theme/theme.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/providers.dart';
@@ -142,6 +145,9 @@ class PrivacySettingsScreen extends ConsumerWidget {
     final bool explainsAbsence = showsConfigurationStatus(
       ref.watch(appEnvironmentProvider),
     );
+    final ValueListenable<ObservabilityStatus> observability = ref.watch(
+      observabilityStatusProvider,
+    );
 
     return GvScreenScaffold(
       title: l10n.settingsPrivacyAndLegal,
@@ -154,15 +160,33 @@ class PrivacySettingsScreen extends ConsumerWidget {
             title: l10n.settingsPrivacyAndLegal,
             child: GvInfoCard(
               children: <Widget>[
-                // Each status is read from the build's real configuration, so
-                // the screen cannot claim a service that is not running.
-                GvSettingsField(
-                  label: l10n.settingsPrivacyCrashReporting,
-                  value: _status(l10n, enabled: false),
-                ),
-                GvSettingsField(
-                  label: l10n.settingsPrivacyPerformance,
-                  value: _status(l10n, enabled: false),
+                // Crash reporting and performance monitoring are one surface
+                // (`Observability`), so they share one source of truth.
+                //
+                // That source is the *live* status, not build eligibility. An
+                // eligible build is not a running service: activation happens
+                // after the first frame and can fail, so a value derived from
+                // `APP_ENV` alone would tell the reader diagnostics were being
+                // collected when nothing had started or everything had failed.
+                // `ValueListenableBuilder` is what lets the row correct itself
+                // when activation resolves.
+                ValueListenableBuilder<ObservabilityStatus>(
+                  valueListenable: observability,
+                  builder:
+                      (BuildContext context, ObservabilityStatus status, _) {
+                        return Column(
+                          children: <Widget>[
+                            GvSettingsField(
+                              label: l10n.settingsPrivacyCrashReporting,
+                              value: _observabilityStatus(l10n, status),
+                            ),
+                            GvSettingsField(
+                              label: l10n.settingsPrivacyPerformance,
+                              value: _observabilityStatus(l10n, status),
+                            ),
+                          ],
+                        );
+                      },
                 ),
                 GvSettingsField(
                   label: l10n.settingsPrivacyAdvertising,
@@ -170,6 +194,14 @@ class PrivacySettingsScreen extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: GvSpacing.md),
+          // The honest part the status alone cannot carry: the diagnostic
+          // components ship in every build of the app, and what the policy
+          // controls is transmission, not presence.
+          Text(
+            l10n.settingsPrivacyDiagnosticsNote,
+            style: context.gvText.caption,
           ),
           if (policy != null) ...<Widget>[
             const SizedBox(height: GvSpacing.lg),
@@ -197,6 +229,21 @@ class PrivacySettingsScreen extends ConsumerWidget {
 
   String _status(AppLocalizations l10n, {required bool enabled}) =>
       enabled ? l10n.settingsPrivacyEnabled : l10n.settingsPrivacyDisabled;
+
+  /// Maps the live activation state to user-facing copy.
+  ///
+  /// Four states, four honest answers. `activated` says the app's reporting is
+  /// running — it deliberately does not claim any payload reached a server,
+  /// which the app cannot observe and therefore must not assert.
+  String _observabilityStatus(
+    AppLocalizations l10n,
+    ObservabilityStatus status,
+  ) => switch (status) {
+    ObservabilityStatus.disabledByPolicy => l10n.settingsPrivacyDisabled,
+    ObservabilityStatus.pending => l10n.settingsPrivacyStarting,
+    ObservabilityStatus.activated => l10n.settingsPrivacyEnabled,
+    ObservabilityStatus.unavailable => l10n.settingsPrivacyUnavailable,
+  };
 }
 
 /// Opens an allow-listed external destination, reporting failure without
