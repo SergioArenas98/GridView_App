@@ -100,17 +100,51 @@ environment-specific interval.
   applied exclusively to production tasks (`android/app/build.gradle`).
 - **Pending:** dedicated Firebase projects/configurations for development and
   staging do not exist yet. Until they are approved and created, dev and
-  staging builds contain no Firebase configuration and no Firebase SDK is
-  initialized anywhere in the shell. Do not create new Firebase projects
-  without approval.
-- The Firebase Dart SDKs are integrated in Phase 8 (Implementation Plan,
-  section 13.5).
-- **Phase 8A did not integrate them.** There is still no FlutterFire
-  dependency, no `firebase_options.dart` and no Firebase initialization
-  anywhere in the shell, so Crashlytics and Performance Monitoring must not be
-  claimed to work. The configuration is production-only and therefore
-  incomplete; activation is an external blocker. The platform-neutral
-  observability boundary is Phase 8C. See
+  staging builds contain no Firebase configuration and initialize no Firebase
+  SDK. Do not create new Firebase projects without approval.
+- **Phase 8C-1 integrated the SDKs.** `firebase_core`, `firebase_crashlytics`
+  and `firebase_performance` are dependencies; exactly one file
+  (`lib/core/observability/firebase/firebase_observability.dart`) imports them,
+  and a test enforces that. There is still **no** `firebase_options.dart` and no
+  new configuration file: the default app comes from the existing production
+  `google-services.json`, which is byte-identical.
+- **The native Firebase components are packaged in every flavor.** Dart
+  dependencies are not flavor-scoped, so `FirebaseInitProvider` and the
+  Crashlytics, Performance, Sessions, Installations, Remote Config and ABT
+  registrars appear in the dev, staging and production manifests alike. Only the
+  *configuration* and the build-time plugins are production-only. Do not state
+  that no Firebase SDK is initialized outside production.
+- **Collection is off by default everywhere.** The main manifest declares
+  `firebase_crashlytics_collection_enabled=false` and
+  `firebase_performance_collection_enabled=false` for all flavors, so the
+  packaged SDKs are inert from process start. Only an eligible production build
+  turns them on at runtime. This is the boundary that matters, because Android
+  instantiates `FirebaseInitProvider` before any Dart code runs.
+- `isObservabilityEligible` returns true for `production` only and governs the
+  **Dart adapters**. Development, staging and tests resolve to a no-op reporter
+  and tracer.
+- **Flavor and `APP_ENV` are bound by a build gate.** `validate<Variant>Environment`
+  in `android/app/build.gradle` fails the build unless dev↔development,
+  staging↔staging and production↔production, and fails when `APP_ENV` is absent.
+  Contradictory artifacts can no longer be produced.
+- Dev and staging still build with **no** `google-services.json`. Verified: a
+  production build emits `processProductionDebugGoogleServices` resources with
+  `google_app_id` and `project_id = gridview-fb20f`, plus the Crashlytics
+  build-ID injection tasks; dev and staging emit neither.
+- Firebase initialization is never awaited before `runApp`; it degrades to inert
+  on any failure. See `GridView_Observability.md` and
+  [ADR 0016](../adr/0016-production-only-firebase-observability.md).
+- **No Firebase Analytics implementation**, no advertising SDK, no Messaging or
+  Authentication, and no Crashlytics NDK. **Remote Config and ABT *are* present
+  as transitive native components of Performance Monitoring** — GridView has no
+  Remote Config Dart API or product feature. A transitive
+  `firebase-measurement-connector` interop stub is present and is not Analytics.
+  The Android facts are asserted by the Gradle gate
+  `verify<Variant>FirebaseDependencies`; the Dart lockfile test covers only
+  direct Dart packages.
+- Crashlytics and Performance data have **not** been observed arriving in
+  Firebase Console; that needs an authorized release-like production build and
+  console access, and remains an external blocker. See
   `GridView_Preferences_And_Settings.md` §6.2 and §7.
 
 ## Advertising

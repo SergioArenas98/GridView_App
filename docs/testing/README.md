@@ -240,6 +240,78 @@ No test requires a real Worker, network, Firebase or Android device. Drift tests
 use `NativeDatabase.memory()` (and a temporary on-disk file for the persistence
 test).
 
+## Observability (`test/observability/`)
+
+57 tests covering the Phase 8C-1 boundary. None constructs a Firebase type: the
+default `observabilityProvider` is the inert surface, and `pumpApp` takes an
+`observability:` parameter that defaults to `Observability.disabled()`, so a
+test transmits nothing unless it deliberately asks for a recording fake from
+`test/support/fake_observability.dart`.
+
+- `observability_isolation_test.dart` — the eligibility truth table (production
+  only; dev, staging and a malformed `APP_ENV` all fail closed), plus structural
+  assertions: exactly one `lib/` file imports `package:firebase_`;
+  `google-services.json` exists only under `android/app/src/production/`; the
+  native collection-policy meta-data is declared `false`; the flavor/`APP_ENV`
+  gate exists; and the Gradle dependency gate encodes the reviewed Android
+  facts. The `pubspec.lock` check is **scoped to direct Dart packages only** —
+  it cannot see native artifacts, which is why Remote Config and ABT (transitive
+  components of Performance Monitoring) are asserted in Gradle instead.
+- `report_exactly_once_test.dart` — the whole reporting pipeline with both hooks
+  live. Each typed validation exception produces exactly **one**
+  `invalidRemoteContract` at the refresh boundary; a genuine storage fault
+  produces exactly one `localDatabaseFailure` at the persistence boundary; a
+  success produces none. This is the test that catches double-reporting.
+- `sync_run_trace_test.dart` — `gv_sync_run` against the real coordinator:
+  one trace per run, outcome recorded, and peak concurrency of 1 even when
+  startup, foreground and a queued manual refresh all overlap.
+- `global_error_handlers_test.dart` — fatal routing. Framework errors and
+  uncaught async errors each report **exactly once**; the previous handler still
+  runs so debug output survives; a throwing reporter cannot escape. Restoration
+  is ownership-aware: a later Flutter or platform handler owner is never
+  overwritten, repeated restoration is safe, and one half can be restored while
+  the other is left alone.
+- `observability_policy_test.dart` — the non-fatal allowlist and its exclusions,
+  redaction (a resource key never reaches a report), bounded attributes, and
+  flood suppression (200 identical failures produce one report; fatals are never
+  throttled).
+- `sync_observation_test.dart` — the two hooks. Successes and operational
+  failures report nothing; the five reportable categories report correctly; a
+  throwing observer or reporter cannot change a refresh outcome or leak a slot;
+  collapsed duplicate refreshes are observed once.
+- `tracing_test.dart` — traces stop in `finally` on success, failure and
+  cancellation; a tracer that fails to start still runs the action; a broken
+  tracer cannot change a result or swallow an error.
+- `observability_startup_test.dart` — drives the real `installObservability`
+  with the activation seam injected: a non-eligible build never activates; an
+  eligible one reports `pending` first; success, a null result and a throwing
+  activator all resolve safely; the app renders while activation is still
+  pending. Also covers the startup buffer — in-order replay exactly once,
+  overflow dropping the newest, `disable()` discarding without throwing, and a
+  replay failure that cannot become a new uncaught error.
+- `privacy_status_test.dart` — Settings → Privacy across all four states
+  (disabled, starting, enabled, unavailable), the live correction when
+  activation resolves, and the packaged-components disclosure.
+
+Run them alone with:
+
+```text
+flutter test test/observability
+```
+
+## Canonical goldens pending regeneration
+
+The Phase 8C-1 Privacy-screen copy change (live status plus the diagnostics
+disclosure) legitimately changes three baselines:
+
+- `test/settings/goldens/settings_privacy_unconfigured.png`
+- `test/settings/goldens/settings_privacy_configured.png`
+- `test/settings/goldens/settings_privacy_production.png`
+
+They have **not** been regenerated. Canonical baselines are Linux-owned: run the
+manual "Render canonical goldens" workflow, inspect the artifact, and commit
+only approved images. Do not author them on Windows.
+
 ## Edge API foundation (Phase 5A)
 
 The Worker backend foundation is tested locally with injected adapters only. No

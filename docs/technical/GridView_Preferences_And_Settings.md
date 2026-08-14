@@ -426,22 +426,35 @@ id, token or namespace. Opening Settings performs **no refresh**.
   repository, so the default applies: **not retained for v1.**
 - The Privacy screen therefore reports advertising as *disabled*, truthfully.
 
-### 6.2 Firebase — partial configuration, not activated
+### 6.2 Firebase — activated in production only (Phase 8C-1)
 
 - `android/app/src/production/google-services.json` is committed and genuine:
   project `gridview-fb20f`, android package `com.sejuma.gridview` — which
   matches the real production `applicationId` exactly, so the configuration is
   owned rather than fabricated. It declares only `appinvite_service`. The
   embedded key is an Android Firebase key (shipped in every APK by design), so
-  its presence is **not** a secret leak.
-- There is **no** dev or staging `google-services.json`, no
-  `firebase_options.dart`, and **no FlutterFire dependency in `pubspec.yaml`**.
-- The Google services Gradle plugin is applied to production tasks only.
-- Therefore: **Crashlytics and Performance Monitoring must not be claimed to
-  work.** No Firebase SDK is initialized anywhere in the shell.
-- The correct Phase 8C outcome is a platform-neutral observability boundary plus
-  a setup checklist for the two missing environments, with Firebase activation
-  reported as an **external closure blocker** (§7).
+  its presence is **not** a secret leak. **Phase 8C-1 left it byte-identical.**
+- There is still **no** dev or staging `google-services.json` and no
+  `firebase_options.dart`. The Google services Gradle plugin is still applied to
+  production tasks only.
+- **Phase 8C-1 added the FlutterFire dependencies** (`firebase_core`,
+  `firebase_crashlytics`, `firebase_performance`) behind a single application
+  boundary. The **native components are packaged in every flavor** — Dart
+  dependencies are not flavor-scoped — so it is wrong to say no Firebase SDK is
+  initialized outside production. What is true: collection is disabled by
+  manifest policy in all flavors, only an eligible production build turns it on
+  at runtime, and only production initializes the Dart adapters.
+- The Privacy screen no longer hardcodes these statuses, and no longer derives
+  them from build eligibility either. It reads the live `ObservabilityStatus`
+  (Disabled / Starting / Enabled / Unavailable), so it cannot claim diagnostics
+  are running before activation has finished or after it has failed, and it
+  discloses that diagnostic components ship in every version of the app while
+  transmission is restricted by policy.
+- **Crashlytics and Performance Monitoring must still not be claimed to
+  *deliver*.** The code is complete and locally verified, but no event has been
+  observed in Firebase Console; that needs an authorized release-like build and
+  console access and remains an **external closure blocker** (§7). See
+  `GridView_Observability.md`.
 
 ### 6.3 `package_info_plus` compatibility decision
 
@@ -464,7 +477,11 @@ fails with `source must not be null`. **Do not downgrade.**
 
 1. **Firebase dev/staging projects** do not exist. Creating them requires
    account access and approval. Until then, observability cannot be activated
-   outside production and crash/performance reporting must be reported as off.
+   outside production and crash/performance reporting is reported as off there.
+   Production observability is implemented (Phase 8C-1) but **operationally
+   unverified**: no crash, non-fatal or trace has been observed in Firebase
+   Console, which needs an authorized release-like production build and console
+   access. A green test suite is not evidence of delivery.
 2. **Privacy policy URL** is unset (`PRIVACY_POLICY_URL`). A production build
    with no policy URL shows no policy affordance at all. Publishing a policy and
    supplying the URL is a **release blocker**, tracked here rather than surfaced
