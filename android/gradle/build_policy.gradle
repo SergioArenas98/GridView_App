@@ -355,8 +355,9 @@ tasks.register('verifyAndroidBuildPolicy') {
             }
 
             // 4c. No symbol upload exists at all. `firebase-crashlytics-ndk` is
-            //     deliberately absent, so native crashes are not captured and
-            //     there is no second network-mutating Crashlytics task to gate.
+            //     deliberately absent, so C/C++ library crashes are not captured
+            //     (JVM ones still are) and there is no second network-mutating
+            //     Crashlytics task to gate.
             require(failures,
                 project.tasks.findByName("uploadCrashlyticsSymbolFile${capitalized}") == null,
                 "uploadCrashlyticsSymbolFile${capitalized} exists; the NDK dependency was reintroduced")

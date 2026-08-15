@@ -25,6 +25,9 @@ lib/core/observability/
   error_reporter.dart            ErrorReporter, Noop…, Guarded…
   performance_tracer.dart        TraceName, TraceOutcome, PerformanceTracer, Noop…, Guarded…
   async_error_reporter.dart      AsyncErrorReporter — the fire-and-forget guard
+  serial_report_queue.dart       SerialReportQueue — the FIFO reporting lane
+  non_blocking_tracer.dart       NonBlockingPerformanceTracer + TraceSession
+  preference_observation.dart    PreferenceDiagnostic -> ObservedFailure
   observability_activation.dart  ObservabilityActivation (this process's adapters)
   diagnostics_policy.dart        DiagnosticsPolicy (this build's configuration)
   observability.dart             Observability (reporter + tracer + activation), eligibility
@@ -85,8 +88,11 @@ Precisely stated:
   Analytics events. A measurement-connector artifact is transitive and is not
   the Analytics implementation.
 - **No NDK crash capture.** `firebase-crashlytics-ndk` is not a dependency, so
-  native crashes are not captured at all. Nothing in this integration should be
-  read as claiming otherwise.
+  crashes originating in **native (C/C++) libraries** are not captured. This is
+  narrower than "no native crashes": Android runtime and JVM failures — Dart
+  errors routed through the global handlers, and uncaught Java/Kotlin exceptions
+  — remain in Crashlytics scope. What is missing is the signal-level handler
+  that records a native segfault or abort.
 
 A Dart lockfile cannot show any of this, which is why the Dart-side test is
 scoped to *direct Dart packages* and the Android facts live in the Gradle gate.
@@ -357,6 +363,66 @@ rejecting callbacks and asserts, inside a guarded zone, that nothing escapes —
 tests the shipped path. That suite also proves its own detector by showing an
 *unguarded* rejection does escape, so it cannot pass vacuously.
 
+### Reports are serialized, because custom keys are process-global
+
+A Crashlytics report is not one call but a sequence: `setCustomKey` for every
+attribute, then `recordError`, which reads whatever the keys hold at that moment.
+Those keys are **process-global**. Two reports started close together — concurrent
+resource refreshes, or several buffered startup reports replayed at once — would
+interleave their key writes, and the second `recordError` would be filed under the
+first failure's feature and operation. The attributes would still be bounded
+enums; they would simply describe the wrong failure, which is worse than having
+none.
+
+`SerialReportQueue` is a FIFO lane that runs one report at a time, with each
+callback enqueued **whole** so the sequence is atomic. Fatals share the lane, since
+they read the same context. The lane is unbreakable by construction: a synchronous
+throw, a rejected future or a failing backend call is swallowed and the chain
+continues, because a queue that stops at its first failure goes silent exactly when
+something is wrong. It stays fire-and-forget — `add` returns immediately and no
+application path can await it.
+
+`report_serialization_test.dart` holds the first report open with a completer,
+submits a second, and asserts no key write happens before the first is recorded,
+that attributes stay with their own report, FIFO order, exactly-once attempts, and
+that a failed report does not poison the ones behind it. Removing the lane fails
+8 of its 9 tests.
+
+### Tracing never makes the application wait
+
+`Trace.start()` and `Trace.stop()` are platform-channel calls. Awaiting `start`
+before the action delayed the database open or the synchronization run itself;
+awaiting `stop` delayed the completed result on the way back out. A timeout would
+only bound that delay, and the requirement is that observability adds *no* wait.
+
+`NonBlockingPerformanceTracer` starts the trace without awaiting it, invokes the
+action immediately, and finalizes — attribute, then stop — fire-and-forget. The
+original result or error, and its stack, propagate untouched, and the action runs
+exactly once. `FirebasePerformanceTracer` supplies only the Firebase lifecycle
+calls through the platform-neutral `TraceSession` seam, so the tested logic is the
+shipped logic. The accepted cost is stated plainly: if the platform never finishes
+starting a trace, that measurement is lost — which is strictly better than a
+delayed database open.
+
+`non_blocking_tracer_test.dart` uses completers that are never completed for both
+`start` and `stop`; reintroducing either await makes exactly those three tests
+time out.
+
+### Preference faults reach the same reporter
+
+`AppPreferencesRepository` raises a `PreferenceDiagnostic` for three faults that
+are invisible to the user by design — the store would not open, a stored token no
+longer maps to a value, a write failed and the visible value was reverted. Each is
+what a non-fatal is for: unexpected, actionable, already handled gracefully.
+
+`runBootstrap` supplies the sink, because it is the only place holding the reporter
+the global handlers were installed against. `observedPreferenceFailure` maps the
+diagnostic onto `localPreferenceFailure` / `settings` / `preferenceStoreOpen` |
+`preferenceRead` | `preferenceWrite`, and collapses the stored key through
+`ObservedPreference.fromKey` so a known preference is identified and anything else
+becomes `other`. The raw key, the stored value, the exception and any message are
+all absent by construction — every field remains an enum.
+
 ### Fatal-error ownership
 
 | Boundary | Owns | Reports |
@@ -482,7 +548,8 @@ external release blocker.**
   property and retain its task output as the record that the upload happened.
 - **No NDK or native-library crash capture**, by dependency:
   `firebase-crashlytics-ndk` is absent and stays absent without separate
-  authorization. Native crashes are not captured at all.
+  authorization. Android runtime and JVM failures are still captured; what is
+  missing is the signal-level handler for C/C++ crashes.
 - No symbols were uploaded and no test crash or trace was sent.
 
 ## 9. Verification status

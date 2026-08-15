@@ -361,8 +361,21 @@ The Developer section (component catalogue) exists only outside production.
 ### 5.4 Privacy and legal
 
 The screen reports each platform service from the build's **real configuration**,
-so it cannot claim a service that is not running. Today all three read
-*disabled*: crash reporting, performance monitoring and advertising.
+so it cannot claim a service that is not running.
+
+| Row | Source | dev / staging | production |
+|---|---|---|---|
+| Crash reporting | `DiagnosticsPolicy` | Disabled | **Configured** |
+| Performance monitoring | `DiagnosticsPolicy` | Disabled | **Configured** |
+| App reporting this session | `ObservabilityActivation` | *(not shown)* | Starting → Active / Not confirmed |
+| Advertising | constant | Disabled | Disabled |
+
+The earlier claim that all three rows read *disabled* was true only before Phase
+8C-1 added the diagnostics integration; a production build now discloses a
+configured diagnostics policy. The session row appears only where a policy
+exists to qualify, and is hidden when there is nothing to report. See
+`GridView_Observability.md` §7 for why a failed activation reads *Not confirmed*
+rather than *Disabled*.
 
 Privacy-policy behaviour:
 

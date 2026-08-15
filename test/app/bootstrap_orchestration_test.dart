@@ -10,6 +10,7 @@ import 'package:gridview/core/observability/deferred_observability.dart';
 import 'package:gridview/core/observability/firebase/firebase_observability.dart';
 import 'package:gridview/core/observability/observability_activation.dart';
 import 'package:gridview/core/observability/observability_bootstrap.dart';
+import 'package:gridview/core/observability/observed_failure.dart';
 import 'package:gridview/core/preferences/preference_store.dart';
 import 'package:gridview/core/preferences/preferences_repository.dart';
 
@@ -37,6 +38,10 @@ class _Recorder {
 
   /// Whether activation was still unresolved when the app was handed over.
   ObservabilityActivation? statusAtRunApp;
+
+  /// The diagnostic sink bootstrap handed to the preference repository, so a
+  /// test can drive it exactly as the repository would.
+  void Function(PreferenceDiagnostic)? preferenceSink;
 }
 
 /// Builds operations that record their order and never touch a platform.
@@ -48,6 +53,7 @@ BootstrapOperations _operations(
 }) {
   late ObservabilityBootstrap installed;
   return BootstrapOperations(
+    environment: AppEnvironment.production,
     installObservability: () {
       recorder.steps.add('observability');
       installed =
@@ -65,10 +71,17 @@ BootstrapOperations _operations(
         recorder.handlerBeforeBootstrap,
       );
     },
-    openPreferences: () async {
-      recorder.steps.add('preferences');
-      return AppPreferencesRepository(store: InMemoryPreferenceStore());
-    },
+    openPreferences:
+        ({void Function(PreferenceDiagnostic diagnostic)? onDiagnostic}) async {
+          recorder.steps.add('preferences');
+          // Captured rather than invoked: the production repository would call this
+          // whenever the store misbehaves, so a test can drive the real sink.
+          recorder.preferenceSink = onDiagnostic;
+          return AppPreferencesRepository(
+            store: InMemoryPreferenceStore(),
+            onDiagnostic: onDiagnostic,
+          );
+        },
     runApplication: (Widget app) {
       recorder.steps.add('runApp');
       recorder.apps.add(app);
@@ -171,6 +184,111 @@ void main() {
       // asserted in observability_startup_test.dart.)
       expect(recorder.steps, hasLength(4));
       expect(recorder.apps.single, isA<ProviderScope>());
+    });
+  });
+
+  group('preference diagnostics reach the installed reporter', () {
+    /// Drives the sink bootstrap actually handed to the repository, so this
+    /// covers the production wiring rather than a re-creation of it.
+    Future<List<ObservedFailure>> reportedFor(
+      PreferenceDiagnostic diagnostic,
+    ) async {
+      final RecordingErrorReporter real = RecordingErrorReporter();
+      final Completer<FirebaseAdapters?> gate = Completer<FirebaseAdapters?>();
+
+      final ObservabilityBootstrap boot = await runBootstrap(
+        _operations(recorder, activator: () => gate.future),
+      );
+      addTearDown(boot.handlers.restore);
+
+      expect(
+        recorder.preferenceSink,
+        isNotNull,
+        reason: 'bootstrap must supply a diagnostic sink, never leave it null',
+      );
+      recorder.preferenceSink!(diagnostic);
+
+      gate.complete(
+        FirebaseAdapters(reporter: real, tracer: RecordingPerformanceTracer()),
+      );
+      await boot.activation;
+      return real.nonFatals;
+    }
+
+    test('an unopenable store is reported', () async {
+      final List<ObservedFailure> reported = await reportedFor(
+        const PreferenceDiagnostic(
+          kind: PreferenceDiagnosticKind.storeUnavailable,
+        ),
+      );
+
+      expect(reported, hasLength(1));
+      final ObservedFailure failure = reported.single;
+      expect(failure.kind, ObservedFailureKind.localPreferenceFailure);
+      expect(failure.feature, ObservedFeature.settings);
+      expect(failure.operation, ObservedOperation.preferenceStoreOpen);
+      expect(failure.environment, AppEnvironment.production);
+      // A whole-store failure concerns no single preference.
+      expect(failure.preference, ObservedPreference.other);
+    });
+
+    test('a corrupted token is reported against its preference', () async {
+      final List<ObservedFailure> reported = await reportedFor(
+        const PreferenceDiagnostic(
+          kind: PreferenceDiagnosticKind.corruptedValue,
+          key: 'gv.preference.theme',
+        ),
+      );
+
+      expect(reported, hasLength(1));
+      expect(reported.single.operation, ObservedOperation.preferenceRead);
+      expect(reported.single.preference, ObservedPreference.theme);
+    });
+
+    test('a failed write is reported against its preference', () async {
+      final List<ObservedFailure> reported = await reportedFor(
+        const PreferenceDiagnostic(
+          kind: PreferenceDiagnosticKind.writeFailure,
+          key: 'gv.preference.language',
+        ),
+      );
+
+      expect(reported, hasLength(1));
+      expect(reported.single.operation, ObservedOperation.preferenceWrite);
+      expect(reported.single.preference, ObservedPreference.language);
+    });
+
+    test('an unknown key collapses instead of reaching the report', () async {
+      final List<ObservedFailure> reported = await reportedFor(
+        const PreferenceDiagnostic(
+          kind: PreferenceDiagnosticKind.corruptedValue,
+          key: 'gv.preference.something_added_later',
+        ),
+      );
+
+      expect(reported.single.preference, ObservedPreference.other);
+      // Structural, not stylistic: no attribute may carry the raw key.
+      expect(
+        reported.single.toAttributes().values,
+        isNot(contains(contains('something_added_later'))),
+      );
+    });
+
+    test('every attribute stays enum-derived', () async {
+      final List<ObservedFailure> reported = await reportedFor(
+        const PreferenceDiagnostic(
+          kind: PreferenceDiagnosticKind.writeFailure,
+          key: 'gv.preference.time_display',
+        ),
+      );
+
+      expect(reported.single.toAttributes(), <String, String>{
+        'failure': 'localPreferenceFailure',
+        'feature': 'settings',
+        'operation': 'preferenceWrite',
+        'environment': 'production',
+        'preference': 'timeDisplay',
+      });
     });
   });
 

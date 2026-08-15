@@ -99,8 +99,9 @@
   A local temporary directory is not such a record. See
   `../technical/GridView_Observability.md` §3.1.
 
-  Native crashes are not captured at all: `firebase-crashlytics-ndk` is
-  deliberately absent.
+  `firebase-crashlytics-ndk` is deliberately absent, so crashes originating in
+  **native (C/C++) libraries** are not captured. Android runtime and JVM
+  failures remain in Crashlytics scope.
 
 - **Firebase operational verification (blocking for Phase 8 closure).** No
   crash, non-fatal or performance trace has been observed arriving in Firebase

@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart';
 
 import '../async_error_reporter.dart';
 import '../error_reporter.dart';
+import '../non_blocking_tracer.dart';
 import '../observed_failure.dart';
 import '../performance_tracer.dart';
 import '../throttled_error_reporter.dart';
@@ -69,54 +70,37 @@ class FirebaseErrorReporter implements ErrorReporter {
 
 /// Records custom traces through Firebase Performance Monitoring.
 ///
-/// **Only the traces declared in [TraceName] are recorded.** The Performance
-/// Gradle plugin is deliberately not applied, so there is no bytecode
-/// instrumentation, and automatic HTTP monitoring would not observe this app's
-/// requests in any case: Dio issues them through Dart's own `dart:io` sockets,
-/// not Android's `HttpURLConnection`/OkHttp, which is what that instrumentation
-/// hooks. Anything not listed in [TraceName] is simply not measured here — use
-/// DevTools for that.
+/// **Only the traces declared in [TraceName] are recorded here.** The
+/// Performance Gradle plugin *is* applied (see
+/// `docs/technical/GridView_Observability.md` §3), so the SDK's own build-time
+/// instrumentation is present; what it does not do is observe this app's HTTP
+/// traffic, because Dio issues requests through Dart's `dart:io` sockets rather
+/// than the Android `HttpURLConnection`/OkHttp stacks that instrumentation
+/// hooks. Anything not listed in [TraceName] is simply not measured by this
+/// class — use DevTools for that.
+///
+/// This class contributes only the Firebase lifecycle calls. The guarantee that
+/// none of them can delay the traced work lives in [NonBlockingPerformanceTracer],
+/// which is the class the tracer tests drive, so the tested logic and the
+/// shipped logic cannot diverge.
 class FirebasePerformanceTracer implements PerformanceTracer {
-  const FirebasePerformanceTracer(this._performance);
-
-  final FirebasePerformance _performance;
-
-  @override
-  Future<T> trace<T>(TraceName name, Future<T> Function() action) async {
-    Trace? trace;
-    try {
-      trace = _performance.newTrace(name.wireName);
-      await trace.start();
-    } catch (_) {
-      // A trace that will not start must not stop the work it was measuring.
-      trace = null;
-    }
-
-    TraceOutcome outcome = TraceOutcome.success;
-    try {
-      return await action();
-    } catch (_) {
-      outcome = TraceOutcome.failure;
-      rethrow;
-    } finally {
-      // `finally`, so both outcomes close the trace exactly once.
-      final Trace? started = trace;
-      if (started != null) {
-        try {
+  FirebasePerformanceTracer(FirebasePerformance performance)
+    : _delegate = NonBlockingPerformanceTracer((TraceName name) async {
+        final Trace trace = performance.newTrace(name.wireName);
+        await trace.start();
+        return TraceSession(
           // A two-valued constant attribute: a usable dimension, not a
           // cardinality problem, and it carries nothing about what failed.
-          started.putAttribute(TraceOutcome.attributeKey, outcome.wireValue);
-        } catch (_) {
-          // Deliberately swallowed; the trace is still worth stopping.
-        }
-        try {
-          await started.stop();
-        } catch (_) {
-          // Deliberately swallowed.
-        }
-      }
-    }
-  }
+          putAttribute: trace.putAttribute,
+          stop: trace.stop,
+        );
+      });
+
+  final NonBlockingPerformanceTracer _delegate;
+
+  @override
+  Future<T> trace<T>(TraceName name, Future<T> Function() action) =>
+      _delegate.trace<T>(name, action);
 }
 
 /// The reporter and tracer a successful activation produces.
@@ -137,10 +121,17 @@ class FirebaseAdapters {
 ///
 /// Turning collection on here is deliberate and is the *only* place it happens.
 /// The manifest declares `firebase_crashlytics_collection_enabled=false` and
-/// `firebase_performance_collection_enabled=false` for every flavor, so the
-/// packaged native SDKs are inert from process start; this call is what an
-/// eligible production build uses to switch them on, after the Dart policy has
-/// been evaluated.
+/// `firebase_performance_collection_enabled=false` for every flavor, so a
+/// **fresh installation** of any flavor starts with the packaged native SDKs
+/// inert; this call is what an eligible production build uses to switch them on,
+/// after the Dart policy has been evaluated.
+///
+/// It does **not** stay that way. The platform SDKs persist this opt-in at a
+/// higher priority than the manifest, so a production installation that has
+/// activated once begins **later** launches already collecting, before any Dart
+/// code runs. "Inert from process start in every flavor" is therefore true only
+/// until the first successful production activation, and must not be written
+/// without that qualifier. See `docs/technical/GridView_Observability.md` §4.1.
 ///
 /// This is never awaited before `runApp`; see `bootstrap`.
 Future<FirebaseAdapters?> activateFirebaseObservability({

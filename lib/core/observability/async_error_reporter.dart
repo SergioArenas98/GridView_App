@@ -1,12 +1,11 @@
 // A named parameter cannot be private, so the fields cannot be initializing
 // formals; the callbacks stay private to keep the class's surface minimal.
 // ignore_for_file: prefer_initializing_formals
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import 'error_reporter.dart';
 import 'observed_failure.dart';
+import 'serial_report_queue.dart';
 
 /// Adapts a pair of **asynchronous** reporting calls to the synchronous
 /// [ErrorReporter] contract, without ever letting one surface as an application
@@ -29,40 +28,54 @@ import 'observed_failure.dart';
 ///   synchronous throw from the callback, which an `async` body captures the
 ///   same way — is swallowed at the boundary.
 ///
+/// ## Reports are serialized
+///
+/// Both guarantees are provided by [SerialReportQueue], which additionally runs
+/// one report at a time. That matters because a backend report is a *sequence*
+/// — set every custom key, then record — against process-global context. Two
+/// unawaited sequences would interleave their key writes and cross-attribute
+/// the reports. Enqueuing each callback whole makes the sequence atomic without
+/// making any caller wait.
+///
 /// The Firebase adapter builds one of these from Crashlytics calls, and the
 /// rejection tests build one from callbacks that reject. Both exercise this
 /// class, so the guarantee is proven against the code production runs rather
 /// than against a lookalike that reimplements it.
 class AsyncErrorReporter implements ErrorReporter {
-  const AsyncErrorReporter({
+  AsyncErrorReporter({
     required Future<void> Function(FlutterErrorDetails) recordFatalAsync,
     required Future<void> Function(ObservedFailure) recordNonFatalAsync,
+    SerialReportQueue? queue,
   }) : _recordFatalAsync = recordFatalAsync,
-       _recordNonFatalAsync = recordNonFatalAsync;
+       _recordNonFatalAsync = recordNonFatalAsync,
+       _queue = queue ?? SerialReportQueue();
 
   final Future<void> Function(FlutterErrorDetails) _recordFatalAsync;
   final Future<void> Function(ObservedFailure) _recordNonFatalAsync;
 
+  /// The FIFO lane every report goes through.
+  ///
+  /// Each callback is enqueued **whole**, so a non-fatal's key writes and its
+  /// `recordError` are one indivisible unit and a second report cannot mutate
+  /// the process-global Crashlytics context in between. Fatals share the lane
+  /// too: they read the same context, so letting them overtake a queued
+  /// non-fatal would reintroduce exactly the interleaving this prevents.
+  final SerialReportQueue _queue;
+
+  /// Queued or in-flight reports. Test-facing.
+  int get pendingReports => _queue.pending;
+
+  /// Completes when the lane has drained. **Tests only** — production never
+  /// waits for a report.
+  Future<void> get settled => _queue.settled;
+
   @override
   void recordFatal(FlutterErrorDetails details) {
-    unawaited(_guard(() => _recordFatalAsync(details)));
+    _queue.add(() => _recordFatalAsync(details));
   }
 
   @override
   void recordNonFatal(ObservedFailure failure) {
-    unawaited(_guard(() => _recordNonFatalAsync(failure)));
-  }
-
-  /// Runs [action] to completion and absorbs any outcome.
-  ///
-  /// Deliberately swallowed, and deliberately not re-reported: a failure to
-  /// report is not itself an application fault, and reporting it would recurse
-  /// through the same broken path.
-  Future<void> _guard(Future<void> Function() action) async {
-    try {
-      await action();
-    } catch (_) {
-      // See the class doc: this is the loop-breaker.
-    }
+    _queue.add(() => _recordNonFatalAsync(failure));
   }
 }

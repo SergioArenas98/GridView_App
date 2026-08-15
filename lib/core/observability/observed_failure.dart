@@ -42,6 +42,15 @@ enum ObservedFailureKind {
   /// A configuration state that cannot occur in a correctly built release
   /// (a production build with no base URL, or one that requested fixtures).
   impossibleConfiguration,
+
+  /// The local preference store refused an operation, or returned a token that
+  /// does not map to any value this build knows.
+  ///
+  /// Separate from [localDatabaseFailure] because it is a different store with
+  /// a different failure mode and a different consequence: preferences degrade
+  /// to documented defaults and the shell still renders, where a database fault
+  /// costs cached content. Collapsing the two would make both less actionable.
+  localPreferenceFailure,
 }
 
 /// The feature area a reported failure belongs to.
@@ -61,6 +70,7 @@ enum ObservedFeature {
   constructors,
   circuits,
   content,
+  settings,
   other;
 
   /// Derives the feature from a canonical resource key.
@@ -100,6 +110,42 @@ enum ObservedOperation {
 
   /// Opening the on-disk application database.
   databaseOpen,
+
+  /// Opening the platform preference store during startup.
+  preferenceStoreOpen,
+
+  /// Reading a persisted preference token.
+  preferenceRead,
+
+  /// Persisting a user's preference selection.
+  preferenceWrite,
+}
+
+/// Which preference a diagnostic concerns.
+///
+/// **This is the redaction boundary for preference keys.** The stored keys are
+/// namespaced strings (`gv.preference.theme` and friends); they are not secret,
+/// but they are free-form text reaching a report, and the rule here is that no
+/// report field may carry anything but a closed enum. Mapping known keys and
+/// collapsing everything else to [other] means the attribute is one of a fixed
+/// set of values for *any* input, including a key added later and forgotten
+/// here.
+enum ObservedPreference {
+  theme,
+  language,
+  timeDisplay,
+
+  /// Not a preference this build recognises, or a diagnostic with no key at all
+  /// (a whole-store failure concerns no single preference).
+  other;
+
+  /// Derives the preference from a stored key, total for every input.
+  static ObservedPreference fromKey(String? key) => switch (key) {
+    'gv.preference.theme' => theme,
+    'gv.preference.language' => language,
+    'gv.preference.time_display' => timeDisplay,
+    _ => other,
+  };
 }
 
 /// A non-fatal report: a closed, fully enumerated description of *what class of
@@ -116,6 +162,7 @@ class ObservedFailure {
     required this.feature,
     required this.operation,
     required this.environment,
+    this.preference,
   });
 
   final ObservedFailureKind kind;
@@ -123,11 +170,25 @@ class ObservedFailure {
   final ObservedOperation operation;
   final AppEnvironment environment;
 
+  /// Which preference a preference failure concerns, when one applies.
+  ///
+  /// Null for every other report. Another enum, so it cannot widen the field's
+  /// cardinality or smuggle a key: see [ObservedPreference].
+  final ObservedPreference? preference;
+
   /// The identity used for flood suppression.
   ///
   /// Deliberately excludes the environment (constant within a process), so a
-  /// resource that keeps failing the same way collapses to one signature.
-  String get signature => '${kind.name}|${feature.name}|${operation.name}';
+  /// resource that keeps failing the same way collapses to one signature. The
+  /// preference is included when present, so a corrupted theme token and a
+  /// corrupted language token stay distinguishable instead of suppressing each
+  /// other; reports without one keep their previous signature exactly.
+  String get signature => <String>[
+    kind.name,
+    feature.name,
+    operation.name,
+    if (preference != null) preference!.name,
+  ].join('|');
 
   /// The bounded key/value context attached to the report.
   Map<String, String> toAttributes() => <String, String>{
@@ -135,6 +196,7 @@ class ObservedFailure {
     'feature': feature.name,
     'operation': operation.name,
     'environment': environment.name,
+    if (preference != null) 'preference': preference!.name,
   };
 
   /// The short, low-cardinality reason string a reporter logs alongside the

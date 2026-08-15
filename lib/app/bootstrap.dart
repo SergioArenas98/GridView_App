@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/observability/error_reporter.dart';
 import '../core/observability/observability_bootstrap.dart';
 import '../core/observability/observability_providers.dart';
+import '../core/observability/preference_observation.dart';
 import '../core/preferences/preferences_providers.dart';
 import '../core/preferences/preferences_repository.dart';
 import '../core/time/timezones.dart';
@@ -42,8 +44,11 @@ Future<void> bootstrap({AppEnvironment? environment}) async {
 
   await runBootstrap(
     BootstrapOperations(
+      environment: env,
       installObservability: () => installObservability(environment: env),
       ensureTimeZones: ensureTimeZonesInitialized,
+      // The diagnostic sink is supplied by `runBootstrap`, which is the only
+      // place that holds the reporter it was installed against.
       openPreferences: AppPreferencesRepository.open,
       runApplication: runApp,
     ),
@@ -61,11 +66,16 @@ Future<void> bootstrap({AppEnvironment? environment}) async {
 @visibleForTesting
 class BootstrapOperations {
   const BootstrapOperations({
+    required this.environment,
     required this.installObservability,
     required this.ensureTimeZones,
     required this.openPreferences,
     required this.runApplication,
   });
+
+  /// The environment this build reports as. Needed here because a preference
+  /// diagnostic becomes an [ObservedFailure], which carries it.
+  final AppEnvironment environment;
 
   /// Installs global error routing and starts activation in the background.
   final ObservabilityBootstrap Function() installObservability;
@@ -75,7 +85,17 @@ class BootstrapOperations {
 
   /// Opens the persisted preferences. Local and bounded; never a launch
   /// failure, because the repository falls back to documented defaults.
-  final Future<AppPreferencesRepository> Function() openPreferences;
+  ///
+  /// Takes the diagnostic sink rather than closing over one, because the sink
+  /// has to be backed by the reporter [runBootstrap] just installed — which the
+  /// caller does not have. Passing `AppPreferencesRepository.open` directly, as
+  /// this did before, left `onDiagnostic` null for the repository's whole
+  /// lifetime, so an unopenable store, a corrupted token and a failed write all
+  /// went unreported.
+  final Future<AppPreferencesRepository> Function({
+    void Function(PreferenceDiagnostic diagnostic)? onDiagnostic,
+  })
+  openPreferences;
 
   /// Hands the composed application to the framework.
   final void Function(Widget app) runApplication;
@@ -99,8 +119,17 @@ Future<ObservabilityBootstrap> runBootstrap(
 
   operations.ensureTimeZones();
 
-  final AppPreferencesRepository preferences = await operations
-      .openPreferences();
+  // The preference store's diagnostics go to the reporter installed above — the
+  // same one the global handlers use — so a store that would not open, a token
+  // that no longer maps to a value, or a write that failed all reach the
+  // observability boundary instead of vanishing. Every field of the resulting
+  // report is an enum; see `observedPreferenceFailure`.
+  final ErrorReporter reporter = observability.surface.reporter;
+  final AppPreferencesRepository preferences = await operations.openPreferences(
+    onDiagnostic: (PreferenceDiagnostic diagnostic) => reporter.recordNonFatal(
+      observedPreferenceFailure(diagnostic, operations.environment),
+    ),
+  );
 
   // The ProviderScope owns the app's dependency graph (preferences, database,
   // remote data source, repositories, controllers) for its lifetime.
