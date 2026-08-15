@@ -38,8 +38,10 @@
 - **Firebase SDKs (added Phase 8C-1).** `firebase_core`,
   `firebase_crashlytics` and `firebase_performance` ship in the app. The native
   components are packaged in **every** flavor — Dart dependencies are not
-  flavor-scoped — while the configuration and the three build-time Gradle
-  plugins are production-only. Collection is disabled by manifest policy in all
+  flavor-scoped — and so are the three build-time Gradle plugins. What is
+  production-only is the configuration and the two tasks that consume it,
+  `process<Variant>GoogleServices` and `uploadCrashlyticsMappingFile<Variant>`.
+  Collection is disabled by manifest policy in all
   flavors and enabled at runtime only by an eligible production build.
   Transitively present: **Firebase Remote Config and ABT**, required internally
   by Performance Monitoring, plus a measurement-connector interop stub. Absent:
@@ -61,19 +63,25 @@
   unset, so a production build shows no policy affordance at all. A published
   policy describing the collection above, plus the URL, is a release blocker.
 
-- **Symbol handling (currently not applicable).** Dart obfuscation is **not**
-  enabled: no `--obfuscate` or `--split-debug-info` is used in any build or CI
-  workflow, so there is no Flutter symbol file to upload and Dart stack traces
-  in a non-obfuscated release are already readable. Android minification is not
-  enabled either — the `release` build type sets only `signingConfig`, with no
-  `minifyEnabled`, `shrinkResources` or R8/ProGuard configuration — so no
-  mapping file is produced. The `com.google.firebase.crashlytics` Gradle plugin
-  **is** applied for production and registers its mapping-upload tasks; they
-  simply have nothing to upload, and the injected mapping ID is the all-zero
-  placeholder. **If obfuscation or minification is ever enabled, symbol/mapping
-  upload becomes mandatory before release** or production crash reports become
-  unreadable. Native crashes are not captured at all: `firebase-crashlytics-ndk`
-  is deliberately absent.
+- **Symbol handling.** Dart obfuscation is **not** enabled: no `--obfuscate` or
+  `--split-debug-info` is used in any build or CI workflow, so there is no
+  Flutter symbol file to upload and Dart stack traces in a non-obfuscated release
+  are already readable.
+
+  Android minification **is** enabled, contrary to what this document previously
+  recorded. `android/app/build.gradle` sets only `signingConfig` on the `release`
+  build type, but the Flutter Gradle plugin sets `minifyEnabled true` and
+  `shrinkResources true` on it, so every release variant runs R8 and produces
+  `build/app/outputs/mapping/<variant>/mapping.txt` — measured at ~15 MB for a
+  staging release build. The JVM side of a production release is therefore
+  obfuscated, and `uploadCrashlyticsMappingFileProductionRelease` is enabled and
+  does real work. **A production release must not be published without confirming
+  that upload succeeded**, or JVM frames in production crash reports will be
+  unreadable. The task is disabled for dev and staging, which have no Firebase
+  application ID to upload against.
+
+  Native crashes are not captured at all: `firebase-crashlytics-ndk` is
+  deliberately absent.
 
 - **Firebase operational verification (blocking for Phase 8 closure).** No
   crash, non-fatal or performance trace has been observed arriving in Firebase

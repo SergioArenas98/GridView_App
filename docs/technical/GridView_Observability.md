@@ -52,9 +52,9 @@ Riverpod composition root.
 `firebase_core`, `firebase_crashlytics` and `firebase_performance` are ordinary
 dependencies, so their Android artifacts — and everything those pull in — are in
 the dev, staging and production APKs alike. `FirebaseInitProvider` and the
-component registrars appear in all three merged manifests. Only the *Firebase
-configuration* (`google-services.json`) and the build-time plugins are
-production-only.
+component registrars appear in all three merged manifests. What is
+production-only is the *Firebase configuration* (`google-services.json`) and the
+two build tasks that consume it (§3) — not the plugins, and not the SDKs.
 
 Resolved on every variant's runtime classpath, verified by the Gradle gate
 `verify<Variant>FirebaseDependencies`:
@@ -91,10 +91,8 @@ scoped to *direct Dart packages* and the Android facts live in the Gradle gate.
 
 ## 3. Android build integration
 
-Three build-time plugins, all applied under the same production-only condition
-in `android/app/build.gradle`, because each reads the production
-`google-services.json` and dev/staging must stay buildable with no Firebase
-configuration at all:
+Three build-time plugins, declared in `android/settings.gradle` and applied
+**unconditionally** in `android/app/build.gradle`:
 
 | Plugin | Version | Provides |
 |---|---|---|
@@ -102,15 +100,37 @@ configuration at all:
 | `com.google.firebase.crashlytics` | 3.0.7 | build/mapping ID injection, mapping and native-symbol upload tasks |
 | `com.google.firebase.firebase-perf` | 2.0.2 | Performance build-time configuration and instrumentation |
 
-Evidence from the production task graph: `:app:processProductionDebugGoogleServices`,
-`:app:injectCrashlyticsMappingFileIdProductionDebug` and
-`:app:injectCrashlyticsVersionControlInfoProductionDebug` are present; none
-appear for dev or staging.
+They were previously applied only when the requested task name contained
+"production". That was never an application boundary: `gradlew assemble`,
+`build`, `assembleRelease`, `bundle` and IDE-driven configuration all build
+production variants without naming them, so each of those paths produced a
+production artifact with no Google Services processing, no Crashlytics injection
+and no environment validation — and a mixed-flavor invocation had the opposite
+failure, applying production tooling to dev.
 
-**Mapping upload is not expected to run yet, and that is correct.** The build is
-not minified (`minifyEnabled` is unset), so there is no mapping file to upload;
-the injected mapping ID is the all-zero placeholder. If minification is ever
-enabled, upload becomes mandatory or production crash reports become unreadable.
+What is genuinely production-only is not plugin *application* but two **tasks**,
+scoped by variant rather than by what someone typed:
+
+| Task | Enabled for | Why |
+|---|---|---|
+| `process<Variant>GoogleServices` | production only | `google-services.json` registers `com.sejuma.gridview` alone — there is no `.dev` or `.staging` client, and non-production must stay buildable with no Firebase configuration at all |
+| `uploadCrashlyticsMappingFile<Variant>` | production only | resolves the Firebase application ID from the Google Services output non-production does not have, and uploads over the network |
+
+Everything else the plugins register is harmless off production:
+`injectCrashlyticsMappingFileId<Variant>` and
+`injectCrashlyticsVersionControlInfo<Variant>` exist for every variant, need no
+configuration file, and write a build-local resource. Their presence in a dev
+task graph is expected, and is not evidence of a dev Firebase integration —
+without `google_app_id` there is no project to report to.
+
+**Release builds are minified, so mapping upload is real.** The Flutter Gradle
+plugin sets `minifyEnabled true` and `shrinkResources true` on the `release`
+build type; this project's `build.gradle` does not set either. Every release
+variant therefore runs R8 and produces a real
+`build/app/outputs/mapping/<variant>/mapping.txt`. That is exactly why the upload
+task must be scoped: before it was, `assembleStagingRelease` reached
+`uploadCrashlyticsMappingFileStagingRelease` with no Firebase application ID to
+resolve. Debug and profile builds are not minified and have no mapping file.
 
 **Applying the Performance plugin does not make Firebase observe GridView's
 network traffic.** Its automatic instrumentation hooks Android's HTTP stacks;
@@ -175,6 +195,34 @@ fails the build before an installable artifact is accepted.
 | staging | production | **build fails** — flavor/APP_ENV mismatch |
 | production | development | **build fails** — flavor/APP_ENV mismatch |
 | production | *(missing)* | **build fails** — missing `--dart-define=APP_ENV` |
+| any | supplied twice | **build fails** — even when the two values agree |
+
+Duplicates fail on purpose. Two sources disagreeing about the environment is a
+configuration fault whether or not they happen to match today, and silently
+picking one is how the flavor and the environment drifted apart to begin with.
+
+**Where the gate is attached matters.** It hangs off each variant's *resource
+merge*, not its pre-build. `variant.preBuildProvider` is genuinely per-variant
+and would be the obvious earlier choice, but AGP keys native-build configuration
+by build type and ABI alone — `configureCMakeDebug[arm64-v8a]` and friends —
+and each of those depends on **every** flavor's pre-build of that build type.
+This project has a native build, so `assembleDevDebug` pulls in
+`preProductionDebugBuild`; a gate anchored there made a dev build run the
+production validator and fail. Resource merging carries no such coupling.
+`verifyAndroidBuildPolicy` asserts both halves — the gates are on the resource
+merge, and they are *not* on the pre-build — so the regression cannot return
+unnoticed.
+
+Two tasks make this a repository-owned regression gate rather than a manual
+observation, and both run in CI:
+
+| Task | Asserts |
+|---|---|
+| `:app:verifyAppEnvParser` | the dart-define parser against synthetic input — missing, unknown, mismatched and duplicate `APP_ENV`, values containing `=` or `,`, malformed Base64, an undeclared flavor |
+| `:app:verifyAndroidBuildPolicy` | over all nine variants: the three plugins are applied; `process<Variant>GoogleServices` and `uploadCrashlyticsMappingFile<Variant>` are enabled for production only; Crashlytics mapping-ID injection exists for production; both gates are wired to the resource merge and neither is wired to the pre-build |
+
+Neither needs a secret, signing key, device or network beyond the dependency
+resolution an ordinary build already performs.
 
 Dev and staging still build with no Firebase configuration file.
 

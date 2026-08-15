@@ -82,13 +82,25 @@ duplicated or late activation cannot swap the target underneath a running app.
 
 **The documented Android integration is applied, not skipped.** The
 `com.google.firebase.crashlytics` (3.0.7) and `com.google.firebase.firebase-perf`
-(2.0.2) Gradle plugins are applied alongside `com.google.gms.google-services`,
-under the same production-only condition — all three read the production
-configuration, and dev/staging must remain buildable without one. Crashlytics
-build-ID and version-control-info injection now run for production; mapping
-upload has nothing to upload because the build is not minified. Applying the
-Performance plugin completes the supported integration; it does **not** make
-Firebase observe Dio traffic, which goes through `dart:io` sockets.
+(2.0.2) Gradle plugins are applied alongside `com.google.gms.google-services`.
+
+All three are applied **unconditionally**. They were first applied only when the
+requested task name contained "production", which is not an application
+boundary: `assemble`, `build`, `assembleRelease`, `bundle` and IDE-driven
+configuration all build production variants without naming them, so those paths
+produced production artifacts with none of this tooling, while a mixed-flavor
+invocation applied production tooling to dev. Production scoping now attaches to
+the two tasks that actually consume the production configuration —
+`process<Variant>GoogleServices` and `uploadCrashlyticsMappingFile<Variant>` —
+which is a property of the variant being built rather than of the command line.
+
+Crashlytics build-ID and version-control-info injection run for every variant;
+they need no configuration file and identify no project. Mapping upload is
+production-only and does real work there: the Flutter Gradle plugin minifies the
+`release` build type, so every release variant produces a mapping file.
+
+Applying the Performance plugin completes the supported integration; it does
+**not** make Firebase observe Dio traffic, which goes through `dart:io` sockets.
 
 **Native crash capture is out of scope.** `firebase-crashlytics-ndk` is absent
 and stays absent without separate authorization, so native crashes are not
@@ -113,10 +125,14 @@ in.
 - Because the traced and reported paths are inert outside production, their
   behaviour is proven by tests against fakes rather than by observing real
   telemetry. A green suite is evidence about code, never evidence of delivery.
-- Build proof of the isolation is mechanical: a production build produces
-  `processProductionDebugGoogleServices` resources containing `google_app_id`
-  and `project_id`, plus the Crashlytics injection tasks; dev and staging builds
-  produce neither.
+- Build proof of the isolation is mechanical: a production build runs
+  `processProductionDebugGoogleServices` and emits resources containing
+  `google_app_id` and `project_id`; the same task is disabled for dev and
+  staging, so their artifacts carry neither. The Crashlytics *injection* tasks
+  run for every variant and are not part of this proof — they identify no
+  project. `verifyAndroidBuildPolicy` asserts the enablement pattern for all
+  nine variants in CI, so this is a regression gate rather than a one-off
+  observation.
 - Remote Config and ABT ship in every APK as transitive components of
   Performance Monitoring. GridView has no Remote Config Dart API and no product
   feature using it, but the components are present and must be disclosed.

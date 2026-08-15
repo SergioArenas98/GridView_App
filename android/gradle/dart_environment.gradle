@@ -1,0 +1,116 @@
+// Parsing and validation of Flutter's `--dart-define` values, isolated from the
+// app build script so it can be exercised deterministically by a verification
+// task instead of only by running real builds.
+//
+// Flutter forwards defines to Gradle as the `dart-defines` project property: a
+// comma-separated list of Base64-encoded `KEY=VALUE` pairs. The outer separator
+// is safe because the Base64 alphabet excludes commas, and the inner split is
+// at the *first* `=` only, so a value may itself contain `=`.
+//
+// `--dart-define-from-file` merges into the same property, so it reaches this
+// code unchanged.
+
+import java.util.regex.Pattern
+
+/// Base64 as Flutter emits it. Validated before decoding so malformed input
+/// produces a clear message instead of a raw Groovy failure.
+ext.dartDefineBase64Pattern = Pattern.compile('^[A-Za-z0-9+/]*={0,2}$')
+
+/// Decodes the raw `dart-defines` property into a key -> list-of-values map.
+///
+/// A list, not a single value, because a duplicated key is an error the caller
+/// must be able to detect rather than a case to resolve by picking one
+/// arbitrarily.
+///
+/// Never logs a key or a value: unrelated defines may hold anything.
+ext.decodeDartDefines = { String raw ->
+    Map<String, List<String>> decoded = [:]
+    if (raw == null) {
+        return decoded
+    }
+    for (String entry : raw.split(',')) {
+        String trimmed = entry.trim()
+        if (trimmed.isEmpty()) {
+            continue
+        }
+        if (!ext.dartDefineBase64Pattern.matcher(trimmed).matches()) {
+            throw new GradleException(
+                'A --dart-define value could not be decoded: the build received ' +
+                'a dart-defines entry that is not valid Base64. Re-run the build ' +
+                'through `flutter build`, which encodes defines correctly.'
+            )
+        }
+        String text
+        try {
+            text = new String(trimmed.decodeBase64(), 'UTF-8')
+        } catch (Exception ignored) {
+            throw new GradleException(
+                'A --dart-define value could not be decoded: the build received ' +
+                'a dart-defines entry that is not valid Base64. Re-run the build ' +
+                'through `flutter build`, which encodes defines correctly.'
+            )
+        }
+        int separator = text.indexOf('=')
+        if (separator <= 0) {
+            // A define with no key is not addressable; skip rather than guess.
+            continue
+        }
+        String key = text.substring(0, separator)
+        String value = text.substring(separator + 1)
+        decoded.computeIfAbsent(key) { [] }.add(value)
+    }
+    return decoded
+}
+
+/// Resolves and validates `APP_ENV` for one product flavor.
+///
+/// Returns the accepted value, or throws a [GradleException] whose message
+/// mentions only `APP_ENV` — never another define's key or value.
+///
+/// Exactly one occurrence is required. Duplicates fail even when the values are
+/// identical: two sources disagreeing about the environment is a configuration
+/// fault whether or not they happen to agree today, and silently accepting one
+/// is how the flavor and the environment drifted apart in the first place.
+ext.resolveAppEnv = { String raw, String flavor, String expected ->
+    if (expected == null) {
+        throw new GradleException(
+            "No APP_ENV is declared for product flavor '${flavor}'. " +
+            'Add it to requiredAppEnvForFlavor in android/app/build.gradle.'
+        )
+    }
+
+    Map<String, List<String>> defines = ext.decodeDartDefines(raw)
+    List<String> values = defines.get('APP_ENV') ?: []
+
+    if (values.isEmpty()) {
+        throw new GradleException(
+            "Missing --dart-define=APP_ENV for the '${flavor}' flavor.\n" +
+            "The '${flavor}' flavor requires APP_ENV=${expected}.\n" +
+            'An absent APP_ENV resolves to development in Dart, which would produce ' +
+            "a ${flavor} artifact whose observability policy contradicts its native " +
+            'Firebase configuration.\n' +
+            "  flutter build apk --flavor ${flavor} --dart-define=APP_ENV=${expected}"
+        )
+    }
+
+    if (values.size() > 1) {
+        throw new GradleException(
+            "APP_ENV was supplied ${values.size()} times for the '${flavor}' flavor.\n" +
+            'Exactly one value is required, so the build never has to choose between ' +
+            'them. Remove the duplicate --dart-define / --dart-define-from-file entry.'
+        )
+    }
+
+    String actual = values.first().trim()
+    if (actual != expected) {
+        throw new GradleException(
+            "Flavor/APP_ENV mismatch: the '${flavor}' flavor requires APP_ENV=${expected} " +
+            "but the build passed APP_ENV=${actual}.\n" +
+            'The Android flavor and the Dart environment must describe the same build. ' +
+            'GridView supports one flavor per build invocation:\n' +
+            "  flutter build apk --flavor ${flavor} --dart-define=APP_ENV=${expected}"
+        )
+    }
+
+    return actual
+}

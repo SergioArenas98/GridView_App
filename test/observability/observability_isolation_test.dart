@@ -215,14 +215,39 @@ void main() {
     });
 
     test('flavor and APP_ENV are bound by a build gate', () {
+      // The flavor -> APP_ENV mapping is declared in the app build script; the
+      // parsing and the failure messages live in the extracted environment
+      // script, which `:app:verifyAppEnvParser` executes against synthetic
+      // input. This test only asserts the wiring still exists in the sources --
+      // the behaviour itself is proven by that Gradle task, not by text.
       final String gradle = File('android/app/build.gradle').readAsStringSync();
 
       expect(gradle, contains('requiredAppEnvForFlavor'));
       expect(gradle, contains('dev       : "development"'));
       expect(gradle, contains('staging   : "staging"'));
       expect(gradle, contains('production: "production"'));
-      expect(gradle, contains('Flavor/APP_ENV mismatch'));
-      expect(gradle, contains('Missing --dart-define=APP_ENV'));
+      expect(gradle, contains('gradle/dart_environment.gradle'));
+      expect(gradle, contains('gradle/build_policy.gradle'));
+
+      final String environment = File(
+        'android/gradle/dart_environment.gradle',
+      ).readAsStringSync();
+
+      expect(environment, contains('Flavor/APP_ENV mismatch'));
+      expect(environment, contains('Missing --dart-define=APP_ENV'));
+    });
+
+    test('the environment gates are not anchored on pre-build', () {
+      // AGP keys native-build configuration by build type and ABI alone, and
+      // each such task depends on every flavor's pre-build of that type. This
+      // project has a native build, so anchoring the gates on
+      // `preBuildProvider` makes a dev build run the production validator.
+      // `:app:verifyAndroidBuildPolicy` asserts this over the configured task
+      // graph; this keeps the mistake from reappearing in review.
+      final String gradle = File('android/app/build.gradle').readAsStringSync();
+
+      expect(gradle, contains('variant.mergeResourcesProvider.configure'));
+      expect(gradle, isNot(contains('variant.preBuildProvider.configure')));
     });
 
     test('no Firebase configuration file exists outside production', () {

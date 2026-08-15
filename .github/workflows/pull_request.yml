@@ -68,6 +68,23 @@ jobs:
       - name: Build dev debug APK
         run: flutter build apk --debug --flavor dev --dart-define=APP_ENV=development
 
+      # The Android observability policy asserted against the configured Gradle
+      # model: all three Firebase plugins applied, Google Services processing and
+      # Crashlytics mapping upload enabled for production only, and both
+      # environment gates wired into each variant's resource merge rather than
+      # its pre-build. The APK build above is evidence for one variant on one
+      # machine; this is the regression gate for all nine, and it needs no
+      # secret, signing key, device or network beyond the dependency resolution
+      # that build already performed.
+      #
+      # It must run *after* an Android build, not before: `android/settings.gradle`
+      # reads `flutter.sdk` from `android/local.properties`, which is gitignored
+      # and absent on a fresh checkout until the Flutter tool writes it. Invoking
+      # gradlew any earlier fails on the clean CI runner while passing locally.
+      - name: Verify Android build policy
+        working-directory: android
+        run: ./gradlew :app:verifyAppEnvParser :app:verifyAndroidBuildPolicy
+
   # ---------------------------------------------------------------------------
   # Canonical golden freshness.
   #

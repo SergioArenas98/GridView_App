@@ -95,9 +95,11 @@ environment-specific interval.
 ## Firebase
 
 - The production Firebase configuration
-  (`android/app/src/production/google-services.json`) is preserved unchanged
-  and applies only to production builds: the Google services Gradle plugin is
-  applied exclusively to production tasks (`android/app/build.gradle`).
+  (`android/app/src/production/google-services.json`) is preserved unchanged and
+  applies only to production builds: the Google services Gradle plugin is applied
+  to every variant, but its `process<Variant>GoogleServices` task is enabled for
+  the production flavor alone (`android/app/build.gradle`). The scoping is by
+  variant, never by the requested task name.
 - **Pending:** dedicated Firebase projects/configurations for development and
   staging do not exist yet. Until they are approved and created, dev and
   staging builds contain no Firebase configuration and initialize no Firebase
@@ -112,8 +114,9 @@ environment-specific interval.
   dependencies are not flavor-scoped, so `FirebaseInitProvider` and the
   Crashlytics, Performance, Sessions, Installations, Remote Config and ABT
   registrars appear in the dev, staging and production manifests alike. Only the
-  *configuration* and the build-time plugins are production-only. Do not state
-  that no Firebase SDK is initialized outside production.
+  *configuration* and the two build tasks that consume it are production-only;
+  the plugins themselves are applied everywhere. Do not state that no Firebase
+  SDK is initialized outside production.
 - **Collection is off by default everywhere.** The main manifest declares
   `firebase_crashlytics_collection_enabled=false` and
   `firebase_performance_collection_enabled=false` for all flavors, so the
@@ -128,9 +131,10 @@ environment-specific interval.
   staging↔staging and production↔production, and fails when `APP_ENV` is absent.
   Contradictory artifacts can no longer be produced.
 - Dev and staging still build with **no** `google-services.json`. Verified: a
-  production build emits `processProductionDebugGoogleServices` resources with
-  `google_app_id` and `project_id = gridview-fb20f`, plus the Crashlytics
-  build-ID injection tasks; dev and staging emit neither.
+  production build runs `processProductionDebugGoogleServices` and emits
+  resources with `google_app_id` and `project_id = gridview-fb20f`; the task is
+  disabled for dev and staging, which emit neither. The Crashlytics build-ID
+  injection tasks run for every variant and prove nothing about configuration.
 - Firebase initialization is never awaited before `runApp`; it degrades to inert
   on any failure. See `GridView_Observability.md` and
   [ADR 0016](../adr/0016-production-only-firebase-observability.md).

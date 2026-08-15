@@ -1,0 +1,194 @@
+// Repository-owned, CI-executable verification of the Android build policy.
+//
+// Manual `flutter build` runs are evidence, not a regression gate. These tasks
+// read the configured Gradle model — applied plugins, registered tasks, task
+// enablement, task dependencies and resolved module identities — so a future
+// edit that quietly reopens one of the holes this phase closed fails here.
+//
+// Nothing needs a secret, a signing key, a device or network access beyond the
+// dependency resolution a normal build already performs.
+
+/// Exercises the Dart-define parser against synthetic inputs.
+///
+/// Deterministic and hermetic: it never reads the real `dart-defines` property,
+/// so it behaves identically in CI and locally, and it covers the cases a real
+/// build cannot conveniently produce (duplicates, malformed Base64).
+tasks.register('verifyAppEnvParser') {
+    group = 'verification'
+    description = 'Unit-tests the APP_ENV dart-define parser.'
+
+    doLast {
+        // Closures rather than methods: Groovy does not permit a method
+        // declaration inside a closure body, which is what a doLast block is.
+        def resolveAppEnv = project.ext.resolveAppEnv
+        def decodeDartDefines = project.ext.decodeDartDefines
+
+        def encode = { String plain ->
+            plain.getBytes('UTF-8').encodeBase64().toString()
+        }
+        def defines = { List<String> pairs ->
+            pairs.collect { encode(it) }.join(',')
+        }
+        def expectFailure = { String description, Closure body ->
+            try {
+                body()
+            } catch (GradleException ignored) {
+                logger.lifecycle("  ok  ${description}")
+                return
+            }
+            throw new GradleException("APP_ENV parser: expected a failure for ${description}")
+        }
+
+        // --- accepted -------------------------------------------------------
+        assert resolveAppEnv(
+            defines(['APP_ENV=production', 'DATA_SOURCE=remote']),
+            'production', 'production') == 'production'
+        logger.lifecycle('  ok  a single matching APP_ENV is accepted')
+
+        // A value containing '=' must survive: the split is at the first '='.
+        Map<String, List<String>> withEquals = decodeDartDefines(
+            defines(['APP_ENV=production', 'OTHER=a=b=c']))
+        assert withEquals['OTHER'] == ['a=b=c']
+        assert withEquals['APP_ENV'] == ['production']
+        logger.lifecycle('  ok  a value containing "=" is preserved')
+
+        // A value containing a comma is safe because the outer split is over
+        // Base64 text, whose alphabet excludes commas.
+        Map<String, List<String>> withComma = decodeDartDefines(
+            defines(['APP_ENV=staging', 'OTHER=a,b,c']))
+        assert withComma['OTHER'] == ['a,b,c']
+        assert withComma['APP_ENV'] == ['staging']
+        logger.lifecycle('  ok  a value containing "," is preserved')
+
+        assert decodeDartDefines(null).isEmpty()
+        assert decodeDartDefines('').isEmpty()
+        logger.lifecycle('  ok  absent defines decode to an empty map')
+
+        // --- rejected -------------------------------------------------------
+        expectFailure('a missing APP_ENV') {
+            resolveAppEnv(defines(['DATA_SOURCE=remote']), 'production', 'production')
+        }
+        expectFailure('an unknown APP_ENV value') {
+            resolveAppEnv(defines(['APP_ENV=prod']), 'production', 'production')
+        }
+        expectFailure('a mismatched APP_ENV value') {
+            resolveAppEnv(defines(['APP_ENV=production']), 'dev', 'development')
+        }
+        expectFailure('duplicate APP_ENV with different values') {
+            resolveAppEnv(
+                defines(['APP_ENV=production', 'APP_ENV=development']), 'production', 'production')
+        }
+        expectFailure('duplicate APP_ENV with identical values') {
+            resolveAppEnv(
+                defines(['APP_ENV=production', 'APP_ENV=production']), 'production', 'production')
+        }
+        expectFailure('malformed Base64') {
+            decodeDartDefines('not-valid-base64!!')
+        }
+        expectFailure('an undeclared flavor') {
+            resolveAppEnv(defines(['APP_ENV=production']), 'mystery', null)
+        }
+
+        logger.lifecycle('APP_ENV parser: all cases behaved as specified.')
+    }
+}
+
+/// Asserts the plugin/task policy from the configured Gradle model.
+tasks.register('verifyAndroidBuildPolicy') {
+    group = 'verification'
+    description = 'Asserts the Firebase plugin, task and environment-gate policy.'
+
+    doLast {
+        List<String> failures = []
+
+        // A closure, not a method: see verifyAppEnvParser above.
+        def require = { List<String> sink, boolean condition, String message ->
+            if (!condition) sink.add(message)
+        }
+
+        // 1. All three plugins are applied during normal configuration — not
+        //    conditionally on which task someone typed.
+        [
+            'com.google.gms.google-services',
+            'com.google.firebase.crashlytics',
+            'com.google.firebase.firebase-perf',
+        ].each { String id ->
+            require(failures, project.plugins.hasPlugin(id), "plugin not applied: ${id}")
+        }
+
+        project.android.applicationVariants.all { variant ->
+            String name = variant.name
+            String capitalized = name.capitalize()
+            boolean isProduction = variant.flavorName == 'production'
+
+            // 2/3. Google Services processing: enabled for production, disabled
+            //      for every other flavor (they own no configuration file).
+            def googleServices = project.tasks.findByName("process${capitalized}GoogleServices")
+            require(failures, googleServices != null,
+                "missing Google Services task for ${name}")
+            if (googleServices != null) {
+                require(failures, googleServices.enabled == isProduction,
+                    "process${capitalized}GoogleServices enabled=${googleServices.enabled}, expected ${isProduction}")
+            }
+
+            // 4. Crashlytics mapping-file-ID injection exists for production.
+            def mappingId = project.tasks.findByName("injectCrashlyticsMappingFileId${capitalized}")
+            if (isProduction) {
+                require(failures, mappingId != null,
+                    "missing Crashlytics mapping-file-ID task for ${name}")
+                if (mappingId != null) {
+                    require(failures, mappingId.enabled,
+                        "injectCrashlyticsMappingFileId${capitalized} is disabled")
+                }
+            }
+
+            // 4b. Mapping-file *upload* follows the same production scoping: it
+            //     needs the Google Services output non-production lacks, and it
+            //     talks to the network. It exists for every minified release.
+            def mappingUpload = project.tasks.findByName("uploadCrashlyticsMappingFile${capitalized}")
+            if (mappingUpload != null) {
+                require(failures, mappingUpload.enabled == isProduction,
+                    "uploadCrashlyticsMappingFile${capitalized} enabled=${mappingUpload.enabled}, expected ${isProduction}")
+            }
+
+            // 5. Both gates are real dependencies of the variant's resource
+            //    merge, so no assemble/bundle/install path reaches an artifact
+            //    without them — whatever task name was requested.
+            def anchor = variant.mergeResourcesProvider.get()
+            List<String> anchorDeps = anchor.taskDependencies
+                .getDependencies(anchor)
+                .collect { it.name }
+            ["validate${capitalized}Environment", "verify${capitalized}FirebaseDependencies"]
+                .each { String gate ->
+                    require(failures, anchorDeps.contains(gate),
+                        "${gate} is not a dependency of ${anchor.name}")
+                }
+
+            // 6. The gates must NOT hang off pre<Variant>Build. AGP's native
+            //    configuration tasks are keyed by build type and ABI only, and
+            //    depend on every flavor's pre-build of that type, so a gate
+            //    there makes one flavor's build run another flavor's validator.
+            //    This caught exactly that regression once; keep it.
+            def preBuild = project.tasks.findByName("pre${capitalized}Build")
+            require(failures, preBuild != null, "missing pre${capitalized}Build")
+            if (preBuild != null) {
+                List<String> preBuildDeps = preBuild.taskDependencies
+                    .getDependencies(preBuild)
+                    .collect { it.name }
+                require(failures,
+                    !preBuildDeps.any { it.startsWith('validate') && it.endsWith('Environment') },
+                    "pre${capitalized}Build depends on an environment gate; " +
+                    "anchor the gates on the variant's resource merge instead")
+            }
+        }
+
+        if (!failures.isEmpty()) {
+            throw new GradleException(
+                'Android build policy violated:\n  ' + failures.join('\n  ') +
+                '\nSee docs/technical/GridView_Observability.md.'
+            )
+        }
+        logger.lifecycle('Android build policy: plugins, Google Services scoping, ' +
+            'Crashlytics injection and environment gates all as specified.')
+    }
+}

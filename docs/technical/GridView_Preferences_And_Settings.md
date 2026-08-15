@@ -435,8 +435,9 @@ id, token or namespace. Opening Settings performs **no refresh**.
   embedded key is an Android Firebase key (shipped in every APK by design), so
   its presence is **not** a secret leak. **Phase 8C-1 left it byte-identical.**
 - There is still **no** dev or staging `google-services.json` and no
-  `firebase_options.dart`. The Google services Gradle plugin is still applied to
-  production tasks only.
+  `firebase_options.dart`. The Google services Gradle plugin is applied to every
+  variant; only its `process<Variant>GoogleServices` task is enabled, for the
+  production flavor alone.
 - **Phase 8C-1 added the FlutterFire dependencies** (`firebase_core`,
   `firebase_crashlytics`, `firebase_performance`) behind a single application
   boundary. The **native components are packaged in every flavor** — Dart
