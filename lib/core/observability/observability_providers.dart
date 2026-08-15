@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'error_reporter.dart';
 import 'observability.dart';
-import 'observability_status.dart';
+import 'observability_activation.dart';
 import 'performance_tracer.dart';
 
 /// The application's observability surface.
@@ -35,7 +35,8 @@ final Provider<PerformanceTracer> performanceTracerProvider =
 /// a value captured at composition time would leave the Privacy screen showing
 /// "pending" forever, or claiming diagnostics were running before they were.
 /// Settings → Privacy rebuilds on it.
-final Provider<ValueListenable<ObservabilityStatus>>
-observabilityStatusProvider = Provider<ValueListenable<ObservabilityStatus>>(
-  (Ref ref) => ref.watch(observabilityProvider).status,
-);
+final Provider<ValueListenable<ObservabilityActivation>>
+observabilityActivationProvider =
+    Provider<ValueListenable<ObservabilityActivation>>(
+      (Ref ref) => ref.watch(observabilityProvider).status,
+    );

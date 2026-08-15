@@ -24,8 +24,10 @@ lib/core/observability/
   observed_failure.dart          ObservedFailureKind / Feature / Operation / ObservedFailure
   error_reporter.dart            ErrorReporter, Noop…, Guarded…
   performance_tracer.dart        TraceName, TraceOutcome, PerformanceTracer, Noop…, Guarded…
-  observability_status.dart      ObservabilityStatus, StaticObservabilityStatus
-  observability.dart             Observability (reporter + tracer + status), eligibility
+  async_error_reporter.dart      AsyncErrorReporter — the fire-and-forget guard
+  observability_activation.dart  ObservabilityActivation (this process's adapters)
+  diagnostics_policy.dart        DiagnosticsPolicy (this build's configuration)
+  observability.dart             Observability (reporter + tracer + activation), eligibility
   observability_policy.dart      ObservabilityPolicy, NonFatalThrottle
   throttled_error_reporter.dart  non-fatal flood suppression
   deferred_observability.dart    Deferred reporter (bounded startup buffer) + tracer
@@ -168,6 +170,42 @@ The eligible production build opts in at runtime, in
 it cannot be reversed at runtime and would disable the production build this
 integration exists for.
 
+### 4.1 The runtime opt-in persists, so the manifest is a default and not a rule
+
+The manifest values are the **starting** state of an installation, not a
+per-launch guarantee. `setCrashlyticsCollectionEnabled` and
+`setPerformanceCollectionEnabled` write a persisted preference that the SDKs
+read at a **higher priority than the manifest**, and that preference survives
+process death. The consequence, stated plainly for a production installation:
+
+| Launch | Native collection at process start | Why |
+|---|---|---|
+| first ever | **off** | no persisted override yet, so the manifest `false` applies |
+| first ever, after activation succeeds | **on** | the runtime opt-in ran and was persisted |
+| every later launch | **on, before Dart runs** | the persisted override outranks the manifest |
+| every later launch, if activation then fails | **still on** | the override is unrelated to this process's Dart adapters |
+
+So the claim "the packaged SDKs are inert from process start in every flavor"
+is **false for a production installation that has activated at least once**, and
+it has been removed. The accurate statement is narrower: *collection starts off
+on a fresh installation of any flavor, and only a production build can ever turn
+it on.*
+
+**Dev and staging are unaffected, and this is structural rather than a
+convention.** They carry the `.dev` and `.staging` application-ID suffixes, so
+they are different installations with separate storage; they own no
+`google-services.json`, so the default `FirebaseApp` cannot initialize; and they
+are ineligible, so `activateFirebaseObservability` is never called for them.
+There is no path by which an override could be written for a non-production
+installation, and none by which a production one could be read by them.
+
+**What a failed activation proves, exactly.** It proves that *this process's*
+Dart reporter and tracer were unavailable. It does **not** prove that a
+previously persisted native override is off, and nothing — in the code, the UI
+or these documents — may present it that way. This is why the Privacy screen
+discloses the build's diagnostics **policy** and reports only whether *this
+app's own* reporting could be confirmed this session (§7).
+
 For dev and staging the missing `google_app_id` is a second, independent
 obstacle — the default `FirebaseApp` cannot initialize without it. It is not the
 policy. The manifest flags are, and they stay correct even if a configuration
@@ -230,17 +268,25 @@ Dev and staging still build with no Firebase configuration file.
 
 ```
 WidgetsFlutterBinding.ensureInitialized()
-installObservability(environment)            <- installs handlers synchronously
-    not eligible -> delegates disabled, status = disabledByPolicy
-    eligible     -> status = pending, activation started, NEVER awaited
-ensureTimeZonesInitialized() / preferences   <- local only
-runApp(...)
-    activation resolves -> status = activated | unavailable
+runBootstrap(BootstrapOperations(...))       <- the tested orchestration
+  installObservability(environment)          <- installs handlers synchronously
+      not eligible -> delegates disabled, activation = notConfigured
+      eligible     -> activation = pending, started, NEVER awaited
+  ensureTimeZonesInitialized() / preferences <- local only
+  runApp(...)
+      activation resolves -> active | unavailable
 ```
 
-`ObservabilityStatus` has four values: `disabledByPolicy`, `pending`,
-`activated`, `unavailable`. `activated` means *this process's Dart adapters are
-attached*; it is not a claim that any payload reached Firebase.
+`bootstrap()` adds only the binding and the environment; the ordering itself
+lives in `runBootstrap`, which production and `bootstrap_orchestration_test.dart`
+both call. The test injects the four operations, so the sequence under test is
+the sequence that ships rather than a reconstruction of it.
+
+`ObservabilityActivation` has four values: `notConfigured`, `pending`, `active`,
+`unavailable`. It describes **this process's Dart adapters and nothing else** —
+`active` is not a claim that any payload reached Firebase, and `unavailable` is
+not a claim that native collection is off (§4.1). The build-level fact lives in
+the separate `DiagnosticsPolicy`.
 
 Errors arriving in the activation window are **buffered in memory**, bounded at
 16 reports, replayed exactly once and in order on adoption, and discarded
@@ -250,6 +296,22 @@ persisted, and a replay failure cannot become a new uncaught error.
 
 Observability initialization issues no API request, opens no database, schedules
 no synchronization and touches no media.
+
+### Reporting failures cannot re-enter the app
+
+`ErrorReporter` is synchronous, but the Crashlytics calls behind it are not, so
+every real report is a future that nobody awaits. An unawaited rejection is an
+uncaught asynchronous error, and `PlatformDispatcher.onError` would convert it
+into a fatal and hand it to `FlutterError.onError` — the handler the failing
+reporter serves. That is a loop, not a diagnostic.
+
+`AsyncErrorReporter` is the single place that closes it: it awaits the call
+internally inside a `try` and swallows the outcome. `FirebaseErrorReporter`
+supplies the two Crashlytics calls and reimplements none of the guarding, so
+`async_reporter_rejection_test.dart` — which drives `AsyncErrorReporter` with
+rejecting callbacks and asserts, inside a guarded zone, that nothing escapes —
+tests the shipped path. That suite also proves its own detector by showing an
+*unguarded* rejection does escape, so it cannot pass vacuously.
 
 ### Fatal-error ownership
 
@@ -328,12 +390,32 @@ intentionally attach identifying data; the Firebase SDKs process the categories
 listed.** No legal conclusion is drawn here — this records technical behaviour
 so the privacy and Data Safety review can be accurate.
 
-**Settings → Privacy** reports the live `ObservabilityStatus` (Disabled /
-Starting / Enabled / Unavailable) and states that diagnostic components are
-included in every version of the app while transmission is restricted by policy.
-It never claims diagnostics are running merely because the build was eligible,
-and it exposes no technical identifier, URL or exception detail. English and
-Spanish copy are maintained in parity.
+**Settings → Privacy** separates the two facts, because only one of them is
+knowable:
+
+| Row | Source | dev / staging | production |
+|---|---|---|---|
+| Crash reporting | `DiagnosticsPolicy` | Disabled | Configured |
+| Performance monitoring | `DiagnosticsPolicy` | Disabled | Configured |
+| App reporting this session | `ObservabilityActivation` | *(not shown)* | Starting → Active / Not confirmed |
+| Advertising | constant | Disabled | Disabled |
+
+The diagnostics rows state the **build's policy**, which is fixed at build time
+and identical on every launch. The session row is the only live claim, and it is
+scoped in words to this app's own reporting.
+
+A failed activation therefore reads **"Not confirmed"**, never "Disabled". The
+app cannot see the platform's collection state, and after §4.1 it cannot infer
+it either: the same screen has to be truthful on a first-ever failed launch and
+on an installation that succeeded last week and left a persisted override
+enabled. "Not confirmed" is true in both; "Disabled" would be false in the
+second. The session row disappears entirely where there is nothing to report.
+
+The copy names no manifest, adapter, persisted override or SDK component — those
+are implementation facts, and this screen is not the place for them. It exposes
+no technical identifier, URL or exception detail. English and Spanish copy are
+maintained in parity, and `privacy_status_test.dart` covers every state
+including the indistinguishable one.
 
 **Google Play Data Safety** must be updated before release to cover the
 categories above. **The hosted privacy-policy URL remains unset and is an
@@ -343,10 +425,16 @@ external release blocker.**
 
 - Dart obfuscation is **not** enabled; no `--obfuscate` or `--split-debug-info`
   anywhere. Flutter symbol upload is therefore **not currently applicable**.
-- Android minification is **not** enabled (`release` sets only `signingConfig`),
-  so no mapping file is produced and none is uploaded. The Crashlytics plugin's
-  upload tasks exist but have nothing to upload.
-- **No NDK crash capture**, by dependency: `firebase-crashlytics-ndk` is absent.
+- Android minification **is** enabled. This project's `build.gradle` sets only
+  `signingConfig` on `release`, but the Flutter Gradle plugin sets
+  `minifyEnabled true` and `shrinkResources true` on that build type, so every
+  release variant runs R8 and writes a real
+  `build/app/outputs/mapping/<variant>/mapping.txt`. `uploadCrashlyticsMappingFile`
+  is production-scoped and does real work there; a production release must not
+  ship without confirming that upload, or JVM frames will be unreadable.
+- **No NDK or native-library crash capture**, by dependency:
+  `firebase-crashlytics-ndk` is absent and stays absent without separate
+  authorization. Native crashes are not captured at all.
 - No symbols were uploaded and no test crash or trace was sent.
 
 ## 9. Verification status
@@ -354,13 +442,26 @@ external release blocker.**
 **Not verifiable from this repository:** a real Crashlytics fatal, a selected
 non-fatal or a Performance trace arriving in Firebase Console; dev/staging
 observability (no projects exist); Data Safety accuracy; the hosted privacy
-policy. Sending a test event is prohibited during this local phase.
+policy. Sending a test event is prohibited during this local phase. **External
+Firebase Console verification therefore remains outstanding**, and no claim in
+this document should be read as evidence of delivery.
+
+Also not verifiable here: the persisted collection override of §4.1. Its
+behaviour is documented from the platform SDKs' contract, not observed, because
+observing it would require a real production installation and console access.
 
 ## 10. Known follow-ups
 
 - `firebase_performance` applies its own Kotlin Gradle Plugin; Flutter warns
   that future versions will fail to build for apps whose plugins do this.
+  **Accepted toolchain debt** for this phase: no AGP 9 or Kotlin migration is in
+  scope, and the warning is expected in every build log.
 - Gradle 8.11.1, AGP 8.9.1 and Kotlin 2.0.21 are below the versions Flutter
-  warns it will soon require. Pre-existing.
+  warns it will soon require. Pre-existing, and accepted on the same terms.
 - Three Privacy-screen golden baselines need regeneration through the Linux
-  canonical workflow after the copy change in this phase (see the testing docs).
+  canonical workflow after the copy changes in this phase (see the testing docs).
+  The disclosure rework moved them further from the committed baselines —
+  `settings_privacy_unconfigured` 13.02%, `settings_privacy_configured` 12.18%,
+  `settings_privacy_production` 10.23% — because the diagnostics note grew and
+  the row values changed. They are **not** regenerated locally: the canonical
+  baselines are Linux-owned.

@@ -1994,28 +1994,40 @@ abstract class AppLocalizations {
   /// **'Advertising'**
   String get settingsPrivacyAdvertising;
 
-  /// A platform service is enabled.
+  /// The build is configured to collect this kind of diagnostics.
   ///
   /// In en, this message translates to:
-  /// **'Enabled'**
-  String get settingsPrivacyEnabled;
+  /// **'Configured'**
+  String get settingsPrivacyConfigured;
 
-  /// Diagnostics status while the reporting service is still starting up.
+  /// Label for whether the app's own reporting started during this run.
+  ///
+  /// In en, this message translates to:
+  /// **'App reporting this session'**
+  String get settingsPrivacySessionReporting;
+
+  /// The app's reporting for this session is still starting up.
   ///
   /// In en, this message translates to:
   /// **'Starting'**
   String get settingsPrivacyStarting;
 
-  /// Diagnostics status when the reporting service could not start.
+  /// The app's reporting started successfully during this session.
   ///
   /// In en, this message translates to:
-  /// **'Unavailable'**
-  String get settingsPrivacyUnavailable;
+  /// **'Active'**
+  String get settingsPrivacySessionActive;
 
-  /// Explains that the diagnostics components ship in all builds but only transmit when enabled.
+  /// The app's own reporting could not be confirmed this session. Deliberately not 'disabled': it is not evidence that diagnostics collection is off.
   ///
   /// In en, this message translates to:
-  /// **'Diagnostic components are included in every version of the app. Crash and performance information is only sent while the status above says Enabled.'**
+  /// **'Not confirmed'**
+  String get settingsPrivacySessionUnconfirmed;
+
+  /// Explains that diagnostics ship in all builds, that production builds are configured to collect, and that the session line is only about the app's own reporting.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostic components are included in every version of the app. In production builds, crash and performance diagnostics are configured and can start collecting as soon as the app opens. The line above describes only whether this app\'s own reporting could be confirmed during this session.'**
   String get settingsPrivacyDiagnosticsNote;
 
   /// A platform service is disabled.

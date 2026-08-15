@@ -40,21 +40,67 @@ Future<void> bootstrap({AppEnvironment? environment}) async {
 
   final AppEnvironment env = environment ?? AppEnvironment.current;
 
-  // Installs the global handlers synchronously and starts activation in the
-  // background. `bootstrap` deliberately ignores `activation`: observability
-  // may take as long as it likes, or never finish at all, and the first frame
-  // is unaffected either way.
-  final ObservabilityBootstrap observability = installObservability(
-    environment: env,
+  await runBootstrap(
+    BootstrapOperations(
+      installObservability: () => installObservability(environment: env),
+      ensureTimeZones: ensureTimeZonesInitialized,
+      openPreferences: AppPreferencesRepository.open,
+      runApplication: runApp,
+    ),
   );
+}
 
-  // Load the IANA timezone database once. Local, synchronous and bounded.
-  ensureTimeZonesInitialized();
+/// The four startup operations [bootstrap] performs, as injectable functions.
+///
+/// This exists so the **ordering itself** can be tested. Startup order is the
+/// whole contract here — handlers before anything that can fail, timezones and
+/// preferences before the first frame, activation never blocking it — and a
+/// test that rebuilt an equivalent sequence would only prove that the copy was
+/// ordered correctly. [runBootstrap] owns the order; production and tests both
+/// call it, differing only in what these four functions do.
+@visibleForTesting
+class BootstrapOperations {
+  const BootstrapOperations({
+    required this.installObservability,
+    required this.ensureTimeZones,
+    required this.openPreferences,
+    required this.runApplication,
+  });
 
-  // Preferences are local essential startup state: no network is involved and
-  // there is no blocking fixed-duration splash.
-  final AppPreferencesRepository preferences =
-      await AppPreferencesRepository.open();
+  /// Installs global error routing and starts activation in the background.
+  final ObservabilityBootstrap Function() installObservability;
+
+  /// Loads the IANA timezone database. Local, synchronous and bounded.
+  final void Function() ensureTimeZones;
+
+  /// Opens the persisted preferences. Local and bounded; never a launch
+  /// failure, because the repository falls back to documented defaults.
+  final Future<AppPreferencesRepository> Function() openPreferences;
+
+  /// Hands the composed application to the framework.
+  final void Function(Widget app) runApplication;
+}
+
+/// The real startup orchestration, shared by production and its tests.
+///
+/// Returns the [ObservabilityBootstrap] so a caller that cares — only a test
+/// does — can await `activation` and inspect what happened afterwards.
+/// Production discards it, which is precisely the point: nothing here awaits
+/// activation, so the first frame cannot be delayed by it.
+@visibleForTesting
+Future<ObservabilityBootstrap> runBootstrap(
+  BootstrapOperations operations,
+) async {
+  // First, and synchronously. From this point every framework and uncaught
+  // asynchronous error has an owner — including one thrown by the two startup
+  // steps below, which run after this line for exactly that reason.
+  final ObservabilityBootstrap observability = operations
+      .installObservability();
+
+  operations.ensureTimeZones();
+
+  final AppPreferencesRepository preferences = await operations
+      .openPreferences();
 
   // The ProviderScope owns the app's dependency graph (preferences, database,
   // remote data source, repositories, controllers) for its lifetime.
@@ -63,7 +109,7 @@ Future<void> bootstrap({AppEnvironment? environment}) async {
   // single application-level synchronization owner is wired once and never by a
   // screen. It schedules the startup run *after the first frame*: the shell and
   // any cached content render before a byte of network work begins.
-  runApp(
+  operations.runApplication(
     ProviderScope(
       // `Override` is not exported by flutter_riverpod's show-list, so the list
       // literal is left unannotated rather than typed.
@@ -76,4 +122,6 @@ Future<void> bootstrap({AppEnvironment? environment}) async {
       child: const AppSyncLifecycleScope(child: GridViewApp()),
     ),
   );
+
+  return observability;
 }

@@ -41,8 +41,15 @@
   flavor-scoped — and so are the three build-time Gradle plugins. What is
   production-only is the configuration and the two tasks that consume it,
   `process<Variant>GoogleServices` and `uploadCrashlyticsMappingFile<Variant>`.
-  Collection is disabled by manifest policy in all
-  flavors and enabled at runtime only by an eligible production build.
+  Collection starts off by manifest default on a fresh installation of every
+  flavor and is enabled at runtime only by an eligible production build. **That
+  runtime opt-in is persisted by the platform SDKs at a higher priority than the
+  manifest**, so a production installation that has activated once begins later
+  launches with collection already on, before Dart runs — relevant to the Data
+  Safety declaration below, which must describe collection from app start rather
+  than from a Dart-side decision. Dev and staging are structurally excluded:
+  separate application IDs, no Firebase configuration, and the production
+  activation never runs for them.
   Transitively present: **Firebase Remote Config and ABT**, required internally
   by Performance Monitoring, plus a measurement-connector interop stub. Absent:
   any Firebase Analytics implementation, advertising SDK, Messaging,

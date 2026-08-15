@@ -50,6 +50,29 @@ For dev and staging the missing `google_app_id` is a second, independent
 obstacle. It is not the policy, and it would stop being an obstacle the moment a
 configuration file was added by accident; the manifest flags would not.
 
+**The manifest is a starting default, not a per-launch guarantee.** The runtime
+opt-in is persisted by the platform SDKs and read at a higher priority than the
+manifest, so it outlives the process. A production installation begins its first
+launch with collection off, turns it on when activation succeeds, and begins
+**every later launch with collection already on, before Dart runs**. This is
+accepted deliberately: it is how the Android SDKs implement a reversible opt-in,
+and the alternative — the permanent deactivation flag — cannot be reversed at
+all.
+
+Two consequences follow, and both are load-bearing. First, the claim that the
+packaged SDKs are "inert from process start in every flavor" is false after the
+first successful production activation, and has been removed everywhere. Second,
+a failed activation proves only that *this process's* Dart adapters were
+unavailable; it is not evidence that a persisted native override is off. Nothing
+may present it as such — which is why the user-facing screen discloses the
+build's `DiagnosticsPolicy` and reports activation only as a scoped statement
+about this app's own reporting.
+
+Dev and staging are unaffected structurally, not by convention: separate
+application IDs mean separate installations and storage, they own no Firebase
+configuration, and `activateFirebaseObservability` is never called for them, so
+no override can ever be written for them.
+
 **Flavor and `APP_ENV` are bound at build time.** They used to be independent
 identities compared only after native startup, which allowed a production
 artifact whose Dart layer believed observability was off while the native SDKs
@@ -121,7 +144,10 @@ in.
   developer crashes to the published app's project.
 - A production build whose Firebase initialization fails is indistinguishable
   from an inert one at runtime, and the app is unaffected. This is the intended
-  trade: observability degrades silently rather than degrading the app.
+  trade: observability degrades silently rather than degrading the app. It also
+  means failure is not information: the app cannot tell a first-ever failure
+  from a failure on an installation carrying a persisted collection override, so
+  it reports the failure as unconfirmed rather than as anything being off.
 - Because the traced and reported paths are inert outside production, their
   behaviour is proven by tests against fakes rather than by observing real
   telemetry. A green suite is evidence about code, never evidence of delivery.
@@ -136,9 +162,13 @@ in.
 - Remote Config and ABT ship in every APK as transitive components of
   Performance Monitoring. GridView has no Remote Config Dart API and no product
   feature using it, but the components are present and must be disclosed.
-- The Privacy screen reports the live `ObservabilityStatus`, not eligibility, so
-  it cannot claim diagnostics are running before activation finishes or after it
-  fails.
+- The Privacy screen discloses the build's `DiagnosticsPolicy` for crash and
+  performance reporting, and reports `ObservabilityActivation` only as a scoped
+  statement about this app's own reporting during the current session. It cannot
+  claim diagnostics are running before activation finishes, and it cannot claim
+  collection is off after activation fails.
+- External Firebase Console verification remains outstanding, and no NDK or
+  native-library crash support is included.
 
 ## Alternatives rejected
 

@@ -1085,17 +1085,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsPrivacyAdvertising => 'Publicidad';
 
   @override
-  String get settingsPrivacyEnabled => 'Activado';
+  String get settingsPrivacyConfigured => 'Configurado';
+
+  @override
+  String get settingsPrivacySessionReporting =>
+      'Informes de la aplicación en esta sesión';
 
   @override
   String get settingsPrivacyStarting => 'Iniciando';
 
   @override
-  String get settingsPrivacyUnavailable => 'No disponible';
+  String get settingsPrivacySessionActive => 'Activo';
+
+  @override
+  String get settingsPrivacySessionUnconfirmed => 'Sin confirmar';
 
   @override
   String get settingsPrivacyDiagnosticsNote =>
-      'Los componentes de diagnóstico se incluyen en todas las versiones de la aplicación. La información de fallos y rendimiento solo se envía mientras el estado anterior indique Activado.';
+      'Los componentes de diagnóstico se incluyen en todas las versiones de la aplicación. En las versiones de producción, los diagnósticos de fallos y rendimiento están configurados y pueden empezar a recopilar datos en cuanto se abre la aplicación. La línea anterior solo indica si se pudo confirmar el propio envío de informes de esta aplicación durante esta sesión.';
 
   @override
   String get settingsPrivacyDisabled => 'Desactivado';

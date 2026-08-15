@@ -6,9 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/core/observability/deferred_observability.dart';
 import 'package:gridview/core/observability/firebase/firebase_observability.dart';
+import 'package:gridview/core/observability/observability_activation.dart';
 import 'package:gridview/core/observability/observability_bootstrap.dart';
 import 'package:gridview/core/observability/observability_providers.dart';
-import 'package:gridview/core/observability/observability_status.dart';
 import 'package:gridview/core/observability/observed_failure.dart';
 import 'package:gridview/core/observability/performance_tracer.dart';
 import 'package:gridview/features/shared/application/providers.dart';
@@ -47,7 +47,7 @@ void main() {
       await boot.activation;
 
       expect(activatorCalled, isFalse);
-      expect(boot.surface.status.value, ObservabilityStatus.disabledByPolicy);
+      expect(boot.surface.status.value, ObservabilityActivation.notConfigured);
     });
 
     test('an eligible build reports pending before activation resolves', () {
@@ -58,7 +58,7 @@ void main() {
       );
       addTearDown(boot.handlers.restore);
 
-      expect(boot.surface.status.value, ObservabilityStatus.pending);
+      expect(boot.surface.status.value, ObservabilityActivation.pending);
     });
   });
 
@@ -81,7 +81,7 @@ void main() {
       gate.complete(FirebaseAdapters(reporter: reporter, tracer: tracer));
       await boot.activation;
 
-      expect(boot.surface.status.value, ObservabilityStatus.activated);
+      expect(boot.surface.status.value, ObservabilityActivation.active);
       expect(
         reporter.fatals,
         hasLength(1),
@@ -105,7 +105,7 @@ void main() {
         FlutterError.reportError(_fatal('lost'));
         await boot.activation;
 
-        expect(boot.surface.status.value, ObservabilityStatus.unavailable);
+        expect(boot.surface.status.value, ObservabilityActivation.unavailable);
         // Reporting after a failed activation is inert, never an error.
         expect(
           () => FlutterError.reportError(_fatal('after')),
@@ -122,7 +122,7 @@ void main() {
       addTearDown(boot.handlers.restore);
 
       await expectLater(boot.activation, completes);
-      expect(boot.surface.status.value, ObservabilityStatus.unavailable);
+      expect(boot.surface.status.value, ObservabilityActivation.unavailable);
     });
   });
 
@@ -147,7 +147,7 @@ void main() {
     );
 
     expect(find.text('rendered'), findsOneWidget);
-    expect(boot.surface.status.value, ObservabilityStatus.pending);
+    expect(boot.surface.status.value, ObservabilityActivation.pending);
   });
 
   group('the startup buffer', () {
@@ -260,7 +260,7 @@ void main() {
 
     container.read(errorReporterProvider);
     container.read(performanceTracerProvider);
-    container.read(observabilityStatusProvider);
+    container.read(observabilityActivationProvider);
     await tester.pump();
 
     expect(container.exists(remoteApiProvider), isFalse);

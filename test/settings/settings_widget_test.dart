@@ -373,9 +373,15 @@ void main() {
         find.text('No privacy policy is configured in this build.'),
         findsNothing,
       );
-      // The locally verifiable facts are still stated.
+      // The locally verifiable facts are still stated. A production build
+      // discloses its diagnostics *policy* — the thing that is fixed and
+      // knowable — so only Advertising reads as disabled. No session line
+      // appears here because this harness installs the inert surface, which
+      // never activates and so has no session to report on.
       expect(find.text('Crash reporting'), findsOneWidget);
-      expect(find.text('Disabled'), findsNWidgets(3));
+      expect(find.text('Configured'), findsNWidgets(2));
+      expect(find.text('Disabled'), findsOneWidget);
+      expect(find.text('App reporting this session'), findsNothing);
       expect(
         renderedText(tester).join(' '),
         contains('independent application'),

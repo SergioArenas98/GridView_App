@@ -7,62 +7,63 @@
 /// single-file change.
 library;
 
-import 'dart:async';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_performance/firebase_performance.dart';
 import 'package:flutter/foundation.dart';
 
+import '../async_error_reporter.dart';
 import '../error_reporter.dart';
 import '../observed_failure.dart';
 import '../performance_tracer.dart';
 import '../throttled_error_reporter.dart';
 
 /// Sends fatal and selected non-fatal errors to Crashlytics.
+///
+/// This class contributes only the two Crashlytics calls. Making them safe —
+/// unawaited so they cannot delay the app, internally awaited inside a `try` so
+/// a rejection cannot re-enter the global handler — is [AsyncErrorReporter]'s
+/// job, and that is the class the rejection tests drive. Nothing about the
+/// guarantee is reimplemented here, so the tested path and the shipped path
+/// cannot drift apart.
 class FirebaseErrorReporter implements ErrorReporter {
-  const FirebaseErrorReporter(this._crashlytics);
+  FirebaseErrorReporter(FirebaseCrashlytics crashlytics)
+    : _delegate = AsyncErrorReporter(
+        // Crashlytics' own Flutter entry point: it preserves the framework
+        // context and library fields rather than flattening them to a message.
+        recordFatalAsync: crashlytics.recordFlutterFatalError,
+        recordNonFatalAsync: (ObservedFailure failure) =>
+            _send(crashlytics, failure),
+      );
 
-  final FirebaseCrashlytics _crashlytics;
+  final AsyncErrorReporter _delegate;
 
   @override
-  void recordFatal(FlutterErrorDetails details) {
-    // Crashlytics' own Flutter entry point: it preserves the framework context
-    // and library fields rather than flattening them into a message.
-    unawaited(_guard(() => _crashlytics.recordFlutterFatalError(details)));
-  }
+  void recordFatal(FlutterErrorDetails details) =>
+      _delegate.recordFatal(details);
 
   @override
-  void recordNonFatal(ObservedFailure failure) {
-    unawaited(_guard(() => _send(failure)));
-  }
+  void recordNonFatal(ObservedFailure failure) =>
+      _delegate.recordNonFatal(failure);
 
-  Future<void> _send(ObservedFailure failure) async {
+  static Future<void> _send(
+    FirebaseCrashlytics crashlytics,
+    ObservedFailure failure,
+  ) async {
     // Bounded enum-derived keys only; see [ObservedFailure].
     for (final MapEntry<String, String> entry
         in failure.toAttributes().entries) {
-      await _crashlytics.setCustomKey(entry.key, entry.value);
+      await crashlytics.setCustomKey(entry.key, entry.value);
     }
     // The failure object itself is the exception: its `toString` is the
     // signature, so Crashlytics groups by failure class rather than by a
     // per-occurrence message.
-    await _crashlytics.recordError(
+    await crashlytics.recordError(
       failure,
       null,
       reason: failure.reason,
       fatal: false,
     );
-  }
-
-  /// Reporting must never surface as an application error, including
-  /// asynchronously — an unawaited rejection would land straight back in the
-  /// global handler this reporter serves.
-  Future<void> _guard(Future<void> Function() action) async {
-    try {
-      await action();
-    } catch (_) {
-      // Deliberately swallowed.
-    }
   }
 }
 

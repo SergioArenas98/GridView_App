@@ -7,7 +7,7 @@ import 'deferred_observability.dart';
 import 'firebase/firebase_observability.dart';
 import 'global_error_handlers.dart';
 import 'observability.dart';
-import 'observability_status.dart';
+import 'observability_activation.dart';
 
 /// Produces the platform adapters, or null when activation is not possible.
 ///
@@ -69,8 +69,10 @@ ObservabilityBootstrap installObservability({
     reporter,
   );
 
-  final ValueNotifier<ObservabilityStatus> status =
-      ValueNotifier<ObservabilityStatus>(ObservabilityStatus.disabledByPolicy);
+  final ValueNotifier<ObservabilityActivation> status =
+      ValueNotifier<ObservabilityActivation>(
+        ObservabilityActivation.notConfigured,
+      );
 
   final Observability surface = Observability(
     reporter: reporter,
@@ -88,7 +90,7 @@ ObservabilityBootstrap installObservability({
     );
   }
 
-  status.value = ObservabilityStatus.pending;
+  status.value = ObservabilityActivation.pending;
   final ObservabilityActivator activate =
       activator ?? () => activateFirebaseObservability(now: now);
 
@@ -108,7 +110,7 @@ Future<void> _activate(
   ObservabilityActivator activate,
   DeferredErrorReporter reporter,
   DeferredPerformanceTracer tracer,
-  ValueNotifier<ObservabilityStatus> status,
+  ValueNotifier<ObservabilityActivation> status,
 ) async {
   FirebaseAdapters? adapters;
   try {
@@ -120,12 +122,12 @@ Future<void> _activate(
   if (adapters == null) {
     reporter.disable();
     tracer.disable();
-    status.value = ObservabilityStatus.unavailable;
+    status.value = ObservabilityActivation.unavailable;
     return;
   }
 
   // Adoption flushes the startup buffer; both are one-way.
   reporter.adopt(adapters.reporter);
   tracer.adopt(adapters.tracer);
-  status.value = ObservabilityStatus.activated;
+  status.value = ObservabilityActivation.active;
 }

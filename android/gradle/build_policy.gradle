@@ -39,18 +39,62 @@ tasks.register('verifyAppEnvParser') {
             throw new GradleException("APP_ENV parser: expected a failure for ${description}")
         }
 
-        // --- accepted -------------------------------------------------------
+        // --- the exhaustive flavor x APP_ENV matrix -------------------------
+        //
+        // Driven from the build's own `requiredAppEnvForFlavor`, so the matrix
+        // can never describe a contract the build does not actually enforce.
+        // Every declared product flavor is crossed with every declared
+        // environment: the diagonal must be accepted and every off-diagonal
+        // pairing must be rejected. Adding a flavor grows the matrix by itself.
+        Map<String, String> contract = project.ext.requiredAppEnvForFlavor
+        List<String> flavors = project.android.productFlavors.collect { it.name }.sort()
+        List<String> environments = contract.values().toList().unique().sort()
+
+        assert contract.keySet().sort() == flavors,
+            "requiredAppEnvForFlavor covers ${contract.keySet().sort()} " +
+            "but the build declares product flavors ${flavors}"
+        logger.lifecycle("  ok  every declared product flavor has a declared APP_ENV ${flavors}")
+
+        int accepted = 0
+        int rejected = 0
+        flavors.each { String flavor ->
+            String expected = contract[flavor]
+            environments.each { String supplied ->
+                String raw = defines(["APP_ENV=${supplied}".toString()])
+                if (supplied == expected) {
+                    assert resolveAppEnv(raw, flavor, expected) == expected
+                    accepted++
+                    logger.lifecycle("  ok  ${flavor} + ${supplied} is accepted")
+                } else {
+                    expectFailure("${flavor} + ${supplied} is rejected") {
+                        resolveAppEnv(raw, flavor, expected)
+                    }
+                    rejected++
+                }
+            }
+        }
+        int combinations = flavors.size() * environments.size()
+        assert accepted == flavors.size()
+        assert accepted + rejected == combinations
+        logger.lifecycle(
+            "  ok  matrix complete: ${combinations} combinations, " +
+            "${accepted} accepted, ${rejected} rejected")
+
+        // --- other accepted input -------------------------------------------
         assert resolveAppEnv(
             defines(['APP_ENV=production', 'DATA_SOURCE=remote']),
             'production', 'production') == 'production'
-        logger.lifecycle('  ok  a single matching APP_ENV is accepted')
+        logger.lifecycle('  ok  an unrelated define alongside APP_ENV is accepted')
 
         // A value containing '=' must survive: the split is at the first '='.
         Map<String, List<String>> withEquals = decodeDartDefines(
             defines(['APP_ENV=production', 'OTHER=a=b=c']))
         assert withEquals['OTHER'] == ['a=b=c']
         assert withEquals['APP_ENV'] == ['production']
-        logger.lifecycle('  ok  a value containing "=" is preserved')
+        assert resolveAppEnv(
+            defines(['APP_ENV=production', 'OTHER=a=b=c']),
+            'production', 'production') == 'production'
+        logger.lifecycle('  ok  an unrelated define containing "=" is preserved and ignored')
 
         // A value containing a comma is safe because the outer split is over
         // Base64 text, whose alphabet excludes commas.
@@ -64,15 +108,44 @@ tasks.register('verifyAppEnvParser') {
         assert decodeDartDefines('').isEmpty()
         logger.lifecycle('  ok  absent defines decode to an empty map')
 
+        // `--dart-define-from-file` is not a second channel: Flutter merges file
+        // entries into the same `dart-defines` property, so a define's origin is
+        // invisible here. Equivalence means identical text decodes identically
+        // however the two halves were assembled...
+        List<String> fromFile = ['APP_ENV=production', 'DATA_SOURCE=remote']
+        List<String> fromFlags = ['API_BASE_URL=https://example.invalid']
+        String merged = defines(fromFile + fromFlags)
+        Map<String, List<String>> mergedDecoded = decodeDartDefines(merged)
+        assert mergedDecoded['APP_ENV'] == ['production']
+        assert mergedDecoded['DATA_SOURCE'] == ['remote']
+        assert mergedDecoded['API_BASE_URL'] == ['https://example.invalid']
+        assert decodeDartDefines(defines(fromFile) + ',' + defines(fromFlags)) == mergedDecoded
+        assert resolveAppEnv(merged, 'production', 'production') == 'production'
+        logger.lifecycle('  ok  file-supplied and flag-supplied defines are equivalent')
+
+        // A define with no key is not addressable, so it is skipped rather than
+        // guessed at -- and skipping it must not disturb the rest.
+        Map<String, List<String>> noSeparator = decodeDartDefines(
+            defines(['APP_ENV=production', 'NOEQUALSSIGN', '=orphanvalue']))
+        assert noSeparator.keySet() == ['APP_ENV'] as Set
+        assert noSeparator['APP_ENV'] == ['production']
+        assert resolveAppEnv(
+            defines(['APP_ENV=production', 'NOEQUALSSIGN', '=orphanvalue']),
+            'production', 'production') == 'production'
+        logger.lifecycle('  ok  a decoded define with no "=" is skipped without side effects')
+
         // --- rejected -------------------------------------------------------
         expectFailure('a missing APP_ENV') {
             resolveAppEnv(defines(['DATA_SOURCE=remote']), 'production', 'production')
         }
+        expectFailure('no defines at all') {
+            resolveAppEnv(null, 'production', 'production')
+        }
         expectFailure('an unknown APP_ENV value') {
             resolveAppEnv(defines(['APP_ENV=prod']), 'production', 'production')
         }
-        expectFailure('a mismatched APP_ENV value') {
-            resolveAppEnv(defines(['APP_ENV=production']), 'dev', 'development')
+        expectFailure('an empty APP_ENV value') {
+            resolveAppEnv(defines(['APP_ENV=']), 'production', 'production')
         }
         expectFailure('duplicate APP_ENV with different values') {
             resolveAppEnv(
@@ -82,8 +155,18 @@ tasks.register('verifyAppEnvParser') {
             resolveAppEnv(
                 defines(['APP_ENV=production', 'APP_ENV=production']), 'production', 'production')
         }
+        expectFailure('a duplicate split across a file and a flag') {
+            resolveAppEnv(
+                defines(['APP_ENV=production']) + ',' + defines(['APP_ENV=production']),
+                'production', 'production')
+        }
         expectFailure('malformed Base64') {
             decodeDartDefines('not-valid-base64!!')
+        }
+        expectFailure('malformed Base64 beside a valid entry') {
+            resolveAppEnv(
+                defines(['APP_ENV=production']) + ',not-valid-base64!!',
+                'production', 'production')
         }
         expectFailure('an undeclared flavor') {
             resolveAppEnv(defines(['APP_ENV=production']), 'mystery', null)

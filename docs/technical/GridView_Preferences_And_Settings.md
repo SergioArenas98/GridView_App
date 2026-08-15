@@ -442,15 +442,24 @@ id, token or namespace. Opening Settings performs **no refresh**.
   `firebase_crashlytics`, `firebase_performance`) behind a single application
   boundary. The **native components are packaged in every flavor** — Dart
   dependencies are not flavor-scoped — so it is wrong to say no Firebase SDK is
-  initialized outside production. What is true: collection is disabled by
-  manifest policy in all flavors, only an eligible production build turns it on
-  at runtime, and only production initializes the Dart adapters.
-- The Privacy screen no longer hardcodes these statuses, and no longer derives
-  them from build eligibility either. It reads the live `ObservabilityStatus`
-  (Disabled / Starting / Enabled / Unavailable), so it cannot claim diagnostics
-  are running before activation has finished or after it has failed, and it
-  discloses that diagnostic components ship in every version of the app while
-  transmission is restricted by policy.
+  initialized outside production. What is true: collection starts off by
+  manifest default on a fresh installation of any flavor, only an eligible
+  production build turns it on at runtime, and only production initializes the
+  Dart adapters.
+- **The runtime opt-in persists across launches.** The platform SDKs store it at
+  a higher priority than the manifest, so a production installation that has
+  activated once begins later launches with native collection already on, before
+  Dart runs. Dev and staging cannot be affected: different application IDs, no
+  Firebase configuration, and the production activation never runs for them.
+- The Privacy screen no longer hardcodes these statuses, no longer derives them
+  from build eligibility, and no longer presents activation as a collection
+  state. The crash and performance rows disclose the build's `DiagnosticsPolicy`
+  (Disabled outside production, Configured in production); one further row
+  reports `ObservabilityActivation` strictly as this session's own reporting
+  (Starting / Active / Not confirmed) and is hidden when there is nothing to
+  report. A failed activation reads **Not confirmed**, never Disabled — it
+  proves only that this process's adapters were unavailable, not that a
+  persisted native override is off.
 - **Crashlytics and Performance Monitoring must still not be claimed to
   *deliver*.** The code is complete and locally verified, but no event has been
   observed in Firebase Console; that needs an authorized release-like build and

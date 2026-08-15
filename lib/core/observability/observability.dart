@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../app/environment/app_environment.dart';
 import 'error_reporter.dart';
-import 'observability_status.dart';
+import 'observability_activation.dart';
 import 'performance_tracer.dart';
 
 /// The application's observability surface: one reporter, one tracer and the
@@ -22,8 +22,8 @@ class Observability {
   const Observability.disabled()
     : reporter = const NoopErrorReporter(),
       tracer = const NoopPerformanceTracer(),
-      status = const StaticObservabilityStatus(
-        ObservabilityStatus.disabledByPolicy,
+      status = const StaticObservabilityActivation(
+        ObservabilityActivation.notConfigured,
       );
 
   final ErrorReporter reporter;
@@ -35,7 +35,7 @@ class Observability {
   /// status changes *after* `runApp`, when activation resolves, and a screen
   /// that read a snapshot at composition time would keep showing "pending"
   /// forever — or worse, claim diagnostics were running before they were.
-  final ValueListenable<ObservabilityStatus> status;
+  final ValueListenable<ObservabilityActivation> status;
 }
 
 /// Whether an environment is allowed to activate the Dart observability

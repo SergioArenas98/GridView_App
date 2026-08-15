@@ -5,8 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/core/observability/error_reporter.dart';
 import 'package:gridview/core/observability/observability.dart';
+import 'package:gridview/core/observability/observability_activation.dart';
 import 'package:gridview/core/observability/observability_providers.dart';
-import 'package:gridview/core/observability/observability_status.dart';
 import 'package:gridview/core/observability/performance_tracer.dart';
 
 /// Environment isolation for observability.
@@ -59,7 +59,7 @@ void main() {
       const Observability disabled = Observability.disabled();
       expect(disabled.reporter, isA<NoopErrorReporter>());
       expect(disabled.tracer, isA<NoopPerformanceTracer>());
-      expect(disabled.status.value, ObservabilityStatus.disabledByPolicy);
+      expect(disabled.status.value, ObservabilityActivation.notConfigured);
     });
 
     test('the provider default is inert, so no test can transmit', () {
@@ -68,7 +68,7 @@ void main() {
 
       expect(
         container.read(observabilityProvider).status.value,
-        ObservabilityStatus.disabledByPolicy,
+        ObservabilityActivation.notConfigured,
       );
       expect(container.read(errorReporterProvider), isA<NoopErrorReporter>());
       expect(
@@ -76,8 +76,8 @@ void main() {
         isA<NoopPerformanceTracer>(),
       );
       expect(
-        container.read(observabilityStatusProvider).value,
-        ObservabilityStatus.disabledByPolicy,
+        container.read(observabilityActivationProvider).value,
+        ObservabilityActivation.notConfigured,
       );
     });
 

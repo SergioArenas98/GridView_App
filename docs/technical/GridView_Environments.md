@@ -117,12 +117,24 @@ environment-specific interval.
   *configuration* and the two build tasks that consume it are production-only;
   the plugins themselves are applied everywhere. Do not state that no Firebase
   SDK is initialized outside production.
-- **Collection is off by default everywhere.** The main manifest declares
-  `firebase_crashlytics_collection_enabled=false` and
-  `firebase_performance_collection_enabled=false` for all flavors, so the
-  packaged SDKs are inert from process start. Only an eligible production build
-  turns them on at runtime. This is the boundary that matters, because Android
-  instantiates `FirebaseInitProvider` before any Dart code runs.
+- **Collection starts off on a fresh installation of every flavor.** The main
+  manifest declares `firebase_crashlytics_collection_enabled=false` and
+  `firebase_performance_collection_enabled=false` for all flavors, and only an
+  eligible production build ever turns them on at runtime. This is the boundary
+  that matters, because Android instantiates `FirebaseInitProvider` before any
+  Dart code runs.
+- **The runtime opt-in persists, so the manifest is a default and not a
+  per-launch rule.** A successful production activation writes a preference the
+  SDKs read at a higher priority than the manifest, and it survives process
+  death. A production installation that has activated once therefore begins
+  **later** launches with native collection already on, before Dart runs. Do
+  **not** write that the packaged SDKs are inert from process start in every
+  flavor: it is true only until the first successful production activation.
+  Dev and staging are structurally unaffected — different application IDs, no
+  Firebase configuration, and the production activation never runs for them.
+- **A failed activation proves only that this process's Dart adapters were
+  unavailable.** It is not evidence that a previously persisted native override
+  is off, and no document, status value or user-facing string may imply that.
 - `isObservabilityEligible` returns true for `production` only and governs the
   **Dart adapters**. Development, staging and tests resolve to a no-op reporter
   and tracer.
