@@ -117,6 +117,23 @@ the two tasks that actually consume the production configuration —
 `process<Variant>GoogleServices` and `uploadCrashlyticsMappingFile<Variant>` —
 which is a property of the variant being built rather than of the command line.
 
+**Variant scoping was necessary but not sufficient for the upload task.** Scoping
+it to the production flavor stopped staging from reaching it, but left a network
+write to the published project as an ordinary side effect of compiling a
+production release locally — and one such possible, unverified upload occurred
+during this phase's own verification. Local compilation must not mutate remote
+state. Mapping upload therefore now requires three independent conditions: the
+production flavor, the `release` build type, and the explicit Gradle property
+`gridviewCrashlyticsUploadMapping=true`, evaluated exactly and case-sensitively,
+with a present-but-unusable value throwing rather than defaulting either way.
+
+Two boundaries enforce it, because the supported plugin switch cannot express
+the whole rule: the official `mappingFileUploadEnabled` is build-type scoped, so
+it carries the authorization half and keeps the plugin from registering the task
+at all by default, while a per-variant task gate adds the production-flavor half.
+`-x` is explicitly rejected as a mechanism: a safe default that depends on the
+operator remembering a flag is not a default.
+
 Crashlytics build-ID and version-control-info injection run for every variant;
 they need no configuration file and identify no project. Mapping upload is
 production-only and does real work there: the Flutter Gradle plugin minifies the
@@ -169,6 +186,11 @@ in.
   collection is off after activation fails.
 - External Firebase Console verification remains outstanding, and no NDK or
   native-library crash support is included.
+- **No build performed by a developer or by CI can mutate remote state.** The
+  only network-mutating task is mapping upload, and it is off unless explicitly
+  authorized. The cost is that a real release now has one deliberate extra step;
+  that is the intended trade, because the alternative made every local
+  production compile an unannounced write to the published project.
 
 ## Alternatives rejected
 

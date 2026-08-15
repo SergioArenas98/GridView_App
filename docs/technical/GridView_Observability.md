@@ -116,7 +116,7 @@ scoped by variant rather than by what someone typed:
 | Task | Enabled for | Why |
 |---|---|---|
 | `process<Variant>GoogleServices` | production only | `google-services.json` registers `com.sejuma.gridview` alone — there is no `.dev` or `.staging` client, and non-production must stay buildable with no Firebase configuration at all |
-| `uploadCrashlyticsMappingFile<Variant>` | production only | resolves the Firebase application ID from the Google Services output non-production does not have, and uploads over the network |
+| `uploadCrashlyticsMappingFile<Variant>` | **nothing, by default** — production `release` only, and only under explicit authorization (§3.1) | it is the one task in this build that mutates state outside the machine running it |
 
 Everything else the plugins register is harmless off production:
 `injectCrashlyticsMappingFileId<Variant>` and
@@ -125,14 +125,57 @@ configuration file, and write a build-local resource. Their presence in a dev
 task graph is expected, and is not evidence of a dev Firebase integration —
 without `google_app_id` there is no project to report to.
 
-**Release builds are minified, so mapping upload is real.** The Flutter Gradle
-plugin sets `minifyEnabled true` and `shrinkResources true` on the `release`
-build type; this project's `build.gradle` does not set either. Every release
-variant therefore runs R8 and produces a real
-`build/app/outputs/mapping/<variant>/mapping.txt`. That is exactly why the upload
-task must be scoped: before it was, `assembleStagingRelease` reached
-`uploadCrashlyticsMappingFileStagingRelease` with no Firebase application ID to
-resolve. Debug and profile builds are not minified and have no mapping file.
+**Release builds are minified.** The Flutter Gradle plugin sets
+`minifyEnabled true` and `shrinkResources true` on the `release` build type; this
+project's `build.gradle` does not set either. Every release variant therefore
+runs R8 and produces a real `build/app/outputs/mapping/<variant>/mapping.txt`.
+Debug and profile builds are not minified and have no mapping file.
+
+### 3.1 Four different things, deliberately not conflated
+
+Local artifacts are routinely mistaken for evidence of an upload. They are not.
+
+| # | Thing | Where it happens | What it proves |
+|---|---|---|---|
+| 1 | **R8 mapping generation** | local, every minified release variant, always | that the build obfuscated JVM code and wrote `mapping.txt`. Nothing left the machine. |
+| 2 | **Mapping-file-ID generation** | local, `injectCrashlyticsMappingFileId<Variant>`, every variant | that a build-local identifier resource was written. It identifies no project and is **not** proof of upload. |
+| 3 | **Upload eligibility** | production flavor + `release` build type + explicit authorization | that an upload *would be permitted*. Still not proof one occurred. |
+| 4 | **Confirmed remote upload** | requires retained task-level or HTTP success output from the build | the only thing that proves Firebase accepted a mapping file. It **cannot** be inferred from a temporary directory or any local file. |
+
+**Authorization.** Upload requires the Gradle property
+`gridviewCrashlyticsUploadMapping`, evaluated exactly and case-sensitively:
+
+| Property state | Result |
+|---|---|
+| absent | disabled — the normal case for every local build and every CI job |
+| exactly `false` | disabled |
+| exactly `true` | authorized |
+| present but empty | `GradleException` |
+| anything else (`TRUE`, `1`, `yes`, padded, typo) | `GradleException` |
+
+A present-but-unusable value fails rather than defaulting, because both defaults
+are wrong: silently disabling discards an authorized release upload, and
+silently enabling performs an unauthorized one.
+
+Two independent boundaries enforce it. The official Crashlytics DSL
+(`mappingFileUploadEnabled`, build-type scoped) is set from the authorization
+value on `release`, so with no authorization the plugin does not register the
+upload task at all; and the per-variant task gate additionally requires the
+production flavor, which the build-type-scoped DSL cannot express.
+
+The property is an authorization switch, not a credential: it holds no secret,
+and it is never placed in `gradle.properties`, a CI environment block or a local
+template. A future authorized release step — and only that step — may set
+`ORG_GRADLE_PROJECT_gridviewCrashlyticsUploadMapping=true` for its own
+invocation. The equivalent direct form is
+`-PgridviewCrashlyticsUploadMapping=true`, but note that ordinary
+`flutter build` commands do not forward arbitrary `-P` arguments to Gradle,
+which is why the environment-variable form is the practical one.
+
+**An ordinary `flutter build apk --release --flavor production` generates the
+mapping locally and uploads nothing.** No flag, no `-x` and nothing for the
+operator to remember: the safe behaviour is encoded in the project
+configuration.
 
 **Applying the Performance plugin does not make Firebase observe GridView's
 network traffic.** Its automatic instrumentation hooks Android's HTTP stacks;
@@ -256,8 +299,9 @@ observation, and both run in CI:
 
 | Task | Asserts |
 |---|---|
-| `:app:verifyAppEnvParser` | the dart-define parser against synthetic input — missing, unknown, mismatched and duplicate `APP_ENV`, values containing `=` or `,`, malformed Base64, an undeclared flavor |
-| `:app:verifyAndroidBuildPolicy` | over all nine variants: the three plugins are applied; `process<Variant>GoogleServices` and `uploadCrashlyticsMappingFile<Variant>` are enabled for production only; Crashlytics mapping-ID injection exists for production; both gates are wired to the resource merge and neither is wired to the pre-build |
+| `:app:verifyAppEnvParser` | the dart-define parser against synthetic input — the exhaustive flavor×`APP_ENV` matrix, missing, unknown, empty and duplicate `APP_ENV`, values containing `=` or `,`, malformed Base64, file/flag equivalence, an undeclared flavor |
+| `:app:verifyMappingUploadPolicy` | the pure mapping-upload authorization rule across 3 flavors × 3 build types × {absent, `false`, `true`} — exactly one combination eligible, none eligible without authorization, dev/staging and debug/profile never eligible, and every malformed value throwing. Performs no upload and reads no real property. |
+| `:app:verifyAndroidBuildPolicy` | over all nine variants: the three plugins are applied; `process<Variant>GoogleServices` is production-only; `uploadCrashlyticsMappingFile<Variant>` matches the authorization rule, so with the property absent it is disabled or absent everywhere; no `uploadCrashlyticsSymbolFile<Variant>` exists; release variants still minify locally; Crashlytics mapping-ID injection exists for production; both environment gates are wired to the resource merge and neither to the pre-build |
 
 Neither needs a secret, signing key, device or network beyond the dependency
 resolution an ordinary build already performs.
@@ -429,9 +473,13 @@ external release blocker.**
   `signingConfig` on `release`, but the Flutter Gradle plugin sets
   `minifyEnabled true` and `shrinkResources true` on that build type, so every
   release variant runs R8 and writes a real
-  `build/app/outputs/mapping/<variant>/mapping.txt`. `uploadCrashlyticsMappingFile`
-  is production-scoped and does real work there; a production release must not
-  ship without confirming that upload, or JVM frames will be unreadable.
+  `build/app/outputs/mapping/<variant>/mapping.txt`. That generation is local and
+  unconditional (§3.1 item 1).
+- **Mapping upload is off by default and is not part of local verification.** It
+  requires production + `release` + explicit authorization (§3.1). A published
+  production release still needs the mapping uploaded — otherwise JVM frames in
+  its crash reports are unreadable — so the authorized release step must set the
+  property and retain its task output as the record that the upload happened.
 - **No NDK or native-library crash capture**, by dependency:
   `firebase-crashlytics-ndk` is absent and stays absent without separate
   authorization. Native crashes are not captured at all.
@@ -449,6 +497,31 @@ this document should be read as evidence of delivery.
 Also not verifiable here: the persisted collection override of §4.1. Its
 behaviour is documented from the platform SDKs' contract, not observed, because
 observing it would require a real production installation and console access.
+
+### 9.1 Incident — one possible, unverified mapping upload
+
+During Phase 8C-1 verification, a local
+`flutter build apk --release --flavor production` ran with mapping upload
+enabled by default, because the task was scoped by flavor alone. What is known:
+
+- **Confirmed:** the upload task was scheduled and enabled; local preparation
+  artifacts were created for `productionRelease` and for no other variant; an
+  APK was produced. The equivalent staging release build, with the task
+  disabled, produced no such artifacts.
+- **Inferred, not proven:** that the task executed.
+- **Not proven, and not provable now:** that Firebase received or accepted
+  anything. The build's task-level output was not retained, and no daemon log
+  covers the window. It is therefore recorded as a **possible, unverified
+  mapping upload** — the local temporary directory is not evidence of a remote
+  upload (§3.1 item 4).
+- **Did not occur:** any crash, non-fatal or performance event upload — the real
+  activation path is never reached by the test suite and no device was used; any
+  APK or AAB publication; any Play Console operation; any Firebase configuration
+  change.
+
+No attempt was made to confirm the upload through Firebase, to re-run the task
+or to delete anything remotely. The default was then changed to fail closed
+(§3.1), so this cannot recur without explicit authorization.
 
 ## 10. Known follow-ups
 

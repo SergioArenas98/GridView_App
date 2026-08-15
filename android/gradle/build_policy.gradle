@@ -176,6 +176,107 @@ tasks.register('verifyAppEnvParser') {
     }
 }
 
+/// Exercises the mapping-upload authorization rule against synthetic inputs.
+///
+/// Hermetic and deterministic: it never reads the real property and never
+/// performs, prepares or schedules an upload. It tests the pure decision the
+/// build makes, across every flavor, every build type and every property state,
+/// so the matrix is proven without ever producing the side effect it guards.
+tasks.register('verifyMappingUploadPolicy') {
+    group = 'verification'
+    description = 'Unit-tests the Crashlytics mapping-upload authorization rule.'
+
+    doLast {
+        // Closures rather than methods: see verifyAppEnvParser.
+        def eligible = project.ext.mappingUploadEligible
+        def resolve = project.ext.resolveMappingUploadOptIn
+
+        def expectFailure = { String description, Closure body ->
+            try {
+                body()
+            } catch (GradleException ignored) {
+                logger.lifecycle("  ok  ${description}")
+                return
+            }
+            throw new GradleException(
+                "mapping-upload policy: expected a failure for ${description}")
+        }
+
+        List<String> flavors = project.android.productFlavors.collect { it.name }.sort()
+        List<String> buildTypes = project.android.buildTypes.collect { it.name }.sort()
+
+        // --- the property alone ----------------------------------------------
+        assert resolve(null) == false
+        assert resolve('false') == false
+        assert resolve('true') == true
+        logger.lifecycle('  ok  absent, "false" and "true" resolve as specified')
+
+        for (String bad in ['', ' ', '  ', 'TRUE', 'True', 'FALSE', '1', '0',
+                            'yes', 'no', ' true', 'true ', 'true\n', 'enabled']) {
+            expectFailure("a present but unusable value '${bad}'") { resolve(bad) }
+        }
+
+        // --- the full eligibility matrix -------------------------------------
+        int combinations = 0
+        int eligibleCount = 0
+        for (String raw in [null, 'false', 'true']) {
+            for (String flavor in flavors) {
+                for (String buildType in buildTypes) {
+                    combinations++
+                    boolean actual = eligible(flavor, buildType, raw)
+                    boolean expected = raw == 'true' &&
+                        flavor == 'production' &&
+                        buildType == 'release'
+                    assert actual == expected,
+                        "flavor=${flavor} buildType=${buildType} property=${raw} " +
+                        "resolved to ${actual}, expected ${expected}"
+                    if (actual) {
+                        eligibleCount++
+                    }
+                }
+            }
+        }
+        assert eligibleCount == 1,
+            "exactly one combination may ever be eligible, found ${eligibleCount}"
+        logger.lifecycle(
+            "  ok  matrix: ${combinations} combinations across " +
+            "${flavors.size()} flavors x ${buildTypes.size()} build types x 3 " +
+            "property states, exactly 1 eligible")
+
+        // --- the invariants stated directly ----------------------------------
+        for (String flavor in flavors) {
+            for (String buildType in buildTypes) {
+                assert !eligible(flavor, buildType, null),
+                    "${flavor}/${buildType} is eligible with the property absent"
+                assert !eligible(flavor, buildType, 'false'),
+                    "${flavor}/${buildType} is eligible with the property false"
+            }
+        }
+        logger.lifecycle('  ok  nothing is eligible while authorization is absent or false')
+
+        for (String flavor in flavors.findAll { it != 'production' }) {
+            for (String buildType in buildTypes) {
+                assert !eligible(flavor, buildType, 'true'),
+                    "${flavor} became eligible under explicit authorization"
+            }
+        }
+        logger.lifecycle('  ok  dev and staging can never become eligible')
+
+        for (String buildType in buildTypes.findAll { it != 'release' }) {
+            for (String flavor in flavors) {
+                assert !eligible(flavor, buildType, 'true'),
+                    "${buildType} became eligible under explicit authorization"
+            }
+        }
+        logger.lifecycle('  ok  debug and profile can never become eligible')
+
+        assert eligible('production', 'release', 'true')
+        logger.lifecycle('  ok  production release is eligible only with explicit authorization')
+
+        logger.lifecycle('Mapping-upload policy: all cases behaved as specified.')
+    }
+}
+
 /// Asserts the plugin/task policy from the configured Gradle model.
 tasks.register('verifyAndroidBuildPolicy') {
     group = 'verification'
@@ -187,6 +288,18 @@ tasks.register('verifyAndroidBuildPolicy') {
         // A closure, not a method: see verifyAppEnvParser above.
         def require = { List<String> sink, boolean condition, String message ->
             if (!condition) sink.add(message)
+        }
+
+        // The real property, as this invocation sees it. Absent in every local
+        // build and every current CI job, which is the state this task exists to
+        // hold in place.
+        String uploadRaw = project.findProperty('gridviewCrashlyticsUploadMapping')?.toString()
+        if (uploadRaw == null) {
+            logger.lifecycle(
+                '  gridviewCrashlyticsUploadMapping is absent: no variant may upload a mapping file.')
+        } else {
+            logger.lifecycle(
+                "  gridviewCrashlyticsUploadMapping='${uploadRaw}': production release only.")
         }
 
         // 1. All three plugins are applied during normal configuration — not
@@ -225,13 +338,37 @@ tasks.register('verifyAndroidBuildPolicy') {
                 }
             }
 
-            // 4b. Mapping-file *upload* follows the same production scoping: it
-            //     needs the Google Services output non-production lacks, and it
-            //     talks to the network. It exists for every minified release.
+            // 4b. Mapping-file *upload* is the one network-mutating task, so it
+            //     is checked against the authorization rule rather than against
+            //     the flavor alone. With no property set — every local build and
+            //     every current CI job — the expectation is false everywhere,
+            //     production release included.
+            boolean uploadExpected = project.ext.mappingUploadEligible(
+                variant.flavorName, variant.buildType.name, uploadRaw)
             def mappingUpload = project.tasks.findByName("uploadCrashlyticsMappingFile${capitalized}")
             if (mappingUpload != null) {
-                require(failures, mappingUpload.enabled == isProduction,
-                    "uploadCrashlyticsMappingFile${capitalized} enabled=${mappingUpload.enabled}, expected ${isProduction}")
+                require(failures, mappingUpload.enabled == uploadExpected,
+                    "uploadCrashlyticsMappingFile${capitalized} enabled=${mappingUpload.enabled}, expected ${uploadExpected}")
+            } else {
+                require(failures, !uploadExpected,
+                    "uploadCrashlyticsMappingFile${capitalized} is absent but policy expects it enabled")
+            }
+
+            // 4c. No symbol upload exists at all. `firebase-crashlytics-ndk` is
+            //     deliberately absent, so native crashes are not captured and
+            //     there is no second network-mutating Crashlytics task to gate.
+            require(failures,
+                project.tasks.findByName("uploadCrashlyticsSymbolFile${capitalized}") == null,
+                "uploadCrashlyticsSymbolFile${capitalized} exists; the NDK dependency was reintroduced")
+
+            // 4d. Local-only mapping *generation* stays available and ungated.
+            //     Withholding upload authorization must not stop a release build
+            //     from minifying and writing its mapping file locally.
+            if (variant.buildType.name == 'release') {
+                def minify = project.tasks.findByName("minify${capitalized}WithR8")
+                require(failures, minify != null && minify.enabled,
+                    "minify${capitalized}WithR8 is missing or disabled; "
+                        + "release builds must still generate a mapping file locally")
             }
 
             // 5. Both gates are real dependencies of the variant's resource

@@ -22,10 +22,22 @@ plugins {
     id "com.google.firebase.firebase-perf"
 }
 
-// Dart-define parsing/validation, and the CI-executable assertions over the
-// configured Gradle model that keep this policy from silently regressing.
+// Dart-define parsing/validation, mapping-upload authorization, and the
+// CI-executable assertions over the configured Gradle model that keep these
+// policies from silently regressing.
 apply from: "${rootProject.projectDir}/gradle/dart_environment.gradle"
+apply from: "${rootProject.projectDir}/gradle/mapping_upload_policy.gradle"
 apply from: "${rootProject.projectDir}/gradle/build_policy.gradle"
+
+// Read once, at configuration time, so the build type below and the per-variant
+// task gate further down decide from the same value. Resolving it here also
+// means a malformed value fails the build immediately rather than at the moment
+// an upload would have happened.
+def mappingUploadRaw = providers
+    .gradleProperty("gridviewCrashlyticsUploadMapping")
+    .getOrNull()
+def mappingUploadAuthorized = project.ext.resolveMappingUploadOptIn(mappingUploadRaw)
+def mappingUploadEligible = project.ext.mappingUploadEligible
 
 /// The single source of truth for which `APP_ENV` each product flavor requires.
 ///
@@ -102,6 +114,16 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
+
+            // The official Crashlytics switch, and the first of two boundaries.
+            // It is build-type scoped, so it cannot express "production only" —
+            // that half is enforced per variant further down. What it does give
+            // is the supported, plugin-level default: with no authorization,
+            // the plugin itself is told not to upload, rather than being left
+            // enabled and then disabled task by task.
+            firebaseCrashlytics {
+                mappingFileUploadEnabled = mappingUploadAuthorized
+            }
         }
     }
 }
@@ -147,13 +169,24 @@ android.applicationVariants.all { variant ->
         enabled = isProduction
     }
 
-    // Crashlytics mapping-file upload is scoped for the same reason, and it is
-    // not merely redundant off production: it resolves the Firebase application
-    // ID from the Google Services output that non-production variants do not
-    // have, and it uploads over the network. Flutter minifies release builds, so
-    // this task is real in every release variant, not only production's.
+    // Crashlytics mapping-file upload: the second boundary, and the one that
+    // adds "production only" to the build-type switch above.
+    //
+    // This is the only task in the build that mutates something outside this
+    // machine, so it is the only one whose default is *off*. Scoping it to the
+    // production flavor alone was not enough: an ordinary
+    // `flutter build apk --release --flavor production` then performed a
+    // network write to the published project as a side effect of compiling,
+    // which is how one such upload happened during Phase 8C-1 verification.
+    // Authorization is now explicit and absent by default, so the safe
+    // behaviour is a property of this file rather than of what the operator
+    // remembered to type.
     tasks.matching { it.name == "uploadCrashlyticsMappingFile${variantName}" }.configureEach {
-        enabled = isProduction
+        enabled = mappingUploadEligible(
+            flavor,
+            variant.buildType.name,
+            mappingUploadRaw,
+        )
     }
 
     // Gate 1: the product flavor and APP_ENV must agree.

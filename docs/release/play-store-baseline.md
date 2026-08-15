@@ -39,8 +39,10 @@
   `firebase_crashlytics` and `firebase_performance` ship in the app. The native
   components are packaged in **every** flavor — Dart dependencies are not
   flavor-scoped — and so are the three build-time Gradle plugins. What is
-  production-only is the configuration and the two tasks that consume it,
-  `process<Variant>GoogleServices` and `uploadCrashlyticsMappingFile<Variant>`.
+  production-only is the configuration and the two tasks that consume it:
+  `process<Variant>GoogleServices`, and `uploadCrashlyticsMappingFile<Variant>`
+  which additionally requires the `release` build type and explicit
+  authorization, and is disabled by default.
   Collection starts off by manifest default on a fresh installation of every
   flavor and is enabled at runtime only by an eligible production build. **That
   runtime opt-in is persisted by the platform SDKs at a higher priority than the
@@ -79,13 +81,23 @@
   recorded. `android/app/build.gradle` sets only `signingConfig` on the `release`
   build type, but the Flutter Gradle plugin sets `minifyEnabled true` and
   `shrinkResources true` on it, so every release variant runs R8 and produces
-  `build/app/outputs/mapping/<variant>/mapping.txt` — measured at ~15 MB for a
-  staging release build. The JVM side of a production release is therefore
-  obfuscated, and `uploadCrashlyticsMappingFileProductionRelease` is enabled and
-  does real work. **A production release must not be published without confirming
-  that upload succeeded**, or JVM frames in production crash reports will be
-  unreadable. The task is disabled for dev and staging, which have no Firebase
-  application ID to upload against.
+  `build/app/outputs/mapping/<variant>/mapping.txt`. The JVM side of a production
+  release is therefore obfuscated.
+
+  **Mapping upload is off by default and is not part of ordinary verification.**
+  It requires the production flavor, the `release` build type *and* the explicit
+  Gradle property `gridviewCrashlyticsUploadMapping=true`; with the property
+  absent — every local build and every CI job — no variant can upload. An
+  ordinary local production release build therefore generates the mapping and
+  uploads nothing.
+
+  **A published production release must still have its mapping uploaded**, or
+  JVM frames in its crash reports are unreadable. That is the authorized release
+  step's job: it sets
+  `ORG_GRADLE_PROJECT_gridviewCrashlyticsUploadMapping=true` for its own single
+  invocation and retains the task output as the record that the upload occurred.
+  A local temporary directory is not such a record. See
+  `../technical/GridView_Observability.md` §3.1.
 
   Native crashes are not captured at all: `firebase-crashlytics-ndk` is
   deliberately absent.

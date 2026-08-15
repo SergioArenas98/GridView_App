@@ -1,0 +1,69 @@
+// Authorization for the only build task that mutates anything outside this
+// machine: the Crashlytics mapping-file upload.
+//
+// Everything else the Firebase plugins contribute is local. R8 writes a mapping
+// file, `injectCrashlyticsMappingFileId` writes a build-local string resource,
+// and Google Services processing generates string resources from a committed
+// configuration file. None of them talk to a network. `uploadCrashlyticsMappingFile`
+// does, against the published production project, and it used to run as an
+// unremarkable side effect of compiling a production release locally. It no
+// longer does: authorization is now explicit, and its absence is the default.
+//
+// This switch is an authorization flag, not a credential. It carries no secret,
+// it is never written to gradle.properties, a CI environment block or a local
+// template, and it grants nothing on its own — the Firebase application ID
+// still comes from the committed google-services.json.
+
+/// Resolves the opt-in property, failing closed and failing loudly.
+///
+/// Absent means "nobody authorized anything", which is the ordinary state of
+/// every local build and every current CI job, so it resolves quietly to false.
+///
+/// A *present* value that is neither `true` nor `false` is a different
+/// situation: the operator tried to say something and the build cannot tell
+/// what. Both guesses are wrong — guessing false silently discards an
+/// authorized release upload, guessing true performs an unauthorized one — so
+/// it throws instead.
+///
+/// Matching is exact and case-sensitive, and the value is not trimmed. `TRUE`,
+/// `True`, `1`, `yes`, `" true "` and an empty value all fail.
+ext.resolveMappingUploadOptIn = { String raw ->
+    if (raw == null) {
+        return false
+    }
+    if (raw == 'true') {
+        return true
+    }
+    if (raw == 'false') {
+        return false
+    }
+    throw new GradleException(
+        "gridviewCrashlyticsUploadMapping must be exactly 'true' or 'false' when " +
+        "it is set, but this build received '${raw}'.\n" +
+        "The comparison is case-sensitive and the value is not trimmed, so TRUE, " +
+        "True, 1, yes and padded values are rejected rather than guessed at: " +
+        "guessing wrong either uploads a mapping file without authorization or " +
+        "silently drops an authorized release upload.\n" +
+        "Omit the property entirely for every local build and every ordinary CI " +
+        "job. Only the authorized release step sets it."
+    )
+}
+
+/// Whether one variant may upload its mapping file.
+///
+/// Three independent conditions, all required, and none of them inferable from
+/// the command line:
+///
+/// * the **flavor** is production — dev and staging own no Firebase
+///   configuration and must never reach the production project;
+/// * the **build type** is release — it is the only minified type, so it is the
+///   only one with a mapping file to upload at all;
+/// * authorization was given explicitly.
+///
+/// Flavor and build type are properties of the artifact being produced, so no
+/// task-name heuristic and no remembered `-x` is involved.
+ext.mappingUploadEligible = { String flavor, String buildType, String raw ->
+    return ext.resolveMappingUploadOptIn(raw) &&
+        flavor == 'production' &&
+        buildType == 'release'
+}
