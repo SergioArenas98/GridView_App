@@ -907,11 +907,36 @@ No attempt was made to confirm the upload through Firebase, to re-run the task
 or to delete anything remotely. The default was then changed to fail closed
 (§3.1), so this cannot recur without explicit authorization.
 
-**Every statement in this subsection is scoped to Phase 8C-1.** The controlled
-events described in §9.1 were sent later, deliberately, under explicit
-authorization, from a production **debug** build — a variant that can never reach
-the upload task. Phase 8C-2 uploaded no mapping file and no symbols, and did not
-revisit or attempt to confirm this incident.
+**Every statement in this subsection is scoped to Phase 8C-1.** Phase 8C-2
+uploaded no mapping file and no symbols, and did not revisit, re-run or attempt to
+confirm this incident. Its two passes reached that outcome by **different**
+routes, and the distinction matters to anyone auditing upload safety:
+
+- **The production-debug pass (§9.1)** used `productionDebug`. That variant is
+  *structurally* ineligible: eligibility requires the `release` build type, so no
+  authorization value could have made it upload. No mapping- or symbol-upload task
+  was registered or executed.
+- **The release-like pass (§9.1.1)** used `productionRelease` — the **only**
+  flavor/build-type combination that can ever become eligible. Its safety therefore
+  rests on the fail-closed authorization policy and on the observed task graph, and
+  **not** on any claim that the variant is incapable of uploading. What was checked,
+  at each evidence level:
+  - `gridviewCrashlyticsUploadMapping` and
+    `ORG_GRADLE_PROJECT_gridviewCrashlyticsUploadMapping` were **absent** — from
+    the process environment and from both repository and user Gradle properties —
+    so the Crashlytics mapping-upload DSL stayed disabled and the task was never
+    registered. That is the *configured model*, and it proves default
+    ineligibility.
+  - A retained **dry-run** of the production release graph shows the task absent
+    from the intended graph.
+  - The retained **verbose build logs** show it was neither scheduled nor executed
+    during the actual builds. Across the dry-run and every release build log there
+    are **zero** occurrences of `uploadCrashlyticsMappingFile` or
+    `uploadCrashlyticsSymbolFile`, and **no `-x` exclusion was used** — the safe
+    default held on its own.
+  - R8 wrote a local `mapping.txt`, which is ordinary mapping *generation* for any
+    minified release (§3.1 item 1). It is not evidence of an upload, and no
+    statement here infers remote upload state from a local artifact.
 
 ## 10. Known follow-ups
 
