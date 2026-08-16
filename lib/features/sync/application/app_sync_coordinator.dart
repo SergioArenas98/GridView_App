@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import '../../../core/database/daos/sync_metadata_dao.dart';
+import '../../../core/observability/performance_tracer.dart';
 import '../../shared/data/remote/remote_cancellation.dart';
 import '../../shared/domain/entities/season.dart';
 import '../../shared/domain/entities/sync_state.dart';
@@ -48,12 +49,14 @@ class AppSyncCoordinator {
     required SyncMetadataDao metadata,
     required DateTime Function() now,
     int maxConcurrency = kDefaultSyncConcurrency,
+    PerformanceTracer tracer = const NoopPerformanceTracer(),
   }) : _dispatcher = dispatcher,
        _seasons = seasons,
        _home = home,
        _bootstrap = bootstrap,
        _metadata = metadata,
        _now = now,
+       _tracer = tracer,
        _maxConcurrency = math.max(1, maxConcurrency);
 
   final ResourceRefreshDispatcher _dispatcher;
@@ -63,6 +66,12 @@ class AppSyncCoordinator {
   final SyncMetadataDao _metadata;
   final DateTime Function() _now;
   final int _maxConcurrency;
+
+  /// Measures a whole run. A run is bounded by lifecycle transitions — one at
+  /// startup, one per genuine background→resumed, one per manual refresh — so
+  /// this is a handful of traces per session, never one per resource, request,
+  /// row or frame.
+  final PerformanceTracer _tracer;
 
   final StreamController<AppSyncState> _states =
       StreamController<AppSyncState>.broadcast();
@@ -192,7 +201,10 @@ class AppSyncCoordinator {
     if (done != null && !done.isCompleted) done.complete();
   }
 
-  Future<void> _run(SyncTrigger trigger) async {
+  Future<void> _run(SyncTrigger trigger) =>
+      _tracer.trace(TraceName.syncRun, () => _runTraced(trigger));
+
+  Future<void> _runTraced(SyncTrigger trigger) async {
     _cancelled = false;
     final RemoteCancellation cancellation = RemoteCancellation();
     _cancellation = cancellation;

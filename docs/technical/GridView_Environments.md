@@ -95,22 +95,72 @@ environment-specific interval.
 ## Firebase
 
 - The production Firebase configuration
-  (`android/app/src/production/google-services.json`) is preserved unchanged
-  and applies only to production builds: the Google services Gradle plugin is
-  applied exclusively to production tasks (`android/app/build.gradle`).
+  (`android/app/src/production/google-services.json`) is preserved unchanged and
+  applies only to production builds: the Google services Gradle plugin is applied
+  to every variant, but its `process<Variant>GoogleServices` task is enabled for
+  the production flavor alone (`android/app/build.gradle`). The scoping is by
+  variant, never by the requested task name.
 - **Pending:** dedicated Firebase projects/configurations for development and
   staging do not exist yet. Until they are approved and created, dev and
-  staging builds contain no Firebase configuration and no Firebase SDK is
-  initialized anywhere in the shell. Do not create new Firebase projects
-  without approval.
-- The Firebase Dart SDKs are integrated in Phase 8 (Implementation Plan,
-  section 13.5).
-- **Phase 8A did not integrate them.** There is still no FlutterFire
-  dependency, no `firebase_options.dart` and no Firebase initialization
-  anywhere in the shell, so Crashlytics and Performance Monitoring must not be
-  claimed to work. The configuration is production-only and therefore
-  incomplete; activation is an external blocker. The platform-neutral
-  observability boundary is Phase 8C. See
+  staging builds contain no Firebase configuration and initialize no Firebase
+  SDK. Do not create new Firebase projects without approval.
+- **Phase 8C-1 integrated the SDKs.** `firebase_core`, `firebase_crashlytics`
+  and `firebase_performance` are dependencies; exactly one file
+  (`lib/core/observability/firebase/firebase_observability.dart`) imports them,
+  and a test enforces that. There is still **no** `firebase_options.dart` and no
+  new configuration file: the default app comes from the existing production
+  `google-services.json`, which is byte-identical.
+- **The native Firebase components are packaged in every flavor.** Dart
+  dependencies are not flavor-scoped, so `FirebaseInitProvider` and the
+  Crashlytics, Performance, Sessions, Installations, Remote Config and ABT
+  registrars appear in the dev, staging and production manifests alike. Only the
+  *configuration* and the two build tasks that consume it are production-only;
+  the plugins themselves are applied everywhere. Do not state that no Firebase
+  SDK is initialized outside production.
+- **Collection starts off on a fresh installation of every flavor.** The main
+  manifest declares `firebase_crashlytics_collection_enabled=false` and
+  `firebase_performance_collection_enabled=false` for all flavors, and only an
+  eligible production build ever turns them on at runtime. This is the boundary
+  that matters, because Android instantiates `FirebaseInitProvider` before any
+  Dart code runs.
+- **The runtime opt-in persists, so the manifest is a default and not a
+  per-launch rule.** A successful production activation writes a preference the
+  SDKs read at a higher priority than the manifest, and it survives process
+  death. A production installation that has activated once therefore begins
+  **later** launches with native collection already on, before Dart runs. Do
+  **not** write that the packaged SDKs are inert from process start in every
+  flavor: it is true only until the first successful production activation.
+  Dev and staging are structurally unaffected — different application IDs, no
+  Firebase configuration, and the production activation never runs for them.
+- **A failed activation proves only that this process's Dart adapters were
+  unavailable.** It is not evidence that a previously persisted native override
+  is off, and no document, status value or user-facing string may imply that.
+- `isObservabilityEligible` returns true for `production` only and governs the
+  **Dart adapters**. Development, staging and tests resolve to a no-op reporter
+  and tracer.
+- **Flavor and `APP_ENV` are bound by a build gate.** `validate<Variant>Environment`
+  in `android/app/build.gradle` fails the build unless dev↔development,
+  staging↔staging and production↔production, and fails when `APP_ENV` is absent.
+  Contradictory artifacts can no longer be produced.
+- Dev and staging still build with **no** `google-services.json`. Verified: a
+  production build runs `processProductionDebugGoogleServices` and emits
+  resources with `google_app_id` and `project_id = gridview-fb20f`; the task is
+  disabled for dev and staging, which emit neither. The Crashlytics build-ID
+  injection tasks run for every variant and prove nothing about configuration.
+- Firebase initialization is never awaited before `runApp`; it degrades to inert
+  on any failure. See `GridView_Observability.md` and
+  [ADR 0016](../adr/0016-production-only-firebase-observability.md).
+- **No Firebase Analytics implementation**, no advertising SDK, no Messaging or
+  Authentication, and no Crashlytics NDK. **Remote Config and ABT *are* present
+  as transitive native components of Performance Monitoring** — GridView has no
+  Remote Config Dart API or product feature. A transitive
+  `firebase-measurement-connector` interop stub is present and is not Analytics.
+  The Android facts are asserted by the Gradle gate
+  `verify<Variant>FirebaseDependencies`; the Dart lockfile test covers only
+  direct Dart packages.
+- Crashlytics and Performance data have **not** been observed arriving in
+  Firebase Console; that needs an authorized release-like production build and
+  console access, and remains an external blocker. See
   `GridView_Preferences_And_Settings.md` §6.2 and §7.
 
 ## Advertising

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/observability/observability_providers.dart';
 import '../../shared/application/providers.dart';
 import '../data/resource_refresh_dispatcher.dart';
 import '../domain/app_sync_state.dart';
@@ -64,6 +65,7 @@ final Provider<AppSyncCoordinator> appSyncCoordinatorProvider =
         metadata: ref.watch(databaseProvider).syncMetadataDao,
         now: ref.watch(clockProvider),
         maxConcurrency: ref.watch(syncConcurrencyProvider),
+        tracer: ref.watch(performanceTracerProvider),
       );
       final StreamSubscription<AppSyncState> subscription = coordinator.states
           .listen(ref.read(appSyncStateProvider.notifier).publish);

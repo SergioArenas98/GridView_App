@@ -4,17 +4,54 @@ import java.io.FileInputStream
 plugins {
     id "com.android.application"
     id "dev.flutter.flutter-gradle-plugin"
+    // Applied unconditionally, during normal project configuration.
+    //
+    // These used to be applied only when the requested task name contained
+    // "production". That is not an application boundary: `gradlew assemble`,
+    // `build`, `assembleRelease`, `bundle` and any IDE-driven configuration
+    // build production variants without naming them, and every one of those
+    // paths produced a production artifact with no Google Services processing,
+    // no Crashlytics injection and no environment validation. A mixed-flavor
+    // invocation had the opposite failure, applying production tooling to dev.
+    //
+    // Applying them always removes the request-name dependency entirely. What
+    // remains flavor-specific is *Google Services processing*, which is scoped
+    // below by variant rather than by what someone typed.
+    id "com.google.gms.google-services"
+    id "com.google.firebase.crashlytics"
+    id "com.google.firebase.firebase-perf"
 }
 
-// google-services.json is registered for the production application ID only
-// (com.sejuma.gridview), so the Google services plugin is applied exclusively
-// to production builds. Applying it to dev/staging would fail the build and
-// could point non-production builds at the production Firebase project.
-// Dev/staging Firebase configurations are pending; see
-// docs/technical/GridView_Environments.md.
-if (gradle.startParameter.taskRequests.toString().toLowerCase().contains("production")) {
-    apply plugin: "com.google.gms.google-services"
-}
+// Dart-define parsing/validation, mapping-upload authorization, and the
+// CI-executable assertions over the configured Gradle model that keep these
+// policies from silently regressing.
+apply from: "${rootProject.projectDir}/gradle/dart_environment.gradle"
+apply from: "${rootProject.projectDir}/gradle/mapping_upload_policy.gradle"
+apply from: "${rootProject.projectDir}/gradle/build_policy.gradle"
+
+// Read once, at configuration time, so the build type below and the per-variant
+// task gate further down decide from the same value. Resolving it here also
+// means a malformed value fails the build immediately rather than at the moment
+// an upload would have happened.
+def mappingUploadRaw = providers
+    .gradleProperty("gridviewCrashlyticsUploadMapping")
+    .getOrNull()
+def mappingUploadAuthorized = project.ext.resolveMappingUploadOptIn(mappingUploadRaw)
+def mappingUploadEligible = project.ext.mappingUploadEligible
+
+/// The single source of truth for which `APP_ENV` each product flavor requires.
+///
+/// Two independent environment identities used to exist — the Android product
+/// flavor and the Dart `APP_ENV` define — and nothing compared them until after
+/// native startup. That allowed a production artifact whose Dart layer believed
+/// observability was disabled while the native SDKs were fully configured, and
+/// the inverse, a dev artifact claiming production status. This map makes the
+/// pairing declarative and the build enforces it.
+ext.requiredAppEnvForFlavor = [
+    dev       : "development",
+    staging   : "staging",
+    production: "production",
+]
 
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file("key.properties")
@@ -77,7 +114,151 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
+
+            // The official Crashlytics switch, and the first of two boundaries.
+            // It is build-type scoped, so it cannot express "production only" —
+            // that half is enforced per variant further down. What it does give
+            // is the supported, plugin-level default: with no authorization,
+            // the plugin itself is told not to upload, rather than being left
+            // enabled and then disabled task by task.
+            firebaseCrashlytics {
+                mappingFileUploadEnabled = mappingUploadAuthorized
+            }
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Google Services scoping, and the per-variant build gates.
+//
+// The three Firebase plugins are applied unconditionally (see the plugins block
+// above). The one thing that genuinely is production-only is *Google Services
+// processing*, because `google-services.json` registers the production
+// application ID alone: `com.sejuma.gridview`, with no `.dev` or `.staging`
+// client. So that single task is scoped here, by variant — a property of the
+// build being produced — instead of by which task name someone happened to type.
+//
+// Both gates are registered for every variant as independently runnable tasks
+// and wired into that variant's own resource merge, so no assemble/bundle/
+// install path can reach an artifact without them, whatever the invocation
+// looked like.
+//
+// The anchor is deliberately NOT `variant.preBuildProvider`, even though that is
+// the earlier and more obvious choice, and it is genuinely per-variant. AGP's
+// native-build configuration tasks are keyed by build type and ABI alone —
+// `configureCMakeDebug[arm64-v8a]` and friends — and each one depends on *every*
+// flavor's pre-build of that build type. This project has a native build, so
+// `assembleDevDebug` pulls in `preProductionDebugBuild`, and gates hung there
+// would make a dev build run the production validator and fail. Resource
+// merging is per-variant, on the path to every artifact, and free of that
+// coupling; `verifyAndroidBuildPolicy` asserts both halves of this.
+// -----------------------------------------------------------------------------
+def resolveAppEnv = project.ext.resolveAppEnv
+def dartDefines = providers.gradleProperty("dart-defines")
+
+android.applicationVariants.all { variant ->
+    def flavor = variant.flavorName
+    def expectedEnv = project.ext.requiredAppEnvForFlavor[flavor]
+    def variantName = variant.name.capitalize()
+    def isProduction = flavor == "production"
+
+    // Only production owns a google-services.json client entry. Disabling the
+    // task for the other flavors is what keeps them buildable with no Firebase
+    // configuration at all, and keeps their artifacts free of google_app_id.
+    tasks.matching { it.name == "process${variantName}GoogleServices" }.configureEach {
+        enabled = isProduction
+    }
+
+    // Crashlytics mapping-file upload: the second boundary, and the one that
+    // adds "production only" to the build-type switch above.
+    //
+    // This is the only task in the build that mutates something outside this
+    // machine, so it is the only one whose default is *off*. Scoping it to the
+    // production flavor alone was not enough: an ordinary
+    // `flutter build apk --release --flavor production` then performed a
+    // network write to the published project as a side effect of compiling,
+    // which is how one such upload happened during Phase 8C-1 verification.
+    // Authorization is now explicit and absent by default, so the safe
+    // behaviour is a property of this file rather than of what the operator
+    // remembered to type.
+    tasks.matching { it.name == "uploadCrashlyticsMappingFile${variantName}" }.configureEach {
+        enabled = mappingUploadEligible(
+            flavor,
+            variant.buildType.name,
+            mappingUploadRaw,
+        )
+    }
+
+    // Gate 1: the product flavor and APP_ENV must agree.
+    def validateEnv = tasks.register("validate${variantName}Environment") {
+        group = "verification"
+        description = "Fails unless APP_ENV matches the ${flavor} product flavor."
+        doLast {
+            resolveAppEnv(dartDefines.getOrNull(), flavor, expectedEnv)
+            logger.lifecycle("APP_ENV=${expectedEnv} matches the ${flavor} flavor.")
+        }
+    }
+
+    // Gate 2: the resolved Android Firebase dependency set is the intended one.
+    //
+    // Reads Gradle's resolution result — actual resolved module identities, not
+    // console tree text — so it cannot be fooled by formatting, and it sees the
+    // transitive native artifacts a Dart lockfile can never show.
+    def verifyDeps = tasks.register("verify${variantName}FirebaseDependencies") {
+        group = "verification"
+        description = "Asserts the resolved Firebase artifacts for ${variant.name}."
+        doLast {
+            def configuration = configurations.getByName("${variant.name}RuntimeClasspath")
+            def modules = configuration.incoming.resolutionResult.allComponents
+                .findAll { it.id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+                .collect { "${it.moduleVersion.group}:${it.moduleVersion.name}".toString() }
+                .toSet()
+
+            // Intentional, and the transitive components Performance brings for
+            // its own internal configuration. Documented, not hidden.
+            def expected = [
+                "com.google.firebase:firebase-crashlytics",
+                "com.google.firebase:firebase-perf",
+                "com.google.firebase:firebase-config",
+                "com.google.firebase:firebase-abt",
+                "com.google.firebase:firebase-installations",
+                "com.google.firebase:firebase-sessions",
+            ]
+            // Never packaged. firebase-measurement-connector is deliberately not
+            // listed here: it is a transitive interop stub, not an Analytics
+            // implementation, and asserting its absence would be false.
+            def forbidden = [
+                "com.google.firebase:firebase-analytics",
+                "com.google.firebase:firebase-analytics-impl",
+                "com.google.android.gms:play-services-measurement",
+                "com.google.android.gms:play-services-measurement-api",
+                "com.google.android.gms:play-services-ads",
+                "com.google.android.gms:play-services-ads-identifier",
+                "com.google.firebase:firebase-messaging",
+                "com.google.firebase:firebase-auth",
+                "com.google.firebase:firebase-crashlytics-ndk",
+            ]
+
+            def missing = expected.findAll { !modules.contains(it) }
+            def present = forbidden.findAll { modules.contains(it) }
+            if (!missing.isEmpty() || !present.isEmpty()) {
+                throw new GradleException(
+                    "Firebase dependency policy violated for ${variant.name}.\n" +
+                    (missing.isEmpty() ? "" : "  expected but missing : ${missing}\n") +
+                    (present.isEmpty() ? "" : "  forbidden but present: ${present}\n") +
+                    "See docs/technical/GridView_Observability.md."
+                )
+            }
+            logger.lifecycle(
+                "${variant.name}: Firebase dependency policy satisfied " +
+                "(${expected.size()} expected present, ${forbidden.size()} forbidden absent)."
+            )
+        }
+    }
+
+    variant.mergeResourcesProvider.configure {
+        dependsOn(validateEnv)
+        dependsOn(verifyDeps)
     }
 }
 

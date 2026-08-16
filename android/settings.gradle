@@ -20,7 +20,21 @@ plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
     id "com.android.application" version "8.9.1" apply false
     id "org.jetbrains.kotlin.android" version "2.0.21" apply false
+    // Firebase build-time integrations. All three are declared here and applied
+    // unconditionally in app/build.gradle. Only the Google Services *processing
+    // task* is production-scoped there, because google-services.json registers
+    // the production application ID alone.
     id "com.google.gms.google-services" version "4.4.4" apply false
+    // Generates the per-build Crashlytics build ID and registers the mapping /
+    // native-symbol upload tasks. The SDK reports Dart and JVM exceptions
+    // without it, but the documented Android integration is incomplete without
+    // it, and no build ID is emitted.
+    id "com.google.firebase.crashlytics" version "3.0.7" apply false
+    // Completes the documented Performance Monitoring Android integration
+    // (build-time configuration and bytecode instrumentation). It does NOT make
+    // Firebase observe this app's HTTP traffic: Dio uses dart:io sockets, not
+    // the Android HTTP stacks the instrumentation hooks.
+    id "com.google.firebase.firebase-perf" version "2.0.2" apply false
 }
 
 include ":app"

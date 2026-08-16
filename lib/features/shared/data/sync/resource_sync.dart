@@ -1,8 +1,14 @@
+// ignore_for_file: prefer_initializing_formals
 import '../../../../core/database/daos/sync_metadata_dao.dart';
 import '../../../../core/database/gridview_database.dart';
 import '../../domain/entities/sync_state.dart';
 import '../../domain/snapshot_conflict.dart';
 import 'resource_snapshot.dart';
+
+/// Notified when an error escapes [ResourceSync.applySnapshot], with the
+/// canonical resource key and the error. The error is always rethrown; the
+/// observer only watches.
+typedef SnapshotApplyObserver = void Function(String key, Object error);
 
 /// Safe, provider-agnostic `lastFailureCategory` values. Never a raw message.
 abstract final class SyncFailureCategory {
@@ -27,9 +33,19 @@ abstract final class SyncFailureCategory {
 /// It owns no HTTP concerns and makes no refresh-policy decisions (that is the
 /// repository's / Phase 6B2's job); it only persists outcomes.
 class ResourceSync {
-  ResourceSync(this._db);
+  ResourceSync(this._db, {SnapshotApplyObserver? onApplyError})
+    : _onApplyError = onApplyError;
 
   final GridViewDatabase _db;
+
+  /// Observes an error that escaped [applySnapshot]'s transaction.
+  ///
+  /// A plain callback, deliberately not an observability type: this class stays
+  /// ignorant of what an observer does. It is the single place in the
+  /// application where "the transport succeeded but the write did not" is
+  /// visible, which is why the materialization report is raised here rather
+  /// than in each repository.
+  final SnapshotApplyObserver? _onApplyError;
 
   SyncMetadataDao get _meta => _db.syncMetadataDao;
 
@@ -46,6 +62,40 @@ class ResourceSync {
   /// Returns the conflict outcome. If [writeDomain] throws, the whole
   /// transaction rolls back and no success metadata is left behind.
   Future<SnapshotConflictOutcome> applySnapshot({
+    required String key,
+    required ResourceScope scope,
+    required RemoteSnapshotMeta incoming,
+    required DateTime at,
+    required Future<void> Function() writeDomain,
+  }) async {
+    try {
+      return await _applySnapshot(
+        key: key,
+        scope: scope,
+        incoming: incoming,
+        at: at,
+        writeDomain: writeDomain,
+      );
+    } catch (error) {
+      // Observe, then rethrow untouched: the caller's rollback handling and the
+      // typed failure it returns are unchanged by the fact that anyone watched.
+      _observeApplyError(key, error);
+      rethrow;
+    }
+  }
+
+  /// Runs the observer without letting it affect the failure being reported.
+  void _observeApplyError(String key, Object error) {
+    final SnapshotApplyObserver? observe = _onApplyError;
+    if (observe == null) return;
+    try {
+      observe(key, error);
+    } catch (_) {
+      // Observation never changes an outcome.
+    }
+  }
+
+  Future<SnapshotConflictOutcome> _applySnapshot({
     required String key,
     required ResourceScope scope,
     required RemoteSnapshotMeta incoming,

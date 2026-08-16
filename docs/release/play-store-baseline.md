@@ -34,3 +34,78 @@
   release AAB** — decide whether to bump `ndkVersion` to 28.2 (or higher common
   version) and re-verify the signed AAB. It is intentionally **not** changed
   outside a dedicated, reviewed Android-config change.
+
+- **Firebase SDKs (added Phase 8C-1).** `firebase_core`,
+  `firebase_crashlytics` and `firebase_performance` ship in the app. The native
+  components are packaged in **every** flavor — Dart dependencies are not
+  flavor-scoped — and so are the three build-time Gradle plugins. What is
+  production-only is the configuration and the two tasks that consume it:
+  `process<Variant>GoogleServices`, and `uploadCrashlyticsMappingFile<Variant>`
+  which additionally requires the `release` build type and explicit
+  authorization, and is disabled by default.
+  Collection starts off by manifest default on a fresh installation of every
+  flavor and is enabled at runtime only by an eligible production build. **That
+  runtime opt-in is persisted by the platform SDKs at a higher priority than the
+  manifest**, so a production installation that has activated once begins later
+  launches with collection already on, before Dart runs — relevant to the Data
+  Safety declaration below, which must describe collection from app start rather
+  than from a Dart-side decision. Dev and staging are structurally excluded:
+  separate application IDs, no Firebase configuration, and the production
+  activation never runs for them.
+  Transitively present: **Firebase Remote Config and ABT**, required internally
+  by Performance Monitoring, plus a measurement-connector interop stub. Absent:
+  any Firebase Analytics implementation, advertising SDK, Messaging,
+  Authentication and `firebase-crashlytics-ndk`. See
+  `../technical/GridView_Observability.md`.
+
+- **Data Safety declaration (blocking for release).** The Play Data Safety form
+  must be updated before publishing to cover what Firebase may process in a
+  production build: Firebase Installation IDs and Crashlytics Installation
+  UUIDs, IP addresses, crash traces and exception information, device/OS/RAM/
+  disk/network metadata, session lifecycle data, and Performance Monitoring
+  configuration traffic. GridView itself sets no Firebase user identifier and
+  attaches no domain IDs, URLs or payloads as attributes — its non-fatal reports
+  carry five owned custom keys whose values are enum-derived or fixed bounded
+  constants. This item records technical behaviour; the
+  declaration needs a legal/privacy review, not an engineering assertion.
+
+- **Privacy policy URL (blocking for release).** `PRIVACY_POLICY_URL` is still
+  unset, so a production build shows no policy affordance at all. A published
+  policy describing the collection above, plus the URL, is a release blocker.
+
+- **Symbol handling.** Dart obfuscation is **not** enabled: no `--obfuscate` or
+  `--split-debug-info` is used in any build or CI workflow, so there is no
+  Flutter symbol file to upload and Dart stack traces in a non-obfuscated release
+  are already readable.
+
+  Android minification **is** enabled, contrary to what this document previously
+  recorded. `android/app/build.gradle` sets only `signingConfig` on the `release`
+  build type, but the Flutter Gradle plugin sets `minifyEnabled true` and
+  `shrinkResources true` on it, so every release variant runs R8 and produces
+  `build/app/outputs/mapping/<variant>/mapping.txt`. The JVM side of a production
+  release is therefore obfuscated.
+
+  **Mapping upload is off by default and is not part of ordinary verification.**
+  It requires the production flavor, the `release` build type *and* the explicit
+  Gradle property `gridviewCrashlyticsUploadMapping=true`; with the property
+  absent — every local build and every CI job — no variant can upload. An
+  ordinary local production release build therefore generates the mapping and
+  uploads nothing.
+
+  **A published production release must still have its mapping uploaded**, or
+  JVM frames in its crash reports are unreadable. That is the authorized release
+  step's job: it sets
+  `ORG_GRADLE_PROJECT_gridviewCrashlyticsUploadMapping=true` for its own single
+  invocation and retains the task output as the record that the upload occurred.
+  A local temporary directory is not such a record. See
+  `../technical/GridView_Observability.md` §3.1.
+
+  `firebase-crashlytics-ndk` is deliberately absent, so crashes originating in
+  **native (C/C++) libraries** are not captured. Android runtime and JVM
+  failures remain in Crashlytics scope.
+
+- **Firebase operational verification (blocking for Phase 8 closure).** No
+  crash, non-fatal or performance trace has been observed arriving in Firebase
+  Console. That requires an authorized release-like production build and console
+  access. Automated tests, a successful `Firebase.initializeApp()` and a
+  completed Gradle task are **not** evidence of delivery.

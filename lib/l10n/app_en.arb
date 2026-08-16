@@ -1444,9 +1444,29 @@
   "@settingsPrivacyAdvertising": {
     "description": "Label for the advertising status."
   },
-  "settingsPrivacyEnabled": "Enabled",
-  "@settingsPrivacyEnabled": {
-    "description": "A platform service is enabled."
+  "settingsPrivacyConfigured": "Configured",
+  "@settingsPrivacyConfigured": {
+    "description": "The build is configured to collect this kind of diagnostics."
+  },
+  "settingsPrivacySessionReporting": "App reporting this session",
+  "@settingsPrivacySessionReporting": {
+    "description": "Label for whether the app's own reporting started during this run."
+  },
+  "settingsPrivacyStarting": "Starting",
+  "@settingsPrivacyStarting": {
+    "description": "The app's reporting for this session is still starting up."
+  },
+  "settingsPrivacySessionActive": "Active",
+  "@settingsPrivacySessionActive": {
+    "description": "The app's reporting started successfully during this session."
+  },
+  "settingsPrivacySessionUnconfirmed": "Not confirmed",
+  "@settingsPrivacySessionUnconfirmed": {
+    "description": "The app's own reporting could not be confirmed this session. Deliberately not 'disabled': it is not evidence that diagnostics collection is off."
+  },
+  "settingsPrivacyDiagnosticsNote": "Diagnostic components are included in every version of the app. In production builds, crash and performance diagnostics are configured and can start collecting as soon as the app opens. The line above describes only whether this app's own reporting could be confirmed during this session.",
+  "@settingsPrivacyDiagnosticsNote": {
+    "description": "Explains that diagnostics ship in all builds, that production builds are configured to collect, and that the session line is only about the app's own reporting."
   },
   "settingsPrivacyDisabled": "Disabled",
   "@settingsPrivacyDisabled": {

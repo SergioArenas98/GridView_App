@@ -77,7 +77,12 @@ part 'gridview_database.g.dart';
   ],
 )
 class GridViewDatabase extends _$GridViewDatabase {
-  GridViewDatabase() : super(openAppConnection());
+  /// Opens the standard on-disk database, or an injected [connection].
+  ///
+  /// The connection is injectable so the composition root can supply a traced
+  /// open without this class knowing anything about observability.
+  GridViewDatabase({QueryExecutor? connection})
+    : super(connection ?? openAppConnection());
 
   /// Test/alternate connection constructor (in-memory or temporary on-disk).
   GridViewDatabase.forTesting(super.executor);

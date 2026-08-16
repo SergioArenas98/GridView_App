@@ -29,3 +29,5 @@ GridView reconstruction.
 | [0013](0013-per-resource-refresh-deduplication.md) | Per-resource refresh deduplication | Accepted |
 | [0014](0014-bootstrap-atomic-persistence-and-metadata-isolation.md) | Bootstrap atomic persistence and metadata isolation | Accepted |
 | [0015](0015-application-synchronization-policy.md) | Application startup, foreground and manual synchronization policy | Accepted |
+| [0016](0016-production-only-firebase-observability.md) | Production-only Firebase observability behind an application boundary | Accepted |
+| [0017](0017-selected-non-fatal-reporting.md) | A narrow non-fatal allowlist with enum-only diagnostic context | Accepted |
