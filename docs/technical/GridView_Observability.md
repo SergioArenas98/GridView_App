@@ -16,8 +16,10 @@ crash reports from a staging/release-like build. That criterion is now satisfied
 it was not weakened to get there. See §9.
 
 What this does **not** establish: Play-distributed behaviour, behaviour under every
-device or network condition, future Firebase availability, or anything about
-mapping/symbol handling — no mapping was ever uploaded.
+device or network condition, or future Firebase availability. It settles nothing
+about mapping/symbol handling either — **Phase 8C-2 performed no mapping or symbol
+upload**, while the earlier Phase 8C-1 incident remains possible and unverified,
+exactly as §9.4 records.
 
 The distinction that governs every claim here: a green test suite, a successful
 `Firebase.initializeApp()`, a completed Gradle task and a compiled custom trace
@@ -698,13 +700,16 @@ external release blocker.**
   `firebase-crashlytics-ndk` is absent and stays absent without separate
   authorization. Android runtime and JVM failures are still captured; what is
   missing is the signal-level handler for C/C++ crashes.
-- **No mapping file and no native symbols have ever been uploaded under
-  authorization.** Phase 8C-2 built a production **debug** variant only; mapping
-  upload stayed fail-closed throughout, `gridviewCrashlyticsUploadMapping` was
-  never set, and the build's task graph contained no
+- **No mapping file and no native symbols have been uploaded under the
+  authorization mechanism**, which since §3.1 was made fail-closed is the only
+  route that exists. Phase 8C-2 built production **debug** *and* **release**
+  variants; in both, mapping upload stayed fail-closed,
+  `gridviewCrashlyticsUploadMapping` was never set, and no
   `uploadCrashlyticsMappingFile<Variant>` or `uploadCrashlyticsSymbolFile<Variant>`
-  task at all. (§9.4 records a separate, earlier, possible-but-unverified upload
-  from Phase 8C-1, before the default was changed.)
+  task appeared in any task graph. That is a statement about Phase 8C-2 and the
+  current policy, **not about all history**: §9.4 records an earlier Phase 8C-1
+  build whose upload task was enabled and scheduled before that default existed,
+  and whether Firebase received anything from it is not proven either way.
 - Phase 8C-2 **did** send controlled signals, and exactly these: one fatal and one
   non-fatal plus a `gv_sync_run` trace from a production **debug** build, and then
   — under separate explicit authorization — exactly **one further fatal and one
