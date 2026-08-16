@@ -80,6 +80,50 @@ tasks.register('verifyAppEnvParser') {
             "  ok  matrix complete: ${combinations} combinations, " +
             "${accepted} accepted, ${rejected} rejected")
 
+        // --- padded and altered tokens are rejected, for every flavor --------
+        //
+        // The comparison must be byte-for-byte identical to Dart's. Dart matches
+        // the compile-time string exactly and falls back to `development` for
+        // anything else, so a gate that normalized before comparing would accept
+        // a value Dart rejects — producing an artifact whose flavor and Dart
+        // environment disagree, which is exactly what this gate exists to stop.
+        int paddedRejected = 0
+        flavors.each { String flavor ->
+            String expected = contract[flavor]
+            Map<String, String> altered = [
+                'a leading space'        : ' ' + expected,
+                'a trailing space'       : expected + ' ',
+                'spaces on both sides'   : ' ' + expected + ' ',
+                'a leading tab'          : '\t' + expected,
+                'a trailing tab'         : expected + '\t',
+                'a leading newline'      : '\n' + expected,
+                'a trailing newline'     : expected + '\n',
+                'CRLF padding'           : '\r\n' + expected + '\r\n',
+                'upper-case'             : expected.toUpperCase(),
+                'capitalised'            : expected.capitalize(),
+            ]
+            altered.each { String description, String value ->
+                expectFailure("${flavor} + ${description}") {
+                    resolveAppEnv(defines(["APP_ENV=${value}".toString()]), flavor, expected)
+                }
+                paddedRejected++
+            }
+        }
+        logger.lifecycle(
+            "  ok  ${paddedRejected} padded/altered tokens rejected across " +
+            "${flavors.size()} flavors")
+
+        // The combination that made this a P1 rather than a nuisance: a padded
+        // production token *plus* a fixture data source. Without exact
+        // comparison the build would pass here, Dart would resolve to
+        // development, and a production-application-ID artifact could serve
+        // fixtures. It must fail on APP_ENV, before anything is produced.
+        expectFailure('a padded production token beside DATA_SOURCE=fixture') {
+            resolveAppEnv(
+                defines(['APP_ENV= production ', 'DATA_SOURCE=fixture']),
+                'production', 'production')
+        }
+
         // --- other accepted input -------------------------------------------
         assert resolveAppEnv(
             defines(['APP_ENV=production', 'DATA_SOURCE=remote']),
@@ -122,6 +166,36 @@ tasks.register('verifyAppEnvParser') {
         assert decodeDartDefines(defines(fromFile) + ',' + defines(fromFlags)) == mergedDecoded
         assert resolveAppEnv(merged, 'production', 'production') == 'production'
         logger.lifecycle('  ok  file-supplied and flag-supplied defines are equivalent')
+
+        // ...and equivalence cuts both ways: a padded token from a file is
+        // rejected exactly like a padded token from a flag. There is no
+        // "trusted" origin.
+        expectFailure('a padded token supplied through a file') {
+            resolveAppEnv(
+                defines(['APP_ENV=production ', 'DATA_SOURCE=remote']),
+                'production', 'production')
+        }
+
+        // Exactness applies to APP_ENV alone. Other defines are never compared,
+        // normalized or logged, so their spaces, commas and '=' are untouched.
+        Map<String, List<String>> noisy = decodeDartDefines(
+            defines([
+                'APP_ENV=production',
+                'OTHER=  padded on both sides  ',
+                'URL=https://example.invalid/a?b=c&d=e',
+                'LIST=a,b,c',
+            ]))
+        assert noisy['OTHER'] == ['  padded on both sides  ']
+        assert noisy['URL'] == ['https://example.invalid/a?b=c&d=e']
+        assert noisy['LIST'] == ['a,b,c']
+        assert resolveAppEnv(
+            defines([
+                'APP_ENV=production',
+                'OTHER=  padded on both sides  ',
+                'LIST=a,b,c',
+            ]),
+            'production', 'production') == 'production'
+        logger.lifecycle('  ok  unrelated defines keep their spaces, commas and "="')
 
         // A define with no key is not addressable, so it is skipped rather than
         // guessed at -- and skipping it must not disturb the rest.

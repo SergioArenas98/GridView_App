@@ -233,8 +233,19 @@ void main() {
         'android/gradle/dart_environment.gradle',
       ).readAsStringSync();
 
-      expect(environment, contains('Flavor/APP_ENV mismatch'));
+      expect(environment, contains('not an exact supported token'));
       expect(environment, contains('Missing --dart-define=APP_ENV'));
+      // The comparison must stay byte-for-byte. Dart matches the compile-time
+      // string exactly, so any normalization here would let the gate accept a
+      // value Dart rejects — a production artifact whose Dart layer resolves to
+      // development. Asserted structurally because the failure it prevents is
+      // invisible until a release is already built.
+      expect(
+        environment,
+        contains('String actual = values.first()\n'),
+        reason: 'the decoded APP_ENV value must never be trimmed',
+      );
+      expect(environment, isNot(contains('values.first().trim()')));
     });
 
     test('the environment gates are not anchored on pre-build', () {

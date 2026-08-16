@@ -64,13 +64,21 @@ ext.decodeDartDefines = { String raw ->
 
 /// Resolves and validates `APP_ENV` for one product flavor.
 ///
-/// Returns the accepted value, or throws a [GradleException] whose message
+/// Returns the exact accepted value, or throws a [GradleException] whose message
 /// mentions only `APP_ENV` — never another define's key or value.
 ///
 /// Exactly one occurrence is required. Duplicates fail even when the values are
 /// identical: two sources disagreeing about the environment is a configuration
 /// fault whether or not they happen to agree today, and silently accepting one
 /// is how the flavor and the environment drifted apart in the first place.
+///
+/// **The decoded value is never normalized.** Only the tokens declared in
+/// `requiredAppEnvForFlavor` are accepted, compared byte-for-byte, because Dart
+/// compares the same compile-time string byte-for-byte. Any normalization here —
+/// trimming, case folding, anything — makes this gate accept values Dart
+/// rejects, which is the one outcome it exists to prevent. Trimming the outer
+/// Base64 *entry* before decoding is a different concern and is fine; the
+/// decoded value is not touched.
 ext.resolveAppEnv = { String raw, String flavor, String expected ->
     if (expected == null) {
         throw new GradleException(
@@ -101,16 +109,72 @@ ext.resolveAppEnv = { String raw, String flavor, String expected ->
         )
     }
 
-    String actual = values.first().trim()
+    // NOT trimmed, and that is the whole point of this line.
+    //
+    // Dart receives the define as a compile-time constant and compares it
+    // exactly: `AppEnvironment.parse` matches 'production' or 'staging' and
+    // falls back to `development` for everything else, padding included. A gate
+    // that trimmed before comparing therefore *accepted a value Dart rejects* —
+    // `APP_ENV=" production "` passed here and became `development` there, so a
+    // build could carry the production application ID, the production Firebase
+    // configuration and the production-only Gradle tasks while the Dart layer
+    // believed it was a development build: observability disabled, the
+    // production guards off, and `DATA_SOURCE=fixture` honoured, which the
+    // production branch otherwise forbids.
+    //
+    // The comparison must be byte-for-byte identical to Dart's, so the value is
+    // used exactly as decoded. No trimming, no case folding, no normalization of
+    // any kind.
+    String actual = values.first()
     if (actual != expected) {
         throw new GradleException(
-            "Flavor/APP_ENV mismatch: the '${flavor}' flavor requires APP_ENV=${expected} " +
-            "but the build passed APP_ENV=${actual}.\n" +
-            'The Android flavor and the Dart environment must describe the same build. ' +
+            "APP_ENV is not an exact supported token for the '${flavor}' flavor.\n" +
+            "  required : ${ext.quoteDefineValue(expected)}\n" +
+            "  received : ${ext.quoteDefineValue(actual)}\n" +
+            'The value is compared exactly, because Dart compares it exactly: a ' +
+            'padded, differently-cased or otherwise altered token silently ' +
+            'resolves to development in Dart while this build keeps the ' +
+            "${flavor} flavor's application ID and configuration.\n" +
             'GridView supports one flavor per build invocation:\n' +
             "  flutter build apk --flavor ${flavor} --dart-define=APP_ENV=${expected}"
         )
     }
 
     return actual
+}
+
+/// Renders a define value for a message without corrupting the output.
+///
+/// A padded or control-character value is exactly the case these messages exist
+/// for, and printing it raw is useless — a trailing space is invisible and an
+/// embedded newline breaks the message into what looks like two errors. Every
+/// character outside the printable ASCII range is escaped, and the result is
+/// quoted so leading and trailing whitespace is visible as position.
+///
+/// Only ever applied to APP_ENV and its expected token. No other define's value
+/// is read, formatted or logged anywhere in this file.
+ext.quoteDefineValue = { String raw ->
+    if (raw == null) {
+        return 'null'
+    }
+    StringBuilder out = new StringBuilder('"')
+    for (int i = 0; i < raw.length(); i++) {
+        int code = (int) raw.charAt(i)
+        if (code == 0x5C) {
+            out.append('\\\\')
+        } else if (code == 0x22) {
+            out.append('\\"')
+        } else if (code == 0x0A) {
+            out.append('\\n')
+        } else if (code == 0x0D) {
+            out.append('\\r')
+        } else if (code == 0x09) {
+            out.append('\\t')
+        } else if (code < 0x20 || code == 0x7F) {
+            out.append(String.format('\\u%04x', code))
+        } else {
+            out.append(raw.charAt(i))
+        }
+    }
+    return out.append('"').toString()
 }

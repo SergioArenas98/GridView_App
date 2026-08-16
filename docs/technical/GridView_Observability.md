@@ -284,10 +284,29 @@ fails the build before an installable artifact is accepted.
 | production | development | **build fails** — flavor/APP_ENV mismatch |
 | production | *(missing)* | **build fails** — missing `--dart-define=APP_ENV` |
 | any | supplied twice | **build fails** — even when the two values agree |
+| any | padded, e.g. `" production "` | **build fails** — the value is compared exactly |
 
 Duplicates fail on purpose. Two sources disagreeing about the environment is a
 configuration fault whether or not they happen to match today, and silently
 picking one is how the flavor and the environment drifted apart to begin with.
+
+**The comparison is byte-for-byte, and that is load-bearing.** Dart matches the
+compile-time string exactly — `AppEnvironment.parse` accepts `production` or
+`staging` and falls back to `development` for everything else, padding included.
+A gate that trimmed before comparing would therefore accept a value Dart
+*rejects*: `--dart-define="APP_ENV= production "` would pass the flavor gate and
+produce an artifact carrying the production application ID, the production
+Firebase configuration and the production-only Gradle tasks, while the Dart layer
+resolved to `development` — observability disabled, the production guards off,
+and `DATA_SOURCE=fixture` honoured, which the production branch otherwise
+forbids. Nothing is trimmed, case-folded or otherwise normalized; only the tokens
+declared in `requiredAppEnvForFlavor` are accepted. (Trimming the outer Base64
+*entry* before decoding is unrelated and remains.)
+
+`verifyAppEnvParser` rejects leading/trailing/surrounding spaces, leading and
+trailing tabs, leading and trailing newlines, CRLF padding and wrong casing —
+for every declared flavor — plus the combination that made this severe: a padded
+production token alongside `DATA_SOURCE=fixture`.
 
 **Where the gate is attached matters.** It hangs off each variant's *resource
 merge*, not its pre-build. `variant.preBuildProvider` is genuinely per-variant
