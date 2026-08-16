@@ -67,6 +67,79 @@ int labelOccurrences(WidgetTester tester, String text) {
   return total;
 }
 
+/// Every rendered label in screen-reader traversal order.
+///
+/// Traversal order is not the order [semanticsNodes] walks: children are stored
+/// in paint order and sorted only when the tree is serialised, so reading order
+/// has to be asked for explicitly.
+List<String> orderedLabels(WidgetTester tester) {
+  final List<SemanticsNode> roots = semanticsNodes(tester);
+  if (roots.isEmpty) return const <String>[];
+  final List<String> labels = <String>[];
+  void visit(SemanticsNode node) {
+    final String label = node.getSemanticsData().label;
+    if (label.isNotEmpty) labels.add(label);
+    for (final SemanticsNode child in node.debugListChildrenInOrder(
+      DebugSemanticsDumpOrder.traversalOrder,
+    )) {
+      visit(child);
+    }
+  }
+
+  visit(roots.first);
+  return labels;
+}
+
+/// Asserts that [landmarks] are read in this relative order, ignoring whatever
+/// sits between them.
+///
+/// Deliberately not a snapshot of the whole tree: a screen's internal nodes
+/// change whenever its layout does, and a test that fails for that reason
+/// teaches nobody anything. What must not change is that — for example — the
+/// Standings title is read before the championship selector, which is read
+/// before the first row.
+void expectReadingOrder(WidgetTester tester, List<String> landmarks) {
+  final List<String> labels = orderedLabels(tester);
+  int cursor = -1;
+  for (final String landmark in landmarks) {
+    final int at = labels.indexWhere(
+      (String label) => label.contains(landmark),
+      cursor + 1,
+    );
+    expect(
+      at,
+      isNot(-1),
+      reason:
+          'expected "$landmark" to be read after the previous landmark; '
+          'order was $labels',
+    );
+    cursor = at;
+  }
+}
+
+/// Asserts that [sentinel] reaches neither the screen nor a screen reader.
+///
+/// A stable identifier or a raw URL is infrastructure. Rendering one is a
+/// visible defect; leaking one into an accessibility label is the same defect
+/// where no sighted reviewer will ever see it.
+void expectNeverSurfaced(WidgetTester tester, String sentinel) {
+  expect(
+    find.textContaining(sentinel, findRichText: true),
+    findsNothing,
+    reason: 'the identifier "$sentinel" was rendered as text',
+  );
+  final Iterable<String> leaked = renderedLabels(
+    tester,
+  ).where((String label) => label.contains(sentinel));
+  expect(
+    leaked,
+    isEmpty,
+    reason:
+        'the identifier "$sentinel" reached an accessibility label: '
+        '$leaked',
+  );
+}
+
 /// Every rendered label, ignoring the nodes that carry none.
 List<String> renderedLabels(WidgetTester tester) => semanticsDataList(tester)
     .map((SemanticsData data) => data.label)
