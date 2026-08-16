@@ -494,7 +494,9 @@ The design system should be built around reusable components.
 - Empty state block.
 - Error state block.
 - Skeleton loader.
-- Banner ad container.
+- Banner ad container (built as `GvAdContainer`, reserved space only; not
+  retained for v1 and rendered on no live screen — see
+  [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)).
 
 ### 15.2 Component philosophy
 
@@ -860,7 +862,14 @@ GridView should establish a strong accessibility baseline.
 
 ## 19. Advertisement design guidance
 
-Advertising remains part of the product, but must be handled carefully.
+> **Status: not applicable to v1.** Advertising is not retained for v1 — see
+> [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md). No advertising
+> SDK, consent SDK, ad unit or ad request exists, and no live screen renders an
+> ad container. `GvAdContainer` survives as a development catalogue component
+> only. The guidance below is retained unchanged as the design constraint set a
+> future advertising phase would have to satisfy; nothing in it describes v1.
+
+Advertising, *if it is ever reintroduced*, must be handled carefully.
 
 ### Rules
 
@@ -951,7 +960,8 @@ This document establishes the following design decisions:
 - Team detail should use team identity with restraint.
 - Circuit detail should embrace structured visual data.
 - The bottom navigation should have four primary destinations.
-- Ads must be visually controlled and non-blocking.
+- Ads, *if ever reintroduced*, must be visually controlled and non-blocking.
+  Advertising is not retained for v1 (ADR 0018), so no v1 screen carries one.
 
 ---
 

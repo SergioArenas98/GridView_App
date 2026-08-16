@@ -175,18 +175,38 @@ environment-specific interval.
 
 ## Advertising
 
-- The production AdMob application ID is preserved in
-  `android/app/src/production/AndroidManifest.xml` only. Dev and staging
-  manifests do not carry it.
-- No ads SDK is included in the shell and no advertisement is requested in
-  any flavor. When advertising is integrated (Phase 8), dev and staging must
-  use Google test ad units exclusively.
-- **Decision for v1: advertising is not retained.** No `google_mobile_ads` or
-  consent-SDK dependency exists, no ad unit IDs exist, and no approval to ship
-  advertising exists in the repository. The preserved manifest `meta-data` is an
-  identifier for the published app, not an integration. The Settings → Privacy
-  screen reports advertising as disabled, truthfully. See
+**Decided and closed: advertising is not retained for v1.** See
+[ADR 0018](../adr/0018-advertising-not-retained-for-v1.md). The PRD (§17) says
+advertising *may* remain, which makes it optional rather than mandatory, and the
+decision deadline in `GridView_Implementation_Plan.md` §25 — before Phase 8
+production integration — passed with no approval to integrate it.
+
+- No `google_mobile_ads` or consent/UMP dependency exists, no ad unit ID exists,
+  no ad request exists, and nothing initializes an advertising SDK at runtime.
+  `android/app/build.gradle` lists `com.google.android.gms:play-services-ads`
+  and `play-services-ads-identifier` in its **forbidden** dependency set, so
+  `verify<Variant>FirebaseDependencies` fails the build if either is ever
+  resolved into a variant.
+- The production AdMob **application ID** is preserved in
+  `android/app/src/production/AndroidManifest.xml` only; dev and staging
+  manifests do not carry it. It is published-app identity (§2.6 of the
+  Implementation Plan), and it is **inert**: an application ID is read by the
+  Google Mobile Ads SDK at initialization, and that SDK is neither packaged nor
+  initialized. It is unchanged by this decision.
+- `GvAdContainer` remains a **development catalogue component only**. It
+  reserves layout space and performs no ad initialization, it is constructed
+  only by the component catalogue, and the catalogue is unreachable from every
+  live production route (`ComponentCatalogueScreen.open` refuses to navigate in
+  production).
+- **Dev and staging require no test ad units.** The earlier instruction to use
+  Google test identifiers outside production presumed an integration; with no
+  integration there is nothing to point at a test unit.
+- The Settings → Privacy screen reports advertising as disabled, truthfully. See
   `GridView_Preferences_And_Settings.md` §6.1.
+- Reintroducing advertising later requires a new reviewed phase: a superseding
+  architecture decision, consent/privacy analysis, test identifiers outside
+  production, and a measured startup impact. It is not an incremental change to
+  Phase 8.
 
 ## Edge API (Cloudflare Worker)
 

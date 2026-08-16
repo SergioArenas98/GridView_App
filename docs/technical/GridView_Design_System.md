@@ -96,7 +96,17 @@ Implemented: `GvAppBar`, `GvSectionHeader`, `GvBottomNav`, `GvPrimaryButton`,
 `GvDriverRow`, `GvTeamRow`, `GvCircuitRow`, `GvResultRow`, `GvSkeletonBlock`,
 `GvSkeletonCard`, `GvEmptyState`, `GvErrorState`, `GvOfflineNotice`,
 `GvImagePlaceholder`, `GvAdContainer` (reserved space only — **no** ad
-initialization).
+initialization; **catalogue-only**, see below).
+
+`GvAdContainer` is a development catalogue component and nothing else.
+Advertising is not retained for v1
+([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)): no advertising or
+consent SDK is packaged, no ad unit or ad request exists, and no live screen
+constructs this component. It is built only by `ComponentCatalogueScreen`, which
+refuses to navigate in production, so it is unreachable from every production
+route. It is retained because it documents the reserved-space pattern a future
+advertising phase would start from — its presence is not evidence that ads are
+planned for v1.
 
 ### When a new shared component is justified
 

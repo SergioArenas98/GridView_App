@@ -1025,7 +1025,26 @@ Implement:
 
 ## 13.6 Advertising tasks
 
-If ads remain:
+**Closed: advertising is not retained for v1.** See
+[ADR 0018](../adr/0018-advertising-not-retained-for-v1.md). The PRD (§17) says
+advertising *may* remain, so it was optional rather than mandatory, and the §25
+decision deadline — before Phase 8 production integration — passed with no
+approval to integrate it.
+
+No task in this subsection is performed in Phase 8. There is no advertising SDK,
+no consent SDK, no ad unit, no ad request and no advertising runtime; the
+forbidden-dependency gate in `android/app/build.gradle` fails the build if
+`play-services-ads` is ever resolved. The production AdMob **application ID**
+`meta-data` is preserved unchanged as published-app identity (§2.6) and is inert
+without the SDK. `GvAdContainer` remains a development catalogue component only,
+unreachable from every live production route. Dev and staging need no test ad
+units, because there is no integration to point at one.
+
+The original task list is retained below as the starting point a future
+advertising phase would work from. It describes no Phase 8 work.
+
+<details>
+<summary>Superseded task list (a future advertising phase only)</summary>
 
 - Retain Google Mobile Ads only.
 - Remove Unity Ads.
@@ -1035,6 +1054,8 @@ If ads remain:
 - Reserve ad layout space.
 - Verify ad failure does not affect content.
 - Avoid interstitial ads in v1.
+
+</details>
 
 ## 13.7 Accessibility tasks
 
@@ -1051,7 +1072,8 @@ If ads remain:
 - English and Spanish UI.
 - Settings screens.
 - Crash/performance monitoring.
-- Controlled advertising integration.
+- ~~Controlled advertising integration.~~ Not applicable: advertising is not
+  retained for v1 ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)).
 - Accessibility review report.
 
 ## 13.9 Exit criteria
@@ -1059,7 +1081,11 @@ If ads remain:
 - Every user-facing string is localized.
 - Missing media always has a stable fallback.
 - Crash reports arrive from staging/release-like builds.
-- Ads never block startup.
+- **Ads never block startup — not applicable, because advertising is not
+  retained for v1** ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)).
+  Deliberately *not* recorded as satisfied: nothing would be proved by it. No
+  advertising integration was built, so none was tested, and the risk this
+  criterion guards against cannot occur because its cause does not exist.
 - Settings persist correctly.
 - Core screens pass the accessibility baseline.
 
@@ -1681,14 +1707,21 @@ Decision deadline:
 
 ### Advertising
 
-Recommendation:
+**Closed — decision: not retained for v1.** See
+[ADR 0018](../adr/0018-advertising-not-retained-for-v1.md).
+
+Recommendation (as written):
 
 - Retain only if revenue or continuity justifies SDK and consent complexity.
 - Do not allow advertising to delay core reconstruction.
 
 Decision deadline:
 
-- Before Phase 8 production integration.
+- Before Phase 8 production integration. **This deadline passed with no approval
+  to integrate advertising**, which under this section is a decision not to
+  retain it. The PRD (§17) makes advertising optional ("may remain"), so no
+  product change was required to close it this way. Reintroducing advertising
+  requires a new reviewed phase, not an amendment here.
 
 ### Light historical season support
 
