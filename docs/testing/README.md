@@ -299,18 +299,27 @@ Run them alone with:
 flutter test test/observability
 ```
 
-## Canonical goldens pending regeneration
+## Canonical golden status
+
+**No golden is pending regeneration.**
 
 The Phase 8C-1 Privacy-screen copy change (live status plus the diagnostics
-disclosure) legitimately changes three baselines:
+disclosure) legitimately changed three baselines:
 
 - `test/settings/goldens/settings_privacy_unconfigured.png`
 - `test/settings/goldens/settings_privacy_configured.png`
 - `test/settings/goldens/settings_privacy_production.png`
 
-They have **not** been regenerated. Canonical baselines are Linux-owned: run the
-manual "Render canonical goldens" workflow, inspect the artifact, and commit
-only approved images. Do not author them on Windows.
+They were regenerated through the canonical Linux workflow and committed in
+**`84ee996`** (`test(settings): update canonical privacy goldens`), which is on
+`master`. The **canonical golden freshness** gate — Linux-only, zero
+allowance — is green and remains the authority on whether a baseline matches
+what the code renders.
+
+The rule that produced this is unchanged and still binding: **canonical
+baselines are Linux-owned.** Author one with the manual "Render canonical
+goldens" workflow, inspect the artifact, and commit only approved images. **Do
+not author or regenerate a baseline locally on Windows or macOS.**
 
 ## Edge API foundation (Phase 5A)
 
@@ -1238,3 +1247,109 @@ other.
 The 2% cross-platform comparator is unchanged and must not be raised because an
 image introduces platform variance; a new golden approaching that threshold is a
 signal to diagnose, not to weaken the gate.
+
+## Preferences, theming and Settings (Phase 8A)
+
+Phase 8A's behaviour is asserted in two directories, both run by the ordinary
+`flutter test`.
+
+### `test/preferences/` (65)
+
+| File | Covers |
+|---|---|
+| `preference_values_test.dart` | The three typed preferences and their stable wire tokens; every unknown, empty or corrupted value resolving to the documented safe default rather than throwing |
+| `preferences_repository_test.dart` | The single owner of all three preferences: whole-snapshot replacement, read-failure and write-failure behaviour, and the synchronous bootstrap read |
+| `locale_resolution_test.dart` | Total locale resolution from a preference plus the platform locales, including an unsupported platform locale and an explicit preference overriding the device |
+| `theme_behavior_test.dart` | Theme selection across `system`/`dark`/`light`, both palettes' semantic pairs, and a light-theme smoke matrix over every shared component |
+
+### `test/settings/` (74)
+
+| File | Covers |
+|---|---|
+| `settings_widget_test.dart` | The whole Settings surface: localized values rather than wire tokens, the developer section's environment gating, the truthful privacy report, external-link behaviour without ever displaying a URL, and the composed accessible names of the settings rows |
+| `settings_navigation_test.dart` | The seven sub-routes on the root navigator: opening Settings never changes the active branch, and back returns to the exact origin |
+| `external_links_test.dart` | The `https`/`mailto` allow-list, an unconfigured link explained outside production and omitted entirely in production, and launch failures reported without exposing the URL |
+| `settings_golden_test.dart` | The Settings golden set (see the golden gates above) |
+
+Contrast is asserted programmatically for **both** palettes rather than by eye;
+see `test/support/contrast.dart`.
+
+## Observability verification (Phase 8C-2)
+
+Phase 8C-2 added **no** new automated suite. It was an external verification
+pass: controlled signals were produced by real builds and then **observed in
+Firebase Console**. Its evidence lives in `../technical/GridView_Observability.md`
+and `../release/play-store-baseline.md`, not here.
+
+It matters to testing for one reason — the three evidence levels must stay
+separate, and no test can supply the third:
+
+| Level | What it proves | Where it comes from |
+|---|---|---|
+| Produced locally | The app emitted the signal | `test/observability/` and a local run |
+| Accepted by ingestion (HTTP 200) | The transport accepted a batch | Device logs during a verification pass |
+| **Observed in Console** | **Delivery** | Firebase Console, by a human, in Phase 8C-2 |
+
+**A green `test/observability/` run is not evidence of delivery, and neither is
+an accepted HTTP batch.** Phase 8C-2 uploaded no mapping or symbol file.
+
+## Accessibility (Phase 8C-3)
+
+> **Scope limit, stated first because it is the point.** Everything in this
+> section runs in `flutter_test` against the Flutter **semantics and interaction
+> layer**. It proves what the framework exposes and how the widgets respond.
+> It does **not** prove TalkBack, Switch Access, D-pad hardware, OS display
+> scaling, OS-level "remove animations", or any physical-device behaviour.
+> Those require the Phase 8C-3 device pass and are **not** covered by any test
+> in this repository.
+
+### Shared support — `test/support/a11y_harness.dart`
+
+Helpers that inspect the *rendered* semantics tree rather than merely locating a
+node: depth-first and traversal-order label lists, a relative reading-order
+assertion, live-region and heading collections, and an occurrence counter that
+counts repeats **within** a single merged label as well as across nodes. The
+last one matters: the established pattern here is a parent `Semantics` carrying
+a composed label over an `ExcludeSemantics` subtree, and forgetting the
+exclusion merges the two into one node whose label says everything twice — which
+a node-counting assertion reports as correct.
+
+### Component-level — `test/design_system/`
+
+| File | Covers |
+|---|---|
+| `state_semantics_test.dart` (12) | One live region and one localized announcement per loading frame however many skeleton shapes it wraps; the shapes contributing no semantics; the wrapper changing no size; one text-carrying live region and a heading title on the error and empty states; and the offline notice carrying its message on exactly one node |
+| `reduced_motion_test.dart` (4) | The segmented control completing its selection change in the first frame under `MediaQuery.disableAnimationsOf`, still animating without it (the guard that keeps the assertion non-vacuous), and unchanged size, resting appearance and selected semantics |
+| `component_behavior_test.dart` (20) | Keyboard traversal, Enter, Space and the standard `ActivateIntent`/`ButtonActivateIntent` on the bottom navigation and the segmented control; pointer behaviour preserved; the 48 dp target and semantics unchanged under focus; and a focus ring present only while focus is |
+| `semantics_test.dart` (10) | Selected-state flags on the primary controls, and `GvPrimaryButton` across its enabled, disabled and loading states |
+| `component_catalogue_test.dart` (9) | The development catalogue's loading example — the only `isLoading: true` call site in the app — announcing its name and its localized state in EN and ES, and the component contract that rejects a missing or blank loading label |
+
+### Cross-screen — `test/a11y/` (111)
+
+| File | Covers |
+|---|---|
+| `screen_semantics_test.dart` (34) | Reading order as ordered landmarks for **19 screen families** (Home, Calendar, Grand Prix, both Standings tables, all three Explore collections, the driver/team/circuit details, Settings and its seven sub-screens); semantic flags for button, selected, checked-in-a-mutually-exclusive-group, heading, live region, informative image and decorative image; and the three Home module states (resolving, unavailable, available-empty) |
+| `identifier_leak_test.dart` (7) | Sentinel identifiers and URLs injected into Home, Calendar, Standings, Settings and the three detail screens, asserted to reach neither rendered text nor an accessibility label. Sentinels, not a global ban on identifier-shaped strings |
+| `text_scale_matrix_test.dart` (64) | 200% text. The complete `{320, 390} x {EN, ES} x {dark, light}` product for Home, Standings, Settings and the driver detail (32 cells), and a documented two-cell pairwise set for the other fifteen families, together covering every width, locale and theme. Per cell: no overflow, important labels still in the semantics tree, primary destinations still at least 48 dp, content still scrollable |
+| `reduced_motion_screens_test.dart` (6) | Reduced motion delivered to the live screens that own a segmented control (Standings and Explore), and no intermediate animated state during a selection change |
+
+Reading order is read through `debugListChildrenInOrder(traversalOrder)`.
+Semantics children are stored in **paint** order and sorted only on
+serialisation, so a naive tree walk asserts the wrong order and passes.
+
+Assertions are ordered landmarks, not a dump of every internal node. A snapshot
+of a whole screen's semantics tree fails whenever its layout changes at all,
+which teaches nobody anything and trains everyone to re-bless it.
+
+### Performance — a pending measurement protocol, not a result
+
+**No performance measurement has been taken.** No startup time, frame timing,
+scroll-jank, app-size or media-cache number exists anywhere in this repository,
+and nothing here should be read as one.
+
+The protocol the Phase 8C-3 device pass is to execute is described in
+`../technical/GridView_Media.md` (Explore scrolling, repeated detail navigation,
+and Home first render with and without cached media) and
+`../technical/GridView_Implementation_Plan.md` (Phase 10 performance tasks). It
+requires a representative physical device, which is why it has not run. Results
+will be recorded when they are measured — not before.

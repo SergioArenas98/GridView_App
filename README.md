@@ -140,8 +140,8 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   absent policy URL or contact address is explained; in production the
   affordance is omitted entirely rather than shown as a dead control. See
   `docs/technical/GridView_Preferences_And_Settings.md`.
-- Phase 8B - media: **code-complete and locally verified; live media
-  publication blocked.** Persisted media metadata now reaches the product
+- Phase 8B - media: **implemented and merged** (PR #1); **live media
+  publication is blocked externally.** Persisted media metadata now reaches the product
   through domain-facing read models, a pure size-and-DPR variant selector, a
   strict HTTPS URL policy, one shared bounded disk cache and one reviewed image
   loader, behind a data-agnostic `GvRemoteImage`. The governing rule is that
@@ -156,17 +156,47 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   provisioned**, so the approved inventory is empty and no image has been
   published — both are external operational blockers, not defects. See
   `docs/technical/GridView_Media.md`.
-- Phase 8C (observability, hardening, closure) is not started.
+- Phase 8C-1 - observability: **implemented and merged** (PR #4). A
+  platform-neutral `ErrorReporter`/`PerformanceTracer` boundary with exactly one
+  file importing `firebase_*`; Crashlytics and Performance Monitoring activated
+  in **production only**; global fatal and allow-listed non-fatal capture;
+  selected performance traces; and a fail-closed mapping-upload authorization
+  gate asserted by Gradle.
+- Phase 8C-2 - external observability verification: **implemented, merged and
+  externally verified** (PR #5, 2026-08-16). Controlled signals were observed in
+  Firebase Console from a production **debug** pass and from a **release-like**
+  pass built from a signed, R8-minified, non-debuggable production release APK.
+  Keep the three evidence levels apart — produced locally, accepted by ingestion
+  (HTTP 200), observed in Console; only the last is delivery. Phase 8C-2 uploaded
+  no mapping or symbol file, built no AAB and published nothing.
+- Phase 8C-3 - accessibility, performance and Phase 8 closure: **in progress.**
+  Automated accessibility hardening is implemented on the working branch and
+  proves the **Flutter semantics and interaction layer only**. TalkBack, Switch
+  Access, D-pad hardware, OS-level accessibility, physical-device performance
+  measurement, the final reports and Phase 8 closure are **still pending**.
+- **Phase 8 as a whole is not closed.**
 
 Home's next-Grand-Prix hero, the Calendar, the Grand Prix detail screen, both
 standings tables, the three Explore collections and the Driver, Team and Circuit
 detail screens are driven by a **Drift-backed** local store: content renders
 immediately from cache (offline included), a refresh writes one atomic snapshot
 transaction, and a failed refresh never erases cached content. Settings is
-implemented (Phase 8A); real media downloading is Phase 8B. No Firebase SDK, ads
-SDK or production provider is wired yet — the production Firebase configuration
-and AdMob application ID are preserved for the published app's identity, but
-nothing initializes or reads them. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
+implemented (Phase 8A) and the media pipeline is implemented (Phase 8B): variant
+selection, a strict HTTPS URL policy, one shared bounded disk cache and one
+reviewed image loader behind a data-agnostic `GvRemoteImage`. Images still
+render as placeholders in practice because **no Formula 1 media rights are
+approved and no R2 bucket is provisioned**, so nothing has been published —
+external operational prerequisites, not missing architecture.
+
+**Firebase is wired and initialized in production only** (Phase 8C-1, verified
+in Console in Phase 8C-2): Crashlytics and Performance Monitoring behind a
+platform-neutral observability boundary, never awaited before `runApp`, and
+degrading to inert on any failure. Dev and staging own no Firebase
+configuration and report reporting as off. **No ads SDK, consent SDK, ad unit,
+ad request or advertising runtime exists** — advertising is not retained for v1
+([ADR 0018](docs/adr/0018-advertising-not-retained-for-v1.md)) — and the
+preserved production AdMob **application ID** is inert published-app identity
+that nothing reads. **No production provider is wired yet.** Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
 only under a deliberate `DATA_SOURCE=fixture` build define (never inferred from a
 missing `API_BASE_URL`) and show a "Sample data" banner; **production never
 constructs the fixture source** — an attempted fixture mode or a missing base URL

@@ -979,17 +979,40 @@ Complete cross-cutting product capabilities after core screens are stable.
 
 ## 13.2 Media tasks
 
-- Define approved media inventory.
-- Collect rights and attribution metadata.
-- Create media-processing script.
-- Generate WebP variants.
-- Upload staging media to R2.
-- Publish media manifest.
-- Implement remote image component.
-- Implement disk cache policy.
-- Implement placeholders.
-- Profile list scrolling and memory.
-- Verify no oversized image is used in small rows.
+These split into engineering, which Phase 8 owns and has delivered, and external
+operator actions, which Phase 8 cannot perform and does not own.
+
+**Engineering — delivered in Phase 8B (merged, PR #1):**
+
+- Create media-processing script. **Done** — deterministic, offline dry-run,
+  no credentials required.
+- Generate WebP variants. **Done** — never upscales, never overwrites an
+  immutable object key.
+- Implement remote image component. **Done** — `GvRemoteImage`, data-agnostic.
+- Implement disk cache policy. **Done** — one shared bounded cache; image bytes
+  never enter Drift.
+- Implement placeholders. **Done** — one stable fallback for every no-image
+  state, at the same size, with no broken-image icon and no URL on screen.
+- Implement the media URL policy. **Done** — HTTPS only, non-empty host, no
+  embedded credentials; the loopback relaxation must be injected explicitly and
+  no environment selects it.
+- Verify no oversized image is used in small rows. **Done** — a pure
+  size-and-DPR variant selector decides before the widget is built.
+- Profile list scrolling and memory. **Not done** — requires a representative
+  physical device. This is a Phase 8C-3 device-pass task; no number has been
+  measured and none is recorded.
+
+**External operator actions — reassigned, not completed:**
+
+- Define approved media inventory. **Not done. External.**
+- Collect rights and attribution metadata. **Not done. External.**
+- Upload staging media to R2. **Not done. External** — no R2 bucket is
+  provisioned in any environment.
+- Publish media manifest. **Not done. External** — blocked by the two above.
+
+These four are **prerequisites for media publication**, and they are tracked on
+the operator checklist in their owning phase. They are **not blockers for Phase
+8 engineering closure** — see §13.9.
 
 ## 13.3 Localization tasks
 
@@ -1068,7 +1091,8 @@ advertising phase would work from. It describes no Phase 8 work.
 
 ## 13.8 Deliverables
 
-- R2 media pipeline.
+- R2 media pipeline — **the pipeline is implemented**; the R2 bucket itself is
+  not provisioned, which is an external operator action (§13.2).
 - English and Spanish UI.
 - Settings screens.
 - Crash/performance monitoring.
@@ -1080,6 +1104,23 @@ advertising phase would work from. It describes no Phase 8 work.
 
 - Every user-facing string is localized.
 - Missing media always has a stable fallback.
+
+**Resolving the media-publication conflict.** Phase 8 engineering closure
+requires the *implemented* media architecture: variant selection, the stable
+fallback, the URL policy, the cache behaviour, and the operator publication
+pipeline. All of these exist and are merged.
+
+It does **not** require GridView to display a published image. No Formula 1
+media rights have been approved and no R2 bucket is provisioned, so the approved
+inventory is empty and nothing has been published. A placeholder is therefore
+the **correct** rendered outcome of a working architecture, not evidence of a
+missing one.
+
+Rights approval, R2 provisioning, media upload and manifest publication are
+**external operator actions**, reassigned to the operator checklist and their
+owning phase (§13.2). They remain **visible prerequisites for media
+publication** and are **not marked complete**. They do not block Phase 8
+engineering closure, and no engineering work is waiting on them.
 - Crash reports arrive from staging/release-like builds.
 - **Ads never block startup — not applicable, because advertising is not
   retained for v1** ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)).

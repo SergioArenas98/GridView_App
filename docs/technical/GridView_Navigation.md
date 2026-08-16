@@ -1,10 +1,23 @@
 # GridView Navigation
 
-Phase 3B navigation shell and routing. Implemented with
+The navigation shell and routing, established in Phase 3B and accumulated
+through Phase 7D. Implemented with
 [`go_router`](https://pub.dev/packages/go_router) (17.x) and a
-`StatefulShellRoute.indexedStack`. All screens are **data-independent
-skeletons**: they render deterministic placeholder content only. No repository,
-controller, data source, Worker call, Firebase or advertising is involved.
+`StatefulShellRoute.indexedStack`.
+
+**Every screen now renders real, Drift-backed content.** The Phase 3B statement
+that all screens were "data-independent skeletons rendering deterministic
+placeholder content" described the shell before any feature existed and has not
+been true since Phase 7D: Home, Calendar, Grand Prix detail, both standings
+tables, the three Explore collections and the driver, team and circuit details
+all read local domain models through repositories and controllers (see §8).
+Advertising is still not involved anywhere
+([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)), and Firebase is
+involved only as production-only observability, which owns no route.
+
+The routing behaviour described below — the four-branch state-preserving shell,
+root-navigator detail routes, parameter validation, back behaviour and
+immediate-loop prevention — is current and unchanged.
 
 Source of truth for the intended flows: `../product/GridView_App_Flow.md`.
 
@@ -27,10 +40,9 @@ hidden behind it.
   user switches tabs (guaranteed by `indexedStack`).
 - The **Standings branch root is `/standings`** — deliberately season-agnostic.
   No season is baked into the router; the screen shows the drivers view and
-  resolves the active season from presentation-only mock data
-  (`Placeholders.season`), and in later phases from the local database. The
+  resolves the active season **from the local database** (Phase 7B). The
   `/standings/drivers/:season` and `/standings/constructors/:season` routes
-  remain for season-specific deep links.
+  remain for season-specific deep links and render their exact season.
 - **Re-selecting the active branch** returns it to its branch root
   (`goBranch(index, initialLocation: index == currentIndex)`); repeated taps do
   not stack duplicate routes.
@@ -51,9 +63,9 @@ in `lib/app/router/route_paths.dart`; names in `route_names.dart`.
 | `/standings/drivers/:season` | `standings-drivers` | Standings branch | `StandingsScreen` |
 | `/standings/constructors/:season` | `standings-constructors` | Standings branch | `StandingsScreen` |
 | `/explore` | `explore` | Explore branch | `ExploreScreen` |
-| `/explore/drivers` | `explore-drivers` | Explore branch | `DriverListScreen` |
-| `/explore/teams` | `explore-teams` | Explore branch | `ConstructorListScreen` |
-| `/explore/circuits` | `explore-circuits` | Explore branch | `CircuitListScreen` |
+| `/explore/drivers` | `explore-drivers` | Explore branch | `ExploreScreen(category: ExploreCategory.drivers)` |
+| `/explore/teams` | `explore-teams` | Explore branch | `ExploreScreen(category: ExploreCategory.teams)` |
+| `/explore/circuits` | `explore-circuits` | Explore branch | `ExploreScreen(category: ExploreCategory.circuits)` |
 | `/drivers/:driverId` | `driver` | **root** (above shell) | `DriverDetailScreen` |
 | `/constructors/:constructorId` | `constructor` | **root** (above shell) | `ConstructorDetailScreen` |
 | `/circuits/:circuitId` | `circuit` | **root** (above shell) | `CircuitDetailScreen` |
@@ -193,8 +205,9 @@ regions. Immediate-loop prevention (§4) is unchanged: Grand Prix → Circuit �
 that same Grand Prix returns to the existing route instead of stacking a
 duplicate.
 
-Circuit, driver and constructor detail content itself remains a skeleton until
-Phases 7C/7D; only the routes are wired.
+Circuit, driver and constructor detail content was a skeleton when this section
+was written. **Phase 7C implemented all three**: each renders local content
+immediately and triggers one on-demand refresh of its exact resource (§11).
 
 ### 9.4 Deep links and invalid parameters
 
@@ -259,8 +272,9 @@ underneath; back (app-bar or Android system back) returns to exactly that state.
 Immediate-loop prevention (§4) is unchanged, and only public go_router APIs are
 used.
 
-Driver and constructor detail **content** remains a skeleton until Phase 7C; only
-the entry points are wired.
+Driver and constructor detail **content** was a skeleton when this section was
+written. **Phase 7C implemented both** (§11); the entry points described here are
+unchanged.
 
 ## 11. Explore and entity-detail navigation (Phase 7C)
 

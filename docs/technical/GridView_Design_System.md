@@ -4,7 +4,9 @@
 
 - Product: GridView
 - Document type: Design System (implementation)
-- Status: Phase 3A
+- Status: **accumulated through Phase 8B**, with Phase 8C-3 accessibility work in
+  progress. The header previously read "Phase 3A", which described only §1–§8
+  and was never updated as the document grew (see "Scope evolution" in §1).
 - Related documents:
   - `../product/GridView_UI_UX_Design.md` (source of truth for palette, type
     scale, radius and spacing)
@@ -15,10 +17,26 @@
 
 ## 1. Scope
 
-Phase 3A implements the reusable visual foundation only: design tokens,
-typography, the dark-first theme, and data-agnostic shared components, plus a
-development-only component catalogue. No feature screens, navigation, data, Drift,
-Worker calls, Firebase, ads or remote images are part of this phase.
+Phase 3A implemented the reusable visual foundation: design tokens, typography,
+the dark-first theme, and data-agnostic shared components, plus a
+development-only component catalogue. No feature screens, navigation, data,
+Drift, Worker calls or Firebase were part of **that phase**.
+
+### Scope evolution
+
+This document has grown well past Phase 3A and now records the design system as
+it stands. What later phases added:
+
+| Phase | Added here |
+|---|---|
+| 7A / 7B / 7C | Component changes in §8b, §8c and §8d — session and standings rows, the overflow-safe section header, the driver/team/circuit rows |
+| **8A** | **A full light theme shipped.** Both palettes are produced by one builder from one component configuration, so only the palette differs, and every semantic pair is contrast-asserted for both. The earlier statement in §5 that a light theme was "intentionally deferred" is obsolete and is corrected there. |
+| **8B** | **Remote-image components.** `GvRemoteImage` and the media policy in §8d. The original scope line above excluded remote images; that exclusion applied to Phase 3A only, and is no longer true of the design system. |
+| **8C-3** (in progress) | Accessibility hardening of the shared components: one loading announcement per screen state, live-region and heading semantics on the error and empty states, a de-duplicated offline notice, keyboard/D-pad operability and reduced motion on the primary navigation controls, and complete settings-row and button names. This proves the Flutter semantics and interaction layer only — not TalkBack, Switch Access or physical-device behaviour. |
+
+Advertising is **not** part of the design system's live surface: `GvAdContainer`
+exists but is catalogue-only, and advertising is not retained for v1
+([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)). See §6.
 
 ## 2. Layout
 
@@ -74,9 +92,15 @@ font files. The legacy Formula 1 fonts must not be used.
 `buildGridViewDarkTheme()` is a dark-first Material 3 theme built from the tokens:
 colour scheme, text theme, system status/navigation-bar styling, and component
 themes for the common Material controls (app bar, card, chip, elevated/outlined/
-icon buttons, dividers). A full light theme is intentionally deferred; the token
-and extension architecture supports adding one later without touching component
-code.
+icon buttons, dividers).
+
+**A full light theme shipped in Phase 8A** as `buildGridViewLightTheme()`. The
+token and extension architecture held: both themes come from one builder and one
+component configuration, so only the palette differs and no component code was
+touched. Every semantic pair is contrast-asserted for both palettes. (This
+paragraph previously said a light theme was "intentionally deferred"; that was
+true of Phase 3A and is not true now.) Theme selection is a persisted user
+preference — see `GridView_Preferences_And_Settings.md` §3.
 
 Team colours are decorative and may fail contrast, so they are applied only as
 accents through `GvTeamAccent.foregroundOn(...)`, never as the sole carrier of

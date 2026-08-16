@@ -215,12 +215,31 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 | Environment | Worker name | State |
 |---|---|---|
 | development | `gridview-api-dev` | Local `wrangler dev` only |
-| staging | `gridview-api-staging` | Not provisioned |
+| staging | `gridview-api-staging` | **Contradictory — see below. Requires re-verification.** |
 | production | `gridview-api-production` | Not provisioned |
 
-No Cloudflare account resources (KV namespaces, R2 buckets, routes, domains,
-secrets) exist yet; provisioning happens in Phase 5 with approval. The mobile
-shell does not call the Worker.
+> **Unresolved contradiction: the staging Worker's provisioning status.**
+>
+> This table says staging is "Not provisioned". Earlier operational evidence
+> from the Phase 5B workstream records the opposite: a **public staging Worker
+> observed responding** to an unauthenticated `GET /v1/status`, reporting
+> `environment=staging`. Both statements are in the project's history and they
+> cannot both be current.
+>
+> This is recorded rather than resolved. Settling it means querying Cloudflare,
+> which is an external service, and Phase 8C-3 does not touch the edge API.
+> **The staging Worker's provisioning status requires re-verification in its
+> owning phase (5B).** Until that happens, treat neither the table row nor the
+> earlier observation as authoritative, and do not build any Phase 8 claim on
+> either.
+>
+> Nothing in the mobile application depends on the answer: the shell does not
+> call the Worker in any shipped flavor, and production remains unprovisioned
+> under both readings.
+
+Production Cloudflare account resources (KV namespaces, R2 buckets, routes,
+domains, secrets) do not exist; provisioning happens with approval in the owning
+phase.
 
 ## Media delivery
 

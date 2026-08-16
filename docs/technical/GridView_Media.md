@@ -1,9 +1,12 @@
 # GridView media architecture (Phase 8B)
 
-Status: **code-complete, locally verified, operational media publication
-blocked.** No Formula 1 media rights have been cleared for GridView, and no R2
-media bucket is provisioned in any environment. Everything below is implemented
-and tested; nothing below has published a real image.
+Status: **implemented and merged** (PR #1); **operational media publication is
+blocked externally.** No Formula 1 media rights have been cleared for GridView,
+and no R2 media bucket is provisioned in any environment. Everything below is
+implemented and tested; nothing below has published a real image. Those two
+gaps are external operator prerequisites for *publication*, not missing
+architecture, and they do not block Phase 8 engineering closure — see
+`GridView_Implementation_Plan.md` §13.9.
 
 ## 1. The rule everything else follows
 
@@ -620,12 +623,41 @@ listed here rather than invented.
 
 ## 21. Phase 8C hand-off
 
-Phase 8C owns: the platform-neutral observability boundary; Firebase setup and
-activation handling; global crash and non-fatal capture; selected performance
-traces; the full app-wide TalkBack and text-scale sweeps; the broader
-reduced-motion audit; representative-device performance profiling; startup and
-app-size measurement; the final cross-feature accessibility report; and final
-Phase 8 documentation consolidation.
+This was written as a forward hand-off. Part of it has since been delivered, so
+it is split into what is done and what remains. **Phase 8 is not closed.**
+
+### Delivered by Phase 8C-1 and 8C-2 (both merged)
+
+- **The platform-neutral observability boundary.** Application code depends on
+  `ErrorReporter` and `PerformanceTracer`; exactly one file imports `firebase_*`,
+  and a test enforces it.
+- **Firebase setup and activation handling**, eligible in **production only**.
+  Dev and staging own no configuration; initialization is never awaited before
+  `runApp` and degrades to inert on any failure.
+- **Global fatal and non-fatal capture** — every Flutter and platform-dispatcher
+  error, plus a narrow allow-listed non-fatal set (ADR 0017).
+- **Selected performance traces**, including `gv_sync_run`.
+- **External Console verification (Phase 8C-2, 2026-08-16).** Controlled signals
+  were observed in Firebase Console from a production **debug** pass and from a
+  **release-like** pass built from a signed, R8-minified, non-debuggable
+  production release APK. Keep the three evidence levels apart: produced
+  locally, accepted by ingestion (HTTP 200), observed in Console — only the last
+  is delivery. Phase 8C-2 uploaded no mapping or symbol file.
+
+### Remaining in Phase 8C-3 (in progress)
+
+- **Device accessibility verification** — TalkBack, Switch Access, D-pad
+  hardware and OS-level display scaling on a physical device. The automated
+  accessibility suites implemented on the 8C-3 branch prove the Flutter
+  semantics and interaction layer only; they prove none of these.
+- **Performance measurements** — the representative-device profiling described
+  in §20 (Explore scrolling, repeated detail navigation, Home first render with
+  and without cached media), plus startup and app-size measurement. No number
+  has been measured; none is recorded anywhere in this document.
+- **The final accessibility and performance reports.**
+- **Documentation consolidation and Phase 8 closure.**
+
+### Boundaries (unchanged)
 
 Phase 8C must **not**: replace the media cache; move media bytes into Drift; move
 media selection into widgets; alter entity/media ownership; introduce seasonal
