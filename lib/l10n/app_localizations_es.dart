@@ -47,9 +47,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get eventStateCompleted => 'Finalizado';
 
   @override
-  String get eventStateCurrent => 'Este fin de semana';
-
-  @override
   String get eventStateUpcoming => 'Próximo';
 
   @override

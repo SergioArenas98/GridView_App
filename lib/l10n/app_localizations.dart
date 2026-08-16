@@ -164,12 +164,6 @@ abstract class AppLocalizations {
   /// **'Completed'**
   String get eventStateCompleted;
 
-  /// Status for the current Grand Prix.
-  ///
-  /// In en, this message translates to:
-  /// **'This weekend'**
-  String get eventStateCurrent;
-
   /// Status for a future Grand Prix.
   ///
   /// In en, this message translates to:

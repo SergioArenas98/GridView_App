@@ -128,16 +128,25 @@ production always uses the real compile-time environment.)
 
 ## 8. Presentation data
 
-The remaining skeleton screens (drivers, teams, circuits) still consume
-`lib/features/shared/presentation/placeholder/placeholder_content.dart` —
-presentation-only models with deterministic mock values. **No API DTO or Drift
+Every screen consumes a Drift-backed domain read model. **No API DTO or Drift
 row is imported into a presentation widget.** Team colours appear only as
 restrained accents (a line, dot or small highlight), never as full row
 backgrounds.
 
-Home and Grand Prix detail were moved onto real Drift-backed domain read models
-in Phase 4; the Calendar followed in Phase 7A and Standings in Phase 7B, and
-neither references the placeholder catalogue at all.
+Home and Grand Prix detail were moved onto real read models in Phase 4; the
+Calendar followed in Phase 7A and Standings in Phase 7B. Phase 7C replaced the
+old drivers, teams and circuits list screens with a single
+`ExploreScreen(category:)` over real season collections, which was the last
+consumer of the Phase 3B placeholder catalogue.
+
+That catalogue —
+`lib/features/shared/presentation/placeholder/placeholder_content.dart` and the
+`EventRow` / event-status helpers that were its only readers — was therefore
+unreachable, and was deleted in Phase 8C-3 together with the `eventStateCurrent`
+string that existed solely for its `PlaceholderEventState.current`. The live
+`EventStatus` mapping in `domain_status.dart` is unaffected: it has no "current"
+state, using `inProgress` → `eventStateLive` instead, and it still owns
+`eventStateCompleted` and `eventStateUpcoming`.
 
 ## 9. Calendar and Grand Prix navigation (Phase 7A)
 

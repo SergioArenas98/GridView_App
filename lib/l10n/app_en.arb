@@ -56,10 +56,6 @@
   "@eventStateCompleted": {
     "description": "Status for a finished Grand Prix."
   },
-  "eventStateCurrent": "This weekend",
-  "@eventStateCurrent": {
-    "description": "Status for the current Grand Prix."
-  },
   "eventStateUpcoming": "Upcoming",
   "@eventStateUpcoming": {
     "description": "Status for a future Grand Prix."
