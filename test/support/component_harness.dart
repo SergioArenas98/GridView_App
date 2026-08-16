@@ -15,6 +15,10 @@ Future<void> pumpComponent(
   Size? surfaceSize,
   Locale locale = const Locale('en'),
   Brightness brightness = Brightness.dark,
+
+  /// Reports the platform "remove animations" accessibility setting as on, so a
+  /// component test can prove it honours reduced motion.
+  bool disableAnimations = false,
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
@@ -28,12 +32,21 @@ Future<void> pumpComponent(
           : buildGridViewLightTheme(),
       locale: locale,
       home: Scaffold(
-        body: MediaQuery.withClampedTextScaling(
-          minScaleFactor: textScale,
-          maxScaleFactor: textScale,
-          child: Center(
-            child: Padding(padding: const EdgeInsets.all(16), child: child),
-          ),
+        body: Builder(
+          builder: (BuildContext context) {
+            final Widget content = MediaQuery.withClampedTextScaling(
+              minScaleFactor: textScale,
+              maxScaleFactor: textScale,
+              child: Center(
+                child: Padding(padding: const EdgeInsets.all(16), child: child),
+              ),
+            );
+            if (!disableAnimations) return content;
+            return MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: content,
+            );
+          },
         ),
       ),
     ),
