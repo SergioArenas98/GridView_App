@@ -167,10 +167,16 @@ in.
   A production debug build proves flavor selection and Firebase routing, because
   eligibility keys off `APP_ENV` rather than the build type, but it does not
   exercise release compilation, R8/minification or release artifact behaviour. A
-  second pass therefore ran from a signed, R8-minified production **release APK**;
-  its fatal and `gv_sync_run` were accepted by Firebase ingestion with HTTP 200,
-  and **its Console check is still outstanding**, so Phase 8C-2 is not yet closed.
-  See `../technical/GridView_Observability.md` §9.
+  second pass therefore ran from a signed, R8-minified production **release APK**
+  (`minifyProductionReleaseWithR8` executed; the installed package was **not**
+  debuggable and matched the built artifact). Its controlled fatal is
+  **Console-confirmed** by unique marker and timestamp, classified fatal, with the
+  five owned keys correct; its `gv_sync_run` is Console-confirmed at ≈ 9.71 s,
+  though `outcome=success` rests on retained SDK evidence rather than direct
+  Console display. **Phase 8C-2 is therefore complete**, and the implementation
+  plan's release-like criterion was satisfied rather than weakened. Mapping upload
+  remained absent and unauthorized — never `-x`-excluded — and no AAB was built or
+  published. See `../technical/GridView_Observability.md` §9.
 - Dev and staging are observably inert. A developer cannot "test Crashlytics
   locally" — deliberately, because the only way to do so would be to send
   developer crashes to the published app's project.

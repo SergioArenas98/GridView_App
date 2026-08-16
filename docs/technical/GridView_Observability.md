@@ -1,20 +1,23 @@
 # GridView Observability
 
-Status: **Phase 8C-2 is NOT complete. It is pending one final Firebase Console
-check of the release-like verification.**
-
-Two verification passes exist, and they are at different evidence levels:
+Status: **Phase 8C-2 is COMPLETE (2026-08-16).** External Firebase verification is
+confirmed in Console from **two** passes:
 
 | Pass | Artifact | Console arrival |
 |---|---|---|
-| production **debug** (2026-08-16) | debug build, no R8 | **confirmed** — fatal, non-fatal and `gv_sync_run` all observed |
-| production **release** (2026-08-16) | signed release APK, R8/minified | **not yet checked** — submitted and accepted with HTTP 200 |
+| production **debug** | debug build, no R8 | **confirmed** — fatal, non-fatal and `gv_sync_run` all observed |
+| production **release** | signed release APK, R8/minified, not debuggable | **confirmed** — controlled fatal and a `gv_sync_run` sample observed |
 
 The release-like pass exists because a debug build proves flavor selection and
 Firebase routing but does **not** exercise release compilation, R8/minification or
 release artifact behaviour, and
 [`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md) §13.9 requires
-crash reports from a staging/release-like build. See §9.
+crash reports from a staging/release-like build. That criterion is now satisfied;
+it was not weakened to get there. See §9.
+
+What this does **not** establish: Play-distributed behaviour, behaviour under every
+device or network condition, future Firebase availability, or anything about
+mapping/symbol handling — no mapping was ever uploaded.
 
 The distinction that governs every claim here: a green test suite, a successful
 `Firebase.initializeApp()`, a completed Gradle task and a compiled custom trace
@@ -702,9 +705,11 @@ external release blocker.**
   `uploadCrashlyticsMappingFile<Variant>` or `uploadCrashlyticsSymbolFile<Variant>`
   task at all. (§9.4 records a separate, earlier, possible-but-unverified upload
   from Phase 8C-1, before the default was changed.)
-- Phase 8C-2 **did** send controlled signals: one fatal and one non-fatal plus a
-  `gv_sync_run` trace from a production **debug** build, and one further fatal plus
-  a `gv_sync_run` trace from a production **release** APK. See §9.
+- Phase 8C-2 **did** send controlled signals, and exactly these: one fatal and one
+  non-fatal plus a `gv_sync_run` trace from a production **debug** build, and then
+  — under separate explicit authorization — exactly **one further fatal and one
+  further `gv_sync_run` sample** from a production **release** APK. **No second
+  non-fatal was ever produced.** See §9.
 
   **No further *controlled* crash, non-fatal or custom-trace signal was produced** —
   which is the accurate, narrower claim. It is not a claim that nothing else left
@@ -715,9 +720,9 @@ external release blocker.**
 
 ## 9. Verification status
 
-**Phase 8C-2 is pending one final Console check.** Two passes were run on
-2026-08-16, both on the same dedicated, clean emulator with no prior GridView
-installation, both with `APP_ENV=production`.
+**Phase 8C-2 is complete.** Two passes were run on 2026-08-16, both on the same
+dedicated, clean emulator with no prior GridView installation, both with
+`APP_ENV=production`, and **both confirmed in Firebase Console**.
 
 Three levels of evidence are kept distinct throughout, because collapsing them is
 how a delivery claim becomes untrue:
@@ -793,39 +798,62 @@ independently Console-confirmed. It is recorded that way on purpose.
 launch — see §6 for the timing reason and the decision to keep it as a best-effort
 signal.
 
-### 9.1.1 Production **release** pass — submitted, Console check outstanding
+### 9.1.1 Production **release** pass — Console-confirmed
 
 The debug pass proves flavor selection, Firebase routing and the normalized
 context, but it does not exercise release compilation, R8/minification or release
 artifact behaviour, which the implementation plan's exit criteria require. A second
-pass therefore ran from a **signed production release APK** — R8/minified, not
-debuggable — installed on the same dedicated emulator.
+pass therefore ran from a **signed production release APK** — R8/minified, and
+**not debuggable**, confirmed from the installed package flags — whose SHA-256 was
+checked equal to the artifact just built, installed on the same dedicated emulator.
 
 | Signal | Local SDK evidence | Ingestion | Console |
 |---|---|---|---|
-| controlled fatal, 14:29:20 UTC | recorded via the shipped `recordFlutterFatalError` path; `No userId set for session`; enqueued to DataTransport | **HTTP 200** at 14:29:48 UTC | **not yet checked** |
-| `gv_sync_run`, 14:30:13 UTC | `outcome=success`, duration ≈ 9.71 s | **HTTP 200** at 14:30:53 UTC | **not yet checked** |
+| controlled fatal, 2026-08-16 14:29:20 UTC | recorded via the shipped `recordFlutterFatalError` path; `No userId set for session`; enqueued to DataTransport | **HTTP 200** at 14:29:48 UTC | **confirmed** |
+| `gv_sync_run`, 2026-08-16 14:30:13 UTC | `outcome=success`, duration 9707.958 ms | **HTTP 200** at 14:30:53 UTC | **confirmed**, ≈ 9.71 s |
 
-The fatal carries a unique marker of the form
-`GridView Phase 8C-2 release-like controlled fatal - <UTC timestamp>`, so it is
-identifiable in Console without ambiguity. It travelled the same shipped path as
-the debug pass — an uncaught asynchronous error through
+**The fatal is Console-confirmed**, matched by its unique marker
+`GridView Phase 8C-2 release-like controlled fatal - 2026-08-16T14:29:20.462587Z`
+and that exact timestamp: Firebase application `gridview (android)`, application ID
+`com.sejuma.gridview`, version `1.2.1 (7)`, Android 16, classified as a **fatal**
+failure, one event affecting one installation. It travelled the same shipped path
+as the debug pass — an uncaught asynchronous error through
 `PlatformDispatcher.onError` → `FlutterError.reportError` → `FlutterError.onError`
 → the reporter. `FirebaseCrashlytics.crash()` was not used.
 
-**Until that Console check is done, this pass proves submission and acceptance,
-not arrival**, and Phase 8C-2 must not be described as complete. Exactly one fatal
-was produced; the harness wrote a persisted repeat-guard before signalling, and a
-clean relaunch confirmed it went inert rather than repeating.
+Owned keys in Console for that fatal:
+
+| Key | Value |
+|---|---|
+| `environment` | `production` |
+| `failure` | `fatal` |
+| `feature` | `notApplicable` |
+| `operation` | `notApplicable` |
+| `preference` | `notApplicable` |
+
+Console additionally shows FlutterFire's `flutter_error_exception` and
+`flutter_error_reason` — plugin-generated, not GridView-owned keys (§7). Console's
+affected-user count is one affected **installation**; it establishes no custom user
+ID, and the retained SDK evidence independently records `No userId set`.
+
+**The release-like `gv_sync_run` is Console-confirmed** for version `1.2.1 (7)` at
+approximately **9.71 s**. One boundary is kept explicit: Console confirms the
+trace's arrival, version and duration, while **`outcome=success` rests on the
+retained SDK evidence and was not independently displayed in Console**.
+
+Exactly one fatal was produced. The harness wrote a persisted repeat-guard before
+signalling, and a clean relaunch confirmed it went inert rather than repeating. **No
+additional non-fatal was produced in this pass.**
 
 Two build-safety facts about that APK, both from the retained verbose log:
 `:app:minifyProductionReleaseWithR8` **executed**, and the log contains **zero**
 occurrences of `uploadCrashlyticsMappingFile<Variant>` or
-`uploadCrashlyticsSymbolFile<Variant>` — no task excluded, none registered.
-Mapping upload stayed fail-closed with no authorization property set anywhere: not
-in the environment, not in repository or user Gradle properties. A mapping file was
-generated locally, as every minified release does (§3.1 item 1); nothing was
-uploaded. No AAB was produced and nothing was published.
+`uploadCrashlyticsSymbolFile<Variant>` — none registered, none scheduled, and **no
+`-x` exclusion used**, so the safe default held on its own. Mapping upload stayed
+fail-closed with no authorization property set anywhere: not in the environment,
+not in repository or user Gradle properties. A mapping file was generated locally,
+as every minified release does (§3.1 item 1); nothing was uploaded. No AAB was
+produced and nothing was published.
 
 ### 9.2 What Phase 8C-2 deliberately did not do
 
@@ -909,6 +937,6 @@ revisit or attempt to confirm this incident.
   possible future enhancement; nothing in this repository requires it before
   release, and it must not be listed as a blocker.
 - **The two Play blockers** — an unset privacy-policy URL and the outstanding Data
-  Safety declaration — remain open. See `../release/play-store-baseline.md`.
-- **The release-like Console check** of §9.1.1 is the one item left before Phase
-  8C-2 can be called complete.
+  Safety declaration — remain open. See `../release/play-store-baseline.md`. Every
+  other pre-existing release requirement stays governed by
+  `GridView_Implementation_Plan.md`.

@@ -103,10 +103,13 @@ final Provider<DataSourceMode> dataSourceModeProvider =
 
 /// The application database. Opened once and closed with the scope.
 ///
-/// The open is traced (once per process, on first use) because it is the one
-/// unavoidable local I/O step between launching and rendering cached content:
-/// if it regresses, every screen starts late and nothing else in the app
-/// explains why.
+/// The open is traced — at most once per [GridViewDatabase] instance, normally
+/// once per `ProviderScope`, on first use — because it is the one unavoidable
+/// local I/O step between launching and rendering cached content: if it
+/// regresses, every screen starts late and nothing else in the app explains why.
+/// It is not a per-OS-process quantity: each scope constructs its own instance,
+/// so a process holding several scopes opens several databases, while the
+/// ordinary application shell holds one.
 final Provider<GridViewDatabase> databaseProvider = Provider<GridViewDatabase>((
   Ref ref,
 ) {

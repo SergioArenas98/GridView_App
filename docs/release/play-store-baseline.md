@@ -104,18 +104,26 @@
   **native (C/C++) libraries** are not captured. Android runtime and JVM
   failures remain in Crashlytics scope.
 
-- **Firebase operational verification — production-debug pass DONE, release-like
-  pass pending one Console check (Phase 8C-2, 2026-08-16).**
+- **Firebase operational verification — DONE (Phase 8C-2, 2026-08-16).** No longer
+  a blocker. Both passes are confirmed in Firebase Console.
 
-  A second, **release-like** pass was run from a signed, R8-minified production
-  **release APK** on the same dedicated emulator, because a debug build does not
-  exercise release compilation or artifact behaviour. Its controlled fatal
-  (identifiable by a unique release-like marker) and its `gv_sync_run` sample were
-  **accepted by Firebase ingestion with HTTP 200**, but **Console arrival has not
-  yet been checked**. Until it is, Phase 8C-2 is not complete. That APK was
-  installed only on the dedicated emulator; no AAB was produced, nothing was
-  published, and mapping upload stayed fail-closed — the verbose build log contains
-  no `uploadCrashlyticsMappingFile`/`uploadCrashlyticsSymbolFile` task at all.
+  The **release-like** pass ran from a signed, R8-minified production **release
+  APK** on the dedicated emulator, because a debug build does not exercise release
+  compilation or artifact behaviour. `minifyProductionReleaseWithR8` executed, the
+  installed package was **not debuggable**, and its SHA-256 matched the artifact
+  just built. Its controlled fatal is **Console-confirmed** — matched by a unique
+  release-like marker and its exact UTC timestamp, for `1.2.1 (7)` on Android 16,
+  classified as a **fatal** failure, one event affecting one installation, carrying
+  `environment=production`, `failure=fatal` and `notApplicable` for `feature`,
+  `operation` and `preference`. Its `gv_sync_run` sample is Console-confirmed for
+  `1.2.1 (7)` at approximately **9.71 s**; `outcome=success` rests on retained SDK
+  evidence and was not independently displayed in Console. That APK was installed
+  only on the dedicated emulator; **no AAB was produced, nothing was published**,
+  and mapping upload stayed fail-closed — the verbose build log contains no
+  `uploadCrashlyticsMappingFile`/`uploadCrashlyticsSymbolFile` task at all, and no
+  `-x` exclusion was used. **Exactly one additional fatal and one additional
+  Performance sample were produced, under explicit authorization; no additional
+  non-fatal was generated.**
 
   The earlier production-**debug** pass is fully confirmed:
   - the fatal arrived for `1.2.1 (7)` at 11:39:45 UTC, classified by Firebase as
@@ -164,8 +172,9 @@ Unchanged by Phase 8C-2, and both still open:
 Plus the pre-existing items above: every `PENDING` Play Console value, and the
 Android NDK version decision before the first release AAB.
 
-Outstanding for Phase 8C-2 itself, and **not** a Play blocker: the Console check of
-the release-like pass described above.
+**Phase 8C-2 itself is complete** — nothing about Firebase observability is
+outstanding. Every other pre-existing release requirement remains governed by
+`../technical/GridView_Implementation_Plan.md`.
 
 ## Known limitations (not blockers)
 

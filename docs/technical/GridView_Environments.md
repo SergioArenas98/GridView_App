@@ -159,15 +159,17 @@ environment-specific interval.
   `verify<Variant>FirebaseDependencies`; the Dart lockfile test covers only
   direct Dart packages.
 - Crashlytics and Performance data **have** been observed arriving in Firebase
-  Console (Phase 8C-2, 2026-08-16), from a production **debug** build on a
-  dedicated emulator: a controlled fatal, a controlled non-fatal and a
-  `gv_sync_run` sample. A second, **release-like** pass from a signed, R8-minified
-  production release APK was accepted by Firebase ingestion with HTTP 200, but its
-  **Console arrival has not yet been checked** — so Phase 8C-2 is not yet closed.
-  Keep the three evidence levels apart: produced locally, accepted by ingestion
-  (HTTP 200), observed in Console. Only the last is delivery. See
-  `GridView_Observability.md` §9 and
-  `GridView_Preferences_And_Settings.md` §6.2 and §7.
+  Console (**Phase 8C-2, complete, 2026-08-16**), from two passes on a dedicated
+  emulator: a production **debug** build contributed a controlled fatal, a
+  controlled non-fatal and a `gv_sync_run` sample; a **release-like** pass from a
+  signed, R8-minified, non-debuggable production release APK contributed a further
+  Console-confirmed controlled fatal (correct five owned keys) and a
+  Console-confirmed `gv_sync_run` at ≈ 9.71 s. Keep the three evidence levels
+  apart: produced locally, accepted by ingestion (HTTP 200), observed in Console —
+  only the last is delivery, and `outcome=success` on that trace rests on retained
+  SDK evidence rather than Console display. No mapping or symbol upload occurred,
+  no AAB was built and nothing was published. See `GridView_Observability.md` §9
+  and `GridView_Preferences_And_Settings.md` §6.2 and §7.
 
 ## Advertising
 
