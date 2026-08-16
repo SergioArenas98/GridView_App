@@ -625,26 +625,29 @@ class _StandingsSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.xs,
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.xxl,
+    return GvLoadingSemantics(
+      label: AppLocalizations.of(context).a11yLoading,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.xs,
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.xxl,
+        ),
+        children: const <Widget>[
+          GvSkeletonBlock(height: 56),
+          SizedBox(height: GvSpacing.xxs),
+          GvSkeletonBlock(height: 56),
+          SizedBox(height: GvSpacing.xxs),
+          GvSkeletonBlock(height: 56),
+          SizedBox(height: GvSpacing.xxs),
+          GvSkeletonBlock(height: 56),
+          SizedBox(height: GvSpacing.xxs),
+          GvSkeletonBlock(height: 56),
+          SizedBox(height: GvSpacing.xxs),
+          GvSkeletonBlock(height: 56),
+        ],
       ),
-      children: const <Widget>[
-        GvSkeletonBlock(height: 56),
-        SizedBox(height: GvSpacing.xxs),
-        GvSkeletonBlock(height: 56),
-        SizedBox(height: GvSpacing.xxs),
-        GvSkeletonBlock(height: 56),
-        SizedBox(height: GvSpacing.xxs),
-        GvSkeletonBlock(height: 56),
-        SizedBox(height: GvSpacing.xxs),
-        GvSkeletonBlock(height: 56),
-        SizedBox(height: GvSpacing.xxs),
-        GvSkeletonBlock(height: 56),
-      ],
     );
   }
 }

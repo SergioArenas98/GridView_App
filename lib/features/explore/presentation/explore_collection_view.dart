@@ -139,19 +139,22 @@ class _ExploreSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        GvLayout.screenPaddingHorizontal,
-        0,
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.xxl,
-      ),
-      children: <Widget>[
-        for (int i = 0; i < 6; i++) ...<Widget>[
-          const GvSkeletonCard(),
-          const SizedBox(height: GvSpacing.xxs),
+    return GvLoadingSemantics(
+      label: AppLocalizations.of(context).a11yLoading,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          GvLayout.screenPaddingHorizontal,
+          0,
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.xxl,
+        ),
+        children: <Widget>[
+          for (int i = 0; i < 6; i++) ...<Widget>[
+            const GvSkeletonCard(),
+            const SizedBox(height: GvSpacing.xxs),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

@@ -416,6 +416,10 @@
       }
     }
   },
+  "a11yLoading": "Loading",
+  "@a11yLoading": {
+    "description": "Accessibility-only announcement placed once around a screen's loading placeholder. Never rendered visually; a screen reader speaks it instead of the decorative skeleton shapes."
+  },
   "offlineStaleNotice": "This data may be out of date — showing the last saved version.",
   "@offlineStaleNotice": {
     "description": "Notice shown when cached content is stale."

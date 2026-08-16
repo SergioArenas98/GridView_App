@@ -163,12 +163,15 @@ class _ResultsArea extends ConsumerWidget {
       ),
       GrandPrixResultsLoading() => GvScreenSection(
         title: l10n.grandPrixResults,
-        child: const Column(
-          children: <Widget>[
-            GvSkeletonBlock(height: 56),
-            SizedBox(height: GvSpacing.sm),
-            GvSkeletonBlock(height: 56),
-          ],
+        child: GvLoadingSemantics(
+          label: l10n.a11yLoading,
+          child: const Column(
+            children: <Widget>[
+              GvSkeletonBlock(height: 56),
+              SizedBox(height: GvSpacing.sm),
+              GvSkeletonBlock(height: 56),
+            ],
+          ),
         ),
       ),
       GrandPrixResultsError(:final failure) => GvScreenSection(
@@ -226,24 +229,27 @@ class _DetailSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.md,
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.xxl,
+    return GvLoadingSemantics(
+      label: AppLocalizations.of(context).a11yLoading,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.md,
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.xxl,
+        ),
+        children: const <Widget>[
+          GvSkeletonCard(),
+          SizedBox(height: GvSpacing.xl),
+          GvSkeletonBlock(width: 120, height: 18),
+          SizedBox(height: GvSpacing.md),
+          GvSkeletonBlock(height: 48),
+          SizedBox(height: GvSpacing.sm),
+          GvSkeletonBlock(height: 48),
+          SizedBox(height: GvSpacing.sm),
+          GvSkeletonBlock(height: 48),
+        ],
       ),
-      children: const <Widget>[
-        GvSkeletonCard(),
-        SizedBox(height: GvSpacing.xl),
-        GvSkeletonBlock(width: 120, height: 18),
-        SizedBox(height: GvSpacing.md),
-        GvSkeletonBlock(height: 48),
-        SizedBox(height: GvSpacing.sm),
-        GvSkeletonBlock(height: 48),
-        SizedBox(height: GvSpacing.sm),
-        GvSkeletonBlock(height: 48),
-      ],
     );
   }
 }

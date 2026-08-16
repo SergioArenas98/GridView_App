@@ -324,6 +324,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get a11yLoading => 'Loading';
+
+  @override
   String get offlineStaleNotice =>
       'This data may be out of date — showing the last saved version.';
 

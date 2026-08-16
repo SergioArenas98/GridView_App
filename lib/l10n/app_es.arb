@@ -95,6 +95,7 @@
   "invalidRouteMessage": "Este enlace apunta a algo que no existe.",
   "notFoundGoHome": "Ir a Inicio",
   "homeUpdated": "Actualizado {time}",
+  "a11yLoading": "Cargando",
   "offlineStaleNotice": "Estos datos pueden estar desactualizados — mostrando la última versión guardada.",
   "refreshFailedNotice": "No se pudo actualizar — mostrando datos guardados.",
   "retry": "Reintentar",

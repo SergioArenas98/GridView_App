@@ -104,19 +104,22 @@ class _DetailSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.md,
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.xxl,
-      ),
-      children: <Widget>[
-        for (int i = 0; i < 4; i++) ...<Widget>[
-          const GvSkeletonCard(),
-          const SizedBox(height: GvSpacing.sm),
+    return GvLoadingSemantics(
+      label: AppLocalizations.of(context).a11yLoading,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.md,
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.xxl,
+        ),
+        children: <Widget>[
+          for (int i = 0; i < 4; i++) ...<Widget>[
+            const GvSkeletonCard(),
+            const SizedBox(height: GvSpacing.sm),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
