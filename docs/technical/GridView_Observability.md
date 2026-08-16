@@ -21,17 +21,11 @@ about mapping/symbol handling either — **Phase 8C-2 performed no mapping or sy
 upload**, while the earlier Phase 8C-1 incident remains possible and unverified,
 exactly as §9.4 records.
 
-The distinction that governs every claim here: a green test suite, a successful
-`Firebase.initializeApp()`, a completed Gradle task and a compiled custom trace
-are evidence about *code*; an accepted HTTP batch is evidence of *submission*;
-only Console is evidence of *arrival*. §9 keeps the three separate, and nothing
-below may collapse them.
-
-The distinction that governed Phase 8C-1 still governs every future claim here: a
-green test suite, a successful `Firebase.initializeApp()`, a completed Gradle task
-and a compiled custom trace are evidence about *code*; an accepted HTTP batch is
-evidence of *submission*; only Console is evidence of *arrival*. §9 keeps the
-three separate, and nothing below may collapse them.
+The distinction that governed Phase 8C-1 still governs every claim here: a green
+test suite, a successful `Firebase.initializeApp()`, a completed Gradle task and a
+compiled custom trace are evidence about *code*; an accepted HTTP batch is evidence
+of *submission*; only Console is evidence of *arrival*. §9 keeps the three
+separate, and nothing below may collapse them.
 
 Decisions: [ADR 0016](../adr/0016-production-only-firebase-observability.md)
 (environment isolation, native collection policy and non-blocking activation)

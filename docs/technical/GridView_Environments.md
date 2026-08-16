@@ -101,9 +101,11 @@ environment-specific interval.
   the production flavor alone (`android/app/build.gradle`). The scoping is by
   variant, never by the requested task name.
 - **Pending:** dedicated Firebase projects/configurations for development and
-  staging do not exist yet. Until they are approved and created, dev and
-  staging builds contain no Firebase configuration and initialize no Firebase
-  SDK. Do not create new Firebase projects without approval.
+  staging do not exist yet. Until they are approved and created, dev and staging
+  builds contain **no Firebase configuration** and never initialize the **Dart
+  adapters**. They are not free of the SDK itself — see the packaging note below,
+  which is the accurate statement. Do not create new Firebase projects without
+  approval.
 - **Phase 8C-1 integrated the SDKs.** `firebase_core`, `firebase_crashlytics`
   and `firebase_performance` are dependencies; exactly one file
   (`lib/core/observability/firebase/firebase_observability.dart`) imports them,
