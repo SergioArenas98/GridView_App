@@ -75,36 +75,42 @@ class GvOfflineNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final GvSemanticColors colors = context.gvColors;
+    // The notice speaks once. The parent carries the message and the visible
+    // row is excluded: without the exclusion the annotation merged with the
+    // identical Text below it and the single node's label became the message
+    // twice over, which a sighted review cannot see.
     return Semantics(
       liveRegion: true,
       label: message,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: GvSpacing.md,
-          vertical: GvSpacing.sm,
-        ),
-        decoration: BoxDecoration(
-          color: context.gvColors.surfaceElevated,
-          borderRadius: GvRadii.mdAll,
-          border: Border.all(color: colors.stale),
-        ),
-        child: Row(
-          children: <Widget>[
-            Icon(
-              Icons.cloud_off_outlined,
-              size: GvIconSizes.md,
-              color: colors.stale,
-            ),
-            const SizedBox(width: GvSpacing.sm),
-            Expanded(
-              child: Text(
-                message,
-                style: context.gvText.bodyM.copyWith(
-                  color: context.gvColors.textSecondary,
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: GvSpacing.md,
+            vertical: GvSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: context.gvColors.surfaceElevated,
+            borderRadius: GvRadii.mdAll,
+            border: Border.all(color: colors.stale),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(
+                Icons.cloud_off_outlined,
+                size: GvIconSizes.md,
+                color: colors.stale,
+              ),
+              const SizedBox(width: GvSpacing.sm),
+              Expanded(
+                child: Text(
+                  message,
+                  style: context.gvText.bodyM.copyWith(
+                    color: context.gvColors.textSecondary,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -8,7 +8,7 @@ import '../support/a11y_harness.dart';
 import '../support/component_harness.dart';
 
 /// Accessibility behaviour of the shared *state* components: the loading frame,
-/// the error state and the empty state.
+/// the error state, the empty state and the offline notice.
 ///
 /// These are the components a screen swaps in when it has nothing else to show,
 /// so they are exactly the moments a screen-reader user most needs told what
@@ -222,6 +222,43 @@ void main() {
       );
       expect(labelOccurrences(tester, 'Try again'), 1);
       handle.dispose();
+    });
+  });
+
+  group('GvOfflineNotice', () {
+    const String message =
+        'This data may be out of date — showing the last saved version.';
+
+    testWidgets('carries its message on exactly one semantics node', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(tester, const GvOfflineNotice(message: message));
+
+      expect(
+        labelOccurrences(tester, message),
+        1,
+        reason: 'the parent label and the visible Text must not both speak',
+      );
+      handle.dispose();
+    });
+
+    testWidgets('keeps the notice a live region', (WidgetTester tester) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(tester, const GvOfflineNotice(message: message));
+
+      final List<SemanticsData> regions = liveRegions(tester);
+      expect(regions, hasLength(1));
+      expect(regions.single.label, message);
+      handle.dispose();
+    });
+
+    testWidgets('still renders the message visibly', (
+      WidgetTester tester,
+    ) async {
+      await pumpComponent(tester, const GvOfflineNotice(message: message));
+
+      expect(find.text(message), findsOneWidget);
     });
   });
 }

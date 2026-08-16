@@ -47,13 +47,25 @@ List<SemanticsData> semanticsDataList(WidgetTester tester) => semanticsNodes(
   tester,
 ).map((SemanticsNode node) => node.getSemanticsData()).toList();
 
-/// How many rendered nodes carry [text] anywhere in their label.
+/// How many times [text] is spoken across the whole rendered tree.
 ///
-/// The count — not merely "at least one" — is the assertion that catches a
-/// duplicated announcement.
-int labelOccurrences(WidgetTester tester, String text) => semanticsDataList(
-  tester,
-).where((SemanticsData data) => data.label.contains(text)).length;
+/// Counts occurrences *within* each label as well as across nodes, because a
+/// duplicated announcement takes both forms: two sibling nodes each carrying
+/// the text, and — the harder one to see — a single node whose label merged a
+/// parent annotation with the identical visible text below it, producing
+/// `"Offline\nOffline"` on one node. Counting nodes would call that one.
+int labelOccurrences(WidgetTester tester, String text) {
+  if (text.isEmpty) return 0;
+  int total = 0;
+  for (final SemanticsData data in semanticsDataList(tester)) {
+    int from = data.label.indexOf(text);
+    while (from >= 0) {
+      total++;
+      from = data.label.indexOf(text, from + text.length);
+    }
+  }
+  return total;
+}
 
 /// Every rendered label, ignoring the nodes that carry none.
 List<String> renderedLabels(WidgetTester tester) => semanticsDataList(tester)
