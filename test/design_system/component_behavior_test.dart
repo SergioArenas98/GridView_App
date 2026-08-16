@@ -31,7 +31,12 @@ void main() {
     int taps = 0;
     await pumpComponent(
       tester,
-      GvPrimaryButton(label: 'Load', isLoading: true, onPressed: () => taps++),
+      GvPrimaryButton(
+        label: 'Load',
+        isLoading: true,
+        loadingLabel: 'Loading',
+        onPressed: () => taps++,
+      ),
     );
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(

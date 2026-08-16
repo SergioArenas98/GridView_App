@@ -21,12 +21,30 @@ class GvPrimaryButton extends StatelessWidget {
 
   /// The localized state spoken after the button's own name while [isLoading],
   /// e.g. "Try again, Loading". Supplied by the caller because the design
-  /// system is deliberately localization-agnostic; omitting it keeps the name
-  /// and simply says nothing about the state.
+  /// system is deliberately localization-agnostic.
+  ///
+  /// Required in practice whenever [isLoading] is true — see the assertion in
+  /// [build] — and ignored otherwise, so an ordinary button never has to think
+  /// about it.
   final String? loadingLabel;
 
   @override
   Widget build(BuildContext context) {
+    // The contract, enforced in development and in CI rather than in release:
+    // a loading state nobody can hear is the defect this button already had
+    // once, and it is invisible to a sighted reviewer, so it must not be
+    // possible to reintroduce it silently. Asserted here rather than in the
+    // constructor because detecting a whitespace-only label needs `trim()`,
+    // which a const constructor's initializer list cannot evaluate — and
+    // keeping the constructor const matters to every caller that is not
+    // loading.
+    assert(
+      !isLoading || (loadingLabel?.trim().isNotEmpty ?? false),
+      'GvPrimaryButton(isLoading: true) needs a non-blank localized '
+      'loadingLabel — AppLocalizations.a11yLoading. Without one the button '
+      'announces nothing about the work it is doing, and a screen-reader user '
+      'is told only the name of a control that has stopped responding.',
+    );
     if (!isLoading) {
       return ElevatedButton(
         onPressed: onPressed,
@@ -40,6 +58,13 @@ class GvPrimaryButton extends StatelessWidget {
     // spinner below is excluded, so it is spoken once and not twice.
     final String? state = loadingLabel?.trim();
     return Semantics(
+      // A boundary, like the ElevatedButton this branch replaces. Without it
+      // the annotation is not a node of its own and merges into whatever
+      // encloses the button — on a real screen the button's name disappears
+      // into its section heading instead of being a button a screen reader can
+      // land on. In isolation the two are indistinguishable, which is why this
+      // only surfaced once a whole screen was rendered.
+      container: true,
       button: true,
       enabled: false,
       label: (state == null || state.isEmpty) ? label : '$label, $state',

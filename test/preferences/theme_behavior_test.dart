@@ -162,6 +162,7 @@ void main() {
       'loading primary button': const GvPrimaryButton(
         label: 'Load',
         isLoading: true,
+        loadingLabel: 'Loading',
       ),
       'secondary button': GvSecondaryButton(label: 'More', onPressed: () {}),
       'status chip info': const GvStatusChip(

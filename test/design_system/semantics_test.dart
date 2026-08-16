@@ -118,11 +118,18 @@ void main() {
       final SemanticsHandle handle = tester.ensureSemantics();
       await pumpComponent(
         tester,
-        GvPrimaryButton(label: 'Try again', isLoading: true, onPressed: () {}),
+        GvPrimaryButton(
+          label: 'Try again',
+          isLoading: true,
+          loadingLabel: 'Loading',
+          onPressed: () {},
+        ),
       );
 
+      // The name survives the spinner replacing it, and the whole thing is
+      // still one disabled button rather than an unnamed one.
       expect(labelOccurrences(tester, 'Try again'), 1);
-      final SemanticsData data = nodeLabelled(tester, 'Try again');
+      final SemanticsData data = nodeLabelled(tester, 'Try again, Loading');
       expect(data.flagsCollection.isButton, isTrue);
       expect(
         data.flagsCollection.isEnabled.toBoolOrNull(),
@@ -152,39 +159,47 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('a blank loading state is omitted rather than appended', (
+    testWidgets('the loading state is trimmed before it is spoken', (
       WidgetTester tester,
     ) async {
+      // A blank label is no longer reachable — the component asserts against it
+      // (see component_catalogue_test.dart) — but surrounding whitespace on an
+      // otherwise real label must not become part of the spoken name.
       final SemanticsHandle handle = tester.ensureSemantics();
       await pumpComponent(
         tester,
         GvPrimaryButton(
           label: 'Try again',
           isLoading: true,
-          loadingLabel: '  ',
+          loadingLabel: '  Loading  ',
           onPressed: () {},
         ),
       );
 
-      expect(renderedLabels(tester), contains('Try again'));
+      expect(renderedLabels(tester), contains('Try again, Loading'));
       handle.dispose();
     });
 
-    testWidgets('loading changes neither the spinner nor the button size', (
-      WidgetTester tester,
-    ) async {
-      await pumpComponent(
-        tester,
-        const GvPrimaryButton(label: 'Try again', isLoading: true),
-      );
-      final Size before = tester.getSize(find.byType(ElevatedButton));
-
+    testWidgets('the loading state changes neither the spinner nor the button '
+        'size', (WidgetTester tester) async {
       await pumpComponent(
         tester,
         const GvPrimaryButton(
           label: 'Try again',
           isLoading: true,
           loadingLabel: 'Loading',
+        ),
+      );
+      final Size before = tester.getSize(find.byType(ElevatedButton));
+
+      // A much longer localized state must not move a pixel: the label is
+      // semantics-only.
+      await pumpComponent(
+        tester,
+        const GvPrimaryButton(
+          label: 'Try again',
+          isLoading: true,
+          loadingLabel: 'Cargando, por favor espera un momento',
         ),
       );
 
