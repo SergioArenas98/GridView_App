@@ -104,8 +104,86 @@
   **native (C/C++) libraries** are not captured. Android runtime and JVM
   failures remain in Crashlytics scope.
 
-- **Firebase operational verification (blocking for Phase 8 closure).** No
-  crash, non-fatal or performance trace has been observed arriving in Firebase
-  Console. That requires an authorized release-like production build and console
-  access. Automated tests, a successful `Firebase.initializeApp()` and a
-  completed Gradle task are **not** evidence of delivery.
+- **Firebase operational verification — DONE (Phase 8C-2, 2026-08-16).** No longer
+  a blocker. Both passes are confirmed in Firebase Console.
+
+  The **release-like** pass ran from a signed, R8-minified production **release
+  APK** on the dedicated emulator, because a debug build does not exercise release
+  compilation or artifact behaviour. `minifyProductionReleaseWithR8` executed, the
+  installed package was **not debuggable**, and its SHA-256 matched the artifact
+  just built. Its controlled fatal is **Console-confirmed** — matched by a unique
+  release-like marker and its exact UTC timestamp, for `1.2.1 (7)` on Android 16,
+  classified as a **fatal** failure, one event affecting one installation, carrying
+  `environment=production`, `failure=fatal` and `notApplicable` for `feature`,
+  `operation` and `preference`. Its `gv_sync_run` sample is Console-confirmed for
+  `1.2.1 (7)` at approximately **9.71 s**; `outcome=success` rests on retained SDK
+  evidence and was not independently displayed in Console. That APK was installed
+  only on the dedicated emulator; **no AAB was produced, nothing was published**,
+  and mapping upload stayed fail-closed — the verbose build log contains no
+  `uploadCrashlyticsMappingFile`/`uploadCrashlyticsSymbolFile` task at all, and no
+  `-x` exclusion was used. **Exactly one additional fatal and one additional
+  Performance sample were produced, under explicit authorization; no additional
+  non-fatal was generated.**
+
+  The earlier production-**debug** pass is fully confirmed:
+  - the fatal arrived for `1.2.1 (7)` at 11:39:45 UTC, classified by Firebase as
+    fatal;
+  - the non-fatal arrived for `1.2.1 (7)` at 11:31:25 UTC as one recoverable
+    event, signature
+    `ObservedFailure(localPreferenceFailure|settings|preferenceWrite|timeDisplay)`;
+  - both carry the complete five-key normalized context with the correct
+    `notApplicable` sentinels, and the fatal inherited none of the preceding
+    non-fatal's context;
+  - no raw preference key, user data, URL or Firebase identifier was exposed, and
+    no GridView user identifier is set — Console's "1 affected user" reflects one
+    affected *installation*;
+  - `gv_sync_run` is visible for `1.2.1 (7)`, one sample, ≈ 3.19 s. Its
+    `outcome=success` attribute rests on retained SDK evidence and was **not**
+    independently visible in the reviewed Console screenshot.
+
+  `gv_database_open` was not observed and is not expected to be: it is a
+  best-effort trace normally missed during startup for a documented timing reason.
+  That is an accepted design decision, not an outstanding item.
+
+  The distinction that made this meaningful still holds for any future claim:
+  automated tests, a successful `Firebase.initializeApp()` and a completed Gradle
+  task are **not** evidence of delivery, and neither is an accepted HTTP batch —
+  only a Console record is. Equally, one controlled event proves delivery for that
+  path at that moment; it does not guarantee future availability or behaviour under
+  every device condition.
+
+  Phase 8C-2 changed **no** Firebase configuration, product, retention, alert,
+  permission or billing setting, created no project or app, deleted nothing
+  remotely, produced **no AAB**, performed no Play Console operation, and uploaded
+  no mapping file or native symbols — mapping upload remained fail-closed and
+  unauthorized throughout. All three controlled events remain stored in the
+  production Firebase project. Both temporary verification harnesses were fully
+  removed and must not be reintroduced.
+
+## Remaining release blockers
+
+Unchanged by Phase 8C-2, and both still open:
+
+1. **Privacy-policy URL not configured** — `PRIVACY_POLICY_URL` is unset, so a
+   production build shows no policy affordance.
+2. **Play Data Safety declaration outstanding** — must cover the Firebase
+   processing categories listed above; needs legal/privacy review.
+
+Plus the pre-existing items above: every `PENDING` Play Console value, and the
+Android NDK version decision before the first release AAB.
+
+**Phase 8C-2 itself is complete** — nothing about Firebase observability is
+outstanding. Every other pre-existing release requirement remains governed by
+`../technical/GridView_Implementation_Plan.md`.
+
+## Known limitations (not blockers)
+
+- **No NDK / native-library crash capture.** `firebase-crashlytics-ndk` is
+  deliberately absent and **explicitly outside ADR 0016's scope**, so crashes
+  originating in C/C++ libraries are not recorded; Android runtime and JVM failures
+  still are. Adding it is a possible future enhancement requiring its own scope
+  decision. It does **not** need to be implemented before release, and must not be
+  recorded as a blocker.
+- **`gv_database_open` is best-effort** and normally absent on startup, for the
+  timing reason documented in `../technical/GridView_Observability.md` §6. An
+  accepted design decision, not an outstanding item.

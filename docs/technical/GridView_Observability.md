@@ -1,12 +1,31 @@
 # GridView Observability
 
-Status: **Phase 8C-1 code complete, external observability verification
-pending.** The code, gates, tests and builds described here are done and
-verified locally. **No crash, non-fatal or trace has been observed arriving in
-Firebase Console**, because that requires an authorized release-like production
-build and console access. A green test suite, a successful
-`Firebase.initializeApp()`, a completed Gradle task and a compiled custom trace
-are evidence about *code*, never about telemetry delivery.
+Status: **Phase 8C-2 is COMPLETE (2026-08-16).** External Firebase verification is
+confirmed in Console from **two** passes:
+
+| Pass | Artifact | Console arrival |
+|---|---|---|
+| production **debug** | debug build, no R8 | **confirmed** — fatal, non-fatal and `gv_sync_run` all observed |
+| production **release** | signed release APK, R8/minified, not debuggable | **confirmed** — controlled fatal and a `gv_sync_run` sample observed |
+
+The release-like pass exists because a debug build proves flavor selection and
+Firebase routing but does **not** exercise release compilation, R8/minification or
+release artifact behaviour, and
+[`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md) §13.9 requires
+crash reports from a staging/release-like build. That criterion is now satisfied;
+it was not weakened to get there. See §9.
+
+What this does **not** establish: Play-distributed behaviour, behaviour under every
+device or network condition, or future Firebase availability. It settles nothing
+about mapping/symbol handling either — **Phase 8C-2 performed no mapping or symbol
+upload**, while the earlier Phase 8C-1 incident remains possible and unverified,
+exactly as §9.4 records.
+
+The distinction that governed Phase 8C-1 still governs every claim here: a green
+test suite, a successful `Firebase.initializeApp()`, a completed Gradle task and a
+compiled custom trace are evidence about *code*; an accepted HTTP batch is evidence
+of *submission*; only Console is evidence of *arrival*. §9 keeps the three
+separate, and nothing below may collapse them.
 
 Decisions: [ADR 0016](../adr/0016-production-only-firebase-observability.md)
 (environment isolation, native collection policy and non-blocking activation)
@@ -240,6 +259,20 @@ is **false for a production installation that has activated at least once**, and
 it has been removed. The accurate statement is narrower: *collection starts off
 on a fresh installation of any flavor, and only a production build can ever turn
 it on.*
+
+**This table was externally observed during Phase 8C-2, not merely derived from
+the SDK contract.** On the dedicated clean emulator the Crashlytics SDK logged
+`automatic data collection DISABLED by firebase_crashlytics_collection_enabled
+manifest flag` on the first launch of a fresh installation, then `ENABLED by API`
+once the production activation ran. On every subsequent launch of that same
+installation it logged `ENABLED by API` **at process start, roughly 4.7 seconds
+before any Dart code ran** — the persisted override, applied ahead of the
+manifest, exactly as described above. The manifest value is therefore confirmed
+to be a fresh-install default rather than a per-launch enforcement boundary.
+
+Dev and staging remain structurally isolated by their separate application IDs
+and their absence of Firebase configuration; nothing in this observation applies
+to them, and nothing about it was or could be tested for them.
 
 **Dev and staging are unaffected, and this is structural rather than a
 convention.** They carry the `.dev` and `.staging` application-ID suffixes, so
@@ -500,13 +533,63 @@ are never throttled.
 
 | Trace | Wire name | Frequency |
 |---|---|---|
-| database open | `gv_database_open` | once per `GridViewDatabase` instance — in practice once per `ProviderScope`, **not** once per OS process |
-| sync run | `gv_sync_run` | once per startup / genuine foreground / manual run; the coordinator serialises runs, so two are never open at once |
+| database open | `gv_database_open` | at most once per `GridViewDatabase` instance — in practice once per `ProviderScope`, **not** once per OS process. **Best-effort: normally missed on startup — see below.** |
+| sync run | `gv_sync_run` | once per startup / genuine foreground / manual run; the coordinator serialises runs, so two are never open at once. The **startup** run is subject to the same limitation |
 
 Each records a two-valued `outcome` attribute (`success` / `failure`) and stops
 in a `finally`. There is deliberately **no `cancelled`**: a cancelled
 synchronization run completes normally, so the trace boundary cannot distinguish
 it and inventing the value would misreport it.
+
+#### Both traces are best-effort, and `gv_database_open` is normally absent
+
+Custom traces are recorded only once the deferred tracer has adopted the real
+one. Phase 8C-2 measured both sides of that window on a real device:
+
+| | Timing after Dart startup |
+|---|---|
+| database opened (lazily, during the first frame) | ~1–2 s |
+| Firebase Performance activation completed | ~2.1–3.9 s |
+
+A database is opened **at most once per `GridViewDatabase` instance** — in
+practice once per `ProviderScope` that constructs the provider. The ordinary
+application shell has one such scope, so a normal launch opens one database; a
+process containing several scopes, as tests and a future multi-scope shell would
+create, opens one per scope. It is **not** a per-process quantity, and describing
+it that way would state the wrong trace-frequency guarantee.
+
+The **initial** instance is opened lazily on first use during the first frame,
+inside the activation window, while `DeferredPerformanceTracer` is still
+delegating to the no-op. So on an ordinary launch that first open is not recorded,
+and across the Phase 8C-2 runs `gv_database_open` was never produced. The
+**startup** `gv_sync_run` is lost the same way; later foreground, resumed and
+manual runs fall outside the window and are recorded normally, which is what Phase
+8C-2 observed in both the debug and the release pass.
+
+This is a timing race, not a wiring fault: `performanceTracerProvider` hands out
+the shared `DeferredPerformanceTracer`, which adopts **in place**, so a database
+instance opened **after** adoption still produces the trace. That is exactly why
+the instrumentation is kept as a best-effort signal rather than removed — the
+trace is reachable, just not by the first open of an ordinary launch.
+
+**The decision is to accept this, and it is deliberate.** Every alternative is
+worse than an absent measurement:
+
+- *Replaying the trace on adoption* is impossible without lying. Firebase's
+  `Trace` API has only `start()`/`stop()` and cannot backdate a start, so a
+  replayed trace would report a fabricated duration.
+- *Awaiting activation before the database is opened* would make observability a
+  startup dependency and break the guarantee that rendering never waits on a
+  platform/network handshake — the very thing ADR 0016 exists to prevent.
+- *Restructuring activation* to win the race would trade a real architectural
+  invariant for one optional measurement.
+
+So: do not delay the database open, do not replay the trace, do not fabricate a
+duration, and do not restructure activation to chase it. **Startup instrumentation
+must never block application work**, and an unrecorded measurement is the accepted
+cost of that rule. The absence of `gv_database_open` is not a defect and was not a
+Phase 8C-2 closure blocker — the externally confirmed post-activation
+`gv_sync_run` satisfies the Performance requirement.
 
 ## 7. Privacy and data processing
 
@@ -530,6 +613,20 @@ leaked into the next ordinary non-fatal, and a fatal inherited whatever feature
 and operation the last non-fatal left behind. `NormalizedReportRecorder` starts
 from a fully neutral template and overlays the report, so no owned key is ever
 stale and no key outside the owned set is written at all.
+
+**Confirmed in Console (Phase 8C-2).** A controlled non-fatal populating all five
+keys was followed, in the same session, by a controlled fatal. Console showed the
+fatal carrying `failure=fatal`, `environment=production` and `notApplicable` for
+`feature`, `operation` and `preference` — so it inherited none of the preceding
+non-fatal's `settings` / `preferenceWrite` / `timeDisplay` context. §9 records the
+full observation.
+
+**GridView-owned keys are not the only keys Console displays.** Firebase also
+shows `flutter_error_exception` and `flutter_error_reason`, which are generated by
+FlutterFire's own reporting entry point. They are plugin metadata, not
+application-owned keys, and their presence is expected — the "no unexpected
+GridView-owned custom key" guarantee covers the five keys in this section and does
+not extend to what the plugin attaches on its own behalf.
 
 **What Firebase may process** once collection is enabled in a production build:
 
@@ -597,22 +694,194 @@ external release blocker.**
   `firebase-crashlytics-ndk` is absent and stays absent without separate
   authorization. Android runtime and JVM failures are still captured; what is
   missing is the signal-level handler for C/C++ crashes.
-- No symbols were uploaded and no test crash or trace was sent.
+- **No mapping file and no native symbols have been uploaded under the
+  authorization mechanism**, which since §3.1 was made fail-closed is the only
+  route that exists. Phase 8C-2 built production **debug** *and* **release**
+  variants; in both, mapping upload stayed fail-closed,
+  `gridviewCrashlyticsUploadMapping` was never set, and no
+  `uploadCrashlyticsMappingFile<Variant>` or `uploadCrashlyticsSymbolFile<Variant>`
+  task appeared in any task graph. That is a statement about Phase 8C-2 and the
+  current policy, **not about all history**: §9.4 records an earlier Phase 8C-1
+  build whose upload task was enabled and scheduled before that default existed,
+  and whether Firebase received anything from it is not proven either way.
+- Phase 8C-2 **did** send controlled signals, and exactly these: one fatal and one
+  non-fatal plus a `gv_sync_run` trace from a production **debug** build, and then
+  — under separate explicit authorization — exactly **one further fatal and one
+  further `gv_sync_run` sample** from a production **release** APK. **No second
+  non-fatal was ever produced.** See §9.
+
+  **No further *controlled* crash, non-fatal or custom-trace signal was produced** —
+  which is the accurate, narrower claim. It is not a claim that nothing else left
+  the device: once collection is enabled, the SDKs also send installation and
+  session metadata and Performance Monitoring's own configuration traffic, exactly
+  as §7 records. Those are unavoidable properties of the SDKs, not GridView
+  signals, and a privacy or release audit must read §7 rather than this list.
 
 ## 9. Verification status
 
-**Not verifiable from this repository:** a real Crashlytics fatal, a selected
-non-fatal or a Performance trace arriving in Firebase Console; dev/staging
-observability (no projects exist); Data Safety accuracy; the hosted privacy
-policy. Sending a test event is prohibited during this local phase. **External
-Firebase Console verification therefore remains outstanding**, and no claim in
-this document should be read as evidence of delivery.
+**Phase 8C-2 is complete.** Two passes were run on 2026-08-16, both on the same
+dedicated, clean emulator with no prior GridView installation, both with
+`APP_ENV=production`, and **both confirmed in Firebase Console**.
 
-Also not verifiable here: the persisted collection override of §4.1. Its
-behaviour is documented from the platform SDKs' contract, not observed, because
-observing it would require a real production installation and console access.
+Three levels of evidence are kept distinct throughout, because collapsing them is
+how a delivery claim becomes untrue:
 
-### 9.1 Incident — one possible, unverified mapping upload
+| Level | What it proves |
+|---|---|
+| SDK log line | the Dart/native SDK produced and persisted the record locally |
+| HTTP 200 from the ingestion endpoint | Firebase **accepted the submission** |
+| Console record | the data **arrived and is queryable** |
+
+### 9.1 What was confirmed — production **debug** pass
+
+**Crashlytics fatal** — `com.sejuma.gridview`, version `1.2.1 (7)`,
+2026-08-16 11:39:45 UTC, classified by Firebase as a **fatal** failure. The
+exception text contains the controlled marker
+`Bad state: GridView Phase 8C-2 controlled fatal - 2026-08-16T11:39:45.435442Z`.
+It travelled the shipped path — an uncaught asynchronous error routed through
+`PlatformDispatcher.onError` → `FlutterError.reportError` → `FlutterError.onError`
+→ the installed reporter. `FirebaseCrashlytics.crash()` was never called. Owned
+keys in Console:
+
+| Key | Value |
+|---|---|
+| `environment` | `production` |
+| `failure` | `fatal` |
+| `feature` | `notApplicable` |
+| `operation` | `notApplicable` |
+| `preference` | `notApplicable` |
+
+**Crashlytics non-fatal** — version `1.2.1 (7)`, 2026-08-16 11:31:25 UTC,
+classified as one recoverable event, signature
+`ObservedFailure(localPreferenceFailure|settings|preferenceWrite|timeDisplay)`,
+reason `gridview.localPreferenceFailure`. Owned keys in Console:
+
+| Key | Value |
+|---|---|
+| `environment` | `production` |
+| `failure` | `localPreferenceFailure` |
+| `feature` | `settings` |
+| `operation` | `preferenceWrite` |
+| `preference` | `timeDisplay` |
+
+**Non-inheritance is confirmed.** The two reports were produced in that order, in
+the **same session**, precisely so the fatal's context could be checked against
+the non-fatal that preceded it. The fatal shows the neutral sentinel in all three
+inapplicable dimensions rather than the non-fatal's `settings` / `preferenceWrite`
+/ `timeDisplay`, which is `NormalizedReportRecorder` working end to end against a
+real backend rather than a fake.
+
+**Redaction is confirmed.** No raw preference key, user data, domain identifier,
+URL, query string, payload, credential or Firebase identifier appeared on either
+report. Both also carry FlutterFire's own `flutter_error_exception` and
+`flutter_error_reason` metadata; those are plugin-generated, not GridView-owned,
+and are expected (§7).
+
+**No GridView user identifier is set.** The SDK logged `No userId set for
+session`. Console attributing the crash to one affected user reflects **one
+affected installation** — Crashlytics counts installations — and is not evidence
+that a custom Firebase user ID was assigned.
+
+**Performance** — the custom trace `gv_sync_run` is visible in Console for version
+`1.2.1 (7)`, one sample, duration ≈ 3.19 s.
+
+**One deliberate limit on that last claim.** The retained SDK evidence for that
+exact trace recorded `outcome=success` and a duration of 3193.757 ms, and the
+Performance batch carrying it was accepted with HTTP 200. The Console screenshot
+reviewed for closure confirms **the trace and its duration**, but does not itself
+display the `outcome` attribute. So: trace arrival and duration are
+Console-confirmed; `outcome=success` rests on the retained SDK evidence and is not
+independently Console-confirmed. It is recorded that way on purpose.
+
+`gv_database_open` was **not** observed, and is not expected to be on an ordinary
+launch — see §6 for the timing reason and the decision to keep it as a best-effort
+signal.
+
+### 9.1.1 Production **release** pass — Console-confirmed
+
+The debug pass proves flavor selection, Firebase routing and the normalized
+context, but it does not exercise release compilation, R8/minification or release
+artifact behaviour, which the implementation plan's exit criteria require. A second
+pass therefore ran from a **signed production release APK** — R8/minified, and
+**not debuggable**, confirmed from the installed package flags — whose SHA-256 was
+checked equal to the artifact just built, installed on the same dedicated emulator.
+
+| Signal | Local SDK evidence | Ingestion | Console |
+|---|---|---|---|
+| controlled fatal, 2026-08-16 14:29:20 UTC | recorded via the shipped `recordFlutterFatalError` path; `No userId set for session`; enqueued to DataTransport | **HTTP 200** at 14:29:48 UTC | **confirmed** |
+| `gv_sync_run`, 2026-08-16 14:30:13 UTC | `outcome=success`, duration 9707.958 ms | **HTTP 200** at 14:30:53 UTC | **confirmed**, ≈ 9.71 s |
+
+**The fatal is Console-confirmed**, matched by its unique marker
+`GridView Phase 8C-2 release-like controlled fatal - 2026-08-16T14:29:20.462587Z`
+and that exact timestamp: Firebase application `gridview (android)`, application ID
+`com.sejuma.gridview`, version `1.2.1 (7)`, Android 16, classified as a **fatal**
+failure, one event affecting one installation. It travelled the same shipped path
+as the debug pass — an uncaught asynchronous error through
+`PlatformDispatcher.onError` → `FlutterError.reportError` → `FlutterError.onError`
+→ the reporter. `FirebaseCrashlytics.crash()` was not used.
+
+Owned keys in Console for that fatal:
+
+| Key | Value |
+|---|---|
+| `environment` | `production` |
+| `failure` | `fatal` |
+| `feature` | `notApplicable` |
+| `operation` | `notApplicable` |
+| `preference` | `notApplicable` |
+
+Console additionally shows FlutterFire's `flutter_error_exception` and
+`flutter_error_reason` — plugin-generated, not GridView-owned keys (§7). Console's
+affected-user count is one affected **installation**; it establishes no custom user
+ID, and the retained SDK evidence independently records `No userId set`.
+
+**The release-like `gv_sync_run` is Console-confirmed** for version `1.2.1 (7)` at
+approximately **9.71 s**. One boundary is kept explicit: Console confirms the
+trace's arrival, version and duration, while **`outcome=success` rests on the
+retained SDK evidence and was not independently displayed in Console**.
+
+Exactly one fatal was produced. The harness wrote a persisted repeat-guard before
+signalling, and a clean relaunch confirmed it went inert rather than repeating. **No
+additional non-fatal was produced in this pass.**
+
+Two build-safety facts about that APK, both from the retained verbose log:
+`:app:minifyProductionReleaseWithR8` **executed**, and the log contains **zero**
+occurrences of `uploadCrashlyticsMappingFile<Variant>` or
+`uploadCrashlyticsSymbolFile<Variant>` — none registered, none scheduled, and **no
+`-x` exclusion used**, so the safe default held on its own. Mapping upload stayed
+fail-closed with no authorization property set anywhere: not in the environment,
+not in repository or user Gradle properties. A mapping file was generated locally,
+as every minified release does (§3.1 item 1); nothing was uploaded. No AAB was
+produced and nothing was published.
+
+### 9.2 What Phase 8C-2 deliberately did not do
+
+- **No Firebase configuration change of any kind** — no product, retention,
+  alert, permission or billing setting was touched, no project or app was created,
+  and nothing remote was deleted.
+- **No AAB, no publication, no Play Console access.** A release **APK** was built
+  for the release-like pass (§9.1.1); it was installed only on the dedicated
+  emulator and distributed nowhere.
+- **No mapping-file or native-symbol upload.** Authorization was absent
+  throughout and the upload task was never registered (§8).
+- **All three controlled events remain stored in the production Firebase
+  project** — the debug pass's fatal and non-fatal, and the release pass's fatal.
+  They were deliberately not deleted, so this record stays checkable.
+- Both temporary verification harnesses were **fully removed** from the working
+  tree. Each was compile-time gated behind a define absent from every ordinary
+  build, added no UI, route or production-reachable trigger, and **must not be
+  reintroduced**. There is still no force-crash control, hidden crash route or
+  automatic test exception anywhere in the app.
+
+### 9.3 Still not verifiable from this repository
+
+Dev/staging observability (no projects exist, and reusing production is
+forbidden); Data Safety accuracy; the hosted privacy policy. One controlled event
+proves delivery for that path at that moment — it is not a guarantee of future
+availability, nor of behaviour under every device or network condition, and a
+locally installed release APK does not prove Play-distributed behaviour.
+
+### 9.4 Incident — one possible, unverified mapping upload
 
 During Phase 8C-1 verification, a local
 `flutter build apk --release --flavor production` ran with mapping upload
@@ -637,6 +906,37 @@ No attempt was made to confirm the upload through Firebase, to re-run the task
 or to delete anything remotely. The default was then changed to fail closed
 (§3.1), so this cannot recur without explicit authorization.
 
+**Every statement in this subsection is scoped to Phase 8C-1.** Phase 8C-2
+uploaded no mapping file and no symbols, and did not revisit, re-run or attempt to
+confirm this incident. Its two passes reached that outcome by **different**
+routes, and the distinction matters to anyone auditing upload safety:
+
+- **The production-debug pass (§9.1)** used `productionDebug`. That variant is
+  *structurally* ineligible: eligibility requires the `release` build type, so no
+  authorization value could have made it upload. No mapping- or symbol-upload task
+  was registered or executed.
+- **The release-like pass (§9.1.1)** used `productionRelease` — the **only**
+  flavor/build-type combination that can ever become eligible. Its safety therefore
+  rests on the fail-closed authorization policy and on the observed task graph, and
+  **not** on any claim that the variant is incapable of uploading. What was checked,
+  at each evidence level:
+  - `gridviewCrashlyticsUploadMapping` and
+    `ORG_GRADLE_PROJECT_gridviewCrashlyticsUploadMapping` were **absent** — from
+    the process environment and from both repository and user Gradle properties —
+    so the Crashlytics mapping-upload DSL stayed disabled and the task was never
+    registered. That is the *configured model*, and it proves default
+    ineligibility.
+  - A retained **dry-run** of the production release graph shows the task absent
+    from the intended graph.
+  - The retained **verbose build logs** show it was neither scheduled nor executed
+    during the actual builds. Across the dry-run and every release build log there
+    are **zero** occurrences of `uploadCrashlyticsMappingFile` or
+    `uploadCrashlyticsSymbolFile`, and **no `-x` exclusion was used** — the safe
+    default held on its own.
+  - R8 wrote a local `mapping.txt`, which is ordinary mapping *generation* for any
+    minified release (§3.1 item 1). It is not evidence of an upload, and no
+    statement here infers remote upload state from a local artifact.
+
 ## 10. Known follow-ups
 
 - `firebase_performance` applies its own Kotlin Gradle Plugin; Flutter warns
@@ -645,10 +945,22 @@ or to delete anything remotely. The default was then changed to fail closed
   scope, and the warning is expected in every build log.
 - Gradle 8.11.1, AGP 8.9.1 and Kotlin 2.0.21 are below the versions Flutter
   warns it will soon require. Pre-existing, and accepted on the same terms.
-- Three Privacy-screen golden baselines need regeneration through the Linux
-  canonical workflow after the copy changes in this phase (see the testing docs).
-  The disclosure rework moved them further from the committed baselines —
-  `settings_privacy_unconfigured` 13.02%, `settings_privacy_configured` 12.18%,
-  `settings_privacy_production` 10.23% — because the diagnostics note grew and
-  the row values changed. They are **not** regenerated locally: the canonical
-  baselines are Linux-owned.
+- ~~Three Privacy-screen golden baselines need regeneration.~~ **Done** — the
+  canonical Linux baselines were regenerated and committed during Phase 8C-1
+  (`test(settings): update canonical privacy goldens`). All five golden suites
+  pass with zero drift. Canonical baselines remain Linux-owned and are never
+  regenerated locally.
+- **`gv_database_open` is best-effort and normally absent on startup.** Accepted
+  deliberately rather than tracked as a defect; §6 records the timing measurements
+  and why every alternative is worse. Revisit only if the trace becomes load
+  bearing, and never by delaying the database open or fabricating a duration.
+- **No NDK / native-library crash capture — a known limitation, not a release
+  blocker.** `firebase-crashlytics-ndk` is deliberately outside ADR 0016's scope
+  and stays absent without a separate scope decision, so C/C++ crashes are not
+  recorded while Android runtime and JVM failures still are. Adding it is a
+  possible future enhancement; nothing in this repository requires it before
+  release, and it must not be listed as a blocker.
+- **The two Play blockers** — an unset privacy-policy URL and the outstanding Data
+  Safety declaration — remain open. See `../release/play-store-baseline.md`. Every
+  other pre-existing release requirement stays governed by
+  `GridView_Implementation_Plan.md`.

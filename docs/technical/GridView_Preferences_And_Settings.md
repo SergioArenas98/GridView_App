@@ -10,9 +10,10 @@ Phase 8 was split during execution:
 |---|---|---|
 | **8A** | Preferences, theming, localization, time display, Settings | **Complete, local only** |
 | **8B** | Media selection, loading, disk cache, rights register, R2 pipeline | Not started |
-| **8C** | Observability boundary, broad accessibility/performance hardening, Phase 8 documentation and closure | Not started |
+| **8C** | Observability boundary, broad accessibility/performance hardening, Phase 8 documentation and closure | **Observability complete** — 8C-1 implemented, 8C-2 externally verified in Firebase Console. Accessibility/performance hardening and the Phase 8 documentation set remain open |
 
-**Phase 8 as a whole is not complete.** This document closes 8A only.
+**Phase 8 as a whole is not complete.** This document closes 8A only; for the
+current observability status see `GridView_Observability.md` §9.
 
 Related: `GridView_Design_System.md` (tokens), `GridView_Navigation.md`
 (routing), `GridView_Environments.md` (flavors, Firebase, advertising),
@@ -81,9 +82,19 @@ no wrong-theme flash.
 | Write fails | `writeFailure` diagnostic; the visible value for **that key only** reverts to the last persisted value, so visible and stored state never diverge silently. An unrelated preference selected meanwhile is never erased. |
 
 `PreferenceDiagnostic` carries the preference **key and never the stored text**,
-so a corrupted value can never be echoed into a report or onto a screen. It is
-the seam the Phase 8C observability boundary will consume; today it has no
-production sink.
+so a corrupted value can never be echoed into a report or onto a screen.
+
+**It is now consumed in production.** `runBootstrap` supplies
+`observedPreferenceFailure` as the diagnostic sink, backed by the same installed
+`ErrorReporter` the global error handlers use, so these three faults reach the
+production Crashlytics adapter through the platform-neutral observability
+boundary — application code still depends on `ErrorReporter`, never on Firebase.
+The raw key is **not** reported: `observedPreferenceFailure` collapses it through
+`ObservedPreference.fromKey`, so the report carries a bounded enum
+(`theme` / `language` / `timeDisplay` / `other`) and never an arbitrary key or
+value. Phase 8C-2 observed exactly one such controlled non-fatal in Firebase
+Console — `localPreferenceFailure | settings | preferenceWrite | timeDisplay`,
+with the expected normalized context. See `GridView_Observability.md` §7 and §9.
 
 Writes apply to the visible snapshot immediately and persist through a **single
 serialized lane** with a per-key generation counter. Overlapping writes to the
@@ -101,8 +112,12 @@ things before `runApp`:
    right theme and language** instead of flashing defaults and correcting
    itself.
 
-No network client, Firebase, advertising or backend dependency is initialized
-here. The repository is injected into the `ProviderScope` as an override of
+No network client, advertising or backend dependency is initialized here, and
+**nothing Firebase-related is awaited**. Since Phase 8C-1, `runBootstrap` does
+install the global error handlers synchronously and *start* Firebase activation
+before these two steps — but that activation is never awaited, so it cannot delay
+the first frame (`GridView_Observability.md` §6). The repository is injected into
+the `ProviderScope` as an override of
 `appPreferencesRepositoryProvider`, which is why `AppPreferencesController` can
 return a full snapshot synchronously with no loading state.
 
@@ -473,11 +488,17 @@ id, token or namespace. Opening Settings performs **no refresh**.
   report. A failed activation reads **Not confirmed**, never Disabled — it
   proves only that this process's adapters were unavailable, not that a
   persisted native override is off.
-- **Crashlytics and Performance Monitoring must still not be claimed to
-  *deliver*.** The code is complete and locally verified, but no event has been
-  observed in Firebase Console; that needs an authorized release-like build and
-  console access and remains an **external closure blocker** (§7). See
-  `GridView_Observability.md`.
+- **Crashlytics and Performance Monitoring delivery is proven. Phase 8C-2 is
+  complete (2026-08-16).** A production **debug** pass observed a controlled fatal,
+  a controlled non-fatal and a `gv_sync_run` sample **in Firebase Console**, and a
+  **release-like** pass from a signed, R8-minified, non-debuggable production
+  release APK added a Console-confirmed controlled fatal — correct five owned keys
+  — and a Console-confirmed `gv_sync_run` at ≈ 9.71 s. Keep the evidence levels
+  apart — produced locally, accepted by ingestion, observed in Console — and note
+  that `outcome=success` on that trace rests on retained SDK evidence rather than
+  Console display, and that a controlled event proves that path at that moment,
+  not Play-distributed behaviour, future availability or every device condition.
+  See `GridView_Observability.md` §9.
 
 ### 6.3 `package_info_plus` compatibility decision
 
@@ -501,10 +522,13 @@ fails with `source must not be null`. **Do not downgrade.**
 1. **Firebase dev/staging projects** do not exist. Creating them requires
    account access and approval. Until then, observability cannot be activated
    outside production and crash/performance reporting is reported as off there.
-   Production observability is implemented (Phase 8C-1) but **operationally
-   unverified**: no crash, non-fatal or trace has been observed in Firebase
-   Console, which needs an authorized release-like production build and console
-   access. A green test suite is not evidence of delivery.
+   Production observability is implemented (Phase 8C-1) and **operationally
+   verified — Phase 8C-2 is complete**. A production debug pass had a controlled
+   fatal, a controlled non-fatal and a `gv_sync_run` sample observed in Firebase
+   Console, and a **release-like** pass from a signed, R8-minified, non-debuggable
+   production release APK added a Console-confirmed controlled fatal and
+   `gv_sync_run`. A green test suite is still not evidence of delivery, and neither
+   is an accepted HTTP batch — only a Console record is.
 2. **Privacy policy URL** is unset (`PRIVACY_POLICY_URL`). A production build
    with no policy URL shows no policy affordance at all. Publishing a policy and
    supplying the URL is a **release blocker**, tracked here rather than surfaced
@@ -575,17 +599,29 @@ visual and behavioural coverage.
 - The media URL policy that `ExternalLink` mirrors (`https` only, non-empty
   host, no embedded credentials) is the policy 8B must apply to image URLs.
 
-### Hand-off to Phase 8C (observability, hardening, closure)
+### Phase 8C (observability, hardening, closure) — observability delivered
 
-- `PreferenceDiagnostic` is the ready-made, PII-free seam for the observability
-  boundary: it already carries a kind and a key and never the stored value.
-  Wire the boundary to it rather than inventing a second diagnostic channel.
-- The boundary must be **platform-neutral**: Firebase cannot be activated
-  (§6.2), so 8C delivers the abstraction plus a setup checklist, not a
-  Crashlytics integration.
-- Accessibility hardening beyond Settings, performance measurement, the
-  advertising decision document and the Phase 8 documentation set all remain
-  open.
+The observability half of this hand-off is **done**; what follows records the
+outcome so nothing here directs future work to rebuild it.
+
+- `PreferenceDiagnostic` was the ready-made, PII-free seam, and it is the one the
+  boundary uses — no second diagnostic channel was invented. `runBootstrap` wires
+  it to the installed reporter (§1.3).
+- **The boundary is platform-neutral, and remains so.** Application code depends
+  on `ErrorReporter` and `PerformanceTracer`; exactly one file
+  (`lib/core/observability/firebase/firebase_observability.dart`) imports
+  `firebase_*`, and a test enforces that. **Do not import Firebase into domain,
+  application or widget code** — the adapter stays isolated behind the boundary.
+- **Firebase observability is structurally production-only.** Eligibility is
+  `production` alone, dev and staging own no configuration, and the earlier note
+  that Firebase "cannot be activated" is obsolete: **Phase 8C-1 implemented the
+  Crashlytics and Performance integration**, and **Phase 8C-2 externally verified
+  the controlled signals** in Firebase Console from a production-debug build and
+  from a release-like production release APK. See `GridView_Observability.md` §9
+  and §6.2 above.
+- Still open, and genuinely so: accessibility hardening beyond Settings,
+  performance measurement, the advertising decision document, and the Phase 8
+  documentation set.
 - Known cleanup, deliberately **not** folded into Phase 8A:
   `lib/features/shared/presentation/placeholder/placeholder_content.dart` and
   its only two consumers, `widgets/event_row.dart` and `widgets/event_status.dart`,

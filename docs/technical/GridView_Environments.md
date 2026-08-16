@@ -101,9 +101,11 @@ environment-specific interval.
   the production flavor alone (`android/app/build.gradle`). The scoping is by
   variant, never by the requested task name.
 - **Pending:** dedicated Firebase projects/configurations for development and
-  staging do not exist yet. Until they are approved and created, dev and
-  staging builds contain no Firebase configuration and initialize no Firebase
-  SDK. Do not create new Firebase projects without approval.
+  staging do not exist yet. Until they are approved and created, dev and staging
+  builds contain **no Firebase configuration** and never initialize the **Dart
+  adapters**. They are not free of the SDK itself — see the packaging note below,
+  which is the accurate statement. Do not create new Firebase projects without
+  approval.
 - **Phase 8C-1 integrated the SDKs.** `firebase_core`, `firebase_crashlytics`
   and `firebase_performance` are dependencies; exactly one file
   (`lib/core/observability/firebase/firebase_observability.dart`) imports them,
@@ -158,10 +160,18 @@ environment-specific interval.
   The Android facts are asserted by the Gradle gate
   `verify<Variant>FirebaseDependencies`; the Dart lockfile test covers only
   direct Dart packages.
-- Crashlytics and Performance data have **not** been observed arriving in
-  Firebase Console; that needs an authorized release-like production build and
-  console access, and remains an external blocker. See
-  `GridView_Preferences_And_Settings.md` §6.2 and §7.
+- Crashlytics and Performance data **have** been observed arriving in Firebase
+  Console (**Phase 8C-2, complete, 2026-08-16**), from two passes on a dedicated
+  emulator: a production **debug** build contributed a controlled fatal, a
+  controlled non-fatal and a `gv_sync_run` sample; a **release-like** pass from a
+  signed, R8-minified, non-debuggable production release APK contributed a further
+  Console-confirmed controlled fatal (correct five owned keys) and a
+  Console-confirmed `gv_sync_run` at ≈ 9.71 s. Keep the three evidence levels
+  apart: produced locally, accepted by ingestion (HTTP 200), observed in Console —
+  only the last is delivery, and `outcome=success` on that trace rests on retained
+  SDK evidence rather than Console display. No mapping or symbol upload occurred,
+  no AAB was built and nothing was published. See `GridView_Observability.md` §9
+  and `GridView_Preferences_And_Settings.md` §6.2 and §7.
 
 ## Advertising
 
