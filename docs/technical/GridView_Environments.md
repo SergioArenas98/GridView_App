@@ -158,9 +158,15 @@ environment-specific interval.
   The Android facts are asserted by the Gradle gate
   `verify<Variant>FirebaseDependencies`; the Dart lockfile test covers only
   direct Dart packages.
-- Crashlytics and Performance data have **not** been observed arriving in
-  Firebase Console; that needs an authorized release-like production build and
-  console access, and remains an external blocker. See
+- Crashlytics and Performance data **have** been observed arriving in Firebase
+  Console (Phase 8C-2, 2026-08-16), from a production **debug** build on a
+  dedicated emulator: a controlled fatal, a controlled non-fatal and a
+  `gv_sync_run` sample. A second, **release-like** pass from a signed, R8-minified
+  production release APK was accepted by Firebase ingestion with HTTP 200, but its
+  **Console arrival has not yet been checked** — so Phase 8C-2 is not yet closed.
+  Keep the three evidence levels apart: produced locally, accepted by ingestion
+  (HTTP 200), observed in Console. Only the last is delivery. See
+  `GridView_Observability.md` §9 and
   `GridView_Preferences_And_Settings.md` §6.2 and §7.
 
 ## Advertising

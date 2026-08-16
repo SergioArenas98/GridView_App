@@ -473,11 +473,16 @@ id, token or namespace. Opening Settings performs **no refresh**.
   report. A failed activation reads **Not confirmed**, never Disabled — it
   proves only that this process's adapters were unavailable, not that a
   persisted native override is off.
-- **Crashlytics and Performance Monitoring must still not be claimed to
-  *deliver*.** The code is complete and locally verified, but no event has been
-  observed in Firebase Console; that needs an authorized release-like build and
-  console access and remains an **external closure blocker** (§7). See
-  `GridView_Observability.md`.
+- **Crashlytics and Performance Monitoring delivery is now partly proven.** Phase
+  8C-2 (2026-08-16) observed a controlled fatal, a controlled non-fatal and a
+  `gv_sync_run` sample **in Firebase Console**, from a production **debug** build.
+  A further **release-like** pass from a signed, R8-minified production release APK
+  was accepted by Firebase ingestion with HTTP 200; its **Console arrival is not
+  yet checked**, so Phase 8C-2 remains open on that one item (§7). Keep the
+  evidence levels apart — produced locally, accepted by ingestion, observed in
+  Console — and note that one controlled event proves that path at that moment, not
+  future availability or every device condition. See `GridView_Observability.md`
+  §9.
 
 ### 6.3 `package_info_plus` compatibility decision
 
@@ -501,10 +506,13 @@ fails with `source must not be null`. **Do not downgrade.**
 1. **Firebase dev/staging projects** do not exist. Creating them requires
    account access and approval. Until then, observability cannot be activated
    outside production and crash/performance reporting is reported as off there.
-   Production observability is implemented (Phase 8C-1) but **operationally
-   unverified**: no crash, non-fatal or trace has been observed in Firebase
-   Console, which needs an authorized release-like production build and console
-   access. A green test suite is not evidence of delivery.
+   Production observability is implemented (Phase 8C-1) and **operationally
+   verified from a production debug build** (Phase 8C-2): a controlled fatal, a
+   controlled non-fatal and a `gv_sync_run` sample were observed in Firebase
+   Console. The **release-like** pass from a signed, R8-minified production release
+   APK has been submitted and accepted (HTTP 200) but **not yet checked in
+   Console**, which is the single item keeping Phase 8C-2 open. A green test suite
+   is still not evidence of delivery, and neither is an accepted HTTP batch.
 2. **Privacy policy URL** is unset (`PRIVACY_POLICY_URL`). A production build
    with no policy URL shows no policy affordance at all. Publishing a policy and
    supplying the URL is a **release blocker**, tracked here rather than surfaced

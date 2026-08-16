@@ -157,13 +157,20 @@ in.
   requires a production artifact and Firebase Console access, which is why Phase
   8C-1 was reported as *code complete, external verification pending*. **That
   verification was carried out in Phase 8C-2 (2026-08-16) and the decisions above
-  hold in practice**: a controlled fatal, a controlled non-fatal and the
-  `gv_sync_run` trace were confirmed in Firebase Console, carrying the complete
-  five-key normalized context with correct sentinels and no inherited context. A
-  production **debug** build was sufficient, because eligibility keys off
-  `APP_ENV` rather than the build type — which is itself a consequence of binding
-  flavor and `APP_ENV` at build time. See
-  `../technical/GridView_Observability.md` §9.
+  hold in practice**, in two passes. From a production **debug** build, a
+  controlled fatal, a controlled non-fatal and the `gv_sync_run` trace were
+  confirmed in Firebase Console; the **two crash reports** carried the complete
+  five-key normalized context with correct sentinels and no inherited context.
+  That five-key context is a property of fatal and non-fatal **reports** only — a
+  custom trace carries the two-valued `outcome` attribute and nothing else, so
+  `gv_sync_run` must never be described as carrying the crash schema.
+  A production debug build proves flavor selection and Firebase routing, because
+  eligibility keys off `APP_ENV` rather than the build type, but it does not
+  exercise release compilation, R8/minification or release artifact behaviour. A
+  second pass therefore ran from a signed, R8-minified production **release APK**;
+  its fatal and `gv_sync_run` were accepted by Firebase ingestion with HTTP 200,
+  and **its Console check is still outstanding**, so Phase 8C-2 is not yet closed.
+  See `../technical/GridView_Observability.md` §9.
 - Dev and staging are observably inert. A developer cannot "test Crashlytics
   locally" — deliberately, because the only way to do so would be to send
   developer crashes to the published app's project.
@@ -197,10 +204,11 @@ in.
   deferred tracer adopts runs untraced. Phase 8C-2 measured the window on a real
   device: the database is opened lazily during the first frame, ~1–2 s after Dart
   startup, while activation completed ~2.1–3.9 s after it. The database is opened
-  once per process, so `gv_database_open` is normally **absent**, and the
-  **startup** `gv_sync_run` is lost the same way; later foreground, resumed and
-  manual runs are recorded normally, and one such run is what Phase 8C-2 confirmed
-  in Console. The instrumentation is kept as a best-effort signal — a scope
+  at most once per `GridViewDatabase` instance — in practice once per
+  `ProviderScope`, and the ordinary shell has one — so `gv_database_open` is
+  normally **absent**, and the **startup** `gv_sync_run` is lost the same way;
+  later foreground, resumed and manual runs are recorded normally, and one such run
+  is what Phase 8C-2 confirmed in Console. The instrumentation is kept as a best-effort signal — a scope
   created after adoption still produces the trace — and is explicitly **not**
   repaired by replaying it (Firebase's `Trace` API cannot backdate a start, so the
   duration would be fabricated), by delaying the database open, or by restructuring
@@ -214,7 +222,10 @@ in.
   ran. The manifest value is confirmed to be a fresh-install default rather than a
   per-launch enforcement boundary, exactly as decided above. Dev and staging remain
   structurally isolated and were not, and cannot be, affected.
-- No NDK or native-library crash support is included.
+- No NDK or native-library crash support is included. This is a **known
+  limitation and explicitly outside this ADR's scope**, not a release blocker:
+  adding `firebase-crashlytics-ndk` is a possible future enhancement that needs its
+  own scope decision, and nothing may record it as work required before release.
 - **No build performed by a developer or by CI can mutate remote state.** The
   only network-mutating task is mapping upload, and it is off unless explicitly
   authorized. The cost is that a real release now has one deliberate extra step;
