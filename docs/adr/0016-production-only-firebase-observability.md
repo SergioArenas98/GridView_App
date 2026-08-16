@@ -154,8 +154,16 @@ in.
 ## Consequences
 
 - Crash and performance data exist only for production builds. Verifying them
-  requires a release-like production artifact and Firebase Console access, so
-  Phase 8C-1 is reported as *code complete, external verification pending*.
+  requires a production artifact and Firebase Console access, which is why Phase
+  8C-1 was reported as *code complete, external verification pending*. **That
+  verification was carried out in Phase 8C-2 (2026-08-16) and the decisions above
+  hold in practice**: a controlled fatal, a controlled non-fatal and the
+  `gv_sync_run` trace were confirmed in Firebase Console, carrying the complete
+  five-key normalized context with correct sentinels and no inherited context. A
+  production **debug** build was sufficient, because eligibility keys off
+  `APP_ENV` rather than the build type — which is itself a consequence of binding
+  flavor and `APP_ENV` at build time. See
+  `../technical/GridView_Observability.md` §9.
 - Dev and staging are observably inert. A developer cannot "test Crashlytics
   locally" — deliberately, because the only way to do so would be to send
   developer crashes to the published app's project.
@@ -184,8 +192,29 @@ in.
   statement about this app's own reporting during the current session. It cannot
   claim diagnostics are running before activation finishes, and it cannot claim
   collection is off after activation fails.
-- External Firebase Console verification remains outstanding, and no NDK or
-  native-library crash support is included.
+- **Non-blocking activation costs the startup measurements, and that price is
+  accepted.** Because activation is never awaited, anything traced before the
+  deferred tracer adopts runs untraced. Phase 8C-2 measured the window on a real
+  device: the database is opened lazily during the first frame, ~1–2 s after Dart
+  startup, while activation completed ~2.1–3.9 s after it. The database is opened
+  once per process, so `gv_database_open` is normally **absent**, and the
+  **startup** `gv_sync_run` is lost the same way; later foreground, resumed and
+  manual runs are recorded normally, and one such run is what Phase 8C-2 confirmed
+  in Console. The instrumentation is kept as a best-effort signal — a scope
+  created after adoption still produces the trace — and is explicitly **not**
+  repaired by replaying it (Firebase's `Trace` API cannot backdate a start, so the
+  duration would be fabricated), by delaying the database open, or by restructuring
+  activation. Any of those would trade this ADR's central invariant for one
+  optional measurement. `../technical/GridView_Observability.md` §6 records the
+  detail.
+- **The persisted collection override was externally observed**, not merely
+  derived from the SDK contract: on a fresh installation the SDK reported
+  collection disabled by the manifest default, activation enabled it by API, and
+  every later launch enabled it by API at process start — roughly 4.7 s before Dart
+  ran. The manifest value is confirmed to be a fresh-install default rather than a
+  per-launch enforcement boundary, exactly as decided above. Dev and staging remain
+  structurally isolated and were not, and cannot be, affected.
+- No NDK or native-library crash support is included.
 - **No build performed by a developer or by CI can mutate remote state.** The
   only network-mutating task is mapping upload, and it is off unless explicitly
   authorized. The cost is that a real release now has one deliberate extra step;
