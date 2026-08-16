@@ -52,10 +52,17 @@ class Observability {
 /// This gate governs the **Dart adapters only**. It cannot govern the native
 /// SDK: Android instantiates `FirebaseInitProvider` and the Firebase component
 /// registrars — which are packaged in every flavor — during application
-/// startup, before any Dart code runs. The native collection boundary is the
-/// `firebase_crashlytics_collection_enabled` / `firebase_performance_collection_enabled`
-/// manifest policy, which is `false` for every flavor; the eligible production
-/// build turns collection on at runtime once this gate has been evaluated.
+/// startup, before any Dart code runs.
+///
+/// The native default is the `firebase_crashlytics_collection_enabled` /
+/// `firebase_performance_collection_enabled` manifest policy, `false` for every
+/// flavor. It is a **default, not a per-launch boundary**: the eligible
+/// production build turns collection on at runtime once this gate has been
+/// evaluated, and the platform SDKs persist that choice above the manifest, so
+/// later production launches begin collecting before Dart runs. Dev and staging
+/// cannot be affected — different application IDs, no configuration, and this
+/// gate never lets the activation run for them. See
+/// `docs/technical/GridView_Observability.md` §4.1.
 ///
 /// Flavor and `APP_ENV` can no longer disagree: the Android build fails unless
 /// they match (`android/app/build.gradle`, `validate<Variant>Environment`).

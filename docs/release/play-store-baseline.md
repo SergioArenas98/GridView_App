@@ -65,7 +65,8 @@
   disk/network metadata, session lifecycle data, and Performance Monitoring
   configuration traffic. GridView itself sets no Firebase user identifier and
   attaches no domain IDs, URLs or payloads as attributes — its non-fatal reports
-  carry four enum-derived values. This item records technical behaviour; the
+  carry five owned custom keys whose values are enum-derived or fixed bounded
+  constants. This item records technical behaviour; the
   declaration needs a legal/privacy review, not an engineering assertion.
 
 - **Privacy policy URL (blocking for release).** `PRIVACY_POLICY_URL` is still

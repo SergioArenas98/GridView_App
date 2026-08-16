@@ -156,6 +156,12 @@ enum ObservedPreference {
 /// slug, URL, query string, response body, token, KV key or stack trace, so no
 /// call site can leak one even by accident, and the attribute cardinality is
 /// bounded by the product of the enums.
+///
+/// The values actually written to the backend are **enum-derived or fixed
+/// bounded constants** — the slightly weaker, accurate statement. Fatals carry
+/// no `ObservedFailure`, and an inapplicable dimension needs a value rather than
+/// an omission, so `NormalizedReportRecorder` supplies two fixed literals for
+/// those cases. Both are constants, not free-form text.
 class ObservedFailure {
   const ObservedFailure({
     required this.kind,
@@ -190,13 +196,31 @@ class ObservedFailure {
     if (preference != null) preference!.name,
   ].join('|');
 
-  /// The bounded key/value context attached to the report.
+  /// The custom-key names this application owns.
+  ///
+  /// Named constants rather than literals because the reporting boundary has to
+  /// write **all** of them on every report — see `NormalizedReportRecorder` —
+  /// and a key spelled two ways would silently leak context from one report into
+  /// the next.
+  static const String failureKey = 'failure';
+  static const String featureKey = 'feature';
+  static const String operationKey = 'operation';
+  static const String environmentKey = 'environment';
+  static const String preferenceKey = 'preference';
+
+  /// The bounded key/value context this failure describes.
+  ///
+  /// `preference` is present only when one applies, because this is the
+  /// *domain* view of the failure. Turning that into the wire context — where an
+  /// omitted key would keep the previous report's value — is
+  /// `NormalizedReportRecorder`'s job, and it fills every unpopulated owned key
+  /// with a fixed sentinel.
   Map<String, String> toAttributes() => <String, String>{
-    'failure': kind.name,
-    'feature': feature.name,
-    'operation': operation.name,
-    'environment': environment.name,
-    if (preference != null) 'preference': preference!.name,
+    failureKey: kind.name,
+    featureKey: feature.name,
+    operationKey: operation.name,
+    environmentKey: environment.name,
+    if (preference != null) preferenceKey: preference!.name,
   };
 
   /// The short, low-cardinality reason string a reporter logs alongside the

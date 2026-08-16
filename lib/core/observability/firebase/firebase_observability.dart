@@ -12,30 +12,39 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_performance/firebase_performance.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../app/environment/app_environment.dart';
 import '../async_error_reporter.dart';
 import '../error_reporter.dart';
 import '../non_blocking_tracer.dart';
+import '../normalized_report_recorder.dart';
 import '../observed_failure.dart';
 import '../performance_tracer.dart';
 import '../throttled_error_reporter.dart';
 
 /// Sends fatal and selected non-fatal errors to Crashlytics.
 ///
-/// This class contributes only the two Crashlytics calls. Making them safe —
-/// unawaited so they cannot delay the app, internally awaited inside a `try` so
-/// a rejection cannot re-enter the global handler — is [AsyncErrorReporter]'s
-/// job, and that is the class the rejection tests drive. Nothing about the
-/// guarantee is reimplemented here, so the tested path and the shipped path
-/// cannot drift apart.
+/// This class contributes only the Crashlytics calls. Everything that has to be
+/// true about *how* they are made lives elsewhere, and is tested there:
+///
+/// * [AsyncErrorReporter] makes reporting fire-and-forget and unable to re-enter
+///   the global handler, and serializes reports through one FIFO lane;
+/// * [NormalizedReportRecorder] writes the complete owned custom-key set before
+///   every record, so no report inherits the previous one's context.
+///
+/// Nothing about either guarantee is reimplemented here, so the tested path and
+/// the shipped path cannot drift apart.
 class FirebaseErrorReporter implements ErrorReporter {
-  FirebaseErrorReporter(FirebaseCrashlytics crashlytics)
-    : _delegate = AsyncErrorReporter(
-        // Crashlytics' own Flutter entry point: it preserves the framework
-        // context and library fields rather than flattening them to a message.
-        recordFatalAsync: crashlytics.recordFlutterFatalError,
-        recordNonFatalAsync: (ObservedFailure failure) =>
-            _send(crashlytics, failure),
-      );
+  /// [environment] is attached to fatal reports, which carry no
+  /// [ObservedFailure] to derive it from.
+  ///
+  /// It defaults to production and is stated rather than assumed: this reporter
+  /// is only ever constructed by [activateFirebaseObservability], which runs
+  /// solely for an eligible production build, so production is the only value it
+  /// can legitimately receive.
+  FirebaseErrorReporter(
+    FirebaseCrashlytics crashlytics, {
+    AppEnvironment environment = AppEnvironment.production,
+  }) : _delegate = _buildDelegate(crashlytics, environment);
 
   final AsyncErrorReporter _delegate;
 
@@ -47,23 +56,30 @@ class FirebaseErrorReporter implements ErrorReporter {
   void recordNonFatal(ObservedFailure failure) =>
       _delegate.recordNonFatal(failure);
 
-  static Future<void> _send(
+  static AsyncErrorReporter _buildDelegate(
     FirebaseCrashlytics crashlytics,
-    ObservedFailure failure,
-  ) async {
-    // Bounded enum-derived keys only; see [ObservedFailure].
-    for (final MapEntry<String, String> entry
-        in failure.toAttributes().entries) {
-      await crashlytics.setCustomKey(entry.key, entry.value);
-    }
-    // The failure object itself is the exception: its `toString` is the
-    // signature, so Crashlytics groups by failure class rather than by a
-    // per-occurrence message.
-    await crashlytics.recordError(
-      failure,
-      null,
-      reason: failure.reason,
-      fatal: false,
+    AppEnvironment environment,
+  ) {
+    final NormalizedReportRecorder recorder = NormalizedReportRecorder(
+      setCustomKey: crashlytics.setCustomKey,
+      // The failure object itself is the exception: its `toString` is the
+      // signature, so Crashlytics groups by failure class rather than by a
+      // per-occurrence message.
+      recordNonFatal: (ObservedFailure failure) => crashlytics.recordError(
+        failure,
+        null,
+        reason: failure.reason,
+        fatal: false,
+      ),
+      // Crashlytics' own Flutter entry point: it preserves the framework
+      // context and library fields rather than flattening them to a message.
+      recordFatal: crashlytics.recordFlutterFatalError,
+      environment: environment,
+    );
+
+    return AsyncErrorReporter(
+      recordFatalAsync: recorder.sendFatal,
+      recordNonFatalAsync: recorder.sendNonFatal,
     );
   }
 }

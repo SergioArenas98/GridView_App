@@ -26,6 +26,7 @@ lib/core/observability/
   performance_tracer.dart        TraceName, TraceOutcome, PerformanceTracer, Noop…, Guarded…
   async_error_reporter.dart      AsyncErrorReporter — the fire-and-forget guard
   serial_report_queue.dart       SerialReportQueue — the FIFO reporting lane
+  normalized_report_recorder.dart NormalizedReportRecorder — complete key set
   non_blocking_tracer.dart       NonBlockingPerformanceTracer + TraceSession
   preference_observation.dart    PreferenceDiagnostic -> ObservedFailure
   observability_activation.dart  ObservabilityActivation (this process's adapters)
@@ -388,6 +389,17 @@ that attributes stay with their own report, FIFO order, exactly-once attempts, a
 that a failed report does not poison the ones behind it. Removing the lane fails
 8 of its 9 tests.
 
+**Serialization alone is not enough**, because the same process-global keys also
+leak *sequentially*: whatever one report sets is still attached to the next.
+`NormalizedReportRecorder` closes that by writing the complete owned key set on
+every send — see §7. `report_context_normalization_test.dart` drives the shipped
+recorder through the six ordering cases that matter (preference→ordinary,
+ordinary→preference, preference→fatal, fatal→ordinary, two different preference
+failures, failed→next) and asserts on each recorded item that all five keys are
+present, that the values match only that report, that absent fields hold the
+sentinel and that no unexpected key exists. Restoring the omitted preference
+fails 8 of its 9 tests; skipping fatal normalization fails 2.
+
 ### Tracing never makes the application wait
 
 `Trace.start()` and `Trace.stop()` are platform-channel calls. Awaiting `start`
@@ -481,8 +493,24 @@ it and inventing the value would misreport it.
 
 **What GridView does.** It sets no Firebase user identifier, and attaches no
 GridView domain IDs, slugs, URLs, query strings, synchronized payloads or
-exception text as observability attributes. Its non-fatal reports carry four
-enum-derived values; its traces carry a two-valued outcome.
+exception text as observability attributes. Its traces carry a two-valued
+outcome.
+
+Every report — fatal or non-fatal — writes the same **complete set of five owned
+custom keys**: `failure`, `feature`, `operation`, `environment`, `preference`.
+The values are **enum-derived or fixed bounded constants**, which is the accurate
+narrower claim: a dimension that does not apply to a report is written as the
+fixed sentinel `notApplicable`, and a fatal — which has no `ObservedFailure` to
+derive from — is written as the fixed `fatal` plus the environment. Nothing is
+taken from an exception's message, library, context or stack.
+
+Writing the set *completely, every time* is the point. Crashlytics custom keys
+are process-global and survive until overwritten, so an omitted key keeps the
+previous report's value: before this, a preference failure's `preference=theme`
+leaked into the next ordinary non-fatal, and a fatal inherited whatever feature
+and operation the last non-fatal left behind. `NormalizedReportRecorder` starts
+from a fully neutral template and overlays the report, so no owned key is ever
+stale and no key outside the owned set is written at all.
 
 **What Firebase may process** once collection is enabled in a production build:
 

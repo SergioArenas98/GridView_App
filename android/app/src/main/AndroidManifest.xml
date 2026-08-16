@@ -32,7 +32,13 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- Firebase collection policy: OFF for every flavor at process start.
+        <!-- Firebase collection policy: the DEFAULT is off, for every flavor.
+
+             A default, not a per-launch guarantee, and not an enforcement
+             mechanism. Read that carefully before relying on it: these flags
+             decide what happens on a fresh installation that has never opted
+             in. They are not re-applied at every process start, and they do not
+             override a choice made at runtime.
 
              This is a native boundary, and it exists because the Dart policy
              cannot be one. Android instantiates FirebaseInitProvider (and the
@@ -42,17 +48,35 @@
              therefore cannot prevent native collection from beginning - it can
              only decide what the Dart adapters do afterwards.
 
-             Declaring both flags false makes the packaged SDKs inert by default
-             in dev, staging and production alike. The eligible production build
-             turns them on explicitly at runtime, after the Dart policy has been
-             established, via setCrashlyticsCollectionEnabled(true) and
-             setPerformanceCollectionEnabled(true).
+             The lifecycle, stated exactly:
 
-             Dev and staging additionally have no google_app_id resource, so the
-             default FirebaseApp cannot initialize there at all - but that is a
-             consequence of configuration being absent, not a policy. These flags
-             are the policy, and they stay correct even if a configuration file
-             is introduced later by accident.
+               * fresh installation, any flavor - collection is OFF, because
+                 these defaults apply and nothing has overridden them;
+               * an eligible PRODUCTION build activates at runtime and calls
+                 setCrashlyticsCollectionEnabled(true) and
+                 setPerformanceCollectionEnabled(true) - collection is enabled,
+                 and the platform SDKs PERSIST that choice at a HIGHER priority
+                 than these manifest values;
+               * every later production launch on that installation therefore
+                 begins with collection already enabled, BEFORE any Dart code
+                 runs. Do not write that the packaged SDKs are inert at process
+                 start in every flavor: that is true only until the first
+                 successful production activation.
+
+             Dev and staging are structurally isolated from all of this. They
+             carry the .dev and .staging application-ID suffixes, so they are
+             separate installations with separate storage; they own no
+             google-services.json; and they are ineligible, so the activation
+             that writes the override is never called for them. No override can
+             ever exist for a non-production installation.
+
+             See docs/technical/GridView_Observability.md section 4.1.
+
+             The missing google_app_id in dev and staging is a second, separate
+             obstacle - the default FirebaseApp cannot initialize without it -
+             but it is a consequence of configuration being absent, not a policy.
+             These flags are the default policy, and they stay correct even if a
+             configuration file is introduced later by accident.
 
              firebase_performance_collection_deactivated is deliberately NOT
              used: it is permanent and cannot be reversed at runtime, which would
