@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/theme.dart';
 
+/// Joins the parts of a composed accessible name, dropping every part that is
+/// absent or blank so the result never carries a dangling separator.
+String _spoken(List<String?> parts) => parts
+    .whereType<String>()
+    .map((String part) => part.trim())
+    .where((String part) => part.isNotEmpty)
+    .join(', ');
+
 /// A Settings row: a title, the current value, and a chevron.
 ///
 /// Low decoration on purpose — Settings is a secondary screen, not a dashboard.
@@ -30,7 +38,11 @@ class GvSettingsRow extends StatelessWidget {
     final GvSemanticColors colors = context.gvColors;
     return Semantics(
       button: onTap != null,
-      label: <String>[title, ?value].join(', '),
+      // Everything the row shows, in the order it is read on screen. The
+      // description is the part that says what a row actually does — a row
+      // called "Component catalogue" explains nothing without it — and it was
+      // rendered but never spoken, because the whole subtree below is excluded.
+      label: _spoken(<String?>[title, value, description]),
       onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(

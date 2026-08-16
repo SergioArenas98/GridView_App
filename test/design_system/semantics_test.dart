@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:gridview/core/widgets/widgets.dart';
 
+import '../support/a11y_harness.dart';
 import '../support/component_harness.dart';
 
 void main() {
@@ -77,5 +79,117 @@ void main() {
     );
     expect(find.bySemanticsLabel('Live'), findsOneWidget);
     handle.dispose();
+  });
+
+  // --- GvPrimaryButton across its three states -----------------------------
+  //
+  // Loading replaces the label with a spinner, and a spinner carries no text —
+  // so a screen-reader user who triggered the action lost the button's name at
+  // exactly the moment they needed confirmation of what was running.
+  group('GvPrimaryButton keeps its name in every state', () {
+    testWidgets('an enabled button is a named, enabled button', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(
+        tester,
+        GvPrimaryButton(label: 'Try again', onPressed: () {}),
+      );
+
+      final SemanticsData data = nodeLabelled(tester, 'Try again');
+      expect(data.flagsCollection.isButton, isTrue);
+      expect(data.flagsCollection.isEnabled.toBoolOrNull(), isNot(false));
+      handle.dispose();
+    });
+
+    testWidgets('a disabled button keeps its name and reports disabled', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(tester, const GvPrimaryButton(label: 'Try again'));
+
+      final SemanticsData data = nodeLabelled(tester, 'Try again');
+      expect(data.flagsCollection.isButton, isTrue);
+      expect(data.flagsCollection.isEnabled.toBoolOrNull(), isFalse);
+      handle.dispose();
+    });
+
+    testWidgets('a loading button keeps its name', (WidgetTester tester) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(
+        tester,
+        GvPrimaryButton(label: 'Try again', isLoading: true, onPressed: () {}),
+      );
+
+      expect(labelOccurrences(tester, 'Try again'), 1);
+      final SemanticsData data = nodeLabelled(tester, 'Try again');
+      expect(data.flagsCollection.isButton, isTrue);
+      expect(
+        data.flagsCollection.isEnabled.toBoolOrNull(),
+        isFalse,
+        reason: 'it may stay non-activatable while the work runs',
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a loading button appends its localized state once', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(
+        tester,
+        GvPrimaryButton(
+          label: 'Try again',
+          isLoading: true,
+          loadingLabel: 'Loading',
+          onPressed: () {},
+        ),
+      );
+
+      expect(renderedLabels(tester), contains('Try again, Loading'));
+      expect(labelOccurrences(tester, 'Loading'), 1);
+      expect(labelOccurrences(tester, 'Try again'), 1);
+      handle.dispose();
+    });
+
+    testWidgets('a blank loading state is omitted rather than appended', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(
+        tester,
+        GvPrimaryButton(
+          label: 'Try again',
+          isLoading: true,
+          loadingLabel: '  ',
+          onPressed: () {},
+        ),
+      );
+
+      expect(renderedLabels(tester), contains('Try again'));
+      handle.dispose();
+    });
+
+    testWidgets('loading changes neither the spinner nor the button size', (
+      WidgetTester tester,
+    ) async {
+      await pumpComponent(
+        tester,
+        const GvPrimaryButton(label: 'Try again', isLoading: true),
+      );
+      final Size before = tester.getSize(find.byType(ElevatedButton));
+
+      await pumpComponent(
+        tester,
+        const GvPrimaryButton(
+          label: 'Try again',
+          isLoading: true,
+          loadingLabel: 'Loading',
+        ),
+      );
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(tester.getSize(find.byType(ElevatedButton)), before);
+    });
   });
 }

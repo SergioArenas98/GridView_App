@@ -11,6 +11,7 @@ class GvPrimaryButton extends StatelessWidget {
     this.onPressed,
     this.icon,
     this.isLoading = false,
+    this.loadingLabel,
   });
 
   final String label;
@@ -18,22 +19,43 @@ class GvPrimaryButton extends StatelessWidget {
   final IconData? icon;
   final bool isLoading;
 
+  /// The localized state spoken after the button's own name while [isLoading],
+  /// e.g. "Try again, Loading". Supplied by the caller because the design
+  /// system is deliberately localization-agnostic; omitting it keeps the name
+  /// and simply says nothing about the state.
+  final String? loadingLabel;
+
   @override
   Widget build(BuildContext context) {
-    final Widget child = isLoading
-        ? SizedBox(
+    if (!isLoading) {
+      return ElevatedButton(
+        onPressed: onPressed,
+        child: _LabelWithIcon(label: label, icon: icon),
+      );
+    }
+
+    // A spinner carries no text, so the label the button had a moment ago
+    // vanished from the semantics tree at exactly the moment the user needed
+    // confirmation of what was running. The name is restored here and the
+    // spinner below is excluded, so it is spoken once and not twice.
+    final String? state = loadingLabel?.trim();
+    return Semantics(
+      button: true,
+      enabled: false,
+      label: (state == null || state.isEmpty) ? label : '$label, $state',
+      child: ExcludeSemantics(
+        child: ElevatedButton(
+          onPressed: null,
+          child: SizedBox(
             height: GvIconSizes.md,
             width: GvIconSizes.md,
             child: CircularProgressIndicator(
               strokeWidth: 2,
               color: context.gvColors.onAccentPrimary,
             ),
-          )
-        : _LabelWithIcon(label: label, icon: icon);
-
-    return ElevatedButton(
-      onPressed: isLoading ? null : onPressed,
-      child: child,
+          ),
+        ),
+      ),
     );
   }
 }
