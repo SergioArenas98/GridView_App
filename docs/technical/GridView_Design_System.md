@@ -4,9 +4,10 @@
 
 - Product: GridView
 - Document type: Design System (implementation)
-- Status: **accumulated through Phase 8B**, with Phase 8C-3 accessibility work in
-  progress. The header previously read "Phase 3A", which described only §1–§8
-  and was never updated as the document grew (see "Scope evolution" in §1).
+- Status: **accumulated through Phase 8C-3**, whose accessibility hardening of the
+  shared components is implemented. The header previously read "Phase 3A", which
+  described only §1–§8 and was never updated as the document grew (see "Scope
+  evolution" in §1).
 - Related documents:
   - `../product/GridView_UI_UX_Design.md` (source of truth for palette, type
     scale, radius and spacing)
@@ -32,7 +33,7 @@ it stands. What later phases added:
 | 7A / 7B / 7C | Component changes in §8b, §8c and §8d — session and standings rows, the overflow-safe section header, the driver/team/circuit rows |
 | **8A** | **A full light theme shipped.** Both palettes are produced by one builder from one component configuration, so only the palette differs, and every semantic pair is contrast-asserted for both. The earlier statement in §5 that a light theme was "intentionally deferred" is obsolete and is corrected there. |
 | **8B** | **Remote-image components.** `GvRemoteImage` and the media policy in §8d. The original scope line above excluded remote images; that exclusion applied to Phase 3A only, and is no longer true of the design system. |
-| **8C-3** (in progress) | Accessibility hardening of the shared components: one loading announcement per screen state, live-region and heading semantics on the error and empty states, a de-duplicated offline notice, keyboard/D-pad operability and reduced motion on the primary navigation controls, and complete settings-row and button names. This proves the Flutter semantics and interaction layer only — not TalkBack, Switch Access or physical-device behaviour. |
+| **8C-3** | Accessibility hardening of the shared components: one loading announcement per screen state, live-region and heading semantics on the error and empty states, a de-duplicated offline notice, keyboard/D-pad operability and reduced motion on the primary navigation controls, and complete settings-row and button names. This proves the Flutter semantics and interaction layer only. TalkBack behaviour was covered separately by one populated device review, whose confirmed and still-unfixed findings — including a redundant selected-state suffix on the settings option component — are recorded in [GridView_Accessibility.md](GridView_Accessibility.md) §4. Switch Access remains unverified. |
 
 Advertising is **not** part of the design system's live surface: `GvAdContainer`
 exists but is catalogue-only, and advertising is not retained for v1

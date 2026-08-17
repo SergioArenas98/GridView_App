@@ -173,20 +173,48 @@ table:
   `DioGridViewApi`, and a missing base URL is a controlled configuration failure,
   never fixtures.
 
+### 8.1 The bundled inventory is incomplete
+
+**Fixture selection works.** What is incomplete is what the bundle contains.
+
+`assets/dev_fixtures/` currently holds three files:
+
+| File | Serves |
+|---|---|
+| `home.json` | `/v1/home` |
+| `grand-prix-2026-12.json` | Grand Prix round 12 |
+| `grand-prix-2026-13.json` | Grand Prix round 13 |
+
+`FixtureGridViewApi` resolves sixteen filename families. The rest are absent —
+including **`bootstrap`** and **`season-current`** — so a `DATA_SOURCE=fixture`
+build cannot resolve the current season, and **every season-scoped screen renders
+"Season unavailable"**: Home, Calendar, Grand Prix detail, both Standings tables,
+all three Explore collections and all three entity details. Settings and its
+sub-screens are unaffected, because they are not season-scoped.
+
+Consequences and boundaries:
+
+- **Full application development currently requires an explicit
+  `API_BASE_URL`** pointing at a local or staging Worker (below).
+- **Production never falls back to fixtures**, and this changes nothing about
+  that: the selection rules in §8 are unaffected.
+- **The production and staging HTTP paths are unaffected.** This is a
+  development-tooling gap only.
+- The validated Edge API contract corpus remains available under
+  `services/edge-api/test/fixtures/api/v1/`, covering bootstrap, seasons,
+  calendar, standings, drivers, constructors, circuits, grand-prix, results,
+  content and status.
+- A **separate follow-up** should derive the app's bundled inventory from that
+  corpus rather than author new data, keeping one source of truth. It belongs to
+  the Phase 2 fixture / Phase 3 mock-navigation owner
+  ([GridView_Implementation_Plan.md](GridView_Implementation_Plan.md) §7.5,
+  §8.8). It is **not fixed**, and fixture mode is **not** removed.
+
 ## 9. Manual local-development flow
 
-The default dev flow uses the bundled fixtures via a **deliberate** fixture mode
-— no running Worker required:
-
-```bash
-# Deliberate fixture mode: bundled dev fixtures (assets/dev_fixtures/*).
-# The "Sample data" banner is shown.
-flutter run --flavor dev --dart-define=APP_ENV=development \
-  --dart-define=DATA_SOURCE=fixture
-```
-
-Point dev/staging at a real HTTP endpoint instead (a local Worker or staging edge
-API) with remote mode and a base URL:
+Point dev/staging at a real HTTP endpoint (a local Worker or the staging edge
+API) with remote mode and a base URL. **This is the flow that currently reaches
+every screen**, because the bundled fixture inventory is incomplete (§8.1):
 
 ```bash
 flutter run --flavor dev \
@@ -195,15 +223,28 @@ flutter run --flavor dev \
   --dart-define=API_BASE_URL=http://10.0.2.2:8787   # 10.0.2.2 = host from the Android emulator
 ```
 
+Deliberate fixture mode still exists and is still selected exactly as documented
+in §8, but it currently reaches only Home's own response and two Grand Prix
+rounds; every season-scoped screen shows "Season unavailable" until the §8.1
+follow-up lands:
+
+```bash
+# Deliberate fixture mode: bundled dev fixtures (assets/dev_fixtures/*).
+# The "Sample data" banner is shown. Season-scoped screens are unavailable
+# until the bundled inventory is completed — see §8.1.
+flutter run --flavor dev --dart-define=APP_ENV=development \
+  --dart-define=DATA_SOURCE=fixture
+```
+
 Fixture mode is never inferred: remote mode (the default) with no `API_BASE_URL`
 is a controlled configuration failure, not a fixture fallback.
 
 Exercising states manually:
 
 - **Offline / stale:** turn off connectivity (or airplane mode) and relaunch —
-  cached Home/detail still render; the stale/offline notice appears. With the
-  bundled fixtures, adjust a fixture's `staleAfter` to a past instant to force
-  the stale notice.
+  cached Home/detail still render; the stale/offline notice appears. Use a real
+  base URL for this: the bundled fixtures cannot populate the season-scoped
+  screens the notice belongs to (§8.1).
 - **First-load error:** with `API_BASE_URL` set to an unreachable host and no
   cache, Home shows the recoverable error + Retry.
 - **Clear the reconstructed database:** uninstall the dev app

@@ -355,6 +355,23 @@ Create `gridview-api-v1.yaml` covering:
 
 ## 7.5 Fixture tasks
 
+> **Status correction (Phase 8C-3).** These scenarios exist and are validated in
+> the **Edge API contract corpus** under
+> `services/edge-api/test/fixtures/api/v1/`, which remains the single source of
+> truth for contract fixtures. They are **not** all present in the **app's**
+> bundled development inventory, `assets/dev_fixtures/`, which currently contains
+> only `home.json`, `grand-prix-2026-12.json` and `grand-prix-2026-13.json`.
+> There is no bundled bootstrap or current-season response, so
+> `FixtureGridViewApi` returns `notFound` for both and every season-scoped screen
+> shows "Season unavailable".
+>
+> This is a **development-tooling gap**. It does not affect the production or
+> staging HTTP path, production never falls back to fixtures, and it does not
+> block Phase 8 engineering closure. The follow-up — deriving the app's bundled
+> inventory from the already-validated contract corpus rather than authoring new
+> data — belongs to the owner of this section and of §8.8. It is **not fixed**,
+> and fixture mode is **not** removed.
+
 Create validated fixtures for:
 
 - Standard weekend.
@@ -506,7 +523,15 @@ Use fixture or placeholder data only.
 
 ## 8.8 Exit criteria
 
-- All routes are navigable with mock data.
+- All routes are navigable with mock data. **Qualified since Phase 8C-3:** this
+  was satisfied for the Phase 3 screen skeletons, and every route remains
+  navigable and fully exercised in the widget/golden suites, which inject their
+  own fixtures. It is **not** currently true of the **bundled**
+  `assets/dev_fixtures/` inventory: that bundle carries only `home.json` and two
+  Grand Prix rounds, with no bootstrap or current-season response, so a
+  `DATA_SOURCE=fixture` build cannot resolve the current season and every
+  season-scoped screen renders "Season unavailable". See §7.5 and
+  [GridView_Synchronization.md](GridView_Synchronization.md) §8.1.
 - Primary navigation preserves state.
 - Comparable screens behave consistently.
 - Core components render correctly at supported text sizes.
@@ -998,9 +1023,15 @@ operator actions, which Phase 8 cannot perform and does not own.
   no environment selects it.
 - Verify no oversized image is used in small rows. **Done** — a pure
   size-and-DPR variant selector decides before the widget is built.
-- Profile list scrolling and memory. **Not done** — requires a representative
-  physical device. This is a Phase 8C-3 device-pass task; no number has been
-  measured and none is recorded.
+- Profile list scrolling and memory. **Measured in Phase 8C-3 as provisional
+  evidence**, on the authorized HONOR DNP-NX9 in profile mode: placeholder-only
+  Explore scrolling (2 025 frames across six category/cache-state captures) and
+  240 repeated-navigation round trips with no monotonic heap retention. Recorded
+  in [GridView_Performance.md](GridView_Performance.md). The DNP-NX9 is
+  **flagship-class, not representative mid-range**, and no media existed to
+  scroll, so this is **not** representative-device acceptance: that is deferred
+  to Phase 10 (§15) and the real-media measurements to the media-publication
+  owner.
 
 **External operator actions — reassigned, not completed:**
 
@@ -1082,12 +1113,36 @@ advertising phase would work from. It describes no Phase 8 work.
 
 ## 13.7 Accessibility tasks
 
+The original task list is preserved above the outcome, because it is what the
+phase set out to do. The classification below records what actually happened,
+under the product-priority decision documented in
+[GridView_Accessibility.md](GridView_Accessibility.md) §5.
+
 - Run screen-reader review.
 - Run text-scale review.
 - Run contrast review.
 - Verify semantic state announcements.
 - Verify reduced-motion behavior where applicable.
 - Fix clipping and small-touch targets.
+
+**Outcome (Phase 8C-3):**
+
+- Automated semantics baseline — **complete.** 111 passing tests in `test/a11y`,
+  plus the component-level suites; reading order, semantic flags, identifier
+  suppression, EN/ES.
+- Touch-target verification — **complete**, including under 200% text.
+- Text-scale matrix — **complete.** 200% across every width, locale and theme.
+- Contrast verification — **complete**, for both themes.
+- Reduced-motion automated verification — **complete**, with a non-vacuity guard.
+- Populated TalkBack review — **executed once**, on the dedicated emulator
+  against public staging data, with human-heard confirmation. Findings recorded
+  in [GridView_Accessibility.md](GridView_Accessibility.md) §4 and **not fixed**.
+- Further manual screen-reader polish — **deferred, non-blocking.** No longer a
+  Phase 8 engineering exit criterion.
+- Formal accessibility certification — **outside v1 scope.** None is claimed.
+
+Clipping and small-touch-target fixes are covered by the text-scale matrix and
+the 48 dp assertions, both of which are green.
 
 ## 13.8 Deliverables
 
@@ -1098,12 +1153,25 @@ advertising phase would work from. It describes no Phase 8 work.
 - Crash/performance monitoring.
 - ~~Controlled advertising integration.~~ Not applicable: advertising is not
   retained for v1 ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)).
-- Accessibility review report.
+- Accessibility review report — **delivered** as
+  [GridView_Accessibility.md](GridView_Accessibility.md).
+- Performance evidence report — **delivered** as
+  [GridView_Performance.md](GridView_Performance.md), with its provisional,
+  partial and blocked classifications intact.
 
 ## 13.9 Exit criteria
 
-- Every user-facing string is localized.
-- Missing media always has a stable fallback.
+Each criterion is assessed honestly below. A deferred or blocked measurement is
+never recorded as satisfied.
+
+- **Every user-facing string is localized — satisfied.** ARB parity and the
+  existing localization coverage hold, subject to the previously documented
+  development-only catalogue copy, which is unreachable in production.
+- **Missing media always has a stable fallback — satisfied.** Confirmed on a
+  physical device during Phase 8C-3: every media slot rendered the same stable
+  placeholder at the same size, with no broken-image icon, no error text, no URL
+  on screen and no layout shift, including where a detail request was genuinely
+  attempted and failed.
 
 **Resolving the media-publication conflict.** Phase 8 engineering closure
 requires the *implemented* media architecture: variant selection, the stable
@@ -1121,14 +1189,58 @@ Rights approval, R2 provisioning, media upload and manifest publication are
 owning phase (§13.2). They remain **visible prerequisites for media
 publication** and are **not marked complete**. They do not block Phase 8
 engineering closure, and no engineering work is waiting on them.
-- Crash reports arrive from staging/release-like builds.
+- **Crash reports arrive from a release-like build — satisfied by Phase 8C-2.**
+  Console-confirmed from a production **debug** pass and from a **release-like**
+  pass built from a signed, R8-minified, non-debuggable production release APK.
+  No staging Firebase project exists, and none is claimed: dev and staging own no
+  Firebase configuration at all.
 - **Ads never block startup — not applicable, because advertising is not
   retained for v1** ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)).
   Deliberately *not* recorded as satisfied: nothing would be proved by it. No
   advertising integration was built, so none was tested, and the risk this
   criterion guards against cannot occur because its cause does not exist.
-- Settings persist correctly.
-- Core screens pass the accessibility baseline.
+- **Settings persist correctly — satisfied.**
+- **Core screens meet the selected v1 accessibility baseline — satisfied under
+  the revised product-priority decision.** The automated baseline is implemented
+  and retained (111 `test/a11y` tests within a 1977-test suite); one populated
+  manual TalkBack review was executed with human-heard confirmation; and the
+  screen-reader polish issues it found are documented and deferred in
+  [GridView_Accessibility.md](GridView_Accessibility.md) §4.
+  **This does not state that every accessibility defect is fixed** — four
+  confirmed duplicate-announcement findings, a focus-restoration gap and an
+  unrepeated keyboard observation remain open and unfixed. Manual TalkBack
+  validation is no longer a Phase 8 engineering exit criterion.
+
+## 13.10 Performance tasks — outcome
+
+Classified against the evidence in
+[GridView_Performance.md](GridView_Performance.md). No partial or blocked
+measurement is converted into a pass.
+
+- P9 offstage-prefetch regression guard — **complete**, permanently automated.
+- Placeholder / reference-device profiling — **complete as provisional
+  evidence** on flagship hardware with no media present.
+- Repeated-navigation memory — **complete without media pressure.**
+- Representative mid-range acceptance — **deferred to Phase 10 (§15).** The
+  TRD requirement is unchanged; only its acceptance owner and phase move.
+- Real-media decode and cache-pressure measurements (P2, populated P4, P3 under
+  pressure) — **deferred until approved media publication exists**, and owned by
+  the media-publication owner.
+- Startup and app-size measurements (P7 / P8, P10) — **remain Phase 10.**
+- Thresholds — **still not invented.** No agreed threshold exists for janky
+  frames, memory, disk-cache bytes, image-cache occupancy or rebuild counts.
+
+## 13.11 Phase 8 status
+
+**Phase 8C-3 engineering implementation and evidence collection are complete on
+this branch, with explicitly documented deferrals.**
+
+**Phase 8 engineering scope is ready for review and may be formally closed after
+this branch is merged and post-merge CI is green.** Neither the merge nor the
+post-merge CI run has happened yet, and neither is claimed here. Release
+readiness remains separately blocked by the external Play and privacy
+requirements tracked in
+[`../release/play-store-baseline.md`](../release/play-store-baseline.md).
 
 ---
 

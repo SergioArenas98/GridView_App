@@ -169,12 +169,22 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   Keep the three evidence levels apart — produced locally, accepted by ingestion
   (HTTP 200), observed in Console; only the last is delivery. Phase 8C-2 uploaded
   no mapping or symbol file, built no AAB and published nothing.
-- Phase 8C-3 - accessibility, performance and Phase 8 closure: **in progress.**
-  Automated accessibility hardening is implemented on the working branch and
-  proves the **Flutter semantics and interaction layer only**. TalkBack, Switch
-  Access, D-pad hardware, OS-level accessibility, physical-device performance
-  measurement, the final reports and Phase 8 closure are **still pending**.
-- **Phase 8 as a whole is not closed.**
+- Phase 8C-3 - accessibility, performance and Phase 8 closure: **implementation
+  and evidence collection complete on the working branch**, with documented
+  deferrals. Automated accessibility hardening is implemented and **retained**
+  (111 `test/a11y` tests inside a 1977-test suite). One **populated** TalkBack
+  review was executed on the dedicated emulator against public staging data,
+  with human-heard confirmation; it found several screen-reader polish issues
+  that are recorded and **not fixed**
+  ([accessibility](docs/technical/GridView_Accessibility.md)). Performance was
+  measured on the authorized flagship reference handset with no media present
+  ([performance](docs/technical/GridView_Performance.md)). **Manual
+  screen-reader polish is deferred** by product decision and is no longer a
+  Phase 8 exit criterion; **representative mid-range and real-media acceptance
+  remain Phase 10 / media-publication work.**
+- **Phase 8 engineering scope is awaiting review and merge. Phase 8 is not
+  formally closed**, and will not be until this branch is merged and post-merge
+  CI is green. No accessibility certification is claimed.
 
 Home's next-Grand-Prix hero, the Calendar, the Grand Prix detail screen, both
 standings tables, the three Explore collections and the Driver, Team and Circuit
@@ -200,7 +210,9 @@ that nothing reads. **No production provider is wired yet.** Dev/staging builds 
 only under a deliberate `DATA_SOURCE=fixture` build define (never inferred from a
 missing `API_BASE_URL`) and show a "Sample data" banner; **production never
 constructs the fixture source** — an attempted fixture mode or a missing base URL
-is a controlled configuration failure. A
+is a controlled configuration failure. The **bundled fixture inventory is
+incomplete**, so that mode does not currently reach the season-scoped screens
+(see Development setup below). A
 **development-only** component catalogue is reachable from **Settings → Developer**
 in dev/staging builds (never production).
 
@@ -208,14 +220,22 @@ in dev/staging builds (never production).
 
 1. Install [FVM](https://fvm.app): `dart pub global activate fvm`
 2. Install the pinned Flutter SDK: `fvm install`
-3. Run the app: `fvm flutter run --flavor dev --dart-define=APP_ENV=development --dart-define=DATA_SOURCE=fixture`
-   (no Worker needed — the deliberate `DATA_SOURCE=fixture` serves the bundled
-   `assets/dev_fixtures/*`; see `docs/technical/GridView_Environments.md`)
+3. Run the app against a Worker (local or staging):
+   `fvm flutter run --flavor dev --dart-define=APP_ENV=development --dart-define=DATA_SOURCE=remote --dart-define=API_BASE_URL=<worker-url>`
+
+   **An explicit `API_BASE_URL` is currently required to reach every screen.**
+   Deliberate fixture mode (`--dart-define=DATA_SOURCE=fixture`) still works and
+   still needs no Worker, but the **bundled fixture inventory is incomplete** —
+   it carries only `home.json` and two Grand Prix rounds, with no bootstrap or
+   current-season response, so season-scoped screens show "Season unavailable"
+   until the follow-up lands. See `docs/technical/GridView_Synchronization.md`
+   §8.1. Production never falls back to fixtures.
 4. Run checks: `fvm flutter analyze && fvm flutter test`
 
-The Drift-backed local-development flow — running against the bundled fixtures or
-an explicit `API_BASE_URL`, simulating offline/stale, and clearing the local
-database — is documented in `docs/technical/GridView_Synchronization.md` §9.
+The Drift-backed local-development flow — running against an explicit
+`API_BASE_URL` or the bundled fixtures, simulating offline/stale, and clearing
+the local database — is documented in
+`docs/technical/GridView_Synchronization.md` §§8.1 and 9.
 Flavors, environment defines, Firebase/AdMob state and the edge API
 environments are documented in `docs/technical/GridView_Environments.md`.
 User preferences, the two themes, the presentation-time policy and the Settings

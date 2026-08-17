@@ -100,6 +100,13 @@
   A local temporary directory is not such a record. See
   `../technical/GridView_Observability.md` §3.1.
 
+  **The Phase 8C-1 mapping-upload incident remains possible and unverified in
+  both directions** — it can be neither confirmed nor ruled out, because no
+  retained record covers the window. It is recorded in
+  `../technical/GridView_Observability.md` §9.4 and must not be restated as
+  either "it happened" or "it did not". Phase 8C-2 performed **no** mapping or
+  symbol upload, and neither did Phase 8C-3.
+
   `firebase-crashlytics-ndk` is deliberately absent, so crashes originating in
   **native (C/C++) libraries** are not captured. Android runtime and JVM
   failures remain in Crashlytics scope.
@@ -160,6 +167,36 @@
   production Firebase project. Both temporary verification harnesses were fully
   removed and must not be reintroduced.
 
+- **Accessibility state (added Phase 8C-3).** GridView retains an automated
+  accessibility baseline — 111 `test/a11y` tests inside a 1977-test suite,
+  covering semantics, reading order, touch targets, contrast, reduced motion and
+  200% text in EN and ES. One **populated** TalkBack review was executed on a
+  dedicated emulator with human-heard confirmation.
+
+  **No accessibility certification is claimed**, and Google Play has not reviewed
+  or approved GridView's accessibility state.
+
+  That review confirmed four duplicate-announcement findings, a
+  focus-restoration gap and one unrepeated keyboard observation. They are
+  **documented and unfixed** in `../technical/GridView_Accessibility.md` §4 and
+  are **non-blocking product debt** under the current product-priority decision:
+  each affects only how a screen reader narrates an otherwise complete,
+  correctly ordered and fully touch-operable screen.
+
+  Accessibility warnings may still appear in Play's pre-launch report. **Review
+  them during release preparation.** Escalate one only if it prevents a core
+  flow, hides required content, creates an unusable touchscreen interaction, or
+  reveals a broader functional regression — the known findings do not meet that
+  threshold.
+
+- **Performance acceptance (added Phase 8C-3).** Provisional measurements exist
+  in `../technical/GridView_Performance.md`, taken on a **flagship** reference
+  handset with **no approved media present**. **Representative mid-range
+  performance acceptance remains open and is deferred to Phase 10**; real-media
+  decode and populated cache-pressure measurements are deferred to the
+  media-publication owner. Neither is satisfied, and neither is a release
+  blocker on its own — but neither may be described as passed.
+
 ## Remaining release blockers
 
 Unchanged by Phase 8C-2, and both still open:
@@ -171,6 +208,13 @@ Unchanged by Phase 8C-2, and both still open:
 
 Plus the pre-existing items above: every `PENDING` Play Console value, and the
 Android NDK version decision before the first release AAB.
+
+**External prerequisites, still open and owned outside engineering.** None is
+marked complete: Formula 1 **media rights and attribution approval**, **R2
+provisioning**, media upload and manifest publication (no R2 bucket exists in any
+environment, so nothing has ever been published); and **production provider legal
+approval** with the production provider itself. These are tracked in
+`../technical/GridView_Implementation_Plan.md`.
 
 **Phase 8C-2 itself is complete** — nothing about Firebase observability is
 outstanding. Every other pre-existing release requirement remains governed by

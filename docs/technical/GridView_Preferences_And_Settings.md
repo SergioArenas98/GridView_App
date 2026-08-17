@@ -10,7 +10,7 @@ Phase 8 was split during execution:
 |---|---|---|
 | **8A** | Preferences, theming, localization, time display, Settings | **Implemented and merged** |
 | **8B** | Media selection, loading, disk cache, rights register, R2 pipeline | **Implemented and merged** (PR #1). Live publication is blocked externally — see below |
-| **8C** | Observability boundary, broad accessibility/performance hardening, Phase 8 documentation and closure | **8C-1 implemented and merged** (PR #4); **8C-2 externally verified in Firebase Console and merged** (PR #5); **8C-3 in progress** — automated accessibility hardening is implemented locally on the working branch, and device verification, performance measurement, the final reports and Phase 8 closure remain open |
+| **8C** | Observability boundary, broad accessibility/performance hardening, Phase 8 documentation and closure | **8C-1 implemented and merged** (PR #4); **8C-2 externally verified in Firebase Console and merged** (PR #5); **8C-3 implementation and evidence collection complete** on the working branch, awaiting review and merge — automated accessibility hardening is implemented and retained, one populated TalkBack review was executed with human-heard confirmation, and the final reports are delivered; screen-reader polish findings are documented and unfixed, representative mid-range and real-media performance acceptance are deferred to Phase 10, and Phase 8 closure remains open pending merge and green post-merge CI |
 
 **Phase 8 as a whole is not complete.** This document closes 8A only; for the
 current observability status see `GridView_Observability.md` §9.
@@ -645,18 +645,26 @@ outcome so nothing here directs future work to rebuild it.
   the controlled signals** in Firebase Console from a production-debug build and
   from a release-like production release APK. See `GridView_Observability.md` §9
   and §6.2 above.
-- **Phase 8C-3 is in progress** on a working branch. Automated accessibility
-  hardening beyond Settings is implemented there — loading, error, empty and
-  offline state announcements; keyboard, D-pad and switch-access operability of
-  the primary navigation controls; reduced motion; complete settings-row and
-  button names; and a cross-screen accessibility suite covering reading order,
-  identifier suppression, semantic flags and a bounded 200%-text matrix. It
-  proves the **Flutter semantics and interaction layer only**.
-- Still open, and genuinely so: **TalkBack, Switch Access, D-pad hardware and
-  OS-level accessibility verification on a physical device; performance
-  measurement on a physical device; the final accessibility and performance
-  reports; and Phase 8 closure.** Nothing in this document should be read as
-  claiming any of them.
+- **Phase 8C-3 implementation and evidence collection are complete** on a working
+  branch, awaiting review and merge. Automated accessibility hardening beyond
+  Settings is implemented and retained there — loading, error, empty and offline
+  state announcements; keyboard and D-pad operability of the primary navigation
+  controls; reduced motion; complete settings-row and button names; and a
+  cross-screen accessibility suite covering reading order, identifier
+  suppression, semantic flags and a bounded 200%-text matrix. It proves the
+  **Flutter semantics and interaction layer only**.
+- **One populated TalkBack review was executed** on a dedicated emulator with
+  human-heard confirmation, and the final accessibility and performance reports
+  are delivered ([GridView_Accessibility.md](GridView_Accessibility.md),
+  [GridView_Performance.md](GridView_Performance.md)). That review confirmed
+  screen-reader polish findings that are **documented and unfixed**, including a
+  redundant selected-state announcement on the Settings preference options.
+- Still open, and genuinely so: **Switch Access verification; exhaustive keyboard
+  testing; representative mid-range performance acceptance and real-media
+  measurements (deferred to Phase 10 and the media-publication owner); and Phase
+  8 closure, which requires merge and green post-merge CI.** Nothing in this
+  document should be read as claiming any of them, and **no accessibility
+  certification is claimed.**
 - The advertising decision is **closed**: not retained for v1
   ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)).
 - The known cleanup is **done**.

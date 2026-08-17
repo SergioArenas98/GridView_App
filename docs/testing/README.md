@@ -140,7 +140,9 @@ current. Those are separate concerns and are now checked separately:
 | **Canonical golden freshness** | Linux CI only | **zero** | a baseline that no longer matches what the code renders |
 
 The freshness job regenerates every golden on Linux and requires
-`git diff --exit-code` over the three golden directories to be clean. It also
+`git diff --exit-code` over the four golden directories
+(`test/design_system/goldens`, `test/screens/goldens`, `test/settings/goldens`
+and `test/media/goldens`) to be clean. It also
 self-tests: it modifies a golden, asserts the gate reports it, and restores the
 tree — so a wrong path can never make the check pass vacuously.
 
@@ -1299,9 +1301,12 @@ an accepted HTTP batch.** Phase 8C-2 uploaded no mapping or symbol file.
 > section runs in `flutter_test` against the Flutter **semantics and interaction
 > layer**. It proves what the framework exposes and how the widgets respond.
 > It does **not** prove TalkBack, Switch Access, D-pad hardware, OS display
-> scaling, OS-level "remove animations", or any physical-device behaviour.
-> Those require the Phase 8C-3 device pass and are **not** covered by any test
-> in this repository.
+> scaling, OS-level "remove animations", or any physical-device behaviour, and
+> no test in this repository does.
+>
+> Those were covered separately, **once**, by the Phase 8C-3 populated device
+> pass — see "Populated TalkBack evidence" below. That pass is complete and is
+> **not** repeated as part of ordinary development.
 
 ### Shared support — `test/support/a11y_harness.dart`
 
@@ -1341,15 +1346,88 @@ Assertions are ordered landmarks, not a dump of every internal node. A snapshot
 of a whole screen's semantics tree fails whenever its layout changes at all,
 which teaches nobody anything and trains everyone to re-bless it.
 
-### Performance — a pending measurement protocol, not a result
+### Populated TalkBack evidence — done once, not a routine gate
 
-**No performance measurement has been taken.** No startup time, frame timing,
-scroll-jank, app-size or media-cache number exists anywhere in this repository,
-and nothing here should be read as one.
+The Phase 8C-3 device pass ran on the dedicated `gv_phase8c2_verify` emulator
+against **populated public staging data**, with real TalkBack and a person
+listening. It covered every core screen in EN and ES, at font scales 1.0/1.3/2.0,
+at native and larger display sizes, and with animations disabled.
 
-The protocol the Phase 8C-3 device pass is to execute is described in
-`../technical/GridView_Media.md` (Explore scrolling, repeated detail navigation,
-and Home first render with and without cached media) and
-`../technical/GridView_Implementation_Plan.md` (Phase 10 performance tasks). It
-requires a representative physical device, which is why it has not run. Results
-will be recorded when they are measured — not before.
+Results, including the confirmed screen-reader findings that remain **unfixed**,
+are in [`../technical/GridView_Accessibility.md`](../technical/GridView_Accessibility.md).
+Keep its three evidence levels apart: Flutter semantics, Android platform tree,
+and human-heard output. A clean semantics tree is never evidence of what was
+spoken.
+
+**Do not repeat this protocol as part of ordinary development.** By explicit
+product decision, manual TalkBack validation is not a gate on routine changes and
+is not a Phase 8 exit criterion.
+
+Reopen manual accessibility testing when:
+
+- a user reports an accessibility problem;
+- navigation or semantic architecture changes materially;
+- a major release is being prepared; or
+- Google Play's pre-launch report identifies a severe issue.
+
+### Performance evidence collection
+
+Phase 8C-3 measurements exist and are recorded in
+[`../technical/GridView_Performance.md`](../technical/GridView_Performance.md).
+They were taken from a **staging profile APK** on the authorized physical
+DNP-NX9, driven through the Dart VM service over `adb` — no browser, no DevTools
+UI, and no permanent instrumentation in the repository.
+
+Read them with their qualifications attached, because most of them are not
+acceptance results:
+
+- The DNP-NX9 is **flagship-class, not representative mid-range**.
+- No approved media existed, so nothing was fetched, decoded or cached — the
+  scrolling numbers are a **placeholder-only** baseline.
+- **No project threshold exists** for janky frames, memory, disk-cache bytes,
+  image-cache occupancy or rebuild counts, and none was invented.
+
+**Profile timings and debug rebuild attribution are different things.** Frame and
+memory figures must come from a **profile** build. Per-widget rebuild
+attribution is impossible there — Flutter registers the widget-inspector service
+extensions inside an `assert` block, which profile builds strip — so it is
+available only in **debug**. If a future optimization investigation needs rebuild
+counts, take them in debug and use only the *counts*: **debug timings must never
+be quoted as performance timings.**
+
+Deferred to Phase 10 and to the media-publication owner: representative
+mid-range acceptance, startup and app-size measurement, real-media decode, and
+populated cache-pressure and eviction behaviour. None of these is satisfied, and
+none may be described as passed.
+
+### Golden accounting
+
+Three quantities that are easy to run together. They currently coincide at 71,
+but they are different measurements:
+
+| Quantity | Value |
+|---|---|
+| Committed golden PNG baselines under `test/**/goldens/` | **71** |
+| Golden test declarations | **71** |
+| Golden cases executed and passing | **71** |
+
+Across **five** suites:
+
+| Suite | File | Cases |
+|---|---|---:|
+| Design system | `test/design_system/golden_test.dart` | 5 |
+| Screens | `test/screens/screen_golden_test.dart` | 35 |
+| Light theme | `test/screens/light_theme_golden_test.dart` | 8 |
+| Settings | `test/settings/settings_golden_test.dart` | 16 |
+| Media | `test/media/media_golden_test.dart` | 7 |
+
+Counting `matchesGoldenFile` **call sites** gives a different and misleading
+number (45), because three suites route through a shared helper. Count
+declarations, or run the suites.
+
+The repository also contains 20 Android launcher-icon PNGs under
+`android/app/src/main/res/mipmap-*`. Those are **not** goldens and must not be
+included in a golden count.
+
+**Goldens are never regenerated locally** — see "Linux is the canonical golden
+environment" above.

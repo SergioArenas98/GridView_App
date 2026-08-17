@@ -215,27 +215,35 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 | Environment | Worker name | State |
 |---|---|---|
 | development | `gridview-api-dev` | Local `wrangler dev` only |
-| staging | `gridview-api-staging` | **Contradictory — see below. Requires re-verification.** |
+| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. |
 | production | `gridview-api-production` | Not provisioned |
 
-> **Unresolved contradiction: the staging Worker's provisioning status.**
+> **Staging: public availability observed; administrative state not verified.**
 >
-> This table says staging is "Not provisioned". Earlier operational evidence
-> from the Phase 5B workstream records the opposite: a **public staging Worker
-> observed responding** to an unauthenticated `GET /v1/status`, reporting
-> `environment=staging`. Both statements are in the project's history and they
-> cannot both be current.
+> The earlier contradiction in this table — "Not provisioned" against Phase 5B's
+> record of a responding public Worker — is resolved **in the direction of
+> availability**, on the evidence date only.
 >
-> This is recorded rather than resolved. Settling it means querying Cloudflare,
-> which is an external service, and Phase 8C-3 does not touch the edge API.
-> **The staging Worker's provisioning status requires re-verification in its
-> owning phase (5B).** Until that happens, treat neither the table row nor the
-> earlier observation as authoritative, and do not build any Phase 8 claim on
-> either.
+> **Observed during the Phase 8C-3 verification (2026-08-17), read-only and
+> public:**
 >
-> Nothing in the mobile application depends on the answer: the shell does not
-> call the Worker in any shipped flavor, and production remains unprovisioned
-> under both readings.
+> - `GET /v1/status` returned `200` and reported `environment=staging`,
+>   `apiVersion=1`, `maintenance=false`.
+> - The public season, calendar, standings, Explore-collection and entity-detail
+>   resources were available and populated for season 2026.
+> - The staging mobile application **synchronized successfully** against it over
+>   ordinary public `GET` traffic, so the earlier note that "the shell does not
+>   call the Worker in any shipped flavor" is superseded: a staging build with an
+>   explicit `API_BASE_URL` does call it, and did.
+>
+> **What this does not establish.** No administrative route was called, no
+> Cloudflare dashboard, API or tooling was accessed, and `ADMIN_TOKEN` was never
+> handled. Deployment ownership, configuration, bindings, secrets, retention and
+> future availability were **not** verified and must not be inferred from public
+> HTTP behaviour. This records that the service answered on that date — nothing
+> about how it is configured or who maintains it.
+>
+> Production remains unprovisioned, and nothing above changes that.
 
 Production Cloudflare account resources (KV namespaces, R2 buckets, routes,
 domains, secrets) do not exist; provisioning happens with approval in the owning
