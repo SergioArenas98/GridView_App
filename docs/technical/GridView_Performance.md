@@ -193,14 +193,33 @@ GC and settle; sample. Dart heap on the main isolate.
 | | 2 | 19.46 MB | 20.81 MB | 19.46 MB | +2.0 KB |
 | | 3 | 19.46 MB | 23.43 MB | 19.46 MB | +2.5 KB |
 
-Post-GC external usage returned to its exact byte-level baseline every time.
+Post-GC external usage returned to its exact byte-level baseline every time. The
+`Δ vs run 1` column is in **KiB** and compares each run's settled after-GC heap
+with **run 1's settled after-GC heap for the same journey**.
 
-**Growth is not monotonic** — one journey ended below its own baseline — and the
-largest positive post-GC deviation across 240 round trips is approximately
-**3 KB**, which is ordinary allocation noise rather than retention.
+**Growth is not monotonic**, and the evidence shows **no accumulating
+navigation-retention trend**. Two different comparisons live in the table above,
+though, and collapsing them into a single figure overstates how tight the result
+is:
 
-**Limitation:** measured with no images in play, so it says nothing about
-behaviour under media pressure.
+- **Across later runs**, the settled after-GC heap stayed within **+3.2 KiB**
+  (3 264 B, Explore → driver run 3) of run 1's settled after-GC value for the
+  same journey, and one journey finished **22.2 KiB (22 784 B) below** its own
+  run-1 value.
+- **That cross-run comparison excludes the first traversal itself.** The largest
+  *within-run* before-to-after-GC increases were **59.2 KiB (60 624 B)** for
+  Explore → circuit and **53.8 KiB (55 056 B)** for Standings → driver, both on
+  run 1. They did not recur: the same within-run comparison stays at or below
+  2.6 KiB on every later run.
+
+The shape of that — a larger settle on a journey's first traversal, not repeated
+afterwards — is consistent with allocation retained the first time a journey's
+screens are built. Nothing here measures the cause, so that reading is an
+inference, not a finding.
+
+**Limitations:** measured with no images in play, so it says nothing about
+behaviour under media pressure; and **no memory threshold exists for this
+project**, so no run is called a pass or a failure.
 
 ### 4.6 P6 — rebuild scope (aggregate cost only)
 
