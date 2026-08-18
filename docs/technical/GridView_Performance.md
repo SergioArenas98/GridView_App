@@ -181,17 +181,17 @@ GC and settle; sample. Dart heap on the main isolate.
 | Journey | Run | Before | After | After GC | Δ vs run 1 |
 |---|---|---:|---:|---:|---:|
 | Explore → driver detail | 1 | 18.92 MB | 22.46 MB | 18.91 MB | — |
-| | 2 | 18.91 MB | 32.97 MB | 18.92 MB | +2.6 KB |
-| | 3 | 18.92 MB | 21.59 MB | 18.92 MB | +3.2 KB |
+| | 2 | 18.91 MB | 32.97 MB | 18.92 MB | +2.6 KiB |
+| | 3 | 18.92 MB | 21.59 MB | 18.92 MB | +3.2 KiB |
 | Explore → team detail | 1 | 18.73 MB | 19.69 MB | 18.71 MB | — |
-| | 2 | 18.71 MB | 23.69 MB | 18.71 MB | +2.0 KB |
-| | 3 | 18.71 MB | 20.53 MB | 18.71 MB | +2.7 KB |
+| | 2 | 18.71 MB | 23.69 MB | 18.71 MB | +2.0 KiB |
+| | 3 | 18.71 MB | 20.53 MB | 18.71 MB | +2.7 KiB |
 | Explore → circuit detail | 1 | 18.60 MB | 23.05 MB | 18.66 MB | — |
-| | 2 | 18.66 MB | 30.70 MB | 18.66 MB | +2.1 KB |
-| | 3 | 18.74 MB | 20.58 MB | 18.64 MB | −22.2 KB |
+| | 2 | 18.66 MB | 30.70 MB | 18.66 MB | +2.1 KiB |
+| | 3 | 18.74 MB | 20.58 MB | 18.64 MB | −22.2 KiB |
 | Standings → driver detail | 1 | 19.40 MB | 21.59 MB | 19.46 MB | — |
-| | 2 | 19.46 MB | 20.81 MB | 19.46 MB | +2.0 KB |
-| | 3 | 19.46 MB | 23.43 MB | 19.46 MB | +2.5 KB |
+| | 2 | 19.46 MB | 20.81 MB | 19.46 MB | +2.0 KiB |
+| | 3 | 19.46 MB | 23.43 MB | 19.46 MB | +2.5 KiB |
 
 Post-GC external usage returned to its exact byte-level baseline every time. The
 `Δ vs run 1` column is in **KiB** and compares each run's settled after-GC heap
