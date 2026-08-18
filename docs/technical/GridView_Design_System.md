@@ -31,7 +31,7 @@ it stands. What later phases added:
 | Phase | Added here |
 |---|---|
 | 7A / 7B / 7C | Component changes in §8b, §8c and §8d — session and standings rows, the overflow-safe section header, the driver/team/circuit rows |
-| **8A** | **A full light theme shipped.** Both palettes are produced by one builder from one component configuration, so only the palette differs, and every semantic pair is contrast-asserted for both. The earlier statement in §5 that a light theme was "intentionally deferred" is obsolete and is corrected there. |
+| **8A** | **A full light theme shipped.** Both palettes are produced by one builder from one component configuration, so only the palette differs, and the semantic colour pairings enumerated by the contrast suite are asserted for both. That enumerated set is a curated list of combinations the interface actually uses — not an exhaustive pairing of all 21 semantic colours; see [GridView_Accessibility.md](GridView_Accessibility.md) §2 and [GridView_Preferences_And_Settings.md](GridView_Preferences_And_Settings.md) §3.4. The earlier statement in §5 that a light theme was "intentionally deferred" is obsolete and is corrected there. |
 | **8B** | **Remote-image components.** `GvRemoteImage` and the media policy in §8d. The original scope line above excluded remote images; that exclusion applied to Phase 3A only, and is no longer true of the design system. |
 | **8C-3** | Accessibility hardening of the shared components: one loading announcement per screen state, live-region and heading semantics on the error and empty states, a de-duplicated offline notice, keyboard/D-pad operability and reduced motion on the primary navigation controls, and complete settings-row and button names. This proves the Flutter semantics and interaction layer only. TalkBack behaviour was covered separately by one populated device review, whose confirmed and still-unfixed findings — including a redundant selected-state suffix on the settings option component — are recorded in [GridView_Accessibility.md](GridView_Accessibility.md) §4. Switch Access remains unverified. |
 
@@ -98,10 +98,14 @@ icon buttons, dividers).
 **A full light theme shipped in Phase 8A** as `buildGridViewLightTheme()`. The
 token and extension architecture held: both themes come from one builder and one
 component configuration, so only the palette differs and no component code was
-touched. Every semantic pair is contrast-asserted for both palettes. (This
-paragraph previously said a light theme was "intentionally deferred"; that was
-true of Phase 3A and is not true now.) Theme selection is a persisted user
-preference — see `GridView_Preferences_And_Settings.md` §3.
+touched. The semantic colour pairings enumerated by
+`test/design_system/theme_contrast_test.dart` are asserted for both palettes;
+that enumeration is the curated set of combinations the interface actually uses
+(listed in `GridView_Preferences_And_Settings.md` §3.4), not an exhaustive
+pairing of all 21 semantic colours. (This paragraph previously said a light theme
+was "intentionally deferred"; that was true of Phase 3A and is not true now.)
+Theme selection is a persisted user preference — see
+`GridView_Preferences_And_Settings.md` §3.
 
 Team colours are decorative and may fail contrast, so they are applied only as
 accents through `GvTeamAccent.foregroundOn(...)`, never as the sole carrier of

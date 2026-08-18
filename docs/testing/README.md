@@ -1262,7 +1262,7 @@ Phase 8A's behaviour is asserted in two directories, both run by the ordinary
 | `preference_values_test.dart` | The three typed preferences and their stable wire tokens; every unknown, empty or corrupted value resolving to the documented safe default rather than throwing |
 | `preferences_repository_test.dart` | The single owner of all three preferences: whole-snapshot replacement, read-failure and write-failure behaviour, and the synchronous bootstrap read |
 | `locale_resolution_test.dart` | Total locale resolution from a preference plus the platform locales, including an unsupported platform locale and an explicit preference overriding the device |
-| `theme_behavior_test.dart` | Theme selection across `system`/`dark`/`light`, both palettes' semantic pairs, and a light-theme smoke matrix over every shared component |
+| `theme_behavior_test.dart` | Theme selection across `system`/`dark`/`light`; both palettes' semantic role completeness (both theme extensions installed, and the palettes differing in their surface and text roles); and a light-theme smoke matrix over 23 named shared-component cases — a sample, not every shared component. Contrast ratios are asserted separately, in `test/design_system/theme_contrast_test.dart` |
 
 ### `test/settings/` (74)
 
