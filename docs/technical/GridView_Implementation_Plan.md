@@ -1141,8 +1141,16 @@ under the product-priority decision documented in
   Phase 8 engineering exit criterion.
 - Formal accessibility certification — **outside v1 scope.** None is claimed.
 
-Clipping and small-touch-target fixes are covered by the text-scale matrix and
-the 48 dp assertions, both of which are green.
+What the text-scale matrix establishes at 200% is bounded, and worth stating
+precisely: no `RenderFlex` overflow exception, the important semantic labels
+still present, the applicable 48 dp touch-target minimum, and a surviving
+`Scrollable` where it asserts one.
+
+It does **not** detect visual truncation. A `Text` that ellipsizes under
+`maxLines` keeps its full semantics label and throws no exception, so the suite
+stays green through it. Small-touch-target coverage is therefore established;
+**absence of visible clipping at 200% is not**, and is neither claimed nor
+disproven here.
 
 ## 13.8 Deliverables
 

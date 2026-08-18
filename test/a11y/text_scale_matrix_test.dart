@@ -20,11 +20,14 @@ typedef Screen = (String location, Readable readable, bool hasBottomNav);
 /// Every screen family at 200% text, across widths, locales and themes.
 ///
 /// 200% is the accessibility floor, not an extreme: it is what Android's
-/// largest font setting produces, and it is where a fixed height clips a label
-/// out of existence or a row overflows. The failure this is built to catch is
-/// the silent one — a label still present in the widget tree but clipped out of
-/// the *semantics* tree, so a screen reader stops reading it while the screen
-/// still looks plausible to a sighted reviewer.
+/// largest font setting produces, and it is where a fixed height drops a label
+/// or a row overflows. The failure this is built to catch is the silent one — a
+/// label gone from the *semantics* tree, so a screen reader stops reading it
+/// while the screen still looks plausible to a sighted reviewer.
+///
+/// Visual truncation is a **different** failure and is deliberately out of
+/// scope: an ellipsized `Text` keeps its full semantics label and raises no
+/// exception, so nothing asserted here would report it.
 ///
 /// The matrix is bounded on purpose. The full Cartesian product
 /// {320, 390} x {EN, ES} x {dark, light} runs for the four highest-risk
@@ -92,9 +95,11 @@ void main() {
       reason: 'overflow at ${describe(c)} on $location',
     );
 
-    // 2. The important labels are still in the semantics tree. A clipped label
-    //    leaves it, so this is what catches "still looks fine, reads like
-    //    nothing".
+    // 2. The important labels are still in the semantics tree. This catches a
+    //    label dropped from semantics altogether — "still looks fine, reads
+    //    like nothing". It does *not* catch visual truncation: a `Text` that
+    //    ellipsizes under `maxLines` keeps its full label here and throws no
+    //    exception, so nothing in this suite would report it.
     for (final String label in spanish ? readable.es : readable.en) {
       expect(
         labelOccurrences(tester, label),
