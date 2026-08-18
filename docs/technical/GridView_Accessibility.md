@@ -102,12 +102,14 @@ a restatement of each test.
   set covering every width, locale and theme for the other fifteen families.
   Per cell: no overflow, important labels still present, primary destinations
   still at least 48 dp, content still scrollable.
-- Contrast: the pairings that actually occur are asserted in **both** themes —
-  primary, secondary and muted text against each surface they are drawn on; the
-  status accents used as text; the reserved and decorative accents against their
-  non-text floors; disabled text, dividers and surface-role separation; and the
-  contrast-safe foreground against every team colour. This is a curated set of
-  real combinations, **not** an exhaustive pairing of all 21 semantic colours.
+- Contrast: an explicitly enumerated, curated set of semantic pairings is
+  asserted in **both** themes — primary, secondary and muted text against each
+  surface they are drawn on; the status accents used as text; the reserved and
+  decorative accents against their non-text floors; disabled text, dividers and
+  surface-role separation; and the contrast-safe foreground against every team
+  colour. The set mixes pairings the current interface uses with reserved roles
+  that have no call site yet, and it is **not** an exhaustive cross-product of
+  all 21 semantic colours.
 
 ### 2.1 Retained counts
 
