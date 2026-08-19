@@ -140,7 +140,9 @@ current. Those are separate concerns and are now checked separately:
 | **Canonical golden freshness** | Linux CI only | **zero** | a baseline that no longer matches what the code renders |
 
 The freshness job regenerates every golden on Linux and requires
-`git diff --exit-code` over the three golden directories to be clean. It also
+`git diff --exit-code` over the four golden directories
+(`test/design_system/goldens`, `test/screens/goldens`, `test/settings/goldens`
+and `test/media/goldens`) to be clean. It also
 self-tests: it modifies a golden, asserts the gate reports it, and restores the
 tree — so a wrong path can never make the check pass vacuously.
 
@@ -299,18 +301,27 @@ Run them alone with:
 flutter test test/observability
 ```
 
-## Canonical goldens pending regeneration
+## Canonical golden status
+
+**No golden is pending regeneration.**
 
 The Phase 8C-1 Privacy-screen copy change (live status plus the diagnostics
-disclosure) legitimately changes three baselines:
+disclosure) legitimately changed three baselines:
 
 - `test/settings/goldens/settings_privacy_unconfigured.png`
 - `test/settings/goldens/settings_privacy_configured.png`
 - `test/settings/goldens/settings_privacy_production.png`
 
-They have **not** been regenerated. Canonical baselines are Linux-owned: run the
-manual "Render canonical goldens" workflow, inspect the artifact, and commit
-only approved images. Do not author them on Windows.
+They were regenerated through the canonical Linux workflow and committed in
+**`84ee996`** (`test(settings): update canonical privacy goldens`), which is on
+`master`. The **canonical golden freshness** gate — Linux-only, zero
+allowance — is green and remains the authority on whether a baseline matches
+what the code renders.
+
+The rule that produced this is unchanged and still binding: **canonical
+baselines are Linux-owned.** Author one with the manual "Render canonical
+goldens" workflow, inspect the artifact, and commit only approved images. **Do
+not author or regenerate a baseline locally on Windows or macOS.**
 
 ## Edge API foundation (Phase 5A)
 
@@ -1238,3 +1249,185 @@ other.
 The 2% cross-platform comparator is unchanged and must not be raised because an
 image introduces platform variance; a new golden approaching that threshold is a
 signal to diagnose, not to weaken the gate.
+
+## Preferences, theming and Settings (Phase 8A)
+
+Phase 8A's behaviour is asserted in two directories, both run by the ordinary
+`flutter test`.
+
+### `test/preferences/` (65)
+
+| File | Covers |
+|---|---|
+| `preference_values_test.dart` | The three typed preferences and their stable wire tokens; every unknown, empty or corrupted value resolving to the documented safe default rather than throwing |
+| `preferences_repository_test.dart` | The single owner of all three preferences: whole-snapshot replacement, read-failure and write-failure behaviour, and the synchronous bootstrap read |
+| `locale_resolution_test.dart` | Total locale resolution from a preference plus the platform locales, including an unsupported platform locale and an explicit preference overriding the device |
+| `theme_behavior_test.dart` | Theme selection across `system`/`dark`/`light`; both palettes' semantic role completeness (both theme extensions installed, and the palettes differing in their surface and text roles); and a light-theme smoke matrix over 23 named shared-component cases — a sample, not every shared component. Contrast ratios are asserted separately, in `test/design_system/theme_contrast_test.dart` |
+
+### `test/settings/` (74)
+
+| File | Covers |
+|---|---|
+| `settings_widget_test.dart` | The whole Settings surface: localized values rather than wire tokens, the developer section's environment gating, the truthful privacy report, external-link behaviour without ever displaying a URL, and the composed accessible names of the settings rows |
+| `settings_navigation_test.dart` | The seven sub-routes on the root navigator: opening Settings never changes the active branch, and back returns to the exact origin |
+| `external_links_test.dart` | The `https`/`mailto` allow-list, an unconfigured link explained outside production and omitted entirely in production, and launch failures reported without exposing the URL |
+| `settings_golden_test.dart` | The Settings golden set (see the golden gates above) |
+
+Contrast is asserted programmatically for **both** palettes rather than by eye;
+see `test/support/contrast.dart`.
+
+## Observability verification (Phase 8C-2)
+
+Phase 8C-2 added **no** new automated suite. It was an external verification
+pass: controlled signals were produced by real builds and then **observed in
+Firebase Console**. Its evidence lives in `../technical/GridView_Observability.md`
+and `../release/play-store-baseline.md`, not here.
+
+It matters to testing for one reason — the three evidence levels must stay
+separate, and no test can supply the third:
+
+| Level | What it proves | Where it comes from |
+|---|---|---|
+| Produced locally | The app emitted the signal | `test/observability/` and a local run |
+| Accepted by ingestion (HTTP 200) | The transport accepted a batch | Device logs during a verification pass |
+| **Observed in Console** | **Delivery** | Firebase Console, by a human, in Phase 8C-2 |
+
+**A green `test/observability/` run is not evidence of delivery, and neither is
+an accepted HTTP batch.** Phase 8C-2 uploaded no mapping or symbol file.
+
+## Accessibility (Phase 8C-3)
+
+> **Scope limit, stated first because it is the point.** Everything in this
+> section runs in `flutter_test` against the Flutter **semantics and interaction
+> layer**. It proves what the framework exposes and how the widgets respond.
+> It does **not** prove TalkBack, Switch Access, D-pad hardware, OS display
+> scaling, OS-level "remove animations", or any physical-device behaviour, and
+> no test in this repository does.
+>
+> Those were covered separately, **once**, by the Phase 8C-3 populated device
+> pass — see "Populated TalkBack evidence" below. That pass is complete and is
+> **not** repeated as part of ordinary development.
+
+### Shared support — `test/support/a11y_harness.dart`
+
+Helpers that inspect the *rendered* semantics tree rather than merely locating a
+node: depth-first and traversal-order label lists, a relative reading-order
+assertion, live-region and heading collections, and an occurrence counter that
+counts repeats **within** a single merged label as well as across nodes. The
+last one matters: the established pattern here is a parent `Semantics` carrying
+a composed label over an `ExcludeSemantics` subtree, and forgetting the
+exclusion merges the two into one node whose label says everything twice — which
+a node-counting assertion reports as correct.
+
+### Component-level — `test/design_system/`
+
+| File | Covers |
+|---|---|
+| `state_semantics_test.dart` (12) | One live region and one localized announcement per loading frame however many skeleton shapes it wraps; the shapes contributing no semantics; the wrapper changing no size; one text-carrying live region and a heading title on the error and empty states; and the offline notice carrying its message on exactly one node |
+| `reduced_motion_test.dart` (4) | The segmented control completing its selection change in the first frame under `MediaQuery.disableAnimationsOf`, still animating without it (the guard that keeps the assertion non-vacuous), and unchanged size, resting appearance and selected semantics |
+| `component_behavior_test.dart` (20) | Keyboard traversal, Enter, Space and the standard `ActivateIntent`/`ButtonActivateIntent` on the bottom navigation and the segmented control; pointer behaviour preserved; the 48 dp target and semantics unchanged under focus; and a focus ring present only while focus is |
+| `semantics_test.dart` (10) | Selected-state flags on the primary controls, and `GvPrimaryButton` across its enabled, disabled and loading states |
+| `component_catalogue_test.dart` (9) | The development catalogue's loading example — the only `isLoading: true` call site in the app — announcing its name and its localized state in EN and ES, and the component contract that rejects a missing or blank loading label |
+
+### Cross-screen — `test/a11y/` (111)
+
+| File | Covers |
+|---|---|
+| `screen_semantics_test.dart` (34) | Reading order as ordered landmarks for **19 screen families** (Home, Calendar, Grand Prix, both Standings tables, all three Explore collections, the driver/team/circuit details, Settings and its seven sub-screens); semantic flags for button, selected, checked-in-a-mutually-exclusive-group, heading, live region, informative image and decorative image; and the three Home module states (resolving, unavailable, available-empty) |
+| `identifier_leak_test.dart` (7) | Sentinel identifiers and URLs injected into Home, Calendar, Standings, Settings and the three detail screens, asserted to reach neither rendered text nor an accessibility label. Sentinels, not a global ban on identifier-shaped strings |
+| `text_scale_matrix_test.dart` (64) | 200% text. The complete `{320, 390} x {EN, ES} x {dark, light}` product for Home, Standings, Settings and the driver detail (32 cells), and a documented two-cell pairwise set for the other fifteen families, together covering every width, locale and theme. Per cell: no overflow, important labels still in the semantics tree, primary destinations still at least 48 dp, content still scrollable |
+| `reduced_motion_screens_test.dart` (6) | Reduced motion delivered to the live screens that own a segmented control (Standings and Explore), and no intermediate animated state during a selection change |
+
+Reading order is read through `debugListChildrenInOrder(traversalOrder)`.
+Semantics children are stored in **paint** order and sorted only on
+serialisation, so a naive tree walk asserts the wrong order and passes.
+
+Assertions are ordered landmarks, not a dump of every internal node. A snapshot
+of a whole screen's semantics tree fails whenever its layout changes at all,
+which teaches nobody anything and trains everyone to re-bless it.
+
+### Populated TalkBack evidence — done once, not a routine gate
+
+The Phase 8C-3 device pass ran on the dedicated `gv_phase8c2_verify` emulator
+against **populated public staging data**, with real TalkBack and a person
+listening. It covered every core screen in EN and ES, at font scales 1.0/1.3/2.0,
+at native and larger display sizes, and with animations disabled.
+
+Results, including the confirmed screen-reader findings that remain **unfixed**,
+are in [`../technical/GridView_Accessibility.md`](../technical/GridView_Accessibility.md).
+Keep its three evidence levels apart: Flutter semantics, Android platform tree,
+and human-heard output. A clean semantics tree is never evidence of what was
+spoken.
+
+**Do not repeat this protocol as part of ordinary development.** By explicit
+product decision, manual TalkBack validation is not a gate on routine changes and
+is not a Phase 8 exit criterion.
+
+Reopen manual accessibility testing when:
+
+- a user reports an accessibility problem;
+- navigation or semantic architecture changes materially;
+- a major release is being prepared; or
+- Google Play's pre-launch report identifies a severe issue.
+
+### Performance evidence collection
+
+Phase 8C-3 measurements exist and are recorded in
+[`../technical/GridView_Performance.md`](../technical/GridView_Performance.md).
+They were taken from a **staging profile APK** on the authorized physical
+DNP-NX9, driven through the Dart VM service over `adb` — no browser, no DevTools
+UI, and no permanent instrumentation in the repository.
+
+Read them with their qualifications attached, because most of them are not
+acceptance results:
+
+- The DNP-NX9 is **flagship-class, not representative mid-range**.
+- No approved media existed, so nothing was fetched, decoded or cached — the
+  scrolling numbers are a **placeholder-only** baseline.
+- **No project threshold exists** for janky frames, memory, disk-cache bytes,
+  image-cache occupancy or rebuild counts, and none was invented.
+
+**Profile timings and debug rebuild attribution are different things.** Frame and
+memory figures must come from a **profile** build. Per-widget rebuild
+attribution is impossible there — Flutter registers the widget-inspector service
+extensions inside an `assert` block, which profile builds strip — so it is
+available only in **debug**. If a future optimization investigation needs rebuild
+counts, take them in debug and use only the *counts*: **debug timings must never
+be quoted as performance timings.**
+
+Deferred to Phase 10 and to the media-publication owner: representative
+mid-range acceptance, startup and app-size measurement, real-media decode, and
+populated cache-pressure and eviction behaviour. None of these is satisfied, and
+none may be described as passed.
+
+### Golden accounting
+
+Three quantities that are easy to run together. They currently coincide at 71,
+but they are different measurements:
+
+| Quantity | Value |
+|---|---|
+| Committed golden PNG baselines under `test/**/goldens/` | **71** |
+| Golden test declarations | **71** |
+| Golden cases executed and passing | **71** |
+
+Across **five** suites:
+
+| Suite | File | Cases |
+|---|---|---:|
+| Design system | `test/design_system/golden_test.dart` | 5 |
+| Screens | `test/screens/screen_golden_test.dart` | 35 |
+| Light theme | `test/screens/light_theme_golden_test.dart` | 8 |
+| Settings | `test/settings/settings_golden_test.dart` | 16 |
+| Media | `test/media/media_golden_test.dart` | 7 |
+
+Counting `matchesGoldenFile` **call sites** gives a different and misleading
+number (45), because three suites route through a shared helper. Count
+declarations, or run the suites.
+
+The repository also contains 20 Android launcher-icon PNGs under
+`android/app/src/main/res/mipmap-*`. Those are **not** goldens and must not be
+included in a golden count.
+
+**Goldens are never regenerated locally** — see "Linux is the canonical golden
+environment" above.

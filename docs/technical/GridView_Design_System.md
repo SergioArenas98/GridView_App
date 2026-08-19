@@ -4,7 +4,10 @@
 
 - Product: GridView
 - Document type: Design System (implementation)
-- Status: Phase 3A
+- Status: **accumulated through Phase 8C-3**, whose accessibility hardening of the
+  shared components is implemented. The header previously read "Phase 3A", which
+  described only §1–§8 and was never updated as the document grew (see "Scope
+  evolution" in §1).
 - Related documents:
   - `../product/GridView_UI_UX_Design.md` (source of truth for palette, type
     scale, radius and spacing)
@@ -15,10 +18,26 @@
 
 ## 1. Scope
 
-Phase 3A implements the reusable visual foundation only: design tokens,
-typography, the dark-first theme, and data-agnostic shared components, plus a
-development-only component catalogue. No feature screens, navigation, data, Drift,
-Worker calls, Firebase, ads or remote images are part of this phase.
+Phase 3A implemented the reusable visual foundation: design tokens, typography,
+the dark-first theme, and data-agnostic shared components, plus a
+development-only component catalogue. No feature screens, navigation, data,
+Drift, Worker calls or Firebase were part of **that phase**.
+
+### Scope evolution
+
+This document has grown well past Phase 3A and now records the design system as
+it stands. What later phases added:
+
+| Phase | Added here |
+|---|---|
+| 7A / 7B / 7C | Component changes in §8b, §8c and §8d — session and standings rows, the overflow-safe section header, the driver/team/circuit rows |
+| **8A** | **A full light theme shipped.** Both palettes are produced by one builder from one component configuration, so only the palette differs, and the semantic colour pairings enumerated by the contrast suite are asserted for both. That set is curated and explicitly enumerated: it covers pairings the current interface uses together with reserved and decorative roles held to their applicable thresholds, and it is **not** an exhaustive cross-product of all 21 semantic colour tokens; see [GridView_Accessibility.md](GridView_Accessibility.md) §2 and [GridView_Preferences_And_Settings.md](GridView_Preferences_And_Settings.md) §3.4. The earlier statement in §5 that a light theme was "intentionally deferred" is obsolete and is corrected there. |
+| **8B** | **Remote-image components.** `GvRemoteImage` and the media policy in §8d. The original scope line above excluded remote images; that exclusion applied to Phase 3A only, and is no longer true of the design system. |
+| **8C-3** | Accessibility hardening of the shared components: one loading announcement per screen state, live-region and heading semantics on the error and empty states, a de-duplicated offline notice, keyboard/D-pad operability and reduced motion on the primary navigation controls, and complete settings-row and button names. This proves the Flutter semantics and interaction layer only. TalkBack behaviour was covered separately by one populated device review, whose confirmed and still-unfixed findings — including a redundant selected-state suffix on the settings option component — are recorded in [GridView_Accessibility.md](GridView_Accessibility.md) §4. Switch Access remains unverified. |
+
+Advertising is **not** part of the design system's live surface: `GvAdContainer`
+exists but is catalogue-only, and advertising is not retained for v1
+([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)). See §6.
 
 ## 2. Layout
 
@@ -74,9 +93,37 @@ font files. The legacy Formula 1 fonts must not be used.
 `buildGridViewDarkTheme()` is a dark-first Material 3 theme built from the tokens:
 colour scheme, text theme, system status/navigation-bar styling, and component
 themes for the common Material controls (app bar, card, chip, elevated/outlined/
-icon buttons, dividers). A full light theme is intentionally deferred; the token
-and extension architecture supports adding one later without touching component
-code.
+icon buttons, dividers).
+
+**A full light theme shipped in Phase 8A** as `buildGridViewLightTheme()`. The
+token and extension architecture held: both themes come from one builder and one
+component configuration, so only the palette differs and no component code was
+touched. The semantic colour pairings enumerated by
+`test/design_system/theme_contrast_test.dart` are asserted for both palettes.
+That enumeration is curated and explicit. Most text-bearing pairings are
+asserted at 4.5:1; the decorative and reserved roles are asserted at the 3:1
+non-text floor — `accentPrimary` against the background, the `tertiary` accent,
+which has no call site yet, and white on `accentSecondary`, which is never drawn
+as a fill.
+
+One of those non-text assertions covers a pair that production also uses for
+text. `onAccentPrimary` on `accentPrimary` is asserted only at 3:1, and the
+selected option of `GvSegmentedControl` draws its 14 px, weight-700 label in
+exactly that pair: **3.55:1 in the dark palette, below the 4.5:1 small-text
+threshold**, against 5.67:1 in the light palette, which meets it. That is a
+known, **pre-existing and unfixed** limitation — it is not introduced here and
+exists identically on `master` — and it is recorded in
+[GridView_Accessibility.md](GridView_Accessibility.md) §4.11. The 3:1 assertion
+is not itself wrong: it correctly checks the decorative, non-text use it was
+written for. What is missing is a separate 4.5:1 assertion for the small-text
+use.
+
+The enumeration is **not** an exhaustive cross-product of all 21 semantic colour
+tokens; the pairs are listed in `GridView_Preferences_And_Settings.md` §3.4. (This paragraph previously said
+a light theme was "intentionally deferred"; that was true of Phase 3A and is not
+true now.)
+Theme selection is a persisted user preference — see
+`GridView_Preferences_And_Settings.md` §3.
 
 Team colours are decorative and may fail contrast, so they are applied only as
 accents through `GvTeamAccent.foregroundOn(...)`, never as the sole carrier of
@@ -96,7 +143,17 @@ Implemented: `GvAppBar`, `GvSectionHeader`, `GvBottomNav`, `GvPrimaryButton`,
 `GvDriverRow`, `GvTeamRow`, `GvCircuitRow`, `GvResultRow`, `GvSkeletonBlock`,
 `GvSkeletonCard`, `GvEmptyState`, `GvErrorState`, `GvOfflineNotice`,
 `GvImagePlaceholder`, `GvAdContainer` (reserved space only — **no** ad
-initialization).
+initialization; **catalogue-only**, see below).
+
+`GvAdContainer` is a development catalogue component and nothing else.
+Advertising is not retained for v1
+([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)): no advertising or
+consent SDK is packaged, no ad unit or ad request exists, and no live screen
+constructs this component. It is built only by `ComponentCatalogueScreen`, which
+refuses to navigate in production, so it is unreachable from every production
+route. It is retained because it documents the reserved-space pattern a future
+advertising phase would start from — its presence is not evidence that ads are
+planned for v1.
 
 ### When a new shared component is justified
 

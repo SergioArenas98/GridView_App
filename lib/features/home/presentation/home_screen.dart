@@ -549,28 +549,31 @@ class _HomeSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.md,
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.xxl,
+    return GvLoadingSemantics(
+      label: AppLocalizations.of(context).a11yLoading,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.md,
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.xxl,
+        ),
+        children: const <Widget>[
+          GvSkeletonBlock(width: 160, height: 28),
+          SizedBox(height: GvSpacing.xl),
+          GvSkeletonCard(),
+          SizedBox(height: GvSpacing.xl),
+          GvSkeletonBlock(width: 140, height: 18),
+          SizedBox(height: GvSpacing.md),
+          GvSkeletonBlock(height: 48),
+          SizedBox(height: GvSpacing.sm),
+          GvSkeletonBlock(height: 48),
+          SizedBox(height: GvSpacing.xl),
+          GvSkeletonBlock(width: 140, height: 18),
+          SizedBox(height: GvSpacing.md),
+          GvSkeletonBlock(height: 64),
+        ],
       ),
-      children: const <Widget>[
-        GvSkeletonBlock(width: 160, height: 28),
-        SizedBox(height: GvSpacing.xl),
-        GvSkeletonCard(),
-        SizedBox(height: GvSpacing.xl),
-        GvSkeletonBlock(width: 140, height: 18),
-        SizedBox(height: GvSpacing.md),
-        GvSkeletonBlock(height: 48),
-        SizedBox(height: GvSpacing.sm),
-        GvSkeletonBlock(height: 48),
-        SizedBox(height: GvSpacing.xl),
-        GvSkeletonBlock(width: 140, height: 18),
-        SizedBox(height: GvSpacing.md),
-        GvSkeletonBlock(height: 64),
-      ],
     );
   }
 }

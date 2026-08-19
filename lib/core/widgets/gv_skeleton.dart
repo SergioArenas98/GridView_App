@@ -2,6 +2,45 @@ import 'package:flutter/material.dart';
 
 import '../theme/theme.dart';
 
+/// Announces a screen-level loading state once, and silences the shapes below.
+///
+/// A loading frame is built from many repeated blocks and cards. Each of those
+/// is decoration — a screen reader that read one announcement per shape would
+/// say "Loading" a dozen times for a single screen. So the announcement lives
+/// here, on one live region at the boundary of the loading state, and the whole
+/// visual subtree below is excluded from semantics.
+///
+/// Use it only where a screen (or a screen section) swaps its entire content
+/// for a placeholder — never around an individual [GvSkeletonBlock] or
+/// [GvSkeletonCard], and never around a remote image slot, whose loading is
+/// deliberately not announced.
+///
+/// Semantics only: it adds no box, no padding and no constraint, so wrapping an
+/// existing loading frame cannot move a pixel.
+class GvLoadingSemantics extends StatelessWidget {
+  const GvLoadingSemantics({
+    super.key,
+    required this.label,
+    required this.child,
+  });
+
+  /// The localized announcement, supplied by the caller: the design system is
+  /// deliberately localization-agnostic.
+  final String label;
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: label,
+      liveRegion: true,
+      container: true,
+      child: ExcludeSemantics(child: child),
+    );
+  }
+}
+
 /// A pulsing placeholder block used while content loads. Respects the platform
 /// reduced-motion setting (renders static when animations are disabled).
 class GvSkeletonBlock extends StatefulWidget {

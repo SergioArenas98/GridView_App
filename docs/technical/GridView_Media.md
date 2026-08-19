@@ -1,9 +1,12 @@
 # GridView media architecture (Phase 8B)
 
-Status: **code-complete, locally verified, operational media publication
-blocked.** No Formula 1 media rights have been cleared for GridView, and no R2
-media bucket is provisioned in any environment. Everything below is implemented
-and tested; nothing below has published a real image.
+Status: **implemented and merged** (PR #1); **operational media publication is
+blocked externally.** No Formula 1 media rights have been cleared for GridView,
+and no R2 media bucket is provisioned in any environment. Everything below is
+implemented and tested; nothing below has published a real image. Those two
+gaps are external operator prerequisites for *publication*, not missing
+architecture, and they do not block Phase 8 engineering closure — see
+`GridView_Implementation_Plan.md` §13.9.
 
 ## 1. The rule everything else follows
 
@@ -613,19 +616,61 @@ Behaviour that is tested rather than benchmarked:
 - Decode target is close to display size; no manual unlimited memory-cache
   override; no full-resolution decode retained for a small row.
 
-**No device-level numbers are given, because no representative device was
-available.** Profiling Explore scrolling, repeated detail navigation and Home
-first render with and without cached media is a Phase 8C / release-profiling task,
-listed here rather than invented.
+**Device-level numbers now exist, but not for the media path.** Phase 8C-3
+profiled Explore scrolling and repeated detail navigation on the authorized
+DNP-NX9 — a **flagship-class, not representative mid-range** device — and with
+**no approved media to load**, so the scrolling figures are a placeholder-only
+baseline and the media-specific measurements (decode sizing, populated cache
+footprint, eviction) are **blocked** rather than measured. See
+[GridView_Performance.md](GridView_Performance.md). Representative mid-range
+acceptance is deferred to Phase 10 and the real-media measurements to the
+media-publication owner; nothing here is invented.
 
 ## 21. Phase 8C hand-off
 
-Phase 8C owns: the platform-neutral observability boundary; Firebase setup and
-activation handling; global crash and non-fatal capture; selected performance
-traces; the full app-wide TalkBack and text-scale sweeps; the broader
-reduced-motion audit; representative-device performance profiling; startup and
-app-size measurement; the final cross-feature accessibility report; and final
-Phase 8 documentation consolidation.
+This was written as a forward hand-off. Part of it has since been delivered, so
+it is split into what is done and what remains. **Phase 8 is not closed.**
+
+### Delivered by Phase 8C-1 and 8C-2 (both merged)
+
+- **The platform-neutral observability boundary.** Application code depends on
+  `ErrorReporter` and `PerformanceTracer`; exactly one file imports `firebase_*`,
+  and a test enforces it.
+- **Firebase setup and activation handling**, eligible in **production only**.
+  Dev and staging own no configuration; initialization is never awaited before
+  `runApp` and degrades to inert on any failure.
+- **Global fatal and non-fatal capture** — every Flutter and platform-dispatcher
+  error, plus a narrow allow-listed non-fatal set (ADR 0017).
+- **Selected performance traces**, including `gv_sync_run`.
+- **External Console verification (Phase 8C-2, 2026-08-16).** Controlled signals
+  were observed in Firebase Console from a production **debug** pass and from a
+  **release-like** pass built from a signed, R8-minified, non-debuggable
+  production release APK. Keep the three evidence levels apart: produced
+  locally, accepted by ingestion (HTTP 200), observed in Console — only the last
+  is delivery. Phase 8C-2 uploaded no mapping or symbol file.
+
+### Phase 8C-3 outcome
+
+- **Device accessibility verification — executed once.** A populated TalkBack
+  review ran on the dedicated emulator against public staging data, with
+  human-heard confirmation. Switch Access certification and exhaustive keyboard
+  testing were **not** performed and are deferred. Results, including the
+  confirmed and **unfixed** screen-reader findings, are in
+  [GridView_Accessibility.md](GridView_Accessibility.md).
+- **Performance measurements — partly taken, and provisional.** The §20 protocol
+  ran on the authorized HONOR DNP-NX9 in profile mode, but that device is
+  **flagship-class, not representative mid-range**, and **no approved media
+  existed to load**: zero bytes were fetched, zero images decoded, and both the
+  `ImageCache` and the disk cache stayed empty. Decode sizing and populated
+  cache/eviction behaviour are therefore **blocked**, not measured. Startup and
+  app-size measurement remain Phase 10. Everything measured is recorded, with its
+  classification, in [GridView_Performance.md](GridView_Performance.md).
+- **The final accessibility and performance reports — delivered** as the two
+  documents above.
+- **Documentation consolidation — done. Phase 8 closure — pending review and
+  merge**, not claimed here.
+
+### Boundaries (unchanged)
 
 Phase 8C must **not**: replace the media cache; move media bytes into Drift; move
 media selection into widgets; alter entity/media ownership; introduce seasonal

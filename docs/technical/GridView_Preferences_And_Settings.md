@@ -8,9 +8,9 @@ Phase 8 was split during execution:
 
 | Sub-phase | Scope | State |
 |---|---|---|
-| **8A** | Preferences, theming, localization, time display, Settings | **Complete, local only** |
-| **8B** | Media selection, loading, disk cache, rights register, R2 pipeline | Not started |
-| **8C** | Observability boundary, broad accessibility/performance hardening, Phase 8 documentation and closure | **Observability complete** — 8C-1 implemented, 8C-2 externally verified in Firebase Console. Accessibility/performance hardening and the Phase 8 documentation set remain open |
+| **8A** | Preferences, theming, localization, time display, Settings | **Implemented and merged** |
+| **8B** | Media selection, loading, disk cache, rights register, R2 pipeline | **Implemented and merged** (PR #1). Live publication is blocked externally — see below |
+| **8C** | Observability boundary, broad accessibility/performance hardening, Phase 8 documentation and closure | **8C-1 implemented and merged** (PR #4); **8C-2 externally verified in Firebase Console and merged** (PR #5); **8C-3 implementation and evidence collection complete** on the working branch, awaiting review and merge — automated accessibility hardening is implemented and retained, one populated TalkBack review was executed with human-heard confirmation, and the final reports are delivered; screen-reader polish findings are documented and unfixed, representative mid-range and real-media performance acceptance are deferred to Phase 10, and Phase 8 closure remains open pending merge and green post-merge CI |
 
 **Phase 8 as a whole is not complete.** This document closes 8A only; for the
 current observability status see `GridView_Observability.md` §9.
@@ -513,7 +513,7 @@ fails with `source must not be null`. **Do not downgrade.**
 | `shared_preferences: ^2.5.5` | yes | The only preference persistence mechanism. Preferences never use Drift. |
 | `package_info_plus: ^10.2.1` | yes | Real package metadata for About. See §6.3. |
 | `url_launcher: ^6.3.2` | yes | Allow-listed `https`/`mailto` only. |
-| `flutter_cache_manager: ^3.4.1` | **no** | Declared ahead of use for the Phase **8B** media byte cache. It has **zero call sites** today. Left in place deliberately rather than removed and re-added; if 8B slips, drop it. |
+| `flutter_cache_manager: ^3.4.1` | not by 8A | Declared by 8A ahead of use, and **now in use**: Phase 8B built the media byte cache on it. `FlutterCacheManagerMediaCache` (`lib/core/media/media_cache.dart`) is the single owner and is installed once in `lib/app/app.dart`; widgets never construct a `CacheManager`. The earlier note that it had "zero call sites" described 8A only and is obsolete. |
 
 ---
 
@@ -533,8 +533,12 @@ fails with `source must not be null`. **Do not downgrade.**
    with no policy URL shows no policy affordance at all. Publishing a policy and
    supplying the URL is a **release blocker**, tracked here rather than surfaced
    to users at runtime.
-3. **Advertising approval** does not exist. Absent an explicit decision,
-   advertising stays out of v1.
+3. **Advertising** — no longer an open item. The decision is recorded:
+   advertising is **not retained for v1**
+   ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)). No approval to
+   ship advertising was ever granted, the Implementation Plan §25 deadline
+   passed without one, and the PRD makes advertising optional rather than
+   mandatory. §6.1 below describes the shipped state.
 
 ---
 
@@ -556,7 +560,14 @@ locale, surface size, text scale, clock, device time zone, data-source mode,
 package metadata, external-link configuration and synchronization metadata, with
 animations disabled so no frame is captured mid-transition.
 
-Media renders as placeholders because Phase 8B has not started.
+Media renders as placeholders in these goldens, and that is the **correct**
+outcome rather than a gap in the media architecture. Phase 8B implemented
+variant selection, the URL policy, the shared bounded disk cache, the image
+loader and `GvRemoteImage`. A placeholder is what that architecture is specified
+to render when there is no image to show — and there is none, because **no
+Formula 1 media rights have been approved (the rights inventory is empty) and no
+R2 bucket is provisioned, so nothing has been published**. Both are external
+operational prerequisites, not missing code. See `GridView_Media.md`.
 
 **Baselines are authored on Linux.** After Phase 8A the whole golden corpus was
 canonicalized on the CI platform: `07efdd5` changed a visible line break without
@@ -576,10 +587,10 @@ goldens.
 
 ---
 
-## 9. Phase 8A status and hand-off
+## 9. Phase 8A status, and what the later sub-phases did with it
 
-**Phase 8A: complete.** Ten commits on `master`, verified locally.
-**Phase 8 is not complete.**
+**Phase 8A: implemented and merged.** Ten commits on `master`.
+**Phase 8 as a whole is not closed.**
 
 Delivered: typed persisted preferences; light theme and the two theme
 extensions; language preference and total locale resolution; the single
@@ -587,17 +598,32 @@ presentation-time policy; the Settings information architecture with seven
 sub-routes; the EN/ES ARB parity gate; light-theme, Settings, theme and locale
 visual and behavioural coverage.
 
-### Hand-off to Phase 8B (media)
+### What Phase 8B did with the 8A hand-off — delivered
 
-- Media is placeholder-only today. `GvImagePlaceholder` is proven visible on
-  **both** palettes (the light component sheet exists to pin exactly that).
-- `flutter_cache_manager` is already declared (§6.4) and owns the only intended
-  media byte cache. **Image bytes must never enter Drift.**
-- `MediaAttribution` and `mediaAttributionsProvider` already exist and already
-  drive the Acknowledgements screen; 8B must populate them from the real rights
-  register rather than replacing the read path.
-- The media URL policy that `ExternalLink` mirrors (`https` only, non-empty
-  host, no embedded credentials) is the policy 8B must apply to image URLs.
+This section was written as a hand-off *to* 8B. Phase 8B is implemented and
+merged (PR #1), so it now records the outcome. Each 8A hand-off item and what
+became of it:
+
+- **The placeholder is no longer the only thing that can render.**
+  `GvRemoteImage` renders a real image when one exists and falls back to
+  `GvImagePlaceholder` when one does not. `GvImagePlaceholder` is still proven
+  visible on **both** palettes — the light component sheet still pins exactly
+  that — and the goldens still show placeholders, because no image has been
+  published (§8).
+- **`flutter_cache_manager` is in use**, as intended. `FlutterCacheManagerMediaCache`
+  is the single owner of the media byte cache and is installed once in
+  `lib/app/app.dart`. **Image bytes never entered Drift**, and the rule stands.
+- **`MediaAttribution` and `mediaAttributionsProvider` were populated, not
+  replaced.** The Acknowledgements read path is the one 8A built; 8B fed it from
+  the rights register.
+- **The `ExternalLink` URL policy was applied to image URLs**: `https` only,
+  non-empty host, no embedded credentials.
+
+What remains open is **not** architecture. No Formula 1 media rights are
+approved and no R2 bucket is provisioned, so the approved inventory is empty and
+nothing has been published. Both are external operational prerequisites for
+media *publication*; neither is a defect, and neither blocks Phase 8 engineering
+closure. See `GridView_Media.md`.
 
 ### Phase 8C (observability, hardening, closure) — observability delivered
 
@@ -619,12 +645,34 @@ outcome so nothing here directs future work to rebuild it.
   the controlled signals** in Firebase Console from a production-debug build and
   from a release-like production release APK. See `GridView_Observability.md` §9
   and §6.2 above.
-- Still open, and genuinely so: accessibility hardening beyond Settings,
-  performance measurement, the advertising decision document, and the Phase 8
-  documentation set.
-- Known cleanup, deliberately **not** folded into Phase 8A:
+- **Phase 8C-3 implementation and evidence collection are complete** on a working
+  branch, awaiting review and merge. Automated accessibility hardening beyond
+  Settings is implemented and retained there — loading, error, empty and offline
+  state announcements; keyboard and D-pad operability of the primary navigation
+  controls; reduced motion; complete settings-row and button names; and a
+  cross-screen accessibility suite covering reading order, identifier
+  suppression, semantic flags and a bounded 200%-text matrix. It proves the
+  **Flutter semantics and interaction layer only**.
+- **One populated TalkBack review was executed** on a dedicated emulator with
+  human-heard confirmation, and the final accessibility and performance reports
+  are delivered ([GridView_Accessibility.md](GridView_Accessibility.md),
+  [GridView_Performance.md](GridView_Performance.md)). That review confirmed
+  screen-reader polish findings that are **documented and unfixed**, including a
+  redundant selected-state announcement on the Settings preference options.
+- Still open, and genuinely so: **Switch Access verification; exhaustive keyboard
+  testing; representative mid-range performance acceptance and real-media
+  measurements (deferred to Phase 10 and the media-publication owner); and Phase
+  8 closure, which requires merge and green post-merge CI.** Nothing in this
+  document should be read as claiming any of them, and **no accessibility
+  certification is claimed.**
+- The advertising decision is **closed**: not retained for v1
+  ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)).
+- The known cleanup is **done**.
   `lib/features/shared/presentation/placeholder/placeholder_content.dart` and
   its only two consumers, `widgets/event_row.dart` and `widgets/event_status.dart`,
-  are dead code — nothing on a live screen references them. The §22 invariant
-  ("no live screen imports `placeholder_content.dart`") holds, but the files
-  should be deleted in a dedicated cleanup commit.
+  were dead after Phase 7C replaced the drivers/teams/circuits list screens with
+  `ExploreScreen(category:)`. They were deleted in Phase 8C-3 along with the
+  `eventStateCurrent` string that existed solely for them. The invariant this
+  document used to assert — "no live screen imports `placeholder_content.dart`"
+  — is now vacuously true: the file no longer exists. See
+  `GridView_Navigation.md` §8.

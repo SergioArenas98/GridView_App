@@ -47,9 +47,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get eventStateCompleted => 'Finalizado';
 
   @override
-  String get eventStateCurrent => 'Este fin de semana';
-
-  @override
   String get eventStateUpcoming => 'Próximo';
 
   @override
@@ -325,6 +322,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String homeUpdated(String time) {
     return 'Actualizado $time';
   }
+
+  @override
+  String get a11yLoading => 'Cargando';
 
   @override
   String get offlineStaleNotice =>

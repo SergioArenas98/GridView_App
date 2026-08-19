@@ -291,24 +291,27 @@ class _CalendarSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.md,
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.xxl,
+    return GvLoadingSemantics(
+      label: AppLocalizations.of(context).a11yLoading,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.md,
+          GvLayout.screenPaddingHorizontal,
+          GvSpacing.xxl,
+        ),
+        children: const <Widget>[
+          GvSkeletonBlock(width: 140, height: 20),
+          SizedBox(height: GvSpacing.lg),
+          GvSkeletonBlock(height: 72),
+          SizedBox(height: GvSpacing.sm),
+          GvSkeletonBlock(height: 72),
+          SizedBox(height: GvSpacing.sm),
+          GvSkeletonBlock(height: 72),
+          SizedBox(height: GvSpacing.sm),
+          GvSkeletonBlock(height: 72),
+        ],
       ),
-      children: const <Widget>[
-        GvSkeletonBlock(width: 140, height: 20),
-        SizedBox(height: GvSpacing.lg),
-        GvSkeletonBlock(height: 72),
-        SizedBox(height: GvSpacing.sm),
-        GvSkeletonBlock(height: 72),
-        SizedBox(height: GvSpacing.sm),
-        GvSkeletonBlock(height: 72),
-        SizedBox(height: GvSpacing.sm),
-        GvSkeletonBlock(height: 72),
-      ],
     );
   }
 }

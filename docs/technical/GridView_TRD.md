@@ -1123,6 +1123,13 @@ Rules:
 
 ## 23. Advertising
 
+> **Status: advertising is not retained for v1.** See
+> [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md). No advertising or
+> consent SDK is packaged, no ad unit or ad request exists, and nothing
+> initializes an advertising runtime. The requirements below are retained
+> unchanged as the constraint set a future advertising phase would have to
+> satisfy; none of them describes v1, and the condition below is not met.
+
 If advertising remains enabled:
 
 - Google Mobile Ads will be the only advertising SDK in the first reconstructed release unless a clear business requirement justifies another.

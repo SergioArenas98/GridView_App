@@ -56,10 +56,6 @@
   "@eventStateCompleted": {
     "description": "Status for a finished Grand Prix."
   },
-  "eventStateCurrent": "This weekend",
-  "@eventStateCurrent": {
-    "description": "Status for the current Grand Prix."
-  },
   "eventStateUpcoming": "Upcoming",
   "@eventStateUpcoming": {
     "description": "Status for a future Grand Prix."
@@ -415,6 +411,10 @@
         "example": "12:00"
       }
     }
+  },
+  "a11yLoading": "Loading",
+  "@a11yLoading": {
+    "description": "Accessibility-only announcement placed once around a screen's loading placeholder. Never rendered visually; a screen reader speaks it instead of the decorative skeleton shapes."
   },
   "offlineStaleNotice": "This data may be out of date — showing the last saved version.",
   "@offlineStaleNotice": {

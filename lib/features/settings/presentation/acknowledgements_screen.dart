@@ -87,9 +87,14 @@ class AcknowledgementsScreen extends ConsumerWidget {
         ? credits.requireValue
         : null;
     if (resolved == null) {
-      return const GvInfoCard(
+      return GvInfoCard(
         key: resolvingKey,
-        children: <Widget>[GvSkeletonBlock(height: 20)],
+        children: <Widget>[
+          GvLoadingSemantics(
+            label: l10n.a11yLoading,
+            child: const GvSkeletonBlock(height: 20),
+          ),
+        ],
       );
     }
     if (resolved.isEmpty) {

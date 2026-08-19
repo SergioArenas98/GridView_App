@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/environment/app_environment.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../l10n/app_localizations.dart';
 
 /// A development-only gallery of every shared design-system component and its
 /// states. It is never part of a production build: [open] refuses to navigate
@@ -49,7 +50,15 @@ class _ComponentCatalogueScreenState extends State<ComponentCatalogueScreen> {
               children: <Widget>[
                 GvPrimaryButton(label: 'Primary', onPressed: () {}),
                 const GvPrimaryButton(label: 'Disabled'),
-                const GvPrimaryButton(label: 'Loading', isLoading: true),
+                // The gallery's own copy stays English and untranslated, but
+                // the spoken loading state is real localized copy: this is the
+                // only place in the app that renders the loading state, so it
+                // is the only place its accessibility can be seen at all.
+                GvPrimaryButton(
+                  label: 'Loading',
+                  isLoading: true,
+                  loadingLabel: AppLocalizations.of(context).a11yLoading,
+                ),
                 GvSecondaryButton(label: 'Secondary', onPressed: () {}),
                 GvIconButton(
                   icon: Icons.settings_outlined,

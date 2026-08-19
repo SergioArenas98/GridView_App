@@ -164,12 +164,6 @@ abstract class AppLocalizations {
   /// **'Completed'**
   String get eventStateCompleted;
 
-  /// Status for the current Grand Prix.
-  ///
-  /// In en, this message translates to:
-  /// **'This weekend'**
-  String get eventStateCurrent;
-
   /// Status for a future Grand Prix.
   ///
   /// In en, this message translates to:
@@ -667,6 +661,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Updated {time}'**
   String homeUpdated(String time);
+
+  /// Accessibility-only announcement placed once around a screen's loading placeholder. Never rendered visually; a screen reader speaks it instead of the decorative skeleton shapes.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading'**
+  String get a11yLoading;
 
   /// Notice shown when cached content is stale.
   ///

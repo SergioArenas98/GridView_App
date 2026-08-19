@@ -75,36 +75,42 @@ class GvOfflineNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final GvSemanticColors colors = context.gvColors;
+    // The notice speaks once. The parent carries the message and the visible
+    // row is excluded: without the exclusion the annotation merged with the
+    // identical Text below it and the single node's label became the message
+    // twice over, which a sighted review cannot see.
     return Semantics(
       liveRegion: true,
       label: message,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: GvSpacing.md,
-          vertical: GvSpacing.sm,
-        ),
-        decoration: BoxDecoration(
-          color: context.gvColors.surfaceElevated,
-          borderRadius: GvRadii.mdAll,
-          border: Border.all(color: colors.stale),
-        ),
-        child: Row(
-          children: <Widget>[
-            Icon(
-              Icons.cloud_off_outlined,
-              size: GvIconSizes.md,
-              color: colors.stale,
-            ),
-            const SizedBox(width: GvSpacing.sm),
-            Expanded(
-              child: Text(
-                message,
-                style: context.gvText.bodyM.copyWith(
-                  color: context.gvColors.textSecondary,
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: GvSpacing.md,
+            vertical: GvSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: context.gvColors.surfaceElevated,
+            borderRadius: GvRadii.mdAll,
+            border: Border.all(color: colors.stale),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(
+                Icons.cloud_off_outlined,
+                size: GvIconSizes.md,
+                color: colors.stale,
+              ),
+              const SizedBox(width: GvSpacing.sm),
+              Expanded(
+                child: Text(
+                  message,
+                  style: context.gvText.bodyM.copyWith(
+                    color: context.gvColors.textSecondary,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -134,12 +140,24 @@ class _CenteredState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(icon, size: GvIconSizes.xl, color: iconColor),
+            // The glyph repeats the title; it names nothing the copy does not.
+            ExcludeSemantics(
+              child: Icon(icon, size: GvIconSizes.xl, color: iconColor),
+            ),
             const SizedBox(height: GvSpacing.md),
-            Text(
-              title,
-              style: context.gvText.cardTitle,
-              textAlign: TextAlign.center,
+            // The state's single live region, so arriving here is announced
+            // rather than silently swapped in — and it is the title node
+            // itself, because a live region with no text of its own announces
+            // nothing. The heading flag stays on the visible title, and the
+            // message keeps its own node, so nothing is said twice.
+            Semantics(
+              header: true,
+              liveRegion: true,
+              child: Text(
+                title,
+                style: context.gvText.cardTitle,
+                textAlign: TextAlign.center,
+              ),
             ),
             const SizedBox(height: GvSpacing.xs),
             Text(

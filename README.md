@@ -140,8 +140,8 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   absent policy URL or contact address is explained; in production the
   affordance is omitted entirely rather than shown as a dead control. See
   `docs/technical/GridView_Preferences_And_Settings.md`.
-- Phase 8B - media: **code-complete and locally verified; live media
-  publication blocked.** Persisted media metadata now reaches the product
+- Phase 8B - media: **implemented and merged** (PR #1); **live media
+  publication is blocked externally.** Persisted media metadata now reaches the product
   through domain-facing read models, a pure size-and-DPR variant selector, a
   strict HTTPS URL policy, one shared bounded disk cache and one reviewed image
   loader, behind a data-agnostic `GvRemoteImage`. The governing rule is that
@@ -156,21 +156,63 @@ Reconstruction per `docs/technical/GridView_Implementation_Plan.md`:
   provisioned**, so the approved inventory is empty and no image has been
   published — both are external operational blockers, not defects. See
   `docs/technical/GridView_Media.md`.
-- Phase 8C (observability, hardening, closure) is not started.
+- Phase 8C-1 - observability: **implemented and merged** (PR #4). A
+  platform-neutral `ErrorReporter`/`PerformanceTracer` boundary with exactly one
+  file importing `firebase_*`; Crashlytics and Performance Monitoring activated
+  in **production only**; global fatal and allow-listed non-fatal capture;
+  selected performance traces; and a fail-closed mapping-upload authorization
+  gate asserted by Gradle.
+- Phase 8C-2 - external observability verification: **implemented, merged and
+  externally verified** (PR #5, 2026-08-16). Controlled signals were observed in
+  Firebase Console from a production **debug** pass and from a **release-like**
+  pass built from a signed, R8-minified, non-debuggable production release APK.
+  Keep the three evidence levels apart — produced locally, accepted by ingestion
+  (HTTP 200), observed in Console; only the last is delivery. Phase 8C-2 uploaded
+  no mapping or symbol file, built no AAB and published nothing.
+- Phase 8C-3 - accessibility, performance and Phase 8 closure: **implementation
+  and evidence collection complete on the working branch**, with documented
+  deferrals. Automated accessibility hardening is implemented and **retained**
+  (111 `test/a11y` tests inside a 1977-test suite). One **populated** TalkBack
+  review was executed on the dedicated emulator against public staging data,
+  with human-heard confirmation; it found several screen-reader polish issues
+  that are recorded and **not fixed**
+  ([accessibility](docs/technical/GridView_Accessibility.md)). Performance was
+  measured on the authorized flagship reference handset with no media present
+  ([performance](docs/technical/GridView_Performance.md)). **Manual
+  screen-reader polish is deferred** by product decision and is no longer a
+  Phase 8 exit criterion; **representative mid-range and real-media acceptance
+  remain Phase 10 / media-publication work.**
+- **Phase 8 engineering scope is awaiting review and merge. Phase 8 is not
+  formally closed**, and will not be until this branch is merged and post-merge
+  CI is green. No accessibility certification is claimed.
 
 Home's next-Grand-Prix hero, the Calendar, the Grand Prix detail screen, both
 standings tables, the three Explore collections and the Driver, Team and Circuit
 detail screens are driven by a **Drift-backed** local store: content renders
 immediately from cache (offline included), a refresh writes one atomic snapshot
 transaction, and a failed refresh never erases cached content. Settings is
-implemented (Phase 8A); real media downloading is Phase 8B. No Firebase SDK, ads
-SDK or production provider is wired yet — the production Firebase configuration
-and AdMob application ID are preserved for the published app's identity, but
-nothing initializes or reads them. Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
+implemented (Phase 8A) and the media pipeline is implemented (Phase 8B): variant
+selection, a strict HTTPS URL policy, one shared bounded disk cache and one
+reviewed image loader behind a data-agnostic `GvRemoteImage`. Images still
+render as placeholders in practice because **no Formula 1 media rights are
+approved and no R2 bucket is provisioned**, so nothing has been published —
+external operational prerequisites, not missing architecture.
+
+**Firebase is wired and initialized in production only** (Phase 8C-1, verified
+in Console in Phase 8C-2): Crashlytics and Performance Monitoring behind a
+platform-neutral observability boundary, never awaited before `runApp`, and
+degrading to inert on any failure. Dev and staging own no Firebase
+configuration and report reporting as off. **No ads SDK, consent SDK, ad unit,
+ad request or advertising runtime exists** — advertising is not retained for v1
+([ADR 0018](docs/adr/0018-advertising-not-retained-for-v1.md)) — and the
+preserved production AdMob **application ID** is inert published-app identity
+that nothing reads. **No production provider is wired yet.** Dev/staging builds serve OpenAPI-valid fixtures via an injected fixture API
 only under a deliberate `DATA_SOURCE=fixture` build define (never inferred from a
 missing `API_BASE_URL`) and show a "Sample data" banner; **production never
 constructs the fixture source** — an attempted fixture mode or a missing base URL
-is a controlled configuration failure. A
+is a controlled configuration failure. The **bundled fixture inventory is
+incomplete**, so that mode does not currently reach the season-scoped screens
+(see Development setup below). A
 **development-only** component catalogue is reachable from **Settings → Developer**
 in dev/staging builds (never production).
 
@@ -178,14 +220,22 @@ in dev/staging builds (never production).
 
 1. Install [FVM](https://fvm.app): `dart pub global activate fvm`
 2. Install the pinned Flutter SDK: `fvm install`
-3. Run the app: `fvm flutter run --flavor dev --dart-define=APP_ENV=development --dart-define=DATA_SOURCE=fixture`
-   (no Worker needed — the deliberate `DATA_SOURCE=fixture` serves the bundled
-   `assets/dev_fixtures/*`; see `docs/technical/GridView_Environments.md`)
+3. Run the app against a Worker (local or staging):
+   `fvm flutter run --flavor dev --dart-define=APP_ENV=development --dart-define=DATA_SOURCE=remote --dart-define=API_BASE_URL=<worker-url>`
+
+   **An explicit `API_BASE_URL` is currently required to reach every screen.**
+   Deliberate fixture mode (`--dart-define=DATA_SOURCE=fixture`) still works and
+   still needs no Worker, but the **bundled fixture inventory is incomplete** —
+   it carries only `home.json` and two Grand Prix rounds, with no bootstrap or
+   current-season response, so season-scoped screens show "Season unavailable"
+   until the follow-up lands. See `docs/technical/GridView_Synchronization.md`
+   §8.1. Production never falls back to fixtures.
 4. Run checks: `fvm flutter analyze && fvm flutter test`
 
-The Drift-backed local-development flow — running against the bundled fixtures or
-an explicit `API_BASE_URL`, simulating offline/stale, and clearing the local
-database — is documented in `docs/technical/GridView_Synchronization.md` §9.
+The Drift-backed local-development flow — running against an explicit
+`API_BASE_URL` or the bundled fixtures, simulating offline/stale, and clearing
+the local database — is documented in
+`docs/technical/GridView_Synchronization.md` §§8.1 and 9.
 Flavors, environment defines, Firebase/AdMob state and the edge API
 environments are documented in `docs/technical/GridView_Environments.md`.
 User preferences, the two themes, the presentation-time policy and the Settings

@@ -1,9 +1,16 @@
 # GridView — Synchronization & Offline Behaviour
 
-- Status: Phase 6B1 (conditional remote client + complete repositories). §1–§9
-  describe the Phase 4 Home/Grand Prix slice, now generalized to every resource;
-  §10 documents the Phase 6B1 layer (conditional requests, ETags, the shared
-  sync writer, per-resource dedup and the full repository inventory).
+- Status: accumulated through **Phase 7D**, with a Phase 8 hand-off in §15.8.
+  The header previously read "Phase 6B1", which described only §10 and had not
+  been updated as the document grew. Its actual scope today:
+  §1–§9 the Phase 4 Home/Grand Prix slice, generalized to every resource;
+  §10 the Phase 6B1 conditional client (conditional requests, ETags, the shared
+  sync writer, per-resource dedup, the full repository inventory);
+  §11 the Phase 6B2 bootstrap and application synchronization orchestration;
+  §12–§15 feature ownership for Phases 7A (Calendar and Grand Prix), 7B
+  (Standings), 7C (Explore and the three detail profiles) and 7D (Home).
+  Synchronization architecture is unchanged since Phase 6B2; later sections add
+  per-feature ownership rather than new policy.
 - Related: `GridView_TRD.md` §16, `GridView_Local_Data.md`,
   `docs/adr/0005-snapshot-conflict-and-freshness.md`,
   `docs/adr/0006-riverpod-state-and-result-pattern.md`,
@@ -166,20 +173,48 @@ table:
   `DioGridViewApi`, and a missing base URL is a controlled configuration failure,
   never fixtures.
 
+### 8.1 The bundled inventory is incomplete
+
+**Fixture selection works.** What is incomplete is what the bundle contains.
+
+`assets/dev_fixtures/` currently holds three files:
+
+| File | Serves |
+|---|---|
+| `home.json` | `/v1/home` |
+| `grand-prix-2026-12.json` | Grand Prix round 12 |
+| `grand-prix-2026-13.json` | Grand Prix round 13 |
+
+`FixtureGridViewApi` resolves sixteen filename families. The rest are absent —
+including **`bootstrap`** and **`season-current`** — so a `DATA_SOURCE=fixture`
+build cannot resolve the current season, and **every season-scoped screen renders
+"Season unavailable"**: Home, Calendar, Grand Prix detail, both Standings tables,
+all three Explore collections and all three entity details. Settings and its
+sub-screens are unaffected, because they are not season-scoped.
+
+Consequences and boundaries:
+
+- **Full application development currently requires an explicit
+  `API_BASE_URL`** pointing at a local or staging Worker (below).
+- **Production never falls back to fixtures**, and this changes nothing about
+  that: the selection rules in §8 are unaffected.
+- **The production and staging HTTP paths are unaffected.** This is a
+  development-tooling gap only.
+- The validated Edge API contract corpus remains available under
+  `services/edge-api/test/fixtures/api/v1/`, covering bootstrap, seasons,
+  calendar, standings, drivers, constructors, circuits, grand-prix, results,
+  content and status.
+- A **separate follow-up** should derive the app's bundled inventory from that
+  corpus rather than author new data, keeping one source of truth. It belongs to
+  the Phase 2 fixture / Phase 3 mock-navigation owner
+  ([GridView_Implementation_Plan.md](GridView_Implementation_Plan.md) §7.5,
+  §8.8). It is **not fixed**, and fixture mode is **not** removed.
+
 ## 9. Manual local-development flow
 
-The default dev flow uses the bundled fixtures via a **deliberate** fixture mode
-— no running Worker required:
-
-```bash
-# Deliberate fixture mode: bundled dev fixtures (assets/dev_fixtures/*).
-# The "Sample data" banner is shown.
-flutter run --flavor dev --dart-define=APP_ENV=development \
-  --dart-define=DATA_SOURCE=fixture
-```
-
-Point dev/staging at a real HTTP endpoint instead (a local Worker or staging edge
-API) with remote mode and a base URL:
+Point dev/staging at a real HTTP endpoint (a local Worker or the staging edge
+API) with remote mode and a base URL. **This is the flow that currently reaches
+every screen**, because the bundled fixture inventory is incomplete (§8.1):
 
 ```bash
 flutter run --flavor dev \
@@ -188,15 +223,28 @@ flutter run --flavor dev \
   --dart-define=API_BASE_URL=http://10.0.2.2:8787   # 10.0.2.2 = host from the Android emulator
 ```
 
+Deliberate fixture mode still exists and is still selected exactly as documented
+in §8, but it currently reaches only Home's own response and two Grand Prix
+rounds; every season-scoped screen shows "Season unavailable" until the §8.1
+follow-up lands:
+
+```bash
+# Deliberate fixture mode: bundled dev fixtures (assets/dev_fixtures/*).
+# The "Sample data" banner is shown. Season-scoped screens are unavailable
+# until the bundled inventory is completed — see §8.1.
+flutter run --flavor dev --dart-define=APP_ENV=development \
+  --dart-define=DATA_SOURCE=fixture
+```
+
 Fixture mode is never inferred: remote mode (the default) with no `API_BASE_URL`
 is a controlled configuration failure, not a fixture fallback.
 
 Exercising states manually:
 
 - **Offline / stale:** turn off connectivity (or airplane mode) and relaunch —
-  cached Home/detail still render; the stale/offline notice appears. With the
-  bundled fixtures, adjust a fixture's `staleAfter` to a past instant to force
-  the stale notice.
+  cached Home/detail still render; the stale/offline notice appears. Use a real
+  base URL for this: the bundled fixtures cannot populate the season-scoped
+  screens the notice belongs to (§8.1).
 - **First-load error:** with `API_BASE_URL` set to an unreachable host and no
   cache, Home shows the recoverable error + Retry.
 - **Clear the reconstructed database:** uninstall the dev app
@@ -1227,7 +1275,10 @@ and makes **no** season-scoped request.
   `CircuitProfile`) and the existing navigation helpers.
 - Home must continue reading Drift only.
 - Phase 7D must not alter Explore or detail lifecycle ownership.
-- Real media downloading remains Phase 8 work; Phase 7C ships placeholders only.
+- Real media downloading was Phase 8 work when this constraint was written;
+  Phase 7C shipped placeholders only. **Phase 8B implemented it** — the loader,
+  cache and `GvRemoteImage` exist — and the constraint it expressed still holds:
+  Home never downloads media itself.
 
 ---
 
@@ -1399,12 +1450,26 @@ starts the new season at the top while leaving the branch valid.
   three detail profiles) now renders from local data under a single
   synchronization policy. Phase 8 adds cross-cutting capabilities on top; it
   does **not** need to change refresh ownership again.
-- Media is still placeholder-only everywhere, Home included. The remote image
-  component, its disk-cache policy and the media manifest are Phase 8 work, and
-  the `media` rows already carry the single-owner integrity the loader needs.
+- **Media is implemented** (Phase 8B, merged). The remote image component
+  (`GvRemoteImage`), the variant selector, the strict HTTPS URL policy, the
+  shared bounded disk cache and the image loader all exist, and they read the
+  `media` rows whose single-owner integrity this layer already guaranteed.
+  Images nevertheless render as **placeholders** in practice, because no media
+  rights are approved and no R2 bucket is provisioned, so nothing has been
+  published. That is the specified fallback behaviour of the implemented
+  architecture, not an absence of it — and it changes nothing here: **domain
+  data availability is not media availability**, so a missing image never makes
+  a screen partial and image bytes never enter Drift.
 - Localization is complete for the shipped screens: both ARBs carry the same
-  keys and no user-facing string is hardcoded. Phase 8 owns the remaining
-  fallback-language and text-expansion verification.
-- Settings, Firebase and platform services remain unimplemented and own no
-  synchronization; anything they add must go through `AppSyncCoordinator`
-  (ADR 0015) rather than introduce a second policy.
+  keys and no user-facing string is hardcoded. Fallback-language resolution
+  shipped in Phase 8A, and text expansion is covered by the Phase 8C-3
+  200%-text matrix over every screen family in both locales — in
+  `flutter_test` only; OS-level display scaling on a device remains unverified.
+- **Settings and Firebase observability are implemented** (Phase 8A and Phase
+  8C-1, both merged; 8C-2 verified the observability signals externally). They
+  own **no** synchronization: Settings persists three preferences through
+  `shared_preferences` and never touches Drift or the network, and the
+  observability boundary only *observes* synchronization — `gv_sync_run`
+  attributes are derived from a run the coordinator already owns. The rule is
+  unchanged and still binding: anything that needs to refresh goes through
+  `AppSyncCoordinator` (ADR 0015) rather than introducing a second policy.

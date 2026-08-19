@@ -4,7 +4,10 @@ import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/core/preferences/preference_values.dart';
 import 'package:gridview/features/settings/application/app_info.dart';
 import 'package:gridview/features/settings/application/external_links.dart';
+import 'package:gridview/features/settings/presentation/widgets/settings_rows.dart';
 
+import '../support/a11y_harness.dart';
+import '../support/component_harness.dart';
 import '../support/router_harness.dart';
 
 const Size _tall = Size(400, 1800);
@@ -674,6 +677,118 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(find.text('Preferences'), findsOneWidget);
+    });
+  });
+
+  // --- GvSettingsRow accessible name ---------------------------------------
+  //
+  // The row composes one label over an excluded subtree, so whatever the
+  // composition omits is simply never spoken. The description was omitted, and
+  // it is the part that explains what a row does — "Component catalogue" alone
+  // says nothing about "Design-system gallery, development only".
+  group('GvSettingsRow speaks everything it shows', () {
+    testWidgets('a title-only row speaks its title and nothing else', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(
+        tester,
+        GvSettingsRow(title: 'Language', onTap: () {}),
+      );
+
+      expect(nodeLabelled(tester, 'Language').flagsCollection.isButton, isTrue);
+      expect(labelOccurrences(tester, 'Language'), 1);
+      handle.dispose();
+    });
+
+    testWidgets('a row with a description speaks the description too', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(
+        tester,
+        GvSettingsRow(
+          title: 'Component catalogue',
+          description: 'Design-system gallery, development only',
+          onTap: () {},
+        ),
+      );
+
+      expect(
+        renderedLabels(tester),
+        contains(
+          'Component catalogue, Design-system gallery, development only',
+        ),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a row with a value and a description speaks title, value, '
+        'then description', (WidgetTester tester) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(
+        tester,
+        GvSettingsRow(
+          title: 'Theme',
+          value: 'Dark',
+          description: 'Follows the flagship palette',
+          onTap: () {},
+        ),
+      );
+
+      // Spoken in the order it is read on screen, deterministically.
+      expect(
+        renderedLabels(tester),
+        contains('Theme, Dark, Follows the flagship palette'),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a blank description or value is omitted cleanly', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(
+        tester,
+        GvSettingsRow(
+          title: 'Language',
+          value: '   ',
+          description: '',
+          onTap: () {},
+        ),
+      );
+
+      expect(
+        renderedLabels(tester),
+        contains('Language'),
+        reason: 'no dangling separator and no empty component',
+      );
+      handle.dispose();
+    });
+
+    testWidgets('the visible descendants never repeat the composed label', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpComponent(
+        tester,
+        GvSettingsRow(
+          title: 'Theme',
+          value: 'Dark',
+          description: 'Follows the flagship palette',
+          onTap: () {},
+        ),
+      );
+
+      // Each component is visible…
+      expect(find.text('Theme'), findsOneWidget);
+      expect(find.text('Dark'), findsOneWidget);
+      expect(find.text('Follows the flagship palette'), findsOneWidget);
+      // …and each is spoken exactly once, from the composed label alone.
+      expect(labelOccurrences(tester, 'Theme'), 1);
+      expect(labelOccurrences(tester, 'Dark'), 1);
+      expect(labelOccurrences(tester, 'Follows the flagship palette'), 1);
+      handle.dispose();
     });
   });
 }
