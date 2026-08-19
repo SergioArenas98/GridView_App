@@ -132,6 +132,11 @@ implementation requirement and a release requirement:
   that GridView transforms, normalizes and combines the data, and stating that
   GridView is unofficial and not affiliated with Formula 1, the FIA or related
   entities. **The public API documentation must carry equivalent information.**
+  §3(a)(1)(A) is *conditional*, so that list is a floor: any copyright notice,
+  warranty-disclaimer notice or requested creator designation a project supplies
+  must also be retained, and §3(a)(3) requires removing such information if the
+  licensor asks. Attribution is therefore held as **per-source data, not
+  hard-coded strings**.
 - **ShareAlike** — adapted provider data, the normalized database material and
   publicly redistributed derived datasets stay available under CC BY-NC-SA 4.0
   where ShareAlike applies, with per-source attribution retained. Application and
@@ -166,13 +171,22 @@ acceptance is **not** a legal opinion, a data-rights certification, a Formula 1
 clearance or an accessibility certification, and **no claim is made that a
 dispute or enforcement action cannot occur**.
 
-**9. The validated technical design is unchanged.** OpenF1 provisional attempts
-at session end +32/+35/+45/+60 minutes with early stop; Jolpica reconciliation at
-+2/+6/+12/+24 hours then daily; no polling during the live window; a reconciled
-snapshot never replaced by older provisional data; mandatory identifier mapping;
-beta championship endpoints guarded; provider DTOs never in the public contract;
-either source disableable independently. **C6 and C7 remain GridView objectives,
-never guarantees.**
+**9. The validated technical design is unchanged in substance.** OpenF1
+provisional attempts at +32/+35/+45/+60 minutes with early stop; Jolpica
+reconciliation at +2/+6/+12/+24 hours then daily; no polling during the live
+window; a reconciled snapshot never replaced by older provisional data;
+mandatory identifier mapping; beta championship endpoints guarded; provider DTOs
+never in the public contract; either source disableable independently. **C6 and
+C7 remain GridView objectives, never guarantees.**
+
+Two guards were tightened during review and are **binding Phase 9B
+requirements**, not implementation detail. First, those offsets are measured
+from the **actual** session end, not the scheduled one: the live window closes
+30 minutes after a session really ends, so an overrunning session would move the
+boundary, and the anchor must be bounded conservatively before the first request
+is made, with a detect-and-re-anchor rule as a backstop. Second, **serialization
+does not satisfy a per-second burst limit** — an explicit per-provider rate
+limiter is required.
 
 **10. Sportmonks stays rejected for v1 on budget grounds only** and is the named
 fallback if C1 or C3 is relaxed. **API-Sports stays unselected** and unverified.

@@ -503,7 +503,8 @@ towards commercial advantage or monetary compensation."*
 
 | # | Condition | Provision |
 |---|---|---|
-| O1 | **Attribution** when licensed material is Shared: retain creator identification, any copyright notice, a reference to the licence, the warranty disclaimer, and a URI or hyperlink to the material | §3(a)(1) |
+| O1 | **Attribution** when licensed material is Shared. §3(a)(1)(A) requires retaining, **if supplied by the Licensor**: (i) identification of the creator(s) and any others designated to receive attribution, in any reasonable manner requested; (ii) a copyright notice; (iii) a notice referring to the licence; (iv) a notice referring to the disclaimer of warranties; (v) a URI or hyperlink to the licensed material, to the extent reasonably practicable | §3(a)(1)(A) |
+| O1a | **Removal on request** — if the Licensor asks, the §3(a)(1)(A) information must be removed to the extent reasonably practicable | §3(a)(3) |
 | O2 | **Identify modifications** — *"indicate if You modified the Licensed Material and retain an indication of any previous modifications"* | §3(a)(1)(B) |
 | O3 | **ShareAlike** — Adapted Material that is Shared must carry *"a Creative Commons license with the same License Elements, this version or later, or a BY-NC-SA Compatible License"* | §3(b)(1) |
 | O4 | **No additional restrictions** — *"You may not offer or impose any additional or different terms or conditions on, or apply any Effective Technological Measures to, the Licensed Material if doing so restricts exercise of the Licensed Rights"* by recipients | §2(a)(5)(C) |
@@ -531,13 +532,23 @@ both apply, both apply.
 |---|---|---|
 | N1 | The licence grants **only** the copyright and similar rights the **licensor has authority to grant** | §2(a)(1), definition of Licensed Rights |
 | N2 | **Patent and trademark rights are not licensed** | §2(b)(2) |
-| N3 | Publicity, privacy and personality rights are **not** waived or granted, and may still limit use | §2(b)(1), Deed "Notices" |
-| N4 | Moral rights are not licensed | §2(b)(1) |
+| N3 | Publicity, privacy and personality rights are **not licensed** — but the Licensor does give a **limited waiver of its own** such rights | §2(b)(1), Deed "Notices" |
+| N3a | That waiver reaches **only rights held by the Licensor**, and only *"to the limited extent necessary to allow You to exercise the Licensed Rights, but not otherwise"*. **Third-party publicity and personality rights — a driver's, for instance — are untouched by it.** | §2(b)(1) |
+| N4 | Moral rights, such as the right of integrity, are not licensed — subject to the same limited Licensor waiver as N3a | §2(b)(1) |
 | N5 | **No warranty of any kind**, including as to title or accuracy, unless separately given | §5, Deed "Notices" |
 
 N1 and N2 are the reason this document never claims Formula 1 clearance. The
 official deed itself carries the warning that *"other rights such as publicity,
 privacy, or moral rights may limit how you use the material."*
+
+N3a is worth separating from N3 rather than collapsing the two. The licence is
+not silent on personality rights: it contains a real, if narrow, waiver. But
+that waiver is bounded twice over — to rights **the Licensor holds**, and to the
+extent **necessary to exercise the licensed rights**. Neither OpenF1 nor Jolpica
+holds the personality rights of Formula 1 drivers, so nothing in §2(b)(1)
+reaches them. The residual exposure recorded in §14.1 is therefore about
+**third-party** rights, and the Licensor's limited waiver neither creates nor
+reduces it.
 
 ### 7.4 Media: nothing from either source is cleared
 
@@ -644,6 +655,30 @@ information**, because the API is itself a Sharing surface (§7.5 act 9).
 
 Attribution must be **per source**, not merged into one generic credit: each
 licensor is separately entitled to attribution.
+
+**The six elements above are a floor, not a ceiling.** §3(a)(1)(A) is
+*conditional*: whatever the Licensor actually supplies with the material must be
+retained. Elements 1-4 cover the parts GridView knows are supplied today, but a
+compliant implementation must also:
+
+| # | Conditional duty | Provision |
+|---|---|---|
+| 7 | Retain any **copyright notice** either project supplies | §3(a)(1)(A)(ii) |
+| 8 | Retain any **notice referring to the disclaimer of warranties** either project supplies | §3(a)(1)(A)(iv) |
+| 9 | Retain **creator identification** in any reasonable manner the Licensor requests, including a designated pseudonym or additional parties designated to receive attribution | §3(a)(1)(A)(i) |
+| 10 | Retain a **URI or hyperlink to the licensed material** to the extent reasonably practicable | §3(a)(1)(A)(v) |
+| 11 | **Remove** any §3(a)(1)(A) information if the Licensor requests it, to the extent reasonably practicable | §3(a)(3) |
+
+**Phase 9B must implement the attribution surface so these are possible, not
+merely so the six known elements render.** Concretely, that means attribution
+content is **data, not hard-coded strings**: a per-source record that can carry a
+copyright notice, a warranty-disclaimer notice and a requested creator
+designation if one appears, and from which an entry can be removed under duty 11.
+An implementation that hard-codes six literals cannot satisfy §3(a)(1)(A) if
+either project later ships a notice, and cannot satisfy §3(a)(3) at all.
+
+Duty 11 is easy to overlook because it runs the other way from the rest: it is an
+obligation to **stop** displaying something on request.
 
 Whether a stable machine-readable attribution or data-sources endpoint is
 appropriate is a **Phase 9B determination**. It is deliberately not added in this
@@ -859,7 +894,7 @@ Consequences:
 | M8 | **Jolpica `/2026/circuits/` returned 24 for 23 races** | Unexplained. Must be reconciled against the calendar rather than assumed one-to-one. |
 | M9 | **Jolpica `/last` and `/next` are date-derived** | A public issue records `/current/last` returning the previous round on a Sunday evening after a race, reported and later fixed. Explicit `season/round` addressing should be preferred over `last`/`next`. |
 | M10 | **Jolpica pagination** | `limit` defaults to 30 and caps at 100. Season-scoped queries must pass `limit` explicitly; a 23-race season and a 31-driver season both exceed the default. |
-| M11 | **OpenF1 `date_end` is the scheduled end** | A red-flagged or delayed session may actually end later than `date_end`, which would move the live-window boundary. See §10.2. |
+| M11 | **OpenF1 `date_end` may be a scheduled end** | A red-flagged or delayed session actually ends later, which moves the live-window boundary. Anchoring on the scheduled end alone would place a request inside the paid live window. Resolved by the conservative anchor and the detect-and-re-anchor rule in §10.2 rules 3 and 4, both Phase 9B requirements. |
 
 **No adapter was implemented.** These are recorded as Phase 9B requirements.
 
@@ -955,33 +990,78 @@ field for it.
 OpenF1 classifies data as live from **30 minutes before** a session starts until
 **30 minutes after** it ends. GridView must never fetch inside that window.
 
-Three design rules follow:
+**The window closes 30 minutes after the session *actually* ends, not 30 minutes
+after it was *scheduled* to end.** That distinction is the whole difficulty: a
+red-flagged or delayed session pushes the real boundary later, and a schedule
+anchored on the nominal end would then fire inside the live window. Detecting
+that afterwards cannot undo the request. **Prevention therefore has to be
+conservative, and detection is only a backstop.**
 
-1. **The earliest permitted provisional fetch is `scheduled_end + 30 minutes`.**
+Five design rules follow:
+
+1. **The earliest permitted provisional fetch is `actual_end + 30 minutes`.**
    GridView's C6 objective of 30-60 minutes is therefore *exactly* aligned with
    the earliest moment free access opens. There is no room to be earlier, and
    trying to be would mean using the paid live feed.
-2. **A safety margin is mandatory.** The first attempt is scheduled at
+2. **A safety margin is mandatory.** The first attempt is placed at
    **+32 minutes**, not +30, so that clock skew, boundary rounding or an
-   inclusive interpretation of "30 minutes after" can never place a request
-   inside the live window.
-3. **`date_end` is a *scheduled* end (M11).** A red-flagged or delayed session
-   may genuinely end later, which moves the real boundary. GridView schedules
-   from the scheduled end plus margin, and if the first attempt returns data
-   that is absent or obviously incomplete, it backs off rather than retrying
-   tightly — an incomplete response is a signal the session may have overrun.
+   inclusive interpretation of "30 minutes after" cannot by itself place a
+   request inside the window.
+3. **The anchor must be conservative by construction, because GridView cannot
+   observe the actual end without querying — and querying is the thing being
+   avoided.** OpenF1's `date_end` is the only actual-end signal, and reading it
+   during the window would itself be an in-window request. The planning anchor
+   is therefore:
+
+   ```text
+   anchor = max(
+       scheduled_end,
+       latest date_end already known for the session,
+       session_start + maximum_plausible_duration
+   )
+   first attempt = anchor + 32 minutes
+   ```
+
+   `maximum_plausible_duration` is a **curated per-session-type constant** held
+   by GridView — not a provider value — sized so that an ordinary overrun is
+   already covered before the first request is made. It lives with the
+   identifier mapping registry (§8.7 M1) and is reviewed with it.
+4. **Detect and re-anchor, without pretending it is a cure.** Every response
+   carries `date_end`. If a response reveals a `date_end` later than the anchor
+   used — meaning the request was in fact inside the live window — GridView
+   must **discard the response, write nothing, record a compliance incident,
+   and re-anchor every remaining attempt to `actual date_end + 32 minutes`.**
+   Discarding does not undo the request that was already made; rule 3 is what
+   is supposed to prevent it, and rule 4 exists so that a single mis-anchored
+   request cannot become a repeated one across the +35, +45 and +60 attempts.
+5. **An incomplete response is treated as a possible overrun signal.** If the
+   first attempt returns absent or obviously incomplete data, GridView backs off
+   rather than retrying tightly, because the most likely explanation is that the
+   session ran long.
+
+Rules 3 and 4 together are a **Phase 9B requirement**, not an implementation
+detail: an adapter that anchors on the scheduled end alone does not satisfy
+§7.6 and must not ship.
+
+This changes when the first attempt fires for an overrunning session. It does
+**not** change the number of attempts, so the request-volume model in §11 is
+unaffected.
 
 ### 10.3 Provisional lifecycle — OpenF1
 
 Triggered only for **polled sessions**: Qualifying, Sprint Qualifying, Sprint
 and Race. Practice sessions are not polled for results.
 
-| Attempt | Offset from scheduled session end |
+| Attempt | Offset from the §10.2 anchor (actual session end, conservatively bounded) |
 |---|---|
 | 1 | +32 minutes |
 | 2 | +35 minutes |
 | 3 | +45 minutes |
 | 4 | +60 minutes |
+
+Offsets are measured from the anchor computed in §10.2 rule 3, **never from the
+scheduled end alone**, and are re-anchored under rule 4 if a response reveals a
+later actual end.
 
 **Stop early.** The sequence terminates as soon as a response is *complete and
 internally consistent*, defined as all of:
@@ -1003,7 +1083,7 @@ reconciliation. A failed provisional pass is never an outage.
 Triggered after the same polled sessions, and independently of whether the
 provisional pass succeeded.
 
-| Check | Offset from scheduled session end |
+| Check | Offset from the §10.2 anchor |
 |---|---|
 | 1 | +2 hours |
 | 2 | +6 hours |
@@ -1194,12 +1274,30 @@ Split by source on that day: **OpenF1 ≈ 27**, **Jolpica ≈ 21**.
 
 | Source | Published limit | Peak-day use | Headroom |
 |---|---|---:|---|
-| OpenF1 free | 30 requests/**minute** | ≈ 27 requests/**day** | The entire peak day fits inside one minute's allowance. Attempts are serialized, so the 3 requests/second burst limit is never approached. |
+| OpenF1 free | 3 requests/**second** and 30 requests/**minute** | ≈ 27 requests/**day** | The entire peak day fits inside one minute's allowance. The **per-second** limit is a separate matter — see the note below. |
 | Jolpica unauthenticated | 500 requests/**hour** | ≈ 21 requests/**day** | ≈ 4% of a single hour's allowance, spread across 24 hours. Well inside the announced future reduction. |
 
-**Neither source's rate limit is a constraint on this design, even at worst
-case, even if published limits are reduced substantially.** Licensing, not
-quota, remains the gate.
+**Neither source's daily or hourly volume is a constraint on this design, even
+at worst case, even if published limits are reduced substantially.** Licensing,
+not quota, remains the gate.
+
+**Serialization alone does not satisfy a per-second burst limit.** A single Race
+or Sprint attempt issues five OpenF1 calls, and if responses return quickly,
+more than three of them can complete inside one rolling second even though they
+were issued one after another. The earlier claim that serialization keeps the
+3 requests/second limit out of reach was unsafe and is withdrawn.
+
+**Phase 9B requirement: an explicit per-provider rate limiter.** Each adapter
+must pace its own outbound requests against that provider's published limits
+rather than relying on the shape of the call sequence — a minimum interval
+between OpenF1 requests that cannot exceed 3 per rolling second or 30 per
+rolling minute, and the equivalent for Jolpica's 4 per second and 500 per hour.
+The limiter belongs with the outbound-request hardening helper recorded as G7 in
+Appendix D, alongside timeouts, redirect limits and Jolpica's mandatory
+`User-Agent`. `Retry-After` and HTTP 429 handling remain as specified in §10.
+
+This does not change the request-volume model in §11: the same number of
+requests is made, spaced out.
 
 ### 11.5 Against the superseded model
 
@@ -1409,7 +1507,7 @@ provider or a rights holder raises an objection, §14.3 M10 applies immediately.
 | M6 | **No official-affiliation language** anywhere in the product or documentation | Binding now |
 | M7 | **Conservative request volumes** — roughly 285 requests per month worst case, far inside both published limits (§11) | Designed |
 | M8 | **Licence-version and terms monitoring**, including watching for Jolpica's announced limit reduction | Phase 9B, plus §12.3 S10 annual review |
-| M9 | **A final licence-compliance review before public release** | Release gate (§15.3) |
+| M9 | **A final licence-compliance review before public release**, covering §7.6.1-§7.6.5, the §10.2 live-window anchor and the §11.4 rate limiter | Release gate (§15.3) |
 | M10 | **Immediate reassessment if a provider or rights holder raises an objection** — pause the affected adapter, stop the affected use, re-evaluate before resuming | Standing obligation from now |
 
 ### 14.4 Technical gaps carried into Phase 9B
@@ -1465,10 +1563,10 @@ appears among them.**
 |---|---|
 | E1 | The product remains **unmonetised** — none of the seven items in §7.6.1 is present |
 | E2 | **Both current licence notices are recorded** — OpenF1 (§7.1) and Jolpica (§7.2), each with its source URL and access date |
-| E3 | **Attribution requirements are part of the implementation plan** — the six elements of §7.6.2, in the app and in the public API documentation |
+| E3 | **Attribution requirements are part of the implementation plan** — the six elements of §7.6.2 **and its conditional duties 7-11**, in the app and in the public API documentation, with attribution held as per-source data rather than hard-coded strings |
 | E4 | **Provider-derived data is separated from application source code** (§7.6.3) |
 | E5 | The normalized data output has a **documented ShareAlike strategy** (§7.6.3) |
-| E6 | **Live-window and rate-limit restrictions are encoded as requirements** — no OpenF1 call inside its live window; Jolpica's published limits and mandatory `User-Agent` respected |
+| E6 | **Live-window and rate-limit restrictions are encoded as requirements** — the §10.2 anchor computed from the **actual** session end with the conservative bound and the re-anchor rule, an explicit per-provider rate limiter (§11.4) rather than reliance on serialization, and Jolpica's published limits and mandatory `User-Agent` respected |
 | E7 | **Adapters can be disabled independently** (§14.3 M4) |
 | E8 | The **public DTO contract remains provider-neutral** (§10.8, requirement T4) |
 | E9 | **No protected images, logos or branding are imported** (§7.6.5) |
@@ -1770,7 +1868,7 @@ Recorded as **Phase 9B** work. None is implemented.
 | G4 | **The provider interface cannot express two sources** | `fetchSeasonSource(season, jobs)` demands a whole season from one call and defines no partial-success or per-job failure result. The dual-source model needs per-resource, per-source fetches and a coordinator above them (§10.10). **This is the largest single piece of Phase 9B work.** |
 | G5 | **No event-window awareness** | `scheduler.ts` intervals are constants. §10.3 and §10.4 need offsets relative to session end. |
 | G6 | **Untyped call counting** | `providerCallCount` casts the provider to `{ callCount?: unknown }` and returns `0` for any adapter that does not expose it, so quota telemetry would silently under-report. Worse with two sources, where per-source attribution is needed. |
-| G7 | **No HTTP hardening helper** | Backend Scheme §23.3 requires fixed hostnames, timeouts, redirect limits, content-type validation, response-size limits and header redaction. None exists. Jolpica's mandatory custom `User-Agent` would also live here. |
+| G7 | **No HTTP hardening helper and no rate limiter** | Backend Scheme §23.3 requires fixed hostnames, timeouts, redirect limits, content-type validation, response-size limits and header redaction. None exists. Jolpica's mandatory custom `User-Agent` would also live here, as would the **per-provider rate limiter required by §11.4** — serialization alone does not satisfy a per-second burst limit. |
 | G8 | **No provider-ID mapping registry** | Backend Scheme §8.1 requires one. §8.5 proves it is mandatory: 4 of 11 constructor names differ between sources. |
 | G9 | **No provenance or provisional/reconciled state** | §10.7 fields do not exist in the local schema, and nothing distinguishes a provisional record from a reconciled one. A schema change is implied — the first since v2. |
 | G10 | **No locally-modelled quota state** | `QuotaState` expects values from provider headers; neither source supplies them (§8.6), so counters must be maintained locally per source. |

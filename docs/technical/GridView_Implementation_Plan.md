@@ -1378,31 +1378,57 @@ published CC BY-NC-SA 4.0 licence, whose limits are recorded in
 [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.3.4 and
 whose residual risk is accepted in §14.
 
-## 14.2 Legal gate
+## 14.2 Licence-compliance gate
 
-Before implementation is enabled in production:
+> This section was previously the **legal gate** and was written around obtaining
+> approval from a commercial provider. Under
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) it is a
+> **compliance gate**: the permission is the public licence each source
+> publishes, and what must be established is that GridView's use stays inside it.
+> **No provider reply, approval or waiting period is required or awaited**, and
+> none has been sought. The one case that does require contacting a provider is
+> monetisation, which must reopen the decision **before** implementation.
 
-- Confirm the provider contract, **or**, where the source is a free
-  non-commercial project with no contract to sign, obtain a written statement
-  from that project that the use is permitted under its published licence. The
-  latter is materially weaker and is recorded as such.
-- Confirm the intended use. **For v1 that use is free and unmonetised**
-  (C1-C3), following
-  [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md); separately
-  establish whether any future monetisation would change the applicable rights.
-  The original wording of this line ("Confirm ad-supported use") predates ADR
-  0018 and the zero-monetisation constraint, and is reinterpreted rather than
-  deleted — see
-  [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
-- Confirm caching rights.
-- Confirm redistribution terms for GridView's own public API.
-- Confirm attribution wording and placement.
-- Confirm image/logo exclusions.
-- Where the licence is CC BY-NC-SA 4.0, confirm **what ShareAlike attaches to**
-  and whether a free publicly distributed app counts as non-commercial.
-- Record approval in project documentation.
+Before implementation is enabled in production, verify each of the following.
+Every item is checkable inside this repository against
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md); none depends
+on a third party responding.
 
-If approval is not obtained, select another provider rather than bypassing the requirement.
+- **Record the licence each source publishes**, with its source URL and access
+  date. For OpenF1 and Jolpica that is CC BY-NC-SA 4.0 (Evaluation §7.1, §7.2).
+- **Confirm the intended use is inside the licence.** For v1 that use is free
+  and unmonetised (C1-C3), following
+  [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md), which satisfies
+  the NonCommercial term. Separately establish that any future monetisation
+  would leave that scope and must reopen the provider decision first. The
+  original wording of this line ("Confirm ad-supported use") predates ADR 0018
+  and the zero-monetisation constraint, and is reinterpreted rather than
+  deleted.
+- **Verify caching and retention are inside the grant** — Evaluation §7.5
+  acts 2, 3 and 7.
+- **Verify redistribution through GridView's own public API is inside the
+  grant** — Evaluation §7.5 acts 8-10, classified as Sharing and potentially
+  adapting licensed database material.
+- **Verify attribution is implemented**, in both the application and the public
+  API documentation, per source, including the modification notice and the
+  unofficial-status notice — Evaluation §7.6.2.
+- **Verify the ShareAlike strategy is documented and honoured** for adapted
+  data, the normalized database material and any publicly redistributed derived
+  dataset — Evaluation §7.6.3.
+- **Verify no additional downstream restrictions** are imposed by GridView's own
+  terms or API documentation, keeping operational rate limiting visibly distinct
+  from the data licence — Evaluation §7.6.4.
+- **Verify the excluded-material list is respected** — no logos, photographs,
+  audio, broadcasts, protected artwork, official branding or live telemetry, and
+  no claim of official status — Evaluation §7.6.5.
+- **Verify provider-imposed operational limits are honoured** — OpenF1's live
+  window and Jolpica's rate limits and mandatory `User-Agent`.
+- **Record the compliance decision in project documentation**, as ADR 0019 and
+  the evaluation do. **What is recorded is a licence-compliance decision, not a
+  provider approval and not legal clearance.**
+
+If a use cannot be shown to sit inside the licence, change the use or select
+another source rather than bypassing the requirement.
 
 ## 14.3 Adapter tasks
 
