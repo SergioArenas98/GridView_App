@@ -1454,16 +1454,39 @@ another source rather than bypassing the requirement.
 
 ## 14.3 Adapter tasks
 
-- Implement the production provider adapter.
+> **Two adapters, not one, and one of them is locked.** Build a **Jolpica**
+> adapter (active) and an **OpenF1** adapter (specified but not unlocked,
+> §14.0.2) behind a coordinator, since the single-call provider interface cannot
+> express two sources with different roles. The OpenF1 adapter may be built and
+> tested against fixtures but **must not contact the live service** until an end
+> bound is recorded.
+
+- Implement the **Jolpica** adapter and the reconciliation coordinator.
+- Implement the **OpenF1** adapter, fixture-tested only, behind the
+  bound-or-skip gate.
 - Add runtime response validation.
-- Add provider-ID mappings.
+- Add the **curated provider-ID mapping registry** — mandatory, because 4 of 11
+  constructor names differ between the two sources
+  ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.5).
+- Add the **curated maximum-session-duration bound** that unlocks the OpenF1
+  path, with an official source and access date. **Until this exists every
+  provisional fetch is skipped.**
 - Normalize dates and time zones.
 - Normalize standings and points.
-- Normalize race/session states.
-- Handle pagination if required.
-- Capture quota headers.
+- Normalize race/session states, including deriving sprint from OpenF1
+  `session_name` because `session_type` conflates it with race.
+- Handle pagination — Jolpica defaults to 30 and caps at 100, so season-scoped
+  queries must pass `limit` explicitly.
+- ~~Capture quota headers.~~ **Neither source publishes any**
+  (Evaluation §8.6); model quota locally per source instead.
+- Add an **explicit per-provider rate limiter** — serialization does not satisfy
+  a per-second burst limit (Evaluation §11.4).
 - Implement provider-specific error mapping.
-- Add response-size and timeout controls.
+- Add response-size and timeout controls, a fixed-hostname outbound helper, and
+  Jolpica's mandatory identifying `User-Agent`.
+- **Resolve the `sourceUpdatedAt` conflict** before the adapter can ship
+  (Evaluation §10.7.1). Neither source publishes an update timestamp, yet the
+  field is contract-required and is ADR 0005's primary conflict key.
 
 ## 14.4 Data validation tasks
 
@@ -1484,17 +1507,28 @@ Validate against the current season:
 
 ## 14.5 Refresh-policy tasks
 
-- Tune cron frequency.
-- Define event-window behavior.
-- Define post-session refresh window.
-- Define result finalization.
-- Reserve quota for manual recovery.
-- Configure quota alerts.
+The policy is specified in
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10 and §11;
+these are the implementation tasks.
+
+- Add a **production cron trigger** — none exists today; only staging has one.
+- Implement the **event-aware schedule**, replacing the fixed-interval
+  scheduler. Not doing so would cost roughly 415 requests a day year-round
+  against a modelled ceiling of about 356 a month.
+- Implement the **bound-or-skip live-window guard** for OpenF1, anchored on the
+  actual session end, with the detect-and-re-anchor backstop.
+- Implement the **Jolpica start-anchored cadence** — +5/+9/+15/+24 hours from
+  the scheduled session start, then daily — and the six-hourly calendar poll
+  that both meets the §25 freshness target and drives every session trigger.
+- Define result finalization, including the corroboration rule and the
+  superseded-revision ledger that stop a stale read rolling data back.
+- Reserve capacity for manual recovery and configure alerts on **locally
+  modelled** counters, since neither source returns quota headers.
 - Verify provider calls remain independent of public request volume.
 
 ## 14.6 Production snapshot tasks
 
-- Generate staging snapshot from provider.
+- Generate staging snapshot from **Jolpica** — the only unlocked source.
 - Compare with trusted public references manually.
 - Resolve mappings and overrides.
 - Generate production snapshot.
@@ -1504,19 +1538,33 @@ Validate against the current season:
 
 ## 14.7 Deliverables
 
-- Production provider adapter.
-- Provider mapping registry.
-- Quota monitoring.
+- Jolpica adapter, plus a fixture-tested OpenF1 adapter behind its gate.
+- Reconciliation coordinator with provenance and provisional/reconciled state.
+- Curated provider-ID mapping registry.
+- Locally modelled quota monitoring and a per-provider rate limiter.
+- Attribution surface in the app and in the public API documentation, held as
+  per-source data rather than hard-coded strings.
+- Documented ShareAlike strategy for the normalized output.
 - Validated current-season snapshots.
-- Legal approval record.
+- ~~Legal approval record.~~ **A licence-compliance record instead**
+  ([ADR 0019](../adr/0019-formula-one-provider-legal-gate.md)). No provider
+  approval exists or is sought.
 
 ## 14.8 Exit criteria
 
 - All v1 resources are supplied reliably.
 - No provider DTO leaks into the public contract.
-- Provider failure preserves the previous snapshot.
-- Quota usage fits the selected plan.
-- Rights and attribution requirements are documented and implemented.
+- Provider failure preserves the previous snapshot, and no stale or superseded
+  payload can replace a newer one.
+- Quota usage fits the published free limits, measured against locally modelled
+  counters.
+- **Licence obligations are implemented and verifiable** — non-commercial
+  operation, per-source attribution in both surfaces, the ShareAlike strategy,
+  no additional downstream restrictions, and the excluded-material list
+  (Evaluation §7.6).
+- **No GridView request reaches OpenF1 outside its gate**, and the gate is
+  either unlocked by a recorded bound or skipping every session.
+- The `sourceUpdatedAt` conflict is resolved rather than worked around.
 
 ---
 
