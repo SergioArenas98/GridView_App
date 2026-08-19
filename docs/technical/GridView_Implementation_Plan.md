@@ -1266,8 +1266,8 @@ preparation) is complete; the legal gate remains open.** See §14.0.
 ## 14.0 Phase 9A status
 
 Phase 9A ran as a research and preparation pass on 2026-08-19. Its full
-evidence, classifications, quota model, unsent outreach draft and code audit are
-recorded in
+evidence, classifications, feasibility check, dual-source design, quota model,
+sustainability assessment, unsent inquiries and code audit are recorded in
 [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md), and the
 decision it produced is
 [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) (**Proposed**).
@@ -1278,31 +1278,78 @@ decision it produced is
 | Legal gate | **Open.** No candidate's official sources state that GridView's intended public redistribution is permitted. |
 | Provider approval | **Not obtained.** No provider is approved, selected, subscribed to or contacted. |
 | Production provider adapter | **Not implemented and not activated.** Production remains `PROVIDER_MODE = "none"`; the mock provider is unchanged. |
-| Next action | **Requires user and provider correspondence.** ADR 0019 lists the blocking actions U1-U6. |
+| Next action | **Requires user and provider correspondence.** ADR 0019 lists the blocking actions U1-U8. |
 
-Phase 9B (adapter implementation) does not begin until a provider confirms the
-architecture in writing. ADR 0019 also records eight structural seams that Phase
-9B must add before an adapter can be implemented cleanly.
+### 14.0.1 Product constraints governing Phase 9
+
+Recorded on 2026-08-19 and binding on every provider decision:
+
+| # | Constraint |
+|---|---|
+| C1 | Provider budget for v1 is **EUR 0** |
+| C2 | GridView remains **free** while it relies on non-commercial data sources |
+| C3 | **No monetisation**: no advertising, in-app purchases, subscriptions, affiliate links or sponsorship |
+| C4 | Any future monetisation requires written commercial permission from every affected provider, or migration to a provider whose licence permits it — and **reopens the provider decision** |
+| C5 | **No live telemetry or live timing** is required |
+| C6 | Freshness objective for **provisional** results, points and standings: **30-60 minutes after a session ends** |
+| C7 | Freshness objective for **reconciled** data: **within 24 hours**, subject to provider availability |
+| C8 | **Reliability and replaceability matter more** than in-session updates |
+
+C3 restates an existing state rather than removing anything: advertising was
+already absent from v1 per
+[ADR 0018](../adr/0018-advertising-not-retained-for-v1.md). C3 also does **not**
+settle the licensing questions — it improves the NonCommercial position without
+answering ShareAlike or the redistribution question.
+
+**C6 and C7 are GridView objectives, not provider guarantees.** Neither proposed
+source publishes an SLA, an uptime commitment or a correctness guarantee, and
+both disclaim them. Reconciliation latency is currently **unmeasured**.
+
+### 14.0.2 Proposed direction
+
+A **dual-source, zero-cost, post-session model**, pending both technical
+feasibility and written licensing confirmation from both projects:
+
+| Source | Role |
+|---|---|
+| **OpenF1** | *Provisional* post-session classification, points and championship state, fetched only after its free historical window opens at session end + 30 minutes |
+| **Jolpica F1** | *Complete* season metadata, calendar, participants, circuits, historical depth, and *reconciled* final results and standings |
+
+Sportmonks is **rejected for v1 on budget grounds only** (C1) and is the named
+fallback if C1 or C3 is relaxed. API-Sports remains unselected and unverified.
+
+Phase 9B (adapter implementation) does not begin until **both** projects confirm
+the architecture in writing. ADR 0019 records ten structural seams Phase 9B must
+add, the largest being that the current single-call provider interface cannot
+express two sources with different roles.
 
 ## 14.1 Objective
 
-Replace the mock backend provider with the legally approved production data source.
+Replace the mock backend provider with a legally cleared production data source
+or sources.
 
 ## 14.2 Legal gate
 
 Before implementation is enabled in production:
 
-- Confirm provider contract.
-- Confirm the intended use. **For v1 that use is not ad-supported**, following
+- Confirm the provider contract, **or**, where the source is a free
+  non-commercial project with no contract to sign, obtain a written statement
+  from that project that the use is permitted under its published licence. The
+  latter is materially weaker and is recorded as such.
+- Confirm the intended use. **For v1 that use is free and unmonetised**
+  (C1-C3), following
   [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md); separately
-  establish whether advertising would change the applicable rights. The original
-  wording of this line ("Confirm ad-supported use") predates ADR 0018 and is
-  reinterpreted rather than deleted — see
-  [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) decision 7.
+  establish whether any future monetisation would change the applicable rights.
+  The original wording of this line ("Confirm ad-supported use") predates ADR
+  0018 and the zero-monetisation constraint, and is reinterpreted rather than
+  deleted — see
+  [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
 - Confirm caching rights.
-- Confirm redistribution terms.
-- Confirm attribution.
+- Confirm redistribution terms for GridView's own public API.
+- Confirm attribution wording and placement.
 - Confirm image/logo exclusions.
+- Where the licence is CC BY-NC-SA 4.0, confirm **what ShareAlike attaches to**
+  and whether a free publicly distributed app counts as non-commercial.
 - Record approval in project documentation.
 
 If approval is not obtained, select another provider rather than bypassing the requirement.

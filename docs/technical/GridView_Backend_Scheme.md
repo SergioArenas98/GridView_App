@@ -59,13 +59,26 @@ The recommended production architecture is:
 
 API-Sports is only a technical candidate. Production use remains blocked until the intended use and any required data-publication rights are confirmed.
 
-> **Superseded premise (2026-08-19).** The original wording of this paragraph
-> said "the intended **ad-supported** use". GridView v1 carries no advertising
-> ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)). The gate is
-> unchanged, but it is now assessed against a free, ad-free, publicly
+> **Superseded premise and superseded candidate (2026-08-19).**
+>
+> **Premise.** The original wording of this paragraph said "the intended
+> **ad-supported** use". GridView v1 carries no advertising
+> ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)) and, under the
+> Phase 9 product constraints, **no monetisation of any kind**. The gate is
+> unchanged, but it is now assessed against a free, unmonetised, publicly
 > distributed application that redistributes normalized data through GridView's
 > own public API. The same correction applies to every "ad-supported" phrasing
 > in §3.1 and §7.3 below.
+>
+> **Candidate.** The bullet naming API-Sports as the leading technical provider
+> candidate is **superseded**. Under a zero provider budget, the proposed
+> direction is a **dual-source, zero-cost, post-session model** — OpenF1 for
+> provisional post-session data and Jolpica for complete and reconciled data —
+> pending both technical feasibility and written licensing confirmation from
+> both projects. API-Sports remains unselected and unverified. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) and
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md). **No source is
+> approved.**
 
 ---
 
@@ -81,11 +94,18 @@ Provider selection is both a technical and legal decision.
 > records every claim with an official URL, a page title, an access date and an
 > explicit `Explicitly permitted` / `Explicitly prohibited` / `Written
 > permission required` / `Not stated or ambiguous` / `Not applicable`
-> classification. That document also adds a fourth candidate, Sportmonks, and
-> records the resulting decision in
+> classification. That document also evaluated a fourth candidate, Sportmonks
+> — since **rejected for v1 on budget grounds only**, under a zero provider
+> budget — and records the resulting decision in
 > [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md). Where this section
 > and the evaluation differ, **the evaluation is authoritative.** The comparison
 > tables are deliberately not duplicated here.
+>
+> The proposed direction is now a **dual-source, zero-cost, post-session model**:
+> OpenF1 for provisional post-session data and Jolpica for complete and
+> reconciled data. Both are CC BY-NC-SA 4.0, and **neither permits the intended
+> public redistribution on its published text** — both require written
+> permission, which has not been sought. The gate below is therefore still open.
 
 #### API-Sports
 
@@ -95,7 +115,7 @@ Provider selection is both a technical and legal decision.
 > official page. They carry no source URL and no access date and must be treated
 > as **unverified legacy assertions, not findings**, until someone reads the
 > terms and pricing in an ordinary browser. See
-> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §5.1.
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §6.2.
 
 API-Sports provides Formula 1 endpoints, API-key authentication and paid request quotas suitable for a small application.
 
@@ -128,7 +148,7 @@ OpenF1 is not approved as the default production provider without written permis
 > NonCommercial term plus the ShareAlike obligation, not advertising: removing
 > advertising does not by itself establish that a publicly distributed
 > application redistributing normalized data is non-commercial. See
-> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §6.2.
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.1.
 
 #### Jolpica F1
 
@@ -150,7 +170,7 @@ Jolpica may be useful for prototyping or as a development fixture source, but no
 > identifying `User-Agent`, no guarantee of uptime, availability or correctness,
 > and published limits expected to **decrease**. Jolpica is also the **strongest
 > verified technical fit** for GridView's v1 resource set. See
-> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §6.3, §7.1.
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.2, §8.4.
 
 ### 3.2 Hard release requirement
 
@@ -449,7 +469,12 @@ The public API must never return provider DTOs directly.
 > someone reading the documentation in an ordinary browser. Of the candidates
 > whose capabilities *could* be verified, Jolpica is the strongest technical
 > fit. See [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md)
-> §5.1, §7 and §12.2.
+> §6.2, §7.3 and §15.
+
+> **Superseded (2026-08-19).** The sentence below is superseded. Under a zero
+> provider budget the first adapters proposed are **OpenF1** and **Jolpica**,
+> not API-Sports, and no adapter may be built before the legal gate is passed
+> for both. See [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
 
 The first real adapter should target API-Sports after the legal gate is passed.
 
@@ -475,6 +500,16 @@ Known limitations:
 
 ## 7.3 Alternative providers
 
+> **Roles reversed (2026-08-19).** This section was written when API-Sports was
+> the intended provider and OpenF1 and Jolpica were alternatives. Under a zero
+> provider budget, **OpenF1 and Jolpica are the proposed sources** and
+> API-Sports is unselected. The "not selected" reasoning below is retained for
+> the record and is corrected in place beneath each heading. The proposal is
+> conditional on written permission from both projects, which has not been
+> sought. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §6 and
+> §15.
+
 ### OpenF1
 
 Best suited for:
@@ -491,6 +526,17 @@ Not selected for v1 core because:
 - Published access is personal/non-commercial by default.
 - It would increase data volume and complexity.
 
+> **Corrected (2026-08-19).** OpenF1 is now **proposed as the provisional
+> post-session source**, for `sessions`, `meetings`, `drivers`,
+> `session_result`, `championship_drivers` and `championship_teams` only — no
+> telemetry, no live data, no media. The first two bullets above still hold:
+> telemetry is not used, and both championship endpoints are **confirmed beta**
+> and documented as available for race sessions only. The third bullet is the
+> open legal question, not a settled exclusion. The fourth no longer applies at
+> the narrow endpoint set proposed. Free access begins only **30 minutes after a
+> session ends**, which is what makes the freshness objective achievable and
+> also caps it.
+
 ### Jolpica
 
 Best suited for:
@@ -505,6 +551,17 @@ Not selected for production by default because:
 - It is volunteer-run.
 - Uptime and correctness are not guaranteed.
 - Commercial use needs separate approval.
+
+> **Corrected (2026-08-19).** Jolpica is now **proposed as the complete and
+> reconciled source** — season metadata, calendar, participants, circuits,
+> historical depth back to 1950, and final results and standings. All four
+> bullets above remain true and are accepted as known risks rather than as
+> exclusions: the non-commercial terms are precisely why a zero-monetisation
+> product can consider it, and the volunteer operation and absence of any uptime
+> or correctness guarantee are mitigated architecturally rather than
+> contractually. Jolpica also publishes free database dumps on a 14-day delay,
+> which is a genuine recovery path. Its published rate limits are stated to be
+> heading **downward**.
 
 ### Enterprise licensed feed
 
@@ -976,6 +1033,19 @@ A public request may never trigger a write merely by opening an endpoint intende
 
 ## 15. Refresh policy
 
+> **Superseded for the proposed sources (2026-08-19).** The per-resource cadence
+> table below assumes a single metered provider that may be polled during a
+> session. Neither proposed source may be used that way: OpenF1 classifies data
+> as live — and therefore not free — until **30 minutes after a session ends**,
+> and GridView needs no in-session data at all. The proposed replacement is
+> **event-offset driven**: provisional OpenF1 attempts at +32, +35, +45 and +60
+> minutes after a session's scheduled end, stopping as soon as a complete and
+> internally consistent result is obtained, and Jolpica reconciliation checks at
+> +2, +6, +12 and +24 hours, then daily until reconciled. There is **no polling
+> during a session** and no year-round high-frequency schedule. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10 and
+> §11. The table below is retained for the enterprise-feed contingency.
+
 The exact provider call frequency must respect quota and event timing.
 
 Recommended baseline:
@@ -1014,6 +1084,15 @@ This allows one scheduling mechanism while keeping provider usage controlled.
 ---
 
 ## 16. Provider quota management
+
+> **Not satisfiable from responses under the proposed sources (2026-08-19).**
+> Neither OpenF1 nor Jolpica returns rate-limit headers, an `ETag` or a usable
+> `Last-Modified`, so daily and per-minute limits and remaining counts cannot be
+> read from a response. Under the proposed model they must be **modelled locally
+> per source** from each project's published limits, and the warning thresholds
+> below driven by GridView's own counters. Conditional requests are also
+> unavailable, so every reconciliation check is a full fetch. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.6.
 
 The synchronization layer must record:
 
@@ -1310,6 +1389,13 @@ FORMULA_ONE_PROVIDER_API_KEY
 ADMIN_SYNC_SECRET
 SENTRY_DSN if a server error service is adopted
 ```
+
+> **Note (2026-08-19).** Neither proposed source requires authentication for the
+> access GridView needs, so under the proposed model
+> `FORMULA_ONE_PROVIDER_API_KEY` **would not exist**. That makes the "no secret
+> in the app" property of §5.5 trivially true: there is no provider credential
+> to protect, leak or rotate. The name is retained here because it would apply
+> again to any paid fallback.
 
 Never store secrets in:
 

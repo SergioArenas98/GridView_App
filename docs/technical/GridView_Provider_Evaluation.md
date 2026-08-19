@@ -4,17 +4,24 @@
 
 - Product: GridView
 - Document type: Provider evaluation and legal-gate preparation
-- Version: 0.1
+- Version: 0.2
 - Status: Draft - **no provider is approved**
 - Phase: 9A (provider evaluation and legal-gate preparation)
 - Related documents:
-  - [`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §3, §7, §14-§17
+  - [`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §3, §7, §14-§18
   - [`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md) §14
   - [`GridView_Backend_Operations.md`](GridView_Backend_Operations.md)
   - [`../adr/0019-formula-one-provider-legal-gate.md`](../adr/0019-formula-one-provider-legal-gate.md)
   - [`../adr/0018-advertising-not-retained-for-v1.md`](../adr/0018-advertising-not-retained-for-v1.md)
 - Research access date: **2026-08-19**
 - Document date: 2026-08-19
+
+### Revision history
+
+| Version | Date | Change |
+|---|---|---|
+| 0.1 | 2026-08-19 | First evaluation. Four candidates; Sportmonks proposed as the first written-inquiry candidate. |
+| 0.2 | 2026-08-19 | **Superseded by a product-constraint change.** A zero-provider-budget, no-monetisation constraint was recorded (§2). Sportmonks is rejected for v1 on budget grounds only. The proposal becomes a **dual-source, zero-cost, post-session model using OpenF1 (provisional) and Jolpica (reconciled)**, validated by an unauthenticated feasibility check (§8) and specified as a synchronisation design (§10). Two provider-specific inquiries replace the single Sportmonks draft. |
 
 ---
 
@@ -29,10 +36,15 @@ any plan, accept any terms, request or handle any API key, or call any
 authenticated provider endpoint. No production adapter exists and none is
 authorized by this document.
 
+A small number of **unauthenticated public `GET` requests** was made under the
+explicit authorisation in §8.1, solely to validate the proposed data mapping. No
+credential, cookie or token was used; no paid or live endpoint was touched; no
+image was downloaded; no response was retained inside the repository.
+
 Everything below is evidence and analysis assembled to make a later decision
 possible. It is not legal advice. The provider question is a documented product
-and licensing gate that requires written provider confirmation and, where the
-answers remain ambiguous, professional legal review.
+and licensing gate that requires written confirmation from each project and,
+where the answers remain ambiguous, professional legal review.
 
 ---
 
@@ -43,84 +55,128 @@ answers remain ambiguous, professional legal review.
 - Reading the governing GridView documentation and the existing Edge API
   provider abstraction.
 - Researching current public provider documentation, pricing and terms.
+- A minimal unauthenticated feasibility check against public endpoints.
 - Classifying each intended use against published evidence.
+- Designing, on paper, a dual-source synchronisation policy.
 - Estimating GridView's expected upstream request volume.
-- Recommending a single candidate for a **written legal inquiry**.
-- Drafting, but not sending, that inquiry.
+- Recommending candidates for **written legal inquiry**.
+- Drafting, but not sending, those inquiries.
 
 ### 1.2 Out of scope
 
-- Any purchase, account, trial, credential or provider contact.
+- Any purchase, account, trial, credential, sponsorship or provider contact.
 - Any production provider adapter, provider DTO, mapping or authentication code.
 - Any change to Worker configuration, secrets, routes, cron schedules or
   environment variables.
-- Any media, image or logo acquisition or publication.
+- Any media, image, headshot or logo acquisition or publication.
+- Self-hosting of either project (contingency only, §12.5).
 
 ---
 
-## 2. Intended architecture being assessed
+## 2. Product constraints
+
+These constraints are **non-negotiable inputs** to the evaluation. They were
+recorded after version 0.1 and they are what supersede its recommendation.
+
+| # | Constraint |
+|---|---|
+| C1 | **Provider budget for v1 is EUR 0.** No paid data plan, no sponsorship tier, no supporter tier. |
+| C2 | GridView **remains free** for as long as it relies on non-commercial data sources. |
+| C3 | **No monetisation of any kind**: no advertising, no in-app purchases, no paid subscriptions, no affiliate links, no sponsorship, no other direct revenue. |
+| C4 | Any future monetisation requires **either** explicit written commercial permission from every affected provider, **or** migration to a provider whose licence permits it. Monetisation reopens the provider decision entirely. |
+| C5 | GridView **does not need live telemetry or live timing** during a session. |
+| C6 | Freshness objective for **provisional** session results, points and standings: **30-60 minutes after a session ends**. |
+| C7 | Freshness objective for **reconciled / final** data: **within 24 hours**, subject to provider availability. |
+| C8 | **Reliability and replaceability matter more** than obtaining updates during a session. |
+
+### 2.1 Two clarifications that must not be misread
+
+**C6 and C7 are GridView objectives, not provider guarantees.** Neither OpenF1
+nor Jolpica publishes a service-level agreement, an uptime commitment or a
+correctness guarantee, and both explicitly disclaim them. The 30-60 minute and
+24-hour figures are targets GridView aims at and must degrade gracefully from.
+They must never be described, in documentation or in the product, as an SLA, a
+guarantee, or a provider commitment.
+
+**Removing advertising does not settle the licensing questions.** C3 makes the
+NonCommercial question *more favourable* than it was in version 0.1 — but it
+does not answer it, and it does not touch the **ShareAlike** obligation or the
+question of whether serving normalized data through GridView's own public API is
+permitted redistribution. Those remain open for both candidates (§7, §13.1).
+
+**Advertising is not being removed by this decision.** It was already absent
+from v1 before this pass: [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)
+records that GridView ships with no advertising SDK, no consent SDK, no ad unit
+and no ad request, and the repository confirms it. C3 restates and hardens an
+existing state; it is not a new code removal.
+
+---
+
+## 3. Intended architecture being assessed
 
 The legal questions in this document are about **this specific architecture**,
-not about "using an F1 API" in the abstract. Providers are being asked to
+not about "using an F1 API" in the abstract. Both projects are being asked to
 confirm the architecture as described here.
 
 ```text
-                    Cloudflare (server side)
-  Provider  <--(1)--  GridView sync job  --(2)-->  Workers KV snapshots
-     ^                (Cron Trigger)                        |
-     |                                                     (3)
-  API key held only as a Worker secret                      v
-                                          GridView public API (/v1/...)
-                                                            |
-                                                           (4)
-                                                            v
-                                          GridView Android app (Google Play)
+                        Cloudflare (server side)
+  OpenF1   --(1a)-->                                     no credential is
+  Jolpica  --(1b)-->  GridView sync job  --(2)-->  KV    used or held by
+                      (Cron Trigger)                |    either adapter
+                                                   (3)
+                                                    v
+                                    GridView public API (/v1/...)
+                                                    |
+                                                   (4)
+                                                    v
+                                    GridView Android app (Google Play, free)
 ```
 
-1. **Scheduled, server-side fetch only.** A Cloudflare Cron Trigger invokes the
-   Worker's scheduled handler, which calls the provider only for synchronization
-   jobs that are due. The provider is never called from the mobile application.
-2. **Validate, normalize, map.** Provider responses are validated, normalized
-   into GridView's own domain model, and mapped from provider identifiers to
+1. **Scheduled, server-side fetch only, after the session has ended.**
+   - (1a) **OpenF1** supplies *provisional* post-session data, fetched only
+     after its free historical window opens.
+   - (1b) **Jolpica** supplies *complete metadata, historical coverage and
+     reconciled final results*.
+   - Neither project is ever called from the mobile application.
+2. **Validate, normalize, map.** Responses are validated, normalized into
+   GridView's own domain model, and mapped from provider identifiers to
    GridView's own stable public identifiers
    ([`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §8). No provider
    DTO reaches the public contract.
 3. **Serve normalized snapshots.** The public GridView API serves stored,
-   normalized snapshots. Public read traffic performs **zero** upstream provider
-   requests
-   ([`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §14.2, enforced by
-   the test `public reads consume no provider quota`).
+   normalized snapshots. Public read traffic performs **zero** upstream requests
+   ([`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §14.2, enforced
+   by the test `public reads consume no provider quota`).
 4. **Publicly distributed app.** The Android client is intended for public
-   distribution on Google Play, free of charge.
+   distribution on Google Play, free of charge, with no monetisation (C1-C3).
 
 Additional properties material to the assessment:
 
 | Property | Statement |
 |---|---|
-| Credentials | The provider API key lives only in server-side Worker secrets. It is never shipped in the mobile application, never returned by the public API, and never logged. |
-| Upstream volume | Independent of the number of app users or app requests. Driven only by the synchronization schedule. |
-| Advertising in v1 | **None.** See [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md). No advertising SDK, no consent SDK, no ad unit, no ad request. |
-| Future advertising | **Not assumed permitted.** Treated as a separate question requiring its own agreement and its own architecture decision. |
+| Credentials | Neither candidate requires authentication for the access GridView needs. No API key would exist, therefore none can be shipped, logged or leaked. |
+| Upstream volume | Independent of the number of app users or app requests. Driven only by the session calendar. |
+| Live data | **Never fetched.** GridView does not call OpenF1 inside its live window, and neither project is used for live timing or telemetry. |
+| Monetisation | None, now or while these sources are used (C1-C4). |
 | Historical retention | Intended, if permitted. Snapshots are versioned and retained. |
-| Provider images and logos | **Not used.** GridView assumes no image, logo or media rights arrive with a data subscription. Any media follows GridView's own separate rights and publication process ([`GridView_Media.md`](GridView_Media.md)). |
-| Attribution | Will be displayed wherever contractually required. |
-| Automated tests | Continue to use the mock provider and sanitized fixtures. The mock provider is preserved permanently. |
+| Provider images and logos | **Not used.** Both projects expose media URLs pointing at third-party hosts; none is treated as cleared. See §7.4. |
+| Attribution | Will be displayed in-app and in documentation, in whatever form each project requires. |
+| Open-sourcing | GridView may later publish adapter code. Asked about explicitly, because ShareAlike may bear on it. |
+| Automated tests | Continue to use the mock provider and small derived fixtures. The mock provider is preserved permanently. |
 
-GridView must **not** be described to a provider as a private prototype. The
+GridView must **not** be described to either project as a private prototype. The
 intended public Google Play distribution and the server-side redistribution of
 normalized data through GridView's own public API are the material facts.
 
 ---
 
-## 3. Current Phase 9 requirements
+## 4. Current Phase 9 requirements
 
 Extracted from
 [`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md) §14 and
 [`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §3, §7, §14-§18.
 
-### 3.1 Legal gate (Implementation Plan §14.2, Backend Scheme §3.2)
-
-Before production activation, GridView must obtain written confirmation of:
+### 4.1 Legal gate
 
 | # | Requirement | Source |
 |---|---|---|
@@ -134,14 +190,17 @@ Before production activation, GridView must obtain written confirmation of:
 | L8 | Image and logo exclusions | Plan §14.2, Scheme §3.2 |
 | L9 | Approval recorded in project documentation | Plan §14.2 |
 
-If approval is not obtained, Plan §14.2 requires selecting another provider
-rather than bypassing the requirement.
+Under the zero-cost model, **L1 has no counterparty in the ordinary sense**:
+there is no subscription and no commercial agreement to sign. What replaces it
+is a written statement from each project that the use is permitted under its
+published licence. That is weaker than a contract and is recorded as such
+(§14, R2).
 
-### 3.2 Technical and operational requirements
+### 4.2 Technical and operational requirements
 
 | # | Requirement | Source |
 |---|---|---|
-| T1 | Quota and rate-limit capture: daily limit, daily remaining, per-minute limit, per-minute remaining, usage by job type | Scheme §16 |
+| T1 | Quota and rate-limit capture | Scheme §16 |
 | T2 | Provider failure preserves the previous snapshot | Plan §14.8, Scheme §18.1 |
 | T3 | Public traffic remains independent of provider request volume | Plan §14.5, Scheme §14.2 |
 | T4 | No provider DTO leaks into the GridView public contract | Plan §14.8, Scheme §7.1 |
@@ -150,783 +209,1034 @@ rather than bypassing the requirement.
 | T7 | Provider IDs must not become GridView public IDs | Scheme §7.2, §8.1 |
 | T8 | Reserve quota for manual recovery; alert on quota thresholds | Scheme §16.1 |
 
-### 3.3 Product reconciliation
+**T1 is not satisfiable as written by either candidate.** Neither exposes
+quota headers (§8.6). Daily and per-minute limits must be modelled locally from
+published limits rather than read from responses.
 
-Two documented statements are now in tension and are reconciled here.
+### 4.3 Product reconciliation
 
-- [`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md) §14.2
-  requires confirming **"ad-supported use"**, and
-  [`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §2, §3.1 and §7.3
-  repeatedly qualify provider suitability against an **"ad-supported GridView
-  release"**. Those statements predate
-  [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md).
-- [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md) (Accepted,
-  2026-08-16) decided that **advertising is not retained for v1**.
+[`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md) §14.2
+requires confirming **"ad-supported use"**, and
+[`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §2, §3.1 and §7.3
+assess candidates against an **"ad-supported GridView release"**. Those
+statements predate [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)
+and are now doubly stale: v1 has no advertising, and under C3 v1 has no
+monetisation of any kind.
 
-**Reconciled position for Phase 9.** The legal gate is assessed against the
-product as it will actually ship:
-
-1. GridView v1 contains **no advertising**. Any provider answer that is
-   conditional on advertising must be read against a v1 with none.
-2. GridView v1 is nevertheless intended for **public Google Play distribution**
-   and does **redistribute normalized data** through its own public API. Absence
-   of advertising does not by itself make the use non-commercial, and this
-   document does not assume that it does.
-3. A **possible future advertising model is a separate question**. It is not
-   assumed permitted, it is asked about separately in the outreach draft, and it
-   would require its own agreement and its own ADR superseding ADR 0018.
-
-The §14.2 wording "Confirm ad-supported use" is therefore treated as **"confirm
-the intended use, which for v1 is not ad-supported, and separately establish
-whether advertising would change the answer."** The underlying requirement is
-unchanged; only the factual premise is corrected.
+**Reconciled position.** The gate is assessed against a free, unmonetised,
+publicly distributed application that redistributes normalized data through its
+own public API. The §14.2 wording is read as *"confirm the intended use, which
+for v1 is free and unmonetised, and separately establish whether any future
+monetisation would change the answer."*
 
 ---
 
-## 4. Evidence classification method
+## 5. Evidence classification method
 
 Every legal-use question is classified as exactly one of:
 
 | Classification | Meaning |
 |---|---|
-| `Explicitly permitted` | An official provider source states the use is allowed. |
-| `Explicitly prohibited` | An official provider source states the use is not allowed. |
-| `Written permission required` | An official provider source states the use requires contacting the provider or obtaining consent. |
+| `Explicitly permitted` | An official project source states the use is allowed. |
+| `Explicitly prohibited` | An official project source states the use is not allowed. |
+| `Written permission required` | An official project source states the use requires contacting the project or obtaining consent. |
 | `Not stated or ambiguous` | No official source addresses it, or official sources are unclear or conflicting. |
-| `Not applicable` | The question does not arise for this provider or this use. |
+| `Not applicable` | The question does not arise for this project or this use. |
 
 **Silence is never permission.** None of the following is treated as evidence
 that GridView may publicly redistribute normalized Formula 1 data:
 
-- a paid plan; an API key; an available endpoint; a public API; a commercial
-  pricing tier; a free trial; a request that succeeds.
+- a free public API; an endpoint that responds; a request that succeeds; the
+  absence of authentication; an open-source repository; a permissive **code**
+  licence; a paid tier existing; a free tier existing.
+
+An open-source server implementation in particular **does not** grant rights to
+the underlying Formula 1 data it serves. Code licence and data licence are
+separate questions and are treated separately throughout.
 
 Where official sources conflict, the contradiction is recorded rather than
 resolved in the convenient direction.
 
-### 4.1 Source-quality note for this pass
-
-Sources are ranked as:
-
-- **Primary** - fetched directly from the provider's own documentation, terms,
-  pricing or API on the access date, with the URL and date recorded below.
-- **Unreachable** - the official source exists but could not be retrieved by any
-  method available in this pass. Nothing is asserted from it.
-
-No blog, affiliate comparison, scraped summary or search-result snippet is used
-for any decisive claim in this document.
-
 ---
 
-## 5. Candidates evaluated
+## 6. Candidates
 
-| Provider | Considered because | Evidence status |
+| Provider | Role under the proposal | Evidence status |
 |---|---|---|
-| API-Sports Formula 1 | The repository's incumbent technical candidate (Backend Scheme §2, §7.2) | **Official sources unreachable** - see §5.1 |
-| OpenF1 | Named in Backend Scheme §3.1, §7.3 | Primary sources retrieved |
-| Jolpica F1 | Named in Backend Scheme §3.1, §7.3 | Primary sources retrieved |
-| Sportmonks Motorsport / Formula 1 | Added this pass: current official documentation, dedicated F1 product covering the v1 resource set, publicly published terms and pricing, and a clear commercial contact path | Primary sources retrieved |
+| **OpenF1** | **Proposed provisional fast source** — post-session results, points and championship state, fetched after its free historical window opens | Primary sources retrieved; feasibility-checked |
+| **Jolpica F1** | **Proposed complete and reconciled source** — season metadata, calendar, drivers, constructors, circuits, historical coverage, reconciliation and final results | Primary sources retrieved; feasibility-checked |
+| Sportmonks | **Rejected for v1 — budget only** (§6.1) | Primary sources retrieved in v0.1; retained as evidence |
+| API-Sports | **Unselected** — free availability, terms and redistribution permission all unverified (§6.2) | Official sources unreachable |
 
-Sportmonks was added under the §5 admission criteria: it has current official
-documentation, a plausible technical fit (sessions, classifications, driver and
-constructor standings, seasons), publicly available terms, and coverage broad
-enough to merit comparison.
+### 6.1 Sportmonks: rejected for v1, on budget grounds only
 
-Enterprise feeds (Sportradar, SportsDataIO) were **not** evaluated in depth.
-Both are quote-based rather than publicly priced, which makes a comparison
-impossible without commercial contact, and commercial contact is outside this
-pass.
+Sportmonks was the preferred inquiry candidate in version 0.1. It is rejected
+for v1 because its lowest published Formula 1 tier is EUR 69-79 per month
+(§9.4), which conflicts irreconcilably with C1 (budget EUR 0).
 
-### 5.1 API-Sports: official sources could not be retrieved
+**This is not a finding that Sportmonks is technically or legally unsuitable.**
+The opposite is closer to true, and the record should be preserved accurately:
+
+- Its terms are the only ones among the four that **affirmatively permit
+  commercial use** and state that "distribution, transfer, and storage" of the
+  data is allowed.
+- Its media position — logos and photos are the copyright of their owners and
+  the customer must arrange proof of intellectual property and attribute them —
+  already matches GridView's own documented assumption.
+- Its data coverage includes driver and constructor standings, sessions and
+  classifications.
+
+Its one decisive legal ambiguity (permitted distribution versus prohibited
+resale) and its pricing conflict were never resolved, because it was never
+contacted.
+
+**Sportmonks is therefore the natural first candidate to revisit if C1 or C3 is
+ever relaxed** — for example if monetisation is reconsidered under C4. That is
+recorded rather than discarded.
+
+### 6.2 API-Sports: still unselected and still unverified
 
 Every official API-Sports host returned **HTTP 403** to every retrieval method
-available in this pass, on 2026-08-19:
+available on 2026-08-19: `api-sports.io` (root, `/terms`, `/pricing`,
+`/documentation/formula-1/v1`, `/sports/formula-1`),
+`www.api-football.com/pricing`, `dashboard.api-football.com` and
+`v1.formula-1.api-sports.io`. The responses are bot mitigation, not
+authentication; nothing was logged into and no credential was presented.
 
-| URL | Result |
-|---|---|
-| `https://api-sports.io/` | HTTP 403 |
-| `https://api-sports.io/terms` | HTTP 403 |
-| `https://api-sports.io/pricing` | HTTP 403 |
-| `https://api-sports.io/sports/formula-1` | HTTP 403 |
-| `https://api-sports.io/documentation/formula-1/v1` | HTTP 403 |
-| `https://www.api-football.com/pricing` | HTTP 403 |
-| `https://dashboard.api-football.com/` | HTTP 403 |
-| `https://v1.formula-1.api-sports.io/status` | HTTP 403 |
-
-The interactive browser channel was also unavailable in this session. The 403
-responses are bot-mitigation, not authentication: nothing was logged into, and
-no credential was presented or held.
-
-**Consequence.** No current API-Sports statement about terms, licensing,
-redistribution, pricing, quotas or endpoints is asserted anywhere in this
-document. Every API-Sports row in §6 and §7 is
-`Not stated or ambiguous - unverified (official source unreachable 2026-08-19)`.
+Consequently **no API-Sports statement is asserted anywhere in this document**,
+including any statement about whether a free tier exists, what it permits, or
+whether redistribution is allowed. It stays unselected until someone reads the
+terms and pricing in an ordinary browser.
 
 **This also invalidates the repository's existing API-Sports claims as
 evidence.** [`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §3.1
-asserts six specific things about API-Sports terms ("Direct resale of its data
-is prohibited", "Users are responsible for obtaining any rights required by
-leagues...", and so on) and §7.2 asserts six technical properties. None of these
-statements carries a source URL or an access date, and none could be verified in
-this pass. They must be treated as **unverified legacy assertions**, not as
-findings. This is recorded in §11 as a risk and flagged in the Backend Scheme
-itself.
-
-Retrieving the API-Sports terms and pricing requires a person opening the site
-in an ordinary browser. That is listed in §12 as a required user action.
+asserts six specific things about API-Sports terms and §7.2 asserts six
+technical properties. None carries a source URL or an access date and none could
+be verified. They are **unverified legacy assertions**, not findings, and are
+flagged as such in the Backend Scheme itself.
 
 ---
 
-## 6. Legal-evidence classification
+## 7. Legal-evidence classification
 
-Classifications are per provider, per intended use, against the architecture in
-§2. Sources are listed in §10.
+Classifications are per project, per intended use, against the architecture in
+§3 and the constraints in §2. Sources are listed in §13.
 
-### 6.1 API-Sports Formula 1
-
-| # | Intended use | Classification |
-|---|---|---|
-| 1 | Public Google Play distribution | `Not stated or ambiguous` - unverified, source unreachable |
-| 2 | Non-advertising v1 | `Not stated or ambiguous` - unverified, source unreachable |
-| 3 | Future advertising or monetization | `Not stated or ambiguous` - unverified, source unreachable |
-| 4 | Server-side caching of normalized data | `Not stated or ambiguous` - unverified, source unreachable |
-| 5 | Normalization and derived fields | `Not stated or ambiguous` - unverified, source unreachable |
-| 6 | Public redistribution via GridView's own API | `Not stated or ambiguous` - unverified, source unreachable |
-| 7 | Historical retention | `Not stated or ambiguous` - unverified, source unreachable |
-| 8 | Display of standings, results, schedules | `Not stated or ambiguous` - unverified, source unreachable |
-| 9 | Attribution requirement | `Not stated or ambiguous` - unverified, source unreachable |
-| 10 | Termination and deletion obligations | `Not stated or ambiguous` - unverified, source unreachable |
-| 11 | Usage-reporting requirements | `Not stated or ambiguous` - unverified, source unreachable |
-| 12 | Images and logos | `Not stated or ambiguous` - unverified, source unreachable |
-| 13 | Geographic restrictions | `Not stated or ambiguous` - unverified, source unreachable |
-| 14 | App-store distribution | `Not stated or ambiguous` - unverified, source unreachable |
-| 15 | Formula 1 rights remain the customer's responsibility | `Not stated or ambiguous` - unverified, source unreachable |
-
-### 6.2 OpenF1
+### 7.1 OpenF1
 
 | # | Intended use | Classification | Basis |
 |---|---|---|---|
-| 1 | Public Google Play distribution | `Not stated or ambiguous` | Distribution channel is not addressed; the commercial character of the use is what the terms turn on. |
-| 2 | Non-advertising v1 | `Not stated or ambiguous` | Stated intended use is "educational purposes, personal learning projects, research, and non-commercial fan engagement". Whether a free, ad-free, publicly distributed app qualifies as non-commercial is not stated. |
-| 3 | Future advertising or monetization | `Explicitly prohibited` without a separate licence | The licence is CC BY-NC-SA 4.0; NC excludes use primarily directed toward commercial advantage or monetary compensation. `Written permission required` to proceed at all. |
+| 1 | Public Google Play distribution | `Not stated or ambiguous` | Distribution channel is not addressed; the commercial character of the use is what the licence turns on. |
+| 2 | Free, unmonetised v1 | `Not stated or ambiguous`, **leaning permitted** | Stated intended use is "educational purposes, personal learning projects, research, and non-commercial fan engagement". Under C1-C3 GridView is unmonetised, which sits far closer to that description than v0.1's position did — but the project does not state that a publicly distributed free app qualifies, and silence is not permission. |
+| 3 | Any future monetisation | `Explicitly prohibited` without a separate licence | CC BY-NC-SA 4.0; NC excludes use primarily directed toward commercial advantage or monetary compensation. C4 already treats this as reopening the decision. |
 | 4 | Server-side caching of normalized data | `Not stated or ambiguous` | Not addressed. |
-| 5 | Normalization and derived fields | `Not stated or ambiguous` | Not addressed for the act itself, but the **ShareAlike** term applies to the result: adaptations must be shared under the same licence, which conflicts with GridView serving them under its own terms. |
-| 6 | Public redistribution via GridView's own API | `Written permission required` | Redistribution of an adaptation is constrained by BY-NC-SA. Official text directs "other use cases" to contact to "discuss appropriate licensing". |
-| 7 | Historical retention | `Not stated or ambiguous` | Not addressed; historical coverage begins at the 2023 season. |
-| 8 | Display of standings, results, schedules | `Not stated or ambiguous` | Permitted within the NC licence; the NC status of GridView's use is the open question. |
-| 9 | Attribution requirement | `Explicitly permitted`, with attribution **required** | BY term of CC BY-NC-SA 4.0. |
-| 10 | Termination and deletion obligations | `Not stated or ambiguous` | Not addressed. |
-| 11 | Usage-reporting requirements | `Not applicable` | No account or reporting is required for the free tier. |
-| 12 | Images and logos | `Not applicable` | OpenF1 supplies no images or logos. It explicitly disclaims ownership of Formula 1 trademarks. |
-| 13 | Geographic restrictions | `Not stated or ambiguous` | Not addressed. |
-| 14 | App-store distribution | `Not stated or ambiguous` | Not addressed. |
-| 15 | Formula 1 rights remain the customer's responsibility | `Explicitly` so | The project states it is unofficial and does not claim ownership of Formula 1 data, trademarks or broadcasts. |
+| 5 | Normalization and derived fields | `Not stated or ambiguous` | Not addressed for the act itself, but **ShareAlike** applies to the result: adaptations must be shared under the same licence. |
+| 6 | Public redistribution via GridView's own API | `Written permission required` | **Decisive.** Redistribution of an adaptation is constrained by BY-NC-SA, and official text directs "other use cases" to contact the project to "discuss appropriate licensing". |
+| 7 | Historical retention | `Not stated or ambiguous` | Not addressed. Historical coverage itself begins at 2023. |
+| 8 | Retention if access later ends | `Not stated or ambiguous` | Not addressed. |
+| 9 | Display of results, points and championship state | `Not stated or ambiguous` | Permitted within the NC licence; the NC status of GridView's use is the open question. |
+| 10 | Attribution requirement | `Explicitly permitted`, with attribution **required** | BY term of CC BY-NC-SA 4.0. Exact wording and placement not specified — asked in Appendix A. |
+| 11 | Small derived test fixtures in a public repository | `Not stated or ambiguous` | Not addressed. Asked in Appendix A. |
+| 12 | Open-sourcing GridView adapter code | `Not stated or ambiguous` | The repository's own LICENSE is CC BY-NC-SA 4.0, which is a content licence rather than a software licence; what that implies for a downstream adapter is unclear. Asked in Appendix A. |
+| 13 | Termination and deletion obligations | `Not stated or ambiguous` | Not addressed. |
+| 14 | Usage-reporting requirements | `Not applicable` | No account and no reporting for free historical access. |
+| 15 | Images, headshots and logos | `Explicitly prohibited` to treat as cleared | The project states it is unofficial and does not claim ownership of Formula 1 data, trademarks or broadcasts. Media URLs it exposes point at `media.formula1.com` (§7.4). |
+| 16 | Geographic restrictions | `Not stated or ambiguous` | Not addressed. |
+| 17 | Formula 1 rights remain GridView's responsibility | `Explicitly` so | Unofficial, community-operated, not associated with or endorsed by Formula One World Championship Limited, and claiming no ownership of F1 data, trademarks or broadcasts. |
 
-### 6.3 Jolpica F1
+### 7.2 Jolpica F1
 
 | # | Intended use | Classification | Basis |
 |---|---|---|---|
 | 1 | Public Google Play distribution | `Not stated or ambiguous` | Not addressed; the commercial character governs. |
-| 2 | Non-advertising v1 | `Not stated or ambiguous` | "The API is freely available for non-commercial use." Whether a free, ad-free, publicly distributed app is non-commercial is not stated. |
-| 3 | Future advertising or monetization | `Written permission required` | "For commercial usage, please contact us via admin@jolpi.ca". |
-| 4 | Server-side caching of normalized data | `Explicitly permitted` and encouraged | The rate-limit guide's first recommendation is "Implement a cache to store results." |
+| 2 | Free, unmonetised v1 | `Not stated or ambiguous`, **leaning permitted** | "The API is freely available for **non-commercial use**." Under C1-C3 GridView is unmonetised. The project does not state that a publicly distributed free app qualifies. |
+| 3 | Any future monetisation | `Written permission required` | "For commercial usage, please contact us via `admin@jolpi.ca`". |
+| 4 | Server-side caching of normalized data | `Explicitly permitted` and encouraged | The rate-limit guide's first recommendation for higher throughput is "Implement a cache to store results." |
 | 5 | Normalization and derived fields | `Not stated or ambiguous` | Not addressed for the act itself; **ShareAlike** (CC BY-NC-SA 4.0) applies to the result. |
-| 6 | Public redistribution via GridView's own API | `Written permission required` | Constrained by BY-NC-SA; commercial usage is directed to the contact address. |
+| 6 | Public redistribution via GridView's own API | `Written permission required` | **Decisive.** Constrained by BY-NC-SA; commercial usage is directed to the contact address, and whether GridView's API is "commercial" is exactly what is unclear. |
 | 7 | Historical retention | `Not stated or ambiguous` | Not addressed. Coverage extends to 1950. |
-| 8 | Display of standings, results, schedules | `Not stated or ambiguous` | Permitted within the NC licence; NC status is the open question. |
-| 9 | Attribution requirement | `Explicitly permitted`, with attribution **required** | BY term of CC BY-NC-SA 4.0. |
-| 10 | Termination and deletion obligations | `Not stated or ambiguous` | The terms reserve the right to block for abuse and to change the terms; they do not state deletion obligations. |
-| 11 | Usage-reporting requirements | `Explicitly` required in a limited form | A custom `User-Agent` identifying the application and version is mandatory. |
-| 12 | Images and logos | `Not applicable` | Jolpica supplies no images or logos. |
-| 13 | Geographic restrictions | `Not stated or ambiguous` | Not addressed. |
-| 14 | App-store distribution | `Not stated or ambiguous` | Not addressed. |
-| 15 | Formula 1 rights remain the customer's responsibility | `Not stated or ambiguous` | Not addressed directly; the terms disclaim all warranties and liability. |
+| 8 | Retention if access later ends | `Not stated or ambiguous` | Not addressed. Asked in Appendix B. |
+| 9 | Display of standings, results, schedules | `Not stated or ambiguous` | Permitted within the NC licence; NC status is the open question. |
+| 10 | Attribution requirement | `Explicitly permitted`, with attribution **required** | BY term of CC BY-NC-SA 4.0; the terms link to the licence deed. Exact wording and placement not specified — asked in Appendix B. |
+| 11 | Small derived test fixtures in a public repository | `Not stated or ambiguous` | Not addressed. Asked in Appendix B. |
+| 12 | Open-sourcing GridView adapter code | `Not stated or ambiguous` | The **code** repository is Apache-2.0 while the **data** is CC BY-NC-SA 4.0 — a clean separation that makes the question about adapted data, not about code. Asked in Appendix B. |
+| 13 | Termination and deletion obligations | `Not stated or ambiguous` | The terms reserve the right to block for abuse and to change the terms; deletion obligations are not stated. |
+| 14 | Usage-reporting requirements | `Explicitly` required, in a limited form | A custom `User-Agent` identifying the application and version is mandatory. |
+| 15 | Images, headshots and logos | `Not applicable` | Jolpica supplies no images or logos — only Wikipedia article URLs (§7.4). |
+| 16 | Geographic restrictions | `Not stated or ambiguous` | Not addressed. |
+| 17 | Formula 1 rights remain GridView's responsibility | `Not stated or ambiguous` | Not addressed directly; the terms disclaim all warranties and liability. |
+| 18 | Database dumps under the free tier | `Explicitly permitted` for non-commercial use | Free dumps are published on a delay and require no authentication; the **Supporter** tier, which licenses dumps for commercial use, requires payment and is excluded by C1. |
 
-**Additional Jolpica risk.** The terms state the project is volunteer-run and
-donation-supported, and explicitly **do not guarantee uptime, availability or
-correctness**, with use "entirely at your own risk". The rate-limit guide
-further states that current limits "**will decrease** in the future".
+### 7.3 Cross-provider summary
 
-### 6.4 Sportmonks
+| Intended use | OpenF1 | Jolpica | Sportmonks (rejected, C1) | API-Sports |
+|---|---|---|---|---|
+| Free unmonetised public app | ambiguous, leaning permitted | ambiguous, leaning permitted | permitted | unverified |
+| Server-side caching | ambiguous | **permitted** | permitted | unverified |
+| Public redistribution via GridView's API | **written permission required** | **written permission required** | ambiguous | unverified |
+| Future monetisation | prohibited without licence | written permission required | permitted in principle | unverified |
+| Historical retention | ambiguous | ambiguous | ambiguous | unverified |
+| Attribution | required | required | required for media | unverified |
+| Images and logos | must not be treated as cleared | not applicable | excluded, own rights required | unverified |
+| F1 competition rights are GridView's | **yes, explicitly** | ambiguous | leaning yes | unverified |
 
-| # | Intended use | Classification | Basis |
+**No cell reads `Explicitly permitted` for public redistribution through
+GridView's own API. That is the gate, and it remains open for both proposed
+sources.** Removing monetisation improved the NonCommercial position; it did not
+close the gate.
+
+### 7.4 Media: nothing from either source is cleared
+
+Both projects expose URLs that look like usable media and are not.
+
+| Field | Source | Host | Treatment |
 |---|---|---|---|
-| 1 | Public Google Play distribution | `Not stated or ambiguous` | No clause addresses app-store distribution specifically. |
-| 2 | Non-advertising v1 | `Explicitly permitted` | The service is offered for building "apps, websites, games". Non-commercial use is a subset of what is allowed. |
-| 3 | Future advertising or monetization | `Explicitly permitted` in principle | Creating something from the data and "earning money from your creation" is permitted. This does **not** extend to reselling the data itself. |
-| 4 | Server-side caching of normalized data | `Explicitly permitted` | "Distribution, transfer, and storage of data provided by our services is allowed". |
-| 5 | Normalization and derived fields | `Explicitly permitted` | Building a creation on the data is the stated purpose. |
-| 6 | Public redistribution via GridView's own API | **`Not stated or ambiguous` - this is the decisive question** | "Distribution, transfer, and storage ... is allowed" appears to permit it; "reselling the product is forbidden without our consent" and "you cannot directly sell the data we provide" appear to constrain it. GridView does not sell data, but serving normalized data through its own public API sits between the two clauses. The terms invite exactly this question: users uncertain about compliance should "explain your plan and ask if this is allowed." |
-| 7 | Historical retention | `Not stated or ambiguous` | Only addressed for tournament packages, where removing data after a tournament concludes is described as the customer's responsibility if access is no longer required. General snapshot retention is not addressed. |
-| 8 | Display of standings, results, schedules | `Explicitly permitted` | Within the permitted app use. |
-| 9 | Attribution requirement | `Explicitly` required **for logos and photos** | "Clearly attribute the logos and photos to their respective owners." Attribution for data is `Not stated or ambiguous`. |
-| 10 | Termination and deletion obligations | Partially `Explicitly` stated | Accounts may be terminated immediately for direct violation of the terms. Post-termination deletion of cached data is `Not stated or ambiguous`. |
-| 11 | Usage-reporting requirements | `Not stated or ambiguous` | Not addressed. |
-| 12 | Images and logos | `Explicitly prohibited` without separate rights | "All logos and profile photos are copyrighted by their legal owner. To display these types of content in your app or website, you have to arrange proof of intellectual property yourself." This matches GridView's own position exactly: no media rights are assumed to arrive with the data subscription. |
-| 13 | Geographic restrictions | `Not stated or ambiguous` | Not addressed. |
-| 14 | App-store distribution | `Not stated or ambiguous` | Not addressed. |
-| 15 | Formula 1 rights remain the customer's responsibility | `Not stated or ambiguous`, leaning to yes | The terms disclaim responsibility for losses and, for media, place the IP burden on the customer. They do not make a general statement about competition-data rights. |
+| `headshot_url` on `drivers` | OpenF1 | `media.formula1.com` | **Never fetched, never stored, never displayed.** |
+| `circuit_image` on `meetings` | OpenF1 | `media.formula1.com` | Same. |
+| `country_flag` on `meetings` | OpenF1 | `media.formula1.com` | Same. |
+| `circuit_info_url` on `meetings` | OpenF1 | `api.multiviewer.app` | Third-party API, not a GridView dependency. Not used. |
+| `url` on drivers, constructors, circuits, races | Jolpica | `en.wikipedia.org` | Article links, not media. Not treated as image rights; not fetched. |
 
-### 6.5 Cross-provider summary
-
-| Intended use | API-Sports | OpenF1 | Jolpica | Sportmonks |
-|---|---|---|---|---|
-| Non-advertising v1 public app | unverified | ambiguous | ambiguous | permitted |
-| Server-side caching | unverified | ambiguous | permitted | permitted |
-| Public redistribution via GridView's API | unverified | written permission | written permission | **ambiguous - decisive question** |
-| Future advertising | unverified | prohibited without licence | written permission | permitted in principle |
-| Historical retention | unverified | ambiguous | ambiguous | ambiguous |
-| Attribution | unverified | required | required | required for media |
-| Images and logos | unverified | not applicable | not applicable | excluded, own rights required |
-| F1 competition rights are the customer's | unverified | yes | ambiguous | leaning yes |
-
-**No cell in this table reads `Explicitly permitted` for public redistribution
-through GridView's own API. That is the gate, and it is open for all four
-candidates.**
+An image URL being reachable through a data API establishes nothing about the
+right to redistribute the image. GridView's media continues to follow its own
+separate rights and publication process
+([`GridView_Media.md`](GridView_Media.md)). **No media was downloaded during
+this pass.**
 
 ---
 
-## 7. Technical coverage matrix
+## 8. Feasibility check
 
-`unverified` means the capability could not be confirmed from an official source
-in this pass. It is **not** inferred from endpoint names.
+### 8.1 Authorisation and restrictions observed
 
-| Capability | API-Sports | OpenF1 | Jolpica | Sportmonks |
-|---|---|---|---|---|
-| Seasons | unverified | 2023 onward | 1950 onward | available |
-| Calendar and rounds | unverified | via `meetings` / `sessions` | `/races/` with round numbers | fixtures per session |
-| Grand Prix detail | unverified | meeting + session objects | race object with circuit and location | fixture with venue and state |
-| Practice sessions | unverified | yes (`session_type`) | yes (`FirstPractice`, `SecondPractice`, `ThirdPractice`) | yes (practice fixtures) |
-| Qualifying | unverified | yes | yes (`Qualifying`) | yes |
-| Sprint | unverified | yes | yes (`Sprint`, `SprintQualifying`/`SprintShootout`) | yes |
-| Race | unverified | yes | yes | yes |
-| Completed results | unverified | classification data | `/results/` | classification per fixture |
-| Future events without results | unverified | yes - sessions listed ahead of time | yes - races listed with dates and no results | unverified |
-| Postponed events | unverified | unverified | unverified - Ergast schema has no status field | fixture `state` exists; postponed semantics unverified |
-| Cancelled events | unverified | **yes** - `is_cancelled` field on session objects | unverified | fixture `state` exists; cancelled semantics unverified |
-| Driver standings | unverified | championship standings endpoint present | `/{season}/driverstandings/` | `/v3/motorsport/standings/drivers/seasons/{id}` |
-| Constructor standings | unverified | unverified | `/{season}/constructorstandings/` | `/v3/motorsport/standings/teams/seasons/{id}` |
-| Drivers | unverified | yes | `/drivers/` | yes, with official driver photo |
-| Constructors / teams | unverified | yes | `/constructors/` | yes, with constructor crests |
-| Circuits | unverified | circuit key and short name on sessions | `/circuits/` with lat/long and locality | venue on fixture |
-| Mid-season substitutions | unverified | unverified | unverified | unverified |
-| Provisional classifications | unverified | unverified | unverified | unverified |
-| Stable provider identifiers | unverified | integer keys (`session_key`, `meeting_key`, `circuit_key`) | string slugs (`hamilton`, `monza`) | integer IDs |
-| Pagination | unverified | unverified | `limit` (default 30, max 100) and `offset` | `select` and `include`; max 2 nested includes; pagination unverified |
-| Quota headers | unverified | unverified | unverified | unverified |
-| Update timestamps | unverified | `date_start` / `date_end` per session | date and time per session | fixture start time |
-| Time zones | unverified | UTC plus `gmt_offset` | UTC times | unverified |
-| Error formats | unverified | unverified | HTTP 429 with "Request was throttled" | unverified |
-| Response-size controls | unverified | unverified | `limit` parameter | `select` parameter |
-| Rate limits | unverified | 3 req/s, 30 req/min free; 6 req/s, 60 req/min sponsor | 4 req/s burst, 500 req/hour sustained, unauthenticated | 2,000-3,000 calls/hour - **see pricing conflict in §8.5** |
-| Historical depth | unverified | 2023 onward | 1950 onward | unverified |
-| Authentication | unverified | none required (free tier) | none required; custom `User-Agent` mandatory | API token |
+A small number of public `GET` requests was explicitly authorised solely to
+validate the proposed mapping. Every restriction was observed:
 
-### 7.1 Coverage against GridView's v1 resource set
-
-GridView v1 needs: current-season calendar, session schedules, Grand Prix
-detail, results, driver standings, constructor standings, drivers,
-constructors, circuits.
-
-| Provider | Covers the full v1 set? |
+| Restriction | Compliance |
 |---|---|
-| API-Sports | unverified |
-| OpenF1 | **Not demonstrated.** Constructor standings could not be confirmed from an official source, and historical depth starts at 2023. Its strengths (telemetry, radio, weather) are not v1 requirements. |
-| Jolpica | **Yes** - all nine v1 resources are covered by documented endpoints, with session times, sprint support and 1950-onward depth. |
-| Sportmonks | **Yes** for the data set; driver photos and constructor crests are additionally offered but are explicitly excluded from GridView's use under §6.4 row 12. |
+| No account, login, token, key, cookie or authenticated endpoint | No credential of any kind existed or was sent. |
+| No paid or live OpenF1 endpoints | Only free historical endpoints were called. |
+| No requests during an active live-session window | The target session ended **2026-07-26T15:00:00Z**, 24 days before the check at 2026-08-19T18:12Z — far outside the 30-minute live window. The 2026 season was in its summer break; no session was live. |
+| Respect documented public rate limits | Requests were issued sequentially, roughly 25 in total across both projects, against limits of 3/s and 30/min (OpenF1) and 4/s burst and 500/hour (Jolpica). |
+| No images, headshots or logos downloaded or retained | None was requested. |
+| Raw responses kept outside the repository | Stored only in the session scratchpad; nothing was committed. |
+| No personal identifiers or machine-specific paths in documentation | None appears below. |
+| Stop if authentication, payment or permission is indicated | No such response was received; every call returned HTTP 200. |
+
+### 8.2 Target event
+
+The latest safely completed session was selected programmatically as the most
+recent session whose end time was more than 30 minutes in the past:
+
+| Field | Value |
+|---|---|
+| Event | Hungarian Grand Prix 2026 |
+| OpenF1 `meeting_key` | 1291 |
+| OpenF1 `session_key` | 11342 (Race) |
+| Jolpica season / round | 2026 / 11 |
+| Session end | 2026-07-26T15:00:00+00:00 |
+
+### 8.3 OpenF1 — what it can supply
+
+| Requirement | Result | Endpoint and evidence |
+|---|---|---|
+| Meeting identity | **Yes** | `/v1/meetings` — `meeting_key`, `meeting_name`, `meeting_official_name`, `location`, `country_*`, `circuit_key`, `circuit_short_name`, `circuit_type`, `gmt_offset`, `date_start`, `date_end`, `year`, `is_cancelled` |
+| Session identity | **Yes** | `/v1/sessions` — `session_key`, `session_type`, `session_name`, `date_start`, `date_end`, `meeting_key`, `circuit_key`, `gmt_offset`, `year`, `is_cancelled`. 131 sessions returned for 2026, of which 10 carry `is_cancelled = true`. |
+| Drivers | **Yes, with gaps** | `/v1/drivers` — 22 rows for the session. Carries `driver_number`, `full_name`, `first_name`, `last_name`, `name_acronym`, `broadcast_name`, `team_name`, `team_colour`. **No stable driver ID and no stable team ID.** `country_code` was `null` on every row and is documented as deprecated, to be removed at the end of the 2026 season. |
+| Session classification / results | **Yes** | `/v1/session_result` — 22 rows carrying `position`, `driver_number`, `number_of_laps`, `points`, `dnf`, `dns`, `dsq`, `duration`, `gap_to_leader`. Disqualification, retirement and non-start are represented as explicit booleans. |
+| Driver championship state | **Yes (beta)** | `/v1/championship_drivers` — 22 rows carrying `position_start`, `position_current`, `points_start`, `points_current`. Documented as **beta** and **only available for race sessions**. |
+| Team championship state | **Yes (beta)** | `/v1/championship_teams` — 11 rows, same shape keyed by `team_name`. Documented as **beta** and **only available for race sessions**. |
+| Stable identifiers for reconciliation | **Partial** | `meeting_key` and `session_key` are stable integers. Driver identity is `driver_number` only. **Team identity is a display string.** |
+| Update timestamps | **No** | No `updated_at` field on any payload, and no `Last-Modified`, `ETag` or `Cache-Control` response header (§8.6). Reconciliation must use GridView's own fetch time. |
+
+### 8.4 Jolpica — what it can supply
+
+| Requirement | Result | Endpoint and evidence |
+|---|---|---|
+| Season and calendar | **Yes** | `/2026/races/` — 23 races, `MRData.total` 23. Each race carries `season`, `round`, `raceName`, `Circuit` with `Location` (lat, long, locality, country), `date`, UTC `time`, and optional `FirstPractice`, `SecondPractice`, `ThirdPractice`, `Qualifying`, `Sprint`, `SprintQualifying`. |
+| Sprint weekends | **Yes** | Round 2 (Chinese Grand Prix) carries `Sprint` and `SprintQualifying` and omits `SecondPractice`/`ThirdPractice`, correctly modelling the sprint format. |
+| Race results | **Yes** | `/2026/11/results/` — 22 rows with `position`, `positionText`, `points`, `grid`, `laps`, `status`, `Time.millis`, `FastestLap`, plus full `Driver` and `Constructor` objects. |
+| Retirement / DSQ representation | **Yes** | Non-numeric `positionText` distinguishes classification outcomes; the Hungarian GP returned three `R` (Retired) entries with matching `status`. |
+| Sprint results | **Yes** | `/2026/2/sprint/` — 22 rows in the same shape as race results, with sprint points. |
+| Driver standings | **Yes** | `/2026/driverstandings/` — 22 rows at `round` 11 with `position`, `positionText`, `points`, `wins`, full `Driver`, and the driver's `Constructors`. |
+| Constructor standings | **Yes** | `/2026/constructorstandings/` — 11 rows at `round` 11 with `position`, `points`, `wins`, full `Constructor`. |
+| Drivers | **Yes** | `/2026/drivers/` — **31 rows** for 2026, against 22 on the grid at any one race. Strong evidence of substantial mid-season driver churn, which the season-scoped endpoint captures. |
+| Constructors | **Yes** | `/2026/constructors/` — 11 rows with `constructorId`, `name`, `nationality`. |
+| Circuits | **Yes** | `/2026/circuits/` — 24 rows with `circuitId`, `circuitName` and `Location`. Note 24 circuits against 23 races; the discrepancy is unexplained and is listed as a mapping check in §8.7. |
+| Stable identifiers | **Yes** | Lower-case string slugs: `driverId` (`norris`, `antonelli`), `constructorId` (`mclaren`, `mercedes`), `circuitId` (`hungaroring`, `albert_park`). These are the natural anchor for GridView's own IDs. |
+| Update timestamps | **No** | Ergast-compatible payloads carry none. `Last-Modified` equals `Date` on every response, so it reports generation time, not data-change time (§8.6). |
+| Recoverability | **Yes** | Database dumps are published; the free non-commercial tier is available 14 days after upload with no authentication (§12.4). |
+
+### 8.5 Cross-source agreement — the decisive result
+
+The two sources were compared on the same event. This is the evidence that the
+dual-source model is viable at all.
+
+| Comparison | Result |
+|---|---|
+| **Race winner** | OpenF1 `session_result` position 1: `driver_number` 1, `points` 25, `number_of_laps` 70, `duration` 5996.18 s. Jolpica results position 1: Norris, `points` "25", `laps` "70", `Time.millis` "5996180". **5996.18 s = 5 996 180 ms — exact agreement.** |
+| **Driver championship** | OpenF1 `championship_drivers` leader: `driver_number` 12, `points_current` 219, `position_current` 1. Jolpica `driverstandings` leader: Antonelli, `permanentNumber` "12", `points` "219", `position` "1". **Exact agreement.** |
+| **Driver join, all 22 entries** | Joining `driver_number` to `permanentNumber` and comparing championship points: **22 / 22 matched exactly.** |
+| **Constructor championship** | OpenF1 `championship_teams` leader: `Mercedes`, `points_current` 379. Jolpica `constructorstandings` leader: Mercedes, `points` "379". **Exact agreement.** |
+| **Constructor join by name string** | **Only 7 / 11 matched.** |
+
+**The constructor name mismatch is the single most important technical finding
+of this check:**
+
+| OpenF1 `team_name` | Jolpica `Constructor.name` |
+|---|---|
+| Alpine | Alpine F1 Team |
+| Cadillac | Cadillac F1 Team |
+| Racing Bulls | RB F1 Team |
+| Red Bull Racing | Red Bull |
+
+Four of eleven constructors are named differently by the two sources. **A
+curated constructor mapping registry is therefore mandatory, not optional** —
+which is exactly what
+[`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §8.1 already
+requires, and which §8.1 also requires to *fail validation* rather than silently
+invent an identifier when an unknown entity appears.
+
+### 8.6 Response headers — neither source supports conditional or quota-aware fetching
+
+| Header | OpenF1 | Jolpica |
+|---|---|---|
+| `ETag` | absent | absent |
+| `Last-Modified` | absent | present, but equal to `Date` — generation time, not data-change time |
+| `Cache-Control` | absent | `max-age=600` |
+| Rate-limit headers (`X-RateLimit-*` or equivalent) | **absent** | **absent** |
+| `Retry-After` | not observed (no 429 encountered) | documented behaviour is HTTP 429; header not observed |
+
+Consequences:
+
+1. **Conditional requests are not available.** GridView cannot use `If-None-Match`
+   or a meaningful `If-Modified-Since` against either source, so every
+   reconciliation check is a full fetch. The request model in §11 assumes this.
+2. **`QuotaState` cannot be populated from responses** (T1). Daily and
+   per-minute figures must be modelled locally from published limits, and the
+   `warningLevel` thresholds in Backend Scheme §16.1 must be driven by
+   GridView's own counters.
+3. Jolpica's `max-age=600` means a repeat request inside ten minutes may be
+   served from cache, so polling faster than that gains nothing.
+
+### 8.7 Mapping gaps, beta dependencies and derived logic required
+
+| # | Gap | Consequence |
+|---|---|---|
+| M1 | **Constructor identity differs between sources** (§8.5) | Curated mapping registry required before any adapter can reconcile. |
+| M2 | **OpenF1 has no stable driver or team identifier** | Driver joins must go through `driver_number`, scoped to a season. Numbers are reassigned between seasons and the champion's `#1` is a per-season choice, so the number is not a cross-season key. Jolpica's `driverId` slug is the only durable anchor. |
+| M3 | **Both championship endpoints are beta** and documented as available for race sessions only | GridView's standings freshness path depends on a beta interface. Whether they populate for **sprint** sessions is `unverified`; OpenF1 types a sprint as `session_type = "Race"`, which makes it plausible but unconfirmed. |
+| M4 | **OpenF1 conflates sprint and race in `session_type`** | `session_type` takes only `Practice`, `Qualifying`, `Race`. Sprint appears as `session_name = "Sprint"` with `session_type = "Race"`, and sprint qualifying as `session_name = "Sprint Qualifying"` with `session_type = "Qualifying"`. Derived logic on `session_name` is required to populate GridView's session type, which the local schema keys on (`UNIQUE(race_results gp + sessionType)`). |
+| M5 | **OpenF1 sessions include pre-season testing** | `session_name` values include `Day 1`, `Day 2`, `Day 3`. These must be filtered out of the Grand Prix calendar. |
+| M6 | **No update timestamps anywhere** (§8.6) | Provenance must record GridView's own fetch time; "has this changed?" can only be answered by content comparison. |
+| M7 | **OpenF1 `country_code` on drivers is deprecated and was null** | Documented for removal at the end of the 2026 season. Must not be depended on. |
+| M8 | **Jolpica `/2026/circuits/` returned 24 for 23 races** | Unexplained. Must be reconciled against the calendar rather than assumed one-to-one. |
+| M9 | **Jolpica `/last` and `/next` are date-derived** | A public issue records `/current/last` returning the previous round on a Sunday evening after a race, reported and later fixed. Explicit `season/round` addressing should be preferred over `last`/`next`. |
+| M10 | **Jolpica pagination** | `limit` defaults to 30 and caps at 100. Season-scoped queries must pass `limit` explicitly; a 23-race season and a 31-driver season both exceed the default. |
+| M11 | **OpenF1 `date_end` is the scheduled end** | A red-flagged or delayed session may actually end later than `date_end`, which would move the live-window boundary. See §10.2. |
+
+**No adapter was implemented.** These are recorded as Phase 9B requirements.
 
 ---
 
-## 8. Pricing and quota evidence
+## 9. Cost and quota evidence
 
-All figures are as published on the access date **2026-08-19**. Prices are
-time-sensitive and must be re-verified before any purchase decision.
+All figures as published on the access date **2026-08-19**. Prices and limits
+are time-sensitive and must be re-verified before any decision.
 
-### 8.1 API-Sports
+### 9.1 OpenF1
 
-**Unverified.** No official pricing page could be retrieved (§5.1). No plan
-name, price, currency, billing period or quota is asserted here.
-
-### 8.2 OpenF1
-
-| Plan | Price | Currency | Billing period | Quota / limits |
+| Tier | Price | Currency | Billing period | Limits |
 |---|---|---|---|---|
-| Community | Free | - | - | All 18 endpoints, all historical sessions since 2023, JSON and CSV, no authentication, up to 3 requests/second and 30 requests/minute |
-| Sponsor | 9.90 | EUR | per month | Everything in Community, plus live data during sessions via REST, MQTT and WebSocket; up to 6 requests/second and 60 requests/minute; up to 10 concurrent MQTT/WebSocket connections |
+| **Community (proposed)** | **Free** | - | - | All 18 endpoints; all historical sessions since 2023; JSON and CSV; **no authentication required**; up to **3 requests/second and 30 requests/minute** |
+| Sponsor — **not used** | 9.90 | EUR | per month | Adds live data during sessions via REST, MQTT and WebSocket; 6 req/s and 60 req/min; up to 10 concurrent MQTT/WebSocket connections |
+
+**The Sponsor tier is explicitly not used** (C1). GridView needs no live data
+(C5), so the only thing the paid tier would buy is the capability GridView has
+decided not to use.
+
+**The free/paid boundary is a time window, not a feature flag.** The project
+states: *"Data is considered live from 30 minutes before a session starts until
+30 minutes after it ends. Outside of this window, data is classified as
+historical and is free to access."* This single sentence is what makes the
+proposal work and what constrains it — see §10.2.
 
 No daily or monthly cap is published. Overage behaviour is `unverified`.
 
-### 8.3 Jolpica
+### 9.2 Jolpica
 
-| Plan | Price | Currency | Billing period | Quota / limits |
+| Tier | Price | Currency | Billing period | Limits |
 |---|---|---|---|---|
-| Unauthenticated public access | Free | - | - | Burst 4 requests/second; sustained 500 requests/hour. Exceeding returns HTTP 429. |
-| API token access | Not yet available | - | - | Stated as "currently in the process of implementing"; will provide higher limits than unauthenticated access |
-| Commercial | Not published | - | - | Requires contacting `admin@jolpi.ca` |
+| **Unauthenticated public access (proposed)** | **Free** | - | - | Burst **4 requests/second**; sustained **500 requests/hour**; HTTP 429 on breach; mandatory identifying `User-Agent` |
+| API token access | Not yet available | - | - | "Currently in the process of implementing"; will provide higher limits |
+| Free database dumps | **Free** | - | - | Published **14 days after upload**; non-commercial; no authentication |
+| Supporter dumps — **not used** | Ko-fi supporter | - | - | Latest dumps immediately; **licensed for commercial use**; API key required |
 
-Overage behaviour: HTTP 429 throttling; abuse "may result in temporary or
-permanent blocking", possibly without notice. Published limits are stated to be
-subject to change and are expected to **decrease**.
+**The Supporter tier is explicitly not used** (C1). It is nonetheless a material
+finding: it means Jolpica has a stated commercial-licensing path for its
+database dumps, which is directly relevant if C4 is ever invoked.
 
-### 8.4 Sportmonks
+Published limits are stated to be subject to change and **expected to decrease**
+as token access rolls out. This is a planned reduction, not a risk that might
+not materialise, and §12 treats it accordingly.
 
-| Plan | Price | Currency | Billing period | Quota / limits |
-|---|---|---|---|---|
-| Full Season F1 (product page) | 69 | EUR, excl. VAT | per month | Every race weekend session of the season; classifications, drivers, constructors with photos; 2,000 API calls per hour per endpoint; 7-day human support |
-| Full Season F1, yearly (product page) | 830 per year, presented as 69/12 months | EUR, excl. VAT | per year | as above |
-| Motorsport API (documentation page) | 79 | EUR | per month | 3,000 API calls per hour |
+### 9.3 Combined v1 cost
 
-Trial: a free trial is offered, with an API token issued instantly, no credit
-card and no sales call. Trial restrictions are `unverified`.
+**EUR 0 per month**, satisfying C1. No account, no payment method, no trial and
+no subscription is required for anything GridView proposes to use.
 
-Overage behaviour: `unverified`. Support channel: 7-day human support (product
-page). Contract or enterprise requirement: not stated for these tiers.
+### 9.4 Sportmonks — retained for reference only
 
-### 8.5 Recorded source conflict
+Rejected under C1. Recorded because it is the fallback if monetisation is ever
+reconsidered: Full Season F1 at **EUR 69/month** (or EUR 830 billed yearly),
+excluding VAT, with 2,000 API calls per hour per endpoint on the product page;
+the Motorsport API standings documentation states **EUR 79/month** with 3,000
+API calls per hour. **These two official pages conflict**, and the conflict was
+never resolved because the provider was never contacted.
 
-Two official Sportmonks pages, both retrieved on 2026-08-19, state different
-prices and different hourly quotas for what appears to be the same subscription:
+### 9.5 API-Sports
 
-- The Formula 1 product page states **EUR 69/month** with **2,000 API calls per
-  hour per endpoint**.
-- The Motorsport API standings documentation states standings endpoints require
-  an active Motorsport API subscription at **EUR 79/month** with **3,000 API
-  calls per hour**.
+**Unverified.** No official pricing page could be retrieved (§6.2). No plan
+name, price, currency, billing period, quota or free-tier claim is asserted.
 
-This contradiction is recorded, not resolved. It may reflect two distinct
-products (a Formula 1 season package versus the full Motorsport API), or a stale
-page. **Which subscription actually grants the driver and constructor standings
-endpoints GridView requires is an open commercial question** and is included in
-the outreach draft.
+### 9.6 Quota headers
 
-### 8.6 What is not being recommended
-
-No plan is recommended for purchase. Plan sufficiency is assessed in §9.6
-purely as engineering input; the legal gate in §6 is unsatisfied for every
-candidate, and Implementation Plan §14.2 places legal approval before
-implementation.
+Neither proposed source exposes them (§8.6). This is a documented shortfall
+against requirement T1 and is carried into §14 as a risk.
 
 ---
 
-## 9. Expected quota requirement
+## 10. Proposed dual-source synchronisation policy
 
-### 9.1 Method
+**Design only. Nothing in this section is implemented, and no cron trigger,
+provider mode, binding or route was created or changed.**
 
-The model is derived from GridView's own synchronization design, not from
-invented traffic. Two schedules exist and are modelled separately:
+### 10.1 Roles
 
-- The **documented** event-aware refresh policy in
-  [`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §15.
-- The **implemented** static scheduler in
-  `services/edge-api/src/sync/scheduler.ts`, which has fixed intervals and no
-  event awareness.
-
-Public request volume is excluded by design: public reads perform zero upstream
-requests (Backend Scheme §14.2), so **no term in this model depends on the
-number of app users**.
-
-### 9.2 Assumptions
-
-| # | Assumption | Basis |
+| Source | Role | Never used for |
 |---|---|---|
-| A1 | 24 Grands Prix per season, of which 6 are sprint weekends | Typical current-era calendar; not provider-specific |
-| A2 | The season spans about 9 months, averaging 2 race weekends per calendar month during the season | Derived from A1 |
-| A3 | Sessions actively polled for results and standings: qualifying, sprint (when present) and race. Practice sessions need schedule data only. | Backend Scheme §15.1: GridView is not a live-timing product |
-| A4 | An active session polling window is 3 hours at a 10-minute cadence | Backend Scheme §15 "Every 5-10 minutes for a limited window", conservative end |
-| A5 | A post-session finalization window is 4 hours at a 15-minute cadence | Backend Scheme §15 "until stable" |
-| A6 | Cron invokes the Worker every 15 minutes; due-calculation decides whether any upstream call happens | Backend Scheme §15.2 worked example |
-| A7 | Upstream request cost per job category, as in the table below | **Estimated, not measured. See §9.7.** |
+| **OpenF1** | *Provisional* post-session classification, points and championship state | Live timing, telemetry, in-session data, media |
+| **Jolpica** | *Complete* season metadata, calendar, participants, circuits, historical depth, and *reconciled* final results and standings | Live or near-live data |
 
-### 9.3 Upstream request cost per synchronization job
+Every stored record is in exactly one of two states: **provisional** (last
+written from OpenF1) or **reconciled** (last written from Jolpica). The public
+contract exposes freshness semantics that already exist; the provisional and
+reconciled distinction is internal unless the existing v1 contract already has a
+field for it.
 
-The mock provider currently charges **one unit per due job category**. A real
-adapter will issue one or more HTTP requests per job. The conservative estimate
-used here:
+### 10.2 The live-window boundary is the hard constraint
 
-| Job category (`SyncJobCategory`) | Estimated upstream requests | Rationale |
-|---|---:|---|
-| `season-calendar` | 1 | one season-races call |
-| `event-schedule` | 1 | one session-times call |
-| `profiles` | 3 | drivers + constructors + circuits |
-| `standings` | 2 | driver standings + constructor standings |
-| `results` | 2 | race result + sprint result |
-| `home-rebuild` | 0 | derived locally from stored snapshots |
+OpenF1 classifies data as live from **30 minutes before** a session starts until
+**30 minutes after** it ends. GridView must never fetch inside that window.
 
-### 9.4 Scenario table - documented event-aware policy
+Three design rules follow:
 
-Formulas use `requests = cadence_per_day x cost_per_job`, summed over jobs.
+1. **The earliest permitted provisional fetch is `scheduled_end + 30 minutes`.**
+   GridView's C6 objective of 30-60 minutes is therefore *exactly* aligned with
+   the earliest moment free access opens. There is no room to be earlier, and
+   trying to be would mean using the paid live feed.
+2. **A safety margin is mandatory.** The first attempt is scheduled at
+   **+32 minutes**, not +30, so that clock skew, boundary rounding or an
+   inclusive interpretation of "30 minutes after" can never place a request
+   inside the live window.
+3. **`date_end` is a *scheduled* end (M11).** A red-flagged or delayed session
+   may genuinely end later, which moves the real boundary. GridView schedules
+   from the scheduled end plus margin, and if the first attempt returns data
+   that is absent or obviously incomplete, it backs off rather than retrying
+   tightly — an incomplete response is a signal the session may have overrun.
 
-| Scenario | Formula | Requests |
-|---|---|---:|
-| **S1 - Normal off-event day** | calendar `4x1` + schedule `4x1` + standings `4x2` + results `0` + profiles `3/7` + season metadata `1x1` | **~17 / day** |
-| **S2 - Race-week build-up day** (Mon-Thu of a race week) | calendar `12x1` + schedule `48x1` + standings `24x2` + season metadata `1` | **~109 / day** |
-| **S3 - Active session window** (per polled session, A4) | standings `18x2` + results `18x2` + schedule `12x1` | **84 / session** |
-| **S4 - Post-session finalization** (per polled session, A5) | results `16x2` + standings `16x2` | **64 / session** |
-| **S5 - Manual recovery reserve** | 20% of the daily plan allowance, floor 100 | **>=100 / day held back** |
-| **S6 - One complete bootstrap or snapshot rebuild** | calendar `1` + profiles `3` + standings `2` + results `24 rounds x 2` = 54, plus pagination headroom | **<=80 / rebuild** |
+### 10.3 Provisional lifecycle — OpenF1
 
-### 9.5 Daily peak and monthly total
+Triggered only for **polled sessions**: Qualifying, Sprint Qualifying, Sprint
+and Race. Practice sessions are not polled for results.
 
-**Daily peak** - a race day with two polled sessions (qualifying-day or
-race-day):
-
-```text
-S2 base 109 + 2 x (S3 84 + S4 64) = 109 + 296 = 405 requests/day
-```
-
-A three-session day (sprint weekend) reaches `109 + 3 x 148 = 553 requests/day`.
-
-**Monthly total** - a season month containing two race weekends:
-
-| Component | Formula | Requests |
-|---|---|---:|
-| Race-weekend days (Fri-Sun) | `2 weekends x 3 days x 109` | 654 |
-| Session windows | `2 weekends x 3 sessions x (84 + 64)` | 888 |
-| Build-up days (Mon-Thu) | `2 weekends x 4 days x 109` | 872 |
-| Remaining off-event days | `16 days x 17` | 272 |
-| Bootstraps / rebuilds | `2 x 80` | 160 |
-| **Season-month subtotal** | | **2,846** |
-| **With 2x safety margin** | | **~5,700 / month** |
-
-Off-season month: `30 x 17 + 80` = **590 / month**, or ~1,200 with the same
-margin.
-
-**Recommended safety margin: 2x.** It absorbs the A7 per-job cost estimate being
-wrong by up to a factor of two, plus retries, pagination and recovery runs.
-
-### 9.6 Which plans appear technically sufficient
-
-Assessed against a **peak of ~810 requests/day** (405 x 2 margin) and **~5,700
-requests/month**:
-
-| Provider | Published limit | Sufficient? |
-|---|---|---|
-| API-Sports | unverified | **Cannot be assessed.** |
-| OpenF1 free (3 req/s, 30 req/min) | 43,200/day theoretical | Ample on rate, but the licence gate in §6.2, not quota, is the blocker. |
-| Jolpica unauthenticated (4 req/s, 500 req/hour) | 12,000/day theoretical | Ample on rate. Note the published intention that limits **will decrease**. |
-| Sportmonks (2,000-3,000 calls/hour) | 48,000-72,000/day theoretical | Ample on rate. |
-
-Rate capacity is not the constraining factor for any assessable candidate. The
-constraint is licensing.
-
-### 9.7 Labelled missing decisions
-
-The model is bounded, not exact. Four inputs are undecided and each is flagged:
-
-| # | Missing decision | Effect on the model |
-|---|---|---|
-| Q1 | **Actual upstream request cost per job category.** A7 is an estimate. Only a real adapter against a chosen provider settles it. | Scales the whole model linearly. The 2x margin is sized for this. |
-| Q2 | **Production cron cadence.** `wrangler.toml` declares a cron only for staging (`17 3 * * *`, once daily). **Production declares no cron trigger at all.** A6's 15-minute cadence is the documented example, not configured reality. | Determines whether the documented policy in §9.4 can even be executed. |
-| Q3 | **Event-window awareness.** The implemented scheduler has fixed intervals only. See §9.8. | Determines whether S1/S2/S3 differentiation exists at all. |
-| Q4 | **Whether `results` must backfill every round or only recent rounds.** S6 assumes a full 24-round backfill per rebuild. | Bounds rebuild cost between ~10 and ~80 requests. |
-
-Configuring cron schedules or quotas in production is **not** part of this pass
-and was not done.
-
-### 9.8 The implemented scheduler costs more than the documented policy
-
-`services/edge-api/src/sync/scheduler.ts` uses fixed intervals with no event
-awareness:
-
-| Job | Implemented interval |
+| Attempt | Offset from scheduled session end |
 |---|---|
-| `season-calendar` | 6 hours |
-| `event-schedule` | 1 hour |
-| `profiles` | 24 hours |
-| `standings` | 15 minutes |
-| `results` | 15 minutes |
-| `home-rebuild` | 5 minutes |
+| 1 | +32 minutes |
+| 2 | +35 minutes |
+| 3 | +45 minutes |
+| 4 | +60 minutes |
 
-Under A6 (cron every 15 minutes), this schedule would run standings and results
-**every single cycle, every day of the year**:
+**Stop early.** The sequence terminates as soon as a response is *complete and
+internally consistent*, defined as all of:
+
+- a classification row exists for every driver listed for the session;
+- positions form a contiguous sequence from 1 with no duplicates, once `dnf`,
+  `dns` and `dsq` entries are accounted for;
+- points are present and non-negative on every classified row;
+- for race sessions, `championship_drivers` and `championship_teams` return rows
+  for every driver and team, and `points_current` is greater than or equal to
+  `points_start` for every entry.
+
+If attempt 4 still fails the check, **no provisional write occurs**. The
+previous snapshot stays published and the resource waits for Jolpica
+reconciliation. A failed provisional pass is never an outage.
+
+### 10.4 Reconciliation lifecycle — Jolpica
+
+Triggered after the same polled sessions, and independently of whether the
+provisional pass succeeded.
+
+| Check | Offset from scheduled session end |
+|---|---|
+| 1 | +2 hours |
+| 2 | +6 hours |
+| 3 | +12 hours |
+| 4 | +24 hours |
+
+Then, if still unreconciled, **daily** until reconciled or until the next event
+week begins, at which point the resource is marked unreconciled and left alone.
+There is no aggressive polling and no tight retry loop at any point.
+
+Jolpica also runs on a slow independent cadence for resources that have nothing
+to do with a session: calendar daily, participants and circuits weekly,
+standings daily during the season (which is what catches a penalty applied days
+after a race).
+
+### 10.5 No polling during a session, and no year-round high-frequency scheduler
+
+**Explicit correction of the superseded model.** Version 0.1 documented that the
+*implemented* scheduler in `services/edge-api/src/sync/scheduler.ts` uses fixed
+intervals with no event awareness — `standings` and `results` every 15 minutes —
+which under a 15-minute cron would issue roughly **415 upstream requests per
+day, every day of the year**, polling at race-day cadence in February.
+
+That model is superseded and must not be carried into Phase 9B. The design here
+is event-driven: outside a session's post-session windows, only the slow
+metadata cadence in §10.4 runs. §11 quantifies the difference.
+
+There is **no polling at all while a session is in progress**, which is both a
+licence requirement for OpenF1 and consistent with C5 and C8.
+
+### 10.6 Last-known-good is always served
+
+If either upstream fails, is rate-limited, returns an inconsistent payload or
+disappears entirely, **the last published snapshot remains publicly available
+and unchanged**. This is requirement T2 and is already enforced by the existing
+test `preserves the active snapshot after provider failure`.
+
+A failed fetch updates provenance and health state only. It never deletes,
+truncates or downgrades a published snapshot.
+
+### 10.7 Provenance recorded per synchronized resource
+
+Internal only. Every synchronized resource retains:
+
+| Field | Meaning |
+|---|---|
+| `provider` | `openf1` or `jolpica` |
+| `providerResourceRef` | Provider-side anchor where one exists — OpenF1 `session_key` / `meeting_key`, Jolpica `season`/`round`. Null where the provider exposes none. |
+| `providerVersion` | Provider-declared version where available. **Null for both current candidates** — neither exposes one (§8.6). |
+| `fetchedAt` | GridView's own fetch time. This is the only reliable time anchor either source permits. |
+| `sessionIdentity` | GridView's session identity for the record. |
+| `state` | `provisional` or `reconciled`. |
+| `reconciledAt` | When a reconciled write last replaced or confirmed the record. Null while provisional. |
+| `conflictOutcome` | Which rule in §10.9 fired, and what it decided. |
+
+### 10.8 Provider metadata must not leak into the public contract
+
+None of §10.7 appears in the public v1 DTOs unless the existing contract already
+requires it. The public API keeps the freshness and staleness semantics it
+already has. This is requirement T4, already enforced by
+`test/contract/fixtures.test.ts` and `test/contract/generated-snapshots.test.ts`.
+
+Provider identifiers in particular stay internal: `driver_number`, `team_name`,
+`session_key`, `meeting_key`, `driverId`, `constructorId` and `circuitId` are
+mapping inputs, never public GridView IDs (T7, Backend Scheme §8.1).
+
+### 10.9 Conflict rules
+
+**Governing rule: a reconciled snapshot is never replaced by an older or
+provisional snapshot.** State and time both gate every write:
 
 ```text
-standings   96 cycles x 2 = 192
-results     96 cycles x 2 = 192
-schedule    24 cycles x 1 =  24
-calendar     4 cycles x 1 =   4
-profiles     1 cycle  x 3 =   3
-                        -------
-                            415 requests/day  ->  ~12,450/month
+accept the incoming write only if
+    incoming.state == reconciled
+        and (stored.state == provisional
+             or incoming.reconciledAt > stored.reconciledAt)
+  or
+    incoming.state == provisional
+        and stored.state == provisional
+        and incoming.fetchedAt > stored.fetchedAt
 ```
 
-That is **24x the off-event day cost** of the documented policy and ~4x the
-modelled monthly total, because it polls standings and results at race-day
-cadence in February. Making the scheduler event-aware is Phase 9B work (§11.3),
-not a defect introduced here - the current mock-only configuration never
-exercises it against a metered provider.
+A provisional write against a reconciled record is **rejected and logged**, not
+merged. This composes with the existing `SnapshotConflict.decide` rule rather
+than replacing it.
 
----
-
-## 10. Official sources
-
-All accessed **2026-08-19**. Every decisive claim in this document traces to a
-row here.
-
-| # | Provider | URL | Page title | Statement type | Paraphrase |
-|---|---|---|---|---|---|
-| S1 | OpenF1 | `https://openf1.org/` | OpenF1 API \| The open source API for Formula 1 data | Explicit | Licensed under CC BY-NC-SA 4.0; intended for educational, personal-learning, research and non-commercial fan-engagement use; unofficial and not affiliated with Formula One World Championship Limited; does not claim ownership of Formula 1 data, trademarks or broadcasts; Community tier free with 18 endpoints, historical sessions since 2023, no authentication, 3 req/s and 30 req/min; Sponsor tier EUR 9.90/month adding live data and 6 req/s, 60 req/min. |
-| S2 | OpenF1 | `https://api.openf1.org/v1/sessions?year=2026` | (JSON API response) | Explicit | The `sessions` endpoint returns session objects carrying `session_key`, `session_type`, `session_name`, `date_start`, `date_end`, `meeting_key`, `circuit_key`, `circuit_short_name`, `country_*`, `location`, `gmt_offset`, `year` and `is_cancelled`. Confirms session-schedule coverage, UTC offsets and an explicit cancellation flag. |
-| S3 | Jolpica F1 | `https://github.com/jolpica/jolpica-f1/blob/main/TERMS.md` | Jolpica-F1 API - Terms of Use (last updated 27 August 2025) | Explicit | Freely available for non-commercial use; data licensed CC BY-NC-SA 4.0; commercial usage requires contacting `admin@jolpi.ca`; the project reserves the right to change the terms; volunteer-run and donation-supported with no guarantee of uptime, availability or correctness; use entirely at the user's own risk. |
-| S4 | Jolpica F1 | `https://github.com/jolpica/jolpica-f1/blob/main/docs/rate_limits.md` | Rate Limits | Explicit | Unauthenticated burst limit 4 requests/second, sustained 500 requests/hour; HTTP 429 on breach; limits subject to change and expected to decrease as token access rolls out; caching results is the first recommended mitigation. |
-| S5 | Jolpica F1 | `https://github.com/jolpica/jolpica-f1/blob/main/docs/README.md` | jolpica-f1 Documentation | Explicit | Thirteen Ergast-compatible endpoints (circuits, constructors, constructor standings, drivers, driver standings, laps, pitstops, qualifying, races, results, seasons, sprint, status); shared `limit` (default 30, max 100) and `offset` query parameters; a custom identifying `User-Agent` is required. |
-| S6 | Jolpica F1 | `https://github.com/jolpica/jolpica-f1/blob/main/docs/endpoints/races.md` | Races | Explicit | Race objects carry season, round, raceName, Circuit (with locality and coordinates), date and optional UTC time, plus optional `FirstPractice`, `SecondPractice`, `ThirdPractice`, `Qualifying`, `Sprint` and `SprintQualifying`/`SprintShootout` session objects. Historical coverage from 1950. |
-| S7 | Sportmonks | `https://www.sportmonks.com/formula-one-api/` | Formula 1 API \| Live F1 Race Data & Results \| Sportmonks | Explicit | Every race-weekend session modelled as a fixture; per-driver timing and entry-list data; official driver photos and constructor crests; Full Season F1 plan at EUR 69/month (EUR 830 billed yearly), excluding VAT, with 2,000 API calls per hour per endpoint; free trial with an instant API token, no credit card. |
-| S8 | Sportmonks | `https://www.sportmonks.com/terms-of-service/` | Sportmonks Terms of Service (no last-updated date shown) | Explicit | Data may be used to build apps, websites and games, and earning money from the creation is permitted; distribution, transfer and storage of the data is allowed; reselling the product is forbidden without consent and the data may not be sold directly; users unsure about compliance are invited to explain their plan and ask; logos and profile photos are copyrighted by their legal owner and the customer must arrange proof of intellectual property and clearly attribute them; accounts may be terminated immediately for direct violation. |
-| S9 | Sportmonks | `https://docs.sportmonks.com/v3/motorsport-api/endpoints-and-entities/endpoints/standings` | Standings \| Motorsport API 3.0 | Explicit | Four standings endpoints covering all driver standings, driver standings by season, all team standings and team standings by season, at `/v3/motorsport/standings/drivers/seasons/{id}` and `/v3/motorsport/standings/teams/seasons/{id}`; fields include `participant_id`, `position`, `points`, `stage_id`; maximum two nested includes; states an active Motorsport API subscription at EUR 79/month with 3,000 API calls/hour is required. |
-| S10 | API-Sports | `https://api-sports.io/terms`, `https://api-sports.io/pricing`, `https://api-sports.io/documentation/formula-1/v1`, `https://api-sports.io/sports/formula-1`, `https://api-sports.io/`, `https://www.api-football.com/pricing`, `https://dashboard.api-football.com/`, `https://v1.formula-1.api-sports.io/status` | (not retrieved) | **Unreachable** | All eight official endpoints returned HTTP 403 to every retrieval method available in this pass on 2026-08-19. No API-Sports statement is asserted anywhere in this document. |
-
-### 10.1 Ambiguities requiring written confirmation
-
-| # | Provider | Ambiguity |
+| # | Conflict | Rule |
 |---|---|---|
-| X1 | Sportmonks | Whether serving normalized data through GridView's own public API is permitted "distribution" or prohibited "resale". **Decisive.** |
-| X2 | Sportmonks | Which subscription grants the standings endpoints, at which price and hourly quota (§8.5 conflict). |
-| X3 | Sportmonks | Whether cached snapshots must be deleted on termination, and whether historical snapshots may be retained indefinitely. |
-| X4 | Sportmonks | Whether Formula 1 competition-data rights remain the customer's responsibility, as they explicitly do for logos and photos. |
-| X5 | OpenF1, Jolpica | Whether a free, ad-free, publicly distributed Google Play application is "non-commercial" under CC BY-NC-SA 4.0. |
-| X6 | OpenF1, Jolpica | Whether ShareAlike obliges GridView to license its normalized public API output under CC BY-NC-SA 4.0. |
-| X7 | API-Sports | Everything. No current statement could be read. |
+| 1 | **Mismatched driver identifier** | Join on `driver_number` scoped to the season. If no Jolpica driver matches, **fail validation for that resource** and do not write. Never invent an identifier (Backend Scheme §8.1). |
+| 2 | **Mismatched constructor identifier** | Resolve through the curated mapping registry (M1). An unmapped constructor name **fails validation** and raises an operational signal; it does not fall back to string matching. |
+| 3 | **Penalty or post-session classification change** | Jolpica is authoritative. A reconciled write replaces provisional positions, points and status wholesale for that session — never field-by-field, which could leave a record internally inconsistent. |
+| 4 | **Disqualification** | Same as 3. OpenF1's `dsq` boolean produces a provisional disqualification; Jolpica's `positionText` and `status` are authoritative on reconciliation. A provisional record must never *remove* a disqualification a reconciled record asserted. |
+| 5 | **Corrected championship totals** | Jolpica standings are authoritative. OpenF1 `points_current` is provisional and is replaced, not merged. Where the two disagree at reconciliation time, the disagreement is recorded in `conflictOutcome` before the reconciled value is written. |
+| 6 | **Missing sprint or qualifying data** | Absence is never written as an empty result. The resource stays at its previous state and is retried on the §10.4 cadence. A session with no result yet is *unavailable*, which is distinct from *empty* — the same distinction the Home module already enforces via materialization rather than row count. |
+| 7 | **One provider updates before the other** | Expected and normal; it is the whole design. Provisional data may lead reconciled data by up to 24 hours. The reverse — Jolpica reconciling before OpenF1 has been fetched at all — simply skips the provisional write; §10.9's governing rule already forbids a later provisional write from overwriting it. |
+| 8 | **Beta championship endpoint returns nothing** (M3) | Treated as case 6: no write, retry on cadence, reconcile from Jolpica. A beta endpoint going silent must degrade to *slower*, never to *wrong*. |
+
+### 10.10 Independent adapters
+
+`OpenF1Provider` and `JolpicaProvider` are separate implementations of the
+existing `FormulaOneProvider` seam. Neither knows about the other. Reconciliation
+is a **coordinator** concern, above both adapters, not a cross-adapter
+dependency.
+
+Consequence: **either source can be removed without changing the Flutter-facing
+API contract.** If OpenF1 becomes unusable, GridView loses 30-60 minute
+freshness and falls back to Jolpica-only reconciliation. If Jolpica becomes
+unusable, GridView loses reconciliation and historical depth. In neither case
+does the public v1 contract change, and in neither case does the app need a
+release.
+
+This requires the interface work recorded as G4 in Appendix D: the existing
+single-call `fetchSeasonSource(season, jobs)` cannot express two sources with
+different roles and different per-job failure outcomes.
 
 ---
 
-## 11. Risks and unknowns
+## 11. Expected request volume
 
-### 11.1 Legal risks
+### 11.1 Cost per polled session
+
+Neither source supports conditional requests (§8.6), so every attempt is a full
+fetch.
+
+| Session type | OpenF1 per attempt | Jolpica per check |
+|---|---|---|
+| Qualifying / Sprint Qualifying | `sessions` 1 + `session_result` 1 = **2** (+1 `drivers` on the first attempt only) | `qualifying` 1 = **1** |
+| Sprint | `sessions` 1 + `session_result` 1 + `championship_drivers` 1 + `championship_teams` 1 = **4** (+1 `drivers` once) | `sprint` 1 + `driverstandings` 1 + `constructorstandings` 1 = **3** |
+| Race | same as Sprint = **4** (+1 `drivers` once) | `results` 1 + `driverstandings` 1 + `constructorstandings` 1 = **3** |
+
+Worst case, all attempts and checks exhausted:
+
+| Session type | OpenF1 (4 attempts) | Jolpica (4 checks) | Total |
+|---|---:|---:|---:|
+| Qualifying | 4x2 + 1 = 9 | 4x1 = 4 | **13** |
+| Sprint | 4x4 + 1 = 17 | 4x3 = 12 | **29** |
+| Race | 4x4 + 1 = 17 | 4x3 = 12 | **29** |
+
+Expected case, first attempt and first check succeed:
+
+| Session type | OpenF1 | Jolpica | Total |
+|---|---:|---:|---:|
+| Qualifying | 3 | 1 | **4** |
+| Sprint / Race | 5 | 3 | **8** |
+
+### 11.2 Baseline, off-event
+
+| Job | Source | Cadence | Requests/day |
+|---|---|---|---:|
+| Calendar / races | Jolpica | daily | 1 |
+| Driver + constructor standings | Jolpica | daily, in season | 2 |
+| Session schedule | OpenF1 `sessions` | daily | 1 |
+| Participants and circuits | Jolpica | weekly (3 calls) | 3/7 ≈ 0.4 |
+| **Total, in season** | | | **≈ 4.4 / day** |
+| **Total, off season** (standings weekly) | | | **≈ 2.7 / day** |
+
+### 11.3 Weekend and monthly totals
+
+Assumptions: 24 Grands Prix per season of which 6 are sprint weekends (25%); the
+season spans about 9 months, averaging 2 race weekends per calendar month.
+
+| Scenario | Worst case | Expected case |
+|---|---:|---:|
+| Standard weekend (Qualifying + Race) | 13 + 29 = **42** | 4 + 8 = **12** |
+| Sprint weekend (SQ + Sprint + Q + Race) | 13 + 29 + 13 + 29 = **84** | 4 + 8 + 4 + 8 = **24** |
+
+Season month with two race weekends, one in four being a sprint weekend:
+
+| Component | Formula | Worst case | Expected |
+|---|---|---:|---:|
+| Off-event baseline | `30 x 4.4` | 132 | 132 |
+| Weekends | `1.5 x 42 + 0.5 x 84` / `1.5 x 12 + 0.5 x 24` | 105 | 30 |
+| Subtotal | | 237 | 162 |
+| Manual recovery and retry reserve (20%) | | 47 | 32 |
+| **Monthly total** | | **≈ 285** | **≈ 195** |
+| **With 2x safety margin** | | **≈ 570** | |
+
+**Peak day** — the Saturday of a sprint weekend, carrying both the Sprint and
+Qualifying post-session windows:
+
+```text
+baseline 4.4 + Sprint (17 + 12) + Qualifying (9 + 4) = ~47 requests/day
+```
+
+Split by source on that day: **OpenF1 ≈ 27**, **Jolpica ≈ 21**.
+
+### 11.4 Headroom against published limits
+
+| Source | Published limit | Peak-day use | Headroom |
+|---|---|---:|---|
+| OpenF1 free | 30 requests/**minute** | ≈ 27 requests/**day** | The entire peak day fits inside one minute's allowance. Attempts are serialized, so the 3 requests/second burst limit is never approached. |
+| Jolpica unauthenticated | 500 requests/**hour** | ≈ 21 requests/**day** | ≈ 4% of a single hour's allowance, spread across 24 hours. Well inside the announced future reduction. |
+
+**Neither source's rate limit is a constraint on this design, even at worst
+case, even if published limits are reduced substantially.** Licensing, not
+quota, remains the gate.
+
+### 11.5 Against the superseded model
+
+| Model | Off-event daily | Peak daily | Monthly |
+|---|---:|---:|---:|
+| Superseded static scheduler (§10.5) | 415 | 415 | ≈ 12,450 |
+| Proposed event-aware model, worst case | 4.4 | ≈ 47 | ≈ 285 |
+| **Reduction** | **~99%** | **~89%** | **~98%** |
+
+### 11.6 Assumptions that remain undecided
+
+| # | Undecided | Effect |
+|---|---|---|
+| Q1 | **Production cron cadence.** `wrangler.toml` declares a cron only for staging (`17 3 * * *`, once daily); production declares none. An event-aware schedule needs a fine-grained cron (for example every 5 minutes) whose invocations mostly do nothing. | Determines whether §10.3's minute-level offsets are achievable at all. |
+| Q2 | **Whether the beta championship endpoints populate for sprint sessions** (M3). | If not, sprint-day standings freshness falls back to Jolpica reconciliation. Reduces OpenF1 cost, increases latency. |
+| Q3 | **How quickly Jolpica publishes results after a race.** Not measurable in this pass: the check ran during the 2026 summer break, 24 days after the last session. Round 11 was fully populated, but that proves completeness, not latency. | Determines whether C7's 24-hour objective is realistic. Must be measured against a live race weekend before being asserted. |
+| Q4 | **Whether a full-season backfill is needed per rebuild, or only recent rounds.** | Bounds bootstrap cost between roughly 10 and 80 requests. |
+
+---
+
+## 12. Continuity and sustainability
+
+### 12.1 What is not claimed
+
+**Neither project is guaranteed to be operating next year.** Both are free
+community efforts. Jolpica states it is volunteer-run and donation-supported and
+explicitly does not guarantee uptime, availability or correctness, with use
+"entirely at your own risk". OpenF1 states it is unofficial and
+community-operated. Neither offers an SLA, and neither can be held to one.
+
+Adopting them is a decision to accept that risk in exchange for EUR 0 and to
+mitigate it in architecture. The mitigations below are the substance of that
+decision.
+
+### 12.2 Observable maintenance signals
+
+Risk indicators, **not guarantees**, as observed on 2026-08-19:
+
+| Signal | OpenF1 (`br-g/openf1`) | Jolpica (`jolpica/jolpica-f1`) |
+|---|---|---|
+| Repository archived | No | No |
+| Last push | 2026-07-17 (~1 month before access date) | 2026-08-14 (~5 days before access date) |
+| Recent commit themes | Vendor-agnostic object storage; MQTT reconnect fix; team-radio cache | Service status endpoint (#389); fix to infer total rounds rather than hardcode; cache reduced to 10 minutes |
+| Stars | 1,676 | 880 |
+| Open issues | 34 | 22 |
+| Code licence | Custom — repository LICENSE file is CC BY-NC-SA 4.0 | **Apache-2.0**, cleanly separated from the CC BY-NC-SA 4.0 data licence |
+| Documentation currency | Endpoint reference maintained in-repo, with fields explicitly marked deprecated and dated for removal | Terms dated 27 August 2025; endpoint docs and rate-limit guide maintained in-repo |
+| Issue handling | 34 open | A reported result-timing bug drew a maintainer reply the same day and was fixed |
+| Data dumps | Not offered | **Offered**, free tier at 14-day delay |
+| Announced limit changes | None | Rate limits explicitly stated to be heading **downward** |
+
+**Reading.** Both are actively maintained on this evidence. Jolpica is the more
+recently active, has cleaner licence separation, has a status endpoint, and
+offers dumps — but has openly announced it will reduce free limits. OpenF1's
+last push is a month old, which is unremarkable for a project whose season was
+in summer break, but it is a signal to re-check.
+
+### 12.3 Required mitigations
+
+None of these is implemented. All are Phase 9B or later.
+
+| # | Mitigation | Why |
+|---|---|---|
+| S1 | **Independent adapters** (§10.10) | Either source can be dropped without an app release or a contract change. |
+| S2 | **Fixture-backed contract tests** | The public contract is pinned by 30 normalized fixtures that do not depend on any upstream being reachable. A provider disappearing cannot break the contract tests. |
+| S3 | **Last-known-good public snapshots** (§10.6) | An upstream outage degrades freshness, never availability. |
+| S4 | **Event-aware retry and circuit breaking** | Bounded attempts (§10.3, §10.4), no tight loops, `Retry-After` respected, and a breaker that stops calling a source that is failing rather than burning the published limit. |
+| S5 | **Provider health and freshness monitoring** | Per-source last success, last failure, consecutive failures, and age of the newest reconciled record. Jolpica's new service status endpoint is a candidate input. |
+| S6 | **Stale-data indicators** | The app already distinguishes unavailable from empty and surfaces staleness. Extend to make "provisional" and "not yet reconciled" legible where the contract allows. |
+| S7 | **Identifier mapping isolated from public DTOs** (§10.8, T7) | Changing or dropping a source never changes a public GridView identifier. |
+| S8 | **Periodic backups of source data where licensing permits** | Jolpica's free 14-day-delayed dumps are a genuine recovery path (§12.4). OpenF1 offers no equivalent; its recovery path is GridView's own retained snapshots. |
+| S9 | **Documented manual recovery procedure** | An operator runbook for rebuilding a season from dumps and retained snapshots, in `docs/operations/`. Does not exist yet. |
+| S10 | **Annual provider and licence review** | Terms, rate limits and maintenance signals are all explicitly changeable; Jolpica has already announced a reduction. A dated annual review with a recorded outcome. |
+| S11 | **Replaceability without an app release** | Guaranteed as long as the normalized v1 contract is unchanged. This is the single most valuable property of the whole architecture and must be protected in review. |
+
+### 12.4 Backups and dumps
+
+Jolpica publishes database dumps in CSV. The **free tier** is available 14 days
+after upload, requires no authentication and is for non-commercial use. The
+**Supporter tier** offers the latest dumps immediately *and licenses them for
+commercial use*, but requires payment and is excluded by C1.
+
+A 14-day-delayed dump is a viable disaster-recovery input for historical data:
+it would not restore the most recent race weekend, but it would restore
+everything older. Whether GridView may **retain** such a dump — and in
+particular whether it may keep it if Jolpica access later ends — is
+`Not stated or ambiguous` and is asked in Appendix B.
+
+Dump enums are documented as integer encodings whose meanings currently live
+only in the project's model source. Any use of dumps carries that decoding
+burden.
+
+### 12.5 Self-hosting is a contingency to investigate, not a plan
+
+Both projects publish server code. That does **not** mean GridView may self-host
+and thereby side-step the data question.
+
+- An open-source **code** licence grants rights to the code, not to the Formula 1
+  data the code serves. Jolpica's separation is explicit: Apache-2.0 code,
+  CC BY-NC-SA 4.0 data.
+- Self-hosting would require GridView to source the underlying data itself,
+  which reintroduces every rights question this document exists to answer, plus
+  a data-acquisition problem neither project's code solves for a third party.
+- Operating a scraper is excluded by
+  [`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §2 ("No production
+  scraper").
+
+Recorded as a contingency to **investigate** if both sources become unavailable
+simultaneously. **Not implemented, not planned, and not assumed viable.**
+
+---
+
+## 13. Official sources
+
+All accessed **2026-08-19**. Every decisive claim traces to a row here.
+
+| # | Project | URL | Page title | Type | Paraphrase |
+|---|---|---|---|---|---|
+| S1 | OpenF1 | `https://openf1.org/` | OpenF1 API \| The open source API for Formula 1 data | Explicit | Licensed CC BY-NC-SA 4.0; intended for educational, personal-learning, research and non-commercial fan-engagement use; unofficial and not associated, affiliated, endorsed or sponsored by Formula One World Championship Limited; claims no ownership of Formula 1 data, trademarks or broadcasts; Community tier free, 18 endpoints, historical sessions since 2023, **no authentication**, 3 req/s and 30 req/min; Sponsor tier EUR 9.90/month adds live data, 6 req/s and 60 req/min. **"Data is considered live from 30 minutes before a session starts until 30 minutes after it ends. Outside of this window, data is classified as historical and is free to access."** |
+| S2 | OpenF1 | `https://github.com/br-g/openf1/blob/main/documentation/includes/_api_endpoints.md` | API endpoints | Explicit | Full endpoint reference. Eighteen endpoints: Car data, **Drivers championship (beta)**, **Teams championship (beta)**, Drivers, Intervals, Laps, Location, Meetings, Overtakes, Pit, Position, Race control, Sessions, Session result, Starting grid, Stints, Team radio, Weather. Championship paths are `/v1/championship_drivers` and `/v1/championship_teams`, each documented as "Only available for race sessions" with `points_start`, `points_current`, `position_start`, `position_current`. `country_code` on drivers and `pit_duration` on pit are marked deprecated for removal at the end of the 2026 season. |
+| S3 | OpenF1 | `https://github.com/br-g/openf1/blob/main/LICENSE` | Attribution-NonCommercial-ShareAlike 4.0 International | Explicit | The repository's LICENSE file is the CC BY-NC-SA 4.0 legal text. |
+| S4 | OpenF1 | `https://api.openf1.org/v1/sessions`, `/v1/meetings`, `/v1/drivers`, `/v1/session_result`, `/v1/championship_drivers`, `/v1/championship_teams` | (JSON API responses) | Explicit | Feasibility check, §8.3. Field inventories and row counts as recorded there. No rate-limit, `ETag`, `Cache-Control` or `Last-Modified` headers were returned. |
+| S5 | Jolpica | `https://github.com/jolpica/jolpica-f1/blob/main/TERMS.md` | Jolpica-F1 API - Terms of Use (last updated 27 August 2025) | Explicit | Freely available for **non-commercial use**; data licensed CC BY-NC-SA 4.0; **commercial usage requires contacting `admin@jolpi.ca`**; the project reserves the right to change the terms; volunteer-run and donation-supported with **no guarantee of uptime, availability or correctness**; use entirely at the user's own risk. |
+| S6 | Jolpica | `https://github.com/jolpica/jolpica-f1/blob/main/docs/rate_limits.md` | Rate Limits | Explicit | Unauthenticated burst 4 requests/second, sustained 500 requests/hour; HTTP 429 on breach; limits subject to change and **"will decrease"** as token access rolls out; **caching results is the first recommended mitigation**. |
+| S7 | Jolpica | `https://github.com/jolpica/jolpica-f1/blob/main/docs/README.md` | jolpica-f1 Documentation | Explicit | Thirteen Ergast-compatible endpoints; shared `limit` (default 30, max 100) and `offset`; a custom identifying `User-Agent` is **required**. |
+| S8 | Jolpica | `https://github.com/jolpica/jolpica-f1/blob/main/docs/endpoints/races.md` | Races | Explicit | Race objects carry season, round, raceName, Circuit with Location, date and optional UTC time, plus optional `FirstPractice`, `SecondPractice`, `ThirdPractice`, `Qualifying`, `Sprint` and `SprintQualifying`/`SprintShootout`. Historical coverage from 1950. |
+| S9 | Jolpica | `https://github.com/jolpica/jolpica-f1/blob/main/docs/database_dumps.md` | Database Dumps | Explicit | CSV exports of the F1 database. **Free tier**: dumps available 14 days after upload, non-commercial, no authentication. **Supporter tier**: latest dumps immediately, **licensed for commercial use**, API key required, arranged via Ko-fi. Integer enum meanings currently live only in the project's model source. |
+| S10 | Jolpica | `https://api.jolpi.ca/ergast/f1/2026/...` (races, driverstandings, constructorstandings, drivers, constructors, circuits, `2026/11/results`, `2026/2/sprint`) | (JSON API responses) | Explicit | Feasibility check, §8.4. Row counts, field inventories and cross-source agreement as recorded in §8.4 and §8.5. Response headers carry `Cache-Control: max-age=600` and a `Last-Modified` equal to `Date`; no rate-limit headers and no `ETag`. |
+| S11 | Jolpica | `https://github.com/jolpica/jolpica-f1` (repository metadata, recent commits, issue 179) | jolpica/jolpica-f1 | Explicit | Not archived; last push 2026-08-14; Apache-2.0 code licence; 880 stars; 22 open issues; recent commits add a service status endpoint and fix round-count inference. Issue 179 records `/current/last` returning the previous round on a race Sunday, a same-day maintainer reply, and a later fix. |
+| S12 | OpenF1 | `https://github.com/br-g/openf1` (repository metadata, recent commits) | br-g/openf1 | Explicit | Not archived; last push 2026-07-17; 1,676 stars; 34 open issues. |
+| S13 | Sportmonks | `https://www.sportmonks.com/formula-one-api/`, `https://www.sportmonks.com/terms-of-service/`, `https://docs.sportmonks.com/v3/motorsport-api/endpoints-and-entities/endpoints/standings` | Sportmonks Formula 1 API; Terms of Service; Standings \| Motorsport API 3.0 | Explicit | Retained from v0.1. Commercial creations permitted; distribution, transfer and storage allowed; reselling forbidden without consent; logos and profile photos are copyright of their owners with the customer arranging IP proof and attribution. EUR 69/month with 2,000 calls/hour/endpoint on the product page against EUR 79/month with 3,000 calls/hour in the standings documentation — **an unresolved conflict**. |
+| S14 | API-Sports | `https://api-sports.io/` and seven other official paths | (not retrieved) | **Unreachable** | All returned HTTP 403 to every retrieval method available on 2026-08-19. No API-Sports statement is asserted anywhere in this document. |
+
+### 13.1 Ambiguities requiring written confirmation
+
+| # | Project | Ambiguity |
+|---|---|---|
+| X1 | **Both** | Whether serving normalized data through GridView's own free public API is permitted redistribution under CC BY-NC-SA 4.0. **Decisive for the whole proposal.** |
+| X2 | **Both** | Whether a free, unmonetised, publicly distributed Google Play application is "non-commercial" under the NC term. |
+| X3 | **Both** | What ShareAlike attaches to: the app source, the backend source, the normalized database, exported datasets, or only adapted data. |
+| X4 | **Both** | Required attribution wording and placement, and whether a specific licence link or notice must be reproduced. |
+| X5 | **Both** | Whether small derived test fixtures may be stored in a public repository. |
+| X6 | **Both** | Whether cached historical data may be retained if access later ends. |
+| X7 | **Both** | Whether Formula 1 competition-data rights remain GridView's separate responsibility. |
+| X8 | **Both** | Whether any future monetisation would require separate written permission — asked now so that C4 is a priced decision, not a discovered problem. |
+| X9 | Jolpica | Whether free 14-day-delayed database dumps may be retained as a GridView backup, and under what conditions. |
+| X10 | OpenF1 | Whether GridView's fetch schedule starting at scheduled-session-end + 32 minutes is correctly outside the live window in all cases, including delayed or red-flagged sessions. |
+| X11 | API-Sports | Everything. No current statement could be read. |
+
+---
+
+## 14. Risks and unknowns
+
+### 14.1 Legal risks
 
 | # | Risk | Severity |
 |---|---|---|
-| R1 | **No candidate explicitly permits the intended public redistribution.** Every candidate is ambiguous or requires written permission. Proceeding without confirmation risks operating a public service outside its data licence. | Critical - this is the gate |
-| R2 | **Formula 1 competition-data rights are separate from any provider subscription** and are unresolved for all four candidates. A data subscription is not a rights clearance. | Critical |
-| R3 | **The repository's existing API-Sports legal claims are unsourced and unverified** (§5.1). Any decision resting on Backend Scheme §3.1 as written would rest on assertions with no citation and no access date. | High |
-| R4 | CC BY-NC-SA ShareAlike may propagate to GridView's own API output (X6), constraining GridView's ability to set its own terms. | High for OpenF1 and Jolpica |
-| R5 | Future advertising is foreclosed or renegotiation-dependent under the NC candidates and unconfirmed for the others. ADR 0018 keeps v1 clean, but a later reversal would reopen the provider question entirely. | Medium |
-| R6 | Sportmonks' terms show no last-updated date, so their currency cannot be established. | Medium |
-| R7 | Jolpica's terms explicitly reserve the right to change, and its rate limits are stated to be heading downward. | Medium |
+| R1 | **Neither proposed source explicitly permits the intended public redistribution.** Both require written permission (X1). Proceeding without it risks operating a public service outside its data licence. | Critical — this is the gate |
+| R2 | **There is no contract.** Under the zero-cost model, the strongest available outcome is a written statement from a volunteer project, not a commercial agreement. It can be changed, withdrawn or superseded, and both projects reserve the right to change their terms. | Critical |
+| R3 | **Formula 1 competition-data rights are separate and unresolved** (X7). OpenF1 explicitly disclaims ownership of F1 data, trademarks and broadcasts, which places the burden on GridView. No free source can grant these rights. | Critical |
+| R4 | **ShareAlike scope is unknown** (X3). If SA reaches GridView's normalized database or exported datasets, GridView may be obliged to license its own API output under CC BY-NC-SA 4.0 — which would constrain the product's own terms and permanently foreclose monetisation without renegotiation. | High |
+| R5 | **Monetisation is foreclosed** while these sources are used. C4 already states this; the risk is that it is forgotten and a later revenue decision is taken without reopening the provider question. | High |
+| R6 | **The repository's existing API-Sports legal claims are unsourced and unverified** (§6.2). | Medium |
 
-### 11.2 Commercial risks
+### 14.2 Availability and continuity risks
 
-| # | Risk |
-|---|---|
-| R8 | API-Sports pricing and quotas are entirely unverified; the repository's "low entry price" premise cannot be checked. |
-| R9 | Sportmonks publishes two conflicting prices and quotas for what may be the same subscription (§8.5). |
-| R10 | Jolpica has no published commercial tier at all; a commercial price is unknown until the project is contacted. |
-| R11 | OpenF1's Sponsor tier is priced for live data GridView does not need; there is no commercial tier for GridView's actual use. |
-
-### 11.3 Technical risks and structural gaps
-
-| # | Gap | Owner |
+| # | Risk | Severity |
 |---|---|---|
-| R12 | `ProviderMode` admits only `'mock'` and `'none'`. There is no mode that selects a live provider, and production is hard-configured to `'none'`. A real adapter cannot be selected without extending this union. | Phase 9B |
-| R13 | No provider credential binding exists in `Env`. Documentation anticipates `FORMULA_ONE_PROVIDER_API_KEY` (Backend Scheme §23.1) but no code reads it and no secret is declared. | Phase 9B |
-| R14 | **Production declares no cron trigger.** Only staging has one, once daily. Nothing would drive synchronization in production today. | Phase 9B |
-| R15 | The scheduler is not event-aware (§9.8), so it would consume race-day cadence year-round. | Phase 9B |
-| R16 | `FormulaOneProvider.fetchSeasonSource` returns the **entire season source in one call**. A real adapter must fan out to many upstream endpoints internally and reconcile partial failures behind a single-call interface. Partial-failure semantics are undefined. | Phase 9B |
-| R17 | `QuotaState` expects daily and per-minute limits and remaining counts. Whether any candidate exposes these as response headers is `unverified` for all four. If a provider does not, quota state must be derived locally. | Phase 9B |
-| R18 | `providerCallCount` reads an untyped optional `callCount` property off the provider via a cast. It is a mock-only affordance, not part of the interface, and silently reports `0` for any adapter that does not expose it. | Phase 9B |
+| R7 | **Neither project guarantees uptime, availability or correctness.** Jolpica says so explicitly. Two free community projects are a thinner foundation than one paid provider, though two independent sources are also a genuine redundancy benefit. | High |
+| R8 | **Jolpica has announced its free rate limits will decrease.** This is a stated plan, not a hypothetical. §11.4 shows large headroom, but the size of the reduction is unknown. | Medium |
+| R9 | **Both championship endpoints are beta** (M3) and the standings-freshness path depends on them. | Medium |
+| R10 | **Q3 is unmeasured**: Jolpica's actual post-race publication latency is unknown, so C7's 24-hour objective is unvalidated. | Medium |
+| R11 | **OpenF1's live window is a licence boundary enforced by a clock**, and `date_end` is a scheduled time (M11). A badly delayed session could in principle place a scheduled fetch inside the live window. Mitigated by the +32-minute margin (§10.2), not eliminated. | Medium |
+| R12 | **Neither source exposes quota headers** (§8.6), so T1 cannot be satisfied as written and quota state must be modelled locally. | Low |
+
+### 14.3 Technical risks and structural gaps
+
+Unchanged from v0.1 except where the dual-source design alters them. Full detail
+in Appendix D.
+
+| # | Gap |
+|---|---|
+| R13 | `ProviderMode` admits only `'mock'` and `'none'`; production is hard-configured to `'none'`. |
+| R14 | **Production declares no cron trigger** (Q1). An event-aware schedule needs one, at fine granularity. |
+| R15 | `fetchSeasonSource(season, jobs)` is a single coarse call and **cannot express two sources with different roles**; partial-failure semantics are undefined (G4). |
+| R16 | The scheduler is not event-aware (§10.5). |
+| R17 | `providerCallCount` reads an untyped optional property via a cast and silently reports `0` for any adapter that does not expose it. |
+| R18 | No curated identifier mapping registry exists, and §8.5 proves one is mandatory. |
+| R19 | No outbound-request hardening helper exists (Backend Scheme §23.3). |
+| R20 | No provenance fields exist for §10.7, and no `provisional`/`reconciled` state exists in the local schema. |
 
 ---
 
-## 12. Preferred candidate for written inquiry
+## 15. Recommendation
 
-### 12.1 Outcome
+### 15.1 Outcome
 
-**Sportmonks is the preferred candidate for written legal inquiry.**
+**The proposed Phase 9A direction is a dual-source, zero-cost, post-session
+model: OpenF1 for provisional data and Jolpica for complete and reconciled
+data.**
 
-This is **not** production-provider approval, not a selection, and not a
-recommendation to purchase. It identifies who to ask first.
+Both projects are candidates for **written legal inquiry**. Neither is approved,
+selected for production, or activated. The proposal is contingent on **both**:
 
-### 12.2 The recommendation separated into its parts
+1. **technical feasibility** — largely evidenced by §8, with the gaps in §8.7
+   and the undecided items in §11.6 outstanding; and
+2. **written licensing confirmation from both projects** — entirely outstanding
+   (X1-X10).
 
-**Technical preference.** *Unsettled between API-Sports and Jolpica.* The
-repository's stated technical preference is API-Sports (Backend Scheme §7.2),
-but no part of that preference could be verified in this pass. Of the candidates
-whose capabilities could actually be read, **Jolpica has the cleanest fit** for
-GridView's v1 resource set: all nine resources, session-level schedules
-including sprint variants, stable string identifiers, explicit pagination, and
-1950-onward depth. Sportmonks also covers the set. OpenF1 does not demonstrably
-cover constructor standings and starts at 2023.
+Both inquiries must be answered. **A favourable answer from only one does not
+unblock the model**, because the two sources fill different roles: OpenF1 alone
+cannot supply complete metadata, constructor standings or pre-2023 history;
+Jolpica alone cannot plausibly meet C6's 30-60 minute objective.
 
-**Commercial fit.** *Sportmonks is the only candidate with published commercial
-pricing that could be read* - albeit with the §8.5 conflict. Jolpica has no
-published commercial tier. OpenF1's paid tier does not address GridView's use
-case. API-Sports is unverified.
+### 15.2 The recommendation separated into its parts
 
-**Licensing certainty.** *Sportmonks is materially ahead, and still
-insufficient.* It is the only candidate whose official terms affirmatively
-permit commercial use, storage and distribution, and it is the only one whose
-media position (logos and photos require the customer's own IP proof and
-attribution) already matches GridView's documented assumption. Its single
-decisive ambiguity - distribution versus resale (X1) - is a sharply formed
-question a support or commercial contact can answer in writing. By contrast,
-OpenF1 and Jolpica both carry a categorical NonCommercial licence plus a
-ShareAlike obligation, which is two structural questions rather than one, and
-API-Sports offers nothing readable at all.
+**Product fit.** *Strong.* The proposal is the only assessed option that
+satisfies C1 at EUR 0. Its freshness ceiling — the earliest free OpenF1 fetch at
+session end + 30 minutes — coincides exactly with C6's objective, which is
+fortunate rather than engineered, and leaves no margin to do better.
 
-**Outstanding questions.** X1 through X4 for Sportmonks; X5 and X6 if the NC
-candidates are revisited; X7 in full for API-Sports.
+**Technical fit.** *Good, with named gaps.* §8.5 is the strongest evidence: the
+two sources agreed exactly on winner, laps, race duration, race points, and all
+22 driver championship totals. Against that, constructor names disagreed in 4 of
+11 cases (M1), OpenF1 exposes no stable driver or team identifier (M2), and the
+championship endpoints are beta (M3).
 
-**Risks.** R1, R2 and R6 apply to Sportmonks. R2 in particular is unresolved for
-every candidate and is not something a data provider can grant.
+**Commercial fit.** *Trivially satisfied, and that is the risk.* EUR 0 with no
+account and no payment method. The cost of that is R2: there is no counterparty
+obligation of any kind.
 
-### 12.3 Why Sportmonks is not approved
+**Licensing certainty.** *Low, and improved but not resolved by C3.* Both
+sources are CC BY-NC-SA 4.0. Removing monetisation makes the NonCommercial
+question more favourable (X2) but answers neither it nor ShareAlike (X3) nor the
+decisive redistribution question (X1).
 
-1. The decisive question (X1) is **unanswered**. GridView's public API sits
-   between an explicit permission ("distribution, transfer, and storage ... is
-   allowed") and an explicit prohibition ("reselling the product is forbidden
-   without our consent"). Reading the permissive clause as covering GridView's
-   architecture would be exactly the inference §4 forbids.
-2. **Formula 1 competition-data rights (R2) remain unresolved** and no data
-   subscription resolves them.
-3. **Pricing is contradictory across two official pages** (§8.5), so the
-   commercially correct subscription is not established.
-4. **The terms carry no last-updated date** (R6), so their currency is unknown.
-5. Nothing has been asked, and no written answer exists.
+**Sustainability.** *Acceptable only with the S1-S11 mitigations.* Both projects
+show active maintenance, but neither offers a guarantee and Jolpica has already
+announced a limit reduction.
 
-### 12.4 Evidence that would change the recommendation
+### 15.3 Why this is not approval
+
+1. **X1 is unanswered for both projects.** Whether GridView's public normalized
+   API is permitted redistribution under CC BY-NC-SA 4.0 is the entire question,
+   and neither project's published text answers it.
+2. **X2 is unanswered.** "Free and unmonetised" is a strong argument for
+   non-commercial status. It is not a statement by either licensor.
+3. **X3 is unanswered.** ShareAlike's scope could reach GridView's own database
+   and API output.
+4. **R3 is unresolved and unresolvable by these projects.** Formula 1
+   competition-data rights are not theirs to grant.
+5. **Q3 is unmeasured.** C7's 24-hour objective has not been validated against a
+   real race weekend.
+6. Nothing has been asked, and no written answer exists.
+
+### 15.4 Evidence that would change the recommendation
 
 | If this becomes true | Then |
 |---|---|
-| Sportmonks confirms in writing that GridView's normalized public API is permitted distribution and not prohibited resale | Sportmonks becomes the candidate for provider selection, subject to R2 and a commercial decision |
-| Sportmonks answers that it **is** prohibited resale | Sportmonks is rejected; re-open with API-Sports once its terms are readable |
-| API-Sports terms and pricing become readable and permit the architecture | API-Sports returns as the leading candidate, consistent with the repository's existing technical preference |
-| Jolpica grants written commercial permission on terms compatible with GridView setting its own API terms | Jolpica becomes viable and is the strongest **technical** fit |
-| Any candidate confirms that F1 competition-data rights must be licensed separately by GridView | That becomes a product-level blocker for **all** candidates and requires a separate decision about whether GridView can ship at all with live competition data |
+| Both projects confirm in writing that GridView's free public normalized API is permitted, and state their attribution requirements | The model proceeds to Phase 9B, subject to R3 and the S1-S11 mitigations |
+| Either project answers that it is **not** permitted | The dual-source model fails. Fall back per ADR 0019. |
+| ShareAlike is confirmed to reach GridView's normalized database or API output | A product decision is required on whether GridView can accept licensing its own output under CC BY-NC-SA 4.0 |
+| C1 or C3 is relaxed | **Sportmonks returns as the leading candidate** (§6.1), and its unresolved distribution-versus-resale question becomes the priority |
+| API-Sports terms become readable and permit the architecture at zero cost | It becomes a third candidate for inquiry |
+| Q3 measurement shows Jolpica routinely publishes results far later than 24 hours | C7 must be revised downward; it is an objective, not a provider commitment |
 
-### 12.5 Required user actions before Phase 9B
+### 15.5 Required user actions before Phase 9B
 
 | # | Action | Why it needs the user |
 |---|---|---|
-| U1 | Review and approve or amend the outreach draft in Appendix A | Sending is explicitly outside this pass |
-| U2 | **Send** the inquiry to Sportmonks via the contact path in Appendix B | Contacting a provider is a hard boundary here |
-| U3 | Open `api-sports.io/terms` and `api-sports.io/pricing` in an ordinary browser and record what they say | Automated retrieval is blocked (§5.1); this cannot be done from this environment |
-| U4 | Decide whether to open a parallel inquiry to API-Sports and Jolpica, or to serialize | A commercial and time-management decision |
-| U5 | Decide whether GridView will independently seek Formula 1 competition-data clearance (R2), and whether it will accept legal review | A product and possibly legal-counsel decision |
-| U6 | Decide Q2 - whether production gets a cron trigger, and at what cadence | Affects §9 and Phase 9B scope |
+| U1 | Review and approve or amend the two inquiry drafts (Appendix A, Appendix B) | Sending is outside this pass |
+| U2 | **Send** the OpenF1 inquiry | Contacting a project is a hard boundary here |
+| U3 | **Send** the Jolpica inquiry to `admin@jolpi.ca` or via GitHub Discussions | As above |
+| U4 | Decide the response window after which no reply is treated as no permission | Silence must not become a default yes |
+| U5 | Decide whether GridView independently pursues Formula 1 competition-data clearance (R3), and whether legal review is accepted | A product and possibly legal-counsel decision |
+| U6 | Decide Q1 — whether production gets a cron trigger and at what granularity | Determines whether §10.3 is achievable |
+| U7 | Accept or revise C6 and C7 as **objectives**, knowing Q3 is unmeasured | A product decision about what the app promises |
+| U8 | Optionally, open `api-sports.io` in an ordinary browser to close X11 | Automated retrieval is blocked |
 
 ---
 
-## Appendix A - Unsent provider outreach draft
+## Appendix A - Unsent inquiry: OpenF1
 
 > **Status: DRAFT. NOT SENT.** This message has not been sent, submitted,
-> emailed or entered into any form. No account exists and no trial has been
-> started. It is recorded here for review.
+> emailed or entered into any form. No account exists, no sponsorship has been
+> started, and no payment method has been provided.
 
-**Recipient:** Sportmonks support or commercial contact (see Appendix B)
-**Subject:** Licensing confirmation request - server-side use of Formula 1 data in a free public Android application
+**Recipient:** OpenF1 project (contact path in Appendix C)
+**Subject:** Licence question — free non-commercial F1 app using OpenF1 historical data via its own backend
 
 ---
 
 Hello,
 
-I am building **GridView**, a free Formula 1 companion application for Android.
-Before subscribing to any plan, I would like written confirmation that my
-intended architecture and use are permitted under your terms. I would rather ask
-first than assume, and your terms invite exactly this.
+Thank you for OpenF1. I would like written confirmation that my intended use is
+permitted before I build anything on it.
 
-**What GridView is**
+**What GridView is.** A free Formula 1 companion application for Android,
+intended for public distribution on Google Play. It has **no advertising, no
+in-app purchases, no subscriptions, no sponsorship and no affiliate income**, and
+it will stay that way for as long as it uses OpenF1 data. There is no revenue of
+any kind.
 
-A free Android application, intended for public distribution on Google Play.
-There is no charge to users, no in-app purchase and no subscription. Version 1
-contains **no advertising**: there is no advertising SDK, no consent SDK, no ad
-unit and no ad request in the application.
+**How I would use OpenF1.**
 
-**How the data would be used - architecture summary**
+1. **Only after the free historical window opens.** I understand data is live
+   from 30 minutes before a session starts until 30 minutes after it ends. My
+   first request would be scheduled at the session's scheduled end **plus 32
+   minutes**, deliberately leaving a margin so I never call inside the live
+   window. I would make at most four attempts, at +32, +35, +45 and +60 minutes,
+   stopping as soon as I have a complete result.
+2. **No live timing and no telemetry.** I do not need and will not use car data,
+   intervals, positions, laps, location, stints, team radio or weather.
+3. **Server-side only.** Requests come from my own backend, never from the
+   mobile app.
+4. **Scheduled, not per-user.** Upstream request volume does not depend on how
+   many people use the app. My estimate is roughly 30 requests on the busiest
+   race weekend day and a few hundred per month.
+5. **Caching and normalization.** I convert responses into my own data model and
+   store them as snapshots on my backend.
+6. **Retention.** I would like to keep historical snapshots of past seasons.
+7. **Redistribution.** My backend serves those normalized snapshots to my own
+   app through my own free, read-only public API.
+8. **Endpoints I would use:** `sessions`, `meetings`, `drivers`,
+   `session_result`, `championship_drivers`, `championship_teams`.
 
-1. Your API would be called **only from my own server-side backend**, a
-   Cloudflare Worker. The mobile application never calls your API.
-2. The API key would be stored **only as a server-side secret**. It would never
-   be shipped in the mobile application, never returned in any response and
-   never written to logs.
-3. A **scheduled job** fetches data on a fixed timetable. There is **no upstream
-   request per user request** - if a million people open the app, your API sees
-   the same number of calls as if nobody did. Expected volume is roughly 6,000
-   requests per month with a peak of about 800 on a race day.
-4. Responses are **validated, normalized and mapped** into my own data model,
-   including mapping your identifiers to my own stable public identifiers. Your
-   raw response objects never leave my backend.
-5. Normalized results are **stored as snapshots** on my backend, and I would
-   like to **retain historical snapshots** of past seasons.
-6. My backend serves those normalized snapshots to my own mobile application
-   through **my own public HTTP API**.
+**The questions.**
 
-**The questions I need answered**
+1. **Is this use permitted under CC BY-NC-SA 4.0?**
+2. Does a **free, unmonetised, publicly distributed app** count as
+   non-commercial in your view?
+3. **Is serving your data — normalized into my own model — through my own free
+   public API permitted redistribution?** This is my most important question.
+4. **What does ShareAlike attach to here?** Specifically: does it apply to my
+   Android app's source code, my backend's source code, my normalized database,
+   any dataset I might export, or only to the adapted data itself? I may
+   open-source my adapter code later and want to understand the obligation
+   before I do.
+5. **What attribution do you require** — exact wording, and where it must appear
+   (an in-app credits screen, every screen showing your data, my API responses,
+   my documentation)? Is a specific licence link or notice required?
+6. May I store **small derived samples** — a handful of records — in a public
+   repository as fixtures for automated tests? They would exist only to verify my
+   code parses correctly, not as a data source.
+7. If I later stop using OpenF1, **may I retain the historical data I already
+   cached**, or must it be deleted?
+8. Do any **Formula 1 competition-data rights remain my responsibility** to
+   clear separately? I am assuming they do — that OpenF1 does not and cannot
+   grant them — but I would rather have that confirmed than assumed.
+9. I will use **no images, headshots or logos**. I understand the `headshot_url`,
+   `circuit_image` and `country_flag` fields point at third-party media that is
+   not yours to license, and I will not fetch, store or display any of them.
+   Please confirm a data-only, no-media use is acceptable.
+10. If I ever wanted to **monetise** the app in future, would that require
+    separate written permission or a different licence? I am not asking for that
+    now — I want to know the answer before it becomes a live question.
+11. Is my **+32-minute margin** sufficient to stay outside the live window in
+    all cases, including a session that is delayed or red-flagged and therefore
+    ends later than its scheduled end time?
 
-*On the architecture*
+I would rather ask and be told no than assume and be wrong.
 
-1. Is the architecture above permitted under your terms?
-2. Specifically: your terms state that "distribution, transfer, and storage of
-   data provided by our services is allowed", and separately that "reselling the
-   product is forbidden without our consent" and that I "cannot directly sell
-   the data". I do not sell data, and my API exists only to serve my own
-   application. **Does serving normalized data to my own app through my own
-   public API count as permitted distribution, or as prohibited resale or
-   redistribution?** This is the single most important question for me.
-3. Is server-side caching of normalized data permitted?
-4. Is indefinite retention of historical snapshots permitted, or must data be
-   deleted after some period?
-
-*On distribution and monetization*
-
-5. Is public distribution of the application on Google Play permitted?
-6. Version 1 has no advertising. Is that use permitted as described?
-7. **If I later added advertising**, would that require a different agreement or
-   a different plan? I am asking now so I do not build on a wrong assumption -
-   I am not asking for permission to add advertising today.
-
-*On what may be displayed*
-
-8. May the application display race calendars, session schedules, driver and
-   constructor standings, drivers, constructors, circuits and race results?
-9. **What attribution do you require?** Exact wording, and where it must appear
-    (an in-app credits screen, every screen that shows your data, my public API
-    responses, or elsewhere).
-10. Are there specific copyright or trademark notices I must reproduce?
-
-*On rights that are not yours to grant*
-
-11. Do **Formula 1 competition-data rights** remain my responsibility to clear
-    separately with Formula One World Championship Limited, the FIA or other
-    rights holders? I am assuming they do and that a subscription to your
-    service does not clear them - please correct me if that is wrong.
-12. I intend to use **no images, logos, driver photos or constructor crests**
-    from your service. I understand from your terms that these are copyrighted
-    by their owners and that I would have to arrange proof of intellectual
-    property myself. Please confirm that a data-only subscription with no media
-    use is acceptable.
-
-*On plan and quota*
-
-13. Given roughly 6,000 requests per month and a peak of about 800 per day, from
-    a single server-side source, **which plan do you recommend?**
-14. Your Formula 1 product page lists EUR 69/month with 2,000 API calls per hour
-    per endpoint, while your Motorsport API standings documentation states EUR
-    79/month with 3,000 API calls per hour. **Which subscription grants access to
-    the driver and constructor standings endpoints, and at what price and
-    quota?**
-15. What happens if I exceed the hourly limit - throttling, overage charges, or
-    suspension?
-
-*On termination and testing*
-
-16. If I stop subscribing or the agreement is terminated, must I delete cached
-    and stored data, and within what period?
-17. May I keep a small number of **sanitized example responses** in my source
-    repository as fixtures for automated tests? These would be a handful of
-    records, used only to verify that my code parses correctly, not as a data
-    source.
-
-*On the status of your answer*
-
-18. **Is a written confirmation from support contractually sufficient**, or does
-    my intended use require an amended or separate commercial agreement? If the
-    latter, please tell me how to start that process.
-
-I appreciate that some of these questions are unusual for a small customer. I
-would rather have the answers in writing before I subscribe than discover a
-problem after publishing.
-
-Thank you for your time.
+Thank you for your time and for the project.
 
 Kind regards,
 Sergio Arenas
@@ -934,67 +1244,160 @@ GridView
 
 ---
 
-## Appendix B - Official contact path
+## Appendix B - Unsent inquiry: Jolpica F1
 
-**No form was submitted, no email was sent, and no account was created.**
+> **Status: DRAFT. NOT SENT.** This message has not been sent, submitted,
+> emailed or posted. No account exists, no Ko-fi supporter tier has been taken,
+> and no API key has been requested.
 
-| Provider | Contact path | Source |
-|---|---|---|
-| Sportmonks | Support and commercial contact are reachable from `https://www.sportmonks.com/` (contact and support links in the site footer). The terms themselves invite customers who are unsure about compliance to "explain your plan and ask if this is allowed", which establishes support as the intended channel for exactly this question. Whether that answer is contractually binding is question 18 of the draft. | S7, S8 |
-| Jolpica F1 | `admin@jolpi.ca` for commercial usage; GitHub Discussions at `https://github.com/jolpica/jolpica-f1/discussions` for support, feedback and rate-limit requests. | S3, S4 |
-| OpenF1 | The site directs other use cases to contact the project to discuss appropriate licensing. | S1 |
-| API-Sports | **Not established.** No official page could be retrieved (§5.1). The contact path must be read from the site by a person - see U3. | S10 |
+**Recipient:** Jolpica F1 project — `admin@jolpi.ca`, or GitHub Discussions
+**Subject:** Licence question — free non-commercial F1 app redistributing normalized Jolpica data via its own API
 
 ---
 
-## Appendix C - Code architecture audit
+Hello,
+
+Thank you for jolpica-f1, and for keeping the Ergast interface alive. Your terms
+say commercial usage should be raised with you. I do not believe my use is
+commercial, but I would rather ask than assume — so this is that question.
+
+**What GridView is.** A free Formula 1 companion application for Android,
+intended for public distribution on Google Play. It has **no advertising, no
+in-app purchases, no subscriptions, no sponsorship and no affiliate income**, and
+it will stay that way for as long as it uses Jolpica data. There is no revenue of
+any kind.
+
+**How I would use the API.**
+
+1. **Server-side only, on a schedule.** Requests come from my own backend, never
+   from the mobile app, and volume does not depend on how many people use it. My
+   estimate is roughly 20 requests on the busiest race weekend day and a few
+   hundred per month — a small fraction of the 500/hour public limit.
+2. **A custom `User-Agent`** identifying the app and version, as you require.
+3. **Caching**, as your rate-limit guide recommends. I address resources
+   explicitly by `season/round` rather than `last`/`next`, and I pass `limit`
+   explicitly rather than relying on the default.
+4. **Endpoints I would use:** `races`, `results`, `sprint`, `qualifying`,
+   `driverstandings`, `constructorstandings`, `drivers`, `constructors`,
+   `circuits`.
+5. **Normalization.** I convert responses into my own data model, mapping your
+   identifiers to my own, and store the result as snapshots.
+6. **Retention.** I would like to keep historical snapshots of past seasons.
+7. **Redistribution.** My backend serves those normalized snapshots to my own
+   app through my own free, read-only public API.
+8. **No live timing.** I use your data for complete season metadata and for
+   final, reconciled results and standings after a session.
+
+**The questions.**
+
+1. **Is this use permitted under CC BY-NC-SA 4.0 and your Terms of Use?**
+2. Does a **free, unmonetised, publicly distributed app** count as
+   non-commercial in your view, or would you consider it commercial usage
+   requiring the route in your terms?
+3. **Is serving your data — normalized into my own model — through my own free
+   public API permitted redistribution?** This is my most important question.
+4. **What does ShareAlike attach to here?** Specifically: my Android app's source
+   code, my backend's source code, my normalized database, any dataset I might
+   export, or only the adapted data itself? I note your code is Apache-2.0 while
+   the data is CC BY-NC-SA 4.0, so I want to be sure which obligation reaches
+   which artefact. I may open-source my adapter code later.
+5. **What attribution do you require** — exact wording, and where it must appear
+   (an in-app credits screen, every screen showing your data, my API responses,
+   my documentation)? Is a specific licence link or notice required?
+6. May I store **small derived samples** — a handful of records — in a public
+   repository as fixtures for automated tests?
+7. If I later lose access, or the project stops, **may I retain the historical
+   data I already cached**?
+8. Regarding your **free database dumps** (14-day delayed, non-commercial): may I
+   download and retain them as a backup for disaster recovery, and does that
+   retention survive if my API access later ends?
+9. Do any **Formula 1 competition-data rights remain my responsibility** to
+   clear separately? I am assuming they do and that jolpica-f1 does not grant
+   them; please correct me if that is wrong.
+10. If I ever wanted to **monetise** the app in future, I take it that would need
+    separate written permission from you — is that right, and is the Supporter
+    tier the intended route?
+11. You have noted that public rate limits **will decrease** as token access
+    rolls out. Is there anything about my usage pattern above that you would
+    want changed ahead of that?
+
+I would rather ask and be told no than assume and be wrong.
+
+Thank you for your time and for the project.
+
+Kind regards,
+Sergio Arenas
+GridView
+
+---
+
+## Appendix C - Official contact paths
+
+**No form was submitted, no email was sent, no discussion was posted, and no
+account was created.**
+
+| Project | Contact path | Source |
+|---|---|---|
+| **OpenF1** | The site directs use cases beyond the stated non-commercial scope to contact the project to discuss appropriate licensing. The repository `br-g/openf1` carries community and support guidance, including a `_community_and_support.md` documentation section. | S1, S12 |
+| **Jolpica F1** | **`admin@jolpi.ca`** for commercial usage, per the Terms of Use. GitHub Discussions at `https://github.com/jolpica/jolpica-f1/discussions` for support, feedback and rate-limit questions; the project also references a Discord invite and a Ko-fi page for supporters. | S5, S6, S9 |
+| Sportmonks | Support and commercial contact reachable from `https://www.sportmonks.com/`. Retained for reference; rejected under C1. | S13 |
+| API-Sports | **Not established.** No official page could be retrieved (§6.2). Must be read from the site by a person. | S14 |
+
+**Contact addresses above are the projects' own published contact points.** They
+are published business contact details, not credentials and not personal data of
+any GridView user, and they are recorded here for that reason.
+
+---
+
+## Appendix D - Code architecture audit
 
 Read-only. Nothing in `services/edge-api/` was modified.
 
-### C.1 Seams that exist
+### D.1 Seams that exist
 
 | Element | Location |
 |---|---|
-| Provider interface | `services/edge-api/src/providers/formula-one-provider.ts` - `FormulaOneProvider`, with `ProviderSeasonSource`, `ProviderStatus`, `ProviderError`, `ProviderRateLimitedError` |
-| Mock provider | `services/edge-api/src/providers/mock/mock-provider.ts` - `MockFormulaOneProvider` |
-| Dependency-injection / factory seam | `services/edge-api/src/providers/factory.ts` - `resolveProvider(env, config, clock)`, with a test-only `env.__PROVIDER` override |
-| Configuration switch | `services/edge-api/src/config/environment.ts` - `resolveProviderMode`, `ProviderMode = 'mock' \| 'none'` |
-| Secret names anticipated | `FORMULA_ONE_PROVIDER_API_KEY`, `ADMIN_SYNC_SECRET` (Backend Scheme §23.1). **Neither exists in code.** The only implemented secret is `ADMIN_TOKEN`. |
-| Normalized domain boundary | `services/edge-api/src/contract/types.ts` - the provider interface already returns contract types, so normalization happens **inside** the adapter |
-| Provider DTO isolation boundary | The adapter itself. `ProviderSeasonSource` is composed of contract types, so no provider-shaped DTO can escape by construction |
+| Provider interface | `services/edge-api/src/providers/formula-one-provider.ts` — `FormulaOneProvider`, with `ProviderSeasonSource`, `ProviderStatus`, `ProviderError`, `ProviderRateLimitedError` |
+| Mock provider | `services/edge-api/src/providers/mock/mock-provider.ts` — `MockFormulaOneProvider` |
+| Factory seam | `services/edge-api/src/providers/factory.ts` — `resolveProvider(env, config, clock)`, with a test-only `env.__PROVIDER` override |
+| Configuration switch | `services/edge-api/src/config/environment.ts` — `resolveProviderMode`, `ProviderMode = 'mock' \| 'none'` |
+| Secret names anticipated | `FORMULA_ONE_PROVIDER_API_KEY`, `ADMIN_SYNC_SECRET` (Backend Scheme §23.1). **Neither exists in code, and neither proposed source needs one.** The only implemented secret is `ADMIN_TOKEN`. |
+| Normalized domain boundary | `services/edge-api/src/contract/types.ts` — the provider interface returns contract types, so normalization happens inside the adapter |
 | Snapshot-writing path | `sync/sync-service.ts` -> `snapshots/generator.ts` -> `publication/publisher.ts` -> `storage/kv.ts` |
-| Contract fixtures | `services/edge-api/test/fixtures/api/v1/**` - 30 normalized public-contract fixtures, validated by `test/contract/fixtures.test.ts` and `scripts/validate-fixtures.mjs` |
+| Contract fixtures | `services/edge-api/test/fixtures/api/v1/**` — 30 normalized fixtures, validated by `test/contract/fixtures.test.ts` and `scripts/validate-fixtures.mjs` |
 
-### C.2 Tests a future adapter must satisfy
+### D.2 Tests a future adapter must satisfy
 
 | Test | Requirement enforced |
 |---|---|
-| `test/sync/synchronization.test.ts` - "performs no provider call when no scheduled job is due" | Due-calculation gates every upstream call |
-| `test/sync/synchronization.test.ts` - "preserves the active snapshot after provider failure" | T2 - failure never destroys the last valid snapshot |
-| `test/sync/synchronization.test.ts` - "public reads consume no provider quota" | T3 - public traffic is independent of upstream volume |
-| `test/sync/synchronization.test.ts` - "records rate limiting and avoids an immediate retry" | `Retry-After` handling and backoff |
-| `test/sync/synchronization.test.ts` - "skips low-priority jobs when quota is high" | T8 - quota-pressure degradation |
-| `test/sync/synchronization.test.ts` - "runs manual sync through the same orchestration as scheduled sync" | One orchestration path |
-| `test/environment.test.ts` - "does not make mock mode a production default" and "requires staging to select the provider mode explicitly" | Provider-mode safety |
-| `test/config/wrangler-config.test.ts` | Asserts the literal `PROVIDER_MODE` values in `wrangler.toml`; **changing the mode union will require updating this test** |
-| `test/contract/fixtures.test.ts`, `test/contract/generated-snapshots.test.ts` | T4 - no provider DTO reaches the public contract |
+| `test/sync/synchronization.test.ts` — "performs no provider call when no scheduled job is due" | Due-calculation gates every upstream call |
+| `test/sync/synchronization.test.ts` — "preserves the active snapshot after provider failure" | T2, §10.6 |
+| `test/sync/synchronization.test.ts` — "public reads consume no provider quota" | T3 |
+| `test/sync/synchronization.test.ts` — "records rate limiting and avoids an immediate retry" | `Retry-After` handling and backoff |
+| `test/sync/synchronization.test.ts` — "skips low-priority jobs when quota is high" | T8 |
+| `test/sync/synchronization.test.ts` — "runs manual sync through the same orchestration as scheduled sync" | One orchestration path |
+| `test/environment.test.ts` — "does not make mock mode a production default", "requires staging to select the provider mode explicitly" | Provider-mode safety |
+| `test/config/wrangler-config.test.ts` | Pins the literal `PROVIDER_MODE` values in `wrangler.toml`; **widening the mode union will require updating this test** |
+| `test/contract/fixtures.test.ts`, `test/contract/generated-snapshots.test.ts` | T4, §10.8 |
 
-### C.3 Missing seams that would block a clean adapter
+### D.3 Missing seams that would block a clean implementation
 
-Recorded as **Phase 9B** work. None of it is implemented here.
+Recorded as **Phase 9B** work. None is implemented.
 
 | # | Gap | Detail |
 |---|---|---|
-| G1 | No live provider mode | `validProviderModes` is `['mock', 'none']`. A third value is required, plus the production guard must be inverted so production selects the live mode rather than `'none'`. `test/config/wrangler-config.test.ts` and `test/environment.test.ts` both pin the current values. |
-| G2 | No credential binding | `Env` has no provider key field. A binding, a `wrangler.toml` `secrets` declaration and the documented `FORMULA_ONE_PROVIDER_API_KEY` name must be introduced together. |
-| G3 | No production cron | `wrangler.toml` declares `crons` only under `[env.staging.triggers]`. Production has no trigger, so nothing would drive synchronization. |
-| G4 | Coarse provider interface | `fetchSeasonSource(season, jobs)` demands the whole season source from one call. A real adapter fans out to many endpoints behind it, and the interface defines no partial-success or per-job failure result. |
-| G5 | No event-window awareness | `scheduler.ts` intervals are constants. The documented §15 event-aware policy has no implementation. |
-| G6 | Untyped call counting | `providerCallCount` casts the provider to `{ callCount?: unknown }`. It is not on the interface and returns `0` for any adapter that does not happen to expose it, so quota telemetry would silently under-report. |
-| G7 | No HTTP hardening helpers | Backend Scheme §23.3 requires fixed hostnames, timeouts, redirect limits, content-type validation, response-size limits and header redaction. No shared outbound-request helper exists. |
-| G8 | No provider-ID mapping registry | Backend Scheme §8.1 requires a mapping file resolving provider IDs to GridView IDs, with unknown entities failing validation. No such registry exists. |
+| G1 | **No live provider mode** | `validProviderModes` is `['mock', 'none']`. The dual-source model needs at least one live value, and the production guard must be inverted so production selects it rather than `'none'`. `test/config/wrangler-config.test.ts` and `test/environment.test.ts` both pin the current values. |
+| G2 | **No credential binding** | Not needed by either proposed source, which is a simplification worth recording: the documented `FORMULA_ONE_PROVIDER_API_KEY` stays unused, and the "no secret in the app" property (Backend Scheme §5.5) becomes trivially true because no secret exists. |
+| G3 | **No production cron** | `wrangler.toml` declares `crons` only under `[env.staging.triggers]`. §10.3 needs fine-grained invocation in production (Q1). |
+| G4 | **The provider interface cannot express two sources** | `fetchSeasonSource(season, jobs)` demands a whole season from one call and defines no partial-success or per-job failure result. The dual-source model needs per-resource, per-source fetches and a coordinator above them (§10.10). **This is the largest single piece of Phase 9B work.** |
+| G5 | **No event-window awareness** | `scheduler.ts` intervals are constants. §10.3 and §10.4 need offsets relative to session end. |
+| G6 | **Untyped call counting** | `providerCallCount` casts the provider to `{ callCount?: unknown }` and returns `0` for any adapter that does not expose it, so quota telemetry would silently under-report. Worse with two sources, where per-source attribution is needed. |
+| G7 | **No HTTP hardening helper** | Backend Scheme §23.3 requires fixed hostnames, timeouts, redirect limits, content-type validation, response-size limits and header redaction. None exists. Jolpica's mandatory custom `User-Agent` would also live here. |
+| G8 | **No provider-ID mapping registry** | Backend Scheme §8.1 requires one. §8.5 proves it is mandatory: 4 of 11 constructor names differ between sources. |
+| G9 | **No provenance or provisional/reconciled state** | §10.7 fields do not exist in the local schema, and nothing distinguishes a provisional record from a reconciled one. A schema change is implied — the first since v2. |
+| G10 | **No locally-modelled quota state** | `QuotaState` expects values from provider headers; neither source supplies them (§8.6), so counters must be maintained locally per source. |
 
-**None of G1-G8 was implemented, scaffolded or stubbed in this pass.** No
-API-Sports client, provider DTO, authentication code, secret name, environment
-variable, Worker route, provider-specific mapping, network test, sandbox request
-or production configuration was added.
+**None of G1-G10 was implemented, scaffolded or stubbed in this pass.** No
+provider client, provider DTO, authentication code, secret name, environment
+variable, Worker route, provider-specific mapping, cron trigger, network test or
+production configuration was added or changed.
