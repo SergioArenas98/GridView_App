@@ -1073,10 +1073,17 @@ A public request may never trigger a write merely by opening an endpoint intende
 > as live — and therefore not free — until **30 minutes after a session ends**,
 > and GridView needs no in-session data at all. The proposed replacement is
 > **event-offset driven**: provisional OpenF1 attempts at +32, +35, +45 and +60
-> minutes after a session's scheduled end, stopping as soon as a complete and
+> minutes after the **actual** session end, stopping as soon as a complete and
 > internally consistent result is obtained, and Jolpica reconciliation checks at
 > +2, +6, +12 and +24 hours, then daily until reconciled. There is **no polling
-> during a session** and no year-round high-frequency schedule. See
+> during a session** and no year-round high-frequency schedule.
+>
+> **The scheduled end must never be used as the anchor on its own.** The live
+> window closes 30 minutes after the session really ends, so a delayed or
+> red-flagged session moves the boundary. Offsets are measured from an anchor
+> that is a justified **upper bound** on the actual end, and where no such bound
+> is available **the provisional fetch is skipped** and the session waits for
+> reconciliation. See
 > [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10 and
 > §11. The table below is retained for the enterprise-feed contingency.
 

@@ -180,13 +180,20 @@ never in the public contract; either source disableable independently. **C6 and
 C7 remain GridView objectives, never guarantees.**
 
 Two guards were tightened during review and are **binding Phase 9B
-requirements**, not implementation detail. First, those offsets are measured
-from the **actual** session end, not the scheduled one: the live window closes
-30 minutes after a session really ends, so an overrunning session would move the
-boundary, and the anchor must be bounded conservatively before the first request
-is made, with a detect-and-re-anchor rule as a backstop. Second, **serialization
-does not satisfy a per-second burst limit** — an explicit per-provider rate
-limiter is required.
+requirements**, not implementation detail.
+
+First, those offsets are measured from the **actual** session end, never from
+the scheduled one: the live window closes 30 minutes after a session really
+ends, so an overrunning session moves the boundary. The anchor must be a
+**justified upper bound** on the actual end, and **where no such bound is
+available the provisional fetch is skipped** and the session waits for
+reconciliation. A detect-and-re-anchor rule backs this up but cannot be relied
+on, because whether OpenF1 revises `date_end` after an overrun is unverified.
+**The freshness objective yields to the licence: C6 is never a reason to fetch
+early.**
+
+Second, **serialization does not satisfy a per-second burst limit** — an
+explicit per-provider rate limiter is required.
 
 **10. Sportmonks stays rejected for v1 on budget grounds only** and is the named
 fallback if C1 or C3 is relaxed. **API-Sports stays unselected** and unverified.

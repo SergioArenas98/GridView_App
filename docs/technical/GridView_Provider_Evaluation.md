@@ -894,7 +894,7 @@ Consequences:
 | M8 | **Jolpica `/2026/circuits/` returned 24 for 23 races** | Unexplained. Must be reconciled against the calendar rather than assumed one-to-one. |
 | M9 | **Jolpica `/last` and `/next` are date-derived** | A public issue records `/current/last` returning the previous round on a Sunday evening after a race, reported and later fixed. Explicit `season/round` addressing should be preferred over `last`/`next`. |
 | M10 | **Jolpica pagination** | `limit` defaults to 30 and caps at 100. Season-scoped queries must pass `limit` explicitly; a 23-race season and a 31-driver season both exceed the default. |
-| M11 | **OpenF1 `date_end` may be a scheduled end** | A red-flagged or delayed session actually ends later, which moves the live-window boundary. Anchoring on the scheduled end alone would place a request inside the paid live window. Resolved by the conservative anchor and the detect-and-re-anchor rule in §10.2 rules 3 and 4, both Phase 9B requirements. |
+| M11 | **Whether OpenF1 revises `date_end` after an overrun is `unverified`** | A red-flagged or delayed session actually ends later, which moves the live-window boundary. Anchoring on the scheduled end alone would place a request inside the paid live window. Because the revision behaviour is unverified, the detect-and-re-anchor backstop (§10.2 rule 4) **cannot be relied on to notice the overrun**. The operative control is therefore §10.2 rule 3: fetch only from a justified upper bound, otherwise **skip the provisional fetch** and wait for reconciliation. Both are Phase 9B requirements. |
 
 **No adapter was implemented.** These are recorded as Phase 9B requirements.
 
@@ -1007,45 +1007,69 @@ Five design rules follow:
    **+32 minutes**, not +30, so that clock skew, boundary rounding or an
    inclusive interpretation of "30 minutes after" cannot by itself place a
    request inside the window.
-3. **The anchor must be conservative by construction, because GridView cannot
-   observe the actual end without querying — and querying is the thing being
-   avoided.** OpenF1's `date_end` is the only actual-end signal, and reading it
-   during the window would itself be an in-window request. The planning anchor
-   is therefore:
+3. **The anchor must be *provably* at or after the actual end — and if it
+   cannot be proven, GridView does not fetch at all.** GridView cannot observe
+   the actual end without querying, and querying during the window is the thing
+   being avoided. So the anchor may only be built from signals that are
+   themselves safe to hold, and it must be an **upper bound**, not an estimate:
 
    ```text
-   anchor = max(
-       scheduled_end,
-       latest date_end already known for the session,
-       session_start + maximum_plausible_duration
-   )
+   bound = a value B for which GridView can state a source and a reason
+           why the session cannot still be running at B
+
+   anchor = max(scheduled_end,
+                latest date_end already known for the session,
+                bound)
+
    first attempt = anchor + 32 minutes
    ```
 
-   `maximum_plausible_duration` is a **curated per-session-type constant** held
-   by GridView — not a provider value — sized so that an ordinary overrun is
-   already covered before the first request is made. It lives with the
-   identifier mapping registry (§8.7 M1) and is reviewed with it.
-4. **Detect and re-anchor, without pretending it is a cure.** Every response
-   carries `date_end`. If a response reveals a `date_end` later than the anchor
-   used — meaning the request was in fact inside the live window — GridView
-   must **discard the response, write nothing, record a compliance incident,
-   and re-anchor every remaining attempt to `actual date_end + 32 minutes`.**
-   Discarding does not undo the request that was already made; rule 3 is what
-   is supposed to prevent it, and rule 4 exists so that a single mis-anchored
-   request cannot become a repeated one across the +35, +45 and +60 attempts.
+   **If no such `bound` is available for a session, the provisional fetch is
+   skipped.** The session waits for Jolpica reconciliation (§10.4), and
+   provisional freshness is lost for that session only.
+
+   That trade is deliberate. Losing the 30-60 minute objective for one
+   red-flagged session is a bounded product cost. Issuing a request inside the
+   paid live window is a licence breach, and no freshness objective justifies
+   it. **C6 yields to §7.6; the objective is never a reason to fetch early.**
+
+   Candidate bounds, each of which must carry a source and an access date
+   before it may be relied on:
+
+   | Candidate bound | Status |
+   |---|---|
+   | A published maximum session duration from the governing sporting regulations | **Not yet recorded.** No such figure is cited anywhere in this document, and none may be assumed. Recording one is Phase 9B work and requires an official source. |
+   | The scheduled start of the next session at the same meeting — a session cannot still be running once the next has begun | Usable where a next session exists; **unavailable for the final session of a meeting**, which is the race, the one that matters most |
+   | A confirmed statement from OpenF1 that `date_end` is revised to the actual end | **Unverified** — see M11. Would make rule 4 a reliable detector rather than a backstop. |
+
+   Until at least one bound is recorded with its source, **the skip rule is the
+   operative behaviour** for any session that may have overrun.
+4. **Detect and re-anchor, without pretending it is a cure — and without relying
+   on it.** Every response carries `date_end`. If a response reveals a `date_end`
+   later than the anchor used, GridView must **discard the response, write
+   nothing, record a compliance incident, and re-anchor every remaining attempt
+   to `actual date_end + 32 minutes`.**
+
+   Two limits are stated plainly. Discarding does not undo the request already
+   made. And whether OpenF1 revises `date_end` after an overrun is **unverified**
+   (M11), so this rule may silently fail to detect the very case it is aimed at.
+   **Rule 4 is therefore a backstop against repetition across the +35, +45 and
+   +60 attempts, not a control that makes rule 3 optional.** Rule 3 — bound or
+   skip — is what actually prevents the breach.
 5. **An incomplete response is treated as a possible overrun signal.** If the
    first attempt returns absent or obviously incomplete data, GridView backs off
    rather than retrying tightly, because the most likely explanation is that the
    session ran long.
 
 Rules 3 and 4 together are a **Phase 9B requirement**, not an implementation
-detail: an adapter that anchors on the scheduled end alone does not satisfy
-§7.6 and must not ship.
+detail: an adapter that anchors on the scheduled end alone, or that fetches
+without a justified bound, does not satisfy §7.6 and must not ship. **E6 and M9
+may not be treated as satisfied until a recorded bound or the skip rule is
+implemented.**
 
-This changes when the first attempt fires for an overrunning session. It does
-**not** change the number of attempts, so the request-volume model in §11 is
-unaffected.
+This changes when — and whether — the first attempt fires for an overrunning
+session. It never increases the number of attempts, so the request-volume model
+in §11 remains an upper bound.
 
 ### 10.3 Provisional lifecycle — OpenF1
 
@@ -1448,7 +1472,7 @@ asking; sending them is not a prerequisite for Phase 9B and no reply is awaited.
 | # | Project | Topic | Why it is not blocking |
 |---|---|---|---|
 | X1 | OpenF1 | Whether "Personal use" on the tier label is read as narrower than "non-commercial fan engagement" in the FAQ (§7.1.1) | The licence applied to the data is CC BY-NC-SA 4.0, whose operative term is NonCommercial; GridView complies with that term via §7.6.1. |
-| X2 | OpenF1 | Whether a fetch at scheduled session end + 32 minutes is reliably outside the live window for delayed or red-flagged sessions | §10.2 already builds in margin and backs off on incomplete data rather than retrying tightly. |
+| X2 | OpenF1 | Whether `date_end` is revised to the **actual** end after a red flag or delay, and what upper bound OpenF1 would consider safe for scheduling a first fetch | §10.2 rule 3 does not depend on an answer: without a justified upper bound GridView **skips** the provisional fetch rather than guessing. An answer would let the fetch happen more often, not more safely. |
 | X3 | Both | Exactly where ShareAlike's boundary falls between application code, database structure and individual facts | §7.6.3 states no absolute claim, follows §4(b), and preserves the boundary technically so either reading remains workable. |
 | X4 | Both | Preferred attribution wording | §7.6.2 satisfies the licence's own §3(a) requirements; a project preference would refine presentation, not permission. |
 | X5 | Both | Whether cached historical data may be retained if access later ends | The licence is irrevocable for material already received under it; retention is exercised under P1 and P4. |
@@ -1566,7 +1590,7 @@ appears among them.**
 | E3 | **Attribution requirements are part of the implementation plan** — the six elements of §7.6.2 **and its conditional duties 7-11**, in the app and in the public API documentation, with attribution held as per-source data rather than hard-coded strings |
 | E4 | **Provider-derived data is separated from application source code** (§7.6.3) |
 | E5 | The normalized data output has a **documented ShareAlike strategy** (§7.6.3) |
-| E6 | **Live-window and rate-limit restrictions are encoded as requirements** — the §10.2 anchor computed from the **actual** session end with the conservative bound and the re-anchor rule, an explicit per-provider rate limiter (§11.4) rather than reliance on serialization, and Jolpica's published limits and mandatory `User-Agent` respected |
+| E6 | **Live-window and rate-limit restrictions are encoded as requirements** — the §10.2 anchor computed from the **actual** session end via a justified upper bound, **with the skip rule implemented for sessions where no bound is available**, plus the re-anchor backstop; an explicit per-provider rate limiter (§11.4) rather than reliance on serialization; and Jolpica's published limits and mandatory `User-Agent` respected |
 | E7 | **Adapters can be disabled independently** (§14.3 M4) |
 | E8 | The **public DTO contract remains provider-neutral** (§10.8, requirement T4) |
 | E9 | **No protected images, logos or branding are imported** (§7.6.5) |
@@ -1689,9 +1713,15 @@ any kind.
 10. If I ever wanted to **monetise** the app in future, would that require
     separate written permission or a different licence? I am not asking for that
     now — I want to know the answer before it becomes a live question.
-11. Is my **+32-minute margin** sufficient to stay outside the live window in
-    all cases, including a session that is delayed or red-flagged and therefore
-    ends later than its scheduled end time?
+11. For a session that is delayed or red-flagged and therefore ends later than
+    scheduled: **is `date_end` revised to the actual end**, or does it stay at
+    the scheduled value? And is there an upper bound you would consider safe for
+    scheduling a first request — a maximum session duration, for instance?
+
+    I ask because I do not want to guess. My current rule is that if I cannot
+    justify an upper bound for a session, I **skip** the post-session fetch
+    entirely and wait for my other source, rather than risk a request inside
+    your live window.
 
 I would rather ask and be told no than assume and be wrong.
 
