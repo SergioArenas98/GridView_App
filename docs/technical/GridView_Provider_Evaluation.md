@@ -1141,23 +1141,47 @@ no live window and imposes no post-session embargo — only rate limits and fair
 use. It therefore needs no upper bound on the actual session end, and its
 schedule must **not** be tied to the §10.2 anchor:
 
+**The anchor is the session *start*, because that is what Jolpica actually
+supplies.** §8.4 records that a Jolpica race object carries a `date` and an
+optional UTC `time` for each session — a start, never an end and never a
+duration. An anchor defined as "scheduled session end" could not be constructed
+from it, so the anchor is defined on the timestamp that exists:
+
 ```text
-jolpica_anchor = scheduled session end, from Jolpica's own calendar
+jolpica_anchor = scheduled session START, from Jolpica's calendar
+                 = `date` + `time`  (UTC)
+
+where `time` is absent (it is optional in the Ergast schema),
+                 = `date` at 23:59:59 UTC
 ```
 
-This is deliberate and load-bearing. §10.2's bound-or-skip rule exists solely to
-keep GridView out of **OpenF1's** paid window. Applying it to Jolpica would mean
-that when no bound is recorded — which is the situation today — *nothing* would
-run at all: no provisional path and no reconciliation, so no data and no C7
-either. **The reconciliation path stays available in every case, including when
-every OpenF1 fetch is skipped.**
+Falling back to the end of the day when `time` is missing errs **late**, which
+is the safe direction here: Jolpica imposes no embargo, so an early check costs
+one wasted request while a late one costs only freshness. Neither is a
+compliance risk.
 
-| Check | Offset from `jolpica_anchor` |
-|---|---|
-| 1 | +2 hours |
-| 2 | +6 hours |
-| 3 | +12 hours |
-| 4 | +24 hours |
+**Offsets are therefore measured from the start and sized to land after any
+plausible session end.** A session runs at most a few hours, so the checks below
+approximate "end + 2, 6, 12 and 24 hours" for a session of about three hours,
+and remain after the end for a shorter one.
+
+| Check | Offset from `jolpica_anchor` (session start) | Approximate offset after a ~3h session ends |
+|---|---|---|
+| 1 | +5 hours | +2 hours |
+| 2 | +9 hours | +6 hours |
+| 3 | +15 hours | +12 hours |
+| 4 | +27 hours | +24 hours |
+
+The C7 objective of "within 24 hours" is measured from the session end and is
+served by check 4.
+
+This separation from §10.2 is deliberate and load-bearing. The bound-or-skip
+rule exists **solely** to keep GridView out of **OpenF1's** paid window.
+Applying it to Jolpica would mean that when no bound is recorded — the situation
+today — *nothing* would run at all: no provisional path and no reconciliation,
+so no data and no C7 either. **The reconciliation path stays available in every
+case, including when every OpenF1 fetch is skipped**, and it depends on no
+timestamp that Jolpica does not publish.
 
 Then, if still unreconciled, **daily** until reconciled or until the next event
 week begins, at which point the resource is marked unreconciled and left alone.
@@ -1226,6 +1250,8 @@ provisional snapshot.** State and time both gate every write:
 
 ```text
 accept the incoming write only if
+    stored is absent
+  or
     incoming.state == reconciled
         and (stored.state == provisional
              or incoming.reconciledAt > stored.reconciledAt)
@@ -1234,6 +1260,16 @@ accept the incoming write only if
         and stored.state == provisional
         and incoming.fetchedAt > stored.fetchedAt
 ```
+
+**The `stored is absent` case must come first, and it is not a formality.**
+Without it the predicate rejects the very first write for a session, because the
+reconciled branch requires either an existing provisional record or a
+`reconciledAt` to compare against, and neither exists yet. That would mean a new
+session — or a whole new season — could never publish its first result. It is
+also the **normal** case today: with the OpenF1 path locked (§10.2), every
+result arrives as a first reconciled write with nothing stored before it. An
+implementation that evaluates the later branches against absent `stored` state
+would also dereference nothing.
 
 A provisional write against a reconciled record is **rejected and logged**, not
 merged. This composes with the existing `SnapshotConflict.decide` rule rather

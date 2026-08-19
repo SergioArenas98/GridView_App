@@ -553,10 +553,25 @@ Not selected for v1 core because:
 - Published access is personal/non-commercial by default.
 - It would increase data volume and complexity.
 
-> **Corrected (2026-08-19).** OpenF1 is now the **provisional post-session
-> source**, for `sessions`, `meetings`, `drivers`, `session_result`,
+> **Corrected (2026-08-19). LOCKED — do not enable against the live service.**
+>
+> OpenF1 is the **specified but not unlocked** provisional post-session source,
+> for `sessions`, `meetings`, `drivers`, `session_result`,
 > `championship_drivers` and `championship_teams` only — no telemetry, no live
-> data, no media. The first two bullets above still hold: telemetry is not used,
+> data, no media.
+>
+> **No GridView request may reach OpenF1 today.** Its data is free only outside
+> a live window that closes 30 minutes after a session *actually* ends, and a
+> delayed session moves that boundary. GridView may fetch only from a justified
+> upper bound on the actual end, and **no usable bound is recorded**, so every
+> session is skipped, **Jolpica supplies all data including session schedules**,
+> and the 30-60 minute freshness objective is **not met by any implemented
+> mechanism**. There is no baseline poll, metadata refresh or health check
+> outside that gate either. The adapter may be built and tested against
+> fixtures; it must not contact the live service until a bound is recorded with
+> an official source and access date. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.2 and
+> `GridView_Implementation_Plan.md` §14.0.2. The first two bullets above still hold: telemetry is not used,
 > and both championship endpoints are **confirmed beta** and documented as
 > available for race sessions only. The third bullet is superseded: the data is
 > published under CC BY-NC-SA 4.0, whose operative restriction is
@@ -566,8 +581,10 @@ Not selected for v1 core because:
 > [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.1.1
 > together with GridView's interpretation and that interpretation's limits. The
 > fourth bullet no longer applies at the narrow endpoint set used. Free access
-> begins only **30 minutes after a session ends**, which is what makes the
-> freshness objective achievable and also caps it.
+> begins only **30 minutes after a session ends**, which caps the freshness
+> objective — and, because that is 30 minutes after the *actual* end and no
+> bound on it is recorded, currently prevents the objective from being met at
+> all.
 
 ### Jolpica
 
