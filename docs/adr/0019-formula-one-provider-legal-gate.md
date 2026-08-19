@@ -192,6 +192,16 @@ on, because whether OpenF1 revises `date_end` after an overrun is unverified.
 **The freshness objective yields to the licence: C6 is never a reason to fetch
 early.**
 
+**No usable bound is recorded today.** The one candidate that looked
+serviceable — the scheduled start of the next session — is unsound, because
+delays cascade: an overrunning session pushes the next one back, so its
+scheduled timestamp passes while the earlier session is still running. It fails
+exactly in the case it was meant to cover. Until a bound is recorded with its
+source, **the skip rule applies to every session, and the C6 objective is not
+met by any implemented mechanism.** Recording one is the first item of Phase 9B
+work on this path. This is a real reduction in what the design delivers and is
+recorded as such rather than presented as an edge case.
+
 Second, **serialization does not satisfy a per-second burst limit** — an
 explicit per-provider rate limiter is required.
 

@@ -979,6 +979,12 @@ provider mode, binding or route was created or changed.**
 | **OpenF1** | *Provisional* post-session classification, points and championship state | Live timing, telemetry, in-session data, media |
 | **Jolpica** | *Complete* season metadata, calendar, participants, circuits, historical depth, and *reconciled* final results and standings | Live or near-live data |
 
+> **Gated (see §10.2 rule 3).** OpenF1's provisional role is conditional on a
+> justified upper bound on the actual session end existing. **None is recorded
+> today**, so as things stand the skip rule applies to every session and
+> Jolpica supplies everything. The provisional path is designed and specified;
+> it is not yet unlocked.
+
 Every stored record is in exactly one of two states: **provisional** (last
 written from OpenF1) or **reconciled** (last written from Jolpica). The public
 contract exposes freshness semantics that already exist; the provisional and
@@ -1025,8 +1031,9 @@ Five design rules follow:
    ```
 
    **If no such `bound` is available for a session, the provisional fetch is
-   skipped.** The session waits for Jolpica reconciliation (§10.4), and
-   provisional freshness is lost for that session only.
+   skipped.** The session waits for Jolpica reconciliation (§10.4). As the
+   table below records, **no usable bound is presently recorded**, so today
+   the skip applies to every session, not to an unlucky few.
 
    That trade is deliberate. Losing the 30-60 minute objective for one
    red-flagged session is a bounded product cost. Issuing a request inside the
@@ -1038,12 +1045,32 @@ Five design rules follow:
 
    | Candidate bound | Status |
    |---|---|
-   | A published maximum session duration from the governing sporting regulations | **Not yet recorded.** No such figure is cited anywhere in this document, and none may be assumed. Recording one is Phase 9B work and requires an official source. |
-   | The scheduled start of the next session at the same meeting — a session cannot still be running once the next has begun | Usable where a next session exists; **unavailable for the final session of a meeting**, which is the race, the one that matters most |
-   | A confirmed statement from OpenF1 that `date_end` is revised to the actual end | **Unverified** — see M11. Would make rule 4 a reliable detector rather than a backstop. |
+   | A published maximum session duration from the governing sporting regulations | **Not recorded.** No such figure is cited anywhere in this document, and none may be assumed. Recording one is Phase 9B work and requires an official source. |
+   | The **scheduled** start of the next session at the same meeting | **Rejected — unsound.** See below. |
+   | Confirmation that the next session **actually began** | Theoretically sound, but GridView cannot obtain it without querying during the window it is trying to avoid. **Not usable.** |
+   | A confirmed statement from OpenF1 that `date_end` is revised to the actual end | **Unverified** — see M11. Would make rule 4 a reliable detector rather than a backstop, but is not itself a bound. |
 
-   Until at least one bound is recorded with its source, **the skip rule is the
-   operative behaviour** for any session that may have overrun.
+   **Why the scheduled next-session start is rejected.** It looks like a bound —
+   a session cannot still be running once the next has begun — but the
+   inference fails exactly when it is needed. Delays cascade: if a session
+   overruns, the *next* session is pushed back too, so its **scheduled**
+   timestamp passes while the previous session is still running. Treating that
+   timestamp as an upper bound could therefore schedule a request while the
+   earlier session is still under way, or inside the 30 minutes after it
+   finally ends. The bound is unsound precisely in the delayed case it was
+   supposed to cover, and it is not rescued by only applying it to
+   non-final sessions.
+
+   **Consequently, no usable bound is recorded today, and the skip rule is the
+   operative behaviour for every session.** GridView does not perform the
+   provisional OpenF1 fetch at all until a bound is recorded with its source;
+   provisional freshness is supplied by nothing, and every session reaches the
+   app through Jolpica reconciliation (§10.4).
+
+   That is a real reduction in what the design delivers, and it is stated
+   rather than hidden: **until a bound is recorded, the C6 objective is not met
+   by any implemented mechanism.** Recording one — most plausibly a published
+   maximum session duration — is the first item of Phase 9B work on this path.
 4. **Detect and re-anchor, without pretending it is a cure — and without relying
    on it.** Every response carries `date_end`. If a response reveals a `date_end`
    later than the anchor used, GridView must **discard the response, write
@@ -1067,9 +1094,11 @@ without a justified bound, does not satisfy §7.6 and must not ship. **E6 and M9
 may not be treated as satisfied until a recorded bound or the skip rule is
 implemented.**
 
-This changes when — and whether — the first attempt fires for an overrunning
-session. It never increases the number of attempts, so the request-volume model
-in §11 remains an upper bound.
+This changes when — and whether — the first attempt fires. It never increases
+the number of attempts, so the request-volume model in §11 remains an upper
+bound. While the skip rule applies to every session, the OpenF1 component of
+that model is **not exercised at all**, and actual volume is the Jolpica
+baseline and reconciliation figures alone.
 
 ### 10.3 Provisional lifecycle — OpenF1
 
@@ -1560,8 +1589,12 @@ under the public CC BY-NC-SA 4.0 licence that OpenF1 and Jolpica each publish.**
 
 | Source | Role |
 |---|---|
-| **OpenF1** | *Provisional* post-session classification, points and championship state, fetched only outside its live window |
+| **OpenF1** | *Provisional* post-session classification, points and championship state, fetched only outside its live window — **gated on a justified end bound, none of which is recorded today (§10.2 rule 3)** |
 | **Jolpica F1** | *Complete* season metadata, calendar, participants, circuits, historical depth, and *reconciled* final results and standings |
+
+**As things stand the OpenF1 path is specified but not unlocked**, so Jolpica
+supplies everything and the C6 objective is not met by any implemented
+mechanism. Recording a bound is the first Phase 9B item on this path.
 
 **Individual provider replies are not required and are not awaited.** Outreach
 remains available as an optional courtesy or clarification channel (Appendices A
@@ -1662,12 +1695,23 @@ any kind.
 
 **How I would use OpenF1.**
 
-1. **Only after the free historical window opens.** I understand data is live
-   from 30 minutes before a session starts until 30 minutes after it ends. My
-   first request would be scheduled at the session's scheduled end **plus 32
-   minutes**, deliberately leaving a margin so I never call inside the live
-   window. I would make at most four attempts, at +32, +35, +45 and +60 minutes,
-   stopping as soon as I have a complete result.
+1. **Only after the free historical window opens — and only when I can prove
+   it has.** I understand data is live from 30 minutes before a session starts
+   until 30 minutes after it ends. Because that window closes 30 minutes after
+   the session *actually* ends, I do not schedule from the published start time
+   alone: a delayed or red-flagged session would move the boundary and I could
+   call inside your live window without realising it.
+
+   So my rule is **bound-or-skip**. I fetch only when I can justify an upper
+   bound on the actual end — a value I can point to a source for and say the
+   session cannot still be running by then — and I measure **+32 minutes** from
+   that, leaving margin for clock skew. If I cannot justify such a bound for a
+   session, **I do not fetch it at all** and wait for my other source instead.
+   Where I do fetch, I make at most four attempts, at +32, +35, +45 and +60
+   minutes, stopping as soon as I have a complete result.
+
+   I would rather lose freshness on a session than make one request inside your
+   paid window.
 2. **No live timing and no telemetry.** I do not need and will not use car data,
    intervals, positions, laps, location, stints, team radio or weather.
 3. **Server-side only.** Requests come from my own backend, never from the
