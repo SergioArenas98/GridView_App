@@ -1165,15 +1165,25 @@ plausible session end.** A session runs at most a few hours, so the checks below
 approximate "end + 2, 6, 12 and 24 hours" for a session of about three hours,
 and remain after the end for a shorter one.
 
-| Check | Offset from `jolpica_anchor` (session start) | Approximate offset after a ~3h session ends |
-|---|---|---|
-| 1 | +5 hours | +2 hours |
-| 2 | +9 hours | +6 hours |
-| 3 | +15 hours | +12 hours |
-| 4 | +27 hours | +24 hours |
+| Check | Offset from `jolpica_anchor` (session start) | After a ~2h session ends | After a ~3h session ends |
+|---|---|---|---|
+| 1 | +5 hours | +3 hours | +2 hours |
+| 2 | +9 hours | +7 hours | +6 hours |
+| 3 | +15 hours | +13 hours | +12 hours |
+| 4 | **+24 hours** | +22 hours | +21 hours |
 
-The C7 objective of "within 24 hours" is measured from the session end and is
-served by check 4.
+**Check 4 is deliberately at +24 hours from the start, not +27.** C7 is measured
+from the session **end**, so a check at start + 27 hours would land at end + 25
+hours for a two-hour session — outside the objective. Anchoring the last
+pre-objective check at start + 24 hours keeps it inside C7 for any session
+length, because a session's start always precedes its end.
+
+After check 4 the cadence drops to **daily**, per §10.4's continuation rule.
+
+**One case cannot meet C7 and is not claimed to.** Where Jolpica omits the
+optional `time`, the anchor falls back to end-of-day UTC, which pushes every
+offset later — potentially past end + 24 hours. C7 is an objective, not a
+guarantee (§2.1), and this is one of the situations where it is not met.
 
 This separation from §10.2 is deliberate and load-bearing. The bound-or-skip
 rule exists **solely** to keep GridView out of **OpenF1's** paid window.
@@ -1230,6 +1240,9 @@ Internal only. Every synchronized resource retains:
 | `sessionIdentity` | GridView's session identity for the record. |
 | `state` | `provisional` or `reconciled`. |
 | `reconciledAt` | When a reconciled write last replaced or confirmed the record. Null while provisional. |
+| `contentRevision` | Stable hash of the normalized payload, used by §10.9 to order reconciled writes without a provider timestamp. |
+| `pendingRevision` | A differing reconciled payload seen once and awaiting corroboration on the next check (§10.9). Null when none. |
+| `settled` | Whether the resource has been stable across the full check sequence and past the C7 window (§10.9). |
 | `conflictOutcome` | Which rule in §10.9 fired, and what it decided. |
 
 ### 10.8 Provider metadata must not leak into the public contract
@@ -1249,24 +1262,58 @@ mapping inputs, never public GridView IDs (T7, Backend Scheme §8.1).
 provisional snapshot.** State and time both gate every write:
 
 ```text
+contentRevision = stable hash of the normalized payload for the resource
+
 accept the incoming write only if
     stored is absent
   or
-    incoming.state == reconciled
-        and (stored.state == provisional
-             or incoming.reconciledAt > stored.reconciledAt)
+    incoming.state == reconciled and stored.state == provisional
   or
-    incoming.state == provisional
-        and stored.state == provisional
+    incoming.state == reconciled and stored.state == reconciled
+        and incoming.contentRevision != stored.contentRevision
+        and incoming.contentRevision is CORROBORATED
+  or
+    incoming.state == provisional and stored.state == provisional
         and incoming.fetchedAt > stored.fetchedAt
+
+where CORROBORATED means the same contentRevision was returned on two
+consecutive reconciliation checks (§10.4), not merely once
 ```
 
+**`reconciledAt` orders nothing.** It records *when GridView last confirmed* a
+record; it is never used to decide which of two differing reconciled payloads is
+newer. Jolpica exposes no update timestamp, no version and no usable
+`Last-Modified` (§8.6), so **fetch order cannot demonstrate source order.**
+Ordering reconciled writes by local time would let a stale replica or a cached
+pre-penalty classification, simply because it was fetched later, overwrite a
+newer and correct stored result — regressing published positions or points. It
+would also contradict
+[ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md), which forbids
+substituting generation time for source recency.
+
+**Corroboration is the substitute for the timestamp GridView does not have.** A
+differing reconciled payload changes nothing on first sight; it must be returned
+again on the next check before it is written. A single anomalous read from a
+stale replica is therefore inert, while a genuine change — a penalty applied
+hours after a race — persists across checks and is accepted. The cost is one
+check interval of latency on genuine corrections, which is well inside C7.
+
+**Identical payloads are a no-op.** When `incoming.contentRevision` equals the
+stored one, nothing is written; only the confirmation time is refreshed. This
+keeps re-checks idempotent and keeps `reconciledAt` meaningful as "last
+confirmed".
+
+**Settled records.** Once a resource has returned the same `contentRevision`
+across the full check sequence of §10.4 and the C7 window has passed, it is
+marked **settled**. A settled record still accepts a corroborated change — sport
+results are corrected weeks later on occasion — but every such change raises an
+operational conflict signal for review rather than being applied silently.
+
 **The `stored is absent` case must come first, and it is not a formality.**
-Without it the predicate rejects the very first write for a session, because the
-reconciled branch requires either an existing provisional record or a
-`reconciledAt` to compare against, and neither exists yet. That would mean a new
-session — or a whole new season — could never publish its first result. It is
-also the **normal** case today: with the OpenF1 path locked (§10.2), every
+Without it the predicate rejects the very first write for a session, because
+every other branch needs something stored to compare against. That would mean a
+new session — or a whole new season — could never publish its first result. It
+is also the **normal** case today: with the OpenF1 path locked (§10.2), every
 result arrives as a first reconciled write with nothing stored before it. An
 implementation that evaluates the later branches against absent `stored` state
 would also dereference nothing.
@@ -1281,7 +1328,7 @@ than replacing it.
 | 2 | **Mismatched constructor identifier** | Resolve through the curated mapping registry (M1). An unmapped constructor name **fails validation** and raises an operational signal; it does not fall back to string matching. |
 | 3 | **Penalty or post-session classification change** | Jolpica is authoritative. A reconciled write replaces provisional positions, points and status wholesale for that session — never field-by-field, which could leave a record internally inconsistent. |
 | 4 | **Disqualification** | Same as 3. OpenF1's `dsq` boolean produces a provisional disqualification; Jolpica's `positionText` and `status` are authoritative on reconciliation. A provisional record must never *remove* a disqualification a reconciled record asserted. |
-| 5 | **Corrected championship totals** | Jolpica standings are authoritative. OpenF1 `points_current` is provisional and is replaced, not merged. Where the two disagree at reconciliation time, the disagreement is recorded in `conflictOutcome` before the reconciled value is written. |
+| 5 | **Corrected championship totals** | Jolpica standings are authoritative. OpenF1 `points_current` is provisional and is replaced, not merged. A *reconciled* correction of a previously reconciled total is subject to the corroboration rule above, so a single stale read cannot regress a total. Where the two sources disagree at reconciliation time, the disagreement is recorded in `conflictOutcome` before the reconciled value is written. |
 | 6 | **Missing sprint or qualifying data** | Absence is never written as an empty result. The resource stays at its previous state and is retried on the §10.4 cadence. A session with no result yet is *unavailable*, which is distinct from *empty* — the same distinction the Home module already enforces via materialization rather than row count. |
 | 7 | **One provider updates before the other** | Expected and normal; it is the whole design. Provisional data may lead reconciled data by up to 24 hours. The reverse — Jolpica reconciling before OpenF1 has been fetched at all — simply skips the provisional write; §10.9's governing rule already forbids a later provisional write from overwriting it. |
 | 8 | **Beta championship endpoint returns nothing** (M3) | Treated as case 6: no write, retry on cadence, reconcile from Jolpica. A beta endpoint going silent must degrade to *slower*, never to *wrong*. |
@@ -1353,11 +1400,20 @@ skip rule total rather than partial.
 
 | Job | Source | Cadence | Requests/day |
 |---|---|---|---:|
-| Calendar / races, including session times | Jolpica | daily | 1 |
+| Calendar / races, including session times | Jolpica | **every 6 hours** | 4 |
 | Driver + constructor standings | Jolpica | daily, in season | 2 |
 | Participants and circuits | Jolpica | weekly (3 calls) | 3/7 ≈ 0.4 |
-| **Total, in season** | | | **≈ 3.4 / day** |
-| **Total, off season** (standings weekly) | | | **≈ 1.7 / day** |
+| **Total, in season** | | | **≈ 6.4 / day** |
+| **Total, off season** (standings weekly) | | | **≈ 4.7 / day** |
+
+**The calendar is fetched every six hours, not daily, for two reasons.**
+`GridView_Backend_Scheme.md` §25 sets a calendar-freshness target of **≤ 6
+hours** outside an event, and a daily fetch would miss it by a factor of four.
+More importantly, the Jolpica calendar is now the **trigger source for every
+session job** (§10.4): a schedule change observed late does not merely show a
+stale date, it delays or misses the result checks that hang off it. Six-hourly
+polling costs three extra requests a day against a 500-per-hour limit, which is
+not a meaningful cost.
 
 ### 11.3 Weekend and monthly totals
 
@@ -1373,21 +1429,21 @@ Season month with two race weekends, one in four being a sprint weekend:
 
 | Component | Formula | Worst case | Expected |
 |---|---|---:|---:|
-| Off-event baseline | `30 x 3.4` | 102 | 102 |
+| Off-event baseline | `30 x 6.4` | 192 | 192 |
 | Weekends | `1.5 x 42 + 0.5 x 84` / `1.5 x 12 + 0.5 x 24` | 105 | 30 |
-| Subtotal | | 207 | 132 |
-| Manual recovery and retry reserve (20%) | | 41 | 26 |
-| **Monthly total** | | **≈ 248** | **≈ 158** |
-| **With 2x safety margin** | | **≈ 500** | |
+| Subtotal | | 297 | 222 |
+| Manual recovery and retry reserve (20%) | | 59 | 44 |
+| **Monthly total** | | **≈ 356** | **≈ 266** |
+| **With 2x safety margin** | | **≈ 712** | |
 
 **Peak day** — the Saturday of a sprint weekend, carrying both the Sprint and
 Qualifying post-session windows:
 
 ```text
-baseline 3.4 + Sprint (17 + 12) + Qualifying (9 + 4) = ~45 requests/day
+baseline 6.4 + Sprint (17 + 12) + Qualifying (9 + 4) = ~48 requests/day
 ```
 
-Split by source on that day: **OpenF1 ≈ 26**, **Jolpica ≈ 19**.
+Split by source on that day: **OpenF1 ≈ 26**, **Jolpica ≈ 22**.
 
 **These are ceilings for the design, not current traffic.** While no end bound
 is recorded and the skip rule applies to every session (§10.2 rule 3), the
@@ -1400,7 +1456,7 @@ the numbers above once the provisional path is unlocked.
 | Source | Published limit | Peak-day use | Headroom |
 |---|---|---:|---|
 | OpenF1 free | 3 requests/**second** and 30 requests/**minute** | ≈ 26 requests/**day** once unlocked; **0 today** | The entire peak day fits inside one minute's allowance. The **per-second** limit is a separate matter — see the note below. |
-| Jolpica unauthenticated | 4 requests/**second** and 500 requests/**hour** | ≈ 19 requests/**day** | ≈ 4% of a single hour's allowance, spread across 24 hours. Well inside the announced future reduction. The per-second limit is subject to the same note below. |
+| Jolpica unauthenticated | 4 requests/**second** and 500 requests/**hour** | ≈ 22 requests/**day** | ≈ 4% of a single hour's allowance, spread across 24 hours. Well inside the announced future reduction. The per-second limit is subject to the same note below. |
 
 **Neither source's daily or hourly volume is a constraint on this design, even
 at worst case, even if published limits are reduced substantially.** Licensing,

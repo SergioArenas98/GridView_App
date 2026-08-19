@@ -172,9 +172,15 @@ clearance or an accessibility certification, and **no claim is made that a
 dispute or enforcement action cannot occur**.
 
 **9. The validated technical design is unchanged in substance.** OpenF1
-provisional attempts at +32/+35/+45/+60 minutes with early stop; Jolpica
-reconciliation at +2/+6/+12/+24 hours then daily; no polling during the live
-window; a reconciled snapshot never replaced by older provisional data;
+provisional attempts at +32/+35/+45/+60 minutes after the actual session end,
+with early stop; Jolpica reconciliation at +5/+9/+15/+24 hours after the session
+start, then daily; no polling during the live
+window; a reconciled snapshot never replaced by older provisional data, and one
+reconciled payload never replaced by another on **fetch order** — neither source
+publishes an update timestamp or version, so a differing reconciled payload must
+be corroborated across two consecutive checks before it is written, which also
+keeps [ADR 0005](0005-snapshot-conflict-and-freshness.md)'s prohibition on
+substituting generation time for source recency intact;
 mandatory identifier mapping; beta championship endpoints guarded; provider DTOs
 never in the public contract; either source disableable independently. **C6 and
 C7 remain GridView objectives, never guarantees.**
@@ -206,10 +212,18 @@ Two properties make that gate total rather than partial, and both are binding.
 **Every** OpenF1 request goes through it — there is no baseline poll, metadata
 refresh or health check outside the gated path, because an ungated daily
 schedule lookup could itself have fired inside the live window. And **Jolpica is
-scheduled from its own always-available anchor**, the scheduled session end from
-its own calendar, rather than from the OpenF1 bound. Tying reconciliation to
-that bound would mean that when no bound exists — the situation today — nothing
-would run at all, leaving neither data nor C7.
+scheduled from its own always-available anchor**, rather than from the OpenF1
+bound. Tying reconciliation to that bound would mean that when no bound exists —
+the situation today — nothing would run at all, leaving neither data nor C7.
+
+That Jolpica anchor is the scheduled session **start**, because a Jolpica race
+object publishes a `date` and an optional UTC `time` per session and no end or
+duration. Checks run at **+5, +9, +15 and +24 hours from the start**, then
+daily; the last pre-objective check sits at start + 24 hours precisely so it
+stays inside C7, which is measured from the session end. Where the optional
+`time` is absent the anchor falls back to end-of-day UTC, which errs late —
+safe, because Jolpica imposes no embargo, but it is one case where C7 is not
+met, and C7 is an objective rather than a guarantee.
 
 Second, **serialization does not satisfy a per-second burst limit** — an
 explicit per-provider rate limiter is required.

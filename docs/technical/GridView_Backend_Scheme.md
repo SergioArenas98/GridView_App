@@ -1557,7 +1557,7 @@ Initial operational targets:
 | Cached public API p95 | <= 300 ms |
 | Error rate | < 1% excluding client errors |
 | Provider failure data loss | Zero overwrite of last valid snapshot |
-| Calendar freshness outside event | <= 6 hours |
+| Calendar freshness outside event | <= 6 hours (met by the 6-hourly Jolpica calendar fetch, [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §11.2) |
 | Standings freshness after race | Target <= 15 minutes, provider-dependent |
 | Media availability | 99.5% |
 | Recovery from bad snapshot | <= 30 minutes through rollback |
@@ -1593,7 +1593,12 @@ gridview-media-production
 
 - Development may use mock provider data.
 - Staging may use a provider test/free key within its allowed terms.
-- Production uses the approved paid provider account.
+- Production uses the **free, unauthenticated** sources adopted in
+  [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md): Jolpica today, and
+  OpenF1 only once its live-window bound is recorded. **No paid provider account
+  and no provider credential exists**, so there is none to approve, store or
+  rotate. The "approved paid provider account" this line previously required is
+  superseded.
 - Production and staging secrets must differ.
 - Staging media must not be exposed as production content.
 - Production deployment requires protected GitHub environment approval.
@@ -2059,8 +2064,15 @@ This document establishes:
 - R2 as the media store.
 - Cron-based provider synchronization.
 - Precomputed public API responses.
-- API-Sports as the first technical adapter candidate.
-- A mandatory legal gate before production provider activation.
+- ~~API-Sports as the first technical adapter candidate.~~ **Superseded by
+  [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md):** the adopted
+  sources are **Jolpica F1** (active) and **OpenF1** (specified but locked),
+  used under their published CC BY-NC-SA 4.0 licence at zero cost. API-Sports is
+  unselected and its terms remain unverified.
+- A mandatory **licence-compliance** gate before production provider activation.
+  It is satisfied by demonstrating compliance with the published licence, **not**
+  by obtaining a provider reply — see ADR 0019 and
+  `GridView_Implementation_Plan.md` §14.2.
 - GridView-owned stable entity identifiers.
 - Version-controlled curated content.
 - Versioned snapshot publication and rollback.
@@ -2073,8 +2085,21 @@ This document establishes:
 
 The following must be resolved before production launch:
 
-- Written approval or rights assessment for the chosen data provider.
-- Final Formula 1 provider subscription.
+- ~~Written approval or rights assessment for the chosen data provider.~~
+  **Closed by [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md):**
+  GridView relies on the published CC BY-NC-SA 4.0 licence, and a rights
+  assessment is recorded in
+  [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7 and §14.
+  **No provider approval was obtained or is required**, and the residual
+  Formula 1 competition-data and trademark exposure is accepted rather than
+  resolved.
+- ~~Final Formula 1 provider subscription.~~ **Closed: there is none.** The
+  provider budget is EUR 0 and both adopted sources are free and
+  unauthenticated. Any future monetisation reopens this and must be settled
+  before implementation.
+- **Still open:** recording a justified upper bound on a session's actual end,
+  which is what unlocks the OpenF1 provisional path. Until it exists every
+  session is skipped and Jolpica supplies everything.
 - Final custom API and media domains.
 - Whether the Cloudflare paid plan is enabled from the start.
 - Final public rate limit.
