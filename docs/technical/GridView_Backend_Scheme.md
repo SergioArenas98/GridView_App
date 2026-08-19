@@ -268,7 +268,7 @@ The public API must serve normalized snapshots rather than query and transform t
 
 ### 5.2 Provider isolation
 
-Only the provider adapter may understand the external provider's field names, identifiers and response structures.
+Only a provider adapter may understand its own source's field names, identifiers and response structures. With two sources adopted, each adapter knows only its own; reconciling them is a coordinator concern above both, and neither adapter knows the other exists.
 
 ### 5.3 Precomputed public responses
 
@@ -1972,7 +1972,10 @@ The migration will use a direct cutover strategy.
 
 - Build the edge API.
 - Seed current-season curated content.
-- Implement the provider adapter.
+- Implement the **Jolpica adapter and the reconciliation coordinator**. The
+  OpenF1 adapter is built and fixture-tested alongside them but stays **locked**
+  until an end bound is recorded
+  ([ADR 0019](../adr/0019-formula-one-provider-legal-gate.md)).
 - Generate validated snapshots.
 - Deploy and validate staging.
 

@@ -1884,7 +1884,7 @@ Suggested sequence:
 26. Settings.
 27. Firebase observability.
 28. Advertising and consent.
-29. Production provider adapter.
+29. Production data-source adapters — Jolpica active, OpenF1 locked (§14.0.2).
 30. Legacy preference migration.
 31. Performance and accessibility hardening.
 32. Release candidate.
