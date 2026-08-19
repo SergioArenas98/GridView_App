@@ -202,6 +202,15 @@ met by any implemented mechanism.** Recording one is the first item of Phase 9B
 work on this path. This is a real reduction in what the design delivers and is
 recorded as such rather than presented as an edge case.
 
+Two properties make that gate total rather than partial, and both are binding.
+**Every** OpenF1 request goes through it — there is no baseline poll, metadata
+refresh or health check outside the gated path, because an ungated daily
+schedule lookup could itself have fired inside the live window. And **Jolpica is
+scheduled from its own always-available anchor**, the scheduled session end from
+its own calendar, rather than from the OpenF1 bound. Tying reconciliation to
+that bound would mean that when no bound exists — the situation today — nothing
+would run at all, leaving neither data nor C7.
+
 Second, **serialization does not satisfy a per-second burst limit** — an
 explicit per-provider rate limiter is required.
 

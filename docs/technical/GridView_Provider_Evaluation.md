@@ -1136,7 +1136,23 @@ reconciliation. A failed provisional pass is never an outage.
 Triggered after the same polled sessions, and independently of whether the
 provisional pass succeeded.
 
-| Check | Offset from the §10.2 anchor |
+**Jolpica uses its own anchor, and it is always available.** Jolpica publishes
+no live window and imposes no post-session embargo — only rate limits and fair
+use. It therefore needs no upper bound on the actual session end, and its
+schedule must **not** be tied to the §10.2 anchor:
+
+```text
+jolpica_anchor = scheduled session end, from Jolpica's own calendar
+```
+
+This is deliberate and load-bearing. §10.2's bound-or-skip rule exists solely to
+keep GridView out of **OpenF1's** paid window. Applying it to Jolpica would mean
+that when no bound is recorded — which is the situation today — *nothing* would
+run at all: no provisional path and no reconciliation, so no data and no C7
+either. **The reconciliation path stays available in every case, including when
+every OpenF1 fetch is skipped.**
+
+| Check | Offset from `jolpica_anchor` |
 |---|---|
 | 1 | +2 hours |
 | 2 | +6 hours |
@@ -1284,14 +1300,28 @@ Expected case, first attempt and first check succeed:
 
 ### 11.2 Baseline, off-event
 
+**The baseline contains no OpenF1 request.** An earlier version of this table
+included a daily OpenF1 `sessions` lookup. That was a defect: it sat outside the
+provisional path, so the §10.2 bound-or-skip rule did not gate it, and on an
+event day it could have fired **inside OpenF1's live window**. It is removed.
+
+Session schedules come from **Jolpica's calendar**, which already carries
+`FirstPractice`, `SecondPractice`, `ThirdPractice`, `Qualifying`, `Sprint` and
+`SprintQualifying` times (§8.4) and is fetched daily anyway. Jolpica has no live
+window, so a schedule lookup there is unconditionally safe.
+
+**Every OpenF1 request without exception belongs to the gated provisional path
+of §10.2 and §10.3.** There is no other route by which GridView contacts OpenF1
+— no baseline poll, no metadata refresh, no health check. That is what makes the
+skip rule total rather than partial.
+
 | Job | Source | Cadence | Requests/day |
 |---|---|---|---:|
-| Calendar / races | Jolpica | daily | 1 |
+| Calendar / races, including session times | Jolpica | daily | 1 |
 | Driver + constructor standings | Jolpica | daily, in season | 2 |
-| Session schedule | OpenF1 `sessions` | daily | 1 |
 | Participants and circuits | Jolpica | weekly (3 calls) | 3/7 ≈ 0.4 |
-| **Total, in season** | | | **≈ 4.4 / day** |
-| **Total, off season** (standings weekly) | | | **≈ 2.7 / day** |
+| **Total, in season** | | | **≈ 3.4 / day** |
+| **Total, off season** (standings weekly) | | | **≈ 1.7 / day** |
 
 ### 11.3 Weekend and monthly totals
 
@@ -1307,28 +1337,34 @@ Season month with two race weekends, one in four being a sprint weekend:
 
 | Component | Formula | Worst case | Expected |
 |---|---|---:|---:|
-| Off-event baseline | `30 x 4.4` | 132 | 132 |
+| Off-event baseline | `30 x 3.4` | 102 | 102 |
 | Weekends | `1.5 x 42 + 0.5 x 84` / `1.5 x 12 + 0.5 x 24` | 105 | 30 |
-| Subtotal | | 237 | 162 |
-| Manual recovery and retry reserve (20%) | | 47 | 32 |
-| **Monthly total** | | **≈ 285** | **≈ 195** |
-| **With 2x safety margin** | | **≈ 570** | |
+| Subtotal | | 207 | 132 |
+| Manual recovery and retry reserve (20%) | | 41 | 26 |
+| **Monthly total** | | **≈ 248** | **≈ 158** |
+| **With 2x safety margin** | | **≈ 500** | |
 
 **Peak day** — the Saturday of a sprint weekend, carrying both the Sprint and
 Qualifying post-session windows:
 
 ```text
-baseline 4.4 + Sprint (17 + 12) + Qualifying (9 + 4) = ~47 requests/day
+baseline 3.4 + Sprint (17 + 12) + Qualifying (9 + 4) = ~45 requests/day
 ```
 
-Split by source on that day: **OpenF1 ≈ 27**, **Jolpica ≈ 21**.
+Split by source on that day: **OpenF1 ≈ 26**, **Jolpica ≈ 19**.
+
+**These are ceilings for the design, not current traffic.** While no end bound
+is recorded and the skip rule applies to every session (§10.2 rule 3), the
+OpenF1 column is **zero**: the peak day is Jolpica's ≈ 19 requests, and the
+monthly figure is the baseline plus reconciliation alone. Volume only reaches
+the numbers above once the provisional path is unlocked.
 
 ### 11.4 Headroom against published limits
 
 | Source | Published limit | Peak-day use | Headroom |
 |---|---|---:|---|
-| OpenF1 free | 3 requests/**second** and 30 requests/**minute** | ≈ 27 requests/**day** | The entire peak day fits inside one minute's allowance. The **per-second** limit is a separate matter — see the note below. |
-| Jolpica unauthenticated | 500 requests/**hour** | ≈ 21 requests/**day** | ≈ 4% of a single hour's allowance, spread across 24 hours. Well inside the announced future reduction. |
+| OpenF1 free | 3 requests/**second** and 30 requests/**minute** | ≈ 26 requests/**day** once unlocked; **0 today** | The entire peak day fits inside one minute's allowance. The **per-second** limit is a separate matter — see the note below. |
+| Jolpica unauthenticated | 4 requests/**second** and 500 requests/**hour** | ≈ 19 requests/**day** | ≈ 4% of a single hour's allowance, spread across 24 hours. Well inside the announced future reduction. The per-second limit is subject to the same note below. |
 
 **Neither source's daily or hourly volume is a constraint on this design, even
 at worst case, even if published limits are reduced substantially.** Licensing,
@@ -1623,7 +1659,7 @@ appears among them.**
 | E3 | **Attribution requirements are part of the implementation plan** — the six elements of §7.6.2 **and its conditional duties 7-11**, in the app and in the public API documentation, with attribution held as per-source data rather than hard-coded strings |
 | E4 | **Provider-derived data is separated from application source code** (§7.6.3) |
 | E5 | The normalized data output has a **documented ShareAlike strategy** (§7.6.3) |
-| E6 | **Live-window and rate-limit restrictions are encoded as requirements** — the §10.2 anchor computed from the **actual** session end via a justified upper bound, **with the skip rule implemented for sessions where no bound is available**, plus the re-anchor backstop; an explicit per-provider rate limiter (§11.4) rather than reliance on serialization; and Jolpica's published limits and mandatory `User-Agent` respected |
+| E6 | **Live-window and rate-limit restrictions are encoded as requirements** — the §10.2 anchor computed from the **actual** session end via a justified upper bound, **with the skip rule implemented for sessions where no bound is available**, plus the re-anchor backstop; **every** OpenF1 request routed through that gate with no baseline, metadata or health-check exception (§11.2); Jolpica scheduled from its own always-available anchor (§10.4) so reconciliation survives the skip; an explicit per-provider rate limiter (§11.4) rather than reliance on serialization; and Jolpica's published limits and mandatory `User-Agent` respected |
 | E7 | **Adapters can be disabled independently** (§14.3 M4) |
 | E8 | The **public DTO contract remains provider-neutral** (§10.8, requirement T4) |
 | E9 | **No protected images, logos or branding are imported** (§7.6.5) |

@@ -1319,10 +1319,32 @@ CC BY-NC-SA 4.0 licence each project publishes. **For uses inside that licence's
 scope, the licence is the permission**; separate written permission from either
 project is not required before Phase 9B.
 
-| Source | Role |
-|---|---|
-| **OpenF1** | *Provisional* post-session classification, points and championship state, fetched only outside its live window, which ends 30 minutes after a session ends |
-| **Jolpica F1** | *Complete* season metadata, calendar, participants, circuits, historical depth, and *reconciled* final results and standings |
+| Source | Role | Status |
+|---|---|---|
+| **OpenF1** | *Provisional* post-session classification, points and championship state | **Specified but NOT unlocked** — see below |
+| **Jolpica F1** | *Complete* season metadata, calendar, session times, participants, circuits, historical depth, and *reconciled* final results and standings | Active; supplies everything today |
+
+**The OpenF1 path is locked, and Phase 9B must not implement it as though it
+were live.** OpenF1's data is free only outside a live window that closes **30
+minutes after a session actually ends**. A delayed or red-flagged session moves
+that boundary, so GridView may only fetch from a **justified upper bound** on
+the actual end — and where no such bound exists, it **skips the session
+entirely**.
+
+**No usable bound is recorded today.** The one candidate that looked serviceable
+— the scheduled start of the next session — is unsound, because delays cascade
+and its timestamp passes while the earlier session is still running.
+Consequently:
+
+- the skip rule applies to **every** session;
+- **Jolpica supplies all data**, including session schedules;
+- **the C6 freshness objective is not met by any implemented mechanism**;
+- **no GridView request reaches OpenF1 by any route** — there is no baseline
+  poll, metadata refresh or health check outside the gated path.
+
+Recording a bound, with an official source and access date, is the **first Phase
+9B item** on this path. Until then the OpenF1 adapter may be built and tested
+against fixtures, but it must not be enabled against the live service.
 
 Sportmonks is **rejected for v1 on budget grounds only** (C1) and is the named
 fallback if C1 or C3 is relaxed. API-Sports remains unselected and unverified.
