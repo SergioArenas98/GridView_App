@@ -182,10 +182,17 @@ Confirmed at Level 3 unless noted:
 under the priority decision in §5. No document may describe them as fixed,
 passed or not reproduced.
 
-Common rationale for "not a Phase 8 blocker": each affects only how a screen
-reader narrates an already-correct screen. None changes what is displayed,
-none affects the ordinary touchscreen flow, and none touches application
-stability, data integrity, security or release configuration.
+Common rationale for "not a Phase 8 blocker", **for §4.1 to §4.10**: each
+affects only how a screen reader narrates an already-correct screen. None
+changes what is displayed, none affects the ordinary touchscreen flow, and none
+touches application stability, data integrity, security or release
+configuration.
+
+**§4.11 is different in kind** and is listed apart from the human-heard
+findings: it is a visible contrast shortfall established by source inspection
+and deterministic token calculation, not by a screen-reader pass. It does change
+what is displayed, so it carries its own rationale rather than the common one
+above.
 
 ### 4.1 Selected Settings options can announce the selected state twice
 
@@ -327,6 +334,53 @@ stability, data integrity, security or release configuration.
   reachable in a production build**.
 - **Suggested correction.** Fold into any future development-catalogue tidy-up.
   Not worth a dedicated change.
+
+### 4.11 The selected segmented-control label misses AA in the dark theme
+
+The only finding in this section that is **visual rather than spoken**, and the
+only one established without a device.
+
+- **Component.** The selected option of `GvSegmentedControl`
+  (`lib/core/widgets/gv_segmented_control.dart`) — the championship switch on
+  Standings and the collection switch on Explore.
+- **Observed.** The selected option fills with `accentPrimary` and draws its
+  label in `onAccentPrimary` at **14 px, weight 700**. Under WCAG 2.1 that is
+  small text (large text starts at 18.66 px bold), so the applicable threshold
+  is **4.5:1**.
+
+  | Palette | Foreground on fill | Ratio | 4.5:1 |
+  |---|---|---:|---|
+  | Dark | `#FFFFFF` on `#FF3B30` | **3.55:1** | **not met** |
+  | Light | `#FFFFFF` on `#C62719` | 5.67:1 | met |
+
+- **Evidence.** Source inspection of the widget and the palette tokens, plus a
+  deterministic WCAG relative-luminance calculation over those token values.
+  **Not** a screen-reader observation and **not** a device finding, so it sits
+  outside the Level 1/2/3 ladder in §1.1.
+- **Why the suite is green.** `test/design_system/theme_contrast_test.dart`
+  asserts `onAccentPrimary` on `accentPrimary` at the **3:1 non-text floor**,
+  which is the correct threshold for the decorative use that test was written
+  for (bars, icons, selection indicators). No assertion covers the same pair as
+  small text, so the shortfall passes. The test is not wrong; the coverage is
+  incomplete.
+- **Provenance.** **Pre-existing.** The fill token, label token, font size and
+  weight are identical on `master`; Phase 8C-3 reflowed this widget for keyboard
+  focus and reduced motion without touching them. This limitation is recorded,
+  not introduced, here.
+- **Why not a blocker.** Accepted as non-blocking accessibility debt under the
+  product-priority decision in §5.1: the control remains fully operable, its
+  label is legible and its selected state is conveyed by fill, weight and the
+  `selected` semantics flag rather than by contrast alone. It is a real WCAG AA
+  shortfall for one component in one palette, and **no WCAG compliance is
+  claimed for it**.
+- **Suggested correction — deferred, not authorized in this pass.** Fill the
+  selected option with an AA-compliant role instead of the decorative red;
+  `accentPrimaryStrong` is the smallest likely candidate, since the filled
+  primary button already uses it for small text and it measures 4.83:1 with
+  white in the dark palette (in the light palette it already *is*
+  `accentPrimary`, so nothing changes there). That change must arrive with a
+  component-specific 4.5:1 assertion for this pairing, and with the affected
+  canonical goldens regenerated and reviewed through the Linux-owned process.
 
 ---
 

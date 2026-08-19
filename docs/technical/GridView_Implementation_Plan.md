@@ -1132,7 +1132,11 @@ under the product-priority decision documented in
   suppression, EN/ES.
 - Touch-target verification — **complete**, including under 200% text.
 - Text-scale matrix — **complete.** 200% across every width, locale and theme.
-- Contrast verification — **complete**, for both themes.
+- Contrast verification — **complete**, for both themes, **with one confirmed
+  exception**: the selected segmented-control label draws 14 px bold text on the
+  decorative red at 3.55:1 in the dark palette, below the 4.5:1 small-text
+  threshold. Pre-existing, unfixed and recorded in
+  [GridView_Accessibility.md](GridView_Accessibility.md) §4.11.
 - Reduced-motion automated verification — **complete**, with a non-vacuity guard.
 - Populated TalkBack review — **executed once**, on the dedicated emulator
   against public staging data, with human-heard confirmation. Findings recorded
@@ -1215,9 +1219,11 @@ engineering closure, and no engineering work is waiting on them.
   screen-reader polish issues it found are documented and deferred in
   [GridView_Accessibility.md](GridView_Accessibility.md) §4.
   **This does not state that every accessibility defect is fixed** — four
-  confirmed duplicate-announcement findings, a focus-restoration gap and an
-  unrepeated keyboard observation remain open and unfixed. Manual TalkBack
-  validation is no longer a Phase 8 engineering exit criterion.
+  confirmed duplicate-announcement findings, a focus-restoration gap, an
+  unrepeated keyboard observation and one confirmed dark-theme contrast
+  shortfall on the selected segmented-control label (§4.11) remain open and
+  unfixed. Manual TalkBack validation is no longer a Phase 8 engineering exit
+  criterion.
 
 ## 13.10 Performance tasks — outcome
 

@@ -100,13 +100,26 @@ token and extension architecture held: both themes come from one builder and one
 component configuration, so only the palette differs and no component code was
 touched. The semantic colour pairings enumerated by
 `test/design_system/theme_contrast_test.dart` are asserted for both palettes.
-That enumeration is curated and explicit: it covers pairings the current
-interface uses alongside reserved and decorative roles — the `tertiary` accent,
+That enumeration is curated and explicit. Most text-bearing pairings are
+asserted at 4.5:1; the decorative and reserved roles are asserted at the 3:1
+non-text floor — `accentPrimary` against the background, the `tertiary` accent,
 which has no call site yet, and white on `accentSecondary`, which is never drawn
-as a fill — each held to the threshold that applies to it, 4.5:1 where the pair
-carries text and the lower non-text floor where it does not. It is **not** an
-exhaustive cross-product of all 21 semantic colour tokens; the pairs are listed
-in `GridView_Preferences_And_Settings.md` §3.4. (This paragraph previously said
+as a fill.
+
+One of those non-text assertions covers a pair that production also uses for
+text. `onAccentPrimary` on `accentPrimary` is asserted only at 3:1, and the
+selected option of `GvSegmentedControl` draws its 14 px, weight-700 label in
+exactly that pair: **3.55:1 in the dark palette, below the 4.5:1 small-text
+threshold**, against 5.67:1 in the light palette, which meets it. That is a
+known, **pre-existing and unfixed** limitation — it is not introduced here and
+exists identically on `master` — and it is recorded in
+[GridView_Accessibility.md](GridView_Accessibility.md) §4.11. The 3:1 assertion
+is not itself wrong: it correctly checks the decorative, non-text use it was
+written for. What is missing is a separate 4.5:1 assertion for the small-text
+use.
+
+The enumeration is **not** an exhaustive cross-product of all 21 semantic colour
+tokens; the pairs are listed in `GridView_Preferences_And_Settings.md` §3.4. (This paragraph previously said
 a light theme was "intentionally deferred"; that was true of Phase 3A and is not
 true now.)
 Theme selection is a persisted user preference — see
