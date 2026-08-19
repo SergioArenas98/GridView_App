@@ -71,14 +71,17 @@ API-Sports is only a technical candidate. Production use remains blocked until t
 > in §3.1 and §7.3 below.
 >
 > **Candidate.** The bullet naming API-Sports as the leading technical provider
-> candidate is **superseded**. Under a zero provider budget, the proposed
+> candidate is **superseded**. Under a zero provider budget, the adopted
 > direction is a **dual-source, zero-cost, post-session model** — OpenF1 for
 > provisional post-session data and Jolpica for complete and reconciled data —
-> pending both technical feasibility and written licensing confirmation from
-> both projects. API-Sports remains unselected and unverified. See
+> operating under the **public CC BY-NC-SA 4.0 licence** each project publishes.
+> API-Sports remains unselected and unverified. See
 > [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) and
-> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md). **No source is
-> approved.**
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
+>
+> **No provider has approved, endorsed or reviewed GridView, and none has been
+> asked.** The licence is the permission for uses inside its scope; it is not a
+> provider approval, not legal advice, and not Formula 1 rights clearance.
 
 ---
 
@@ -91,21 +94,24 @@ Provider selection is both a technical and legal decision.
 > **Status of this section (2026-08-19).** The findings below were written
 > without source URLs or access dates and are **superseded as evidence** by
 > [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md), which
-> records every claim with an official URL, a page title, an access date and an
-> explicit `Explicitly permitted` / `Explicitly prohibited` / `Written
-> permission required` / `Not stated or ambiguous` / `Not applicable`
-> classification. That document also evaluated a fourth candidate, Sportmonks
+> records every claim with an official URL, a page title and an access date, and
+> which maps each act GridView performs to the licence provision that permits it
+> and each obligation to the provision that imposes it. That document also
+> evaluated a fourth candidate, Sportmonks
 > — since **rejected for v1 on budget grounds only**, under a zero provider
 > budget — and records the resulting decision in
 > [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md). Where this section
 > and the evaluation differ, **the evaluation is authoritative.** The comparison
 > tables are deliberately not duplicated here.
 >
-> The proposed direction is now a **dual-source, zero-cost, post-session model**:
+> The adopted direction is a **dual-source, zero-cost, post-session model**:
 > OpenF1 for provisional post-session data and Jolpica for complete and
-> reconciled data. Both are CC BY-NC-SA 4.0, and **neither permits the intended
-> public redistribution on its published text** — both require written
-> permission, which has not been sought. The gate below is therefore still open.
+> reconciled data. Both publish their data under **CC BY-NC-SA 4.0**, and
+> GridView relies on that public licence rather than on a per-project reply.
+> §3.2 below is therefore reframed: its items are now satisfied by licence
+> compliance rather than by correspondence, as mapped in
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §4.1 and
+> §7.6. **No inquiry has been sent and none is awaited.**
 
 #### API-Sports
 
@@ -142,13 +148,16 @@ Its published access conditions describe:
 
 OpenF1 is not approved as the default production provider without written permission.
 
-> **Verified and narrowed (2026-08-19).** OpenF1's own site states the data is
-> licensed **CC BY-NC-SA 4.0** and is intended for educational, personal-learning,
-> research and non-commercial fan-engagement use. The blocker is therefore the
-> NonCommercial term plus the ShareAlike obligation, not advertising: removing
-> advertising does not by itself establish that a publicly distributed
-> application redistributing normalized data is non-commercial. See
-> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.1.
+> **Superseded (2026-08-19).** The sentence above is superseded. OpenF1's own
+> site identifies its data as licensed **CC BY-NC-SA 4.0**, and GridView relies
+> on that published licence rather than on a written reply. The operative
+> conditions are therefore **NonCommercial**, **Attribution** and **ShareAlike**,
+> each of which GridView must satisfy — see
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.1 for
+> OpenF1's recorded position, §7.1.1 for the "Personal use" wording tension and
+> GridView's interpretation of it, and §7.6 for the binding obligations. **No
+> provider approval exists, and none is required for uses inside the licence's
+> scope.**
 
 #### Jolpica F1
 
@@ -163,6 +172,12 @@ Its published terms state:
 
 Jolpica may be useful for prototyping or as a development fixture source, but not for a production release without explicit commercial permission.
 
+> **Superseded in part (2026-08-19).** The sentence above holds only for
+> **commercial** use. Jolpica's terms make the API "freely available for
+> non-commercial use" under CC BY-NC-SA 4.0, and GridView's use is unmonetised,
+> so the commercial-permission route is not triggered today — it becomes
+> mandatory the moment monetisation is contemplated.
+>
 > **Verified (2026-08-19).** Confirmed verbatim against Jolpica's own
 > `TERMS.md` (last updated 27 August 2025) and rate-limit guide: non-commercial
 > use only, CC BY-NC-SA 4.0, commercial usage via `admin@jolpi.ca`, 4 requests
@@ -173,6 +188,15 @@ Jolpica may be useful for prototyping or as a development fixture source, but no
 > [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.2, §8.4.
 
 ### 3.2 Hard release requirement
+
+> **Reframed (2026-08-19).** These items were written as things to *obtain from a
+> provider*. Under the public-licence model they are things to *establish and
+> comply with*, and every one is now mapped to a licence provision or a binding
+> obligation in
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §4.1, §7.5
+> and §7.6. **None of them requires a provider reply**, and no waiting period
+> applies. The one case in which contacting a provider becomes mandatory is
+> monetisation, which must reopen the decision **before** implementation.
 
 Before the production provider integration is approved, GridView must obtain:
 
@@ -472,9 +496,13 @@ The public API must never return provider DTOs directly.
 > §6.2, §7.3 and §15.
 
 > **Superseded (2026-08-19).** The sentence below is superseded. Under a zero
-> provider budget the first adapters proposed are **OpenF1** and **Jolpica**,
-> not API-Sports, and no adapter may be built before the legal gate is passed
-> for both. See [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
+> provider budget the adopted adapters are **OpenF1** and **Jolpica**, not
+> API-Sports, and they operate under those projects' published CC BY-NC-SA 4.0
+> licence. Adapter implementation is Phase 9B and is gated on the objective
+> entry criteria in
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2 — not
+> on any provider reply. See
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
 
 The first real adapter should target API-Sports after the legal gate is passed.
 
@@ -502,13 +530,12 @@ Known limitations:
 
 > **Roles reversed (2026-08-19).** This section was written when API-Sports was
 > the intended provider and OpenF1 and Jolpica were alternatives. Under a zero
-> provider budget, **OpenF1 and Jolpica are the proposed sources** and
-> API-Sports is unselected. The "not selected" reasoning below is retained for
-> the record and is corrected in place beneath each heading. The proposal is
-> conditional on written permission from both projects, which has not been
-> sought. See
-> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §6 and
-> §15.
+> provider budget, **OpenF1 and Jolpica are the adopted sources** and API-Sports
+> is unselected. The "not selected" reasoning below is retained for the record
+> and is corrected in place beneath each heading. Use rests on each project's
+> published CC BY-NC-SA 4.0 licence and on the mandatory obligations in
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.6. See
+> also §6 and §15 there.
 
 ### OpenF1
 
@@ -526,16 +553,21 @@ Not selected for v1 core because:
 - Published access is personal/non-commercial by default.
 - It would increase data volume and complexity.
 
-> **Corrected (2026-08-19).** OpenF1 is now **proposed as the provisional
-> post-session source**, for `sessions`, `meetings`, `drivers`,
-> `session_result`, `championship_drivers` and `championship_teams` only — no
-> telemetry, no live data, no media. The first two bullets above still hold:
-> telemetry is not used, and both championship endpoints are **confirmed beta**
-> and documented as available for race sessions only. The third bullet is the
-> open legal question, not a settled exclusion. The fourth no longer applies at
-> the narrow endpoint set proposed. Free access begins only **30 minutes after a
-> session ends**, which is what makes the freshness objective achievable and
-> also caps it.
+> **Corrected (2026-08-19).** OpenF1 is now the **provisional post-session
+> source**, for `sessions`, `meetings`, `drivers`, `session_result`,
+> `championship_drivers` and `championship_teams` only — no telemetry, no live
+> data, no media. The first two bullets above still hold: telemetry is not used,
+> and both championship endpoints are **confirmed beta** and documented as
+> available for race sessions only. The third bullet is superseded: the data is
+> published under CC BY-NC-SA 4.0, whose operative restriction is
+> **NonCommercial**, which GridView satisfies by shipping unmonetised. The
+> wording tension between the "Personal use" tier label and the FAQ's
+> "non-commercial fan engagement" is recorded in
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.1.1
+> together with GridView's interpretation and that interpretation's limits. The
+> fourth bullet no longer applies at the narrow endpoint set used. Free access
+> begins only **30 minutes after a session ends**, which is what makes the
+> freshness objective achievable and also caps it.
 
 ### Jolpica
 
@@ -552,16 +584,18 @@ Not selected for production by default because:
 - Uptime and correctness are not guaranteed.
 - Commercial use needs separate approval.
 
-> **Corrected (2026-08-19).** Jolpica is now **proposed as the complete and
-> reconciled source** — season metadata, calendar, participants, circuits,
-> historical depth back to 1950, and final results and standings. All four
-> bullets above remain true and are accepted as known risks rather than as
-> exclusions: the non-commercial terms are precisely why a zero-monetisation
-> product can consider it, and the volunteer operation and absence of any uptime
-> or correctness guarantee are mitigated architecturally rather than
-> contractually. Jolpica also publishes free database dumps on a 14-day delay,
-> which is a genuine recovery path. Its published rate limits are stated to be
-> heading **downward**.
+> **Corrected (2026-08-19).** Jolpica is now the **complete and reconciled
+> source** — season metadata, calendar, participants, circuits, historical depth
+> back to 1950, and final results and standings. All four bullets above remain
+> true and are accepted as known risks rather than as exclusions: the
+> non-commercial terms are precisely why a zero-monetisation product can rely on
+> them, and the volunteer operation and absence of any uptime or correctness
+> guarantee are mitigated architecturally rather than contractually. The
+> "commercial use needs separate approval" bullet is not triggered today and
+> becomes **mandatory** the moment monetisation is contemplated — its terms
+> direct commercial usage to `admin@jolpi.ca`. Jolpica also publishes free
+> database dumps on a 14-day delay, which is a genuine recovery path. Its
+> published rate limits are stated to be heading **downward**.
 
 ### Enterprise licensed feed
 

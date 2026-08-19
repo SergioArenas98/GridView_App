@@ -1,353 +1,289 @@
-# ADR 0019: The Formula 1 provider legal gate and the first inquiry candidates
+# ADR 0019: Formula 1 data sources under a public-licence compliance model
 
-- Status: Proposed
-- Date: 2026-08-19 (revised the same day; see *Revision*)
+- Status: Accepted
+- Date: 2026-08-19 (revised twice the same day; see *Revision history*)
 
-## Revision
+> **What "Accepted" means here.** This ADR accepts an **architecture and
+> product-risk decision** based on compliance with a public licence. It is
+> **not** provider-specific approval, **not** legal advice, and **not** Formula 1
+> rights clearance. No provider has approved, endorsed or reviewed GridView, and
+> none has been asked.
 
-This ADR was first drafted proposing **Sportmonks** as the single candidate for
-written legal inquiry. That proposal is **withdrawn**, superseded by a
-product-constraint change recorded the same day: GridView's provider budget for
-v1 is **EUR 0** and the application will carry **no monetisation of any kind**.
+## Revision history
 
-The decision below is the revised one. Sportmonks is rejected for v1 **on budget
-grounds only** — not because it was found technically or legally unsuitable —
-and is retained as the named fallback if that constraint is ever relaxed. The
-earlier reasoning is preserved in the repository history and its evidence is
+| Rev | Change |
+|---|---|
+| 1 | Proposed Sportmonks as the single candidate for written legal inquiry. |
+| 2 | Withdrawn after a zero-budget, zero-monetisation product constraint. Proposed a dual-source OpenF1 + Jolpica model, **gated on a written reply from both projects**. |
+| 3 | **The individual-permission gate is withdrawn.** GridView relies on the public CC BY-NC-SA 4.0 licence both projects publish. Status moves to Accepted on that basis. |
+
+Earlier reasoning is preserved in the repository history and its evidence is
 retained in
-[`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md)
-§6.1 and §9.4.
+[`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md).
 
 ## Context
 
 Phase 9 replaces the mock backend provider with a real Formula 1 data source
-(`GridView_Implementation_Plan.md` §14). `GridView_Backend_Scheme.md` §2 names
-**API-Sports** as the leading technical candidate and §3 makes provider
-selection an explicitly legal decision as well as a technical one: production
-use is blocked until the intended use and any required data-publication rights
-are confirmed in writing.
+(`GridView_Implementation_Plan.md` §14). `GridView_Backend_Scheme.md` §3 makes
+that selection an explicitly legal decision as well as a technical one.
 
-### The product constraints that govern the decision
+### The product constraints
 
 | # | Constraint |
 |---|---|
 | C1 | Provider budget for v1 is **EUR 0** |
 | C2 | GridView remains **free** while it relies on non-commercial data sources |
-| C3 | **No monetisation**: no advertising, in-app purchases, subscriptions, affiliate links or sponsorship |
-| C4 | Any future monetisation requires explicit written commercial permission from every affected provider, or migration to a provider whose licence permits it |
+| C3 | **No monetisation**: no advertising, in-app purchases, subscriptions, affiliate income or sponsorship |
+| C4 | Any future monetisation requires written commercial permission from every affected provider, or migration to a provider whose licence permits it — and **reopens this decision** |
 | C5 | **No live telemetry or live timing** is required |
-| C6 | Freshness objective for **provisional** results, points and standings: **30-60 minutes after a session ends** |
+| C6 | Freshness objective for **provisional** results: **30-60 minutes after a session ends** |
 | C7 | Freshness objective for **reconciled** data: **within 24 hours**, subject to provider availability |
 | C8 | **Reliability and replaceability matter more** than in-session updates |
 
-Two points must not be misread.
+C3 restates an existing state. [ADR 0018](0018-advertising-not-retained-for-v1.md)
+already recorded that GridView ships with no advertising SDK, no consent SDK, no
+ad unit and no ad request. **This is not the removal of an implemented
+advertising SDK — none exists.**
 
-**C3 does not settle the licensing questions.** Removing monetisation makes the
-NonCommercial question more favourable than it was, but it answers neither that
-question nor the ShareAlike obligation, and it does not touch the decisive one:
-whether serving normalized data through GridView's own public API is permitted
-redistribution.
+### Why the previous gate was wrong
 
-**C3 is not a new code removal.** Advertising was already absent from v1 before
-this pass. [ADR 0018](0018-advertising-not-retained-for-v1.md) recorded that
-GridView ships with no advertising SDK, no consent SDK, no ad unit and no ad
-request, and the repository confirms it. C3 restates and hardens an existing
-state.
+Revision 2 required a written reply from both OpenF1 and Jolpica before Phase 9B
+could begin. That framing had a defect: it treated a **standardised public
+licence** as though it were an unanswered request.
 
-### Three further reasons the decision must be taken deliberately
+Both projects publish their data under **CC BY-NC-SA 4.0**. That licence is a
+grant made in advance to everyone who complies with its terms. It is not
+conditional on the licensor answering an email, and its conditions —
+NonCommercial, Attribution, ShareAlike, no additional restrictions — are written
+down and testable. Waiting for a reply would have blocked development on a
+courtesy, while the actual permission was already published.
 
-**1. The premise the existing documentation is written against is stale.**
-`GridView_Implementation_Plan.md` §14.2 requires confirming "ad-supported use",
-and `GridView_Backend_Scheme.md` §2, §3.1 and §7.3 assess candidates against an
-"ad-supported GridView release". ADR 0018 superseded that, and C3 supersedes it
-further: v1 has no revenue at all.
+The question of what silence means therefore does not arise. **GridView is not
+treating silence as permission; it is relying on a published licence.**
 
-**2. The real question was never the advertising.** GridView fetches data
-server-side on a schedule, normalizes it into its own contract, stores snapshots,
-and serves them to a publicly distributed Google Play application through its
-own public HTTP API. That is redistribution of normalized data by a public
-service. It needs permission whether or not any money changes hands.
-
-**3. The repository's own provider claims are unsourced.**
-`GridView_Backend_Scheme.md` §3.1 asserts six specific things about API-Sports'
-terms and §7.2 asserts six technical properties, none carrying a source URL or an
-access date.
-
-### What the Phase 9A research found
+### What the research established
 
 Recorded in full in
-[`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md).
-The pass purchased nothing, contacted nobody, created no account, handled no
-credential and implemented no adapter. It did make a small number of
-**unauthenticated public `GET` requests** to validate the proposed mapping,
-outside any live-session window, with no image or credential involved and no
-response retained in the repository.
+[`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md),
+from the official Creative Commons deed, legal code and FAQ and from each
+project's own published material, accessed 2026-08-19.
 
-**A zero-cost dual-source model is technically viable.** Two sources agreed
-exactly on the same event — the 2026 Hungarian Grand Prix — on winner, laps, race
-duration, race points, constructor championship points, and **all 22 driver
-championship totals**. That is the evidence the model rests on.
+**The licence covers databases, not merely prose.** §4(a) grants the right to
+*"extract, reuse, reproduce, and Share all or a substantial portion of the
+database for NonCommercial purposes only"*. §4(b) then draws the boundary that
+matters most here: including a substantial portion in a database in which you
+hold sui generis database rights makes *"the database in which You have Sui
+Generis Database Rights (**but not its individual contents**)"* Adapted Material.
 
-**But OpenF1's free tier is bounded by a clock, not a feature flag.** The project
-states data is live from 30 minutes before a session starts until 30 minutes
-after it ends, and only outside that window is it free. GridView's C6 objective
-of 30-60 minutes therefore coincides *exactly* with the earliest moment free
-access opens. There is no margin to do better without paying for a live feed the
-product has decided it does not need.
+**A zero-cost dual-source model is technically viable.** On the 2026 Hungarian
+Grand Prix the two sources agreed exactly on winner, laps, race duration, race
+points, constructor championship points and **all 22 driver championship
+totals**. But **only 7 of 11 constructor names matched**, so a curated mapping
+registry is mandatory.
 
-**Both proposed sources are CC BY-NC-SA 4.0, and neither permits the intended
-redistribution on its published text.** Both require written permission for it.
-Attribution is required by both. Neither guarantees uptime, availability or
-correctness; Jolpica says so explicitly and has announced its free rate limits
-**will decrease**.
+**OpenF1's free tier is bounded by a clock, not a feature flag.** Data is live —
+and not free — from 30 minutes before a session starts until 30 minutes after it
+ends. GridView's C6 objective therefore coincides exactly with the earliest
+moment free access opens.
 
-**Four of eleven constructors are named differently by the two sources** —
-Alpine/Alpine F1 Team, Cadillac/Cadillac F1 Team, Racing Bulls/RB F1 Team, Red
-Bull Racing/Red Bull. A curated mapping registry is therefore mandatory, which
-`GridView_Backend_Scheme.md` §8.1 already requires.
+**There is a wording tension in OpenF1's material**, recorded rather than
+smoothed over: the free tier is labelled *"Personal use"*, while the FAQ
+describes intended uses including *"non-commercial fan engagement"*, and the
+licence actually applied to the data contains no personal-use term at all — only
+NonCommercial.
 
-**Both championship endpoints OpenF1 exposes are beta**, and neither source
-exposes quota headers, update timestamps or `ETag`s.
-
-**Every official API-Sports source remained unreachable** — eight hosts, all
-HTTP 403 — so nothing about it is asserted, including whether a usable free tier
-exists.
+**Every official API-Sports source remained unreachable** — eight hosts, all HTTP
+403 — so nothing about it is asserted.
 
 ## Decision
 
-**1. The Phase 9 legal gate is confirmed as a hard, blocking gate.** No Formula 1
-data source is approved, selected for production or activated. Production
-integration does not begin until **both** proposed projects confirm in writing
-that GridView's architecture is permitted.
+**1. GridView relies on the public CC BY-NC-SA 4.0 licence** published by OpenF1
+and Jolpica F1. For uses inside its scope, **that licence is the permission**.
 
-**2. Silence is not permission.** A free public API, an endpoint that responds,
-the absence of authentication, or an open-source repository is **not** evidence
-that GridView may publicly redistribute normalized Formula 1 data. An
-open-source **code** licence in particular grants no rights to the underlying
-data — Jolpica's own separation (Apache-2.0 code, CC BY-NC-SA 4.0 data) makes
-that explicit.
+**2. Separate written permission from each project is not required before Phase
+9B.** Outreach remains available as an **optional courtesy or clarification
+channel** and is never a development or release gate. No inquiry has been sent,
+and no waiting period exists anywhere in the documentation.
 
-**3. The proposed direction is a dual-source, zero-cost, post-session model.**
+**3. The adopted model is dual-source, zero-cost and post-session.**
 
 | Source | Role |
 |---|---|
-| **OpenF1** | *Provisional* post-session classification, points and championship state, fetched only after its free historical window opens |
+| **OpenF1** | *Provisional* post-session classification, points and championship state, fetched only outside its live window |
 | **Jolpica F1** | *Complete* season metadata, calendar, participants, circuits, historical depth, and *reconciled* final results and standings |
 
-Both are candidates for **written legal inquiry**. Two separate inquiries are
-prepared, one per project. **Both must be answered favourably.** A favourable
-answer from only one does not unblock the model: OpenF1 alone cannot supply
-complete metadata, constructor standings or pre-2023 history, and Jolpica alone
-cannot plausibly meet the C6 objective.
+**4. GridView's use is classified as sharing and potentially adapting licensed
+database material** — not as private API consumption. Caching, field extraction,
+normalization, combining the two sources, deriving internal state, retaining
+historical snapshots, serving the app and serving GridView's public API are all
+enumerated act by act, each mapped to the licence provision relied on. The
+stricter classification is chosen deliberately, because it is the one that
+triggers attribution and ShareAlike.
 
-**4. Sportmonks is rejected for v1 on budget grounds only.** Its lowest published
-Formula 1 tier conflicts with C1. It was *not* found technically or legally
-invalid — its terms were the only ones among the four that affirmatively permit
-commercial use and explicitly allow distribution, transfer and storage. **It is
-the named first fallback if C1 or C3 is relaxed** under C4.
+**5. Compliance obligations are mandatory, not aspirational.** Each is a Phase 9B
+implementation requirement and a release requirement:
 
-**5. API-Sports stays unselected** while its current free availability, terms and
-redistribution permission are all unverified.
+- **Non-commercial operation** — no advertising, in-app purchases, paid
+  subscriptions, affiliate income, sponsorship, sale of data or API access, or
+  indirect monetisation designed around the provider data. **Any future
+  monetisation must reopen this decision before implementation.**
+- **Attribution** — a clear surface reachable from the app naming OpenF1 and
+  Jolpica separately, linking to each project and to CC BY-NC-SA 4.0, stating
+  that GridView transforms, normalizes and combines the data, and stating that
+  GridView is unofficial and not affiliated with Formula 1, the FIA or related
+  entities. **The public API documentation must carry equivalent information.**
+- **ShareAlike** — adapted provider data, the normalized database material and
+  publicly redistributed derived datasets stay available under CC BY-NC-SA 4.0
+  where ShareAlike applies, with per-source attribution retained. Application and
+  backend source code are treated as separate from the licensed dataset.
+- **No additional restrictions** — GridView's API documentation and terms must
+  not claim exclusive ownership of provider-derived data or prohibit reuse the
+  licence permits. Operational rate limiting and abuse prevention remain
+  permitted and must be presented as protecting GridView's infrastructure, not
+  as restricting the downstream licence.
+- **Excluded material** — no team logos, Formula 1 logos, driver photographs or
+  headshots, audio, radio recordings, broadcasts, protected artwork, official
+  branding or live telemetry, and no indication that GridView is official or
+  endorsed.
 
-**6. The freshness figures are GridView objectives, never provider guarantees.**
-C6's 30-60 minutes and C7's 24 hours must never be described, in documentation
-or in the product, as an SLA, a guarantee or a provider commitment. Neither
-project offers one, and the actual post-race publication latency of Jolpica is
-**unmeasured** — the feasibility check ran during the season's summer break.
+**6. No absolute claim is made about the ShareAlike boundary.** Where the line
+falls between application code, database structure and individual facts is
+genuinely contested. §4(b)'s "but not its individual contents" anchors the
+interpretation, but the boundary is **preserved technically** so that either
+reading remains workable, and it is documented for the final licence-compliance
+review.
 
-**7. Provisional and reconciled data are distinguished throughout.** Every
-synchronized record carries internal provenance and is in exactly one of two
-states. **A reconciled snapshot is never replaced by an older or provisional
-one.** Provider metadata does not leak into the public v1 DTO contract.
+**7. The Phase 9B entry gate is objective and internal.** Ten criteria, all
+verifiable in this repository. **No provider email, reply or waiting period
+appears among them.**
 
-**8. No media or logo rights are inferred from any data source.** Both projects
-expose URLs that look like usable media and are not — OpenF1's `headshot_url`,
-`circuit_image` and `country_flag` all point at `media.formula1.com`. None is
-fetched, stored or displayed. No media was downloaded during this pass.
+**8. Residual third-party-rights risk is accepted knowingly.** A licensor can
+only license what it holds; the public licences do not establish Formula 1
+competition-data clearance; §2(b)(2) states trademark rights are not licensed;
+neither project offers an SLA; terms and limits may change. The product owner
+accepts this for continued non-commercial development and intended release. That
+acceptance is **not** a legal opinion, a data-rights certification, a Formula 1
+clearance or an accessibility certification, and **no claim is made that a
+dispute or enforcement action cannot occur**.
 
-**9. Future monetisation reopens the provider decision entirely.** C4 is
-recorded here so a later revenue decision cannot be taken as an incremental
-product change. It would require written commercial permission from both
-projects or migration to a different source, and it would supersede this ADR.
+**9. The validated technical design is unchanged.** OpenF1 provisional attempts
+at session end +32/+35/+45/+60 minutes with early stop; Jolpica reconciliation at
++2/+6/+12/+24 hours then daily; no polling during the live window; a reconciled
+snapshot never replaced by older provisional data; mandatory identifier mapping;
+beta championship endpoints guarded; provider DTOs never in the public contract;
+either source disableable independently. **C6 and C7 remain GridView objectives,
+never guarantees.**
 
-**10. No production activation, and no year-round high-frequency polling.** No
-adapter, credential, live provider mode, cron trigger or deployment follows from
-this ADR. The mock provider is preserved permanently. The superseded static
-scheduler model — roughly 415 upstream requests per day, every day of the year —
-is explicitly withdrawn and must not be carried into Phase 9B; the event-aware
-design replaces it at roughly 285 requests per **month** worst case.
+**10. Sportmonks stays rejected for v1 on budget grounds only** and is the named
+fallback if C1 or C3 is relaxed. **API-Sports stays unselected** and unverified.
+
+**11. Phase 9B has not started, and nothing here authorises production
+activation.** No adapter, credential, live provider mode, cron trigger or
+deployment follows from this ADR. The mock provider is preserved permanently.
 
 ## Consequences
 
-**Phase 9 is gated on correspondence, not engineering.** Phase 9B cannot start
-until both projects answer. The blocking actions are the user's:
+**Phase 9 is unblocked on engineering terms.** Phase 9B may begin once Phase 9A
+is merged and its post-merge CI is green, subject to the ten entry criteria.
+Nothing waits on a third party.
 
-| # | Required action |
+**The obligations are real work.** Attribution surfaces in both the app and the
+API documentation, a per-source attribution model, a documented ShareAlike
+strategy for the normalized output, runtime switches to disable either adapter,
+and licence-terms monitoring are now Phase 9B scope rather than optional polish.
+
+**Phase 9B carries the structural gaps already recorded.** The largest:
+`fetchSeasonSource(season, jobs)` demands a whole season from one call and cannot
+express two sources with different roles. Alongside it — no live provider mode,
+no production cron, no event-window awareness, no curated identifier mapping
+registry, no outbound hardening helper, untyped per-source call counting, and no
+provenance or provisional/reconciled state in the local schema, which implies the
+first schema change since v2.
+
+**Public release remains separately gated** by the existing Play, privacy, media
+and production-environment requirements, **plus a final licence-compliance sweep**
+verifying the §5 obligations in the shipped build and the published API
+documentation.
+
+**Positive.** Development is no longer blocked on correspondence; the basis is a
+written, testable, public licence rather than an informal reply; cost is EUR 0;
+no credential exists so none can leak; two independent sources give genuine
+redundancy; and the compliance obligations are concrete enough to verify.
+
+**Negative.** GridView depends on two volunteer projects with no SLA; the
+residual Formula 1 rights gap is real and unresolvable at this level;
+monetisation is foreclosed while these sources are used; the ShareAlike boundary
+is interpreted rather than settled; and a rights holder could still object, in
+which case the affected use pauses immediately.
+
+## Reopening and reassessment
+
+| Trigger | Consequence |
 |---|---|
-| U1 | Review and approve or amend the two inquiry drafts (Provider Evaluation, Appendices A and B) |
-| U2 | Send the OpenF1 inquiry |
-| U3 | Send the Jolpica inquiry to `admin@jolpi.ca` or via GitHub Discussions |
-| U4 | Decide the response window after which no reply is treated as **no permission** |
-| U5 | Decide whether GridView independently pursues Formula 1 competition-data clearance, and whether legal review is accepted |
-| U6 | Decide whether production gets a cron trigger, and at what granularity |
-| U7 | Accept or revise C6 and C7 as objectives, knowing the reconciliation latency is unmeasured |
-| U8 | Optionally, read `api-sports.io` in an ordinary browser |
+| Any monetisation is contemplated | Reopen **before** implementation; contact both projects; supersede this ADR |
+| A provider or rights holder raises an objection | Pause the affected adapter and use immediately, then reassess |
+| Either project changes its licence or terms | Re-evaluate against the new text; the annual provider and licence review is the routine backstop |
+| Jolpica's announced rate-limit reduction lands below what the schedule needs | Re-tune the schedule, or fall back |
+| ShareAlike is authoritatively read to reach GridView's application code | A product decision on whether that is acceptable |
+| C1 or C3 is relaxed | Sportmonks returns as the leading candidate |
 
-**Phase 9B carries more structural work than the single-source model implied.**
-The largest item is new: `fetchSeasonSource(season, jobs)` demands a whole season
-from one call and **cannot express two sources with different roles and
-different per-job failure outcomes**. A coordinator above two independent
-adapters is required. Alongside it: no live provider mode, no production cron, no
-event-window awareness, no curated identifier mapping registry, no outbound
-hardening helper, untyped per-source call counting, no locally-modelled quota
-state, and **no provenance or provisional/reconciled state in the local schema** —
-which implies the first schema change since v2.
+**Fallback order if a source becomes unusable:** single-source Jolpica (a viable
+degraded product, losing the C6 objective); then API-Sports if its terms become
+readable and permit the architecture at zero cost; then Sportmonks if C1 or C3 is
+relaxed; then an enterprise licensed feed. **If none can be used, no source is
+silently adopted** — the mock provider stays, production stays at
+`PROVIDER_MODE = "none"`, and the question returns to the product owner.
 
-**The cost is zero and that is itself the principal risk.** There is no
-subscription, no account and no payment method — and therefore **no
-counterparty obligation of any kind**. The strongest achievable outcome is a
-written statement from a volunteer project that reserves the right to change its
-terms. That is materially weaker than a commercial agreement and is accepted
-knowingly, mitigated by architecture rather than by contract: independent
-adapters, fixture-backed contract tests, last-known-good public snapshots,
-event-aware retry and circuit breaking, health and freshness monitoring, stale
-indicators, identifier mapping isolated from public DTOs, periodic backups where
-licensing permits, a documented manual recovery procedure, an annual provider and
-licence review, and the ability to replace either source without an app release.
-
-**Positive.** EUR 0 cost; no credential exists so none can leak; two independent
-sources are genuine redundancy; the freshness objective is met at the earliest
-moment the licence permits; and the request volume falls by roughly 98% against
-the superseded model.
-
-**Negative.** Two free community dependencies instead of one paid one; no SLA
-from either; monetisation foreclosed while they are used; a beta dependency on
-both championship endpoints; a mandatory curated mapping registry; and a legal
-position that rests on goodwill rather than contract.
-
-## Evidence required to move this ADR to Accepted
-
-From **both** projects, in writing:
-
-1. That GridView's architecture — scheduled server-side fetching outside any live
-   window, normalization, snapshot storage, historical retention, and serving
-   normalized data to a free, unmonetised, publicly distributed Google Play
-   application through GridView's own free public API — is permitted.
-2. That this is **not** prohibited redistribution under CC BY-NC-SA 4.0.
-3. That a free, unmonetised, publicly distributed application is
-   **non-commercial** under the NC term.
-4. **What ShareAlike attaches to**: the app source, the backend source, the
-   normalized database, exported datasets, or only adapted data.
-5. **Attribution requirements** stated exactly — wording, placement, and any
-   required licence link or notice.
-6. Whether **small derived test fixtures** may be stored in a public repository.
-7. Whether **cached historical data may be retained** if access later ends.
-8. Whether **Formula 1 competition-data rights** remain GridView's separate
-   responsibility.
-9. Whether **future monetisation** would require separate written permission.
-
-And additionally:
-
-10. From OpenF1: that a fetch scheduled at **scheduled session end + 32 minutes**
-    is reliably outside the live window, including for delayed or red-flagged
-    sessions.
-11. From Jolpica: whether **free 14-day-delayed database dumps** may be retained
-    as a GridView backup.
-12. A **measurement** of Jolpica's actual post-race publication latency against a
-    real race weekend, validating or revising the C7 objective.
-13. The approvals **recorded in project documentation**, per
-    `GridView_Implementation_Plan.md` §14.2.
-
-Items 1, 2 and 3 are individually blocking, **from both projects**. Item 8 may
-require professional legal review rather than a project's answer.
-
-## Rejection and fallback conditions
-
-**This ADR is Rejected, and the dual-source model is dropped, if:**
-
-- Either project answers that GridView's public normalized API is **not**
-  permitted redistribution.
-- Either project answers that a free, publicly distributed app is **not**
-  non-commercial in its view.
-- ShareAlike is confirmed to reach GridView's normalized database or public API
-  output **and** the product owner will not accept licensing GridView's own
-  output under CC BY-NC-SA 4.0.
-- No usable answer arrives within the window decided in U4. **Silence is a
-  rejection, not a default yes.**
-
-**Fallback order, in sequence:**
-
-1. **Single-source Jolpica**, if Jolpica permits but OpenF1 does not. GridView
-   loses the 30-60 minute provisional objective and falls back to reconciliation
-   latency only. C6 would have to be revised or withdrawn. This is a **viable
-   degraded product**, not a failure.
-2. **API-Sports**, once its terms are readable and only if a free tier permits
-   the architecture at zero cost.
-3. **Sportmonks**, only if C1 or C3 is relaxed under C4 — at which point its
-   unresolved distribution-versus-resale question becomes the priority, together
-   with its unresolved pricing conflict.
-4. **An enterprise licensed feed**, accepting materially higher cost for
-   contractual rights and an SLA. `GridView_Backend_Scheme.md` §7.3 already
-   anticipates this path, and the provider adapter keeps the migration invisible
-   to the mobile API.
-5. **If no source can be cleared**, Phase 9 stops and becomes a product decision
-   about whether GridView can ship live competition data at all.
-
-**Self-hosting is not a fallback.** It may be *investigated* as a contingency,
-but an open-source server implementation grants no rights to the Formula 1 data
-it serves, GridView would still have to source that data, and
+**Self-hosting is not a fallback.** It may be investigated as a contingency, but
+an open-source server implementation grants no rights to the data it serves —
+Jolpica's own Apache-2.0 code and CC BY-NC-SA 4.0 data demonstrate the separation
+— GridView would still have to source the data, and
 `GridView_Backend_Scheme.md` §2 excludes a production scraper.
-
-**If the fallback order is exhausted, no source is silently adopted.** The mock
-provider stays, production stays at `PROVIDER_MODE = "none"`, and the question
-returns to the user.
 
 ## Alternatives considered
 
-**Pay for a data plan.** Rejected by C1. Recorded rather than argued: this is a
-product constraint, not an engineering conclusion, and §6.1 of the evaluation
-preserves the case for revisiting it.
+**Keep waiting for individual provider replies.** Rejected. It blocks development
+on a courtesy while the actual grant is already published, and it forces
+reasoning about what silence means — a question that only exists if the reply is
+mistaken for the permission.
 
-**Pay OpenF1's Sponsor tier for live data.** Rejected twice over: by C1, and by
-C5 — GridView does not need live timing, so the paid tier would buy only the
-capability the product has decided not to use.
+**Treat the public licence as unconditional permission.** Rejected, and the
+opposite of what is decided. The licence permits use **only** for NonCommercial
+purposes and **only** subject to attribution, modification-indication,
+ShareAlike and the no-additional-restrictions rule. §5 above makes each of those
+a binding requirement precisely so the decision cannot be read as
+"GridView can do anything with the data".
 
-**Use OpenF1 alone.** Rejected. It has no constructor standings that could be
-confirmed, no complete season metadata, no pre-2023 history, no stable driver or
-team identifier, and its championship endpoints are beta and race-session-only.
-
-**Use Jolpica alone.** Not rejected — retained as fallback 1. It covers every v1
-resource with stable identifiers and 1950-onward depth. It is not the *first*
-choice only because its reconciliation latency is unmeasured and probably cannot
-meet the C6 objective on its own.
-
-**Treat the absence of monetisation as settling the NonCommercial question and
-proceed without asking.** Rejected. It is the strongest argument GridView has,
-but it is GridView's argument, not the licensors'. Acting on it would be
-treating silence as permission.
+**Classify GridView's use as private API consumption.** Rejected. Serving
+normalized data to a publicly distributed app through a public API is Sharing,
+and normalizing and combining two sources very likely produces Adapted Material
+and a derived database. Choosing the weaker classification would have avoided
+attribution and ShareAlike obligations that the stricter — and safer — reading
+imposes.
 
 **Assume the open-source repositories grant data rights.** Rejected explicitly,
-because it is a tempting and specific error. Jolpica publishes Apache-2.0 code
-and CC BY-NC-SA 4.0 data, which demonstrates the separation rather than
-resolving it.
+because it is a tempting and specific error. A code licence grants rights to
+code.
 
-**Build the adapters behind a disabled flag while waiting.** Rejected.
-`GridView_Backend_Scheme.md` §3.3 permits development against mocks and
-fixtures, which is what exists. Building two adapters, a coordinator, a mapping
-registry and a schema change before knowing whether either source may be used
-would create pressure to justify the sunk work.
+**Pay for a data plan.** Rejected by C1. Recorded rather than argued: this is a
+product constraint, and the case for revisiting it is preserved.
 
-**Contact only one project first.** Rejected. Both answers are required, and
-serialising them doubles the calendar time on a gate that already has no
-committed response time.
+**Read OpenF1's "Personal use" tier label as excluding a public fan app.**
+Considered seriously and not adopted, but the tension is recorded in full rather
+than resolved silently, GridView's interpretation is labelled as an
+interpretation, and its limits are stated.
+
+**Build the adapters now, before Phase 9A is merged.** Rejected. This pass is
+documentation-only, and Phase 9A is not complete until its branch is merged and
+post-merge CI is green.
 
 ## References
 
-- [`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md) — product constraints, evidence, classifications, feasibility check, dual-source design, quota model, sustainability assessment, both unsent inquiries and the code audit
+- [`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md) — licence-compliance analysis, permitted-use mapping, obligations, feasibility evidence, dual-source design, quota model, residual risk and the optional clarification templates
 - [`0018-advertising-not-retained-for-v1.md`](0018-advertising-not-retained-for-v1.md) — advertising is not retained for v1
 - [`0005-snapshot-conflict-and-freshness.md`](0005-snapshot-conflict-and-freshness.md) — the existing snapshot-conflict rule the provisional/reconciled rule composes with
 - [`0002-replace-spring-boot-backend-with-cloudflare-edge-api.md`](0002-replace-spring-boot-backend-with-cloudflare-edge-api.md) — the edge architecture the sources sit behind
 - `GridView_Backend_Scheme.md` §2, §3, §7, §8.1, §14-§18, §23.1
 - `GridView_Implementation_Plan.md` §14
-- `GridView_Backend_Operations.md` — quota behaviour and the outstanding real-provider prerequisites
 - `GridView_Media.md` — the separate media rights and publication process
+- CC BY-NC-SA 4.0 deed, legal code and FAQ — cited with access dates in the evaluation document

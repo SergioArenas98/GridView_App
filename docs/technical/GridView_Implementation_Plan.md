@@ -1260,25 +1260,30 @@ requirements tracked in
 
 ## 14. Phase 9 - Production provider integration
 
-**Phase 9 has started. Phase 9A (provider evaluation and legal-gate
-preparation) is complete; the legal gate remains open.** See §14.0.
+**Phase 9 has started. Phase 9A engineering and documentation work is finished
+on its branch; Phase 9A is not complete until that branch is merged and its
+post-merge CI is green. Phase 9B has not started.** See §14.0.
 
 ## 14.0 Phase 9A status
 
-Phase 9A ran as a research and preparation pass on 2026-08-19. Its full
-evidence, classifications, feasibility check, dual-source design, quota model,
-sustainability assessment, unsent inquiries and code audit are recorded in
+Phase 9A ran as a research, evaluation and licensing-basis pass on 2026-08-19.
+Its licence-compliance analysis, permitted-use mapping, mandatory obligations,
+feasibility evidence, dual-source design, quota model, residual-risk record,
+optional clarification templates and code audit are in
 [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md), and the
 decision it produced is
-[ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) (**Proposed**).
+[ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) (**Accepted** as an
+architecture and product-risk decision, not as provider approval).
 
 | Item | Status |
 |---|---|
-| Provider evaluation (§14.2 legal gate research) | **Complete** |
-| Legal gate | **Open.** No candidate's official sources state that GridView's intended public redistribution is permitted. |
-| Provider approval | **Not obtained.** No provider is approved, selected, subscribed to or contacted. |
+| Provider evaluation and licensing basis | **Work finished on branch.** Phase 9A may be called complete only after the branch is merged and post-merge CI succeeds. |
+| Licensing basis | **Settled: the public CC BY-NC-SA 4.0 licence** published by OpenF1 and Jolpica. For uses inside its scope, the licence is the permission. |
+| Individual provider permission | **Not required and not awaited.** Outreach is an optional courtesy channel only. **No inquiry has been sent**, and no waiting period exists. |
+| Provider approval | **None.** No provider, and no Formula 1 entity, has approved, endorsed or reviewed GridView. None has been asked. |
+| Formula 1 rights clearance | **Not obtained and not claimed.** A licensor can only license rights it holds, and CC BY-NC-SA 4.0 §2(b) does not license trademark rights. Accepted as residual risk. |
 | Production provider adapter | **Not implemented and not activated.** Production remains `PROVIDER_MODE = "none"`; the mock provider is unchanged. |
-| Next action | **Requires user and provider correspondence.** ADR 0019 lists the blocking actions U1-U8. |
+| Next action | **Merge Phase 9A and confirm post-merge CI.** Phase 9B entry is then governed by the ten objective criteria in §14.0.3. |
 
 ### 14.0.1 Product constraints governing Phase 9
 
@@ -1297,36 +1302,81 @@ Recorded on 2026-08-19 and binding on every provider decision:
 
 C3 restates an existing state rather than removing anything: advertising was
 already absent from v1 per
-[ADR 0018](../adr/0018-advertising-not-retained-for-v1.md). C3 also does **not**
-settle the licensing questions — it improves the NonCommercial position without
-answering ShareAlike or the redistribution question.
+[ADR 0018](../adr/0018-advertising-not-retained-for-v1.md). **It is not the
+removal of an implemented advertising SDK, because none exists.** While these
+sources are in use, C1–C3 are **licence compliance requirements**, not merely
+product preferences: CC BY-NC-SA 4.0 permits use only for NonCommercial
+purposes.
 
-**C6 and C7 are GridView objectives, not provider guarantees.** Neither proposed
-source publishes an SLA, an uptime commitment or a correctness guarantee, and
-both disclaim them. Reconciliation latency is currently **unmeasured**.
+**C6 and C7 are GridView objectives, not provider guarantees.** Neither source
+publishes an SLA, an uptime commitment or a correctness guarantee, and both
+disclaim them. Reconciliation latency is currently **unmeasured**.
 
-### 14.0.2 Proposed direction
+### 14.0.2 Adopted direction
 
-A **dual-source, zero-cost, post-session model**, pending both technical
-feasibility and written licensing confirmation from both projects:
+A **dual-source, zero-cost, post-session model**, operating under the public
+CC BY-NC-SA 4.0 licence each project publishes. **For uses inside that licence's
+scope, the licence is the permission**; separate written permission from either
+project is not required before Phase 9B.
 
 | Source | Role |
 |---|---|
-| **OpenF1** | *Provisional* post-session classification, points and championship state, fetched only after its free historical window opens at session end + 30 minutes |
+| **OpenF1** | *Provisional* post-session classification, points and championship state, fetched only outside its live window, which ends 30 minutes after a session ends |
 | **Jolpica F1** | *Complete* season metadata, calendar, participants, circuits, historical depth, and *reconciled* final results and standings |
 
 Sportmonks is **rejected for v1 on budget grounds only** (C1) and is the named
 fallback if C1 or C3 is relaxed. API-Sports remains unselected and unverified.
 
-Phase 9B (adapter implementation) does not begin until **both** projects confirm
-the architecture in writing. ADR 0019 records ten structural seams Phase 9B must
-add, the largest being that the current single-call provider interface cannot
-express two sources with different roles.
+The licence carries mandatory obligations — non-commercial operation,
+attribution in the app and the public API documentation, ShareAlike on adapted
+data and derived datasets, no additional downstream restrictions, and an
+excluded-material list covering logos, photographs, audio, broadcasts, branding
+and live telemetry. These are Phase 9B implementation requirements and release
+requirements, not optional polish.
+
+### 14.0.3 Phase 9B entry criteria
+
+Phase 9B may begin once Phase 9A is merged and its post-merge CI is green,
+provided all ten criteria below hold. Every one is objective and verifiable in
+this repository. **No provider email, reply or waiting period is a
+prerequisite.** Full detail in
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2.
+
+| # | Criterion |
+|---|---|
+| E1 | The product remains **unmonetised** |
+| E2 | **Both current licence notices are recorded**, with source URL and access date |
+| E3 | **Attribution requirements are part of the implementation plan** — in the app and in the public API documentation |
+| E4 | **Provider-derived data is separated from application source code** |
+| E5 | The normalized data output has a **documented ShareAlike strategy** |
+| E6 | **Live-window and rate-limit restrictions are encoded as requirements** |
+| E7 | **Adapters can be disabled independently** |
+| E8 | The **public DTO contract remains provider-neutral** |
+| E9 | **No protected images, logos or branding are imported** |
+| E10 | **No provider is described as officially approving GridView** |
+
+ADR 0019 records the structural seams Phase 9B must add, the largest being that
+the current single-call provider interface cannot express two sources with
+different roles.
+
+### 14.0.4 Release remains separately gated
+
+Phase 9B entry is not release approval. Public release remains subject to the
+existing Play, privacy, media and production-environment gates, **plus a final
+licence-compliance sweep** verifying the non-commercial, attribution,
+ShareAlike, no-additional-restrictions and excluded-material obligations in the
+shipped build and the published API documentation.
 
 ## 14.1 Objective
 
-Replace the mock backend provider with a legally cleared production data source
-or sources.
+Replace the mock backend provider with production data sources used in
+compliance with their published public licence.
+
+**Not "legally cleared".** GridView holds no Formula 1 competition-data or
+trademark clearance and does not claim any. It relies on each project's
+published CC BY-NC-SA 4.0 licence, whose limits are recorded in
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.3.4 and
+whose residual risk is accepted in §14.
 
 ## 14.2 Legal gate
 
@@ -1983,7 +2033,9 @@ Decision deadline:
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Provider use is not legally approved | Release blocked | Complete contract using mocks; evaluate alternatives |
+| Provider use falls outside the public licence — for example through monetisation, missing attribution or a ShareAlike breach | Release blocked; licence breach | Treat the §14.0.1 constraints and the licence obligations as binding requirements; final licence-compliance sweep before release |
+| A provider or rights holder objects to GridView's use | Affected source must stop | Independent adapters, runtime switches to disable either source, last-known-good snapshots, immediate reassessment |
+| Residual Formula 1 competition-data and trademark rights are not held by anyone in the chain | Unresolved third-party-rights exposure | Accepted residual risk; no protected media, no official-affiliation language, conservative volumes, annual licence review |
 | External provider lacks required fields | Feature gaps | Curated content and provider-independent contract |
 | Architecture becomes overcomplicated | Slow delivery | Validate one vertical slice and simplify early |
 | Legacy signing is unavailable | Cannot update existing app | Verify in Phase 0 |
