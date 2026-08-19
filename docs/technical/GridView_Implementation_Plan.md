@@ -147,7 +147,7 @@ Some phases may overlap once their dependencies are satisfied, but release gates
 | M6 | All core data stored and queried through Drift |
 | M7 | All core product screens implemented with mock/staging data |
 | M8 | Media, localization, settings and accessibility baseline completed |
-| M9 | Approved provider integrated and production snapshots generated |
+| M9 | Adopted data sources integrated under their public licence, and production snapshots generated. **No provider approval is involved** — see [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) |
 | M10 | Release candidate passes migration, performance and quality gates |
 | M11 | Reconstructed app released through Google Play |
 | M12 | Railway, Spring Boot and MySQL retired |
@@ -1359,7 +1359,7 @@ requirements, not optional polish.
 ### 14.0.3 Phase 9B entry criteria
 
 Phase 9B may begin once Phase 9A is merged and its post-merge CI is green,
-provided all ten criteria below hold. Every one is objective and verifiable in
+provided all eleven criteria below hold. Every one is objective and verifiable in
 this repository. **No provider email, reply or waiting period is a
 prerequisite.** Full detail in
 [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2.
@@ -1371,6 +1371,7 @@ prerequisite.** Full detail in
 | E3 | **Attribution requirements are part of the implementation plan** — in the app and in the public API documentation |
 | E4 | **Provider-derived data is separated from application source code** |
 | E5 | The normalized data output has a **documented ShareAlike strategy** |
+| E5a | The **`sourceUpdatedAt` conflict is resolved** ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.7.1). Neither source publishes an update timestamp, yet the field is contract-required and is [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md)'s primary conflict key. Without this an adapter cannot produce a contract-valid snapshot at all. |
 | E6 | **Live-window and rate-limit restrictions are encoded as requirements** |
 | E7 | **Adapters can be disabled independently** |
 | E8 | The **public DTO contract remains provider-neutral** |
@@ -2009,7 +2010,10 @@ A task is ready for implementation when:
 - API/data requirements are known.
 - Dependencies are available.
 - Acceptance criteria are testable.
-- Legal approval exists for any required external asset or provider use.
+- Legal approval exists for any required external **asset**. For **provider
+  use**, the equivalent is licence compliance demonstrated against the published
+  licence (§14.2) — there is no provider approval to obtain, and claiming one
+  would be false.
 - Unknowns that could invalidate the work have been resolved.
 
 ---
@@ -2258,7 +2262,8 @@ The GridView reconstruction is complete when:
 ### Security and legal
 
 - No production secret is in source control or the APK.
-- Provider use is approved.
+- Provider use is **compliant with the published licence** and the compliance
+  sweep in §14.0.4 has passed. There is no provider approval to obtain.
 - Media rights are recorded.
 - Privacy and Data Safety declarations are accurate.
 
@@ -2285,7 +2290,7 @@ Secure the legacy project
     -> complete the edge backend and local database
     -> implement core features
     -> add media, localization, settings and observability
-    -> integrate the approved provider
+    -> integrate the adopted licence-compliant sources
     -> harden and test the update path
     -> publish through Google Play
     -> retire the legacy backend

@@ -176,10 +176,15 @@ provisional attempts at +32/+35/+45/+60 minutes after the actual session end,
 with early stop; Jolpica reconciliation at +5/+9/+15/+24 hours after the session
 start, then daily; no polling during the live
 window; a reconciled snapshot never replaced by older provisional data, and one
-reconciled payload never replaced by another on **fetch order** — neither source
-publishes an update timestamp or version, so a differing reconciled payload must
-be corroborated across two consecutive checks before it is written, which also
-keeps [ADR 0005](0005-snapshot-conflict-and-freshness.md)'s prohibition on
+reconciled payload never replaced by another on **fetch order**. Neither source
+publishes an update timestamp or version, so three invariants govern reconciled
+writes together and none is optional: a differing payload must be
+**corroborated** across two consecutive checks before it is written; a
+`contentRevision` that has ever been **superseded** is never re-applied, however
+many consecutive checks return it, because repetition proves only that a stale
+replica is stable and not that it is current; and a change to a **settled**
+record is **staged for review**, never applied automatically. Together these
+keep [ADR 0005](0005-snapshot-conflict-and-freshness.md)'s prohibition on
 substituting generation time for source recency intact;
 mandatory identifier mapping; beta championship endpoints guarded; provider DTOs
 never in the public contract; either source disableable independently. **C6 and
@@ -238,8 +243,17 @@ deployment follows from this ADR. The mock provider is preserved permanently.
 ## Consequences
 
 **Phase 9 is unblocked on engineering terms.** Phase 9B may begin once Phase 9A
-is merged and its post-merge CI is green, subject to the ten entry criteria.
-Nothing waits on a third party.
+is merged and its post-merge CI is green, subject to the **eleven** entry
+criteria. Nothing waits on a third party: there is no provider reply to await.
+
+**Two of those criteria are substantive blockers, not checkboxes.** E5a requires
+resolving the `sourceUpdatedAt` conflict — neither adopted source publishes an
+update timestamp, yet the field is contract-required and is ADR 0005's primary
+conflict key, so **an adapter cannot currently produce a contract-valid snapshot
+at all**, and closing that gap means amending an Accepted ADR and the public
+contract or re-keying the conflict semantics. E6 requires the OpenF1
+live-window gate, which today skips every session because no end bound is
+recorded. Neither is resolved by this ADR.
 
 **The obligations are real work.** Attribution surfaces in both the app and the
 API documentation, a per-source attribution model, a documented ShareAlike

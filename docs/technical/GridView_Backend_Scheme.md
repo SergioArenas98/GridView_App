@@ -474,9 +474,12 @@ interface FormulaOneProvider {
 Implementations may include:
 
 ```text
-ApiSportsProvider
-MockFormulaOneProvider
-FutureLicensedProvider
+JolpicaProvider          # adopted, active
+OpenF1Provider           # adopted, specified but LOCKED (ADR 0019)
+MockFormulaOneProvider   # retained permanently for automated tests
+FutureLicensedProvider   # only if a paid provider is ever reconsidered
+
+# ApiSportsProvider - superseded by ADR 0019; API-Sports is unselected.
 ```
 
 The public API must never return provider DTOs directly.
@@ -1065,7 +1068,11 @@ The handler:
 6. Merges curated overrides.
 7. Generates derived snapshots.
 8. Publishes a complete version.
-9. Records provider quota headers.
+9. Increments and persists the **locally modelled** per-source request
+   counters. Neither adopted source returns quota headers
+   ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.6), so
+   there are none to record; limits are tracked against each project's published
+   figures instead.
 10. Logs success or failure.
 
 ### 14.2 No public sync endpoint
@@ -1628,7 +1635,8 @@ services/edge-api/
 │   ├── routes/
 │   ├── providers/
 │   │   ├── formula-one-provider.ts
-│   │   ├── api-sports/
+│   │   ├── jolpica/
+│   │   ├── openf1/
 │   │   └── mock/
 │   ├── normalization/
 │   ├── snapshots/

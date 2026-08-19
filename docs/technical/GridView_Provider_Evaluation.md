@@ -1193,8 +1193,28 @@ so no data and no C7 either. **The reconciliation path stays available in every
 case, including when every OpenF1 fetch is skipped**, and it depends on no
 timestamp that Jolpica does not publish.
 
-Then, if still unreconciled, **daily** until reconciled or until the next event
-week begins, at which point the resource is marked unreconciled and left alone.
+**The cadence does not stop at the first reconciled value.** After check 4 the
+resource continues to be checked **daily until it is `settled`**, and only then
+does polling stop. Two things depend on this:
+
+- **Corroboration needs a next check to exist.** A correction — a penalty
+  applied the day after a race — is written only when the same revision returns
+  on a following check (§10.9). If polling ended at the first reconciled value,
+  `pendingRevision` would never resolve and the correction would never be
+  published.
+- **`settled` is what terminates polling**, not "reconciled". A resource becomes
+  settled once it has returned the same `contentRevision` across the full check
+  sequence **and** the C7 window has passed. Daily checks then stop, and any
+  later change arrives through the staged-for-review path rather than through
+  polling.
+
+Where a resource is still **unreconciled**, daily checks likewise continue until
+it reconciles or the next event week begins, at which point it is left alone and
+flagged.
+
+The volume model in §11 counts the expected case, where a resource settles
+quickly; the daily continuation adds at most a handful of requests per session
+and is well inside both published limits.
 There is no aggressive polling and no tight retry loop at any point.
 
 Jolpica also runs on a slow independent cadence for resources that have nothing
@@ -1278,8 +1298,14 @@ it as implementable.
   superseded-revision ledger (§10.9): a revision that has been replaced can never
   return, so a later-observed revision is always a later state of the source.
   Ordering snapshots by it is therefore sound.
-- It is a **lower bound** on the true upstream change time, accurate to the
+- It is an **upper bound** on the true upstream change time, accurate to the
   polling interval — up to six hours for calendar data, less around a session.
+  If upstream changed at `t0` and GridView first saw it at poll `t1`, then
+  `t1 >= t0`: the published value can only be **later** than the real change,
+  never earlier. Equivalently it is a **lower** bound on the data's age, so it
+  never makes data look fresher than it is — which is the direction that
+  matters, since the failure ADR 0005 guards against is stale data appearing
+  current.
 
 **Why this still needs sign-off rather than adoption here.** ADR 0005 defines
 the field as the age of the underlying source data. A first-observed timestamp
@@ -1323,6 +1349,7 @@ accept the incoming write only if
     incoming.state == reconciled and stored.state == provisional
   or
     incoming.state == reconciled and stored.state == reconciled
+        and not stored.settled
         and incoming.contentRevision != stored.contentRevision
         and incoming.contentRevision is CORROBORATED
   or
@@ -1332,7 +1359,17 @@ accept the incoming write only if
 where CORROBORATED means the same contentRevision was returned on two
 consecutive reconciliation checks (§10.4), not merely once
   AND that contentRevision does not appear in supersededRevisions
+
+and where stored.settled is true, the write is NOT accepted; it is STAGED
+for review instead (see "Settled records" below)
 ```
+
+**`not stored.settled` is part of the predicate, not a footnote.** Without it a
+settled resource returning a new, corroborated, non-superseded payload satisfies
+the accept branch and is published automatically — which is precisely what the
+settled rule exists to prevent. Staging is a distinct outcome from accepting and
+from rejecting: the payload is retained, the published snapshot is unchanged,
+and an operational signal is raised.
 
 **Corroboration alone is not enough, and the ledger is what closes the gap.**
 Repetition across fetches shows only that a value is stable at the source being
