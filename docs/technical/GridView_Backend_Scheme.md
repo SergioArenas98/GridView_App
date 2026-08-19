@@ -1092,8 +1092,19 @@ A public request may never trigger a write merely by opening an endpoint intende
 > **event-offset driven**: provisional OpenF1 attempts at +32, +35, +45 and +60
 > minutes after the **actual** session end, stopping as soon as a complete and
 > internally consistent result is obtained, and Jolpica reconciliation checks at
-> +2, +6, +12 and +24 hours, then daily until reconciled. There is **no polling
-> during a session** and no year-round high-frequency schedule.
+> **+5, +9, +15 and +24 hours after the session START**, then daily until
+> reconciled. There is **no polling during a session** and no year-round
+> high-frequency schedule.
+>
+> **The two anchors differ and must not be conflated.** OpenF1 offsets run from
+> the *actual session end* and are gated by §10.2's bound-or-skip rule. Jolpica
+> offsets run from the *scheduled session start*, because a Jolpica race object
+> publishes a `date` and an optional UTC `time` and **no end or duration** — an
+> end-based anchor could not be constructed from it. Check 4 sits at start + 24
+> hours so it stays inside the 24-hour reconciled-freshness objective, which is
+> measured from the session end. The Jolpica calendar itself is polled **every
+> six hours**, both to meet the §25 freshness target and because it is the
+> trigger source for every session job.
 >
 > **The scheduled end must never be used as the anchor on its own.** The live
 > window closes 30 minutes after the session really ends, so a delayed or
@@ -1827,6 +1838,17 @@ The paid plan is recommended for predictable production capacity and monitoring.
 
 ### 32.2 Provider
 
+> **Superseded (2026-08-19).** The provider cost model below describes
+> API-Sports, which is **unselected**. Under
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) the provider budget
+> is **EUR 0**: both adopted sources are free and unauthenticated, there is no
+> plan to choose and no subscription to price. The figures are retained only as
+> a reference point should a paid provider ever be reconsidered — which would
+> require reopening ADR 0019 first, because monetisation and paid provision are
+> coupled to the non-commercial licence the current model depends on. They were
+> also never verified against a reachable official page (§6.2 of the
+> evaluation).
+
 API-Sports currently lists:
 
 - A free plan with 100 requests per day.
@@ -1843,11 +1865,14 @@ Indicative infrastructure-only estimate:
 
 ```text
 Cloudflare Workers paid plan: approximately USD 5/month
-Formula 1 API entry paid plan: approximately 15/month as listed
+Formula 1 API entry paid plan: NONE - the adopted sources are free (ADR 0019)
 R2/KV overages: likely zero at small scale
 Domain: separate annual cost
-Estimated initial total: approximately 20/month plus domain
+Estimated initial total: approximately 5/month plus domain
 ```
+
+The provider line is **zero** under the adopted model. The figure previously
+shown here assumed the superseded API-Sports subscription.
 
 This does **not** include:
 
@@ -2116,10 +2141,16 @@ The following must be resolved before production launch:
 
 ## 39. Recommended next implementation proof
 
+> **Updated (2026-08-19).** The slice starts from **Jolpica** or a fixture, not
+> API-Sports, which is unselected. It must not start from OpenF1 either: that
+> path is specified but **locked** until an end bound is recorded, so a proof
+> built on it could not run against the live service. See
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
+
 Before implementing every endpoint, build one backend vertical slice:
 
 ```text
-API-Sports or mock calendar fixture
+Jolpica calendar or mock calendar fixture
     -> provider adapter
     -> runtime validation
     -> stable ID mapping

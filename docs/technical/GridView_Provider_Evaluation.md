@@ -1198,7 +1198,8 @@ week begins, at which point the resource is marked unreconciled and left alone.
 There is no aggressive polling and no tight retry loop at any point.
 
 Jolpica also runs on a slow independent cadence for resources that have nothing
-to do with a session: calendar daily, participants and circuits weekly,
+to do with a session: calendar **every six hours** (§11.2), participants and
+circuits weekly,
 standings daily during the season (which is what catches a penalty applied days
 after a race).
 
@@ -1242,8 +1243,60 @@ Internal only. Every synchronized resource retains:
 | `reconciledAt` | When a reconciled write last replaced or confirmed the record. Null while provisional. |
 | `contentRevision` | Stable hash of the normalized payload, used by §10.9 to order reconciled writes without a provider timestamp. |
 | `pendingRevision` | A differing reconciled payload seen once and awaiting corroboration on the next check (§10.9). Null when none. |
+| `supersededRevisions` | Every `contentRevision` previously stored for this resource and since replaced. A revision in this set is never re-applied, which is what stops a persistently stale source from rolling data back (§10.9). |
+| `sourceObservedAt` | When the **current** `contentRevision` was **first** observed. Monotonic across content changes, and the value published as `sourceUpdatedAt` — see §10.7.1. |
 | `settled` | Whether the resource has been stable across the full check sequence and past the C7 window (§10.9). |
 | `conflictOutcome` | Which rule in §10.9 fired, and what it decided. |
+
+#### 10.7.1 `sourceUpdatedAt` — an unresolved conflict with the existing contract
+
+**This is a blocking Phase 9B design item, recorded here rather than resolved.**
+
+The existing contract requires a value neither adopted source can supply:
+
+| Existing requirement | Where |
+|---|---|
+| `ProviderSeasonSource.sourceUpdatedAt` is a required non-null `string` | `services/edge-api/src/providers/formula-one-provider.ts` |
+| `SnapshotMeta.sourceUpdatedAt` is required; a snapshot missing it is rejected as `invalidResponse` before persisting | [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md) |
+| It means *the age or revision of the underlying source data*, and is the **primary** snapshot-conflict key | [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md) |
+
+Neither OpenF1 nor Jolpica publishes an update timestamp, a version or a usable
+`Last-Modified` (§8.6). And §10.9 forbids substituting fetch or generation time
+for source recency — as does ADR 0005 itself. **As things stand there is no
+documented way to produce a contract-valid snapshot from either source**, which
+is a genuine gap in the adapter design and must be closed before Phase 9B treats
+it as implementable.
+
+**Proposed rule, requiring explicit sign-off.** Publish
+`sourceUpdatedAt = sourceObservedAt`: the time at which the **current**
+`contentRevision` was **first** observed.
+
+- It is **not** the fetch time of the current request. Re-reading unchanged
+  content does not advance it, so repeated polling cannot make stale data look
+  fresh — which is the specific failure ADR 0005 prohibits.
+- It is **monotonic across content changes** when combined with the
+  superseded-revision ledger (§10.9): a revision that has been replaced can never
+  return, so a later-observed revision is always a later state of the source.
+  Ordering snapshots by it is therefore sound.
+- It is a **lower bound** on the true upstream change time, accurate to the
+  polling interval — up to six hours for calendar data, less around a session.
+
+**Why this still needs sign-off rather than adoption here.** ADR 0005 defines
+the field as the age of the underlying source data. A first-observed timestamp
+is a *proxy* for that, not the thing itself, and it is weaker than the current
+wording implies. Phase 9B must therefore either:
+
+1. accept the proxy and **amend ADR 0005 and the OpenAPI description** so the
+   documented semantics match what is actually published; or
+2. revise the snapshot-conflict semantics to key on `contentRevision` directly
+   and reduce `sourceUpdatedAt` to advisory.
+
+Both touch an Accepted ADR and the public contract, so **neither is decided
+here.** What is decided is that the adapter may not ship until one of them is,
+and that inventing a value — publishing fetch time under this field — is not an
+option.
+
+---
 
 ### 10.8 Provider metadata must not leak into the public contract
 
@@ -1278,7 +1331,35 @@ accept the incoming write only if
 
 where CORROBORATED means the same contentRevision was returned on two
 consecutive reconciliation checks (§10.4), not merely once
+  AND that contentRevision does not appear in supersededRevisions
 ```
+
+**Corroboration alone is not enough, and the ledger is what closes the gap.**
+Repetition across fetches shows only that a value is stable at the source being
+read — not that it is *current*. A stale replica, or a cache consistently
+serving a pre-penalty classification, will return the same old payload on two
+consecutive checks and would otherwise be corroborated and written, rolling the
+stored result backwards.
+
+So every revision that has ever been replaced is remembered:
+
+```text
+supersededRevisions = the set of contentRevisions previously stored for this
+                      resource and since replaced
+
+a revision in supersededRevisions is NEVER re-applied, however many
+consecutive checks return it
+```
+
+Re-reading an old revision is therefore inert no matter how persistent the stale
+source is. A genuinely new correction has a revision that has never been stored,
+so it is unaffected by the ledger and is accepted on corroboration as before.
+
+**For a `settled` record the bar is higher still.** A corroborated, non-superseded
+change to a settled resource is **not applied automatically**; it is staged and
+raises an operational signal for review. Results are occasionally corrected weeks
+later, so the path must exist — but at that distance from the event a silent
+rewrite is more likely to be a source defect than a real correction.
 
 **`reconciledAt` orders nothing.** It records *when GridView last confirmed* a
 record; it is never used to decide which of two differing reconciled payloads is
@@ -1390,7 +1471,8 @@ event day it could have fired **inside OpenF1's live window**. It is removed.
 
 Session schedules come from **Jolpica's calendar**, which already carries
 `FirstPractice`, `SecondPractice`, `ThirdPractice`, `Qualifying`, `Sprint` and
-`SprintQualifying` times (§8.4) and is fetched daily anyway. Jolpica has no live
+`SprintQualifying` times (§8.4) and is fetched every six hours anyway (see
+below). Jolpica has no live
 window, so a schedule lookup there is unconditionally safe.
 
 **Every OpenF1 request without exception belongs to the gated provisional path
@@ -1485,8 +1567,12 @@ requests is made, spaced out.
 | Model | Off-event daily | Peak daily | Monthly |
 |---|---:|---:|---:|
 | Superseded static scheduler (§10.5) | 415 | 415 | ≈ 12,450 |
-| Proposed event-aware model, worst case | 4.4 | ≈ 47 | ≈ 285 |
-| **Reduction** | **~99%** | **~89%** | **~98%** |
+| Adopted event-aware model, worst case | 6.4 | ≈ 48 | ≈ 356 |
+| **Reduction** | **~98%** | **~88%** | **~97%** |
+
+Those are ceilings for the design as a whole. **Actual traffic today is lower
+still**, because the OpenF1 path is locked (§10.2) and contributes nothing: the
+current figures are the Jolpica baseline plus reconciliation.
 
 ### 11.6 Assumptions that remain undecided
 
@@ -1705,6 +1791,7 @@ Full detail in Appendix D.
 | G-f | No outbound-request hardening helper exists; Jolpica's mandatory custom `User-Agent` would live there. |
 | G-g | No provenance or provisional/reconciled state exists in the local schema. |
 | G-h | `providerCallCount` is untyped and would silently under-report per-source usage. |
+| G-i | **`sourceUpdatedAt` has no valid value from either source** (§10.7.1). The field is contract-required and is ADR 0005's primary conflict key, but neither provider publishes an update timestamp. Blocking for Phase 9B. |
 
 ---
 
@@ -1751,6 +1838,7 @@ appears among them.**
 | E3 | **Attribution requirements are part of the implementation plan** — the six elements of §7.6.2 **and its conditional duties 7-11**, in the app and in the public API documentation, with attribution held as per-source data rather than hard-coded strings |
 | E4 | **Provider-derived data is separated from application source code** (§7.6.3) |
 | E5 | The normalized data output has a **documented ShareAlike strategy** (§7.6.3) |
+| E5a | The **`sourceUpdatedAt` conflict with the existing contract is resolved** (§10.7.1) — either the proxy rule is accepted with ADR 0005 and the OpenAPI description amended to match, or the conflict semantics are re-keyed. Publishing fetch time under that field is not an option. |
 | E6 | **Live-window and rate-limit restrictions are encoded as requirements** — the §10.2 anchor computed from the **actual** session end via a justified upper bound, **with the skip rule implemented for sessions where no bound is available**, plus the re-anchor backstop; **every** OpenF1 request routed through that gate with no baseline, metadata or health-check exception (§11.2); Jolpica scheduled from its own always-available anchor (§10.4) so reconciliation survives the skip; an explicit per-provider rate limiter (§11.4) rather than reliance on serialization; and Jolpica's published limits and mandatory `User-Agent` respected |
 | E7 | **Adapters can be disabled independently** (§14.3 M4) |
 | E8 | The **public DTO contract remains provider-neutral** (§10.8, requirement T4) |
