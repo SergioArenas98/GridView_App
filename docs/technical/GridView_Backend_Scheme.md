@@ -57,7 +57,15 @@ The recommended production architecture is:
 - **No MySQL database**.
 - **No always-running Spring Boot server**.
 
-API-Sports is only a technical candidate. Production use remains blocked until the intended ad-supported use and any required data-publication rights are confirmed.
+API-Sports is only a technical candidate. Production use remains blocked until the intended use and any required data-publication rights are confirmed.
+
+> **Superseded premise (2026-08-19).** The original wording of this paragraph
+> said "the intended **ad-supported** use". GridView v1 carries no advertising
+> ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)). The gate is
+> unchanged, but it is now assessed against a free, ad-free, publicly
+> distributed application that redistributes normalized data through GridView's
+> own public API. The same correction applies to every "ad-supported" phrasing
+> in §3.1 and §7.3 below.
 
 ---
 
@@ -67,7 +75,27 @@ Provider selection is both a technical and legal decision.
 
 ### 3.1 Current provider findings
 
+> **Status of this section (2026-08-19).** The findings below were written
+> without source URLs or access dates and are **superseded as evidence** by
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md), which
+> records every claim with an official URL, a page title, an access date and an
+> explicit `Explicitly permitted` / `Explicitly prohibited` / `Written
+> permission required` / `Not stated or ambiguous` / `Not applicable`
+> classification. That document also adds a fourth candidate, Sportmonks, and
+> records the resulting decision in
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md). Where this section
+> and the evaluation differ, **the evaluation is authoritative.** The comparison
+> tables are deliberately not duplicated here.
+
 #### API-Sports
+
+> **Unverified (2026-08-19).** Every official API-Sports source returned HTTP
+> 403 to every retrieval method available during the Phase 9A pass, so none of
+> the statements in this subsection could be confirmed against a current
+> official page. They carry no source URL and no access date and must be treated
+> as **unverified legacy assertions, not findings**, until someone reads the
+> terms and pricing in an ordinary browser. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §5.1.
 
 API-Sports provides Formula 1 endpoints, API-key authentication and paid request quotas suitable for a small application.
 
@@ -92,7 +120,15 @@ Its published access conditions describe:
 - Non-commercial and fan-engagement orientation.
 - Commercial or other use cases requiring direct discussion.
 
-OpenF1 is not approved as the default production provider for an ad-supported GridView release without written permission.
+OpenF1 is not approved as the default production provider without written permission.
+
+> **Verified and narrowed (2026-08-19).** OpenF1's own site states the data is
+> licensed **CC BY-NC-SA 4.0** and is intended for educational, personal-learning,
+> research and non-commercial fan-engagement use. The blocker is therefore the
+> NonCommercial term plus the ShareAlike obligation, not advertising: removing
+> advertising does not by itself establish that a publicly distributed
+> application redistributing normalized data is non-commercial. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §6.2.
 
 #### Jolpica F1
 
@@ -105,7 +141,16 @@ Its published terms state:
 - Commercial use requires contacting the project.
 - Availability and correctness are not guaranteed.
 
-Jolpica may be useful for prototyping or as a development fixture source, but not for an ad-supported production release without explicit commercial permission.
+Jolpica may be useful for prototyping or as a development fixture source, but not for a production release without explicit commercial permission.
+
+> **Verified (2026-08-19).** Confirmed verbatim against Jolpica's own
+> `TERMS.md` (last updated 27 August 2025) and rate-limit guide: non-commercial
+> use only, CC BY-NC-SA 4.0, commercial usage via `admin@jolpi.ca`, 4 requests
+> per second burst and 500 per hour sustained unauthenticated, a mandatory
+> identifying `User-Agent`, no guarantee of uptime, availability or correctness,
+> and published limits expected to **decrease**. Jolpica is also the **strongest
+> verified technical fit** for GridView's v1 resource set. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §6.3, §7.1.
 
 ### 3.2 Hard release requirement
 
@@ -396,6 +441,16 @@ The public API must never return provider DTOs directly.
 
 ## 7.2 API-Sports candidate
 
+> **Unverified (2026-08-19).** None of the technical properties or limitations
+> listed below could be confirmed against a current official API-Sports page
+> during the Phase 9A pass; every official host returned HTTP 403. They carry no
+> source URL and no access date. The Phase 9A evaluation therefore neither
+> endorses nor withdraws this preference — it marks it unverified pending
+> someone reading the documentation in an ordinary browser. Of the candidates
+> whose capabilities *could* be verified, Jolpica is the strongest technical
+> fit. See [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md)
+> §5.1, §7 and §12.2.
+
 The first real adapter should target API-Sports after the legal gate is passed.
 
 Reasons for technical preference:
@@ -444,7 +499,7 @@ Best suited for:
 - Historical schedule and result prototypes.
 - Ergast-compatible exploration.
 
-Not selected for ad-supported production by default because:
+Not selected for production by default because:
 
 - Terms are non-commercial.
 - It is volunteer-run.

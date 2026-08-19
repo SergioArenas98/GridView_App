@@ -1260,6 +1260,30 @@ requirements tracked in
 
 ## 14. Phase 9 - Production provider integration
 
+**Phase 9 has started. Phase 9A (provider evaluation and legal-gate
+preparation) is complete; the legal gate remains open.** See §14.0.
+
+## 14.0 Phase 9A status
+
+Phase 9A ran as a research and preparation pass on 2026-08-19. Its full
+evidence, classifications, quota model, unsent outreach draft and code audit are
+recorded in
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md), and the
+decision it produced is
+[ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) (**Proposed**).
+
+| Item | Status |
+|---|---|
+| Provider evaluation (§14.2 legal gate research) | **Complete** |
+| Legal gate | **Open.** No candidate's official sources state that GridView's intended public redistribution is permitted. |
+| Provider approval | **Not obtained.** No provider is approved, selected, subscribed to or contacted. |
+| Production provider adapter | **Not implemented and not activated.** Production remains `PROVIDER_MODE = "none"`; the mock provider is unchanged. |
+| Next action | **Requires user and provider correspondence.** ADR 0019 lists the blocking actions U1-U6. |
+
+Phase 9B (adapter implementation) does not begin until a provider confirms the
+architecture in writing. ADR 0019 also records eight structural seams that Phase
+9B must add before an adapter can be implemented cleanly.
+
 ## 14.1 Objective
 
 Replace the mock backend provider with the legally approved production data source.
@@ -1269,7 +1293,12 @@ Replace the mock backend provider with the legally approved production data sour
 Before implementation is enabled in production:
 
 - Confirm provider contract.
-- Confirm ad-supported use.
+- Confirm the intended use. **For v1 that use is not ad-supported**, following
+  [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md); separately
+  establish whether advertising would change the applicable rights. The original
+  wording of this line ("Confirm ad-supported use") predates ADR 0018 and is
+  reinterpreted rather than deleted — see
+  [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) decision 7.
 - Confirm caching rights.
 - Confirm redistribution terms.
 - Confirm attribution.
