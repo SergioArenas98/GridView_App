@@ -1190,29 +1190,38 @@ This allows one scheduling mechanism while keeping provider usage controlled.
 > unavailable, so every reconciliation check is a full fetch. See
 > [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.6.
 
-The synchronization layer must record:
+The synchronization layer must record, **per source and in that source's own
+windows** — daily and per-minute are the shape of the superseded metered
+provider and cannot represent either adopted source:
 
-- Daily request limit.
-- Remaining daily requests.
-- Per-minute limit.
-- Remaining per-minute requests.
+- The **window set that source publishes**, and the modelled remaining count in
+  each. OpenF1 publishes **per-second and per-minute**; Jolpica publishes
+  **per-second and per-hour**. Neither publishes a daily figure, so a daily
+  bucket is a derived convenience at best and must not be the only bucket.
 - Provider response status.
 - Last provider success.
 - Last provider failure.
 - Requests used by job type.
 
+Counts are **modelled locally**, since neither source returns rate-limit headers
+([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.6, gap
+G-k).
+
 ### 16.1 Quota safety
 
 Rules:
 
-- Reserve a percentage of daily quota for manual recovery.
+- Reserve a percentage of the **longest published window** for manual recovery —
+  Jolpica's hour, OpenF1's minute — not of a daily figure neither source states.
 - Skip low-priority profile refreshes when quota is low.
 - Never consume quota for public mobile requests.
 - Stop retries when the provider reports rate limiting.
 - Respect `Retry-After` when supplied.
-- Alert when remaining daily quota crosses defined thresholds.
+- Alert when the remaining count in **any** of a source's published windows
+  crosses a threshold. A per-second burst breach and an hourly exhaustion are
+  different failures and must both be visible.
 
-Suggested thresholds:
+Suggested thresholds, applied per window rather than to a daily total:
 
 - Warning: 30% remaining.
 - High warning: 15% remaining.

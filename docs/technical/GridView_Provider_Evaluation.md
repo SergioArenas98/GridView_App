@@ -1662,11 +1662,19 @@ provisional path is unlocked.
 | Source | Published limit | Peak-day use | Headroom |
 |---|---|---:|---|
 | OpenF1 free | 3 requests/**second** and 30 requests/**minute** | ≈ 26 requests/**day** once unlocked; **0 today** | The entire peak day fits inside one minute's allowance. The **per-second** limit is a separate matter — see the note below. |
-| Jolpica unauthenticated | 4 requests/**second** and 500 requests/**hour** | ≈ 22 requests/**day** | ≈ 4% of a single hour's allowance, spread across 24 hours. Well inside the announced future reduction. The per-second limit is subject to the same note below. |
+| Jolpica unauthenticated | 4 requests/**second** and 500 requests/**hour** | **≥ 22** requests/**day** — a lower bound, not the peak | The modelled figure is ≈ 4% of a single hour's allowance spread across 24 hours. **Neither the eventual peak nor the future headroom can be established yet:** §10.4.1 leaves the settling and post-settlement cadence undefined, so the true peak is unknown, and §9.2 records that Jolpica's limits will fall without stating by how much. Both must be re-checked once the settling design exists and the new limits are published. The per-second limit is subject to the note below. |
 
-**Neither source's daily or hourly volume is a constraint on this design, even
-at worst case, even if published limits are reduced substantially.** Licensing,
-not quota, remains the gate.
+**On the figures available, neither source's volume looks like a constraint** —
+tens of requests a day against 500 an hour leaves roughly two orders of
+magnitude of room, so licensing rather than quota remains the gate.
+
+**That conclusion is provisional in one direction and unquantified in the
+other.** The Jolpica figure is a lower bound until §10.4.1 fixes how long
+polling continues, and Jolpica has announced its limits will fall without saying
+by how much (§9.2). The margin is large enough that both would have to move
+substantially to matter, but "large enough" is a judgement about unknown
+quantities, not a calculation — so this is recorded as a **re-check at Phase 9B**
+rather than a settled headroom result.
 
 **Serialization alone does not satisfy a per-second burst limit.** A single Race
 or Sprint attempt issues five OpenF1 calls, and if responses return quickly,
@@ -1711,6 +1719,7 @@ be the Jolpica baseline plus reconciliation alone.
 | Q2 | **Whether the beta championship endpoints populate for sprint sessions** (M3). | If not, sprint-day standings freshness falls back to Jolpica reconciliation. Reduces OpenF1 cost, increases latency. |
 | Q3 | **How quickly Jolpica publishes results after a race.** Not measurable in this pass: the check ran during the 2026 summer break, 24 days after the last session. Round 11 was fully populated, but that proves completeness, not latency. | Determines whether C7's 24-hour objective is realistic. Must be measured against a live race weekend before being asserted. |
 | Q4 | **Whether a full-season backfill is needed per rebuild, or only recent rounds.** | Bounds bootstrap cost between roughly 10 and 80 requests. |
+| Q5 | **The size of Jolpica's announced rate-limit reduction** (§9.2). Unstated. | Until it is published, future headroom cannot be computed — only judged against a currently large margin. |
 
 ---
 
