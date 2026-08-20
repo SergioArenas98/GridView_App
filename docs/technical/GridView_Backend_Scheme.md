@@ -198,15 +198,30 @@ Jolpica may be useful for prototyping or as a development fixture source, but no
 > applies. The one case in which contacting a provider becomes mandatory is
 > monetisation, which must reopen the decision **before** implementation.
 
-Before the production provider integration is approved, GridView must obtain:
+Before the production integration is approved, GridView must establish each of
+the following **internally**. None requires a provider response, and none may be
+satisfied by one, because the permission relied on is the published licence:
 
-- Written confirmation that the intended mobile-app use is permitted.
-- Clarification of whether advertising changes the applicable rights.
-- Clarification of attribution requirements.
-- Clarification of whether normalized data may be cached.
-- Clarification of whether historical snapshots may be retained.
-- Clarification of whether logos and images are included or require separate rights.
-- Confirmation of any restrictions on public redistribution.
+- **The intended use is inside the licence** — mapped act by act in
+  [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.5.
+- **Monetisation is absent**, which is what places the use inside the
+  NonCommercial term (§7.6.1). Any future monetisation reopens the decision
+  before implementation, and *that* is the one case requiring a provider.
+- **Attribution is implemented** per source, in the app and in the public API
+  documentation, including the conditional §3(a)(1)(A) duties and the §3(a)(3)
+  removal obligation (§7.6.2).
+- **Caching and retention are inside the grant** (§7.5 acts 2, 3 and 7).
+- **Redistribution through GridView's own API is inside the grant** (§7.5 acts
+  8-10), with the residual uncertainty recorded rather than resolved.
+- **Images and logos are excluded** and nothing protected is imported (§7.6.5).
+- **No additional downstream restrictions** are imposed by GridView's own terms
+  (§7.6.4).
+
+The original wording of this list — "written confirmation", "clarification of",
+"confirmation of" — presumed a provider counterparty and is **superseded** by
+[ADR 0019](../adr/0019-formula-one-provider-legal-gate.md). Retaining it as an
+operative gate would recreate the provider-response requirement that ADR
+withdrew.
 
 ### 3.3 Development before legal approval
 
@@ -474,8 +489,8 @@ interface FormulaOneProvider {
 Implementations may include:
 
 ```text
-JolpicaProvider          # adopted, active
-OpenF1Provider           # adopted, specified but LOCKED (ADR 0019)
+JolpicaProvider          # selected, unlocked - NOT BUILT
+OpenF1Provider           # selected, LOCKED, NOT BUILT (ADR 0019)
 MockFormulaOneProvider   # retained permanently for automated tests
 FutureLicensedProvider   # only if a paid provider is ever reconsidered
 
@@ -2107,7 +2122,8 @@ This document establishes:
 - Precomputed public API responses.
 - ~~API-Sports as the first technical adapter candidate.~~ **Superseded by
   [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md):** the adopted
-  sources are **Jolpica F1** (active) and **OpenF1** (specified but locked),
+  sources are **Jolpica F1** (selected and unlocked) and **OpenF1** (selected but
+  locked) — **neither adapter is built**,
   used under their published CC BY-NC-SA 4.0 licence at zero cost. API-Sports is
   unselected and its terms remain unverified.
 - A mandatory **licence-compliance** gate before production provider activation.

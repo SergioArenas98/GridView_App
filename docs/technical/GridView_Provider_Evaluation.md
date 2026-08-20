@@ -1278,7 +1278,7 @@ Internal only. Every synchronized resource retains:
 | `reconciledAt` | When a reconciled write last replaced or confirmed the record. Null while provisional. |
 | `contentRevision` | Stable hash of the normalized payload, used by §10.9 to order reconciled writes without a provider timestamp. |
 | `pendingRevision` | A differing reconciled payload seen once and awaiting corroboration on the next check (§10.9). Null when none. |
-| `supersededRevisions` | Every `contentRevision` previously stored for this resource and since replaced. A revision in this set is never re-applied, which is what stops a persistently stale source from rolling data back (§10.9). |
+| `supersededRevisions` | Every `contentRevision` **previously stored for this resource and since replaced**. A revision in this set is never re-applied. Note the limit: it can only block revisions GridView once stored, so an older payload it never stored is **not** caught (§10.9.1). |
 | `sourceObservedAt` | When the **current** `contentRevision` was **first** observed. **Candidate** value for the contract-required `sourceUpdatedAt`, *pending the E5a decision* — a proposal requiring sign-off, not the adopted mapping. No contract-valid value exists until E5a is taken (§10.7.1). |
 | `settled` | Whether the resource's value has stopped moving, under the definition Phase 9B must supply against the §10.4.1 invariants. A settled record never accepts a change automatically. |
 | `conflictOutcome` | Which rule in §10.9 fired, and what it decided. |
@@ -1631,7 +1631,8 @@ Qualifying post-session windows:
 baseline 6.4 + Sprint (17 + 12) + Qualifying (9 + 4) = ~48 requests/day
 ```
 
-Split by source on that day: **OpenF1 ≈ 26**, **Jolpica ≈ 22**.
+Split by source on that day: **OpenF1 ≈ 26**, **Jolpica ≈ 22** — baseline 6.4
+plus Sprint 12 plus Qualifying 4, consistent with §11.3.
 
 **The reconciliation figures are now a lower bound, not a ceiling.** They assume
 polling stops at the first successful check. Under the invariants in §10.4.1 a
@@ -1686,9 +1687,11 @@ requests is made, spaced out.
 | Adopted event-aware model, worst case | 6.4 | ≈ 48 | ≈ 356 |
 | **Reduction** | **~98%** | **~88%** | **~97%** |
 
-Those are ceilings for the design as a whole. **Actual traffic today is lower
-still**, because the OpenF1 path is locked (§10.2) and contributes nothing: the
-current figures are the Jolpica baseline plus reconciliation.
+Those are ceilings for the design as a whole. **Actual traffic today is zero**:
+no adapter is built, production remains `PROVIDER_MODE = "none"` and no
+production cron exists, so nothing fetches from either source. Once the Jolpica
+adapter exists and while the OpenF1 path stays locked (§10.2), the figures will
+be the Jolpica baseline plus reconciliation alone.
 
 ### 11.6 Assumptions that remain undecided
 

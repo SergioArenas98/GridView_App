@@ -160,11 +160,14 @@ review.
 
 **7. The Phase 9B entry gate is objective and internal.** Twelve criteria, all
 verifiable in this repository. **No provider email, reply or waiting period
-appears among them.** They are **specification** checks — whether each
-requirement is decided and written down — because requiring Phase 9B's own
-output before Phase 9B may start would be circular. Verification that the
-requirements were actually *built* belongs to the phase exit criteria and the
-release sweep.
+appears among them.** They are of two kinds. **E1, E9 and E10 are state
+checks**: the product must actually be unmonetised, actually import no protected
+media, and actually claim no approval — writing those requirements down does not
+satisfy them, and the state must hold at the moment of entry. The rest are
+**specification checks** — whether a requirement is decided and written down —
+because requiring Phase 9B's own output before Phase 9B may start would be
+circular. Verification that a requirement was actually *built* belongs to the
+phase exit criteria and the release sweep.
 
 **8. Residual third-party-rights risk is accepted knowingly.** A licensor can
 only license what it holds; the public licences do not establish Formula 1

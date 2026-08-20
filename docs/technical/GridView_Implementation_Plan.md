@@ -1470,9 +1470,9 @@ another source rather than bypassing the requirement.
 
 ## 14.3 Adapter tasks
 
-> **Two adapters, not one, and one of them is locked.** Build a **Jolpica**
-> adapter (active) and an **OpenF1** adapter (specified but not unlocked,
-> §14.0.2) behind a coordinator, since the single-call provider interface cannot
+> **Two adapters, not one, and one of them is locked. Neither exists yet.**
+> Build a **Jolpica** adapter (selected and unlocked) and an **OpenF1** adapter
+> (selected but locked, §14.0.2) behind a coordinator, since the single-call provider interface cannot
 > express two sources with different roles. The OpenF1 adapter may be built and
 > tested against fixtures but **must not contact the live service** until an end
 > bound is recorded.
