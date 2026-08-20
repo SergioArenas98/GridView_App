@@ -567,7 +567,8 @@ Not selected for v1 core because:
 > a live window that closes 30 minutes after a session *actually* ends, and a
 > delayed session moves that boundary. GridView may fetch only from a justified
 > upper bound on the actual end, and **no usable bound is recorded**, so every
-> session is skipped, **Jolpica supplies all data including session schedules**,
+> session is skipped, **Jolpica is the source for all data including session
+> schedules** — once its adapter exists; none does yet —
 > and the 30-60 minute freshness objective is **not met by any implemented
 > mechanism**. There is no baseline poll, metadata refresh or health check
 > outside that gate either. The adapter may be built and tested against
@@ -2139,7 +2140,8 @@ The following must be resolved before production launch:
   before implementation.
 - **Still open:** recording a justified upper bound on a session's actual end,
   which is what unlocks the OpenF1 provisional path. Until it exists every
-  session is skipped and Jolpica supplies everything.
+  session is skipped and Jolpica is the source for everything. No adapter for
+  either source exists yet.
 - Final custom API and media domains.
 - Whether the Cloudflare paid plan is enabled from the start.
 - Final public rate limit.

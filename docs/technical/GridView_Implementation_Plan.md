@@ -1322,7 +1322,7 @@ project is not required before Phase 9B.
 | Source | Role | Status |
 |---|---|---|
 | **OpenF1** | *Provisional* post-session classification, points and championship state | **Specified but NOT unlocked** — see below |
-| **Jolpica F1** | *Complete* season metadata, calendar, session times, participants, circuits, historical depth, and *reconciled* final results and standings | Active; supplies everything today |
+| **Jolpica F1** | *Complete* season metadata, calendar, session times, participants, circuits, historical depth, and *reconciled* final results and standings | **Selected and unlocked** — no adapter exists yet, so nothing is running |
 
 **The OpenF1 path is locked, and Phase 9B must not implement it as though it
 were live.** OpenF1's data is free only outside a live window that closes **30
@@ -1337,7 +1337,9 @@ and its timestamp passes while the earlier session is still running.
 Consequently:
 
 - the skip rule applies to **every** session;
-- **Jolpica supplies all data**, including session schedules;
+- **Jolpica is the source for all data**, including session schedules — once its
+  adapter is built. Neither adapter exists today, so nothing is running and
+  production remains `PROVIDER_MODE = "none"`;
 - **the C6 freshness objective is not met by any implemented mechanism**;
 - **no GridView request reaches OpenF1 by any route** — there is no baseline
   poll, metadata refresh or health check outside the gated path.
@@ -1359,10 +1361,19 @@ requirements, not optional polish.
 ### 14.0.3 Phase 9B entry criteria
 
 Phase 9B may begin once Phase 9A is merged and its post-merge CI is green,
-provided all twelve criteria below hold. They are **specification** checks —
-whether each requirement is decided and written down — because requiring Phase
-9B's own output before Phase 9B may start would be circular. Verification that
-they were built belongs to §14.8 and the release sweep. Every one is objective and verifiable in
+provided all twelve criteria below hold. They are of **two kinds**, matching
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2.1:
+
+- **State checks** — something that must be true of the repository *now*. E1
+  (unmonetised), E9 (no protected imports) and E10 (no approval claimed) are
+  licence-critical states, and writing the requirement down does **not** satisfy
+  them; the state itself must hold at the moment of entry.
+- **Specification checks** — whether a requirement is decided and written down
+  clearly enough to build against.
+
+Neither kind requires Phase 9B's own output, which would be circular.
+Verification that a requirement was *built* belongs to §14.8 and the release
+sweep. Every one is objective and verifiable in
 this repository. **No provider email, reply or waiting period is a
 prerequisite.** Full detail in
 [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2.
@@ -1530,8 +1541,12 @@ these are the implementation tasks.
 - Implement the **Jolpica start-anchored cadence** — +5/+9/+15/+24 hours from
   the scheduled session start, then daily — and the six-hourly calendar poll
   that both meets the §25 freshness target and drives every session trigger.
-- Define result finalization, including the corroboration rule and the
-  superseded-revision ledger that stop a stale read rolling data back.
+- Define result finalization. Corroboration and the superseded-revision ledger
+  **reduce** the chance of a stale read rolling data back; they do not prevent
+  it. An older payload GridView never stored passes both while the record is
+  unsettled ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md)
+  §10.9.1). Build to the strategy chosen under **E5a**, and do not certify a
+  guarantee that strategy does not deliver.
 - Reserve capacity for manual recovery and configure alerts on **locally
   modelled** counters, since neither source returns quota headers.
 - Verify provider calls remain independent of public request volume.
@@ -1903,7 +1918,7 @@ Suggested sequence:
 26. Settings.
 27. Firebase observability.
 28. Advertising and consent.
-29. Production data-source adapters — Jolpica active, OpenF1 locked (§14.0.2).
+29. Production data-source adapters — Jolpica selected and unlocked, OpenF1 selected but locked (§14.0.2). Neither is built.
 30. Legacy preference migration.
 31. Performance and accessibility hardening.
 32. Release candidate.

@@ -270,11 +270,13 @@ risk that shares its root cause — neither adopted source publishes an
 update timestamp, yet the field is contract-required and is ADR 0005's primary
 conflict key, so **an adapter cannot currently produce a contract-valid snapshot
 at all**, and closing that gap means amending an Accepted ADR and the public
-contract or re-keying the conflict semantics. E5b requires specifying the
-post-reconciliation cadence and settling predicate against five fixed
-invariants, two of which are in tension. E6 requires the OpenF1 live-window
-rule, which today skips every session because no end bound is recorded. **None
-of the three is resolved by this ADR.**
+contract or re-keying the conflict semantics. E5b requires the five settling
+invariants to be **accepted as binding** — the cadence and settling predicate
+themselves are Phase 9B's first design task, verified at exit, because requiring
+Phase 9B's own specification before Phase 9B may start would be circular. E6
+requires the OpenF1 live-window rule to be specified; it today skips every
+session because no end bound is recorded. **None of the three is resolved by
+this ADR.**
 
 **The obligations are real work.** Attribution surfaces in both the app and the
 API documentation, a per-source attribution model, a documented ShareAlike

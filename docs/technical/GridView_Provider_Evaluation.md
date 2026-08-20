@@ -982,8 +982,9 @@ provider mode, binding or route was created or changed.**
 > **Gated (see §10.2 rule 3).** OpenF1's provisional role is conditional on a
 > justified upper bound on the actual session end existing. **None is recorded
 > today**, so as things stand the skip rule applies to every session and
-> Jolpica supplies everything. The provisional path is designed and specified;
-> it is not yet unlocked.
+> Jolpica is the source for everything. Neither adapter exists yet, so nothing
+> is running: the provisional path is designed and specified but not unlocked,
+> and the reconciliation path is specified but not built.
 
 Every stored record is in exactly one of two states: **provisional** (last
 written from OpenF1) or **reconciled** (last written from Jolpica). The public
@@ -1920,9 +1921,9 @@ under the public CC BY-NC-SA 4.0 licence that OpenF1 and Jolpica each publish.**
 | **OpenF1** | *Provisional* post-session classification, points and championship state, fetched only outside its live window — **gated on a justified end bound, none of which is recorded today (§10.2 rule 3)** |
 | **Jolpica F1** | *Complete* season metadata, calendar, participants, circuits, historical depth, and *reconciled* final results and standings |
 
-**As things stand the OpenF1 path is specified but not unlocked**, so Jolpica
-supplies everything and the C6 objective is not met by any implemented
-mechanism. Recording a bound is the first Phase 9B item on this path.
+**As things stand the OpenF1 path is specified but not unlocked**, so Jolpica is
+the source for everything and the C6 objective is not met by any implemented
+mechanism — nor, since no adapter exists yet, is any other objective. Recording a bound is the first Phase 9B item on this path.
 
 **Individual provider replies are not required and are not awaited.** Outreach
 remains available as an optional courtesy or clarification channel (Appendices A
