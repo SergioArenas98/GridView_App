@@ -1233,8 +1233,12 @@ Until it is specified, the §11 figures for the reconciliation path are a
 **lower bound** (§11.3).
 
 The volume model in §11 counts the expected case, where a resource settles
-quickly; the daily continuation adds at most a handful of requests per session
-and is well inside both published limits.
+quickly. **How much the continuation adds cannot be stated until §10.4.1 is
+designed** — a long break between events, or a slow post-settlement recheck
+cadence, could add considerably more than the expected case suggests. An earlier
+draft capped it at "a handful of requests per session", which was an assertion
+about a design that does not exist yet and contradicted the lower-bound
+treatment in §11.3. No cap is claimed here.
 There is no aggressive polling and no tight retry loop at any point.
 
 Jolpica also runs on a slow independent cadence for resources that have nothing
@@ -1281,7 +1285,7 @@ Internal only. Every synchronized resource retains:
 | `sessionIdentity` | GridView's session identity for the record. |
 | `state` | `provisional` or `reconciled`. |
 | `reconciledAt` | When a reconciled write last replaced or confirmed the record. Null while provisional. |
-| `contentRevision` | Stable hash of the normalized payload, used by §10.9 to order reconciled writes without a provider timestamp. |
+| `contentRevision` | Stable hash of the normalized payload — **revision identity, not ordering**. A hash carries no temporal information, so it can establish that two payloads are the same or different but never which came first. Used for equality (idempotent re-checks), for corroboration, and as the key of the superseded ledger. It does **not** order reconciled writes; nothing available from these sources does (§10.9.1). |
 | `pendingRevision` | A differing reconciled payload seen once and awaiting corroboration on the next check (§10.9). Null when none. |
 | `supersededRevisions` | Every `contentRevision` **previously stored for this resource and since replaced**. A revision in this set is never re-applied. Note the limit: it can only block revisions GridView once stored, so an older payload it never stored is **not** caught (§10.9.1). |
 | `sourceObservedAt` | When the **current** `contentRevision` was **first** observed. **Candidate** value for the contract-required `sourceUpdatedAt`, *pending the E5a decision* — a proposal requiring sign-off, not the adopted mapping. No contract-valid value exists until E5a is taken (§10.7.1). |
@@ -1348,8 +1352,13 @@ wording implies. Phase 9B must therefore either:
 
 1. accept the proxy and **amend ADR 0005 and the OpenAPI description** so the
    documented semantics match what is actually published; or
-2. revise the snapshot-conflict semantics to key on `contentRevision` directly
-   and reduce `sourceUpdatedAt` to advisory.
+2. revise the snapshot-conflict semantics so that **change detection** keys on
+   `contentRevision` and `sourceUpdatedAt` becomes advisory. Note what this
+   exit does and does not buy: `contentRevision` is **identity, not ordering**
+   (§10.7), so it can tell you a payload differs but never which of two
+   differing payloads is newer. This exit removes the need to publish a value
+   GridView cannot derive; it does **not** solve §10.9.1, which is why the two
+   halves of E5a are decided together.
 
 Both touch an Accepted ADR and the public contract, so **neither is decided
 here.** What is decided is that the adapter may not ship until one of them is,

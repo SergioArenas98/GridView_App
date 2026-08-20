@@ -1221,11 +1221,29 @@ Rules:
   crosses a threshold. A per-second burst breach and an hourly exhaustion are
   different failures and must both be visible.
 
-Suggested thresholds, applied per window rather than to a daily total:
+**Thresholds must differ by window size, because percentages collapse on small
+ones.** OpenF1's burst window allows three requests per second: 30%, 15% and 5%
+remaining are 0.9, 0.45 and 0.15 requests, so on integer counts all three
+severities fire at the same moment — zero capacity — and none of them warns
+about anything. Worse, applied to every rolling second they would fire during
+bursts the provider explicitly permits.
+
+**Sustained windows** — Jolpica's 500/hour, OpenF1's 30/minute — use
+percentages, which are meaningful at that size:
 
 - Warning: 30% remaining.
 - High warning: 15% remaining.
 - Critical: 5% remaining.
+
+**Burst windows** — the per-second limits — use absolute counts and a
+saturation signal instead:
+
+- Alert on **repeated saturation**, not on a single saturated second: a burst
+  window reaching zero is normal and expected when a scheduled batch runs.
+- Alert on any request **rejected** for rate limiting (HTTP 429), which is the
+  only unambiguous burst failure.
+- Treat the per-second limit primarily as a **pacing input** for the rate
+  limiter (§11.4 of the evaluation) rather than as an alerting surface.
 
 ---
 
