@@ -1278,7 +1278,7 @@ Internal only. Every synchronized resource retains:
 | `contentRevision` | Stable hash of the normalized payload, used by §10.9 to order reconciled writes without a provider timestamp. |
 | `pendingRevision` | A differing reconciled payload seen once and awaiting corroboration on the next check (§10.9). Null when none. |
 | `supersededRevisions` | Every `contentRevision` previously stored for this resource and since replaced. A revision in this set is never re-applied, which is what stops a persistently stale source from rolling data back (§10.9). |
-| `sourceObservedAt` | When the **current** `contentRevision` was **first** observed. Monotonic across content changes, and the value published as `sourceUpdatedAt` — see §10.7.1. |
+| `sourceObservedAt` | When the **current** `contentRevision` was **first** observed. **Candidate** value for the contract-required `sourceUpdatedAt`, *pending the E5a decision* — a proposal requiring sign-off, not the adopted mapping. No contract-valid value exists until E5a is taken (§10.7.1). |
 | `settled` | Whether the resource's value has stopped moving, under the definition Phase 9B must supply against the §10.4.1 invariants. A settled record never accepts a change automatically. |
 | `conflictOutcome` | Which rule in §10.9 fired, and what it decided. |
 
@@ -1951,8 +1951,8 @@ appears among them.**
 | E3 | **Attribution requirements are part of the implementation plan** — the six elements of §7.6.2 **and its conditional duties 7-11**, in the app and in the public API documentation, with attribution held as per-source data rather than hard-coded strings |
 | E4 | The **separation of provider-derived data from application source code is specified** (§7.6.3), with the artefacts on each side named. Verified in the built system at exit. |
 | E5 | The normalized data output has a **documented ShareAlike strategy** (§7.6.3) |
-| E5a | The **`sourceUpdatedAt` conflict is decided** (§10.7.1) — either the proxy rule is accepted with ADR 0005 and the OpenAPI description amended to match, or the conflict semantics are re-keyed. A *decision*, not an implementation. Publishing fetch time under that field is never an option. |
-| E5b | The **post-reconciliation cadence and settling predicate are specified** against the five invariants in §10.4.1. Again a specification, not an implementation. |
+| E5a | **Both halves of the absent-recency-signal problem are decided**, because they share one root cause: (a) the `sourceUpdatedAt` conflict (§10.7.1) — accept the proxy with ADR 0005 and the OpenAPI description amended to match, or re-key the conflict semantics; and (b) the residual reconciled-ordering risk (§10.9.1) — accept it with monitoring, require review for every reconciled overwrite, or re-key on a source-derived signal. These are **architecture and product decisions** that must precede Phase 9B rather than outputs of it, which is why they gate entry. Publishing fetch time under `sourceUpdatedAt` is never an option. |
+| E5b | The **five settling invariants in §10.4.1 are recorded and accepted as binding** on the Phase 9B design. The design *itself* is Phase 9B's first task and is verified at **exit**, not entry — §10.4.1 calls it Phase 9B work, so requiring it at entry would be circular for the same reason E7 was. |
 | E6 | **Live-window and rate-limit restrictions are written down as binding requirements** the adapter must meet — the §10.2 actual-end anchor with the bound-or-skip rule and re-anchor backstop; every OpenF1 request routed through that gate with no baseline, metadata or health-check exception (§11.2); Jolpica scheduled from its own always-available anchor (§10.4); an explicit per-provider rate limiter (§11.4); and Jolpica's published limits and mandatory `User-Agent`. **Specified, not yet implemented** — see below. |
 | E7 | **Independent per-source disablement is specified** — what may be switched off, at what granularity, and what the system must still serve with one source disabled. The switches themselves are Phase 9B work (§14.3 M4) and are **verified at exit**, not at entry. |
 | E8 | The **provider-neutrality requirement for the public DTO contract is recorded** (§10.8, requirement T4). The contract is provider-neutral today and must stay so; verified against the built adapters at exit. |
@@ -1977,7 +1977,18 @@ So each entry criterion is one of two kinds, and the table marks which:
 
 Neither kind asks whether Phase 9B's own output exists yet. Any criterion phrased
 in the implementation state of a deliverable is miscast and should be rewritten
-as one of the two. Verification that it was
+as one of the two.
+
+**The same test applies to specifications, not just to code.** A specification
+that §10.4.1 assigns to Phase 9B cannot gate Phase 9B entry either — recasting
+"implemented" as "specified" does not help if the *specification* is also Phase
+9B's output. E5b was miscast that way and now gates only on the invariants being
+accepted as binding, with the design itself verified at exit.
+
+By contrast E5a genuinely belongs at entry: amending an Accepted ADR and the
+public contract, and choosing a posture on a known residual risk, are
+architecture and product decisions that must precede the work rather than emerge
+from it. Verification that it was
 actually built belongs to the **Phase 9B exit criteria**
 (`GridView_Implementation_Plan.md` §14.8) and to the final licence-compliance
 sweep before release (§15.3).

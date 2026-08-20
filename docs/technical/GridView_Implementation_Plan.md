@@ -1374,8 +1374,8 @@ prerequisite.** Full detail in
 | E3 | **Attribution requirements are part of the implementation plan** — in the app and in the public API documentation |
 | E4 | The **separation of provider-derived data from application source code is specified** |
 | E5 | The normalized data output has a **documented ShareAlike strategy** |
-| E5a | The **`sourceUpdatedAt` conflict is resolved** ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.7.1). Neither source publishes an update timestamp, yet the field is contract-required and is [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md)'s primary conflict key. Without this an adapter cannot produce a contract-valid snapshot at all. |
-| E5b | The **post-reconciliation cadence and settling predicate are specified** against the five invariants in [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1 |
+| E5a | **Both halves of the absent-recency-signal problem are decided** — the `sourceUpdatedAt` conflict ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.7.1) **and** the residual reconciled-ordering risk (§10.9.1), which share one root cause. Neither source publishes an update timestamp, yet the field is contract-required and is [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md)'s primary conflict key, so without this an adapter cannot produce a contract-valid snapshot at all — and without the ordering choice its overwrite behaviour is undefined. |
+| E5b | The **five settling invariants are recorded and accepted as binding** ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1). The design itself is a §14.3 task verified at exit, not an entry condition |
 | E6 | **Live-window and rate-limit restrictions are written down as binding requirements** |
 | E7 | **Independent per-source disablement is specified** — the switches themselves are §14.3 work and are verified at exit |
 | E8 | The **provider-neutrality requirement for the public DTO contract is recorded** |
@@ -1466,6 +1466,11 @@ another source rather than bypassing the requirement.
 > tested against fixtures but **must not contact the live service** until an end
 > bound is recorded.
 
+- **Specify the post-reconciliation cadence and settling predicate** against the
+  five invariants in
+  [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1,
+  resolving the tension between I3 and I4. This is the **first** design task of
+  the phase and is verified at exit (§14.8).
 - Implement the **Jolpica** adapter and the reconciliation coordinator.
 - Implement the **OpenF1** adapter, fixture-tested only, behind the
   bound-or-skip gate.
@@ -1559,8 +1564,15 @@ these are the implementation tasks.
 
 - All v1 resources are supplied reliably.
 - No provider DTO leaks into the public contract.
-- Provider failure preserves the previous snapshot, and no stale or superseded
-  payload can replace a newer one.
+- Provider failure preserves the previous snapshot.
+- **Reconciled-write behaviour matches the strategy chosen under E5a, and the
+  guarantee claimed is the one that strategy actually delivers.** If E5a accepts
+  the residual risk (§10.9.1), the criterion is that the mitigations and the
+  monitoring are in place and the residual rollback hole is documented — not
+  that it cannot occur, which would be false. If E5a requires review for every
+  reconciled overwrite, the criterion is that none reaches publication without
+  it. A blanket "no stale or superseded payload can replace a newer one" was the
+  withdrawn absolute assurance and must not reappear.
 - Quota usage fits the published free limits, measured against locally modelled
   counters.
 - **Licence obligations are implemented and verifiable** — non-commercial
@@ -1569,7 +1581,10 @@ these are the implementation tasks.
   (Evaluation §7.6).
 - **No GridView request reaches OpenF1 outside its gate**, and the gate is
   either unlocked by a recorded bound or skipping every session.
-- The `sourceUpdatedAt` conflict is resolved rather than worked around.
+- The `sourceUpdatedAt` conflict is resolved rather than worked around, per the
+  E5a decision.
+- The settling design exists, satisfies all five §10.4.1 invariants, and is
+  recorded against them.
 
 ---
 
