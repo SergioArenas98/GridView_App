@@ -1372,13 +1372,13 @@ prerequisite.** Full detail in
 | E1 | The product remains **unmonetised** |
 | E2 | **Both current licence notices are recorded**, with source URL and access date |
 | E3 | **Attribution requirements are part of the implementation plan** — in the app and in the public API documentation |
-| E4 | **Provider-derived data is separated from application source code** |
+| E4 | The **separation of provider-derived data from application source code is specified** |
 | E5 | The normalized data output has a **documented ShareAlike strategy** |
 | E5a | The **`sourceUpdatedAt` conflict is resolved** ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.7.1). Neither source publishes an update timestamp, yet the field is contract-required and is [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md)'s primary conflict key. Without this an adapter cannot produce a contract-valid snapshot at all. |
 | E5b | The **post-reconciliation cadence and settling predicate are specified** against the five invariants in [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1 |
 | E6 | **Live-window and rate-limit restrictions are written down as binding requirements** |
-| E7 | **Adapters can be disabled independently** |
-| E8 | The **public DTO contract remains provider-neutral** |
+| E7 | **Independent per-source disablement is specified** — the switches themselves are §14.3 work and are verified at exit |
+| E8 | The **provider-neutrality requirement for the public DTO contract is recorded** |
 | E9 | **No protected images, logos or branding are imported** |
 | E10 | **No provider is described as officially approving GridView** |
 

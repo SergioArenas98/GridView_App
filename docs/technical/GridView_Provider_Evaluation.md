@@ -1215,7 +1215,7 @@ What is decided here are the properties any design must satisfy:
 | I1 | **Corroboration must be reachable.** A change observed once must have a defined next check at which it can be confirmed, or `pendingRevision` can never resolve and the correction is never published. |
 | I2 | **Settling must be reachable from any starting point**, including a result first published at check 2, 3 or 4, or changed part-way through the sequence. A definition requiring stability across a sequence that has already passed is unreachable and leaves the resource polling forever. |
 | I3 | **Polling must terminate.** An unbounded daily check per session, accumulating across a season, is not acceptable. |
-| I4 | **Late corrections must remain observable.** Results are occasionally corrected weeks later. If polling stops entirely at settlement, the staged-review path in §10.9 has no way to ever receive that change, so termination must leave *some* slow ingestion path — a low-frequency re-check, or ingestion via the standings job which is polled independently. |
+| I4 | **Late corrections must remain observable for the resource that changed.** Results are occasionally corrected weeks later. If polling stops entirely at settlement, the staged-review path in §10.9 can never receive that change, so termination must leave a slow ingestion path **that re-reads the same resource** — a low-frequency `results`, `sprint` or `qualifying` re-check for a session classification. The independently polled standings job does **not** satisfy this: §11.1 models classifications through separate calls, so standings can move without the corrected classification ever being re-read. An earlier draft offered it as an alternative; that was wrong, because a design could satisfy the written invariant while never presenting the corrected resource to §10.9. |
 | I5 | **C7 must still be met** for the ordinary case. |
 
 I3 and I4 are in tension, and resolving that tension is the design task: it
@@ -1305,21 +1305,35 @@ it as implementable.
 `sourceUpdatedAt = sourceObservedAt`: the time at which the **current**
 `contentRevision` was **first** observed.
 
+What it does give:
+
 - It is **not** the fetch time of the current request. Re-reading unchanged
-  content does not advance it, so repeated polling cannot make stale data look
-  fresh — which is the specific failure ADR 0005 prohibits.
-- It is **monotonic across content changes** when combined with the
-  superseded-revision ledger (§10.9): a revision that has been replaced can never
-  return, so a later-observed revision is always a later state of the source.
-  Ordering snapshots by it is therefore sound.
-- It is an **upper bound** on the true upstream change time, accurate to the
-  polling interval — up to six hours for calendar data, less around a session.
-  If upstream changed at `t0` and GridView first saw it at poll `t1`, then
-  `t1 >= t0`: the published value can only be **later** than the real change,
-  never earlier. Equivalently it is a **lower** bound on the data's age, so it
-  never makes data look fresher than it is — which is the direction that
-  matters, since the failure ADR 0005 guards against is stale data appearing
-  current.
+  content does not advance it, so repeated polling of stale content does not
+  keep refreshing its apparent age.
+- It is stable and reproducible: the same content always carries the same
+  timestamp for as long as it remains current.
+
+**What it does not give, stated plainly because two earlier drafts of this
+section got it backwards.**
+
+1. **It is not sound ordering.** See §10.9.1: without a source recency signal,
+   two reconciled payloads cannot be ordered in general, and the
+   superseded-revision ledger narrows that gap without closing it. A claim that
+   the ledger makes ordering by observation time *sound* was wrong and is
+   withdrawn.
+2. **It makes data look fresher than it is, by up to one polling interval.**
+   If upstream changed at `t0` and GridView first observed it at `t1 >= t0`,
+   then the age a consumer computes is `now - t1`, which is **smaller** than the
+   true `now - t0`. So the proxy is an upper bound on the change time and a
+   **lower bound on the age** — and a lower bound on age means data appears
+   *newer*, not older. An earlier draft asserted the opposite and used it as an
+   argument in the proxy's favour; that was wrong twice over, and the error
+   mattered because this paragraph exists to justify amending a public-contract
+   field that ADR 0005 defines as source-data age.
+
+The understatement is bounded by the polling interval — up to six hours for
+calendar data, less around a session — but it is a **cost** of the proxy that
+the sign-off must weigh, not a point in its favour.
 
 **Why this still needs sign-off rather than adoption here.** ADR 0005 defines
 the field as the age of the underlying source data. A first-observed timestamp
@@ -1423,12 +1437,46 @@ would also contradict
 [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md), which forbids
 substituting generation time for source recency.
 
-**Corroboration is the substitute for the timestamp GridView does not have.** A
-differing reconciled payload changes nothing on first sight; it must be returned
-again on the next check before it is written. A single anomalous read from a
-stale replica is therefore inert, while a genuine change — a penalty applied
-hours after a race — persists across checks and is accepted. The cost is one
-check interval of latency on genuine corrections, which is well inside C7.
+**Corroboration and the ledger reduce the risk; they do not eliminate it.** A
+differing reconciled payload changes nothing on first sight and must return on
+the next check before it is written, so a single anomalous read is inert, while
+a genuine correction persists across checks and is accepted at a cost of one
+check interval — well inside C7. But see §10.9.1: this is mitigation, not proof
+of ordering, and it must not be described as though it were.
+
+#### 10.9.1 Reconciled ordering cannot be made sound from these sources
+
+**Without a source-provided timestamp or version, two reconciled payloads cannot
+in general be ordered.** That is a property of the sources, not a gap in the
+rules above, and three successive attempts in review to close it with a cleverer
+rule each left a hole. The remaining hole is concrete: a stale replica may serve
+an **older payload GridView never stored**. Its hash is absent from
+`supersededRevisions`, because the ledger only remembers revisions that were
+once current here; two consecutive reads corroborate it; and the predicate
+accepts it while the record is unsettled. Positions or points roll back.
+
+What the rules actually achieve:
+
+| Mechanism | Catches | Does not catch |
+|---|---|---|
+| Corroboration | A single transient anomalous read | A persistently stale source |
+| Superseded-revision ledger | Re-serving a revision GridView previously stored and replaced | An older revision GridView never stored |
+| `settled` staging | Silent late rewrites of stable records | Anything before settlement |
+
+**This is the same root cause as §10.7.1** — no source recency signal exists —
+and it is folded into the same decision (E5a). Phase 9B must choose one of:
+
+1. **Accept the residual risk** with the mitigations above, and add monitoring
+   that surfaces any reconciled overwrite for inspection rather than trusting it
+   silently.
+2. **Require corroboration plus review for every reconciled overwrite**, not
+   only for settled records — safer, at the cost of operator load.
+3. **Re-key on a source-derived signal** if one can be found, for example a
+   provider-supplied revision or an ordering derivable from the data itself.
+
+**Nothing here should be read as an assurance that reconciled writes are
+correctly ordered.** They are ordered on a best-effort basis with a documented
+residual failure mode.
 
 **Identical payloads are a no-op.** When `incoming.contentRevision` equals the
 stored one, nothing is written; only the confirmation time is refreshed. This
@@ -1898,18 +1946,18 @@ appears among them.**
 
 | # | Criterion |
 |---|---|
-| E1 | The product remains **unmonetised** — none of the seven items in §7.6.1 is present |
+| E1 | The product remains **unmonetised** — none of the seven items in §7.6.1 is present. *(State check, verifiable now.)* |
 | E2 | **Both current licence notices are recorded** — OpenF1 (§7.1) and Jolpica (§7.2), each with its source URL and access date |
 | E3 | **Attribution requirements are part of the implementation plan** — the six elements of §7.6.2 **and its conditional duties 7-11**, in the app and in the public API documentation, with attribution held as per-source data rather than hard-coded strings |
-| E4 | **Provider-derived data is separated from application source code** (§7.6.3) |
+| E4 | The **separation of provider-derived data from application source code is specified** (§7.6.3), with the artefacts on each side named. Verified in the built system at exit. |
 | E5 | The normalized data output has a **documented ShareAlike strategy** (§7.6.3) |
 | E5a | The **`sourceUpdatedAt` conflict is decided** (§10.7.1) — either the proxy rule is accepted with ADR 0005 and the OpenAPI description amended to match, or the conflict semantics are re-keyed. A *decision*, not an implementation. Publishing fetch time under that field is never an option. |
 | E5b | The **post-reconciliation cadence and settling predicate are specified** against the five invariants in §10.4.1. Again a specification, not an implementation. |
 | E6 | **Live-window and rate-limit restrictions are written down as binding requirements** the adapter must meet — the §10.2 actual-end anchor with the bound-or-skip rule and re-anchor backstop; every OpenF1 request routed through that gate with no baseline, metadata or health-check exception (§11.2); Jolpica scheduled from its own always-available anchor (§10.4); an explicit per-provider rate limiter (§11.4); and Jolpica's published limits and mandatory `User-Agent`. **Specified, not yet implemented** — see below. |
-| E7 | **Adapters can be disabled independently** (§14.3 M4) |
-| E8 | The **public DTO contract remains provider-neutral** (§10.8, requirement T4) |
-| E9 | **No protected images, logos or branding are imported** (§7.6.5) |
-| E10 | **No provider is described as officially approving GridView** in any surface |
+| E7 | **Independent per-source disablement is specified** — what may be switched off, at what granularity, and what the system must still serve with one source disabled. The switches themselves are Phase 9B work (§14.3 M4) and are **verified at exit**, not at entry. |
+| E8 | The **provider-neutrality requirement for the public DTO contract is recorded** (§10.8, requirement T4). The contract is provider-neutral today and must stay so; verified against the built adapters at exit. |
+| E9 | **No protected images, logos or branding are imported** (§7.6.5). *(State check, verifiable now — nothing has ever been fetched.)* |
+| E10 | **No provider is described as officially approving GridView** in any surface. *(State check, verifiable now.)* |
 
 #### 15.2.1 Entry criteria are specification checks, not implementation checks
 
@@ -1920,8 +1968,16 @@ Phase 9B may begin would mean Phase 9B work must be finished before Phase 9B can
 start, and `GridView_Implementation_Plan.md` §14.3 and §14.5 list them as Phase
 9B implementation tasks.
 
-So each entry criterion asks only whether the requirement is **decided and
-written down** clearly enough to build against. Verification that it was
+So each entry criterion is one of two kinds, and the table marks which:
+
+- a **state check** — something true of the repository *now*, such as being
+  unmonetised or importing no protected media; or
+- a **specification check** — whether a requirement is decided and written down
+  clearly enough to build against.
+
+Neither kind asks whether Phase 9B's own output exists yet. Any criterion phrased
+in the implementation state of a deliverable is miscast and should be rewritten
+as one of the two. Verification that it was
 actually built belongs to the **Phase 9B exit criteria**
 (`GridView_Implementation_Plan.md` §14.8) and to the final licence-compliance
 sweep before release (§15.3).

@@ -189,7 +189,21 @@ many consecutive checks return it, because repetition proves only that a stale
 replica is stable and not that it is current; and a change to a **settled**
 record is **staged for review**, never applied automatically. Together these
 keep [ADR 0005](0005-snapshot-conflict-and-freshness.md)'s prohibition on
-substituting generation time for source recency intact;
+substituting generation time for source recency intact.
+
+**They do not make reconciled ordering sound, and this ADR does not claim they
+do.** Without a source-provided timestamp or version, two reconciled payloads
+cannot in general be ordered — a property of the sources rather than a gap in
+the rules. A stale replica serving an older payload GridView never stored is not
+caught by the ledger, which only remembers revisions once current here.
+Reconciled writes are therefore ordered on a **best-effort basis with a
+documented residual failure mode**, and choosing how to handle that residual
+risk is folded into the E5a decision alongside `sourceUpdatedAt`, because both
+have the same root cause. See
+[`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md)
+§10.9.1.
+
+Also part of the design:
 mandatory identifier mapping; beta championship endpoints guarded; provider DTOs
 never in the public contract; either source disableable independently. **C6 and
 C7 remain GridView objectives, never guarantees.**
@@ -251,7 +265,8 @@ is merged and its post-merge CI is green, subject to the **twelve** entry
 criteria. Nothing waits on a third party: there is no provider reply to await.
 
 **Three of those criteria are substantive, not checkboxes.** E5a requires
-deciding the `sourceUpdatedAt` conflict — neither adopted source publishes an
+deciding both the `sourceUpdatedAt` conflict and the residual reconciled-ordering
+risk that shares its root cause — neither adopted source publishes an
 update timestamp, yet the field is contract-required and is ADR 0005's primary
 conflict key, so **an adapter cannot currently produce a contract-valid snapshot
 at all**, and closing that gap means amending an Accepted ADR and the public
