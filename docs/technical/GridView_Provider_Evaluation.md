@@ -1417,7 +1417,8 @@ settled rule exists to prevent. Staging is a distinct outcome from accepting and
 from rejecting: the payload is retained, the published snapshot is unchanged,
 and an operational signal is raised.
 
-**Corroboration alone is not enough, and the ledger is what closes the gap.**
+**Corroboration alone is not enough; the ledger narrows the gap without closing
+it.**
 Repetition across fetches shows only that a value is stable at the source being
 read — not that it is *current*. A stale replica, or a cache consistently
 serving a pre-penalty classification, will return the same old payload on two
@@ -1434,9 +1435,17 @@ a revision in supersededRevisions is NEVER re-applied, however many
 consecutive checks return it
 ```
 
-Re-reading an old revision is therefore inert no matter how persistent the stale
-source is. A genuinely new correction has a revision that has never been stored,
-so it is unaffected by the ledger and is accepted on corroboration as before.
+Re-reading a revision **GridView once stored** is therefore inert no matter how
+persistent the stale source is. A genuinely new correction has a revision that
+has never been stored, so it is unaffected by the ledger and is accepted on
+corroboration as before.
+
+**The limit is the same fact stated the other way round.** The ledger only
+remembers revisions that were once current *here*, so an older payload GridView
+never stored is invisible to it: two consecutive reads corroborate it and the
+predicate accepts it while the record is unsettled. That residual rollback path
+is documented in §10.9.1 and is one of the things E5a must take a position on.
+Nothing in this section should be read as closing it.
 
 **For a `settled` record the bar is higher still.** A corroborated, non-superseded
 change to a settled resource is **not applied automatically**; it is staged and
@@ -1919,7 +1928,7 @@ provider or a rights holder raises an objection, §14.3 M10 applies immediately.
 | M4 | **Feature switches allowing either provider to be disabled independently** — distinct from S1: S1 makes removal possible at build time, M4 makes it possible at runtime without a deployment | Phase 9B |
 | M5 | **No protected media** — the §7.6.5 exclusion list | Binding now; nothing has ever been fetched |
 | M6 | **No official-affiliation language** anywhere in the product or documentation | Binding now |
-| M7 | **Conservative request volumes** — roughly 356 requests per month for the modelled design, and a lower bound for the reconciliation path until the §10.4.1 settling design is fixed. Far inside both published limits either way (§11.4) | Designed |
+| M7 | **Conservative request volumes** — roughly 356 requests per month for the modelled design, and a **lower bound** for the reconciliation path until the §10.4.1 settling design is fixed. **Headroom is not yet established**: continuation traffic is unspecified and the size of Jolpica's announced limit reduction is unstated (Q5), so the current margin is an observation about today's figures rather than a mitigation that holds (§11.4). | **Partly designed — re-check required** once §10.4.1 exists and the reduced limits are published |
 | M8 | **Licence-version and terms monitoring**, including watching for Jolpica's announced limit reduction | Phase 9B, plus §12.3 S10 annual review |
 | M9 | **A final licence-compliance review before public release**, covering §7.6.1-§7.6.5, the §10.2 live-window anchor and the §11.4 rate limiter | Release gate (§15.3) |
 | M10 | **Immediate reassessment if a provider or rights holder raises an objection** — pause the affected adapter, stop the affected use, re-evaluate before resuming | Standing obligation from now |
