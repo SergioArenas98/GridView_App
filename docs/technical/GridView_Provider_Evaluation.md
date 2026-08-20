@@ -1194,23 +1194,37 @@ case, including when every OpenF1 fetch is skipped**, and it depends on no
 timestamp that Jolpica does not publish.
 
 **The cadence does not stop at the first reconciled value.** After check 4 the
-resource continues to be checked **daily until it is `settled`**, and only then
-does polling stop. Two things depend on this:
+resource continues to be checked, and where a resource is still **unreconciled**
+daily checks likewise continue until it reconciles or the next event week
+begins, at which point it is left alone and flagged.
 
-- **Corroboration needs a next check to exist.** A correction — a penalty
-  applied the day after a race — is written only when the same revision returns
-  on a following check (§10.9). If polling ended at the first reconciled value,
-  `pendingRevision` would never resolve and the correction would never be
-  published.
-- **`settled` is what terminates polling**, not "reconciled". A resource becomes
-  settled once it has returned the same `contentRevision` across the full check
-  sequence **and** the C7 window has passed. Daily checks then stop, and any
-  later change arrives through the staged-for-review path rather than through
-  polling.
+#### 10.4.1 Post-reconciliation cadence and settling — a Phase 9B design task
 
-Where a resource is still **unreconciled**, daily checks likewise continue until
-it reconciles or the next event week begins, at which point it is left alone and
-flagged.
+This document deliberately stops at **invariants** here rather than specifying a
+state machine. Two review rounds produced successive attempts at a concrete
+settling rule, each of which broke a different case — a rule tied to "unchanged
+across the full check sequence" is unreachable for a result first published at
+check 2, and a rule that stops polling at settlement makes the staged-review
+path unreachable for a later correction. That is a sign the concrete design
+belongs in Phase 9B with the adapter, not in a provider evaluation.
+
+What is decided here are the properties any design must satisfy:
+
+| # | Invariant |
+|---|---|
+| I1 | **Corroboration must be reachable.** A change observed once must have a defined next check at which it can be confirmed, or `pendingRevision` can never resolve and the correction is never published. |
+| I2 | **Settling must be reachable from any starting point**, including a result first published at check 2, 3 or 4, or changed part-way through the sequence. A definition requiring stability across a sequence that has already passed is unreachable and leaves the resource polling forever. |
+| I3 | **Polling must terminate.** An unbounded daily check per session, accumulating across a season, is not acceptable. |
+| I4 | **Late corrections must remain observable.** Results are occasionally corrected weeks later. If polling stops entirely at settlement, the staged-review path in §10.9 has no way to ever receive that change, so termination must leave *some* slow ingestion path — a low-frequency re-check, or ingestion via the standings job which is polled independently. |
+| I5 | **C7 must still be met** for the ordinary case. |
+
+I3 and I4 are in tension, and resolving that tension is the design task: it
+needs a bounded number of confirmations to settle, plus a slow post-settlement
+cadence rather than silence. **Phase 9B must specify it and record it against
+these five invariants before the adapter ships.** Recorded as gap G-j.
+
+Until it is specified, the §11 figures for the reconciliation path are a
+**lower bound** (§11.3).
 
 The volume model in §11 counts the expected case, where a resource settles
 quickly; the daily continuation adds at most a handful of requests per session
@@ -1265,7 +1279,7 @@ Internal only. Every synchronized resource retains:
 | `pendingRevision` | A differing reconciled payload seen once and awaiting corroboration on the next check (§10.9). Null when none. |
 | `supersededRevisions` | Every `contentRevision` previously stored for this resource and since replaced. A revision in this set is never re-applied, which is what stops a persistently stale source from rolling data back (§10.9). |
 | `sourceObservedAt` | When the **current** `contentRevision` was **first** observed. Monotonic across content changes, and the value published as `sourceUpdatedAt` — see §10.7.1. |
-| `settled` | Whether the resource has been stable across the full check sequence and past the C7 window (§10.9). |
+| `settled` | Whether the resource's value has stopped moving, under the definition Phase 9B must supply against the §10.4.1 invariants. A settled record never accepts a change automatically. |
 | `conflictOutcome` | Which rule in §10.9 fired, and what it decided. |
 
 #### 10.7.1 `sourceUpdatedAt` — an unresolved conflict with the existing contract
@@ -1421,11 +1435,14 @@ stored one, nothing is written; only the confirmation time is refreshed. This
 keeps re-checks idempotent and keeps `reconciledAt` meaningful as "last
 confirmed".
 
-**Settled records.** Once a resource has returned the same `contentRevision`
-across the full check sequence of §10.4 and the C7 window has passed, it is
-marked **settled**. A settled record still accepts a corroborated change — sport
-results are corrected weeks later on occasion — but every such change raises an
-operational conflict signal for review rather than being applied silently.
+**Settled records.** `settled` marks a resource whose value has stopped moving,
+under the definition Phase 9B must supply against the invariants in §10.4.1.
+Whatever that definition is, the behaviour here is fixed: a settled record
+**never** accepts a change automatically. A corroborated, non-superseded change
+to a settled resource is **staged** — retained, published snapshot unchanged, and
+an operational signal raised. The path must exist, because results are corrected
+weeks later on occasion, and I4 requires the ingestion route that feeds it to
+survive settlement.
 
 **The `stored is absent` case must come first, and it is not a formality.**
 Without it the predicate rejects the very first write for a session, because
@@ -1564,7 +1581,17 @@ baseline 6.4 + Sprint (17 + 12) + Qualifying (9 + 4) = ~48 requests/day
 
 Split by source on that day: **OpenF1 ≈ 26**, **Jolpica ≈ 22**.
 
-**These are ceilings for the design, not current traffic.** While no end bound
+**The reconciliation figures are now a lower bound, not a ceiling.** They assume
+polling stops at the first successful check. Under the invariants in §10.4.1 a
+resource must be confirmed more than once before it can settle, and I4 requires
+some slow ingestion to continue afterwards — so the true figure is higher by an
+amount that depends on the Phase 9B settling design (G-j). The headroom analysis
+in §11.4 is unaffected in substance: even several times these numbers stays far
+inside both published limits, since the binding constraint is a 500-per-hour
+allowance against tens of requests per day.
+
+**These are ceilings for the OpenF1 path and lower bounds for Jolpica, not
+current traffic.** While no end bound
 is recorded and the skip rule applies to every session (§10.2 rule 3), the
 OpenF1 column is **zero**: the peak day is Jolpica's ≈ 19 requests, and the
 monthly figure is the baseline plus reconciliation alone. Volume only reaches
@@ -1809,7 +1836,7 @@ provider or a rights holder raises an objection, §14.3 M10 applies immediately.
 | M4 | **Feature switches allowing either provider to be disabled independently** — distinct from S1: S1 makes removal possible at build time, M4 makes it possible at runtime without a deployment | Phase 9B |
 | M5 | **No protected media** — the §7.6.5 exclusion list | Binding now; nothing has ever been fetched |
 | M6 | **No official-affiliation language** anywhere in the product or documentation | Binding now |
-| M7 | **Conservative request volumes** — roughly 285 requests per month worst case, far inside both published limits (§11) | Designed |
+| M7 | **Conservative request volumes** — roughly 356 requests per month for the modelled design, and a lower bound for the reconciliation path until the §10.4.1 settling design is fixed. Far inside both published limits either way (§11.4) | Designed |
 | M8 | **Licence-version and terms monitoring**, including watching for Jolpica's announced limit reduction | Phase 9B, plus §12.3 S10 annual review |
 | M9 | **A final licence-compliance review before public release**, covering §7.6.1-§7.6.5, the §10.2 live-window anchor and the §11.4 rate limiter | Release gate (§15.3) |
 | M10 | **Immediate reassessment if a provider or rights holder raises an objection** — pause the affected adapter, stop the affected use, re-evaluate before resuming | Standing obligation from now |
@@ -1829,6 +1856,7 @@ Full detail in Appendix D.
 | G-g | No provenance or provisional/reconciled state exists in the local schema. |
 | G-h | `providerCallCount` is untyped and would silently under-report per-source usage. |
 | G-i | **`sourceUpdatedAt` has no valid value from either source** (§10.7.1). The field is contract-required and is ADR 0005's primary conflict key, but neither provider publishes an update timestamp. Blocking for Phase 9B. |
+| G-j | **The post-reconciliation cadence and the settling predicate are unspecified** (§10.4.1). Five invariants are fixed; the concrete design is Phase 9B work, and I3 and I4 are in tension. Until it exists the reconciliation volume figures are a lower bound. |
 
 ---
 
@@ -1875,12 +1903,34 @@ appears among them.**
 | E3 | **Attribution requirements are part of the implementation plan** — the six elements of §7.6.2 **and its conditional duties 7-11**, in the app and in the public API documentation, with attribution held as per-source data rather than hard-coded strings |
 | E4 | **Provider-derived data is separated from application source code** (§7.6.3) |
 | E5 | The normalized data output has a **documented ShareAlike strategy** (§7.6.3) |
-| E5a | The **`sourceUpdatedAt` conflict with the existing contract is resolved** (§10.7.1) — either the proxy rule is accepted with ADR 0005 and the OpenAPI description amended to match, or the conflict semantics are re-keyed. Publishing fetch time under that field is not an option. |
-| E6 | **Live-window and rate-limit restrictions are encoded as requirements** — the §10.2 anchor computed from the **actual** session end via a justified upper bound, **with the skip rule implemented for sessions where no bound is available**, plus the re-anchor backstop; **every** OpenF1 request routed through that gate with no baseline, metadata or health-check exception (§11.2); Jolpica scheduled from its own always-available anchor (§10.4) so reconciliation survives the skip; an explicit per-provider rate limiter (§11.4) rather than reliance on serialization; and Jolpica's published limits and mandatory `User-Agent` respected |
+| E5a | The **`sourceUpdatedAt` conflict is decided** (§10.7.1) — either the proxy rule is accepted with ADR 0005 and the OpenAPI description amended to match, or the conflict semantics are re-keyed. A *decision*, not an implementation. Publishing fetch time under that field is never an option. |
+| E5b | The **post-reconciliation cadence and settling predicate are specified** against the five invariants in §10.4.1. Again a specification, not an implementation. |
+| E6 | **Live-window and rate-limit restrictions are written down as binding requirements** the adapter must meet — the §10.2 actual-end anchor with the bound-or-skip rule and re-anchor backstop; every OpenF1 request routed through that gate with no baseline, metadata or health-check exception (§11.2); Jolpica scheduled from its own always-available anchor (§10.4); an explicit per-provider rate limiter (§11.4); and Jolpica's published limits and mandatory `User-Agent`. **Specified, not yet implemented** — see below. |
 | E7 | **Adapters can be disabled independently** (§14.3 M4) |
 | E8 | The **public DTO contract remains provider-neutral** (§10.8, requirement T4) |
 | E9 | **No protected images, logos or branding are imported** (§7.6.5) |
 | E10 | **No provider is described as officially approving GridView** in any surface |
+
+#### 15.2.1 Entry criteria are specification checks, not implementation checks
+
+**The gate would otherwise be circular.** E5a, E5b and E6 all concern things
+Phase 9B *builds*: the `sourceUpdatedAt` resolution, the settling design, the
+bound-or-skip guard, the rate limiter. Requiring them to be *implemented* before
+Phase 9B may begin would mean Phase 9B work must be finished before Phase 9B can
+start, and `GridView_Implementation_Plan.md` §14.3 and §14.5 list them as Phase
+9B implementation tasks.
+
+So each entry criterion asks only whether the requirement is **decided and
+written down** clearly enough to build against. Verification that it was
+actually built belongs to the **Phase 9B exit criteria**
+(`GridView_Implementation_Plan.md` §14.8) and to the final licence-compliance
+sweep before release (§15.3).
+
+The distinction matters most for E6. Entry needs the live-window rule specified;
+**release** needs it demonstrably enforced, because that is the point at which a
+mistake would put a real request inside OpenF1's paid window.
+
+---
 
 ### 15.3 Public release remains separately gated
 

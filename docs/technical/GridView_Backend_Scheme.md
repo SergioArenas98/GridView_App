@@ -1099,8 +1099,12 @@ A public request may never trigger a write merely by opening an endpoint intende
 > **event-offset driven**: provisional OpenF1 attempts at +32, +35, +45 and +60
 > minutes after the **actual** session end, stopping as soon as a complete and
 > internally consistent result is obtained, and Jolpica reconciliation checks at
-> **+5, +9, +15 and +24 hours after the session START**, then daily until
-> reconciled. There is **no polling during a session** and no year-round
+> **+5, +9, +15 and +24 hours after the session START**, then daily. Checks do
+> **not** stop at the first reconciled result: a correction observed once needs a
+> later check to confirm it, or it can never be published. The exact termination
+> rule and the slow post-settlement cadence are a **Phase 9B design task** with
+> five fixed invariants — see
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1. There is **no polling during a session** and no year-round
 > high-frequency schedule.
 >
 > **The two anchors differ and must not be conflated.** OpenF1 offsets run from

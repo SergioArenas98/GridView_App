@@ -1283,7 +1283,7 @@ architecture and product-risk decision, not as provider approval).
 | Provider approval | **None.** No provider, and no Formula 1 entity, has approved, endorsed or reviewed GridView. None has been asked. |
 | Formula 1 rights clearance | **Not obtained and not claimed.** A licensor can only license rights it holds, and CC BY-NC-SA 4.0 §2(b) does not license trademark rights. Accepted as residual risk. |
 | Production provider adapter | **Not implemented and not activated.** Production remains `PROVIDER_MODE = "none"`; the mock provider is unchanged. |
-| Next action | **Merge Phase 9A and confirm post-merge CI.** Phase 9B entry is then governed by the ten objective criteria in §14.0.3. |
+| Next action | **Merge Phase 9A and confirm post-merge CI.** Phase 9B entry is then governed by the twelve objective criteria in §14.0.3. |
 
 ### 14.0.1 Product constraints governing Phase 9
 
@@ -1359,7 +1359,10 @@ requirements, not optional polish.
 ### 14.0.3 Phase 9B entry criteria
 
 Phase 9B may begin once Phase 9A is merged and its post-merge CI is green,
-provided all eleven criteria below hold. Every one is objective and verifiable in
+provided all twelve criteria below hold. They are **specification** checks —
+whether each requirement is decided and written down — because requiring Phase
+9B's own output before Phase 9B may start would be circular. Verification that
+they were built belongs to §14.8 and the release sweep. Every one is objective and verifiable in
 this repository. **No provider email, reply or waiting period is a
 prerequisite.** Full detail in
 [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2.
@@ -1372,7 +1375,8 @@ prerequisite.** Full detail in
 | E4 | **Provider-derived data is separated from application source code** |
 | E5 | The normalized data output has a **documented ShareAlike strategy** |
 | E5a | The **`sourceUpdatedAt` conflict is resolved** ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.7.1). Neither source publishes an update timestamp, yet the field is contract-required and is [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md)'s primary conflict key. Without this an adapter cannot produce a contract-valid snapshot at all. |
-| E6 | **Live-window and rate-limit restrictions are encoded as requirements** |
+| E5b | The **post-reconciliation cadence and settling predicate are specified** against the five invariants in [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1 |
+| E6 | **Live-window and rate-limit restrictions are written down as binding requirements** |
 | E7 | **Adapters can be disabled independently** |
 | E8 | The **public DTO contract remains provider-neutral** |
 | E9 | **No protected images, logos or branding are imported** |

@@ -158,9 +158,13 @@ interpretation, but the boundary is **preserved technically** so that either
 reading remains workable, and it is documented for the final licence-compliance
 review.
 
-**7. The Phase 9B entry gate is objective and internal.** Ten criteria, all
+**7. The Phase 9B entry gate is objective and internal.** Twelve criteria, all
 verifiable in this repository. **No provider email, reply or waiting period
-appears among them.**
+appears among them.** They are **specification** checks — whether each
+requirement is decided and written down — because requiring Phase 9B's own
+output before Phase 9B may start would be circular. Verification that the
+requirements were actually *built* belongs to the phase exit criteria and the
+release sweep.
 
 **8. Residual third-party-rights risk is accepted knowingly.** A licensor can
 only license what it holds; the public licences do not establish Formula 1
@@ -243,17 +247,19 @@ deployment follows from this ADR. The mock provider is preserved permanently.
 ## Consequences
 
 **Phase 9 is unblocked on engineering terms.** Phase 9B may begin once Phase 9A
-is merged and its post-merge CI is green, subject to the **eleven** entry
+is merged and its post-merge CI is green, subject to the **twelve** entry
 criteria. Nothing waits on a third party: there is no provider reply to await.
 
-**Two of those criteria are substantive blockers, not checkboxes.** E5a requires
-resolving the `sourceUpdatedAt` conflict — neither adopted source publishes an
+**Three of those criteria are substantive, not checkboxes.** E5a requires
+deciding the `sourceUpdatedAt` conflict — neither adopted source publishes an
 update timestamp, yet the field is contract-required and is ADR 0005's primary
 conflict key, so **an adapter cannot currently produce a contract-valid snapshot
 at all**, and closing that gap means amending an Accepted ADR and the public
-contract or re-keying the conflict semantics. E6 requires the OpenF1
-live-window gate, which today skips every session because no end bound is
-recorded. Neither is resolved by this ADR.
+contract or re-keying the conflict semantics. E5b requires specifying the
+post-reconciliation cadence and settling predicate against five fixed
+invariants, two of which are in tension. E6 requires the OpenF1 live-window
+rule, which today skips every session because no end bound is recorded. **None
+of the three is resolved by this ADR.**
 
 **The obligations are real work.** Attribution surfaces in both the app and the
 API documentation, a per-source attribution model, a documented ShareAlike
