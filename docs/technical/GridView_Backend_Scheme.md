@@ -1631,9 +1631,11 @@ gridview-media-production
 
 - Development may use mock provider data.
 - Staging may use a provider test/free key within its allowed terms.
-- Production uses the **free, unauthenticated** sources adopted in
-  [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md): Jolpica today, and
-  OpenF1 only once its live-window bound is recorded. **No paid provider account
+- Production **will use** the **free, unauthenticated** sources adopted in
+  [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md): Jolpica once its
+  adapter exists, and OpenF1 only once its live-window bound is recorded.
+  **Neither adapter is built**, production is still `PROVIDER_MODE = "none"`,
+  and no production cron exists, so production currently fetches nothing. **No paid provider account
   and no provider credential exists**, so there is none to approve, store or
   rotate. The "approved paid provider account" this line previously required is
   superseded.

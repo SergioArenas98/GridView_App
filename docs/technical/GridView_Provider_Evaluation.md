@@ -873,10 +873,15 @@ Consequences:
 1. **Conditional requests are not available.** GridView cannot use `If-None-Match`
    or a meaningful `If-Modified-Since` against either source, so every
    reconciliation check is a full fetch. The request model in §11 assumes this.
-2. **`QuotaState` cannot be populated from responses** (T1). Daily and
-   per-minute figures must be modelled locally from published limits, and the
-   `warningLevel` thresholds in Backend Scheme §16.1 must be driven by
-   GridView's own counters.
+2. **`QuotaState` cannot be populated from responses, and its *windows* do not
+   match either source** (T1). The existing type carries daily and per-minute
+   limits only (`services/edge-api/src/storage/types.ts`), which is the shape of
+   the superseded metered provider. **OpenF1 publishes per-second and
+   per-minute; Jolpica publishes per-second and per-hour.** So Jolpica's
+   500-per-hour allowance and both burst limits have nowhere to live, and the
+   §16.1 warning thresholds cannot track them. Phase 9B must model **per-source
+   windows** rather than carry the old shape forward, and drive the thresholds
+   from GridView's own counters. Recorded as gap G-k.
 3. Jolpica's `max-age=600` means a repeat request inside ten minutes may be
    served from cache, so polling faster than that gains nothing.
 
@@ -893,7 +898,7 @@ Consequences:
 | M7 | **OpenF1 `country_code` on drivers is deprecated and was null** | Documented for removal at the end of the 2026 season. Must not be depended on. |
 | M8 | **Jolpica `/2026/circuits/` returned 24 for 23 races** | Unexplained. Must be reconciled against the calendar rather than assumed one-to-one. |
 | M9 | **Jolpica `/last` and `/next` are date-derived** | A public issue records `/current/last` returning the previous round on a Sunday evening after a race, reported and later fixed. Explicit `season/round` addressing should be preferred over `last`/`next`. |
-| M10 | **Jolpica pagination** | `limit` defaults to 30 and caps at 100. Season-scoped queries must pass `limit` explicitly; a 23-race season and a 31-driver season both exceed the default. |
+| M10 | **Jolpica pagination** | `limit` defaults to 30 and caps at 100. **The 31-driver season result exceeds the default and is silently truncated without an explicit `limit`; the 23-race calendar does not.** An earlier draft said both did, which was wrong. Season-scoped queries should still pass `limit` explicitly — a calendar can grow past 30 and the cost of being explicit is nil — but only the participant endpoints are known to need it today. |
 | M11 | **Whether OpenF1 revises `date_end` after an overrun is `unverified`** | A red-flagged or delayed session actually ends later, which moves the live-window boundary. Anchoring on the scheduled end alone would place a request inside the paid live window. Because the revision behaviour is unverified, the detect-and-re-anchor backstop (§10.2 rule 4) **cannot be relied on to notice the overrun**. The operative control is therefore §10.2 rule 3: fetch only from a justified upper bound, otherwise **skip the provisional fetch** and wait for reconciliation. Both are Phase 9B requirements. |
 
 **No adapter was implemented.** These are recorded as Phase 9B requirements.
@@ -1643,12 +1648,14 @@ in §11.4 is unaffected in substance: even several times these numbers stays far
 inside both published limits, since the binding constraint is a 500-per-hour
 allowance against tens of requests per day.
 
-**These are ceilings for the OpenF1 path and lower bounds for Jolpica, not
-current traffic.** While no end bound
-is recorded and the skip rule applies to every session (§10.2 rule 3), the
-OpenF1 column is **zero**: the peak day is Jolpica's ≈ 19 requests, and the
-monthly figure is the baseline plus reconciliation alone. Volume only reaches
-the numbers above once the provisional path is unlocked.
+**Read these as a ceiling for the OpenF1 path and a lower bound for Jolpica —
+and neither as current traffic.** While no end bound is recorded and the skip
+rule applies to every session (§10.2 rule 3), the OpenF1 column is **zero**, so
+the peak day would be Jolpica's **≈ 22** requests (baseline 6.4 + Sprint 12 +
+Qualifying 4) and the monthly figure the baseline plus reconciliation alone.
+Those Jolpica figures are themselves lower bounds until the §10.4.1 settling
+design fixes how long polling continues. The OpenF1 numbers apply only once the
+provisional path is unlocked.
 
 ### 11.4 Headroom against published limits
 
@@ -1687,7 +1694,10 @@ requests is made, spaced out.
 | Adopted event-aware model, worst case | 6.4 | ≈ 48 | ≈ 356 |
 | **Reduction** | **~98%** | **~88%** | **~97%** |
 
-Those are ceilings for the design as a whole. **Actual traffic today is zero**:
+Those are ceilings for the OpenF1 path and **lower bounds** for Jolpica, whose
+totals stop at the first successful check until §10.4.1 is designed — so the
+comparison understates the adopted model rather than overstating it.
+**Actual traffic today is zero**:
 no adapter is built, production remains `PROVIDER_MODE = "none"` and no
 production cron exists, so nothing fetches from either source. Once the Jolpica
 adapter exists and while the OpenF1 path stays locked (§10.2), the figures will
@@ -1911,6 +1921,7 @@ Full detail in Appendix D.
 | G-g | No provenance or provisional/reconciled state exists in the local schema. |
 | G-h | `providerCallCount` is untyped and would silently under-report per-source usage. |
 | G-i | **`sourceUpdatedAt` has no valid value from either source** (§10.7.1). The field is contract-required and is ADR 0005's primary conflict key, but neither provider publishes an update timestamp. Blocking for Phase 9B. |
+| G-k | **`QuotaState` has the wrong windows** (§8.6). It carries daily and per-minute fields, while OpenF1 limits are per-second and per-minute and Jolpica's are per-second and per-hour. Per-source windows are required before the §16.1 thresholds can mean anything. |
 | G-j | **The post-reconciliation cadence and the settling predicate are unspecified** (§10.4.1). Five invariants are fixed; the concrete design is Phase 9B work, and I3 and I4 are in tension. Until it exists the reconciliation volume figures are a lower bound. |
 
 ---

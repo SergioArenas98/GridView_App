@@ -1496,8 +1496,10 @@ another source rather than bypassing the requirement.
 - Normalize standings and points.
 - Normalize race/session states, including deriving sprint from OpenF1
   `session_name` because `session_type` conflates it with race.
-- Handle pagination — Jolpica defaults to 30 and caps at 100, so season-scoped
-  queries must pass `limit` explicitly.
+- Handle pagination — Jolpica defaults to 30 and caps at 100. The 31-driver
+  season result is silently truncated without an explicit `limit`; the 23-race
+  calendar is not, but passing `limit` explicitly on season-scoped queries costs
+  nothing and survives a calendar growing past 30.
 - ~~Capture quota headers.~~ **Neither source publishes any**
   (Evaluation §8.6); model quota locally per source instead.
 - Add an **explicit per-provider rate limiter** — serialization does not satisfy
@@ -1535,7 +1537,8 @@ these are the implementation tasks.
 - Add a **production cron trigger** — none exists today; only staging has one.
 - Implement the **event-aware schedule**, replacing the fixed-interval
   scheduler. Not doing so would cost roughly 415 requests a day year-round
-  against a modelled ceiling of about 356 a month.
+  against a modelled figure of about 356 a month — itself a lower bound for the
+  Jolpica path until the §10.4.1 settling design is fixed.
 - Implement the **bound-or-skip live-window guard** for OpenF1, anchored on the
   actual session end, with the detect-and-re-anchor backstop.
 - Implement the **Jolpica start-anchored cadence** — +5/+9/+15/+24 hours from
