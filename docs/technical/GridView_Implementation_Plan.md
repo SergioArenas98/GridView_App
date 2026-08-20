@@ -147,7 +147,7 @@ Some phases may overlap once their dependencies are satisfied, but release gates
 | M6 | All core data stored and queried through Drift |
 | M7 | All core product screens implemented with mock/staging data |
 | M8 | Media, localization, settings and accessibility baseline completed |
-| M9 | Approved provider integrated and production snapshots generated |
+| M9 | Adopted data sources integrated under their public licence, and production snapshots generated. **No provider approval is involved** — see [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) |
 | M10 | Release candidate passes migration, performance and quality gates |
 | M11 | Reconstructed app released through Google Play |
 | M12 | Railway, Spring Boot and MySQL retired |
@@ -1260,36 +1260,256 @@ requirements tracked in
 
 ## 14. Phase 9 - Production provider integration
 
+**Phase 9 has started. Phase 9A engineering and documentation work is finished
+on its branch; Phase 9A is not complete until that branch is merged and its
+post-merge CI is green. Phase 9B has not started.** See §14.0.
+
+## 14.0 Phase 9A status
+
+Phase 9A ran as a research, evaluation and licensing-basis pass on 2026-08-19.
+Its licence-compliance analysis, permitted-use mapping, mandatory obligations,
+feasibility evidence, dual-source design, quota model, residual-risk record,
+optional clarification templates and code audit are in
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md), and the
+decision it produced is
+[ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) (**Accepted** as an
+architecture and product-risk decision, not as provider approval).
+
+| Item | Status |
+|---|---|
+| Provider evaluation and licensing basis | **Work finished on branch.** Phase 9A may be called complete only after the branch is merged and post-merge CI succeeds. |
+| Licensing basis | **Settled: the public CC BY-NC-SA 4.0 licence** published by OpenF1 and Jolpica. For uses inside its scope, the licence is the permission. |
+| Individual provider permission | **Not required and not awaited.** Outreach is an optional courtesy channel only. **No inquiry has been sent**, and no waiting period exists. |
+| Provider approval | **None.** No provider, and no Formula 1 entity, has approved, endorsed or reviewed GridView. None has been asked. |
+| Formula 1 rights clearance | **Not obtained and not claimed.** A licensor can only license rights it holds, and CC BY-NC-SA 4.0 §2(b) does not license trademark rights. Accepted as residual risk. |
+| Production provider adapter | **Not implemented and not activated.** Production remains `PROVIDER_MODE = "none"`; the mock provider is unchanged. |
+| Next action | **Merge Phase 9A and confirm post-merge CI.** Phase 9B entry is then governed by the twelve objective criteria in §14.0.3. |
+
+### 14.0.1 Product constraints governing Phase 9
+
+Recorded on 2026-08-19 and binding on every provider decision:
+
+| # | Constraint |
+|---|---|
+| C1 | Provider budget for v1 is **EUR 0** |
+| C2 | GridView remains **free** while it relies on non-commercial data sources |
+| C3 | **No monetisation**: no advertising, in-app purchases, subscriptions, affiliate links or sponsorship |
+| C4 | Any future monetisation requires written commercial permission from every affected provider, or migration to a provider whose licence permits it — and **reopens the provider decision** |
+| C5 | **No live telemetry or live timing** is required |
+| C6 | Freshness objective for **provisional** results, points and standings: **30-60 minutes after a session ends** |
+| C7 | Freshness objective for **reconciled** data: **within 24 hours**, subject to provider availability |
+| C8 | **Reliability and replaceability matter more** than in-session updates |
+
+C3 restates an existing state rather than removing anything: advertising was
+already absent from v1 per
+[ADR 0018](../adr/0018-advertising-not-retained-for-v1.md). **It is not the
+removal of an implemented advertising SDK, because none exists.** While these
+sources are in use, C1–C3 are **licence compliance requirements**, not merely
+product preferences: CC BY-NC-SA 4.0 permits use only for NonCommercial
+purposes.
+
+**C6 and C7 are GridView objectives, not provider guarantees.** Neither source
+publishes an SLA, an uptime commitment or a correctness guarantee, and both
+disclaim them. Reconciliation latency is currently **unmeasured**.
+
+### 14.0.2 Adopted direction
+
+A **dual-source, zero-cost, post-session model**, operating under the public
+CC BY-NC-SA 4.0 licence each project publishes. **For uses inside that licence's
+scope, the licence is the permission**; separate written permission from either
+project is not required before Phase 9B.
+
+| Source | Role | Status |
+|---|---|---|
+| **OpenF1** | *Provisional* post-session classification, points and championship state | **Specified but NOT unlocked** — see below |
+| **Jolpica F1** | *Complete* season metadata, calendar, session times, participants, circuits, historical depth, and *reconciled* final results and standings | **Selected and unlocked** — no adapter exists yet, so nothing is running |
+
+**The OpenF1 path is locked, and Phase 9B must not implement it as though it
+were live.** OpenF1's data is free only outside a live window that closes **30
+minutes after a session actually ends**. A delayed or red-flagged session moves
+that boundary, so GridView may only fetch from a **justified upper bound** on
+the actual end — and where no such bound exists, it **skips the session
+entirely**.
+
+**No usable bound is recorded today.** The one candidate that looked serviceable
+— the scheduled start of the next session — is unsound, because delays cascade
+and its timestamp passes while the earlier session is still running.
+Consequently:
+
+- the skip rule applies to **every** session;
+- **Jolpica is the source for all data**, including session schedules — once its
+  adapter is built. Neither adapter exists today, so nothing is running and
+  production remains `PROVIDER_MODE = "none"`;
+- **the C6 freshness objective is not met by any implemented mechanism**;
+- **no GridView request reaches OpenF1 by any route** — there is no baseline
+  poll, metadata refresh or health check outside the gated path.
+
+Recording a bound, with an official source and access date, is the **first Phase
+9B item** on this path. Until then the OpenF1 adapter may be built and tested
+against fixtures, but it must not be enabled against the live service.
+
+Sportmonks is **rejected for v1 on budget grounds only** (C1) and is the named
+fallback if C1 or C3 is relaxed. API-Sports remains unselected and unverified.
+
+The licence carries mandatory obligations — non-commercial operation,
+attribution in the app and the public API documentation, ShareAlike on adapted
+data and derived datasets, no additional downstream restrictions, and an
+excluded-material list covering logos, photographs, audio, broadcasts, branding
+and live telemetry. These are Phase 9B implementation requirements and release
+requirements, not optional polish.
+
+### 14.0.3 Phase 9B entry criteria
+
+Phase 9B may begin once Phase 9A is merged and its post-merge CI is green,
+provided all twelve criteria below hold. They are of **two kinds**, matching
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2.1:
+
+- **State checks** — something that must be true of the repository *now*. E1
+  (unmonetised), E9 (no protected imports) and E10 (no approval claimed) are
+  licence-critical states, and writing the requirement down does **not** satisfy
+  them; the state itself must hold at the moment of entry.
+- **Specification checks** — whether a requirement is decided and written down
+  clearly enough to build against.
+
+Neither kind requires Phase 9B's own output, which would be circular.
+Verification that a requirement was *built* belongs to §14.8 and the release
+sweep. Every one is objective and verifiable in
+this repository. **No provider email, reply or waiting period is a
+prerequisite.** Full detail in
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2.
+
+| # | Criterion |
+|---|---|
+| E1 | The product remains **unmonetised** |
+| E2 | **Both current licence notices are recorded**, with source URL and access date |
+| E3 | **Attribution requirements are part of the implementation plan** — in the app and in the public API documentation |
+| E4 | The **separation of provider-derived data from application source code is specified** |
+| E5 | The normalized data output has a **documented ShareAlike strategy** |
+| E5a | **Both halves of the absent-recency-signal problem are decided** — the `sourceUpdatedAt` conflict ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.7.1) **and** the residual reconciled-ordering risk (§10.9.1), which share one root cause. Neither source publishes an update timestamp, yet the field is contract-required and is [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md)'s primary conflict key, so without this an adapter cannot produce a contract-valid snapshot at all — and without the ordering choice its overwrite behaviour is undefined. |
+| E5b | The **five settling invariants are recorded and accepted as binding** ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1). The design itself is a §14.3 task verified at exit, not an entry condition |
+| E6 | **Live-window and rate-limit restrictions are written down as binding requirements** |
+| E7 | **Independent per-source disablement is specified** — the switches themselves are §14.3 work and are verified at exit |
+| E8 | The **provider-neutrality requirement for the public DTO contract is recorded** |
+| E9 | **No protected images, logos or branding are imported** |
+| E10 | **No provider is described as officially approving GridView** |
+
+ADR 0019 records the structural seams Phase 9B must add, the largest being that
+the current single-call provider interface cannot express two sources with
+different roles.
+
+### 14.0.4 Release remains separately gated
+
+Phase 9B entry is not release approval. Public release remains subject to the
+existing Play, privacy, media and production-environment gates, **plus a final
+licence-compliance sweep** verifying the non-commercial, attribution,
+ShareAlike, no-additional-restrictions and excluded-material obligations in the
+shipped build and the published API documentation.
+
 ## 14.1 Objective
 
-Replace the mock backend provider with the legally approved production data source.
+Replace the mock backend provider with production data sources used in
+compliance with their published public licence.
 
-## 14.2 Legal gate
+**Not "legally cleared".** GridView holds no Formula 1 competition-data or
+trademark clearance and does not claim any. It relies on each project's
+published CC BY-NC-SA 4.0 licence, whose limits are recorded in
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.3.4 and
+whose residual risk is accepted in §14.
 
-Before implementation is enabled in production:
+## 14.2 Licence-compliance gate
 
-- Confirm provider contract.
-- Confirm ad-supported use.
-- Confirm caching rights.
-- Confirm redistribution terms.
-- Confirm attribution.
-- Confirm image/logo exclusions.
-- Record approval in project documentation.
+> This section was previously the **legal gate** and was written around obtaining
+> approval from a commercial provider. Under
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) it is a
+> **compliance gate**: the permission is the public licence each source
+> publishes, and what must be established is that GridView's use stays inside it.
+> **No provider reply, approval or waiting period is required or awaited**, and
+> none has been sought. The one case that does require contacting a provider is
+> monetisation, which must reopen the decision **before** implementation.
 
-If approval is not obtained, select another provider rather than bypassing the requirement.
+Before implementation is enabled in production, verify each of the following.
+Every item is checkable inside this repository against
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md); none depends
+on a third party responding.
+
+- **Record the licence each source publishes**, with its source URL and access
+  date. For OpenF1 and Jolpica that is CC BY-NC-SA 4.0 (Evaluation §7.1, §7.2).
+- **Confirm the intended use is inside the licence.** For v1 that use is free
+  and unmonetised (C1-C3), following
+  [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md), which satisfies
+  the NonCommercial term. Separately establish that any future monetisation
+  would leave that scope and must reopen the provider decision first. The
+  original wording of this line ("Confirm ad-supported use") predates ADR 0018
+  and the zero-monetisation constraint, and is reinterpreted rather than
+  deleted.
+- **Verify caching and retention are inside the grant** — Evaluation §7.5
+  acts 2, 3 and 7.
+- **Verify redistribution through GridView's own public API is inside the
+  grant** — Evaluation §7.5 acts 8-10, classified as Sharing and potentially
+  adapting licensed database material.
+- **Verify attribution is implemented**, in both the application and the public
+  API documentation, per source, including the modification notice and the
+  unofficial-status notice — Evaluation §7.6.2.
+- **Verify the ShareAlike strategy is documented and honoured** for adapted
+  data, the normalized database material and any publicly redistributed derived
+  dataset — Evaluation §7.6.3.
+- **Verify no additional downstream restrictions** are imposed by GridView's own
+  terms or API documentation, keeping operational rate limiting visibly distinct
+  from the data licence — Evaluation §7.6.4.
+- **Verify the excluded-material list is respected** — no logos, photographs,
+  audio, broadcasts, protected artwork, official branding or live telemetry, and
+  no claim of official status — Evaluation §7.6.5.
+- **Verify provider-imposed operational limits are honoured** — OpenF1's live
+  window and Jolpica's rate limits and mandatory `User-Agent`.
+- **Record the compliance decision in project documentation**, as ADR 0019 and
+  the evaluation do. **What is recorded is a licence-compliance decision, not a
+  provider approval and not legal clearance.**
+
+If a use cannot be shown to sit inside the licence, change the use or select
+another source rather than bypassing the requirement.
 
 ## 14.3 Adapter tasks
 
-- Implement the production provider adapter.
+> **Two adapters, not one, and one of them is locked. Neither exists yet.**
+> Build a **Jolpica** adapter (selected and unlocked) and an **OpenF1** adapter
+> (selected but locked, §14.0.2) behind a coordinator, since the single-call provider interface cannot
+> express two sources with different roles. The OpenF1 adapter may be built and
+> tested against fixtures but **must not contact the live service** until an end
+> bound is recorded.
+
+- **Specify the post-reconciliation cadence and settling predicate** against the
+  five invariants in
+  [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1,
+  resolving the tension between I3 and I4. This is the **first** design task of
+  the phase and is verified at exit (§14.8).
+- Implement the **Jolpica** adapter and the reconciliation coordinator.
+- Implement the **OpenF1** adapter, fixture-tested only, behind the
+  bound-or-skip gate.
 - Add runtime response validation.
-- Add provider-ID mappings.
+- Add the **curated provider-ID mapping registry** — mandatory, because 4 of 11
+  constructor names differ between the two sources
+  ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.5).
+- Add the **curated maximum-session-duration bound** that unlocks the OpenF1
+  path, with an official source and access date. **Until this exists every
+  provisional fetch is skipped.**
 - Normalize dates and time zones.
 - Normalize standings and points.
-- Normalize race/session states.
-- Handle pagination if required.
-- Capture quota headers.
+- Normalize race/session states, including deriving sprint from OpenF1
+  `session_name` because `session_type` conflates it with race.
+- Handle pagination — Jolpica defaults to 30 and caps at 100. The 31-driver
+  season result is silently truncated without an explicit `limit`; the 23-race
+  calendar is not, but passing `limit` explicitly on season-scoped queries costs
+  nothing and survives a calendar growing past 30.
+- ~~Capture quota headers.~~ **Neither source publishes any**
+  (Evaluation §8.6); model quota locally per source instead.
+- Add an **explicit per-provider rate limiter** — serialization does not satisfy
+  a per-second burst limit (Evaluation §11.4).
 - Implement provider-specific error mapping.
-- Add response-size and timeout controls.
+- Add response-size and timeout controls, a fixed-hostname outbound helper, and
+  Jolpica's mandatory identifying `User-Agent`.
+- **Resolve the `sourceUpdatedAt` conflict** before the adapter can ship
+  (Evaluation §10.7.1). Neither source publishes an update timestamp, yet the
+  field is contract-required and is ADR 0005's primary conflict key.
 
 ## 14.4 Data validation tasks
 
@@ -1310,17 +1530,33 @@ Validate against the current season:
 
 ## 14.5 Refresh-policy tasks
 
-- Tune cron frequency.
-- Define event-window behavior.
-- Define post-session refresh window.
-- Define result finalization.
-- Reserve quota for manual recovery.
-- Configure quota alerts.
+The policy is specified in
+[GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10 and §11;
+these are the implementation tasks.
+
+- Add a **production cron trigger** — none exists today; only staging has one.
+- Implement the **event-aware schedule**, replacing the fixed-interval
+  scheduler. Not doing so would cost roughly 415 requests a day year-round
+  against a modelled figure of about 356 a month — itself a lower bound for the
+  Jolpica path until the §10.4.1 settling design is fixed.
+- Implement the **bound-or-skip live-window guard** for OpenF1, anchored on the
+  actual session end, with the detect-and-re-anchor backstop.
+- Implement the **Jolpica start-anchored cadence** — +5/+9/+15/+24 hours from
+  the scheduled session start, then daily — and the six-hourly calendar poll
+  that both meets the §25 freshness target and drives every session trigger.
+- Define result finalization. Corroboration and the superseded-revision ledger
+  **reduce** the chance of a stale read rolling data back; they do not prevent
+  it. An older payload GridView never stored passes both while the record is
+  unsettled ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md)
+  §10.9.1). Build to the strategy chosen under **E5a**, and do not certify a
+  guarantee that strategy does not deliver.
+- Reserve capacity for manual recovery and configure alerts on **locally
+  modelled** counters, since neither source returns quota headers.
 - Verify provider calls remain independent of public request volume.
 
 ## 14.6 Production snapshot tasks
 
-- Generate staging snapshot from provider.
+- Generate staging snapshot from **Jolpica** — the only unlocked source.
 - Compare with trusted public references manually.
 - Resolve mappings and overrides.
 - Generate production snapshot.
@@ -1330,19 +1566,43 @@ Validate against the current season:
 
 ## 14.7 Deliverables
 
-- Production provider adapter.
-- Provider mapping registry.
-- Quota monitoring.
+- Jolpica adapter, plus a fixture-tested OpenF1 adapter behind its gate.
+- Reconciliation coordinator with provenance and provisional/reconciled state.
+- Curated provider-ID mapping registry.
+- Locally modelled quota monitoring and a per-provider rate limiter.
+- Attribution surface in the app and in the public API documentation, held as
+  per-source data rather than hard-coded strings.
+- Documented ShareAlike strategy for the normalized output.
 - Validated current-season snapshots.
-- Legal approval record.
+- ~~Legal approval record.~~ **A licence-compliance record instead**
+  ([ADR 0019](../adr/0019-formula-one-provider-legal-gate.md)). No provider
+  approval exists or is sought.
 
 ## 14.8 Exit criteria
 
 - All v1 resources are supplied reliably.
 - No provider DTO leaks into the public contract.
 - Provider failure preserves the previous snapshot.
-- Quota usage fits the selected plan.
-- Rights and attribution requirements are documented and implemented.
+- **Reconciled-write behaviour matches the strategy chosen under E5a, and the
+  guarantee claimed is the one that strategy actually delivers.** If E5a accepts
+  the residual risk (§10.9.1), the criterion is that the mitigations and the
+  monitoring are in place and the residual rollback hole is documented — not
+  that it cannot occur, which would be false. If E5a requires review for every
+  reconciled overwrite, the criterion is that none reaches publication without
+  it. A blanket "no stale or superseded payload can replace a newer one" was the
+  withdrawn absolute assurance and must not reappear.
+- Quota usage fits the published free limits, measured against locally modelled
+  counters.
+- **Licence obligations are implemented and verifiable** — non-commercial
+  operation, per-source attribution in both surfaces, the ShareAlike strategy,
+  no additional downstream restrictions, and the excluded-material list
+  (Evaluation §7.6).
+- **No GridView request reaches OpenF1 outside its gate**, and the gate is
+  either unlocked by a recorded bound or skipping every session.
+- The `sourceUpdatedAt` conflict is resolved rather than worked around, per the
+  E5a decision.
+- The settling design exists, satisfies all five §10.4.1 invariants, and is
+  recorded against them.
 
 ---
 
@@ -1661,7 +1921,7 @@ Suggested sequence:
 26. Settings.
 27. Firebase observability.
 28. Advertising and consent.
-29. Production provider adapter.
+29. Production data-source adapters — Jolpica selected and unlocked, OpenF1 selected but locked (§14.0.2). Neither is built.
 30. Legacy preference migration.
 31. Performance and accessibility hardening.
 32. Release candidate.
@@ -1787,7 +2047,10 @@ A task is ready for implementation when:
 - API/data requirements are known.
 - Dependencies are available.
 - Acceptance criteria are testable.
-- Legal approval exists for any required external asset or provider use.
+- Legal approval exists for any required external **asset**. For **provider
+  use**, the equivalent is licence compliance demonstrated against the published
+  licence (§14.2) — there is no provider approval to obtain, and claiming one
+  would be false.
 - Unknowns that could invalidate the work have been resolved.
 
 ---
@@ -1907,7 +2170,9 @@ Decision deadline:
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Provider use is not legally approved | Release blocked | Complete contract using mocks; evaluate alternatives |
+| Provider use falls outside the public licence — for example through monetisation, missing attribution or a ShareAlike breach | Release blocked; licence breach | Treat the §14.0.1 constraints and the licence obligations as binding requirements; final licence-compliance sweep before release |
+| A provider or rights holder objects to GridView's use | Affected source must stop | Independent adapters, runtime switches to disable either source, last-known-good snapshots, immediate reassessment |
+| Residual Formula 1 competition-data and trademark rights are not held by anyone in the chain | Unresolved third-party-rights exposure | Accepted residual risk; no protected media, no official-affiliation language, conservative volumes, annual licence review |
 | External provider lacks required fields | Feature gaps | Curated content and provider-independent contract |
 | Architecture becomes overcomplicated | Slow delivery | Validate one vertical slice and simplify early |
 | Legacy signing is unavailable | Cannot update existing app | Verify in Phase 0 |
@@ -2034,7 +2299,8 @@ The GridView reconstruction is complete when:
 ### Security and legal
 
 - No production secret is in source control or the APK.
-- Provider use is approved.
+- Provider use is **compliant with the published licence** and the compliance
+  sweep in §14.0.4 has passed. There is no provider approval to obtain.
 - Media rights are recorded.
 - Privacy and Data Safety declarations are accurate.
 
@@ -2061,7 +2327,7 @@ Secure the legacy project
     -> complete the edge backend and local database
     -> implement core features
     -> add media, localization, settings and observability
-    -> integrate the approved provider
+    -> integrate the adopted licence-compliant sources
     -> harden and test the update path
     -> publish through Google Play
     -> retire the legacy backend

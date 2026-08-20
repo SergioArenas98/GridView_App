@@ -32,3 +32,4 @@ GridView reconstruction.
 | [0016](0016-production-only-firebase-observability.md) | Production-only Firebase observability behind an application boundary | Accepted |
 | [0017](0017-selected-non-fatal-reporting.md) | A narrow non-fatal allowlist with enum-only diagnostic context | Accepted |
 | [0018](0018-advertising-not-retained-for-v1.md) | Advertising is not retained for v1 | Accepted |
+| [0019](0019-formula-one-provider-legal-gate.md) | Formula 1 data sources under a public-licence compliance model | Accepted |

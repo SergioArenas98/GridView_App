@@ -57,7 +57,31 @@ The recommended production architecture is:
 - **No MySQL database**.
 - **No always-running Spring Boot server**.
 
-API-Sports is only a technical candidate. Production use remains blocked until the intended ad-supported use and any required data-publication rights are confirmed.
+API-Sports is only a technical candidate. Production use remains blocked until the intended use and any required data-publication rights are confirmed.
+
+> **Superseded premise and superseded candidate (2026-08-19).**
+>
+> **Premise.** The original wording of this paragraph said "the intended
+> **ad-supported** use". GridView v1 carries no advertising
+> ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)) and, under the
+> Phase 9 product constraints, **no monetisation of any kind**. The gate is
+> unchanged, but it is now assessed against a free, unmonetised, publicly
+> distributed application that redistributes normalized data through GridView's
+> own public API. The same correction applies to every "ad-supported" phrasing
+> in §3.1 and §7.3 below.
+>
+> **Candidate.** The bullet naming API-Sports as the leading technical provider
+> candidate is **superseded**. Under a zero provider budget, the adopted
+> direction is a **dual-source, zero-cost, post-session model** — OpenF1 for
+> provisional post-session data and Jolpica for complete and reconciled data —
+> operating under the **public CC BY-NC-SA 4.0 licence** each project publishes.
+> API-Sports remains unselected and unverified. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) and
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
+>
+> **No provider has approved, endorsed or reviewed GridView, and none has been
+> asked.** The licence is the permission for uses inside its scope; it is not a
+> provider approval, not legal advice, and not Formula 1 rights clearance.
 
 ---
 
@@ -67,7 +91,37 @@ Provider selection is both a technical and legal decision.
 
 ### 3.1 Current provider findings
 
+> **Status of this section (2026-08-19).** The findings below were written
+> without source URLs or access dates and are **superseded as evidence** by
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md), which
+> records every claim with an official URL, a page title and an access date, and
+> which maps each act GridView performs to the licence provision that permits it
+> and each obligation to the provision that imposes it. That document also
+> evaluated a fourth candidate, Sportmonks
+> — since **rejected for v1 on budget grounds only**, under a zero provider
+> budget — and records the resulting decision in
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md). Where this section
+> and the evaluation differ, **the evaluation is authoritative.** The comparison
+> tables are deliberately not duplicated here.
+>
+> The adopted direction is a **dual-source, zero-cost, post-session model**:
+> OpenF1 for provisional post-session data and Jolpica for complete and
+> reconciled data. Both publish their data under **CC BY-NC-SA 4.0**, and
+> GridView relies on that public licence rather than on a per-project reply.
+> §3.2 below is therefore reframed: its items are now satisfied by licence
+> compliance rather than by correspondence, as mapped in
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §4.1 and
+> §7.6. **No inquiry has been sent and none is awaited.**
+
 #### API-Sports
+
+> **Unverified (2026-08-19).** Every official API-Sports source returned HTTP
+> 403 to every retrieval method available during the Phase 9A pass, so none of
+> the statements in this subsection could be confirmed against a current
+> official page. They carry no source URL and no access date and must be treated
+> as **unverified legacy assertions, not findings**, until someone reads the
+> terms and pricing in an ordinary browser. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §6.2.
 
 API-Sports provides Formula 1 endpoints, API-key authentication and paid request quotas suitable for a small application.
 
@@ -92,7 +146,18 @@ Its published access conditions describe:
 - Non-commercial and fan-engagement orientation.
 - Commercial or other use cases requiring direct discussion.
 
-OpenF1 is not approved as the default production provider for an ad-supported GridView release without written permission.
+OpenF1 is not approved as the default production provider without written permission.
+
+> **Superseded (2026-08-19).** The sentence above is superseded. OpenF1's own
+> site identifies its data as licensed **CC BY-NC-SA 4.0**, and GridView relies
+> on that published licence rather than on a written reply. The operative
+> conditions are therefore **NonCommercial**, **Attribution** and **ShareAlike**,
+> each of which GridView must satisfy — see
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.1 for
+> OpenF1's recorded position, §7.1.1 for the "Personal use" wording tension and
+> GridView's interpretation of it, and §7.6 for the binding obligations. **No
+> provider approval exists, and none is required for uses inside the licence's
+> scope.**
 
 #### Jolpica F1
 
@@ -105,19 +170,58 @@ Its published terms state:
 - Commercial use requires contacting the project.
 - Availability and correctness are not guaranteed.
 
-Jolpica may be useful for prototyping or as a development fixture source, but not for an ad-supported production release without explicit commercial permission.
+Jolpica may be useful for prototyping or as a development fixture source, but not for a production release without explicit commercial permission.
+
+> **Superseded in part (2026-08-19).** The sentence above holds only for
+> **commercial** use. Jolpica's terms make the API "freely available for
+> non-commercial use" under CC BY-NC-SA 4.0, and GridView's use is unmonetised,
+> so the commercial-permission route is not triggered today — it becomes
+> mandatory the moment monetisation is contemplated.
+>
+> **Verified (2026-08-19).** Confirmed verbatim against Jolpica's own
+> `TERMS.md` (last updated 27 August 2025) and rate-limit guide: non-commercial
+> use only, CC BY-NC-SA 4.0, commercial usage via `admin@jolpi.ca`, 4 requests
+> per second burst and 500 per hour sustained unauthenticated, a mandatory
+> identifying `User-Agent`, no guarantee of uptime, availability or correctness,
+> and published limits expected to **decrease**. Jolpica is also the **strongest
+> verified technical fit** for GridView's v1 resource set. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.2, §8.4.
 
 ### 3.2 Hard release requirement
 
-Before the production provider integration is approved, GridView must obtain:
+> **Reframed (2026-08-19).** These items were written as things to *obtain from a
+> provider*. Under the public-licence model they are things to *establish and
+> comply with*, and every one is now mapped to a licence provision or a binding
+> obligation in
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §4.1, §7.5
+> and §7.6. **None of them requires a provider reply**, and no waiting period
+> applies. The one case in which contacting a provider becomes mandatory is
+> monetisation, which must reopen the decision **before** implementation.
 
-- Written confirmation that the intended mobile-app use is permitted.
-- Clarification of whether advertising changes the applicable rights.
-- Clarification of attribution requirements.
-- Clarification of whether normalized data may be cached.
-- Clarification of whether historical snapshots may be retained.
-- Clarification of whether logos and images are included or require separate rights.
-- Confirmation of any restrictions on public redistribution.
+Before the production integration is approved, GridView must establish each of
+the following **internally**. None requires a provider response, and none may be
+satisfied by one, because the permission relied on is the published licence:
+
+- **The intended use is inside the licence** — mapped act by act in
+  [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.5.
+- **Monetisation is absent**, which is what places the use inside the
+  NonCommercial term (§7.6.1). Any future monetisation reopens the decision
+  before implementation, and *that* is the one case requiring a provider.
+- **Attribution is implemented** per source, in the app and in the public API
+  documentation, including the conditional §3(a)(1)(A) duties and the §3(a)(3)
+  removal obligation (§7.6.2).
+- **Caching and retention are inside the grant** (§7.5 acts 2, 3 and 7).
+- **Redistribution through GridView's own API is inside the grant** (§7.5 acts
+  8-10), with the residual uncertainty recorded rather than resolved.
+- **Images and logos are excluded** and nothing protected is imported (§7.6.5).
+- **No additional downstream restrictions** are imposed by GridView's own terms
+  (§7.6.4).
+
+The original wording of this list — "written confirmation", "clarification of",
+"confirmation of" — presumed a provider counterparty and is **superseded** by
+[ADR 0019](../adr/0019-formula-one-provider-legal-gate.md). Retaining it as an
+operative gate would recreate the provider-response requirement that ADR
+withdrew.
 
 ### 3.3 Development before legal approval
 
@@ -179,7 +283,7 @@ The public API must serve normalized snapshots rather than query and transform t
 
 ### 5.2 Provider isolation
 
-Only the provider adapter may understand the external provider's field names, identifiers and response structures.
+Only a provider adapter may understand its own source's field names, identifiers and response structures. With two sources adopted, each adapter knows only its own; reconciling them is a coordinator concern above both, and neither adapter knows the other exists.
 
 ### 5.3 Precomputed public responses
 
@@ -385,9 +489,12 @@ interface FormulaOneProvider {
 Implementations may include:
 
 ```text
-ApiSportsProvider
-MockFormulaOneProvider
-FutureLicensedProvider
+JolpicaProvider          # selected, unlocked - NOT BUILT
+OpenF1Provider           # selected, LOCKED, NOT BUILT (ADR 0019)
+MockFormulaOneProvider   # retained permanently for automated tests
+FutureLicensedProvider   # only if a paid provider is ever reconsidered
+
+# ApiSportsProvider - superseded by ADR 0019; API-Sports is unselected.
 ```
 
 The public API must never return provider DTOs directly.
@@ -395,6 +502,25 @@ The public API must never return provider DTOs directly.
 ---
 
 ## 7.2 API-Sports candidate
+
+> **Unverified (2026-08-19).** None of the technical properties or limitations
+> listed below could be confirmed against a current official API-Sports page
+> during the Phase 9A pass; every official host returned HTTP 403. They carry no
+> source URL and no access date. The Phase 9A evaluation therefore neither
+> endorses nor withdraws this preference — it marks it unverified pending
+> someone reading the documentation in an ordinary browser. Of the candidates
+> whose capabilities *could* be verified, Jolpica is the strongest technical
+> fit. See [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md)
+> §6.2, §7.3 and §15.
+
+> **Superseded (2026-08-19).** The sentence below is superseded. Under a zero
+> provider budget the adopted adapters are **OpenF1** and **Jolpica**, not
+> API-Sports, and they operate under those projects' published CC BY-NC-SA 4.0
+> licence. Adapter implementation is Phase 9B and is gated on the objective
+> entry criteria in
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2 — not
+> on any provider reply. See
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
 
 The first real adapter should target API-Sports after the legal gate is passed.
 
@@ -420,6 +546,15 @@ Known limitations:
 
 ## 7.3 Alternative providers
 
+> **Roles reversed (2026-08-19).** This section was written when API-Sports was
+> the intended provider and OpenF1 and Jolpica were alternatives. Under a zero
+> provider budget, **OpenF1 and Jolpica are the adopted sources** and API-Sports
+> is unselected. The "not selected" reasoning below is retained for the record
+> and is corrected in place beneath each heading. Use rests on each project's
+> published CC BY-NC-SA 4.0 licence and on the mandatory obligations in
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.6. See
+> also §6 and §15 there.
+
 ### OpenF1
 
 Best suited for:
@@ -436,6 +571,40 @@ Not selected for v1 core because:
 - Published access is personal/non-commercial by default.
 - It would increase data volume and complexity.
 
+> **Corrected (2026-08-19). LOCKED — do not enable against the live service.**
+>
+> OpenF1 is the **specified but not unlocked** provisional post-session source,
+> for `sessions`, `meetings`, `drivers`, `session_result`,
+> `championship_drivers` and `championship_teams` only — no telemetry, no live
+> data, no media.
+>
+> **No GridView request may reach OpenF1 today.** Its data is free only outside
+> a live window that closes 30 minutes after a session *actually* ends, and a
+> delayed session moves that boundary. GridView may fetch only from a justified
+> upper bound on the actual end, and **no usable bound is recorded**, so every
+> session is skipped, **Jolpica is the source for all data including session
+> schedules** — once its adapter exists; none does yet —
+> and the 30-60 minute freshness objective is **not met by any implemented
+> mechanism**. There is no baseline poll, metadata refresh or health check
+> outside that gate either. The adapter may be built and tested against
+> fixtures; it must not contact the live service until a bound is recorded with
+> an official source and access date. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.2 and
+> `GridView_Implementation_Plan.md` §14.0.2. The first two bullets above still hold: telemetry is not used,
+> and both championship endpoints are **confirmed beta** and documented as
+> available for race sessions only. The third bullet is superseded: the data is
+> published under CC BY-NC-SA 4.0, whose operative restriction is
+> **NonCommercial**, which GridView satisfies by shipping unmonetised. The
+> wording tension between the "Personal use" tier label and the FAQ's
+> "non-commercial fan engagement" is recorded in
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7.1.1
+> together with GridView's interpretation and that interpretation's limits. The
+> fourth bullet no longer applies at the narrow endpoint set used. Free access
+> begins only **30 minutes after a session ends**, which caps the freshness
+> objective — and, because that is 30 minutes after the *actual* end and no
+> bound on it is recorded, currently prevents the objective from being met at
+> all.
+
 ### Jolpica
 
 Best suited for:
@@ -444,12 +613,25 @@ Best suited for:
 - Historical schedule and result prototypes.
 - Ergast-compatible exploration.
 
-Not selected for ad-supported production by default because:
+Not selected for production by default because:
 
 - Terms are non-commercial.
 - It is volunteer-run.
 - Uptime and correctness are not guaranteed.
 - Commercial use needs separate approval.
+
+> **Corrected (2026-08-19).** Jolpica is now the **complete and reconciled
+> source** — season metadata, calendar, participants, circuits, historical depth
+> back to 1950, and final results and standings. All four bullets above remain
+> true and are accepted as known risks rather than as exclusions: the
+> non-commercial terms are precisely why a zero-monetisation product can rely on
+> them, and the volunteer operation and absence of any uptime or correctness
+> guarantee are mitigated architecturally rather than contractually. The
+> "commercial use needs separate approval" bullet is not triggered today and
+> becomes **mandatory** the moment monetisation is contemplated — its terms
+> direct commercial usage to `admin@jolpi.ca`. Jolpica also publishes free
+> database dumps on a 14-day delay, which is a genuine recovery path. Its
+> published rate limits are stated to be heading **downward**.
 
 ### Enterprise licensed feed
 
@@ -902,7 +1084,11 @@ The handler:
 6. Merges curated overrides.
 7. Generates derived snapshots.
 8. Publishes a complete version.
-9. Records provider quota headers.
+9. Increments and persists the **locally modelled** per-source request
+   counters. Neither adopted source returns quota headers
+   ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.6), so
+   there are none to record; limits are tracked against each project's published
+   figures instead.
 10. Logs success or failure.
 
 ### 14.2 No public sync endpoint
@@ -920,6 +1106,41 @@ A public request may never trigger a write merely by opening an endpoint intende
 ---
 
 ## 15. Refresh policy
+
+> **Superseded for the proposed sources (2026-08-19).** The per-resource cadence
+> table below assumes a single metered provider that may be polled during a
+> session. Neither proposed source may be used that way: OpenF1 classifies data
+> as live — and therefore not free — until **30 minutes after a session ends**,
+> and GridView needs no in-session data at all. The proposed replacement is
+> **event-offset driven**: provisional OpenF1 attempts at +32, +35, +45 and +60
+> minutes after the **actual** session end, stopping as soon as a complete and
+> internally consistent result is obtained, and Jolpica reconciliation checks at
+> **+5, +9, +15 and +24 hours after the session START**, then daily. Checks do
+> **not** stop at the first reconciled result: a correction observed once needs a
+> later check to confirm it, or it can never be published. The exact termination
+> rule and the slow post-settlement cadence are a **Phase 9B design task** with
+> five fixed invariants — see
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1. There is **no polling during a session** and no year-round
+> high-frequency schedule.
+>
+> **The two anchors differ and must not be conflated.** OpenF1 offsets run from
+> the *actual session end* and are gated by §10.2's bound-or-skip rule. Jolpica
+> offsets run from the *scheduled session start*, because a Jolpica race object
+> publishes a `date` and an optional UTC `time` and **no end or duration** — an
+> end-based anchor could not be constructed from it. Check 4 sits at start + 24
+> hours so it stays inside the 24-hour reconciled-freshness objective, which is
+> measured from the session end. The Jolpica calendar itself is polled **every
+> six hours**, both to meet the §25 freshness target and because it is the
+> trigger source for every session job.
+>
+> **The scheduled end must never be used as the anchor on its own.** The live
+> window closes 30 minutes after the session really ends, so a delayed or
+> red-flagged session moves the boundary. Offsets are measured from an anchor
+> that is a justified **upper bound** on the actual end, and where no such bound
+> is available **the provisional fetch is skipped** and the session waits for
+> reconciliation. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10 and
+> §11. The table below is retained for the enterprise-feed contingency.
 
 The exact provider call frequency must respect quota and event timing.
 
@@ -960,33 +1181,69 @@ This allows one scheduling mechanism while keeping provider usage controlled.
 
 ## 16. Provider quota management
 
-The synchronization layer must record:
+> **Not satisfiable from responses under the proposed sources (2026-08-19).**
+> Neither OpenF1 nor Jolpica returns rate-limit headers, an `ETag` or a usable
+> `Last-Modified`, so daily and per-minute limits and remaining counts cannot be
+> read from a response. Under the proposed model they must be **modelled locally
+> per source** from each project's published limits, and the warning thresholds
+> below driven by GridView's own counters. Conditional requests are also
+> unavailable, so every reconciliation check is a full fetch. See
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.6.
 
-- Daily request limit.
-- Remaining daily requests.
-- Per-minute limit.
-- Remaining per-minute requests.
+The synchronization layer must record, **per source and in that source's own
+windows** — daily and per-minute are the shape of the superseded metered
+provider and cannot represent either adopted source:
+
+- The **window set that source publishes**, and the modelled remaining count in
+  each. OpenF1 publishes **per-second and per-minute**; Jolpica publishes
+  **per-second and per-hour**. Neither publishes a daily figure, so a daily
+  bucket is a derived convenience at best and must not be the only bucket.
 - Provider response status.
 - Last provider success.
 - Last provider failure.
 - Requests used by job type.
 
+Counts are **modelled locally**, since neither source returns rate-limit headers
+([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.6, gap
+G-k).
+
 ### 16.1 Quota safety
 
 Rules:
 
-- Reserve a percentage of daily quota for manual recovery.
+- Reserve a percentage of the **longest published window** for manual recovery —
+  Jolpica's hour, OpenF1's minute — not of a daily figure neither source states.
 - Skip low-priority profile refreshes when quota is low.
 - Never consume quota for public mobile requests.
 - Stop retries when the provider reports rate limiting.
 - Respect `Retry-After` when supplied.
-- Alert when remaining daily quota crosses defined thresholds.
+- Alert when the remaining count in **any** of a source's published windows
+  crosses a threshold. A per-second burst breach and an hourly exhaustion are
+  different failures and must both be visible.
 
-Suggested thresholds:
+**Thresholds must differ by window size, because percentages collapse on small
+ones.** OpenF1's burst window allows three requests per second: 30%, 15% and 5%
+remaining are 0.9, 0.45 and 0.15 requests, so on integer counts all three
+severities fire at the same moment — zero capacity — and none of them warns
+about anything. Worse, applied to every rolling second they would fire during
+bursts the provider explicitly permits.
+
+**Sustained windows** — Jolpica's 500/hour, OpenF1's 30/minute — use
+percentages, which are meaningful at that size:
 
 - Warning: 30% remaining.
 - High warning: 15% remaining.
 - Critical: 5% remaining.
+
+**Burst windows** — the per-second limits — use absolute counts and a
+saturation signal instead:
+
+- Alert on **repeated saturation**, not on a single saturated second: a burst
+  window reaching zero is normal and expected when a scheduled batch runs.
+- Alert on any request **rejected** for rate limiting (HTTP 429), which is the
+  only unambiguous burst failure.
+- Treat the per-second limit primarily as a **pacing input** for the rate
+  limiter (§11.4 of the evaluation) rather than as an alerting surface.
 
 ---
 
@@ -1256,6 +1513,13 @@ ADMIN_SYNC_SECRET
 SENTRY_DSN if a server error service is adopted
 ```
 
+> **Note (2026-08-19).** Neither proposed source requires authentication for the
+> access GridView needs, so under the proposed model
+> `FORMULA_ONE_PROVIDER_API_KEY` **would not exist**. That makes the "no secret
+> in the app" property of §5.5 trivially true: there is no provider credential
+> to protect, leak or rotate. The name is retained here because it would apply
+> again to any paid fallback.
+
 Never store secrets in:
 
 - Git.
@@ -1358,7 +1622,7 @@ Initial operational targets:
 | Cached public API p95 | <= 300 ms |
 | Error rate | < 1% excluding client errors |
 | Provider failure data loss | Zero overwrite of last valid snapshot |
-| Calendar freshness outside event | <= 6 hours |
+| Calendar freshness outside event | <= 6 hours (met by the 6-hourly Jolpica calendar fetch, [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §11.2) |
 | Standings freshness after race | Target <= 15 minutes, provider-dependent |
 | Media availability | 99.5% |
 | Recovery from bad snapshot | <= 30 minutes through rollback |
@@ -1394,7 +1658,14 @@ gridview-media-production
 
 - Development may use mock provider data.
 - Staging may use a provider test/free key within its allowed terms.
-- Production uses the approved paid provider account.
+- Production **will use** the **free, unauthenticated** sources adopted in
+  [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md): Jolpica once its
+  adapter exists, and OpenF1 only once its live-window bound is recorded.
+  **Neither adapter is built**, production is still `PROVIDER_MODE = "none"`,
+  and no production cron exists, so production currently fetches nothing. **No paid provider account
+  and no provider credential exists**, so there is none to approve, store or
+  rotate. The "approved paid provider account" this line previously required is
+  superseded.
 - Production and staging secrets must differ.
 - Staging media must not be exposed as production content.
 - Production deployment requires protected GitHub environment approval.
@@ -1413,7 +1684,8 @@ services/edge-api/
 │   ├── routes/
 │   ├── providers/
 │   │   ├── formula-one-provider.ts
-│   │   ├── api-sports/
+│   │   ├── jolpica/
+│   │   ├── openf1/
 │   │   └── mock/
 │   ├── normalization/
 │   ├── snapshots/
@@ -1623,6 +1895,17 @@ The paid plan is recommended for predictable production capacity and monitoring.
 
 ### 32.2 Provider
 
+> **Superseded (2026-08-19).** The provider cost model below describes
+> API-Sports, which is **unselected**. Under
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md) the provider budget
+> is **EUR 0**: both adopted sources are free and unauthenticated, there is no
+> plan to choose and no subscription to price. The figures are retained only as
+> a reference point should a paid provider ever be reconsidered — which would
+> require reopening ADR 0019 first, because monetisation and paid provision are
+> coupled to the non-commercial licence the current model depends on. They were
+> also never verified against a reachable official page (§6.2 of the
+> evaluation).
+
 API-Sports currently lists:
 
 - A free plan with 100 requests per day.
@@ -1639,11 +1922,14 @@ Indicative infrastructure-only estimate:
 
 ```text
 Cloudflare Workers paid plan: approximately USD 5/month
-Formula 1 API entry paid plan: approximately 15/month as listed
+Formula 1 API entry paid plan: NONE - the adopted sources are free (ADR 0019)
 R2/KV overages: likely zero at small scale
 Domain: separate annual cost
-Estimated initial total: approximately 20/month plus domain
+Estimated initial total: approximately 5/month plus domain
 ```
+
+The provider line is **zero** under the adopted model. The figure previously
+shown here assumed the superseded API-Sports subscription.
 
 This does **not** include:
 
@@ -1735,7 +2021,10 @@ The migration will use a direct cutover strategy.
 
 - Build the edge API.
 - Seed current-season curated content.
-- Implement the provider adapter.
+- Implement the **Jolpica adapter and the reconciliation coordinator**. The
+  OpenF1 adapter is built and fixture-tested alongside them but stays **locked**
+  until an end bound is recorded
+  ([ADR 0019](../adr/0019-formula-one-provider-legal-gate.md)).
 - Generate validated snapshots.
 - Deploy and validate staging.
 
@@ -1860,8 +2149,16 @@ This document establishes:
 - R2 as the media store.
 - Cron-based provider synchronization.
 - Precomputed public API responses.
-- API-Sports as the first technical adapter candidate.
-- A mandatory legal gate before production provider activation.
+- ~~API-Sports as the first technical adapter candidate.~~ **Superseded by
+  [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md):** the adopted
+  sources are **Jolpica F1** (selected and unlocked) and **OpenF1** (selected but
+  locked) — **neither adapter is built**,
+  used under their published CC BY-NC-SA 4.0 licence at zero cost. API-Sports is
+  unselected and its terms remain unverified.
+- A mandatory **licence-compliance** gate before production provider activation.
+  It is satisfied by demonstrating compliance with the published licence, **not**
+  by obtaining a provider reply — see ADR 0019 and
+  `GridView_Implementation_Plan.md` §14.2.
 - GridView-owned stable entity identifiers.
 - Version-controlled curated content.
 - Versioned snapshot publication and rollback.
@@ -1874,8 +2171,22 @@ This document establishes:
 
 The following must be resolved before production launch:
 
-- Written approval or rights assessment for the chosen data provider.
-- Final Formula 1 provider subscription.
+- ~~Written approval or rights assessment for the chosen data provider.~~
+  **Closed by [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md):**
+  GridView relies on the published CC BY-NC-SA 4.0 licence, and a rights
+  assessment is recorded in
+  [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §7 and §14.
+  **No provider approval was obtained or is required**, and the residual
+  Formula 1 competition-data and trademark exposure is accepted rather than
+  resolved.
+- ~~Final Formula 1 provider subscription.~~ **Closed: there is none.** The
+  provider budget is EUR 0 and both adopted sources are free and
+  unauthenticated. Any future monetisation reopens this and must be settled
+  before implementation.
+- **Still open:** recording a justified upper bound on a session's actual end,
+  which is what unlocks the OpenF1 provisional path. Until it exists every
+  session is skipped and Jolpica is the source for everything. No adapter for
+  either source exists yet.
 - Final custom API and media domains.
 - Whether the Cloudflare paid plan is enabled from the start.
 - Final public rate limit.
@@ -1892,10 +2203,16 @@ The following must be resolved before production launch:
 
 ## 39. Recommended next implementation proof
 
+> **Updated (2026-08-19).** The slice starts from **Jolpica** or a fixture, not
+> API-Sports, which is unselected. It must not start from OpenF1 either: that
+> path is specified but **locked** until an end bound is recorded, so a proof
+> built on it could not run against the live service. See
+> [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
+
 Before implementing every endpoint, build one backend vertical slice:
 
 ```text
-API-Sports or mock calendar fixture
+Jolpica calendar or mock calendar fixture
     -> provider adapter
     -> runtime validation
     -> stable ID mapping
