@@ -1366,8 +1366,11 @@ mapping inputs, never public GridView IDs (T7, Backend Scheme §8.1).
 
 ### 10.9 Conflict rules
 
-**Governing rule: a reconciled snapshot is never replaced by an older or
-provisional snapshot.** State and time both gate every write:
+**Governing rule: a reconciled snapshot is never replaced by a provisional one,
+and never on fetch order.** Both halves hold unconditionally. Whether it can be
+replaced by a genuinely *older reconciled* payload is a different question, and
+the honest answer is that the rules below make it unlikely rather than
+impossible — see §10.9.1. State and content, never local time, gate every write:
 
 ```text
 contentRevision = stable hash of the normalized payload for the resource
@@ -1512,7 +1515,7 @@ than replacing it.
 | 2 | **Mismatched constructor identifier** | Resolve through the curated mapping registry (M1). An unmapped constructor name **fails validation** and raises an operational signal; it does not fall back to string matching. |
 | 3 | **Penalty or post-session classification change** | Jolpica is authoritative. A reconciled write replaces provisional positions, points and status wholesale for that session — never field-by-field, which could leave a record internally inconsistent. |
 | 4 | **Disqualification** | Same as 3. OpenF1's `dsq` boolean produces a provisional disqualification; Jolpica's `positionText` and `status` are authoritative on reconciliation. A provisional record must never *remove* a disqualification a reconciled record asserted. |
-| 5 | **Corrected championship totals** | Jolpica standings are authoritative. OpenF1 `points_current` is provisional and is replaced, not merged. A *reconciled* correction of a previously reconciled total is subject to the corroboration rule above, so a single stale read cannot regress a total. Where the two sources disagree at reconciliation time, the disagreement is recorded in `conflictOutcome` before the reconciled value is written. |
+| 5 | **Corrected championship totals** | Jolpica standings are authoritative. OpenF1 `points_current` is provisional and is replaced, not merged. A *reconciled* correction of a previously reconciled total is subject to the corroboration rule above, so a single transient stale read cannot regress a total — but a **persistently** stale source serving a total GridView never stored can, per §10.9.1. Where the two sources disagree at reconciliation time, the disagreement is recorded in `conflictOutcome` before the reconciled value is written. |
 | 6 | **Missing sprint or qualifying data** | Absence is never written as an empty result. The resource stays at its previous state and is retried on the §10.4 cadence. A session with no result yet is *unavailable*, which is distinct from *empty* — the same distinction the Home module already enforces via materialization rather than row count. |
 | 7 | **One provider updates before the other** | Expected and normal; it is the whole design. Provisional data may lead reconciled data by up to 24 hours. The reverse — Jolpica reconciling before OpenF1 has been fetched at all — simply skips the provisional write; §10.9's governing rule already forbids a later provisional write from overwriting it. |
 | 8 | **Beta championship endpoint returns nothing** (M3) | Treated as case 6: no write, retry on cadence, reconcile from Jolpica. A beta endpoint going silent must degrade to *slower*, never to *wrong*. |
