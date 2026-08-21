@@ -532,7 +532,7 @@ per-resource freshness (Home, standings).
 | Field | Type | R/N | Meaning |
 |---|---|---|---|
 | `generatedAt` | date-time (UTC) | R | When the snapshot was generated. |
-| `sourceUpdatedAt` | date-time (UTC) | N | When upstream data last changed. |
+| `sourceUpdatedAt` | date-time (UTC) | N | Recency of the upstream data. Where the provider publishes no recency signal — which is the case for every currently adopted Formula 1 source — this is GridView's **first-observed** timestamp for the normalized revision currently published, not the upstream modification time. See [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1. |
 | `staleAfter` | date-time (UTC) | N | When the data should be considered stale. |
 | `contentVersion` | string | N | Curated-content version identifier. |
 | `stale` | boolean | N | Derived: whether the data is currently stale. |
@@ -566,7 +566,12 @@ metadata schemas rather than one permissive schema with globally-nullable fields
   `GET /v1/status` and any other non-snapshot response.
 - **`SnapshotMeta`** — extends `BaseMeta` and additionally requires
   `schemaVersion`, `sourceUpdatedAt`, `staleAfter` and `contentVersion`. Used by
-  non-season-scoped snapshot responses (the content manifest).
+  non-season-scoped snapshot responses (the content manifest). `sourceUpdatedAt`
+  stays **required**; where the upstream source exposes no recency signal it
+  carries GridView's first observation of the current normalized revision
+  ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1),
+  which can make data appear newer than it is by up to one polling interval and
+  which orders nothing GridView did not itself observe in that order.
 - **`SeasonSnapshotMeta`** — extends `SnapshotMeta` and additionally requires
   `season`. Used by every season-scoped response: calendar, standings, entity
   collections, Grand Prix and entity detail, bootstrap and home.

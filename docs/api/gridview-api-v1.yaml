@@ -810,7 +810,26 @@ components:
             sourceUpdatedAt:
               type: string
               format: date-time
-              description: When upstream source data last changed, UTC.
+              description: >
+                Recency of the upstream source data behind this payload, UTC.
+                Required.
+
+
+                Where the upstream provider exposes source recency, this is that
+                value. Where it does **not** — which is the case for every
+                Formula 1 source GridView currently adopts — this is GridView's
+                **first-observed** timestamp for the normalized revision that is
+                currently published: the moment GridView first saw this exact
+                content. Re-reading identical content does not advance it, and
+                GridView's own request time is never published here.
+
+
+                Two consequences are stated rather than implied. It is an upper
+                bound on when the data actually changed upstream, so an age
+                computed from it can understate the true age by up to one
+                polling interval. And it does not order payloads GridView did
+                not itself observe in that order. See
+                `docs/adr/0020-provider-source-observation-and-reconciliation.md`.
             staleAfter:
               type: string
               format: date-time
@@ -979,6 +998,10 @@ components:
         sourceUpdatedAt:
           type: [string, "null"]
           format: date-time
+          description: >
+            Same semantics as `SnapshotMeta.sourceUpdatedAt`, but optional and
+            per-resource. It is **not** the snapshot conflict key; clients use
+            `meta.sourceUpdatedAt` for that.
         staleAfter:
           type: [string, "null"]
           format: date-time

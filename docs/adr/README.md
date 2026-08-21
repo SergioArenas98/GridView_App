@@ -33,3 +33,4 @@ GridView reconstruction.
 | [0017](0017-selected-non-fatal-reporting.md) | A narrow non-fatal allowlist with enum-only diagnostic context | Accepted |
 | [0018](0018-advertising-not-retained-for-v1.md) | Advertising is not retained for v1 | Accepted |
 | [0019](0019-formula-one-provider-legal-gate.md) | Formula 1 data sources under a public-licence compliance model | Accepted |
+| [0020](0020-provider-source-observation-and-reconciliation.md) | Source observation, reconciled ordering and the settling design | Accepted |

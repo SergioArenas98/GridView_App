@@ -49,7 +49,14 @@ Three provenance values, kept distinct (all persisted per snapshot key `home`,
 `grand_prix:{season}:{round}`):
 
 - **`sourceUpdatedAt`** — age/revision of the underlying **source data**. This is
-  the **primary conflict boundary**.
+  the **primary conflict boundary**. Where the server's upstream source publishes
+  no recency signal, the value carried is GridView's **first observation** of the
+  current normalized revision
+  ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1).
+  It is non-decreasing per snapshot key, so the rules below stay well defined;
+  it is a proxy for source age, not the upstream modification time, and it never
+  carries a fetch time. **No client change follows** — the field stays required
+  and the rules below are unchanged.
 - **`generatedAt`** — when the GridView snapshot document was produced. Only an
   **equal-source tie-breaker**; it never outranks `sourceUpdatedAt` (a
   later-generated snapshot can carry older source data).

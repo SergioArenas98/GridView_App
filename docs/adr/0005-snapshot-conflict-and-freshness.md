@@ -3,6 +3,20 @@
 - Status: Accepted
 - Date: 2026-07-19
 
+> **Qualified (2026-08-21) by
+> [ADR 0020](0020-provider-source-observation-and-reconciliation.md), not
+> superseded.** Every rule below stands as written, and the client
+> implementation is unchanged. ADR 0020 qualifies **one** thing: what
+> `sourceUpdatedAt` *means* for a source that publishes no recency signal.
+> Neither adopted Formula 1 source (OpenF1, Jolpica) exposes an update
+> timestamp or version, so for those sources the published value is GridView's
+> **first-observed** timestamp for the current normalized revision — a proxy for
+> source age rather than the upstream modification time, which can make data
+> appear newer than it is by up to one polling interval. The prohibitions below
+> are untouched: `generatedAt` and fetch time still never substitute for source
+> recency, and `contentVersion` is still compared by equality only. See ADR 0020
+> §1.
+
 ## Context
 
 The client is offline-first and cache-first (`GridView_TRD.md` §16). A refresh
@@ -22,6 +36,12 @@ carries `meta.generatedAt`, and season-scoped snapshots additionally carry
 
 - **`sourceUpdatedAt`** — the age/revision of the *underlying source data*. This
   is what actually determines whether one snapshot is more recent than another.
+  *(Qualified by [ADR 0020](0020-provider-source-observation-and-reconciliation.md)
+  §1: where the upstream source publishes no recency signal, the value carried
+  here is GridView's first observation of the current normalized revision. It
+  keeps the rules below well defined — it is non-decreasing per snapshot key —
+  but it is a proxy for source age, and it does not order two payloads that
+  GridView did not itself observe in that order.)*
 - **`generatedAt`** — the time the *GridView snapshot document was produced*. A
   snapshot generated later can still carry **older** source data (a delayed or
   re-run generation), so `generatedAt` is not a safe recency signal on its own.

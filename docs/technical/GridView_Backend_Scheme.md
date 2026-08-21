@@ -1117,11 +1117,15 @@ A public request may never trigger a write merely by opening an endpoint intende
 > internally consistent result is obtained, and Jolpica reconciliation checks at
 > **+5, +9, +15 and +24 hours after the session START**, then daily. Checks do
 > **not** stop at the first reconciled result: a correction observed once needs a
-> later check to confirm it, or it can never be published. The exact termination
-> rule and the slow post-settlement cadence are a **Phase 9B design task** with
-> five fixed invariants — see
-> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1. There is **no polling during a session** and no year-round
-> high-frequency schedule.
+> later check to confirm it, or it can never be published. The termination rule
+> and the slow post-settlement cadence are **specified** (updated 2026-08-21,
+> [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+> §3-§4): a resource settles on three consecutive checks returning the published
+> revision, never evaluated before +24h, with a hard `anchor + 14 days` ceiling
+> and a fixed-budget weekly post-settlement sweep — see
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1.
+> **Specified, not implemented.** There is **no polling during a session** and no
+> year-round high-frequency schedule.
 >
 > **The two anchors differ and must not be conflated.** OpenF1 offsets run from
 > the *actual session end* and are gated by §10.2's bound-or-skip rule. Jolpica
@@ -2186,7 +2190,16 @@ The following must be resolved before production launch:
 - **Still open:** recording a justified upper bound on a session's actual end,
   which is what unlocks the OpenF1 provisional path. Until it exists every
   session is skipped and Jolpica is the source for everything. No adapter for
-  either source exists yet.
+  either source exists yet. The bound-or-skip rule itself is **decided and
+  binding** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+  §5); what is open is the bound.
+- ~~How `sourceUpdatedAt` is derived when the source publishes no recency
+  signal.~~ **Closed by
+  [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1:**
+  the published value is `sourceObservedAt`, GridView's first observation of the
+  currently published normalized revision. The field stays required and the wire
+  shape is unchanged; the proxy can understate data age by up to one polling
+  interval, which is documented rather than hidden.
 - Final custom API and media domains.
 - Whether the Cloudflare paid plan is enabled from the start.
 - Final public rate limit.

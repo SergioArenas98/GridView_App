@@ -59,6 +59,13 @@ pointer is unchanged. Repeating publication of the already active immutable
 version is treated as idempotent. A generated release whose `sourceUpdatedAt` is
 older than the active release is rejected.
 
+That comparison stays well defined once the sources publish no recency signal:
+`sourceUpdatedAt` then carries GridView's first observation of the currently
+published normalized revision, which is non-decreasing per snapshot key
+([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1).
+It is a proxy for source age, so the check protects the publication sequence
+GridView itself observed — it does **not** prove upstream ordering.
+
 ## Rollback
 
 Rollback resolves the target version from the request body or `previous:{season}`.
