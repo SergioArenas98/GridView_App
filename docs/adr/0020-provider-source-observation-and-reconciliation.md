@@ -177,13 +177,26 @@ rather than deferred to exit. Its shape:
   — settlement coincides exactly with the end of the normal cadence at `+24h`.
 - **Bounded cadence:** the four dense checks at `+5/+9/+15/+24` hours from the
   Jolpica start anchor, then daily **only while unsettled**, and a hard ceiling
-  at `anchor + 14 days` at which the resource is settled on deadline with an
-  operator event. Maximum 17 checks per classification resource.
+  at **`jolpica_anchor + 14 days`** — the same scheduled session start, never
+  the first-publication time — at which the resource is settled on deadline with
+  its own event, whatever its confirmation count. Maximum **17 checks on this
+  cadence**; that is not a lifetime per-resource total, because sweep re-reads
+  follow settlement and are bounded by budget rather than by count.
 - **Bounded slow path:** after settlement the same classification resource joins
-  a **fixed-budget weekly rotating sweep**. The budget is constant, so the
-  *request volume* does not grow as completed sessions accumulate; only the
-  revisit interval lengthens. Resources leave the sweep once their season is
-  `completed` and has been swept once after its final round.
+  a **fixed-budget weekly rotating sweep** (8 slots, one slot = one
+  classification request), ordered by a persisted per-resource `lastSweptAt`,
+  with failed reads consuming their slot so a failing resource cannot starve the
+  queue, and with corroboration priority capped at **half the budget** so the
+  rotation always keeps at least 4 slots. Request volume is constant as
+  completed sessions accumulate; the revisit interval lengthens to a **finite,
+  calculable maximum** — 8 weeks normally and 15 weeks under sustained priority
+  contention, at a 60-resource season. Resources leave the sweep once their
+  season is `completed`, they have been swept once after its final round, and no
+  staged payload is outstanding.
+- **A staged payload is never abandoned.** Where a differing revision has no
+  further check before the ceiling, it is retained and staged for review rather
+  than discarded, and a staged resource stays in the sweep until an operator
+  resolves it.
 - **Failure is never a state change.** A failed, missing, malformed, empty or
   rate-limited response writes nothing, confirms nothing and discards nothing;
   the previous published snapshot remains served throughout (Evaluation §10.6).

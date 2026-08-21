@@ -1278,11 +1278,20 @@ seen, `supersededRevisions`, `sourceObservedAt`, the review state and
 |---|---|---|
 | **Dense** | +5, +9, +15, +24 hours from the Jolpica start anchor (§10.4) | Always after 4 checks |
 | **Daily continuation** | Once per day, **only while `unsettled`** | Settlement, or the deadline below |
-| **Deadline ceiling** | — | `anchor + 14 days`: the resource is **settled on deadline**; any outstanding `pendingRevision` is **not applied** but is retained as a staged payload with a staged-review event, so it is never lost silently |
-| **Slow post-settlement sweep** | A fixed-budget weekly rotating sweep (below) | The resource's season is `completed` **and** it has been swept once after that season's final round |
+| **Deadline ceiling** | — | **`jolpica_anchor + 14 days`** — the same scheduled session start the dense offsets run from (§10.4), never the first-publication time, so the ceiling is fixed when the session is scheduled and cannot be pushed back by a late first result. At it the resource is **settled on deadline** whatever its confirmation count, and any outstanding `pendingRevision` is **not applied** but is retained as a staged payload with a staged-review event, so it is never lost silently |
+| **Slow post-settlement sweep** | A fixed-budget weekly rotating sweep (below) | The resource's season is `completed`, it has been swept once after that season's final round, **and no staged payload is outstanding** |
 
-Maximum for one classification resource: **4 dense + 13 daily = 17 checks**,
-whatever the source does. That is the hard bound I3 requires.
+Maximum in the **normal per-session cadence**: **4 dense + 13 daily = 17
+checks** (dense at +5/+9/+15/+24h, then one check per day on days 2-14, the
+day-14 check being the one at which the ceiling fires), whatever the source
+does. That is the hard bound I3 requires **of this cadence**.
+
+**It is not a lifetime per-resource total, and must not be quoted as one.** A
+settled resource then leaves this cadence for the weekly sweep, which is bounded
+by a **fixed weekly request budget** rather than by a check count — that is
+precisely how I3 and I4 are satisfied together. Total lifetime reads are
+therefore `<= 17` on the per-session cadence plus the sweep's rate-bounded
+re-reads.
 
 The never-reconciled case is unchanged and separate: where a resource has no
 reconciled write **at all**, the daily checks continue until it reconciles or
@@ -1301,6 +1310,15 @@ or       the anchor + 14 day deadline is reached (settled on deadline)
 Three consecutive successful checks returning the same revision, never evaluated
 before `+24h`. Deliberately **not** "unchanged across the whole sequence", which
 is the unreachable form I2 rules out.
+
+**Settlement on deadline is a real settlement, and a weaker one.** A resource
+that reaches `jolpica_anchor + 14 days` settles even if it was published only
+one or two checks earlier and was never corroborated. That is deliberate: it
+guarantees termination (I3) and it errs safe, because a settled record can no
+longer be rewritten automatically — any later change is staged for review. It is
+distinguished from ordinary settlement by its own event,
+`reconciled.settled_on_deadline`, so an under-confirmed record is never
+indistinguishable from a corroborated one.
 
 ##### Transitions
 
@@ -1323,7 +1341,8 @@ path.
 | T7 | `reconciled.*` | A `provisional` payload | **Rejected and logged**, never merged (§10.9). |
 | T8 | `reconciled.settled` | A differing revision, not superseded | **First sighting on the slow path.** No write; `pendingRevision` := it; the resource is promoted to a **priority slot in the next weekly sweep**, so corroboration is reachable within 7 days rather than a full rotation (I1). |
 | T9 | `reconciled.settled+pending` | The **same** revision again | **Staged, never applied.** The payload is retained, the published snapshot is unchanged, and the distinct staged-review event is raised. Only an operator decision can publish it. |
-| T10 | `reconciled.settled+pending` | The published revision, or a third revision | `pendingRevision` cleared or replaced exactly as T1/T4, and the resource returns to the ordinary rotation. |
+| T10 | `reconciled.settled+pending` | The published revision, or a third revision | `pendingRevision` cleared or replaced exactly as T1/T4, and the resource returns to the ordinary rotation. The T4 bound applies here too: after 3 consecutive non-corroborating sightings the unstable-source event is raised and the resource stops claiming a priority slot. |
+| T11 | `reconciled.settled+staged` | **Any** observation | **Never published automatically, in any branch.** The staged revision seen again refreshes its last-seen time and corroboration count; the published revision seen again is recorded but does **not** clear the staged payload; a third differing revision **replaces** it and re-raises the staged-review event. The resource stays in the sweep and **may not leave the sweep set while a staged payload is unresolved**, so the season-completed exit can never orphan an operator decision. Only an operator publishes or discards a staged payload. |
 
 Checked against the cases the earlier drafts broke:
 
@@ -1333,7 +1352,12 @@ Checked against the cases the earlier drafts broke:
 | Check 2 (+9h) | Check 4 (+24h) — confirmations 1,2,3 |
 | Check 3 (+15h) | Daily check 1 (+48h) |
 | Check 4 (+24h) | Daily check 2 (+72h) |
+| Any daily check on days 2-11 | Two further identical daily checks — always still inside the ceiling |
+| Daily check on day 12 | Day 14, exactly at the ceiling, by ordinary corroboration |
+| Daily check on **day 13** | Day 14 by the **deadline** only: confirmations reach 2, never 3. Settles on deadline |
+| Daily check on **day 14** (the last) | Immediately, on the **deadline** only, with one confirmation. Settles on deadline |
 | A corroborated change applied at any later check | `consecutiveConfirmations` is 2 on application, so **one** further identical check at or after +24h settles it; otherwise the 14-day deadline does |
+| A differing revision first sighted on **day 14** | It has no further check, so it is **staged** at the deadline rather than corroborated — retained, unpublished, with a staged-review event. This is where I1 is discharged by the operator path instead of by another check, and it is the only such case |
 
 In the **ordinary** case settlement lands exactly at the end of the dense
 sequence, so the daily continuation costs nothing at all.
@@ -1342,16 +1366,53 @@ sequence, so the daily continuation costs nothing at all.
 
 A per-session timer after settlement would reintroduce the unbounded
 accumulation I3 forbids. Instead, settled classification resources join **one
-weekly sweep with a fixed request budget** (modelled at 8 re-reads per sweep),
-serving priority slots (T8 corroboration) first and otherwise cycling
-least-recently-checked first through the settled classifications of the seasons
-still in the sweep set.
+weekly sweep with a fixed request budget**, modelled at **8 slots per sweep**.
 
-The property that matters: **request volume is constant, not proportional to the
-number of completed sessions.** What lengthens as sessions accumulate is the
-revisit interval, not the cost. A resource leaves the sweep set once its season
-is `completed` and has been swept once after that season's final round, so the
-set does not grow year on year.
+| Property | Rule |
+|---|---|
+| **Work unit** | One slot = **one request to one classification endpoint** (`results`, `sprint` or `qualifying`) for one session. The sweep re-reads the classification **only** — it never pulls the standings calls that §11.1 counts alongside a *dense* race check, so a race re-read costs 1 request here, not 3. Slots and requests are therefore the same unit. |
+| **Queue membership** | `reconciled.settled`, `reconciled.settled+pending` and `reconciled.settled+staged` only. `absent`, `provisional` and every `unsettled` state are on the per-session cadence instead and are **never** in this queue, so a resource is in exactly one of the two at any time. |
+| **Entry** | A resource joins at the moment it settles — by predicate or on deadline — with its last-checked time initialised to its settlement time, so it takes its turn behind resources that settled earlier rather than jumping the queue. |
+| **Cursor** | There is **no single global cursor**. The order is derived from per-resource `lastSweptAt` persisted with the resource record, and each sweep selects the least-recently-swept eligible resources. Deriving the order from persisted per-resource state rather than an index makes it restart-safe, and makes insertion and removal ordinary writes. |
+| **Failed attempts** | A failed, empty, malformed or rate-limited read is T6 — no state change — but it **consumes its slot and still advances `lastSweptAt`**. This is the fairness rule: if a failure left the resource at the head of the queue it would occupy a slot every week and starve everything behind it. A resource failing repeatedly is surfaced by provider health, not by monopolising the sweep. |
+| **Priority reservation** | T8 corroboration re-reads are served first but may take **at most half the budget (4 of 8 slots)**; unused priority slots fall through to the rotation. So the rotation is guaranteed **at least 4 slots every sweep**, whatever the source is doing. Without this reservation a wave of pending revisions could consume the whole budget indefinitely and the maximum revisit interval would not be finite. |
+| **Exit** | The season is `completed`, the resource has been swept once after that season's final round, **and** it holds no staged payload (T11). |
+
+**Maximum revisit interval, calculated.** Using the §11.3 season assumptions —
+24 Grands Prix of which 6 are sprint weekends — and the §10.3 polled sessions:
+
+```text
+standard weekend  = qualifying + race                        = 2 resources
+sprint weekend    = sprint qualifying + sprint + qualifying + race
+                                                             = 4 resources
+
+season total      = 18 x 2 + 6 x 4                           = 60 resources
+
+full rotation, no priority contention   = ceil(60 / 8) =  8 weeks
+full rotation, sustained worst-case
+priority contention                     = ceil(60 / 4) = 15 weeks
+```
+
+**So a settled classification resource is re-read at most every 15 weeks, and
+normally every 8**, at the season's maximum population; earlier in a season the
+population is smaller and the interval shorter. Both figures are finite and
+calculable from published assumptions, which is what I4 requires — the design
+owes a deterministic bound, not a constant frequency. The 15-week figure is
+itself pessimistic, because T4/T10 stop any one resource from holding a priority
+slot for more than 3 consecutive sweeps.
+
+**Request volume stays constant while the interval stretches:** the cost is
+capped at 8 requests per week regardless of how many sessions have accumulated,
+and the set does not grow year on year because of the exit rule.
+
+**Why the daily standings job cannot substitute for this.** I4 is about the
+resource that changed. §11.1 models a session classification and the
+championship standings as **separate calls**, so a penalty applied weeks later
+moves `driverstandings` and `constructorstandings` while `results` for that
+session is never re-read. A design polling only standings would satisfy the
+words of I4 and still never present the corrected classification to §10.9's
+staged-review path. The sweep therefore re-reads the classification endpoint
+itself.
 
 ##### Operator-visible outcomes
 
@@ -1388,7 +1449,9 @@ strings, and nothing personal.** Provider identifiers stay internal (§10.8).
 - **Ordinary case: 4 checks per polled classification resource** — the dense
   sequence only. This is what §11.1 already models, so the reconciliation
   figures in §11 are **no longer a lower bound** for the ordinary case.
-- **Worst case: 17 checks** per resource, at the 14-day ceiling.
+- **Worst case: 17 checks** per resource **on the per-session cadence**, at the
+  14-day ceiling. Sweep re-reads are additional and are bounded by the weekly
+  budget, not by this count.
 - **Slow sweep: a constant ~8 requests per week** (~35 per month) for the whole
   settled population, independent of how many sessions have completed. Priority
   corroboration re-reads are served *inside* that budget, not on top of it.
@@ -1880,21 +1943,50 @@ unknown:**
 | Component | Bound |
 |---|---|
 | Dense sequence | Exactly 4 checks per polled classification resource |
-| Daily continuation | 0 in the ordinary case (settlement lands at +24h); at most 13, at the `anchor + 14 days` ceiling |
-| Per-resource ceiling | **17 checks**, whatever the source does |
-| Slow post-settlement sweep | A **constant** ~8 requests per week (≈ 35 per month) for the entire settled population, independent of how many sessions have completed |
+| Daily continuation | 0 in the ordinary case (settlement lands at +24h); at most 13, at the `jolpica_anchor + 14 days` ceiling |
+| Per-resource ceiling, **per-session cadence only** | **17 checks**. This is not a lifetime total: sweep re-reads follow settlement and are bounded by the weekly budget instead (§10.4.1) |
+| Slow post-settlement sweep | A **constant 8 slots per week** (≈ 35 per month, since `8 x 52 / 12 ≈ 34.7`) for the entire settled population, independent of how many sessions have completed. One slot = one classification request |
 
 Modelled Jolpica-only monthly totals, which is the operative case while the
-OpenF1 path stays locked:
+OpenF1 path stays locked. Both lines assume a season month with two race
+weekends, one in four of them a sprint weekend (§11.3):
 
-| Case | Formula | Monthly |
-|---|---|---:|
-| Ordinary | `192 baseline + (1.5 x 16 + 0.5 x 32) weekends = 232`, `+20%` reserve, `+35` sweep | **≈ 313** |
-| Pathological, every resource to the 14-day ceiling | `192 + (1.5 x 68 + 0.5 x 136) = 362`, `+20%` reserve, `+35` sweep | **≈ 469** |
+| Case | Formula | Monthly | Reading |
+|---|---|---:|---|
+| Ordinary | `192 baseline + (1.5 x 16 + 0.5 x 32) weekends = 232`, `+20%` reserve `= 278`, `+35` sweep | **≈ 313** | **Modelled scenario**, not a bound. Every resource settles at +24h and the sweep runs at full budget |
+| Pathological, every resource to the 14-day ceiling | `192 + (1.5 x 68 + 0.5 x 136) = 362`, `+20%` reserve `= 434`, `+35` sweep | **≈ 469** | **Upper bound** for a season month under these assumptions. It deliberately double-counts: a resource still on the daily continuation has not settled and so is not yet in the sweep |
 
-Both remain far inside a 500-request **hourly** allowance. The combined
-≈ 356 figure above is retained as the model for the day the OpenF1 path unlocks;
-its Jolpica component must be re-derived from this table at that point.
+Component derivations, so each figure can be checked rather than trusted:
+
+```text
+baseline      30 x 6.4/day = 192      calendar 4/day (6-hourly) + standings 2/day
+                                      + participants/circuits 3/week (§11.2).
+                                      All Jolpica; the baseline holds no OpenF1 request.
+
+ordinary weekend, Jolpica, 4 dense checks per resource (§11.1 worst-case column)
+  standard    qualifying 4x1 + race 4x3                       = 16
+  sprint      SQ 4x1 + sprint 4x3 + qualifying 4x1 + race 4x3  = 32
+
+ceiling weekend, 17 checks per resource instead of 4
+  standard    qualifying 17x1 + race 17x3                     = 68
+  sprint      17 + 51 + 17 + 51                               = 136
+
+month         1.5 standard + 0.5 sprint weekends
+sweep         8 slots/week x 52/12                            ≈ 35
+reserve       +20%, the existing §11.3 manual-recovery and retry allowance
+```
+
+**No headroom claim is made from these figures, and none may be.** Jolpica
+publishes a **per-second** (4) and a **per-hour** (500) limit; a monthly total
+cannot demonstrate compliance with either, because it says nothing about how the
+requests are distributed within any hour or second. Compliance with those
+windows is the job of the explicit per-provider rate limiter (§11.4, gap G7),
+not of this table. The comparison in §11.4 is against a *daily* figure and
+carries its own caveats.
+
+The combined ≈ 356 figure above is retained as the model for the day the OpenF1
+path unlocks; its Jolpica component must be re-derived from this table at that
+point.
 
 **Read the §11.3 tables as a ceiling for the OpenF1 path and as the ordinary
 Jolpica case only once the correction above is applied — and neither as current
@@ -1908,7 +2000,7 @@ OpenF1 numbers apply only once the provisional path is unlocked.
 | Source | Published limit | Peak-day use | Headroom |
 |---|---|---:|---|
 | OpenF1 free | 3 requests/**second** and 30 requests/**minute** | ≈ 26 requests/**day** once unlocked; **0 today** | The entire peak day fits inside one minute's allowance. The **per-second** limit is a separate matter — see the note below. |
-| Jolpica unauthenticated | 4 requests/**second** and 500 requests/**hour** | ≈ 22 requests/**day** ordinary; **≈ 469/month** at the §11.3.1 ceiling | The modelled figure is ≈ 4% of a single hour's allowance spread across 24 hours. **The peak is now bounded** by §10.4.1 (17 checks per resource plus a constant weekly sweep), so the remaining unknown is the other side: §9.2 records that Jolpica's limits will fall without stating by how much, so the **future headroom still cannot be established** and must be re-checked once the reduced limits are published. The per-second limit is subject to the note below. |
+| Jolpica unauthenticated | 4 requests/**second** and 500 requests/**hour** | ≈ 22 requests/**day** ordinary; **≈ 469/month** at the §11.3.1 ceiling | The modelled figure is ≈ 4% of a single hour's allowance spread across 24 hours. **The peak is now bounded** by §10.4.1 (at most 17 per-session-cadence checks per resource, plus a constant weekly sweep), so the remaining unknown is the other side: §9.2 records that Jolpica's limits will fall without stating by how much, so the **future headroom still cannot be established** and must be re-checked once the reduced limits are published. The per-second limit is subject to the note below. |
 
 **On the figures available, neither source's volume looks like a constraint** —
 tens of requests a day against 500 an hour leaves roughly two orders of
