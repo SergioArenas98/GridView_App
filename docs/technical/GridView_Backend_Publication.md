@@ -71,7 +71,11 @@ published, instead of being rejected as "older". The assignment is made in the
 same transaction that publishes the snapshot, so it survives a crash between
 generation and publication. It is a proxy for source age, so the check protects
 the publication sequence GridView itself observed — it does **not** prove
-upstream ordering.
+upstream ordering. And where the `previous + 1 millisecond` branch of the clamp
+fires — two revisions published inside one millisecond, or a backwards host
+clock — the value is a **local monotonic publication clock** rather than a
+literal observation time; it stays a conservative ordering proxy and raises an
+operational event (ADR 0020 D1.11a).
 
 ## Rollback
 

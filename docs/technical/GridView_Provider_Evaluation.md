@@ -1262,7 +1262,7 @@ reconciled write lands, and independently `unsettled` until it settles.
 | `reconciled.settled` | The published revision has settled. The normal per-session cadence has terminated and the resource is on the slow sweep. |
 | `reconciled.settled+pending` | Settled, with a differing revision seen once on the slow path and awaiting corroboration. |
 | `reconciled.settled+staged` | A differing revision was corroborated on the slow path and is **retained for operator review**; the published snapshot is unchanged. The record leaves the active sweep and moves to the **operator-review backlog** (below). |
-| `reconciled.review_locked` | A staged correction **and** a second, independently corroborated competing correction both exist. No further automatic candidate tracking happens; the record waits in the backlog for operator disposition. |
+| `reconciled.review_locked` | A staged correction **and** a second, independently corroborated competing correction both exist. The two-entry cap is reached, so no further candidate tracking happens even under operator verification; the record waits in the backlog for operator disposition. |
 
 ##### Persisted per resource
 
@@ -1349,6 +1349,23 @@ path, or lets an observation mutate a record that is waiting on a human.
 T3** — the unsettled-path writes. No settled, pending, staged or locked branch
 publishes anything; only an operator does, through T12.
 
+**T11-T11d are not reachable from the scheduler.** *(Corrected 2026-08-22.)*
+An operator-backlog record is never polled by the weekly sweep, so a scheduled
+run has no way to produce an observation for it, and **the ordinary scheduler
+must never execute T11, T11b, T11c or T11d.** Those four transitions run
+**only** inside an explicit **operator verification** — a manual recovery
+action, deliberately requested by a human against one named backlog record:
+
+| Property | Rule |
+|---|---|
+| Trigger | Explicit, per-record, human-initiated. Never a timer, never a cron, never the sweep. |
+| Budget | **Outside** the eight-slot weekly sweep. It is manual-recovery traffic and is charged to the existing manual-recovery and retry reserve (§11.3), not treated as free. |
+| Controls | Every operator-initiated provider request goes through the **same** outbound hardening, per-provider rate limiter, typed per-source call counter, quota checks and audit events as any other request, once those capabilities exist (gaps G6, G7, G10). A manual action is not an exemption from the provider controls. |
+| Effect on review state | It may **only** set or clear `candidateRevision` and, on independent corroboration, write `competingCorrection`. It may **never** publish, remove, replace or mutate `stagedCorrection`. |
+| Failure | A failed, empty, malformed or rate-limited verification is T6: `stagedCorrection`, `candidateRevision`, `competingCorrection` and every confirmation counter are preserved exactly. |
+| If it never happens | The record simply stays in the backlog unchanged and T11-T11d never execute. That is a supported steady state, not a stall. |
+| Disposition | Still only T12. Verification informs an operator; it never decides for them. |
+
 | # | From | Observation | Effect |
 |---|---|---|---|
 | T0 | `absent` | Any valid reconciled payload | **First valid write.** Publish it; `sourceObservedAt` := this check's observation time; `consecutiveConfirmations` := 1. No corroboration is required, because there is nothing to roll back — and this branch must be evaluated **first**, or a new session could never publish anything (§10.9). |
@@ -1363,11 +1380,11 @@ publishes anything; only an operator does, through T12.
 | T8 | `reconciled.settled` | A differing revision, not superseded | **First sighting on the slow path.** No write; `pendingRevision` := it, with `firstSeenAt`; `lastPriorityAttemptAt` := that same time. The resource joins the **priority queue** for the next sweeps. It is *not* promoted ahead of older candidates — see the priority ordering rule below. |
 | T9 | `reconciled.settled+pending` | The **same** revision again | **Corroborated: staged, never applied.** `stagedCorrection` := the payload (immutable from here); `pendingRevision` := null; the staged-review event is raised. The resource **leaves the active sweep** for the operator-review backlog. Only an operator decision can publish or discard it. |
 | T10 | `reconciled.settled+pending` | The published revision, or a third revision | `pendingRevision` cleared or replaced exactly as T1/T4; the resource stays in the active sweep and in the ordinary rotation. The T4 bound applies here too: after 3 consecutive non-corroborating sightings the unstable-source event is raised and the resource stops claiming a priority slot. |
-| T11 | `reconciled.settled+staged` | **Any** observation (a late in-flight response, or an operator-triggered re-read — the record is no longer polled automatically) | **`stagedCorrection` is immutable. Nothing here may publish, discard, overwrite or replace it.** The staged revision seen again only refreshes its last-seen counter. The published revision seen again is recorded and changes nothing. A **different** revision B is written to the separate `candidateRevision` slot with `consecutiveSightings := 1` and raises the *candidate-observed* event — **one sighting never stages B**. |
-| T11b | `reconciled.settled+staged` with a candidate | The **same** revision B again | **B is corroborated independently**, by the same two-consecutive-check rule as D2.5. `competingCorrection` := B; `candidateRevision` := null; the *candidate-corroborated* event is raised and the record becomes `review_locked`. `stagedCorrection` is still untouched. Both entries now await one operator decision. |
-| T11c | `reconciled.settled+staged` with a candidate | The published revision, or a third revision C | The candidate failed to corroborate: `candidateRevision` is cleared or replaced by C with `consecutiveSightings := 1`. `stagedCorrection` is untouched. Nothing is staged and nothing is published. |
-| T11d | `reconciled.review_locked` | **Any** observation | **Terminal until an operator acts.** No slot is written, no candidate is tracked, nothing is published. The record simply waits in the backlog. This is the cap that keeps the representation bounded at two corroborated entries. |
-| T12 | Any staged or locked record | **Operator disposition** — publish, discard, or replace | The only transition that may change published content from a staged entry. The chosen payload is published (or nothing is), `supersededRevisions` is updated as for T3, the *review-disposed* event records who decided and what was chosen, and every review slot is cleared. The resource then re-enters the **active sweep** if it is still inside the active observation horizon (its season is not yet completed-and-swept); otherwise it retires. |
+| T11 | `reconciled.settled+staged` | An **operator verification** response only (see below) | **`stagedCorrection` is immutable. Nothing here may publish, discard, overwrite or replace it.** The staged revision seen again only refreshes its last-seen counter. The published revision seen again is recorded and changes nothing. A **different** revision B is written to the separate `candidateRevision` slot with `consecutiveSightings := 1` and raises the *candidate-observed* event — **one sighting never stages B**. |
+| T11b | `reconciled.settled+staged` with a candidate | The **same** revision B again, on a later **operator verification** | **B is corroborated independently**, by the same two-observation rule as D2.5 — two verification responses, not two calendar sweeps. `competingCorrection` := B; `candidateRevision` := null; the *candidate-corroborated* event is raised and the record becomes `review_locked`. `stagedCorrection` is still untouched. Both entries now await one operator decision. |
+| T11c | `reconciled.settled+staged` with a candidate | On **operator verification**: the published revision, or a third revision C | The candidate failed to corroborate: `candidateRevision` is cleared or replaced by C with `consecutiveSightings := 1`. `stagedCorrection` is untouched. Nothing is staged and nothing is published. |
+| T11d | `reconciled.review_locked` | Any **operator verification** response | **No-op.** No slot is written, no candidate is tracked, nothing is published — the two-entry cap is already reached, so verification can only report. This is what keeps the representation bounded at two corroborated entries. |
+| T12 | Any staged or locked record | **Operator disposition** — publish, discard, or replace. The **only** transition that clears a review entry, and the only one that can change published content from the backlog | The only transition that may change published content from a staged entry. The chosen payload is published (or nothing is), `supersededRevisions` is updated as for T3, the *review-disposed* event records who decided and what was chosen, and every review slot is cleared. The resource then re-enters the **active sweep** if it is still inside the active observation horizon (its season is not yet completed-and-swept); otherwise it retires. |
 
 Checked against the cases the earlier drafts broke:
 
@@ -1397,7 +1414,7 @@ weekly sweep with a fixed request budget**, modelled at **8 slots per sweep**.
 |---|---|
 | **Work unit** | One slot = **one request to one classification endpoint** (`results`, `sprint` or `qualifying`) for one session. The sweep re-reads the classification **only** — it never pulls the standings calls that §11.1 counts alongside a *dense* race check, so a race re-read costs 1 request here, not 3. Slots and requests are therefore the same unit. |
 | **Queue membership** | **`reconciled.settled` and `reconciled.settled+pending` only.** Every resource is in exactly one of four disjoint sets: the **per-session cadence** (`absent`, `provisional`, every `unsettled` state), the **active sweep** (the two states above), the **operator-review backlog** (`settled+staged`, `review_locked`), or **retired**. Nothing is ever counted in two of them. |
-| **Operator-review backlog** | A record with a `stagedCorrection` leaves the active sweep at T9 and moves here. The backlog is **durable but not polled**: it consumes **no sweep slot**, makes **no provider request**, and does **not** count against the active-membership bound. It is retained until operator disposition (T12), for as long as that takes. |
+| **Operator-review backlog** | A record with a `stagedCorrection` leaves the active sweep at T9 and moves here. The backlog is **durable but never automatically polled**: it consumes **no sweep slot**, makes **no scheduled provider request**, and does **not** count against the active-membership bound. The only requests it can ever cause are explicit operator verifications, which are manual-recovery traffic (above). It is retained until operator disposition (T12), for as long as that takes, subject to the capacity limit below. |
 | **Entry** | A resource joins at the moment it settles — by predicate or on deadline — with `lastSweptAt` initialised to its settlement time, so it takes its turn behind resources that settled earlier rather than jumping the queue. A resource that settles on deadline **while holding a staged payload** goes straight to the operator backlog instead and never enters the sweep. |
 | **Cursor** | There is **no single global cursor**. The order is derived from per-resource `lastSweptAt` persisted with the resource record, and each sweep selects the least-recently-swept eligible resources. Deriving the order from persisted per-resource state rather than an index makes it restart-safe, and makes insertion and removal ordinary writes. |
 | **Failed attempts** | A failed, empty, malformed or rate-limited read is T6 — no state change to the review slots — but it **consumes its slot and still advances the scheduling key it was drawn on** (`lastSweptAt` for a rotation slot, `lastPriorityAttemptAt` for a priority slot). This is the fairness rule: if a failure left the resource at the head of its queue it would occupy a slot every week and starve everything behind it. A resource failing repeatedly is surfaced by provider health, not by monopolising the sweep. |
@@ -1405,6 +1422,60 @@ weekly sweep with a fixed request budget**, modelled at **8 slots per sweep**.
 | **Priority ordering** | Priority candidates are drawn **least-recently-attempted first**, ordered by the persisted tuple `(lastPriorityAttemptAt ASC, pendingRevision.firstSeenAt ASC, resourceKey ASC)`. `lastPriorityAttemptAt` is **initialised at T8 to the candidate's own `firstSeenAt`**, so a brand-new candidate sorts by its arrival time and cannot overtake an older one; and every attempt — successful or failed — sets it to `now`, sending that candidate to the back. Both keys are persisted with the record and the third is a stable identifier, so the order is total, deterministic and restart-safe, with no global cursor. |
 | **Exit from the active sweep** | The season is `completed` **and** the resource has been swept once after that season's final round. A staged payload no longer holds a resource in the sweep — it is in the backlog instead, which season completion does not touch, so **season completion can neither orphan nor discard a staged payload**. |
 | **Re-entry** | After operator disposition (T12) the resource re-enters the active sweep **only if it is still inside the active observation horizon** — its season not yet completed-and-swept. Otherwise it retires: the season is closed and there is nothing further to observe. |
+
+##### The operator backlog is capacity-bounded and fails closed
+
+> **Added 2026-08-22.** Removing staged records from the sweep bounded the
+> *request* cost but left the *number* of retained records unlimited. This
+> closes that gap without inventing a retention right GridView does not have.
+
+| Property | Rule |
+|---|---|
+| **Capacity** | A hard maximum of **60 classification-resource records**, chosen to mirror the active-membership ceiling. |
+| **Scope** | The limit is **global across seasons**, not per season. A backlog carried over from an earlier season consumes the same capacity. |
+| **Per-record size** | Unchanged and still structurally bounded: one immutable `stagedCorrection`, at most one corroborated `competingCorrection`, at most one transient `candidateRevision`. |
+| **No automatic eviction** | **No automatic process may delete, evict, overwrite or age out an existing backlog record to make room.** There is no time-based expiry, because GridView has no legal or product approval to discard an unreviewed correction after an arbitrary period. |
+| **Release** | Capacity is released only when a record is resolved through **T12**. |
+
+**When the backlog is full, reconciliation fails closed for the affected
+correction:**
+
+- the currently published snapshot **remains unchanged**;
+- the newly observed correction is **not published**;
+- no existing review record is overwritten, displaced or reordered;
+- a typed **capacity-exceeded** event is raised and an operator alert fires;
+- **production publication remains blocked** for that resource until an operator
+  releases capacity through T12.
+
+Failing closed is the conservative direction: the cost is that a genuine
+correction waits, which is visible and alarmed, rather than a silent overwrite
+of something a human has not yet seen.
+
+**The capacity limit is a storage and operational bound, not a permission.** It
+says how many records the system will hold; it does not grant any right to
+retain provider payloads. Retention of provider-derived payloads remains subject
+to the unresolved licensing, historical-retention and ShareAlike obligations in
+§7.6 — nothing here relaxes them.
+
+**Four different limits, deliberately not conflated:**
+
+| Limit | Value | What it bounds |
+|---|---|---|
+| Active sweep membership | <= 60 resources | How many resources the scheduler may rotate through |
+| Operator backlog capacity | <= 60 records | How many unresolved reviews may be retained at once |
+| Automatic sweep budget | 8 requests / week | Scheduled provider traffic from the sweep |
+| Operator verification | manual recovery | Human-initiated traffic, charged to the §11.3 reserve and subject to the same provider controls |
+
+**Effect on the request-volume arithmetic — stated, not assumed.** Operator
+verification is manual recovery, so it is charged to the **existing 20% manual
+recovery and retry reserve** already present in §11.3; no new line is added to
+the model, and the scheduled figures are unchanged. **That reserve is not
+demonstrated to be sufficient for a full backlog verification pass, and no such
+claim is made.** On the ordinary-case month the reserve is `232 x 0.20 ~= 46`
+requests, while verifying all 60 records at capacity once would cost 60 — more
+than a month's reserve. Verification is therefore expected to be occasional and
+per-record; a bulk pass at capacity must be paced across months or explicitly
+budgeted, and the rate limiter applies to it either way.
 
 **Maximum active membership, calculated.** Using the §11.3 season assumptions —
 24 Grands Prix of which 6 are sprint weekends — and the §10.3 polled sessions:
@@ -1470,8 +1541,15 @@ Three qualifications, stated rather than glossed:
 - `P <= 60` is the absolute ceiling. `P` reaching 60 means every settled
   classification in the season simultaneously changed, which would itself be an
   unstable-source signal long before the queue mattered.
-- The 15-week figures are pessimistic because T4/T10 stop any one resource from
-  holding a priority slot for more than 3 consecutive sweeps.
+- T4/T10's "3 consecutive non-corroborating sightings" counts **observations of
+  that resource**, not calendar sweeps. Under contention a resource's
+  observations are spread across many sweeps, so the rule stops a chronically
+  unstable resource from claiming priority slots indefinitely — it does **not**
+  mean three consecutive weeks and must not be read that way.
+- **If the provider fails indefinitely there is no finite corroboration or
+  outcome bound at all.** The `ceil(P / 4)` figure bounds attempts only. This is
+  a property of depending on an upstream with no SLA (§14.1 R6), stated rather
+  than papered over.
 
 Both bounds are finite and calculable from published assumptions, which is what
 I4 requires — the design owes a deterministic bound, not a constant frequency.
@@ -1484,16 +1562,20 @@ correction has been observed, corroborated and staged, the I4 path has
 **succeeded** for that resource: the correction is in front of a human. Keeping
 the record in the polling rotation afterwards would add nothing to
 observability — the change is already detected — while making the membership
-bound false. I4 requires corrections to be observable; it does not require
+bound false. Where a human wants a further reading before deciding, the explicit
+operator verification above provides it, on request and under the same provider
+controls. I4 requires corrections to be observable; it does not require
 indefinite provider polling of records whose correction has already been
 captured, and nothing above weakens it.
 
-**Request volume stays constant while the interval stretches:** the cost is
-capped at 8 requests per week regardless of how many sessions have accumulated
-or how large the operator backlog grows, and the active set does not grow year
-on year because of the exit rule. **The backlog is a retention obligation, not a
-polling obligation** — it holds records durably and issues no request, so it can
-never affect the request budget or the intervals above.
+**Scheduled request volume stays constant while the interval stretches:** the
+cost is capped at 8 requests per week regardless of how many sessions have
+accumulated or how full the operator backlog is, and the active set does not grow
+year on year because of the exit rule. **The backlog is a retention obligation,
+not a scheduled-polling obligation** — it holds at most 60 records durably and
+issues no scheduled request, so it can never affect the sweep budget or the
+intervals above. Operator verification can issue requests, but only when a human
+asks, and it is charged to the manual-recovery reserve rather than to the sweep.
 
 **Why the daily standings job cannot substitute for this.** I4 is about the
 resource that changed. §11.1 models a session classification and the
@@ -1514,9 +1596,11 @@ Structured events, following the existing Worker logging conventions
 | `reconciled.published` | T0 / T0b — a first reconciled write, or a reconciled payload replacing a provisional one |
 | `reconciled.overwrite` | T3 — a reconciled payload replaced another. **Every** overwrite, per ADR 0020 D2.7 |
 | `reconciled.staged_correction` | T9, and a pending revision retained unapplied at the 14-day deadline. **The existing staged correction.** Distinct from the above, per D2.8 |
-| `reconciled.candidate_observed` | T11 — a **competing candidate** was seen once against an already-staged correction. Not a staging event: nothing is staged and nothing is published |
-| `reconciled.candidate_corroborated` | T11b — that candidate met the two-consecutive-check rule independently and became a second review entry; the record is now `review_locked` |
-| `reconciled.review_disposed` | T12 — an **operator** published, discarded or replaced a review entry. The only event that can accompany a content change out of the backlog |
+| `reconciled.verification_requested` | An operator explicitly requested verification of one backlog record. Carries the requesting principal, so manual traffic is attributable |
+| `reconciled.candidate_observed` | T11 — a **competing candidate** was seen once, during an operator verification, against an already-staged correction. Not a staging event: nothing is staged and nothing is published |
+| `reconciled.candidate_corroborated` | T11b — that candidate met the two-observation rule independently across two verifications and became a second review entry; the record is now `review_locked` |
+| `reconciled.backlog_capacity_exceeded` | A correction could not be staged because the 60-record backlog is full. **Typed, alarmed, and fails closed**: nothing is published and nothing is overwritten |
+| `reconciled.review_disposed` | T12 — an **operator** published, discarded or replaced a review entry. The only event that can accompany a content change out of the backlog, and the only one that releases backlog capacity |
 | `reconciled.settled` / `reconciled.settled_on_deadline` | The predicate fired, or the 14-day ceiling did |
 | `reconciled.rejected_superseded` | T5 |
 | `reconciled.unstable_source` | Three consecutive non-corroborating sightings (T4) |
@@ -1534,8 +1618,8 @@ strings, and nothing personal.** Provider identifiers stay internal (§10.8).
 |---|---|
 | I1 | While unsettled, the daily continuation runs precisely *because* the resource is unsettled, so a pending revision always has a next check; T6 stops a failed check from consuming it; the deadline stages rather than silently drops it. While settled, T8 puts the candidate in a **totally ordered, least-recently-attempted priority queue** whose position can only improve, so an attempt is reached within `ceil(P / 4)` sweeps — 1 week in the ordinary case and at most 15 weeks at the absolute ceiling. Finite and defined, which is what I1 requires; the withdrawn "within 7 days" claim was a latency promise, not the invariant. |
 | I2 | The predicate counts **3 consecutive identical reads from wherever the revision was first published**, and is evaluated at every check from +24h onward. The table above walks first-publication at checks 1, 2, 3, 4 and later; every one settles. Nothing depends on a window that has already passed. |
-| I3 | 4 dense checks; at most 13 daily continuations; a hard `anchor + 14 days` ceiling; and a post-settlement sweep whose cost is a fixed weekly budget rather than a per-session timer, with a defined exit from the sweep set. Staged records leave the sweep for the **unpolled** operator backlog, so an unresolved review can never grow the active membership or the request budget. Nothing that issues a request accumulates without bound. |
-| I4 | The sweep re-reads **the same classification resource** — `results`, `sprint` or `qualifying` for that session — which is what feeds the §10.9 staged-review path, for every settled resource inside the active observation horizon. The daily standings job is explicitly **not** counted towards this. Once a correction is staged the I4 path has *succeeded* for that resource and it moves to the backlog; that is the completion of I4, not an exception to it (see the sweep section). |
+| I3 | 4 dense checks; at most 13 daily continuations; a hard `anchor + 14 days` ceiling; and a post-settlement sweep whose cost is a fixed weekly budget rather than a per-session timer, with a defined exit from the sweep set. Staged records leave the sweep for the operator backlog, which is **never automatically polled** and is itself capped at 60 records with a fail-closed overflow, so an unresolved review can grow neither the active membership, nor the scheduled request budget, nor storage without limit. Nothing that issues a scheduled request accumulates without bound. |
+| I4 | The sweep re-reads **the same classification resource** — `results`, `sprint` or `qualifying` for that session — which is what feeds the §10.9 staged-review path, for every settled resource inside the active observation horizon. The daily standings job is explicitly **not** counted towards this. Once a correction is staged the I4 path has *succeeded* for that resource and it moves to the backlog; that is the completion of I4, not an exception to it (see the sweep section). Beyond that point further provider observation of the record is an explicit **operator verification**, never a scheduled poll — I4 asks that a correction reach a human, and at that point it has. |
 | I5 | Publication is unaffected by settling: the ordinary case publishes at check 1, `+5h` after the scheduled start. Settlement at `+24h` terminates polling; it does not delay data. The documented C7 miss where Jolpica omits the optional `time` (§10.4) is unchanged. |
 
 ##### Resulting request-volume assumptions
@@ -1642,13 +1726,25 @@ or Drift change follows.
 
 *Published, per snapshot key* (ADR 0020 D1.7-D1.11):
 
-- `snapshotRevision` is a stable hash of the **normalized public snapshot
-  document** — the published `data`, never `generatedAt` or `requestId`.
+- `snapshotRevision` is a stable hash of a **deterministic canonical
+  serialization of the normalized public `data` payload only**. Envelope,
+  provenance, transport and time-varying metadata are all excluded —
+  `requestId`, `generatedAt`, `sourceUpdatedAt`, `snapshotObservedAt`,
+  `staleAfter`, ETags, server-stale flags, provider timestamps and identifiers,
+  `fetchedAt`, and retry/reconciliation state — and `contentVersion` is never
+  fed recursively into its own input. **ADR 0020 §1 "The canonical hash input"
+  is binding** and fixes key ordering, array ordering, null-versus-absent
+  normalization, UTC date form, numeric form, schema-version handling and
+  publication-transaction atomicity.
 - `snapshotObservedAt` is the first observation of *that* revision, and is what
   `meta.sourceUpdatedAt` carries. An identical revision keeps its original
   timestamp; any differing revision gets a new one.
 - The assignment is **strictly monotonic** per snapshot key:
-  `snapshotObservedAt := max(now, previous + 1 millisecond)`.
+  `snapshotObservedAt := max(now, previous + 1 millisecond)`. This is a **local
+  monotonic publication clock**: whenever the `previous + 1 ms` branch wins — two
+  revisions inside one millisecond, or a backwards clock step — the value stops
+  being a literal wall-clock observation and is only a conservative local
+  ordering proxy. Each activation raises an operational event (ADR 0020 D1.11a).
 - `fetchedAt` is never published under this field. `generatedAt` never
   substitutes for it. `contentRevision` and `snapshotRevision` remain identity,
   not ordering.

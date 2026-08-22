@@ -96,12 +96,55 @@ snapshot revision itself.
 | D1.4 | `fetchedAt` remains GridView's request time for the current request and is **never** published under `sourceUpdatedAt`. |
 | D1.5 | `generatedAt` remains the snapshot generation time and **never** substitutes for source recency. ADR 0005's prohibition is unchanged. |
 | D1.6 | `contentRevision` remains an **equality and identity** signal. It is not temporally sortable and never orders two payloads. |
-| D1.7 | **`snapshotRevision` is a stable hash of the normalized public snapshot document** for a snapshot key, computed over the published `data` only — never over `generatedAt`, `requestId` or any other volatile envelope field. Like `contentRevision` it is equality-only and is never temporally sorted. |
+| D1.7 | **`snapshotRevision` is a stable hash of a deterministic canonical serialization of the normalized public `data` payload only**, for one snapshot key. Envelope, provenance, transport and time-varying metadata are excluded without exception. Like `contentRevision` it is equality-only and is never temporally sorted. The canonical input is specified immediately below and is binding. |
 | D1.8 | `sourceUpdatedAt` **stays required** in `SnapshotMeta` and `SeasonSnapshotMeta`. The wire shape is unchanged: a required UTC date-time string. No nullability change, no re-keying of the conflict semantics, and no client or Drift change. |
 | D1.9 | **`snapshotObservedAt` is bound to `snapshotRevision`, not to the contributing set.** If a regenerated snapshot has the *same* `snapshotRevision` as the published one, it keeps that revision's existing `snapshotObservedAt` unchanged. If it **differs** in any way — including a removal, a membership change or a filtered-set change — a new `snapshotObservedAt` is assigned. It is persisted with the revision in the same publication transaction, so a restart, redeploy or regeneration never re-derives or resets it. |
 | D1.10 | **The assignment is strictly monotonic per snapshot key**, which is what makes D1.9 safe: `snapshotObservedAt := max(now, previousSnapshotObservedAt + 1 tick)`. Because the result is *strictly* greater than the previously published value, no changed snapshot can ever sort at or before its predecessor under ADR 0005, whatever happened to the contributing resources. |
-| D1.11 | **Equality and clock regression are handled, not assumed away.** `1 tick` is one unit of the published serialization precision, which is **milliseconds** (`.000Z`) — the precision `Date.prototype.toISOString` already emits and the client already parses; the guarantee fails if a publisher truncates to whole seconds. The `max(...)` also absorbs a backwards clock step (NTP correction, host skew): the published value never regresses, at the cost of running briefly ahead of wall clock by at most the size of the regression. That excess is bounded, is the already-documented "appears newer" direction, and must raise an operational event so it is visible rather than silent. |
+| D1.11 | **Equality and clock regression are handled, not assumed away.** `1 tick` is one unit of the published serialization precision, which is **milliseconds** (`.000Z`). The guarantee fails if any stage truncates to whole seconds, so the precision is verified end to end rather than inferred from the OpenAPI `date-time` format: the Worker emits `Date.prototype.toISOString()` via `runtime/clock.ts` (`isoNow`), which always writes milliseconds; the Flutter client parses with `DateTime.parse(...).toUtc()` in `mappers/wire.dart` and `freshness_mapper.dart`, which retains sub-second precision; and Drift persists it under `DriftDatabaseOptions(storeDateTimeAsText: true)` (`lib/core/database/gridview_database.dart`), i.e. as ISO-8601 **text**, so no second-granularity Unix-epoch truncation occurs. The `max(...)` also absorbs a backwards clock step (NTP correction, host skew). |
+| D1.11a | **When the clamp fires, the value is no longer a wall-clock measurement — say so.** `max(now, previous + 1 ms)` is a **local monotonic publication clock**. Whenever the `previous + 1 ms` branch wins — because two revisions were published inside the same millisecond, or because the host clock moved backwards — the published `sourceUpdatedAt` is *not* a literal first-observation time. It remains a conservative **local ordering proxy**, it never claims anything about the provider, and each activation must raise an operational event so the substitution is visible rather than silent. The excess over wall clock is bounded by the size of the regression, and is the already-documented "appears newer" direction. |
 | D1.12 | **Resource-level `sourceObservedAt` is never published.** It stays internal reconciliation state (§10.4.1 T0/T1/T3). Only `snapshotObservedAt` reaches the wire. |
+
+#### The canonical hash input for `snapshotRevision`
+
+Binding, because an ambiguous hash input would make the revision unstable and
+the monotonic assignment meaningless.
+
+**Included:** exactly the normalized, stable, public `data` payload that the
+snapshot serves — nothing else.
+
+**Excluded, without exception:**
+
+| Excluded | Why |
+|---|---|
+| `requestId` | Per-request transport metadata |
+| `generatedAt` | Regeneration time; would make every rebuild a new revision |
+| `sourceUpdatedAt` | Derived *from* the revision — including it would be circular |
+| `snapshotObservedAt` | Internal, and likewise derived from the revision |
+| `staleAfter` | Time-varying policy output, not content |
+| ETag values | Transport metadata derived from the payload |
+| Server-stale flags | Freshness state, not content |
+| Provider observation timestamps, `fetchedAt`, `reconciledAt` | Provenance, not content |
+| Provider identifiers | Internal mapping inputs, never public (§10.8) |
+| Retry and reconciliation state | `pendingRevision`, confirmation counters, review slots |
+| `contentVersion` **when it is itself derived from the same payload** | Never fed recursively into its own hash input |
+
+**Determinism rules:**
+
+| Aspect | Rule |
+|---|---|
+| Key ordering | Object keys serialized in **lexicographic (UTF-8 code-point) order** at every level. Insertion order is never relied on. |
+| Array ordering | Arrays whose order is **semantically meaningful** (calendar rounds, classification positions, standings) are serialized in that domain order, which is part of the content. Arrays with **no** meaningful domain order are sorted by their stable GridView identifier before hashing, so an incidental reordering upstream is not a false revision change. |
+| Null vs absent | Normalized to **one** representation: an optional field that is absent and one explicitly `null` serialize identically, so a provider switching between the two is not a false change. |
+| Dates | Serialized as **ISO-8601 UTC** with a fixed precision, `Z` suffix, never a local offset — so an equivalent instant written in another zone hashes identically. |
+| Numbers | A single canonical numeric form: integers without a decimal point, decimals with a fixed normalized representation, no exponent notation, no `-0`, no trailing zeros. Fractional championship points therefore hash stably. |
+| Schema version | The snapshot `schemaVersion` **is** part of the hashed payload, because a schema change genuinely changes the public representation and must produce a new revision. |
+| Atomicity | The revision is computed, compared and — if it differs — assigned its `snapshotObservedAt` inside the **same publication transaction** that writes the snapshot, so a crash between generation and publication can never leave a revision without its timestamp or a timestamp without its revision. |
+
+**The property this buys.** A removal, a membership change, a filtered-set
+change or any normalized field change produces a **different** revision and
+therefore a new, strictly later `sourceUpdatedAt`. Re-reading or regenerating
+identical normalized data produces the **same** revision and does **not** move
+the timestamp.
 
 **What the proxy proves.** That the normalized public snapshot GridView serves
 for this key has not changed since `snapshotObservedAt`, as observed by GridView.
@@ -223,8 +266,20 @@ rather than deferred to exit. Its shape:
   `completed` and they have been swept once after its final round.
 - **Active polling and operator review are different obligations** *(corrected
   2026-08-22, PR #8 review)*. A staged correction leaves the **active sweep**
-  for a durable **operator-review backlog** that issues no request and consumes
-  no slot. Active membership is therefore genuinely bounded by the season shape
+  for a durable **operator-review backlog** that issues no *scheduled* request
+  and consumes no sweep slot. The backlog is **never automatically polled**, so
+  the scheduler cannot execute the staged-record transitions at all; they run
+  only inside an explicit, per-record **operator verification**, which is manual
+  recovery traffic charged to the existing reserve and subject to the same
+  outbound hardening, rate limiter, call counting and quota checks as any other
+  request. The backlog is itself capped at **60 records globally across
+  seasons**, with **no automatic eviction or age-based deletion**; at capacity
+  reconciliation **fails closed** — nothing is published, nothing is overwritten,
+  a typed capacity-exceeded event alarms, and publication for that resource stays
+  blocked until an operator releases capacity through disposition. The cap bounds
+  storage and operational state only; it grants no retention right, and provider
+  payload retention stays subject to the unresolved licensing, historical-retention
+  and ShareAlike gates. Active membership is therefore genuinely bounded by the season shape
   (`<= 60`), which is what makes the intervals below true: **8 weeks** normally
   and **15 weeks** under sustained priority contention for the rotation, and
   `ceil(P / 4)` weeks for a corroboration attempt — 1 week when at most 4
@@ -392,16 +447,23 @@ Binding on Phase 9B, verified at its exit and in the release sweep:
    revision**; publish only the latter as `sourceUpdatedAt`, under the strictly
    monotonic assignment in D1.10 at millisecond precision; never advance either
    on an identical revision; never publish `fetchedAt` or `generatedAt` under
-   the field.
-2. Implement the §10.4.1 state machine exactly as specified, and record the
+   the field. Compute `snapshotRevision` from the binding canonical input in
+   §1, and raise the clamp event whenever `previous + 1 ms` wins.
+2. Enforce the operator-backlog capacity of 60 records globally, with no
+   automatic eviction and no age-based deletion, failing closed with a typed
+   capacity-exceeded event and an operator alert when it is reached; and keep
+   the staged-record transitions unreachable from the scheduler, running only
+   under an explicit operator verification that is charged to the manual-recovery
+   reserve and passes through the same provider controls as any other request.
+3. Implement the §10.4.1 state machine exactly as specified, and record the
    implementation against I1-I5 individually.
-3. Implement D2.1-D2.9, including both operational events and the field
+4. Implement D2.1-D2.9, including both operational events and the field
    discipline.
-4. Enforce D5.1-D5.6: no OpenF1 request may leave the Worker until a bound is
+5. Enforce D5.1-D5.6: no OpenF1 request may leave the Worker until a bound is
    recorded, and the OpenF1 adapter is fixture-tested only.
-5. Claim in tests, exit criteria and operational documents only what the adopted
+6. Claim in tests, exit criteria and operational documents only what the adopted
    strategy delivers — best-effort ordering with mitigations and monitoring.
-6. Keep the public contract provider-neutral: none of the internal provenance
+7. Keep the public contract provider-neutral: none of the internal provenance
    fields appears in a v1 DTO.
 
 ## Reopening conditions
