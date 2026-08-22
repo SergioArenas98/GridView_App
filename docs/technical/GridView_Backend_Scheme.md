@@ -2196,10 +2196,12 @@ The following must be resolved before production launch:
 - ~~How `sourceUpdatedAt` is derived when the source publishes no recency
   signal.~~ **Closed by
   [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1:**
-  the published value is `sourceObservedAt`, GridView's first observation of the
-  currently published normalized revision. The field stays required and the wire
-  shape is unchanged; the proxy can understate data age by up to one polling
-  interval, which is documented rather than hidden.
+  the published value is `snapshotObservedAt`, GridView's first observation of
+  the currently published normalized **snapshot revision**, assigned strictly
+  monotonically per snapshot key. (The per-resource `sourceObservedAt` exists too
+  but is internal reconciliation state and is never published.) The field stays
+  required and the wire shape is unchanged; the proxy can understate data age by
+  up to one polling interval, which is documented rather than hidden.
 - Final custom API and media domains.
 - Whether the Cloudflare paid plan is enabled from the start.
 - Final public rate limit.

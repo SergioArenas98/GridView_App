@@ -61,10 +61,17 @@ older than the active release is rejected.
 
 That comparison stays well defined once the sources publish no recency signal:
 `sourceUpdatedAt` then carries GridView's first observation of the currently
-published normalized revision, which is non-decreasing per snapshot key
-([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1).
-It is a proxy for source age, so the check protects the publication sequence
-GridView itself observed — it does **not** prove upstream ordering.
+published normalized **snapshot revision**, assigned **strictly monotonically**
+per snapshot key as `max(now, previous + 1 millisecond)`
+([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1,
+D1.7-D1.11). Binding it to the snapshot revision rather than to the contributing
+resources is what keeps this rejection rule safe: a snapshot that changed only
+because an entry was **removed** still carries a later timestamp and is
+published, instead of being rejected as "older". The assignment is made in the
+same transaction that publishes the snapshot, so it survives a crash between
+generation and publication. It is a proxy for source age, so the check protects
+the publication sequence GridView itself observed — it does **not** prove
+upstream ordering.
 
 ## Rollback
 

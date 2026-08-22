@@ -818,10 +818,17 @@ components:
                 Where the upstream provider exposes source recency, this is that
                 value. Where it does **not** — which is the case for every
                 Formula 1 source GridView currently adopts — this is GridView's
-                **first-observed** timestamp for the normalized revision that is
-                currently published: the moment GridView first saw this exact
-                content. Re-reading identical content does not advance it, and
-                GridView's own request time is never published here.
+                **first-observed** timestamp for the normalized snapshot revision
+                that is currently published: the moment GridView first served
+                this exact content for this resource. Regenerating an identical
+                snapshot does not advance it, and GridView's own request time is
+                never published here.
+
+
+                Within one resource the value only ever moves forward, including
+                when the snapshot changes because an entry was removed. That
+                ordering is a property of GridView's own publication sequence,
+                not evidence about the provider.
 
 
                 Two consequences are stated rather than implied. It is an upper

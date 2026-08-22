@@ -65,11 +65,28 @@ were recorded; their acceptance as binding was not.
 
 ## Decision
 
-### 1. `sourceObservedAt`, published as `sourceUpdatedAt`
+### 1. Observation timestamps, published as `sourceUpdatedAt`
 
-**`sourceObservedAt` is defined as the time at which GridView first observed the
-normalized `contentRevision` that is currently published for a resource.** That
-value is published as `sourceUpdatedAt`.
+Two timestamps are defined, at two different levels, and only the second is ever
+published:
+
+- **`sourceObservedAt`** — the time at which GridView first observed the
+  normalized `contentRevision` currently held for **one internal resource**. It
+  drives reconciliation (§10.4.1) and is **internal only**.
+- **`snapshotObservedAt`** — the time at which GridView first observed the
+  normalized **public snapshot revision** currently published for one snapshot
+  key. **This is the value published as `meta.sourceUpdatedAt`.**
+
+**Corrected 2026-08-22 (PR #8 review, P1).** An earlier draft projected the
+snapshot-level value as the *maximum* `sourceObservedAt` across the resources
+contributing to a snapshot. That is only non-decreasing while the contributing
+set is stable. Remove the resource that currently supplies the maximum — a
+withdrawn entry, a membership change, a narrowed filtered set — and the next
+snapshot carries an **older** `sourceUpdatedAt`. ADR 0005 rule 1 then rejects it
+before its differing `contentVersion` or later `generatedAt` can be considered,
+so a legitimate removal could never reach clients. The projection is therefore
+**not** derived from the contributing resources at all; it is derived from the
+snapshot revision itself.
 
 | Rule | Statement |
 |---|---|
@@ -79,16 +96,21 @@ value is published as `sourceUpdatedAt`.
 | D1.4 | `fetchedAt` remains GridView's request time for the current request and is **never** published under `sourceUpdatedAt`. |
 | D1.5 | `generatedAt` remains the snapshot generation time and **never** substitutes for source recency. ADR 0005's prohibition is unchanged. |
 | D1.6 | `contentRevision` remains an **equality and identity** signal. It is not temporally sortable and never orders two payloads. |
-| D1.7 | The snapshot-level projection is the **latest `sourceObservedAt` among the resources contributing to that snapshot key**. For a stable contributing set this is non-decreasing, because a differing revision can only be first observed after the revision it replaces. |
+| D1.7 | **`snapshotRevision` is a stable hash of the normalized public snapshot document** for a snapshot key, computed over the published `data` only — never over `generatedAt`, `requestId` or any other volatile envelope field. Like `contentRevision` it is equality-only and is never temporally sorted. |
 | D1.8 | `sourceUpdatedAt` **stays required** in `SnapshotMeta` and `SeasonSnapshotMeta`. The wire shape is unchanged: a required UTC date-time string. No nullability change, no re-keying of the conflict semantics, and no client or Drift change. |
+| D1.9 | **`snapshotObservedAt` is bound to `snapshotRevision`, not to the contributing set.** If a regenerated snapshot has the *same* `snapshotRevision` as the published one, it keeps that revision's existing `snapshotObservedAt` unchanged. If it **differs** in any way — including a removal, a membership change or a filtered-set change — a new `snapshotObservedAt` is assigned. It is persisted with the revision in the same publication transaction, so a restart, redeploy or regeneration never re-derives or resets it. |
+| D1.10 | **The assignment is strictly monotonic per snapshot key**, which is what makes D1.9 safe: `snapshotObservedAt := max(now, previousSnapshotObservedAt + 1 tick)`. Because the result is *strictly* greater than the previously published value, no changed snapshot can ever sort at or before its predecessor under ADR 0005, whatever happened to the contributing resources. |
+| D1.11 | **Equality and clock regression are handled, not assumed away.** `1 tick` is one unit of the published serialization precision, which is **milliseconds** (`.000Z`) — the precision `Date.prototype.toISOString` already emits and the client already parses; the guarantee fails if a publisher truncates to whole seconds. The `max(...)` also absorbs a backwards clock step (NTP correction, host skew): the published value never regresses, at the cost of running briefly ahead of wall clock by at most the size of the regression. That excess is bounded, is the already-documented "appears newer" direction, and must raise an operational event so it is visible rather than silent. |
+| D1.12 | **Resource-level `sourceObservedAt` is never published.** It stays internal reconciliation state (§10.4.1 T0/T1/T3). Only `snapshotObservedAt` reaches the wire. |
 
-**What the proxy proves.** That the normalized content GridView publishes for
-this resource has not changed since `sourceObservedAt`, as observed by GridView.
+**What the proxy proves.** That the normalized public snapshot GridView serves
+for this key has not changed since `snapshotObservedAt`, as observed by GridView.
 It also keeps ADR 0005's conflict rule self-consistent for the writes GridView
-actually makes: because a replacing revision is always first observed later than
-the revision it replaces, the published `sourceUpdatedAt` is non-decreasing per
-resource, so rules 1 and 2 (older rejects, newer applies) remain well defined at
-the client.
+actually makes: D1.10 makes the published `sourceUpdatedAt` **strictly
+increasing** per snapshot key, so rule 2 (newer applies) always fires for a
+changed snapshot, rule 1 (older rejects) can never fire against GridView's own
+publication sequence, and the equal-timestamp branches — rules 3 and 4 — are
+unreachable for successive snapshots on the same key.
 
 **What the proxy does not prove.**
 
@@ -108,8 +130,10 @@ the client.
 
 **Public documentation must state the substitution.** Where a provider does not
 expose source recency, `sourceUpdatedAt` is GridView's first-observed timestamp
-for the current normalized revision. It must not be described as the actual
-upstream modification time, and no ordering guarantee may be claimed from it.
+for the currently published **normalized snapshot revision**. It must not be
+described as the actual upstream modification time, and no ordering guarantee
+about the *provider* may be claimed from it. The monotonicity in D1.10 is a
+property of GridView's own publication sequence and nothing more.
 
 ### 2. Residual reconciled-ordering risk: accepted, with monitoring
 
@@ -128,7 +152,7 @@ The following are **binding**:
 | D2.2 | A `contentRevision` previously stored for a resource and since superseded is **never re-applied**, however many consecutive checks return it. |
 | D2.3 | A **provisional** payload never replaces a **reconciled** one. It is rejected and logged, never merged. |
 | D2.4 | Reconciled payloads are **never** ordered by fetch time, `generatedAt`, `reconciledAt`, or by comparing hashes. |
-| D2.5 | A differing payload for a **settled** record is **never applied automatically**. After the required corroboration it is **retained for review**, the published snapshot is unchanged, and a staged-review event is raised. |
+| D2.5 | A differing payload for a **settled** record is **never applied automatically**. After the required corroboration it is **retained for review**, the published snapshot is unchanged, and a staged-review event is raised. **A staged correction is immutable until an operator disposes of it**: no later provider response may publish, discard, overwrite or replace it. A competing revision is tracked in a separate bounded slot and must satisfy the same two-consecutive-check corroboration independently before it becomes a second review entry; a single sighting never stages anything. |
 | D2.6 | **Identical payloads are idempotent.** They may refresh confirmation metadata (`reconciledAt`, the confirmation count) but must not rewrite the published content and must not advance `sourceObservedAt`. |
 | D2.7 | Every reconciled **overwrite** produces a safe operational event suitable for monitoring and inspection. |
 | D2.8 | A corroborated change to a **settled** record produces a **distinct** staged-review event, separate from D2.7. |
@@ -169,8 +193,13 @@ rather than deferred to exit. Its shape:
 - **Two axes are kept separate.** *Provenance state* is `provisional` or
   `reconciled` and says which source last wrote the record. *Review state* is
   `unsettled` or `settled` and says whether the record may still be changed
-  automatically. `pendingRevision` and `staged` are markers on the review axis,
-  never on the provenance axis.
+  automatically. `pendingRevision`, `staged` and `review_locked` are markers on
+  the review axis, never on the provenance axis.
+- **Review state is bounded by construction:** at most one immutable
+  `stagedCorrection`, at most one independently corroborated
+  `competingCorrection`, and at most one transient `candidateRevision` — never
+  a growing list of provider payloads. A second corroborated correction locks
+  the record for operator escalation instead of displacing the first.
 - **Settling predicate:** three consecutive checks returning the published
   revision, evaluated **only from the `+24h` check onward**, with no pending
   revision outstanding. In the ordinary case — first reconciled value at check 1
@@ -184,19 +213,29 @@ rather than deferred to exit. Its shape:
   follow settlement and are bounded by budget rather than by count.
 - **Bounded slow path:** after settlement the same classification resource joins
   a **fixed-budget weekly rotating sweep** (8 slots, one slot = one
-  classification request), ordered by a persisted per-resource `lastSweptAt`,
-  with failed reads consuming their slot so a failing resource cannot starve the
-  queue, and with corroboration priority capped at **half the budget** so the
-  rotation always keeps at least 4 slots. Request volume is constant as
-  completed sessions accumulate; the revisit interval lengthens to a **finite,
-  calculable maximum** — 8 weeks normally and 15 weeks under sustained priority
-  contention, at a 60-resource season. Resources leave the sweep once their
-  season is `completed`, they have been swept once after its final round, and no
-  staged payload is outstanding.
-- **A staged payload is never abandoned.** Where a differing revision has no
-  further check before the ceiling, it is retained and staged for review rather
-  than discarded, and a staged resource stays in the sweep until an operator
-  resolves it.
+  classification request), with failed reads consuming their slot so a failing
+  resource cannot starve the queue, and with corroboration priority capped at
+  **half the budget** so the rotation always keeps at least 4 slots. Rotation
+  order is the persisted `lastSweptAt`; priority order is the persisted
+  `(lastPriorityAttemptAt, firstSeenAt, resourceKey)` tuple, drawn
+  least-recently-attempted first so a new candidate can never permanently
+  overtake an older one. Resources leave the sweep once their season is
+  `completed` and they have been swept once after its final round.
+- **Active polling and operator review are different obligations** *(corrected
+  2026-08-22, PR #8 review)*. A staged correction leaves the **active sweep**
+  for a durable **operator-review backlog** that issues no request and consumes
+  no slot. Active membership is therefore genuinely bounded by the season shape
+  (`<= 60`), which is what makes the intervals below true: **8 weeks** normally
+  and **15 weeks** under sustained priority contention for the rotation, and
+  `ceil(P / 4)` weeks for a corroboration attempt — 1 week when at most 4
+  candidates are eligible, 15 weeks at the absolute ceiling. The previous
+  unconditional "within 7 days" corroboration claim is **withdrawn**: 4 priority
+  slots cannot serve 5 or more candidates in one sweep.
+- **A staged payload is never abandoned and never overwritten.** It is retained
+  until explicit operator disposition; season completion removes a resource from
+  the active sweep but never from the backlog, so it cannot orphan or discard a
+  staged payload. After disposition the resource re-enters the sweep only if it
+  is still inside the active observation horizon.
 - **Failure is never a state change.** A failed, missing, malformed, empty or
   rate-limited response writes nothing, confirms nothing and discards nothing;
   the previous published snapshot remains served throughout (Evaluation §10.6).
@@ -280,7 +319,8 @@ that decision.
 - **Monitoring becomes Phase 9B scope**, not optional polish: a reconciled
   overwrite event, a distinct staged-review event, and the field discipline in
   D2.9.
-- **Observation state must be persisted at the edge.** `sourceObservedAt`,
+- **Observation state must be persisted at the edge.** `snapshotRevision` and
+  `snapshotObservedAt` per published snapshot key, plus `sourceObservedAt`,
   `contentRevision`, `pendingRevision`, `supersededRevisions`, the confirmation
   count and the review state all have to survive a restart, which is part of the
   already-recorded gap G9 (`services/edge-api/`). **No Drift schema change is
@@ -347,9 +387,12 @@ inferred figure.
 
 Binding on Phase 9B, verified at its exit and in the release sweep:
 
-1. Derive and persist `sourceObservedAt` per resource revision; publish it as
-   `sourceUpdatedAt`; never advance it on an identical re-read; never publish
-   `fetchedAt` under it.
+1. Derive and persist `sourceObservedAt` per resource revision as **internal**
+   reconciliation state, and `snapshotObservedAt` per **published snapshot
+   revision**; publish only the latter as `sourceUpdatedAt`, under the strictly
+   monotonic assignment in D1.10 at millisecond precision; never advance either
+   on an identical revision; never publish `fetchedAt` or `generatedAt` under
+   the field.
 2. Implement the §10.4.1 state machine exactly as specified, and record the
    implementation against I1-I5 individually.
 3. Implement D2.1-D2.9, including both operational events and the field

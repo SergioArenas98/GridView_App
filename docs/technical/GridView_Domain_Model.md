@@ -532,7 +532,7 @@ per-resource freshness (Home, standings).
 | Field | Type | R/N | Meaning |
 |---|---|---|---|
 | `generatedAt` | date-time (UTC) | R | When the snapshot was generated. |
-| `sourceUpdatedAt` | date-time (UTC) | N | Recency of the upstream data. Where the provider publishes no recency signal — which is the case for every currently adopted Formula 1 source — this is GridView's **first-observed** timestamp for the normalized revision currently published, not the upstream modification time. See [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1. |
+| `sourceUpdatedAt` | date-time (UTC) | N | Recency of the upstream data. Where the provider publishes no recency signal — which is the case for every currently adopted Formula 1 source — this is GridView's **first-observed** timestamp for the normalized **snapshot revision** currently published, not the upstream modification time. See [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1. |
 | `staleAfter` | date-time (UTC) | N | When the data should be considered stale. |
 | `contentVersion` | string | N | Curated-content version identifier. |
 | `stale` | boolean | N | Derived: whether the data is currently stale. |
@@ -568,7 +568,8 @@ metadata schemas rather than one permissive schema with globally-nullable fields
   `schemaVersion`, `sourceUpdatedAt`, `staleAfter` and `contentVersion`. Used by
   non-season-scoped snapshot responses (the content manifest). `sourceUpdatedAt`
   stays **required**; where the upstream source exposes no recency signal it
-  carries GridView's first observation of the current normalized revision
+  carries GridView's first observation of the current normalized **snapshot
+  revision**, assigned strictly monotonically per snapshot key
   ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1),
   which can make data appear newer than it is by up to one polling interval and
   which orders nothing GridView did not itself observe in that order.

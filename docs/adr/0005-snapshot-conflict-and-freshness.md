@@ -10,12 +10,16 @@
 > `sourceUpdatedAt` *means* for a source that publishes no recency signal.
 > Neither adopted Formula 1 source (OpenF1, Jolpica) exposes an update
 > timestamp or version, so for those sources the published value is GridView's
-> **first-observed** timestamp for the current normalized revision — a proxy for
-> source age rather than the upstream modification time, which can make data
-> appear newer than it is by up to one polling interval. The prohibitions below
-> are untouched: `generatedAt` and fetch time still never substitute for source
-> recency, and `contentVersion` is still compared by equality only. See ADR 0020
-> §1.
+> **first-observed** timestamp for the currently published **normalized snapshot
+> revision** — a proxy for source age rather than the upstream modification
+> time, which can make data appear newer than it is by up to one polling
+> interval. That value is assigned **strictly monotonically per snapshot key**
+> (ADR 0020 D1.10), so rule 2 below always fires for a changed snapshot and
+> rule 1 can never reject GridView's own publication sequence — including when a
+> snapshot changes because an entry was **removed** or a membership or filtered
+> set changed. The prohibitions below are untouched: `generatedAt` and fetch
+> time still never substitute for source recency, and `contentVersion` is still
+> compared by equality only. See ADR 0020 §1.
 
 ## Context
 
@@ -38,10 +42,11 @@ carries `meta.generatedAt`, and season-scoped snapshots additionally carry
   is what actually determines whether one snapshot is more recent than another.
   *(Qualified by [ADR 0020](0020-provider-source-observation-and-reconciliation.md)
   §1: where the upstream source publishes no recency signal, the value carried
-  here is GridView's first observation of the current normalized revision. It
-  keeps the rules below well defined — it is non-decreasing per snapshot key —
-  but it is a proxy for source age, and it does not order two payloads that
-  GridView did not itself observe in that order.)*
+  here is GridView's first observation of the currently published normalized
+  **snapshot revision**, assigned strictly monotonically per snapshot key. It
+  keeps the rules below well defined for any snapshot change, including a
+  removal or a membership change — but it is a proxy for source age, and it does
+  not order two payloads that GridView did not itself observe in that order.)*
 - **`generatedAt`** — the time the *GridView snapshot document was produced*. A
   snapshot generated later can still carry **older** source data (a delayed or
   re-run generation), so `generatedAt` is not a safe recency signal on its own.

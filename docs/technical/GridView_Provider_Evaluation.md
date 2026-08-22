@@ -1261,7 +1261,8 @@ reconciled write lands, and independently `unsettled` until it settles.
 | `reconciled.unsettled+pending` | As above, with a differing revision seen **once** and awaiting corroboration. |
 | `reconciled.settled` | The published revision has settled. The normal per-session cadence has terminated and the resource is on the slow sweep. |
 | `reconciled.settled+pending` | Settled, with a differing revision seen once on the slow path and awaiting corroboration. |
-| `reconciled.settled+staged` | A differing revision was corroborated on the slow path. It is **retained for review**; the published snapshot is unchanged. |
+| `reconciled.settled+staged` | A differing revision was corroborated on the slow path and is **retained for operator review**; the published snapshot is unchanged. The record leaves the active sweep and moves to the **operator-review backlog** (below). |
+| `reconciled.review_locked` | A staged correction **and** a second, independently corroborated competing correction both exist. No further automatic candidate tracking happens; the record waits in the backlog for operator disposition. |
 
 ##### Persisted per resource
 
@@ -1272,13 +1273,26 @@ published), `pendingRevision` with the observation time at which it was first
 seen, `supersededRevisions`, `sourceObservedAt`, the review state and
 `settledAt`. All of it must survive a restart — ADR 0020 D1.3.
 
+**Review slots are fixed in number, so the record cannot grow without bound.**
+A settled resource holds at most **three** review-related entries, and never a
+list of provider payloads:
+
+| Slot | Cardinality | Contents |
+|---|---|---|
+| `stagedCorrection` | at most 1, **immutable once written** | `{revision, payload, firstSeenAt, corroboratedAt}`. Only an operator disposes of it. |
+| `candidateRevision` | at most 1, transient | `{revision, firstSeenAt, consecutiveSightings}`. Never published, never itself a review item until corroborated. |
+| `competingCorrection` | at most 1, **immutable once written** | A second independently corroborated correction. Writing it puts the record in `review_locked`. |
+
+Plus two scheduling keys, both persisted and both restart-safe: `lastSweptAt`
+(rotation order) and `lastPriorityAttemptAt` (priority order).
+
 ##### Cadence
 
 | Phase | Checks | Terminates at |
 |---|---|---|
 | **Dense** | +5, +9, +15, +24 hours from the Jolpica start anchor (§10.4) | Always after 4 checks |
 | **Daily continuation** | Once per day, **only while `unsettled`** | Settlement, or the deadline below |
-| **Deadline ceiling** | — | **`jolpica_anchor + 14 days`** — the same scheduled session start the dense offsets run from (§10.4), never the first-publication time, so the ceiling is fixed when the session is scheduled and cannot be pushed back by a late first result. At it the resource is **settled on deadline** whatever its confirmation count, and any outstanding `pendingRevision` is **not applied** but is retained as a staged payload with a staged-review event, so it is never lost silently |
+| **Deadline ceiling** | — | **`jolpica_anchor + 14 days`** — the same scheduled session start the dense offsets run from (§10.4), never the first-publication time, so the ceiling is fixed when the session is scheduled and cannot be pushed back by a late first result. At it the resource is **settled on deadline** whatever its confirmation count, and any outstanding `pendingRevision` is **not applied** but is retained as a staged payload with a staged-review event, so it is never lost silently. Such an entry is flagged **uncorroborated** — it was seen once and the ceiling arrived before a second check — so the operator can weigh it accordingly. Like any staged record it goes to the operator backlog, not to the active sweep |
 | **Slow post-settlement sweep** | A fixed-budget weekly rotating sweep (below) | The resource's season is `completed`, it has been swept once after that season's final round, **and no staged payload is outstanding** |
 
 Maximum in the **normal per-session cadence**: **4 dense + 13 daily = 17
@@ -1322,11 +1336,18 @@ indistinguishable from a corroborated one.
 
 ##### Transitions
 
-**Evaluation order is part of the design.** `absent` is tested first (T0), then
-the superseded-revision ledger (T5), then the identical-revision case (T1), then
-the differing-revision branches. Testing them in any other order either
-dereferences absent state or lets a superseded revision reach the corroboration
-path.
+**Evaluation order is part of the design.** `review_locked` is tested **first**
+(T11d) and is terminal — a locked record ignores every observation until an
+operator acts. Then `absent` (T0), then the superseded-revision ledger (T5),
+then the identical-revision case (T1), then the differing-revision branches,
+with the `settled+staged` family (T11/T11b/T11c) taking precedence over the
+unsettled ones for a staged record. Testing them in any other order either
+dereferences absent state, lets a superseded revision reach the corroboration
+path, or lets an observation mutate a record that is waiting on a human.
+
+**Automatic publication is prohibited in every branch below except T0, T0b and
+T3** — the unsettled-path writes. No settled, pending, staged or locked branch
+publishes anything; only an operator does, through T12.
 
 | # | From | Observation | Effect |
 |---|---|---|---|
@@ -1337,12 +1358,16 @@ path.
 | T3 | `reconciled.unsettled+pending` | The **same** revision as `pendingRevision`, still not superseded | **Corroborated: apply.** One transaction: `supersededRevisions += publishedRevision`; `publishedRevision := pendingRevision`; `sourceObservedAt` := the time recorded at **T2**, not now; `consecutiveConfirmations` := 2; `pendingRevision` := null. Raises the reconciled-overwrite event. |
 | T4 | `reconciled.unsettled+pending` | A **third**, different revision | **Pending replaced.** The previous pending was not corroborated. `pendingRevision` := the third revision (if not superseded); `consecutiveConfirmations` := 0; no write. After 3 consecutive non-corroborating sightings, raise the unstable-source event and continue on cadence to the deadline. |
 | T5 | any | A revision **in `supersededRevisions`** | **Rejected.** No write, no pending. `consecutiveConfirmations` := 0, because the check did not return the published revision. |
-| T6 | any | Failed, missing, malformed, empty or rate-limited response | **No state change.** Nothing written, nothing confirmed, nothing discarded: `consecutiveConfirmations`, `pendingRevision` and `supersededRevisions` are all untouched, so a failure neither counts as corroboration nor destroys a pending revision. The check still counts against the cadence and feeds provider health. Absence is never written as an empty result (§10.9 conflict 6), and the previous snapshot stays served (§10.6). |
+| T6 | any | Failed, missing, malformed, empty or rate-limited response | **No state change.** Nothing written, nothing confirmed, nothing discarded: `consecutiveConfirmations`, `pendingRevision`, `candidateRevision`, `stagedCorrection`, `competingCorrection` and `supersededRevisions` are all untouched, so a failure neither counts as corroboration nor destroys a pending revision, a candidate or a staged correction. The check still counts against the cadence — and, on the sweep, still consumes its slot and advances the scheduling keys — and it feeds provider health. Absence is never written as an empty result (§10.9 conflict 6), and the previous snapshot stays served (§10.6). |
 | T7 | `reconciled.*` | A `provisional` payload | **Rejected and logged**, never merged (§10.9). |
-| T8 | `reconciled.settled` | A differing revision, not superseded | **First sighting on the slow path.** No write; `pendingRevision` := it; the resource is promoted to a **priority slot in the next weekly sweep**, so corroboration is reachable within 7 days rather than a full rotation (I1). |
-| T9 | `reconciled.settled+pending` | The **same** revision again | **Staged, never applied.** The payload is retained, the published snapshot is unchanged, and the distinct staged-review event is raised. Only an operator decision can publish it. |
-| T10 | `reconciled.settled+pending` | The published revision, or a third revision | `pendingRevision` cleared or replaced exactly as T1/T4, and the resource returns to the ordinary rotation. The T4 bound applies here too: after 3 consecutive non-corroborating sightings the unstable-source event is raised and the resource stops claiming a priority slot. |
-| T11 | `reconciled.settled+staged` | **Any** observation | **Never published automatically, in any branch.** The staged revision seen again refreshes its last-seen time and corroboration count; the published revision seen again is recorded but does **not** clear the staged payload; a third differing revision **replaces** it and re-raises the staged-review event. The resource stays in the sweep and **may not leave the sweep set while a staged payload is unresolved**, so the season-completed exit can never orphan an operator decision. Only an operator publishes or discards a staged payload. |
+| T8 | `reconciled.settled` | A differing revision, not superseded | **First sighting on the slow path.** No write; `pendingRevision` := it, with `firstSeenAt`; `lastPriorityAttemptAt` := that same time. The resource joins the **priority queue** for the next sweeps. It is *not* promoted ahead of older candidates — see the priority ordering rule below. |
+| T9 | `reconciled.settled+pending` | The **same** revision again | **Corroborated: staged, never applied.** `stagedCorrection` := the payload (immutable from here); `pendingRevision` := null; the staged-review event is raised. The resource **leaves the active sweep** for the operator-review backlog. Only an operator decision can publish or discard it. |
+| T10 | `reconciled.settled+pending` | The published revision, or a third revision | `pendingRevision` cleared or replaced exactly as T1/T4; the resource stays in the active sweep and in the ordinary rotation. The T4 bound applies here too: after 3 consecutive non-corroborating sightings the unstable-source event is raised and the resource stops claiming a priority slot. |
+| T11 | `reconciled.settled+staged` | **Any** observation (a late in-flight response, or an operator-triggered re-read — the record is no longer polled automatically) | **`stagedCorrection` is immutable. Nothing here may publish, discard, overwrite or replace it.** The staged revision seen again only refreshes its last-seen counter. The published revision seen again is recorded and changes nothing. A **different** revision B is written to the separate `candidateRevision` slot with `consecutiveSightings := 1` and raises the *candidate-observed* event — **one sighting never stages B**. |
+| T11b | `reconciled.settled+staged` with a candidate | The **same** revision B again | **B is corroborated independently**, by the same two-consecutive-check rule as D2.5. `competingCorrection` := B; `candidateRevision` := null; the *candidate-corroborated* event is raised and the record becomes `review_locked`. `stagedCorrection` is still untouched. Both entries now await one operator decision. |
+| T11c | `reconciled.settled+staged` with a candidate | The published revision, or a third revision C | The candidate failed to corroborate: `candidateRevision` is cleared or replaced by C with `consecutiveSightings := 1`. `stagedCorrection` is untouched. Nothing is staged and nothing is published. |
+| T11d | `reconciled.review_locked` | **Any** observation | **Terminal until an operator acts.** No slot is written, no candidate is tracked, nothing is published. The record simply waits in the backlog. This is the cap that keeps the representation bounded at two corroborated entries. |
+| T12 | Any staged or locked record | **Operator disposition** — publish, discard, or replace | The only transition that may change published content from a staged entry. The chosen payload is published (or nothing is), `supersededRevisions` is updated as for T3, the *review-disposed* event records who decided and what was chosen, and every review slot is cleared. The resource then re-enters the **active sweep** if it is still inside the active observation horizon (its season is not yet completed-and-swept); otherwise it retires. |
 
 Checked against the cases the earlier drafts broke:
 
@@ -1357,7 +1382,7 @@ Checked against the cases the earlier drafts broke:
 | Daily check on **day 13** | Day 14 by the **deadline** only: confirmations reach 2, never 3. Settles on deadline |
 | Daily check on **day 14** (the last) | Immediately, on the **deadline** only, with one confirmation. Settles on deadline |
 | A corroborated change applied at any later check | `consecutiveConfirmations` is 2 on application, so **one** further identical check at or after +24h settles it; otherwise the 14-day deadline does |
-| A differing revision first sighted on **day 14** | It has no further check, so it is **staged** at the deadline rather than corroborated — retained, unpublished, with a staged-review event. This is where I1 is discharged by the operator path instead of by another check, and it is the only such case |
+| A differing revision first sighted on **day 14** | It has no further check, so it is **staged uncorroborated** at the deadline — retained, unpublished, flagged as seen once, with a staged-review event. This is where I1 is discharged by the operator path instead of by another check, and it is the only such case |
 
 In the **ordinary** case settlement lands exactly at the end of the dense
 sequence, so the daily continuation costs nothing at all.
@@ -1371,14 +1396,17 @@ weekly sweep with a fixed request budget**, modelled at **8 slots per sweep**.
 | Property | Rule |
 |---|---|
 | **Work unit** | One slot = **one request to one classification endpoint** (`results`, `sprint` or `qualifying`) for one session. The sweep re-reads the classification **only** — it never pulls the standings calls that §11.1 counts alongside a *dense* race check, so a race re-read costs 1 request here, not 3. Slots and requests are therefore the same unit. |
-| **Queue membership** | `reconciled.settled`, `reconciled.settled+pending` and `reconciled.settled+staged` only. `absent`, `provisional` and every `unsettled` state are on the per-session cadence instead and are **never** in this queue, so a resource is in exactly one of the two at any time. |
-| **Entry** | A resource joins at the moment it settles — by predicate or on deadline — with its last-checked time initialised to its settlement time, so it takes its turn behind resources that settled earlier rather than jumping the queue. |
+| **Queue membership** | **`reconciled.settled` and `reconciled.settled+pending` only.** Every resource is in exactly one of four disjoint sets: the **per-session cadence** (`absent`, `provisional`, every `unsettled` state), the **active sweep** (the two states above), the **operator-review backlog** (`settled+staged`, `review_locked`), or **retired**. Nothing is ever counted in two of them. |
+| **Operator-review backlog** | A record with a `stagedCorrection` leaves the active sweep at T9 and moves here. The backlog is **durable but not polled**: it consumes **no sweep slot**, makes **no provider request**, and does **not** count against the active-membership bound. It is retained until operator disposition (T12), for as long as that takes. |
+| **Entry** | A resource joins at the moment it settles — by predicate or on deadline — with `lastSweptAt` initialised to its settlement time, so it takes its turn behind resources that settled earlier rather than jumping the queue. A resource that settles on deadline **while holding a staged payload** goes straight to the operator backlog instead and never enters the sweep. |
 | **Cursor** | There is **no single global cursor**. The order is derived from per-resource `lastSweptAt` persisted with the resource record, and each sweep selects the least-recently-swept eligible resources. Deriving the order from persisted per-resource state rather than an index makes it restart-safe, and makes insertion and removal ordinary writes. |
-| **Failed attempts** | A failed, empty, malformed or rate-limited read is T6 — no state change — but it **consumes its slot and still advances `lastSweptAt`**. This is the fairness rule: if a failure left the resource at the head of the queue it would occupy a slot every week and starve everything behind it. A resource failing repeatedly is surfaced by provider health, not by monopolising the sweep. |
-| **Priority reservation** | T8 corroboration re-reads are served first but may take **at most half the budget (4 of 8 slots)**; unused priority slots fall through to the rotation. So the rotation is guaranteed **at least 4 slots every sweep**, whatever the source is doing. Without this reservation a wave of pending revisions could consume the whole budget indefinitely and the maximum revisit interval would not be finite. |
-| **Exit** | The season is `completed`, the resource has been swept once after that season's final round, **and** it holds no staged payload (T11). |
+| **Failed attempts** | A failed, empty, malformed or rate-limited read is T6 — no state change to the review slots — but it **consumes its slot and still advances the scheduling key it was drawn on** (`lastSweptAt` for a rotation slot, `lastPriorityAttemptAt` for a priority slot). This is the fairness rule: if a failure left the resource at the head of its queue it would occupy a slot every week and starve everything behind it. A resource failing repeatedly is surfaced by provider health, not by monopolising the sweep. |
+| **Priority reservation** | T8 corroboration re-reads are served first but may take **at most half the budget (4 of 8 slots)**; unused priority slots fall through to the rotation, so the rotation is guaranteed **at least 4 slots every sweep**. Without this reservation a wave of pending revisions could consume the whole budget indefinitely and the rotation's maximum revisit interval would not be finite. |
+| **Priority ordering** | Priority candidates are drawn **least-recently-attempted first**, ordered by the persisted tuple `(lastPriorityAttemptAt ASC, pendingRevision.firstSeenAt ASC, resourceKey ASC)`. `lastPriorityAttemptAt` is **initialised at T8 to the candidate's own `firstSeenAt`**, so a brand-new candidate sorts by its arrival time and cannot overtake an older one; and every attempt — successful or failed — sets it to `now`, sending that candidate to the back. Both keys are persisted with the record and the third is a stable identifier, so the order is total, deterministic and restart-safe, with no global cursor. |
+| **Exit from the active sweep** | The season is `completed` **and** the resource has been swept once after that season's final round. A staged payload no longer holds a resource in the sweep — it is in the backlog instead, which season completion does not touch, so **season completion can neither orphan nor discard a staged payload**. |
+| **Re-entry** | After operator disposition (T12) the resource re-enters the active sweep **only if it is still inside the active observation horizon** — its season not yet completed-and-swept. Otherwise it retires: the season is closed and there is nothing further to observe. |
 
-**Maximum revisit interval, calculated.** Using the §11.3 season assumptions —
+**Maximum active membership, calculated.** Using the §11.3 season assumptions —
 24 Grands Prix of which 6 are sprint weekends — and the §10.3 polled sessions:
 
 ```text
@@ -1386,24 +1414,86 @@ standard weekend  = qualifying + race                        = 2 resources
 sprint weekend    = sprint qualifying + sprint + qualifying + race
                                                              = 4 resources
 
-season total      = 18 x 2 + 6 x 4                           = 60 resources
+season total, A   = 18 x 2 + 6 x 4                           = 60 resources
+```
+
+`A <= 60` is now a **true** bound on active sweep membership, because staged
+records leave for the backlog rather than accumulating in the queue. Under the
+previous exit rule an unresolved staged record stayed in the sweep indefinitely,
+so membership grew across seasons and both figures below were unsound — that was
+the P2 finding, and moving the backlog out is what repairs them.
+
+**Rotation revisit interval.**
+
+```text
+rotation slots per sweep  >= 4   (8 budget - at most 4 priority)
+                          =  8   when no priority candidate exists
 
 full rotation, no priority contention   = ceil(60 / 8) =  8 weeks
-full rotation, sustained worst-case
-priority contention                     = ceil(60 / 4) = 15 weeks
+full rotation, sustained max contention = ceil(60 / 4) = 15 weeks
 ```
 
 **So a settled classification resource is re-read at most every 15 weeks, and
 normally every 8**, at the season's maximum population; earlier in a season the
-population is smaller and the interval shorter. Both figures are finite and
-calculable from published assumptions, which is what I4 requires — the design
-owes a deterministic bound, not a constant frequency. The 15-week figure is
-itself pessimistic, because T4/T10 stop any one resource from holding a priority
-slot for more than 3 consecutive sweeps.
+population is smaller and the interval shorter. `8 weeks` is the **modelled
+ordinary case**; `15 weeks` is the **mathematical upper bound** under sustained
+maximum priority contention.
+
+**Corroboration latency — the honest bound.**
+
+> **Corrected 2026-08-22 (PR #8 review, P2).** An earlier draft claimed T8
+> corroboration was reachable "within 7 days". With 4 priority slots that is
+> false as soon as **5 or more** candidates are eligible in the same sweep, and
+> no ordering rule said which 4 were served. The unconditional claim is
+> withdrawn and replaced by the queue-dependent bound below.
+
+Let `P` be the number of eligible priority candidates, and `S = 4` the priority
+slots per sweep. Under the strict least-recently-attempted order above, a
+candidate at queue position `k` is attempted after at most `ceil(k / S)` sweeps,
+and no later arrival can overtake it:
+
+```text
+attempt within   ceil(P / 4) sweeps  =  ceil(P / 4) weeks
+
+P <= 4    ->  1 week   (the ordinary case: corrections are rare)
+P = 20    ->  5 weeks
+P = 60    -> 15 weeks  (absolute worst case, P <= A <= 60)
+```
+
+Three qualifications, stated rather than glossed:
+
+- The bound is on **attempts**, not on corroboration outcomes. A provider that
+  never answers cannot be corroborated by any design; a failed attempt sends the
+  candidate to the back of the queue, so `f` failures cost up to
+  `(f + 1) x ceil(P / 4)` weeks. That is a provider-availability limit, not a
+  scheduling defect.
+- `P <= 60` is the absolute ceiling. `P` reaching 60 means every settled
+  classification in the season simultaneously changed, which would itself be an
+  unstable-source signal long before the queue mattered.
+- The 15-week figures are pessimistic because T4/T10 stop any one resource from
+  holding a priority slot for more than 3 consecutive sweeps.
+
+Both bounds are finite and calculable from published assumptions, which is what
+I4 requires — the design owes a deterministic bound, not a constant frequency.
+
+**I4 is satisfied, and is not being reinterpreted.** I4 requires that a late
+correction to a classification resource stay **observable** through a slow
+ingestion path that re-reads *that* resource. That path is the sweep, and it
+runs for every settled resource inside the active observation horizon. Once a
+correction has been observed, corroborated and staged, the I4 path has
+**succeeded** for that resource: the correction is in front of a human. Keeping
+the record in the polling rotation afterwards would add nothing to
+observability — the change is already detected — while making the membership
+bound false. I4 requires corrections to be observable; it does not require
+indefinite provider polling of records whose correction has already been
+captured, and nothing above weakens it.
 
 **Request volume stays constant while the interval stretches:** the cost is
-capped at 8 requests per week regardless of how many sessions have accumulated,
-and the set does not grow year on year because of the exit rule.
+capped at 8 requests per week regardless of how many sessions have accumulated
+or how large the operator backlog grows, and the active set does not grow year
+on year because of the exit rule. **The backlog is a retention obligation, not a
+polling obligation** — it holds records durably and issues no request, so it can
+never affect the request budget or the intervals above.
 
 **Why the daily standings job cannot substitute for this.** I4 is about the
 resource that changed. §11.1 models a session classification and the
@@ -1423,10 +1513,14 @@ Structured events, following the existing Worker logging conventions
 |---|---|
 | `reconciled.published` | T0 / T0b — a first reconciled write, or a reconciled payload replacing a provisional one |
 | `reconciled.overwrite` | T3 — a reconciled payload replaced another. **Every** overwrite, per ADR 0020 D2.7 |
-| `reconciled.staged_correction` | T9, and a pending revision retained unapplied at the 14-day deadline. Distinct from the above, per D2.8 |
+| `reconciled.staged_correction` | T9, and a pending revision retained unapplied at the 14-day deadline. **The existing staged correction.** Distinct from the above, per D2.8 |
+| `reconciled.candidate_observed` | T11 — a **competing candidate** was seen once against an already-staged correction. Not a staging event: nothing is staged and nothing is published |
+| `reconciled.candidate_corroborated` | T11b — that candidate met the two-consecutive-check rule independently and became a second review entry; the record is now `review_locked` |
+| `reconciled.review_disposed` | T12 — an **operator** published, discarded or replaced a review entry. The only event that can accompany a content change out of the backlog |
 | `reconciled.settled` / `reconciled.settled_on_deadline` | The predicate fired, or the 14-day ceiling did |
 | `reconciled.rejected_superseded` | T5 |
 | `reconciled.unstable_source` | Three consecutive non-corroborating sightings (T4) |
+| `reconciled.clock_regression` | The monotonic assignment in ADR 0020 D1.10 had to advance a snapshot timestamp past a backwards-moving wall clock |
 
 Field discipline is binding (D2.9): the GridView resource key, an enumerated
 event name and decision, revision **hashes truncated to a fixed length**,
@@ -1438,10 +1532,10 @@ strings, and nothing personal.** Provider identifiers stay internal (§10.8).
 
 | # | Satisfied by |
 |---|---|
-| I1 | While unsettled, the daily continuation runs precisely *because* the resource is unsettled, so a pending revision always has a next check; T6 stops a failed check from consuming it; the deadline stages rather than silently drops it. While settled, T8 promotes the resource into the next weekly sweep, bounding corroboration at 7 days. |
+| I1 | While unsettled, the daily continuation runs precisely *because* the resource is unsettled, so a pending revision always has a next check; T6 stops a failed check from consuming it; the deadline stages rather than silently drops it. While settled, T8 puts the candidate in a **totally ordered, least-recently-attempted priority queue** whose position can only improve, so an attempt is reached within `ceil(P / 4)` sweeps — 1 week in the ordinary case and at most 15 weeks at the absolute ceiling. Finite and defined, which is what I1 requires; the withdrawn "within 7 days" claim was a latency promise, not the invariant. |
 | I2 | The predicate counts **3 consecutive identical reads from wherever the revision was first published**, and is evaluated at every check from +24h onward. The table above walks first-publication at checks 1, 2, 3, 4 and later; every one settles. Nothing depends on a window that has already passed. |
-| I3 | 4 dense checks; at most 13 daily continuations; a hard `anchor + 14 days` ceiling; and a post-settlement sweep whose cost is a fixed weekly budget rather than a per-session timer, with a defined exit from the sweep set. Nothing accumulates without bound. |
-| I4 | The sweep re-reads **the same classification resource** — `results`, `sprint` or `qualifying` for that session — which is what feeds the §10.9 staged-review path. The daily standings job is explicitly **not** counted towards this. |
+| I3 | 4 dense checks; at most 13 daily continuations; a hard `anchor + 14 days` ceiling; and a post-settlement sweep whose cost is a fixed weekly budget rather than a per-session timer, with a defined exit from the sweep set. Staged records leave the sweep for the **unpolled** operator backlog, so an unresolved review can never grow the active membership or the request budget. Nothing that issues a request accumulates without bound. |
+| I4 | The sweep re-reads **the same classification resource** — `results`, `sprint` or `qualifying` for that session — which is what feeds the §10.9 staged-review path, for every settled resource inside the active observation horizon. The daily standings job is explicitly **not** counted towards this. Once a correction is staged the I4 path has *succeeded* for that resource and it moves to the backlog; that is the completion of I4, not an exception to it (see the sweep section). |
 | I5 | Publication is unaffected by settling: the ordinary case publishes at check 1, `+5h` after the scheduled start. Settlement at `+24h` terminates polling; it does not delay data. The documented C7 miss where Jolpica omits the optional `time` (§10.4) is unchanged. |
 
 ##### Resulting request-volume assumptions
@@ -1504,7 +1598,7 @@ Internal only. Every synchronized resource retains:
 | `contentRevision` | Stable hash of the normalized payload — **revision identity, not ordering**. A hash carries no temporal information, so it can establish that two payloads are the same or different but never which came first. Used for equality (idempotent re-checks), for corroboration, and as the key of the superseded ledger. It does **not** order reconciled writes; nothing available from these sources does (§10.9.1). |
 | `pendingRevision` | A differing reconciled payload seen once and awaiting corroboration on the next check (§10.9). Null when none. |
 | `supersededRevisions` | Every `contentRevision` **previously stored for this resource and since replaced**. A revision in this set is never re-applied. Note the limit: it can only block revisions GridView once stored, so an older payload it never stored is **not** caught (§10.9.1). |
-| `sourceObservedAt` | When the **current** `contentRevision` was **first** observed. **Adopted** as the value published under the contract-required `sourceUpdatedAt` ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1, E5a decided). Persisted with the revision; a restart or an identical re-fetch never resets it (§10.7.1). |
+| `sourceObservedAt` | When the **current** `contentRevision` was **first** observed for this resource. **Internal reconciliation state only — never published** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) D1.12). Persisted with the revision; a restart or an identical re-fetch never resets it (§10.7.1). |
 | `settled` | Whether the resource's value has stopped moving, under the settling predicate specified in §10.4.1. A settled record never accepts a change automatically. |
 | `conflictOutcome` | Which rule in §10.9 fired, and what it decided. |
 
@@ -1529,35 +1623,62 @@ Neither OpenF1 nor Jolpica publishes an update timestamp, a version or a usable
 `Last-Modified` (§8.6). And §10.9 forbids substituting fetch or generation time
 for source recency — as does ADR 0005 itself.
 
-**The adopted rule.** Publish `sourceUpdatedAt = sourceObservedAt`: the time at
-which the **current** `contentRevision` was **first** observed. The field stays
-**required** and keeps its wire shape — a UTC date-time string. Nothing becomes
-nullable, the conflict semantics are not re-keyed, and no client or Drift change
-follows.
+**The adopted rule works at two levels, and only the second is published.** The
+field stays **required** and keeps its wire shape — a UTC date-time string.
+Nothing becomes nullable, the conflict semantics are not re-keyed, and no client
+or Drift change follows.
 
-Concretely (ADR 0020 D1.1-D1.8):
+*Internal, per resource* (ADR 0020 D1.1-D1.3, D1.12):
 
-- `sourceObservedAt` is stamped when a revision **becomes published**, using the
-  observation time of the check at which that revision was **first seen** — the
-  T2 time in §10.4.1, not the corroborating check and not the write.
+- `sourceObservedAt` is stamped when a `contentRevision` **becomes published for
+  that resource**, using the observation time of the check at which it was
+  **first seen** — the T2 time in §10.4.1, not the corroborating check and not
+  the write.
 - Re-reading identical normalized content **never** advances it, so repeated
   polling of stale content does not keep refreshing its apparent age.
 - It is **persisted with the revision**. A Worker restart, a redeploy or another
   identical fetch must not reset it while that revision remains current.
-- The snapshot-level value is the **latest** `sourceObservedAt` among the
-  resources contributing to that snapshot key.
+- It drives reconciliation only. **It is never projected to the wire.**
+
+*Published, per snapshot key* (ADR 0020 D1.7-D1.11):
+
+- `snapshotRevision` is a stable hash of the **normalized public snapshot
+  document** — the published `data`, never `generatedAt` or `requestId`.
+- `snapshotObservedAt` is the first observation of *that* revision, and is what
+  `meta.sourceUpdatedAt` carries. An identical revision keeps its original
+  timestamp; any differing revision gets a new one.
+- The assignment is **strictly monotonic** per snapshot key:
+  `snapshotObservedAt := max(now, previous + 1 millisecond)`.
 - `fetchedAt` is never published under this field. `generatedAt` never
-  substitutes for it. `contentRevision` remains identity, not ordering.
+  substitutes for it. `contentRevision` and `snapshotRevision` remain identity,
+  not ordering.
+
+> **Corrected 2026-08-22 (PR #8 review, P1).** The snapshot-level value was
+> previously defined as the **maximum** `sourceObservedAt` across contributing
+> resources. That is non-decreasing only while the contributing set is stable:
+> dropping the resource that supplies the maximum — a withdrawn entry, a
+> membership change, a narrowed filter — makes the next snapshot's
+> `sourceUpdatedAt` *older*, and ADR 0005 rule 1 rejects it before its differing
+> `contentVersion` or later `generatedAt` is even consulted. A legitimate
+> removal could then never reach clients. Binding the timestamp to the snapshot
+> revision, with the strictly monotonic assignment above, removes that failure
+> mode entirely and needs no wire, client or Drift change.
 
 What it gives:
 
 - It is **not** the fetch time of the current request, so it is stable and
   reproducible: the same content always carries the same timestamp for as long
   as it remains current.
-- It is **non-decreasing per resource**, because a differing revision can only
-  be first observed after the revision it replaces. That keeps ADR 0005's
-  rules 1 and 2 (older rejects, newer applies) well defined at the client for
-  the writes GridView actually makes.
+- It is **strictly increasing per snapshot key** by construction (ADR 0020
+  D1.10), independently of what happens to the contributing resource set. That
+  keeps ADR 0005 rule 2 (newer applies) always firing for a changed snapshot,
+  makes rule 1 (older rejects) unreachable against GridView's own publication
+  sequence, and makes the equal-timestamp branches (rules 3 and 4) unreachable
+  for successive snapshots on one key.
+- **Equality and clock regression are handled explicitly**, not assumed away:
+  the `max(...)` absorbs a backwards clock step, at the cost of running ahead of
+  wall clock by at most the size of that step, which is logged. The 1-millisecond
+  tick requires the published representation to keep millisecond precision.
 
 **What it does not give, stated plainly because two earlier drafts of this
 section got it backwards.**
@@ -1598,7 +1719,12 @@ an option.
 **Where it lands in the implementation.** Deriving `sourceObservedAt` requires
 the previously stored revision, which a stateless adapter does not have, so it
 is **coordinator state**, not adapter state (gap G4), and it must be persisted
-alongside the other §10.7 provenance fields (gap G9).
+alongside the other §10.7 provenance fields (gap G9). `snapshotRevision` and
+`snapshotObservedAt` sit one level higher again — they belong to the
+**publication** path (`snapshots/generator.ts` → `publication/publisher.ts`),
+are persisted per snapshot key, and are assigned inside the same transaction
+that publishes the snapshot, so the monotonic guarantee survives a crash between
+generation and publication.
 
 ---
 

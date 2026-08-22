@@ -1524,10 +1524,13 @@ another source rather than bypassing the requirement.
 - **Implement the `sourceUpdatedAt` decision** (Evaluation §10.7.1,
   [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1).
   Neither source publishes an update timestamp, so the published value is
-  `sourceObservedAt` — the first observation of the currently published
-  normalized revision, persisted with it, never advanced by an identical
-  re-read, and never GridView's fetch time. It is **coordinator** state, not
-  adapter state, because deriving it needs the previously stored revision.
+  `snapshotObservedAt` — the first observation of the currently published
+  normalized **snapshot revision**, persisted with it in the publication
+  transaction, assigned strictly monotonically per snapshot key, never advanced
+  by an identical revision, and never GridView's fetch time. The per-resource
+  `sourceObservedAt` is **internal** reconciliation state and is never published.
+  Both are **coordinator/publication** state, not adapter state, because deriving
+  them needs the previously stored revision.
 
 ## 14.4 Data validation tasks
 
@@ -1622,11 +1625,14 @@ these are the implementation tasks.
   (Evaluation §7.6).
 - **No GridView request reaches OpenF1 outside its gate**, and the gate is
   either unlocked by a recorded bound or skipping every session.
-- `sourceUpdatedAt` carries `sourceObservedAt` per
+- `sourceUpdatedAt` carries `snapshotObservedAt` per
   [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1:
-  persisted with the revision, never advanced by an identical re-read, never
-  GridView's fetch time, and surviving a restart. No surface describes it as the
-  upstream modification time or claims ordering from it.
+  bound to the snapshot revision, assigned strictly monotonically per snapshot
+  key at millisecond precision, never advanced by an identical revision, never
+  GridView's fetch time, and surviving a restart. A snapshot that changed only
+  by a removal or a membership change is published rather than rejected. No
+  surface describes it as the upstream modification time or claims provider
+  ordering from it.
 - The implementation **matches** the settling design in §10.4.1, satisfies all
   five invariants, and is recorded against I1-I5 individually.
 - The reconciled-overwrite and staged-review events exist and respect the
