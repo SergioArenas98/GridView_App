@@ -4,17 +4,18 @@
 
 - Product: GridView
 - Document type: Provider evaluation and public-licence compliance basis
-- Version: 0.3
+- Version: 0.4
 - Status: Decided - **relying on the providers' published public licence; no provider has approved GridView**
-- Phase: 9A (provider evaluation and licensing basis)
+- Phase: 9A (provider evaluation and licensing basis), extended by the Phase 9B-0 entry decisions
 - Related documents:
   - [`GridView_Backend_Scheme.md`](GridView_Backend_Scheme.md) §3, §7, §14-§18
   - [`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md) §14
   - [`GridView_Backend_Operations.md`](GridView_Backend_Operations.md)
   - [`../adr/0019-formula-one-provider-legal-gate.md`](../adr/0019-formula-one-provider-legal-gate.md)
+  - [`../adr/0020-provider-source-observation-and-reconciliation.md`](../adr/0020-provider-source-observation-and-reconciliation.md)
   - [`../adr/0018-advertising-not-retained-for-v1.md`](../adr/0018-advertising-not-retained-for-v1.md)
-- Research access date: **2026-08-19**
-- Document date: 2026-08-19
+- Research access date: **2026-08-19** (no new external research was performed for version 0.4)
+- Document date: 2026-08-21
 
 ### Revision history
 
@@ -23,6 +24,7 @@
 | 0.1 | 2026-08-19 | First evaluation. Four candidates; Sportmonks proposed as the first written-inquiry candidate. |
 | 0.2 | 2026-08-19 | **Superseded by a product-constraint change.** A zero-provider-budget, no-monetisation constraint was recorded (§2). Sportmonks is rejected for v1 on budget grounds only. The proposal becomes a **dual-source, zero-cost, post-session model using OpenF1 (provisional) and Jolpica (reconciled)**, validated by an unauthenticated feasibility check (§8) and specified as a synchronisation design (§10). Two provider-specific inquiries replace the single Sportmonks draft. |
 | 0.3 | 2026-08-19 | **The individual-permission gate is withdrawn.** The product owner decided that GridView relies on the **public CC BY-NC-SA 4.0 licence** both projects publish, rather than on a per-project written reply. The licence itself is the permission for uses inside its scope. §7 is rewritten as a compliance analysis against the official Creative Commons deed and legal code; §14 becomes an accepted-residual-risk record; §15 becomes an objective Phase 9B entry gate with no provider-response prerequisite. The two inquiry drafts are retained as **optional, unsent, non-blocking clarification templates**. The dual-source technical design in §8-§12 is unchanged. |
+| 0.4 | 2026-08-21 | **Phase 9B-0 entry decisions recorded** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)). E5a is decided: `sourceObservedAt` is adopted as the value published under the contract-required `sourceUpdatedAt` (§10.7.1), and the residual reconciled-ordering risk is accepted with monitoring (§10.9.1). E5b is satisfied: I1-I5 are binding, and the settling state machine, cadence bounds and slow post-settlement sweep are now **specified** in §10.4.1 rather than deferred, which closes gap G-j and bounds the volume model (§11.3.1). E6 is specified and binding, with the OpenF1 bound-or-skip rule and the explicit absence of exceptions. **No implementation, no adapter, no live request and no licensing change.** |
 
 ---
 
@@ -1096,9 +1098,13 @@ Five design rules follow:
 
 Rules 3 and 4 together are a **Phase 9B requirement**, not an implementation
 detail: an adapter that anchors on the scheduled end alone, or that fetches
-without a justified bound, does not satisfy §7.6 and must not ship. **E6 and M9
-may not be treated as satisfied until a recorded bound or the skip rule is
-implemented.**
+without a justified bound, does not satisfy §7.6 and must not ship. They are now
+binding as [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+§5, D5.1-D5.8. **E6 is an entry criterion and is satisfied by that
+specification; nothing about the OpenF1 *implementation* is.** The exit criterion
+and **M9** may not be treated as satisfied until a recorded bound or the skip
+rule is actually implemented, and the OpenF1 real-network path stays locked
+until a bound is recorded with its official source and access date.
 
 This changes when — and whether — the first attempt fires. It never increases
 the number of attempts, so the request-volume model in §11 remains an upper
@@ -1204,42 +1210,430 @@ resource continues to be checked, and where a resource is still **unreconciled**
 daily checks likewise continue until it reconciles or the next event week
 begins, at which point it is left alone and flagged.
 
-#### 10.4.1 Post-reconciliation cadence and settling — a Phase 9B design task
+#### 10.4.1 Post-reconciliation cadence and the settling state machine
 
-This document deliberately stops at **invariants** here rather than specifying a
-state machine. Two review rounds produced successive attempts at a concrete
-settling rule, each of which broke a different case — a rule tied to "unchanged
-across the full check sequence" is unreachable for a result first published at
-check 2, and a rule that stops polling at settlement makes the staged-review
-path unreachable for a later correction. That is a sign the concrete design
-belongs in Phase 9B with the adapter, not in a provider evaluation.
+> **Decided (2026-08-21).** This section previously stopped at invariants and
+> deferred the concrete design to Phase 9B. Under
+> [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §3
+> the five invariants are **binding**, and §4 records that the design below was
+> reachable without a further product decision, so it is specified here rather
+> than deferred. **It is specified, not implemented** — no adapter,
+> coordinator, scheduler or state store exists.
 
-What is decided here are the properties any design must satisfy:
+Two review rounds had produced successive settling rules that each broke a
+different case — a rule tied to "unchanged across the full check sequence" is
+unreachable for a result first published at check 2, and a rule that stops
+polling at settlement makes the staged-review path unreachable for a later
+correction. Those two failures are what the invariants below encode, and every
+transition in this section is checked against them.
+
+##### Invariants (binding)
 
 | # | Invariant |
 |---|---|
-| I1 | **Corroboration must be reachable.** A change observed once must have a defined next check at which it can be confirmed, or `pendingRevision` can never resolve and the correction is never published. |
+| I1 | **Corroboration must be reachable.** A change observed once must have a defined next check at which it can be confirmed or discarded, or `pendingRevision` can never resolve and the correction is never published. |
 | I2 | **Settling must be reachable from any starting point**, including a result first published at check 2, 3 or 4, or changed part-way through the sequence. A definition requiring stability across a sequence that has already passed is unreachable and leaves the resource polling forever. |
 | I3 | **Polling must terminate.** An unbounded daily check per session, accumulating across a season, is not acceptable. |
-| I4 | **Late corrections must remain observable for the resource that changed.** Results are occasionally corrected weeks later. If polling stops entirely at settlement, the staged-review path in §10.9 can never receive that change, so termination must leave a slow ingestion path **that re-reads the same resource** — a low-frequency `results`, `sprint` or `qualifying` re-check for a session classification. The independently polled standings job does **not** satisfy this: §11.1 models classifications through separate calls, so standings can move without the corrected classification ever being re-read. An earlier draft offered it as an alternative; that was wrong, because a design could satisfy the written invariant while never presenting the corrected resource to §10.9. |
-| I5 | **C7 must still be met** for the ordinary case. |
+| I4 | **Late corrections must remain observable for the resource that changed.** Results are occasionally corrected weeks later. Termination must leave a slow ingestion path **that re-reads the same resource** — a low-frequency `results`, `sprint` or `qualifying` re-check for a session classification. The independently polled standings job does **not** satisfy this: §11.1 models classifications through separate calls, so standings can move without the corrected classification ever being re-read. |
+| I5 | **C7 must still be met** for the ordinary case — an objective, not an SLA. |
 
-I3 and I4 are in tension, and resolving that tension is the design task: it
-needs a bounded number of confirmations to settle, plus a slow post-settlement
-cadence rather than silence. **Phase 9B must specify it and record it against
-these five invariants before the adapter ships.** Recorded as gap G-j.
+##### Two axes, kept separate
 
-Until it is specified, the §11 figures for the reconciliation path are a
-**lower bound** (§11.3).
+Conflating them is what made the earlier drafts wrong, so they are named
+separately and never collapsed into one field:
 
-The volume model in §11 counts the expected case, where a resource settles
-quickly. **How much the continuation adds cannot be stated until §10.4.1 is
-designed** — a long break between events, or a slow post-settlement recheck
-cadence, could add considerably more than the expected case suggests. An earlier
-draft capped it at "a handful of requests per session", which was an assertion
-about a design that does not exist yet and contradicted the lower-bound
-treatment in §11.3. No cap is claimed here.
-There is no aggressive polling and no tight retry loop at any point.
+| Axis | Values | Meaning |
+|---|---|---|
+| **Provenance state** | `provisional` \| `reconciled` | Which source last wrote the record (§10.7 `state`). |
+| **Review state** | `unsettled` \| `settled` | Whether the record may still be changed **automatically**. |
+
+`pendingRevision` and the `staged` outcome are markers on the **review** axis
+only. A record is never "half provisional"; it is `reconciled` the moment a
+reconciled write lands, and independently `unsettled` until it settles.
+
+##### States
+
+| State | Meaning |
+|---|---|
+| `absent` | No stored record for this resource. The normal case today, since the OpenF1 path is locked. |
+| `provisional` | Last written by OpenF1. Unreachable while §10.2's skip rule applies to every session. |
+| `reconciled.unsettled` | A reconciled revision is published; it has not yet settled. |
+| `reconciled.unsettled+pending` | As above, with a differing revision seen **once** and awaiting corroboration. |
+| `reconciled.settled` | The published revision has settled. The normal per-session cadence has terminated and the resource is on the slow sweep. |
+| `reconciled.settled+pending` | Settled, with a differing revision seen once on the slow path and awaiting corroboration. |
+| `reconciled.settled+staged` | A differing revision was corroborated on the slow path and is **retained for operator review**; the published snapshot is unchanged. The record leaves the active sweep and moves to the **operator-review backlog** (below). |
+| `reconciled.review_locked` | A staged correction **and** a second, independently corroborated competing correction both exist. The two-entry cap is reached, so no further candidate tracking happens even under operator verification; the record waits in the backlog for operator disposition. |
+
+##### Persisted per resource
+
+Beyond the §10.7 provenance fields: `publishedRevision`,
+`consecutiveConfirmations` (the number of consecutive **successful** checks that
+have returned `publishedRevision`, counting the check at which it was
+published), `pendingRevision` with the observation time at which it was first
+seen, `supersededRevisions`, `sourceObservedAt`, the review state and
+`settledAt`. All of it must survive a restart — ADR 0020 D1.3.
+
+**Review slots are fixed in number, so the record cannot grow without bound.**
+A settled resource holds at most **three** review-related entries, and never a
+list of provider payloads:
+
+| Slot | Cardinality | Contents |
+|---|---|---|
+| `stagedCorrection` | at most 1, **immutable once written** | `{revision, payload, firstSeenAt, corroboratedAt}`. Only an operator disposes of it. |
+| `candidateRevision` | at most 1, transient | `{revision, firstSeenAt, consecutiveSightings}`. Never published, never itself a review item until corroborated. |
+| `competingCorrection` | at most 1, **immutable once written** | A second independently corroborated correction. Writing it puts the record in `review_locked`. |
+
+Plus two scheduling keys, both persisted and both restart-safe: `lastSweptAt`
+(rotation order) and `lastPriorityAttemptAt` (priority order).
+
+##### Cadence
+
+| Phase | Checks | Terminates at |
+|---|---|---|
+| **Dense** | +5, +9, +15, +24 hours from the Jolpica start anchor (§10.4) | Always after 4 checks |
+| **Daily continuation** | Once per day, **only while `unsettled`** | Settlement, or the deadline below |
+| **Deadline ceiling** | — | **`jolpica_anchor + 14 days`** — the same scheduled session start the dense offsets run from (§10.4), never the first-publication time, so the ceiling is fixed when the session is scheduled and cannot be pushed back by a late first result. At it the resource is **settled on deadline** whatever its confirmation count, and any outstanding `pendingRevision` is **not applied** but is retained as a staged payload with a staged-review event, so it is never lost silently. Such an entry is flagged **uncorroborated** — it was seen once and the ceiling arrived before a second check — so the operator can weigh it accordingly. Like any staged record it goes to the operator backlog, not to the active sweep |
+| **Slow post-settlement sweep** | A fixed-budget weekly rotating sweep (below) | The resource's season is `completed`, it has been swept once after that season's final round, **and no staged payload is outstanding** |
+
+Maximum in the **normal per-session cadence**: **4 dense + 13 daily = 17
+checks** (dense at +5/+9/+15/+24h, then one check per day on days 2-14, the
+day-14 check being the one at which the ceiling fires), whatever the source
+does. That is the hard bound I3 requires **of this cadence**.
+
+**It is not a lifetime per-resource total, and must not be quoted as one.** A
+settled resource then leaves this cadence for the weekly sweep, which is bounded
+by a **fixed weekly request budget** rather than by a check count — that is
+precisely how I3 and I4 are satisfied together. Total lifetime reads are
+therefore `<= 17` on the per-session cadence plus the sweep's rate-bounded
+re-reads.
+
+The never-reconciled case is unchanged and separate: where a resource has no
+reconciled write **at all**, the daily checks continue until it reconciles or
+the next event week begins, at which point it is left alone and flagged (§10.4).
+
+##### Settling predicate
+
+```text
+settled  iff  consecutiveConfirmations >= 3
+        and  the current check is at or after the +24h check
+        and  pendingRevision is null
+
+or       the anchor + 14 day deadline is reached (settled on deadline)
+```
+
+Three consecutive successful checks returning the same revision, never evaluated
+before `+24h`. Deliberately **not** "unchanged across the whole sequence", which
+is the unreachable form I2 rules out.
+
+**Settlement on deadline is a real settlement, and a weaker one.** A resource
+that reaches `jolpica_anchor + 14 days` settles even if it was published only
+one or two checks earlier and was never corroborated. That is deliberate: it
+guarantees termination (I3) and it errs safe, because a settled record can no
+longer be rewritten automatically — any later change is staged for review. It is
+distinguished from ordinary settlement by its own event,
+`reconciled.settled_on_deadline`, so an under-confirmed record is never
+indistinguishable from a corroborated one.
+
+##### Transitions
+
+**Evaluation order is part of the design.** `review_locked` is tested **first**
+(T11d) and is terminal — a locked record ignores every observation until an
+operator acts. Then `absent` (T0), then the superseded-revision ledger (T5),
+then the identical-revision case (T1), then the differing-revision branches,
+with the `settled+staged` family (T11/T11b/T11c) taking precedence over the
+unsettled ones for a staged record. Testing them in any other order either
+dereferences absent state, lets a superseded revision reach the corroboration
+path, or lets an observation mutate a record that is waiting on a human.
+
+**Automatic publication is prohibited in every branch below except T0, T0b and
+T3** — the unsettled-path writes. No settled, pending, staged or locked branch
+publishes anything; only an operator does, through T12.
+
+**T11-T11d are not reachable from the scheduler.** *(Corrected 2026-08-22.)*
+An operator-backlog record is never polled by the weekly sweep, so a scheduled
+run has no way to produce an observation for it, and **the ordinary scheduler
+must never execute T11, T11b, T11c or T11d.** Those four transitions run
+**only** inside an explicit **operator verification** — a manual recovery
+action, deliberately requested by a human against one named backlog record:
+
+| Property | Rule |
+|---|---|
+| Trigger | Explicit, per-record, human-initiated. Never a timer, never a cron, never the sweep. |
+| Budget | **Outside** the eight-slot weekly sweep. It is manual-recovery traffic and is charged to the existing manual-recovery and retry reserve (§11.3), not treated as free. |
+| Controls | Every operator-initiated provider request goes through the **same** outbound hardening, per-provider rate limiter, typed per-source call counter, quota checks and audit events as any other request, once those capabilities exist (gaps G6, G7, G10). A manual action is not an exemption from the provider controls. |
+| Effect on review state | It may **only** set or clear `candidateRevision` and, on independent corroboration, write `competingCorrection`. It may **never** publish, remove, replace or mutate `stagedCorrection`. |
+| Failure | A failed, empty, malformed or rate-limited verification is T6: `stagedCorrection`, `candidateRevision`, `competingCorrection` and every confirmation counter are preserved exactly. |
+| If it never happens | The record simply stays in the backlog unchanged and T11-T11d never execute. That is a supported steady state, not a stall. |
+| Disposition | Still only T12. Verification informs an operator; it never decides for them. |
+
+| # | From | Observation | Effect |
+|---|---|---|---|
+| T0 | `absent` | Any valid reconciled payload | **First valid write.** Publish it; `sourceObservedAt` := this check's observation time; `consecutiveConfirmations` := 1. No corroboration is required, because there is nothing to roll back — and this branch must be evaluated **first**, or a new session could never publish anything (§10.9). |
+| T1 | any reconciled | `incoming.revision == publishedRevision` | **Identical: idempotent.** No content write, no stream churn. `consecutiveConfirmations += 1`; `reconciledAt := now`; `sourceObservedAt` **unchanged**; any `pendingRevision` is **cleared** — a differing revision that fails to reappear on the very next check is discarded. Then evaluate the predicate. |
+| T0b | `provisional` | Any valid **reconciled** payload | **Upgrade, no corroboration.** A reconciled payload always replaces a provisional one (§10.9), so it is handled exactly as T0: publish it, stamp `sourceObservedAt` from this check, `consecutiveConfirmations` := 1, review state `unsettled`. Unreachable today, because the OpenF1 path is locked and nothing writes `provisional`. |
+| T2 | `reconciled.unsettled` | A differing revision, **not** in `supersededRevisions` | **First sighting.** No write. `pendingRevision` := it, with its observation time. `consecutiveConfirmations` := 0. |
+| T3 | `reconciled.unsettled+pending` | The **same** revision as `pendingRevision`, still not superseded | **Corroborated: apply.** One transaction: `supersededRevisions += publishedRevision`; `publishedRevision := pendingRevision`; `sourceObservedAt` := the time recorded at **T2**, not now; `consecutiveConfirmations` := 2; `pendingRevision` := null. Raises the reconciled-overwrite event. |
+| T4 | `reconciled.unsettled+pending` | A **third**, different revision | **Pending replaced.** The previous pending was not corroborated. `pendingRevision` := the third revision (if not superseded); `consecutiveConfirmations` := 0; no write. After 3 consecutive non-corroborating sightings, raise the unstable-source event and continue on cadence to the deadline. |
+| T5 | any | A revision **in `supersededRevisions`** | **Rejected.** No write, no pending. `consecutiveConfirmations` := 0, because the check did not return the published revision. |
+| T6 | any | Failed, missing, malformed, empty or rate-limited response | **No state change.** Nothing written, nothing confirmed, nothing discarded: `consecutiveConfirmations`, `pendingRevision`, `candidateRevision`, `stagedCorrection`, `competingCorrection` and `supersededRevisions` are all untouched, so a failure neither counts as corroboration nor destroys a pending revision, a candidate or a staged correction. The check still counts against the cadence — and, on the sweep, still consumes its slot and advances the scheduling keys — and it feeds provider health. Absence is never written as an empty result (§10.9 conflict 6), and the previous snapshot stays served (§10.6). |
+| T7 | `reconciled.*` | A `provisional` payload | **Rejected and logged**, never merged (§10.9). |
+| T8 | `reconciled.settled` | A differing revision, not superseded | **First sighting on the slow path.** No write; `pendingRevision` := it, with `firstSeenAt`; `lastPriorityAttemptAt` := that same time. The resource joins the **priority queue** for the next sweeps. It is *not* promoted ahead of older candidates — see the priority ordering rule below. |
+| T9 | `reconciled.settled+pending` | The **same** revision again | **Corroborated: staged, never applied.** `stagedCorrection` := the payload (immutable from here); `pendingRevision` := null; the staged-review event is raised. The resource **leaves the active sweep** for the operator-review backlog. Only an operator decision can publish or discard it. |
+| T10 | `reconciled.settled+pending` | The published revision, or a third revision | `pendingRevision` cleared or replaced exactly as T1/T4; the resource stays in the active sweep and in the ordinary rotation. The T4 bound applies here too: after 3 consecutive non-corroborating sightings the unstable-source event is raised and the resource stops claiming a priority slot. |
+| T11 | `reconciled.settled+staged` | An **operator verification** response only (see below) | **`stagedCorrection` is immutable. Nothing here may publish, discard, overwrite or replace it.** The staged revision seen again only refreshes its last-seen counter. The published revision seen again is recorded and changes nothing. A **different** revision B is written to the separate `candidateRevision` slot with `consecutiveSightings := 1` and raises the *candidate-observed* event — **one sighting never stages B**. |
+| T11b | `reconciled.settled+staged` with a candidate | The **same** revision B again, on a later **operator verification** | **B is corroborated independently**, by the same two-observation rule as D2.5 — two verification responses, not two calendar sweeps. `competingCorrection` := B; `candidateRevision` := null; the *candidate-corroborated* event is raised and the record becomes `review_locked`. `stagedCorrection` is still untouched. Both entries now await one operator decision. |
+| T11c | `reconciled.settled+staged` with a candidate | On **operator verification**: the published revision, or a third revision C | The candidate failed to corroborate: `candidateRevision` is cleared or replaced by C with `consecutiveSightings := 1`. `stagedCorrection` is untouched. Nothing is staged and nothing is published. |
+| T11d | `reconciled.review_locked` | Any **operator verification** response | **No-op.** No slot is written, no candidate is tracked, nothing is published — the two-entry cap is already reached, so verification can only report. This is what keeps the representation bounded at two corroborated entries. |
+| T12 | Any staged or locked record | **Operator disposition** — publish, discard, or replace. The **only** transition that clears a review entry, and the only one that can change published content from the backlog | The only transition that may change published content from a staged entry. The chosen payload is published (or nothing is), `supersededRevisions` is updated as for T3, the *review-disposed* event records who decided and what was chosen, and every review slot is cleared. The resource then re-enters the **active sweep** if it is still inside the active observation horizon (its season is not yet completed-and-swept); otherwise it retires. |
+
+Checked against the cases the earlier drafts broke:
+
+| First reconciled value appears at | Settles at |
+|---|---|
+| Check 1 (+5h) | Check 4 (+24h) — confirmations 1,2,3,4 |
+| Check 2 (+9h) | Check 4 (+24h) — confirmations 1,2,3 |
+| Check 3 (+15h) | Daily check 1 (+48h) |
+| Check 4 (+24h) | Daily check 2 (+72h) |
+| Any daily check on days 2-11 | Two further identical daily checks — always still inside the ceiling |
+| Daily check on day 12 | Day 14, exactly at the ceiling, by ordinary corroboration |
+| Daily check on **day 13** | Day 14 by the **deadline** only: confirmations reach 2, never 3. Settles on deadline |
+| Daily check on **day 14** (the last) | Immediately, on the **deadline** only, with one confirmation. Settles on deadline |
+| A corroborated change applied at any later check | `consecutiveConfirmations` is 2 on application, so **one** further identical check at or after +24h settles it; otherwise the 14-day deadline does |
+| A differing revision first sighted on **day 14** | It has no further check, so it is **staged uncorroborated** at the deadline — retained, unpublished, flagged as seen once, with a staged-review event. This is where I1 is discharged by the operator path instead of by another check, and it is the only such case |
+
+In the **ordinary** case settlement lands exactly at the end of the dense
+sequence, so the daily continuation costs nothing at all.
+
+##### The slow post-settlement sweep
+
+A per-session timer after settlement would reintroduce the unbounded
+accumulation I3 forbids. Instead, settled classification resources join **one
+weekly sweep with a fixed request budget**, modelled at **8 slots per sweep**.
+
+| Property | Rule |
+|---|---|
+| **Work unit** | One slot = **one request to one classification endpoint** (`results`, `sprint` or `qualifying`) for one session. The sweep re-reads the classification **only** — it never pulls the standings calls that §11.1 counts alongside a *dense* race check, so a race re-read costs 1 request here, not 3. Slots and requests are therefore the same unit. |
+| **Queue membership** | **`reconciled.settled` and `reconciled.settled+pending` only.** Every resource is in exactly one of four disjoint sets: the **per-session cadence** (`absent`, `provisional`, every `unsettled` state), the **active sweep** (the two states above), the **operator-review backlog** (`settled+staged`, `review_locked`), or **retired**. Nothing is ever counted in two of them. |
+| **Operator-review backlog** | A record with a `stagedCorrection` leaves the active sweep at T9 and moves here. The backlog is **durable but never automatically polled**: it consumes **no sweep slot**, makes **no scheduled provider request**, and does **not** count against the active-membership bound. The only requests it can ever cause are explicit operator verifications, which are manual-recovery traffic (above). It is retained until operator disposition (T12), for as long as that takes, subject to the capacity limit below. |
+| **Entry** | A resource joins at the moment it settles — by predicate or on deadline — with `lastSweptAt` initialised to its settlement time, so it takes its turn behind resources that settled earlier rather than jumping the queue. A resource that settles on deadline **while holding a staged payload** goes straight to the operator backlog instead and never enters the sweep. |
+| **Cursor** | There is **no single global cursor**. The order is derived from per-resource `lastSweptAt` persisted with the resource record, and each sweep selects the least-recently-swept eligible resources. Deriving the order from persisted per-resource state rather than an index makes it restart-safe, and makes insertion and removal ordinary writes. |
+| **Failed attempts** | A failed, empty, malformed or rate-limited read is T6 — no state change to the review slots — but it **consumes its slot and still advances the scheduling key it was drawn on** (`lastSweptAt` for a rotation slot, `lastPriorityAttemptAt` for a priority slot). This is the fairness rule: if a failure left the resource at the head of its queue it would occupy a slot every week and starve everything behind it. A resource failing repeatedly is surfaced by provider health, not by monopolising the sweep. |
+| **Priority reservation** | T8 corroboration re-reads are served first but may take **at most half the budget (4 of 8 slots)**; unused priority slots fall through to the rotation, so the rotation is guaranteed **at least 4 slots every sweep**. Without this reservation a wave of pending revisions could consume the whole budget indefinitely and the rotation's maximum revisit interval would not be finite. |
+| **Priority ordering** | Priority candidates are drawn **least-recently-attempted first**, ordered by the persisted tuple `(lastPriorityAttemptAt ASC, pendingRevision.firstSeenAt ASC, resourceKey ASC)`. `lastPriorityAttemptAt` is **initialised at T8 to the candidate's own `firstSeenAt`**, so a brand-new candidate sorts by its arrival time and cannot overtake an older one; and every attempt — successful or failed — sets it to `now`, sending that candidate to the back. Both keys are persisted with the record and the third is a stable identifier, so the order is total, deterministic and restart-safe, with no global cursor. |
+| **Exit from the active sweep** | The season is `completed` **and** the resource has been swept once after that season's final round. A staged payload no longer holds a resource in the sweep — it is in the backlog instead, which season completion does not touch, so **season completion can neither orphan nor discard a staged payload**. |
+| **Re-entry** | After operator disposition (T12) the resource re-enters the active sweep **only if it is still inside the active observation horizon** — its season not yet completed-and-swept. Otherwise it retires: the season is closed and there is nothing further to observe. |
+
+##### The operator backlog is capacity-bounded and fails closed
+
+> **Added 2026-08-22.** Removing staged records from the sweep bounded the
+> *request* cost but left the *number* of retained records unlimited. This
+> closes that gap without inventing a retention right GridView does not have.
+
+| Property | Rule |
+|---|---|
+| **Capacity** | A hard maximum of **60 classification-resource records**, chosen to mirror the active-membership ceiling. |
+| **Scope** | The limit is **global across seasons**, not per season. A backlog carried over from an earlier season consumes the same capacity. |
+| **Per-record size** | Unchanged and still structurally bounded: one immutable `stagedCorrection`, at most one corroborated `competingCorrection`, at most one transient `candidateRevision`. |
+| **No automatic eviction** | **No automatic process may delete, evict, overwrite or age out an existing backlog record to make room.** There is no time-based expiry, because GridView has no legal or product approval to discard an unreviewed correction after an arbitrary period. |
+| **Release** | Capacity is released only when a record is resolved through **T12**. |
+
+**When the backlog is full, reconciliation fails closed for the affected
+correction:**
+
+- the currently published snapshot **remains unchanged**;
+- the newly observed correction is **not published**;
+- no existing review record is overwritten, displaced or reordered;
+- a typed **capacity-exceeded** event is raised and an operator alert fires;
+- **production publication remains blocked** for that resource until an operator
+  releases capacity through T12.
+
+Failing closed is the conservative direction: the cost is that a genuine
+correction waits, which is visible and alarmed, rather than a silent overwrite
+of something a human has not yet seen.
+
+**The capacity limit is a storage and operational bound, not a permission.** It
+says how many records the system will hold; it does not grant any right to
+retain provider payloads. Retention of provider-derived payloads remains subject
+to the unresolved licensing, historical-retention and ShareAlike obligations in
+§7.6 — nothing here relaxes them.
+
+**Four different limits, deliberately not conflated:**
+
+| Limit | Value | What it bounds |
+|---|---|---|
+| Active sweep membership | <= 60 resources | How many resources the scheduler may rotate through |
+| Operator backlog capacity | <= 60 records | How many unresolved reviews may be retained at once |
+| Automatic sweep budget | 8 requests / week | Scheduled provider traffic from the sweep |
+| Operator verification | manual recovery | Human-initiated traffic, charged to the §11.3 reserve and subject to the same provider controls |
+
+**Effect on the request-volume arithmetic — stated, not assumed.** Operator
+verification is manual recovery, so it is charged to the **existing 20% manual
+recovery and retry reserve** already present in §11.3; no new line is added to
+the model, and the scheduled figures are unchanged. **That reserve is not
+demonstrated to be sufficient for a full backlog verification pass, and no such
+claim is made.** On the ordinary-case month the reserve is `232 x 0.20 ~= 46`
+requests, while verifying all 60 records at capacity once would cost 60 — more
+than a month's reserve. Verification is therefore expected to be occasional and
+per-record; a bulk pass at capacity must be paced across months or explicitly
+budgeted, and the rate limiter applies to it either way.
+
+**Maximum active membership, calculated.** Using the §11.3 season assumptions —
+24 Grands Prix of which 6 are sprint weekends — and the §10.3 polled sessions:
+
+```text
+standard weekend  = qualifying + race                        = 2 resources
+sprint weekend    = sprint qualifying + sprint + qualifying + race
+                                                             = 4 resources
+
+season total, A   = 18 x 2 + 6 x 4                           = 60 resources
+```
+
+`A <= 60` is now a **true** bound on active sweep membership, because staged
+records leave for the backlog rather than accumulating in the queue. Under the
+previous exit rule an unresolved staged record stayed in the sweep indefinitely,
+so membership grew across seasons and both figures below were unsound — that was
+the P2 finding, and moving the backlog out is what repairs them.
+
+**Rotation revisit interval.**
+
+```text
+rotation slots per sweep  >= 4   (8 budget - at most 4 priority)
+                          =  8   when no priority candidate exists
+
+full rotation, no priority contention   = ceil(60 / 8) =  8 weeks
+full rotation, sustained max contention = ceil(60 / 4) = 15 weeks
+```
+
+**So a settled classification resource is re-read at most every 15 weeks, and
+normally every 8**, at the season's maximum population; earlier in a season the
+population is smaller and the interval shorter. `8 weeks` is the **modelled
+ordinary case**; `15 weeks` is the **mathematical upper bound** under sustained
+maximum priority contention.
+
+**Corroboration latency — the honest bound.**
+
+> **Corrected 2026-08-22 (PR #8 review, P2).** An earlier draft claimed T8
+> corroboration was reachable "within 7 days". With 4 priority slots that is
+> false as soon as **5 or more** candidates are eligible in the same sweep, and
+> no ordering rule said which 4 were served. The unconditional claim is
+> withdrawn and replaced by the queue-dependent bound below.
+
+Let `P` be the number of eligible priority candidates, and `S = 4` the priority
+slots per sweep. Under the strict least-recently-attempted order above, a
+candidate at queue position `k` is attempted after at most `ceil(k / S)` sweeps,
+and no later arrival can overtake it:
+
+```text
+attempt within   ceil(P / 4) sweeps  =  ceil(P / 4) weeks
+
+P <= 4    ->  1 week   (the ordinary case: corrections are rare)
+P = 20    ->  5 weeks
+P = 60    -> 15 weeks  (absolute worst case, P <= A <= 60)
+```
+
+Three qualifications, stated rather than glossed:
+
+- The bound is on **attempts**, not on corroboration outcomes. A provider that
+  never answers cannot be corroborated by any design; a failed attempt sends the
+  candidate to the back of the queue, so `f` failures cost up to
+  `(f + 1) x ceil(P / 4)` weeks. That is a provider-availability limit, not a
+  scheduling defect.
+- `P <= 60` is the absolute ceiling. `P` reaching 60 means every settled
+  classification in the season simultaneously changed, which would itself be an
+  unstable-source signal long before the queue mattered.
+- T4/T10's "3 consecutive non-corroborating sightings" counts **observations of
+  that resource**, not calendar sweeps. Under contention a resource's
+  observations are spread across many sweeps, so the rule stops a chronically
+  unstable resource from claiming priority slots indefinitely — it does **not**
+  mean three consecutive weeks and must not be read that way.
+- **If the provider fails indefinitely there is no finite corroboration or
+  outcome bound at all.** The `ceil(P / 4)` figure bounds attempts only. This is
+  a property of depending on an upstream with no SLA (§14.1 R6), stated rather
+  than papered over.
+
+Both bounds are finite and calculable from published assumptions, which is what
+I4 requires — the design owes a deterministic bound, not a constant frequency.
+
+**I4 is satisfied, and is not being reinterpreted.** I4 requires that a late
+correction to a classification resource stay **observable** through a slow
+ingestion path that re-reads *that* resource. That path is the sweep, and it
+runs for every settled resource inside the active observation horizon. Once a
+correction has been observed, corroborated and staged, the I4 path has
+**succeeded** for that resource: the correction is in front of a human. Keeping
+the record in the polling rotation afterwards would add nothing to
+observability — the change is already detected — while making the membership
+bound false. Where a human wants a further reading before deciding, the explicit
+operator verification above provides it, on request and under the same provider
+controls. I4 requires corrections to be observable; it does not require
+indefinite provider polling of records whose correction has already been
+captured, and nothing above weakens it.
+
+**Scheduled request volume stays constant while the interval stretches:** the
+cost is capped at 8 requests per week regardless of how many sessions have
+accumulated or how full the operator backlog is, and the active set does not grow
+year on year because of the exit rule. **The backlog is a retention obligation,
+not a scheduled-polling obligation** — it holds at most 60 records durably and
+issues no scheduled request, so it can never affect the sweep budget or the
+intervals above. Operator verification can issue requests, but only when a human
+asks, and it is charged to the manual-recovery reserve rather than to the sweep.
+
+**Why the daily standings job cannot substitute for this.** I4 is about the
+resource that changed. §11.1 models a session classification and the
+championship standings as **separate calls**, so a penalty applied weeks later
+moves `driverstandings` and `constructorstandings` while `results` for that
+session is never re-read. A design polling only standings would satisfy the
+words of I4 and still never present the corrected classification to §10.9's
+staged-review path. The sweep therefore re-reads the classification endpoint
+itself.
+
+##### Operator-visible outcomes
+
+Structured events, following the existing Worker logging conventions
+(`services/edge-api/src/logging/logger.ts`):
+
+| Event | Raised when |
+|---|---|
+| `reconciled.published` | T0 / T0b — a first reconciled write, or a reconciled payload replacing a provisional one |
+| `reconciled.overwrite` | T3 — a reconciled payload replaced another. **Every** overwrite, per ADR 0020 D2.7 |
+| `reconciled.staged_correction` | T9, and a pending revision retained unapplied at the 14-day deadline. **The existing staged correction.** Distinct from the above, per D2.8 |
+| `reconciled.verification_requested` | An operator explicitly requested verification of one backlog record. Carries the requesting principal, so manual traffic is attributable |
+| `reconciled.candidate_observed` | T11 — a **competing candidate** was seen once, during an operator verification, against an already-staged correction. Not a staging event: nothing is staged and nothing is published |
+| `reconciled.candidate_corroborated` | T11b — that candidate met the two-observation rule independently across two verifications and became a second review entry; the record is now `review_locked` |
+| `reconciled.backlog_capacity_exceeded` | A correction could not be staged because the 60-record backlog is full. **Typed, alarmed, and fails closed**: nothing is published and nothing is overwritten |
+| `reconciled.review_disposed` | T12 — an **operator** published, discarded or replaced a review entry. The only event that can accompany a content change out of the backlog, and the only one that releases backlog capacity |
+| `reconciled.settled` / `reconciled.settled_on_deadline` | The predicate fired, or the 14-day ceiling did |
+| `reconciled.rejected_superseded` | T5 |
+| `reconciled.unstable_source` | Three consecutive non-corroborating sightings (T4) |
+| `reconciled.clock_regression` | The monotonic assignment in ADR 0020 D1.10 had to advance a snapshot timestamp past a backwards-moving wall clock |
+
+Field discipline is binding (D2.9): the GridView resource key, an enumerated
+event name and decision, revision **hashes truncated to a fixed length**,
+integer counters and ISO-8601 timestamps. **No credentials or authorization
+material, no raw upstream response bodies, no unbounded provider-supplied
+strings, and nothing personal.** Provider identifiers stay internal (§10.8).
+
+##### How the design satisfies each invariant
+
+| # | Satisfied by |
+|---|---|
+| I1 | While unsettled, the daily continuation runs precisely *because* the resource is unsettled, so a pending revision always has a next check; T6 stops a failed check from consuming it; the deadline stages rather than silently drops it. While settled, T8 puts the candidate in a **totally ordered, least-recently-attempted priority queue** whose position can only improve, so an attempt is reached within `ceil(P / 4)` sweeps — 1 week in the ordinary case and at most 15 weeks at the absolute ceiling. Finite and defined, which is what I1 requires; the withdrawn "within 7 days" claim was a latency promise, not the invariant. |
+| I2 | The predicate counts **3 consecutive identical reads from wherever the revision was first published**, and is evaluated at every check from +24h onward. The table above walks first-publication at checks 1, 2, 3, 4 and later; every one settles. Nothing depends on a window that has already passed. |
+| I3 | 4 dense checks; at most 13 daily continuations; a hard `anchor + 14 days` ceiling; and a post-settlement sweep whose cost is a fixed weekly budget rather than a per-session timer, with a defined exit from the sweep set. Staged records leave the sweep for the operator backlog, which is **never automatically polled** and is itself capped at 60 records with a fail-closed overflow, so an unresolved review can grow neither the active membership, nor the scheduled request budget, nor storage without limit. Nothing that issues a scheduled request accumulates without bound. |
+| I4 | The sweep re-reads **the same classification resource** — `results`, `sprint` or `qualifying` for that session — which is what feeds the §10.9 staged-review path, for every settled resource inside the active observation horizon. The daily standings job is explicitly **not** counted towards this. Once a correction is staged the I4 path has *succeeded* for that resource and it moves to the backlog; that is the completion of I4, not an exception to it (see the sweep section). Beyond that point further provider observation of the record is an explicit **operator verification**, never a scheduled poll — I4 asks that a correction reach a human, and at that point it has. |
+| I5 | Publication is unaffected by settling: the ordinary case publishes at check 1, `+5h` after the scheduled start. Settlement at `+24h` terminates polling; it does not delay data. The documented C7 miss where Jolpica omits the optional `time` (§10.4) is unchanged. |
+
+##### Resulting request-volume assumptions
+
+- **Ordinary case: 4 checks per polled classification resource** — the dense
+  sequence only. This is what §11.1 already models, so the reconciliation
+  figures in §11 are **no longer a lower bound** for the ordinary case.
+- **Worst case: 17 checks** per resource **on the per-session cadence**, at the
+  14-day ceiling. Sweep re-reads are additional and are bounded by the weekly
+  budget, not by this count.
+- **Slow sweep: a constant ~8 requests per week** (~35 per month) for the whole
+  settled population, independent of how many sessions have completed. Priority
+  corroboration re-reads are served *inside* that budget, not on top of it.
+- No aggressive polling and no tight retry loop at any point.
 
 Jolpica also runs on a slow independent cadence for resources that have nothing
 to do with a session: calendar **every six hours** (§11.2), participants and
@@ -1288,13 +1682,18 @@ Internal only. Every synchronized resource retains:
 | `contentRevision` | Stable hash of the normalized payload — **revision identity, not ordering**. A hash carries no temporal information, so it can establish that two payloads are the same or different but never which came first. Used for equality (idempotent re-checks), for corroboration, and as the key of the superseded ledger. It does **not** order reconciled writes; nothing available from these sources does (§10.9.1). |
 | `pendingRevision` | A differing reconciled payload seen once and awaiting corroboration on the next check (§10.9). Null when none. |
 | `supersededRevisions` | Every `contentRevision` **previously stored for this resource and since replaced**. A revision in this set is never re-applied. Note the limit: it can only block revisions GridView once stored, so an older payload it never stored is **not** caught (§10.9.1). |
-| `sourceObservedAt` | When the **current** `contentRevision` was **first** observed. **Candidate** value for the contract-required `sourceUpdatedAt`, *pending the E5a decision* — a proposal requiring sign-off, not the adopted mapping. No contract-valid value exists until E5a is taken (§10.7.1). |
-| `settled` | Whether the resource's value has stopped moving, under the definition Phase 9B must supply against the §10.4.1 invariants. A settled record never accepts a change automatically. |
+| `sourceObservedAt` | When the **current** `contentRevision` was **first** observed for this resource. **Internal reconciliation state only — never published** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) D1.12). Persisted with the revision; a restart or an identical re-fetch never resets it (§10.7.1). |
+| `settled` | Whether the resource's value has stopped moving, under the settling predicate specified in §10.4.1. A settled record never accepts a change automatically. |
 | `conflictOutcome` | Which rule in §10.9 fired, and what it decided. |
 
-#### 10.7.1 `sourceUpdatedAt` — an unresolved conflict with the existing contract
+#### 10.7.1 `sourceUpdatedAt` — decided: publish the first-observation proxy
 
-**This is a blocking Phase 9B design item, recorded here rather than resolved.**
+> **Decided (2026-08-21) in
+> [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1.**
+> This section previously recorded a blocking, undecided design item. E5a half
+> (a) is now closed: the proxy is **adopted**, ADR 0005 carries a qualification
+> note and the OpenAPI description states the substituted semantics. What
+> follows records the decision and its limits, not an open question.
 
 The existing contract requires a value neither adopted source can supply:
 
@@ -1306,22 +1705,76 @@ The existing contract requires a value neither adopted source can supply:
 
 Neither OpenF1 nor Jolpica publishes an update timestamp, a version or a usable
 `Last-Modified` (§8.6). And §10.9 forbids substituting fetch or generation time
-for source recency — as does ADR 0005 itself. **As things stand there is no
-documented way to produce a contract-valid snapshot from either source**, which
-is a genuine gap in the adapter design and must be closed before Phase 9B treats
-it as implementable.
+for source recency — as does ADR 0005 itself.
 
-**Proposed rule, requiring explicit sign-off.** Publish
-`sourceUpdatedAt = sourceObservedAt`: the time at which the **current**
-`contentRevision` was **first** observed.
+**The adopted rule works at two levels, and only the second is published.** The
+field stays **required** and keeps its wire shape — a UTC date-time string.
+Nothing becomes nullable, the conflict semantics are not re-keyed, and no client
+or Drift change follows.
 
-What it does give:
+*Internal, per resource* (ADR 0020 D1.1-D1.3, D1.12):
 
-- It is **not** the fetch time of the current request. Re-reading unchanged
-  content does not advance it, so repeated polling of stale content does not
-  keep refreshing its apparent age.
-- It is stable and reproducible: the same content always carries the same
-  timestamp for as long as it remains current.
+- `sourceObservedAt` is stamped when a `contentRevision` **becomes published for
+  that resource**, using the observation time of the check at which it was
+  **first seen** — the T2 time in §10.4.1, not the corroborating check and not
+  the write.
+- Re-reading identical normalized content **never** advances it, so repeated
+  polling of stale content does not keep refreshing its apparent age.
+- It is **persisted with the revision**. A Worker restart, a redeploy or another
+  identical fetch must not reset it while that revision remains current.
+- It drives reconciliation only. **It is never projected to the wire.**
+
+*Published, per snapshot key* (ADR 0020 D1.7-D1.11):
+
+- `snapshotRevision` is a stable hash of a **deterministic canonical
+  serialization of the normalized public `data` payload only**. Envelope,
+  provenance, transport and time-varying metadata are all excluded —
+  `requestId`, `generatedAt`, `sourceUpdatedAt`, `snapshotObservedAt`,
+  `staleAfter`, ETags, server-stale flags, provider timestamps and identifiers,
+  `fetchedAt`, and retry/reconciliation state — and `contentVersion` is never
+  fed recursively into its own input. **ADR 0020 §1 "The canonical hash input"
+  is binding** and fixes key ordering, array ordering, null-versus-absent
+  normalization, UTC date form, numeric form, schema-version handling and
+  publication-transaction atomicity.
+- `snapshotObservedAt` is the first observation of *that* revision, and is what
+  `meta.sourceUpdatedAt` carries. An identical revision keeps its original
+  timestamp; any differing revision gets a new one.
+- The assignment is **strictly monotonic** per snapshot key:
+  `snapshotObservedAt := max(now, previous + 1 millisecond)`. This is a **local
+  monotonic publication clock**: whenever the `previous + 1 ms` branch wins — two
+  revisions inside one millisecond, or a backwards clock step — the value stops
+  being a literal wall-clock observation and is only a conservative local
+  ordering proxy. Each activation raises an operational event (ADR 0020 D1.11a).
+- `fetchedAt` is never published under this field. `generatedAt` never
+  substitutes for it. `contentRevision` and `snapshotRevision` remain identity,
+  not ordering.
+
+> **Corrected 2026-08-22 (PR #8 review, P1).** The snapshot-level value was
+> previously defined as the **maximum** `sourceObservedAt` across contributing
+> resources. That is non-decreasing only while the contributing set is stable:
+> dropping the resource that supplies the maximum — a withdrawn entry, a
+> membership change, a narrowed filter — makes the next snapshot's
+> `sourceUpdatedAt` *older*, and ADR 0005 rule 1 rejects it before its differing
+> `contentVersion` or later `generatedAt` is even consulted. A legitimate
+> removal could then never reach clients. Binding the timestamp to the snapshot
+> revision, with the strictly monotonic assignment above, removes that failure
+> mode entirely and needs no wire, client or Drift change.
+
+What it gives:
+
+- It is **not** the fetch time of the current request, so it is stable and
+  reproducible: the same content always carries the same timestamp for as long
+  as it remains current.
+- It is **strictly increasing per snapshot key** by construction (ADR 0020
+  D1.10), independently of what happens to the contributing resource set. That
+  keeps ADR 0005 rule 2 (newer applies) always firing for a changed snapshot,
+  makes rule 1 (older rejects) unreachable against GridView's own publication
+  sequence, and makes the equal-timestamp branches (rules 3 and 4) unreachable
+  for successive snapshots on one key.
+- **Equality and clock regression are handled explicitly**, not assumed away:
+  the `max(...)` absorbs a backwards clock step, at the cost of running ahead of
+  wall clock by at most the size of that step, which is logged. The 1-millisecond
+  tick requires the published representation to keep millisecond precision.
 
 **What it does not give, stated plainly because two earlier drafts of this
 section got it backwards.**
@@ -1330,7 +1783,9 @@ section got it backwards.**
    two reconciled payloads cannot be ordered in general, and the
    superseded-revision ledger narrows that gap without closing it. A claim that
    the ledger makes ordering by observation time *sound* was wrong and is
-   withdrawn.
+   withdrawn. Self-consistency of GridView's own write sequence is not the same
+   property: if a stale replica supplies genuinely older content, GridView
+   publishes it carrying a *newer* `sourceUpdatedAt`.
 2. **It makes data look fresher than it is, by up to one polling interval.**
    If upstream changed at `t0` and GridView first observed it at `t1 >= t0`,
    then the age a consumer computes is `now - t1`, which is **smaller** than the
@@ -1342,28 +1797,30 @@ section got it backwards.**
    field that ADR 0005 defines as source-data age.
 
 The understatement is bounded by the polling interval — up to six hours for
-calendar data, less around a session — but it is a **cost** of the proxy that
-the sign-off must weigh, not a point in its favour.
+calendar data, less around a session. It is a **cost** the decision accepts, not
+a point in its favour, and every public surface describing the field must say
+so.
 
-**Why this still needs sign-off rather than adoption here.** ADR 0005 defines
-the field as the age of the underlying source data. A first-observed timestamp
-is a *proxy* for that, not the thing itself, and it is weaker than the current
-wording implies. Phase 9B must therefore either:
+**The alternative that was rejected.** Re-keying change detection on
+`contentRevision` and demoting `sourceUpdatedAt` to advisory or nullable was
+weighed and not taken. It is the larger change — ADR 0005, the OpenAPI contract,
+the Flutter remote parser, the Drift write path and the client conflict rule —
+and it buys less: `contentRevision` is **identity, not ordering** (§10.7), so it
+can tell you a payload differs but never which of two differing payloads is
+newer. It would remove the need to publish a value GridView cannot derive
+without solving §10.9.1 at all, which is why both halves of E5a were decided
+together. Inventing a value — publishing fetch time under this field — was never
+an option.
 
-1. accept the proxy and **amend ADR 0005 and the OpenAPI description** so the
-   documented semantics match what is actually published; or
-2. revise the snapshot-conflict semantics so that **change detection** keys on
-   `contentRevision` and `sourceUpdatedAt` becomes advisory. Note what this
-   exit does and does not buy: `contentRevision` is **identity, not ordering**
-   (§10.7), so it can tell you a payload differs but never which of two
-   differing payloads is newer. This exit removes the need to publish a value
-   GridView cannot derive; it does **not** solve §10.9.1, which is why the two
-   halves of E5a are decided together.
-
-Both touch an Accepted ADR and the public contract, so **neither is decided
-here.** What is decided is that the adapter may not ship until one of them is,
-and that inventing a value — publishing fetch time under this field — is not an
-option.
+**Where it lands in the implementation.** Deriving `sourceObservedAt` requires
+the previously stored revision, which a stateless adapter does not have, so it
+is **coordinator state**, not adapter state (gap G4), and it must be persisted
+alongside the other §10.7 provenance fields (gap G9). `snapshotRevision` and
+`snapshotObservedAt` sit one level higher again — they belong to the
+**publication** path (`snapshots/generator.ts` → `publication/publisher.ts`),
+are persisted per snapshot key, and are assigned inside the same transaction
+that publishes the snapshot, so the monotonic guarantee survives a crash between
+generation and publication.
 
 ---
 
@@ -1491,7 +1948,7 @@ What the rules actually achieve:
 | `settled` staging | Silent late rewrites of stable records | Anything before settlement |
 
 **This is the same root cause as §10.7.1** — no source recency signal exists —
-and it is folded into the same decision (E5a). Phase 9B must choose one of:
+and it was folded into the same decision (E5a). Three options were open:
 
 1. **Accept the residual risk** with the mitigations above, and add monitoring
    that surfaces any reconciled overwrite for inspection rather than trusting it
@@ -1501,9 +1958,34 @@ and it is folded into the same decision (E5a). Phase 9B must choose one of:
 3. **Re-key on a source-derived signal** if one can be found, for example a
    provider-supplied revision or an ordering derivable from the data itself.
 
+> **Decided (2026-08-21) in
+> [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §2:
+> option 1.** The residual risk is **accepted with monitoring**. Option 2 was
+> rejected as disproportionate — the ordinary case today is a first reconciled
+> write with nothing stored before it, and gating those on human review would
+> make routine publication depend on an operator. Option 3 is **not available**:
+> neither source publishes a version, an update timestamp or a usable
+> `Last-Modified`, and nothing in the payloads orders two classifications.
+
+The mitigations that come with that acceptance are binding, not advisory
+(ADR 0020 D2.1-D2.9), and each is already stated above or in §10.4.1:
+two-consecutive-check corroboration before any unsettled reconciled overwrite;
+the superseded-revision ledger; no ordering by fetch time, `generatedAt`,
+`reconciledAt` or hash comparison; provisional never replacing reconciled;
+staging rather than applying a change to a settled record; idempotent identical
+payloads. Added by the decision: **every reconciled overwrite raises a safe
+operational event**, and a corroborated change to a settled record raises a
+**distinct** staged-review event, with the bounded, non-personal field
+discipline in §10.4.1.
+
 **Nothing here should be read as an assurance that reconciled writes are
 correctly ordered.** They are ordered on a best-effort basis with a documented
-residual failure mode.
+residual failure mode, and the failure mode above is **not** closed by the
+decision: a persistently stale replica may still return an older revision that
+GridView never previously stored, and neither corroboration nor the ledger can
+prove that it is current. The withdrawn absolute assurance — that stale or
+superseded reconciled data can never replace newer data — stays withdrawn and
+must not reappear in any document, test name or exit criterion.
 
 **Identical payloads are a no-op.** When `incoming.contentRevision` equals the
 stored one, nothing is written; only the confirmation time is refreshed. This
@@ -1511,9 +1993,10 @@ keeps re-checks idempotent and keeps `reconciledAt` meaningful as "last
 confirmed".
 
 **Settled records.** `settled` marks a resource whose value has stopped moving,
-under the definition Phase 9B must supply against the invariants in §10.4.1.
-Whatever that definition is, the behaviour here is fixed: a settled record
-**never** accepts a change automatically. A corroborated, non-superseded change
+under the settling predicate specified in §10.4.1 — three consecutive checks
+returning the published revision, never evaluated before the +24h check. The
+behaviour here is fixed regardless: a settled record **never** accepts a change
+automatically. A corroborated, non-superseded change
 to a settled resource is **staged** — retained, published snapshot unchanged, and
 an operational signal raised. The path must exist, because results are corrected
 weeks later on occasion, and I4 requires the ingestion route that feeds it to
@@ -1591,6 +2074,13 @@ Expected case, first attempt and first check succeed:
 | Qualifying | 3 | 1 | **4** |
 | Sprint / Race | 5 | 3 | **8** |
 
+**The Jolpica column of the expected-case table does not apply to
+reconciliation.** OpenF1 stops early (§10.3); Jolpica does not — the dense
+sequence always runs all four checks, because settling needs three consecutive
+confirmations and is never evaluated before +24h (§10.4.1). Jolpica's ordinary
+per-session cost is therefore the **4-check** figure in the worst-case table
+above. See §11.3.1.
+
 ### 11.2 Baseline, off-event
 
 **The baseline contains no OpenF1 request.** An earlier version of this table
@@ -1657,42 +2147,94 @@ baseline 6.4 + Sprint (17 + 12) + Qualifying (9 + 4) = ~48 requests/day
 Split by source on that day: **OpenF1 ≈ 26**, **Jolpica ≈ 22** — baseline 6.4
 plus Sprint 12 plus Qualifying 4, consistent with §11.3.
 
-**The reconciliation figures are now a lower bound, not a ceiling.** They assume
-polling stops at the first successful check. Under the invariants in §10.4.1 a
-resource must be confirmed more than once before it can settle, and I4 requires
-some slow ingestion to continue afterwards — so the true figure is higher by an
-amount that depends on the Phase 9B settling design (G-j). The headroom analysis
-in §11.4 is unaffected in substance: even several times these numbers stays far
-inside both published limits, since the binding constraint is a 500-per-hour
-allowance against tens of requests per day.
+#### 11.3.1 What the settling design adds
 
-**Read these as a ceiling for the OpenF1 path and a lower bound for Jolpica —
-and neither as current traffic.** While no end bound is recorded and the skip
-rule applies to every session (§10.2 rule 3), the OpenF1 column is **zero**, so
-the peak day would be Jolpica's **≈ 22** requests (baseline 6.4 + Sprint 12 +
-Qualifying 4) and the monthly figure the baseline plus reconciliation alone.
-Those Jolpica figures are themselves lower bounds until the §10.4.1 settling
-design fixes how long polling continues. The OpenF1 numbers apply only once the
-provisional path is unlocked.
+> **Updated (2026-08-21).** §10.4.1 is now specified, so the reconciliation
+> figures are no longer open-ended. Two corrections follow.
+
+**The "Expected case" column overstates nothing for OpenF1 and understates
+Jolpica.** OpenF1 genuinely stops early (§10.3). Jolpica does **not**: the dense
+sequence always runs all four checks, because settling requires three
+consecutive confirmations and is never evaluated before +24h. So Jolpica's
+*ordinary* per-session cost is the **4-check** figure in the worst-case table of
+§11.1, not the one-check figure.
+
+**Continuation and post-settlement traffic are now bounded rather than
+unknown:**
+
+| Component | Bound |
+|---|---|
+| Dense sequence | Exactly 4 checks per polled classification resource |
+| Daily continuation | 0 in the ordinary case (settlement lands at +24h); at most 13, at the `jolpica_anchor + 14 days` ceiling |
+| Per-resource ceiling, **per-session cadence only** | **17 checks**. This is not a lifetime total: sweep re-reads follow settlement and are bounded by the weekly budget instead (§10.4.1) |
+| Slow post-settlement sweep | A **constant 8 slots per week** (≈ 35 per month, since `8 x 52 / 12 ≈ 34.7`) for the entire settled population, independent of how many sessions have completed. One slot = one classification request |
+
+Modelled Jolpica-only monthly totals, which is the operative case while the
+OpenF1 path stays locked. Both lines assume a season month with two race
+weekends, one in four of them a sprint weekend (§11.3):
+
+| Case | Formula | Monthly | Reading |
+|---|---|---:|---|
+| Ordinary | `192 baseline + (1.5 x 16 + 0.5 x 32) weekends = 232`, `+20%` reserve `= 278`, `+35` sweep | **≈ 313** | **Modelled scenario**, not a bound. Every resource settles at +24h and the sweep runs at full budget |
+| Pathological, every resource to the 14-day ceiling | `192 + (1.5 x 68 + 0.5 x 136) = 362`, `+20%` reserve `= 434`, `+35` sweep | **≈ 469** | **Upper bound** for a season month under these assumptions. It deliberately double-counts: a resource still on the daily continuation has not settled and so is not yet in the sweep |
+
+Component derivations, so each figure can be checked rather than trusted:
+
+```text
+baseline      30 x 6.4/day = 192      calendar 4/day (6-hourly) + standings 2/day
+                                      + participants/circuits 3/week (§11.2).
+                                      All Jolpica; the baseline holds no OpenF1 request.
+
+ordinary weekend, Jolpica, 4 dense checks per resource (§11.1 worst-case column)
+  standard    qualifying 4x1 + race 4x3                       = 16
+  sprint      SQ 4x1 + sprint 4x3 + qualifying 4x1 + race 4x3  = 32
+
+ceiling weekend, 17 checks per resource instead of 4
+  standard    qualifying 17x1 + race 17x3                     = 68
+  sprint      17 + 51 + 17 + 51                               = 136
+
+month         1.5 standard + 0.5 sprint weekends
+sweep         8 slots/week x 52/12                            ≈ 35
+reserve       +20%, the existing §11.3 manual-recovery and retry allowance
+```
+
+**No headroom claim is made from these figures, and none may be.** Jolpica
+publishes a **per-second** (4) and a **per-hour** (500) limit; a monthly total
+cannot demonstrate compliance with either, because it says nothing about how the
+requests are distributed within any hour or second. Compliance with those
+windows is the job of the explicit per-provider rate limiter (§11.4, gap G7),
+not of this table. The comparison in §11.4 is against a *daily* figure and
+carries its own caveats.
+
+The combined ≈ 356 figure above is retained as the model for the day the OpenF1
+path unlocks; its Jolpica component must be re-derived from this table at that
+point.
+
+**Read the §11.3 tables as a ceiling for the OpenF1 path and as the ordinary
+Jolpica case only once the correction above is applied — and neither as current
+traffic.** While no end bound is recorded and the skip rule applies to every
+session (§10.2 rule 3), the OpenF1 column is **zero**, so the peak day would be
+Jolpica's **≈ 22** requests (baseline 6.4 + Sprint 12 + Qualifying 4). The
+OpenF1 numbers apply only once the provisional path is unlocked.
 
 ### 11.4 Headroom against published limits
 
 | Source | Published limit | Peak-day use | Headroom |
 |---|---|---:|---|
 | OpenF1 free | 3 requests/**second** and 30 requests/**minute** | ≈ 26 requests/**day** once unlocked; **0 today** | The entire peak day fits inside one minute's allowance. The **per-second** limit is a separate matter — see the note below. |
-| Jolpica unauthenticated | 4 requests/**second** and 500 requests/**hour** | **≥ 22** requests/**day** — a lower bound, not the peak | The modelled figure is ≈ 4% of a single hour's allowance spread across 24 hours. **Neither the eventual peak nor the future headroom can be established yet:** §10.4.1 leaves the settling and post-settlement cadence undefined, so the true peak is unknown, and §9.2 records that Jolpica's limits will fall without stating by how much. Both must be re-checked once the settling design exists and the new limits are published. The per-second limit is subject to the note below. |
+| Jolpica unauthenticated | 4 requests/**second** and 500 requests/**hour** | ≈ 22 requests/**day** ordinary; **≈ 469/month** at the §11.3.1 ceiling | The modelled figure is ≈ 4% of a single hour's allowance spread across 24 hours. **The peak is now bounded** by §10.4.1 (at most 17 per-session-cadence checks per resource, plus a constant weekly sweep), so the remaining unknown is the other side: §9.2 records that Jolpica's limits will fall without stating by how much, so the **future headroom still cannot be established** and must be re-checked once the reduced limits are published. The per-second limit is subject to the note below. |
 
 **On the figures available, neither source's volume looks like a constraint** —
 tens of requests a day against 500 an hour leaves roughly two orders of
 magnitude of room, so licensing rather than quota remains the gate.
 
-**That conclusion is provisional in one direction and unquantified in the
-other.** The Jolpica figure is a lower bound until §10.4.1 fixes how long
-polling continues, and Jolpica has announced its limits will fall without saying
-by how much (§9.2). The margin is large enough that both would have to move
-substantially to matter, but "large enough" is a judgement about unknown
-quantities, not a calculation — so this is recorded as a **re-check at Phase 9B**
-rather than a settled headroom result.
+**That conclusion is now firm on one side and unquantified on the other.** The
+Jolpica volume is bounded by §11.3.1 rather than open-ended, but Jolpica has
+announced its limits will fall without saying by how much (§9.2). The margin is
+large enough that the limit would have to move substantially to matter, but
+"large enough" is a judgement about an unknown future limit, not a calculation
+— so this stays a **re-check at Phase 9B**, narrowed to the published-limit side
+alone, rather than a settled headroom result.
 
 **Serialization alone does not satisfy a per-second burst limit.** A single Race
 or Sprint attempt issues five OpenF1 calls, and if responses return quickly,
@@ -1720,9 +2262,10 @@ requests is made, spaced out.
 | Adopted event-aware model, worst case | 6.4 | ≈ 48 | ≈ 356 |
 | **Reduction** | **~98%** | **~88%** | **~97%** |
 
-Those are ceilings for the OpenF1 path and **lower bounds** for Jolpica, whose
-totals stop at the first successful check until §10.4.1 is designed — so the
-comparison understates the adopted model rather than overstating it.
+Those are ceilings for the OpenF1 path. The Jolpica component of the "expected
+case" understates the adopted model, because reconciliation never stops at the
+first successful check (§11.3.1); the corrected Jolpica-only figures are
+≈ 313 per month ordinary and ≈ 469 at the §10.4.1 ceiling.
 **Actual traffic today is zero**:
 no adapter is built, production remains `PROVIDER_MODE = "none"` and no
 production cron exists, so nothing fetches from either source. Once the Jolpica
@@ -1928,7 +2471,7 @@ provider or a rights holder raises an objection, §14.3 M10 applies immediately.
 | M4 | **Feature switches allowing either provider to be disabled independently** — distinct from S1: S1 makes removal possible at build time, M4 makes it possible at runtime without a deployment | Phase 9B |
 | M5 | **No protected media** — the §7.6.5 exclusion list | Binding now; nothing has ever been fetched |
 | M6 | **No official-affiliation language** anywhere in the product or documentation | Binding now |
-| M7 | **Conservative request volumes** — roughly 356 requests per month for the modelled design, and a **lower bound** for the reconciliation path until the §10.4.1 settling design is fixed. **Headroom is not yet established**: continuation traffic is unspecified and the size of Jolpica's announced limit reduction is unstated (Q5), so the current margin is an observation about today's figures rather than a mitigation that holds (§11.4). | **Partly designed — re-check required** once §10.4.1 exists and the reduced limits are published |
+| M7 | **Conservative request volumes** — ≈ 313 requests per month on the Jolpica-only path in the ordinary case and ≈ 469 at the §10.4.1 ceiling, with continuation traffic now **bounded** rather than unspecified (§11.3.1). **Headroom is still not fully established**: the size of Jolpica's announced limit reduction is unstated (Q5), so the current margin is an observation about today's published limit rather than a mitigation that holds (§11.4). | **Designed — re-check required** once the reduced limits are published |
 | M8 | **Licence-version and terms monitoring**, including watching for Jolpica's announced limit reduction | Phase 9B, plus §12.3 S10 annual review |
 | M9 | **A final licence-compliance review before public release**, covering §7.6.1-§7.6.5, the §10.2 live-window anchor and the §11.4 rate limiter | Release gate (§15.3) |
 | M10 | **Immediate reassessment if a provider or rights holder raises an objection** — pause the affected adapter, stop the affected use, re-evaluate before resuming | Standing obligation from now |
@@ -1947,9 +2490,9 @@ Full detail in Appendix D.
 | G-f | No outbound-request hardening helper exists; Jolpica's mandatory custom `User-Agent` would live there. |
 | G-g | No provenance or provisional/reconciled state exists in the local schema. |
 | G-h | `providerCallCount` is untyped and would silently under-report per-source usage. |
-| G-i | **`sourceUpdatedAt` has no valid value from either source** (§10.7.1). The field is contract-required and is ADR 0005's primary conflict key, but neither provider publishes an update timestamp. Blocking for Phase 9B. |
+| G-i | **`sourceUpdatedAt` must be derived from GridView's own observation state** (§10.7.1). Neither provider publishes an update timestamp, so the published value is `sourceObservedAt`, which requires the previously stored revision and is therefore coordinator state. ~~Blocking for Phase 9B.~~ **Decided** by [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1; the remaining work is implementation (it rides on G4 and G9). |
 | G-k | **`QuotaState` has the wrong windows** (§8.6). It carries daily and per-minute fields, while OpenF1 limits are per-second and per-minute and Jolpica's are per-second and per-hour. Per-source windows are required before the §16.1 thresholds can mean anything. |
-| G-j | **The post-reconciliation cadence and the settling predicate are unspecified** (§10.4.1). Five invariants are fixed; the concrete design is Phase 9B work, and I3 and I4 are in tension. Until it exists the reconciliation volume figures are a lower bound. |
+| G-j | ~~**The post-reconciliation cadence and the settling predicate are unspecified.**~~ **Specified** in §10.4.1 under [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §3-§4: the five invariants are binding and the state machine, cadence bounds and slow sweep are recorded against them. The I3/I4 tension is resolved by a bounded settling predicate plus a fixed-budget weekly sweep. Volume figures are bounded (§11.3.1). The remaining work is **implementation**, including the operational events in §10.4.1 and §10.9.1. |
 
 ---
 
@@ -1989,20 +2532,29 @@ provided **all** of the following hold. Every criterion is objective and
 verifiable inside this repository. **No provider email, reply or waiting period
 appears among them.**
 
-| # | Criterion |
-|---|---|
-| E1 | The product remains **unmonetised** — none of the seven items in §7.6.1 is present. *(State check, verifiable now.)* |
-| E2 | **Both current licence notices are recorded** — OpenF1 (§7.1) and Jolpica (§7.2), each with its source URL and access date |
-| E3 | **Attribution requirements are part of the implementation plan** — the six elements of §7.6.2 **and its conditional duties 7-11**, in the app and in the public API documentation, with attribution held as per-source data rather than hard-coded strings |
-| E4 | The **separation of provider-derived data from application source code is specified** (§7.6.3), with the artefacts on each side named. Verified in the built system at exit. |
-| E5 | The normalized data output has a **documented ShareAlike strategy** (§7.6.3) |
-| E5a | **Both halves of the absent-recency-signal problem are decided**, because they share one root cause: (a) the `sourceUpdatedAt` conflict (§10.7.1) — accept the proxy with ADR 0005 and the OpenAPI description amended to match, or re-key the conflict semantics; and (b) the residual reconciled-ordering risk (§10.9.1) — accept it with monitoring, require review for every reconciled overwrite, or re-key on a source-derived signal. These are **architecture and product decisions** that must precede Phase 9B rather than outputs of it, which is why they gate entry. Publishing fetch time under `sourceUpdatedAt` is never an option. |
-| E5b | The **five settling invariants in §10.4.1 are recorded and accepted as binding** on the Phase 9B design. The design *itself* is Phase 9B's first task and is verified at **exit**, not entry — §10.4.1 calls it Phase 9B work, so requiring it at entry would be circular for the same reason E7 was. |
-| E6 | **Live-window and rate-limit restrictions are written down as binding requirements** the adapter must meet — the §10.2 actual-end anchor with the bound-or-skip rule and re-anchor backstop; every OpenF1 request routed through that gate with no baseline, metadata or health-check exception (§11.2); Jolpica scheduled from its own always-available anchor (§10.4); an explicit per-provider rate limiter (§11.4); and Jolpica's published limits and mandatory `User-Agent`. **Specified, not yet implemented** — see below. |
-| E7 | **Independent per-source disablement is specified** — what may be switched off, at what granularity, and what the system must still serve with one source disabled. The switches themselves are Phase 9B work (§14.3 M4) and are **verified at exit**, not at entry. |
-| E8 | The **provider-neutrality requirement for the public DTO contract is recorded** (§10.8, requirement T4). The contract is provider-neutral today and must stay so; verified against the built adapters at exit. |
-| E9 | **No protected images, logos or branding are imported** (§7.6.5). *(State check, verifiable now — nothing has ever been fetched.)* |
-| E10 | **No provider is described as officially approving GridView** in any surface. *(State check, verifiable now.)* |
+> **This table is the authoritative owner of the twelve entry-criterion
+> statuses.** `GridView_Implementation_Plan.md` §14.0.3 mirrors it and must not
+> diverge. Status as of **2026-08-21**, after Phase 9A merged at `b233da4` and
+> the Phase 9B-0 entry-decision package recorded E5a, E5b and E6:
+> **all twelve hold, and Phase 9B implementation may begin.** Entry is not
+> release approval (§15.3), and the open items in §14.4 stay open — in
+> particular no session-end bound is recorded, so the OpenF1 real-network path
+> stays locked.
+
+| # | Criterion | Status |
+|---|---|---|
+| E1 | The product remains **unmonetised** — none of the seven items in §7.6.1 is present. *(State check, verifiable now.)* | **Holds.** Verified 2026-08-21 against `pubspec.yaml`/`pubspec.lock`, the Gradle forbidden-dependency gate, `lib/`, `android/` and `services/edge-api/`: no advertising or consent SDK, no ad unit, no in-app purchase or billing dependency, no subscription, affiliate, sponsorship or data-sale mechanism. The inert production AdMob **application-ID** `meta-data` retained under [ADR 0018](../adr/0018-advertising-not-retained-for-v1.md) is an identity value with no SDK to read it. |
+| E2 | **Both current licence notices are recorded** — OpenF1 (§7.1) and Jolpica (§7.2), each with its source URL and access date | **Holds.** §7.1 and §7.2, sources S1/S5/S6 in §13, accessed 2026-08-19. |
+| E3 | **Attribution requirements are part of the implementation plan** — the six elements of §7.6.2 **and its conditional duties 7-11**, in the app and in the public API documentation, with attribution held as per-source data rather than hard-coded strings | **Holds.** §7.6.2; `GridView_Implementation_Plan.md` §14.2 and §14.7. Specification only — the surface is built in Phase 9B and verified at exit. |
+| E4 | The **separation of provider-derived data from application source code is specified** (§7.6.3), with the artefacts on each side named. Verified in the built system at exit. | **Holds.** §7.6.3 names the artefacts on each side. |
+| E5 | The normalized data output has a **documented ShareAlike strategy** (§7.6.3) | **Holds.** §7.6.3, with the boundary limits recorded in §7.3.3 and ADR 0019 §6. |
+| E5a | **Both halves of the absent-recency-signal problem are decided**, because they share one root cause: (a) the `sourceUpdatedAt` conflict (§10.7.1); and (b) the residual reconciled-ordering risk (§10.9.1). These are **architecture and product decisions** that must precede Phase 9B rather than outputs of it, which is why they gate entry. Publishing fetch time under `sourceUpdatedAt` is never an option. | **Decided** 2026-08-21, [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1 and §2. (a) The `sourceObservedAt` proxy is adopted and published under `sourceUpdatedAt`; ADR 0005 carries a qualification note and the OpenAPI description states the substituted semantics; the field stays required and the wire shape is unchanged. (b) The residual ordering risk is **accepted with monitoring** (option 1); the documented rollback failure mode stays open and no ordering guarantee is claimed. |
+| E5b | The **five settling invariants in §10.4.1 are recorded and accepted as binding** on the Phase 9B design. The design *itself* was allowed to be verified at **exit** rather than entry, because requiring Phase 9B's own output at entry would be circular. | **Satisfied at entry** 2026-08-21, ADR 0020 §3: I1-I5 are binding. The design was additionally completed in this package (§10.4.1, ADR 0020 §4) because it needed no further product decision, so what remains at **exit** is that the implementation matches it and is recorded against I1-I5 individually. |
+| E6 | **Live-window and rate-limit restrictions are written down as binding requirements** the adapter must meet — the §10.2 actual-end anchor with the bound-or-skip rule and re-anchor backstop; every OpenF1 request routed through that gate with no baseline, metadata or health-check exception (§11.2); Jolpica scheduled from its own always-available anchor (§10.4); an explicit per-provider rate limiter (§11.4); and Jolpica's published limits and mandatory `User-Agent`. | **Specified and binding** 2026-08-21, ADR 0020 §5 (D5.1-D5.8), which records the bound-or-skip rule and the explicit absence of exceptions. **Not implemented**, and the OpenF1 real-network path stays locked because no session-end bound is recorded — that item remains open (§10.2, §14.4). |
+| E7 | **Independent per-source disablement is specified** — what may be switched off, at what granularity, and what the system must still serve with one source disabled. The switches themselves are Phase 9B work (§14.3 M4) and are **verified at exit**, not at entry. | **Holds.** §10.10 and §14.3 M1/M4. |
+| E8 | The **provider-neutrality requirement for the public DTO contract is recorded** (§10.8, requirement T4). The contract is provider-neutral today and must stay so; verified against the built adapters at exit. | **Holds.** §10.8; enforced today by `test/contract/fixtures.test.ts` and `test/contract/generated-snapshots.test.ts`. ADR 0020 keeps every new provenance field internal. |
+| E9 | **No protected images, logos or branding are imported** (§7.6.5). *(State check, verifiable now — nothing has ever been fetched.)* | **Holds.** Verified 2026-08-21: the authoritative `content/media/media-rights.json` register is empty and the publication gate fails closed; the only tracked raster assets are GridView's own launcher icons and the test golden baselines; `content/media/media-assets.mock.json` points at the non-routable `media.gridview.local`. No provider media has ever been fetched. |
+| E10 | **No provider is described as officially approving GridView** in any surface. *(State check, verifiable now.)* | **Holds.** Verified 2026-08-21 across `lib/`, `test/`, `docs/`, `content/`, `services/edge-api/src/`, `README.md` and `privacy_policies.md`. Every match is a **disclaimer** or a statement of this requirement; the shipped Settings string states GridView is independent and not endorsed by or affiliated with Formula 1, the FIA or any team, in both locales. |
 
 #### 15.2.1 Entry criteria are specification checks, not implementation checks
 
@@ -2029,6 +2581,12 @@ that §10.4.1 assigns to Phase 9B cannot gate Phase 9B entry either — recastin
 "implemented" as "specified" does not help if the *specification* is also Phase
 9B's output. E5b was miscast that way and now gates only on the invariants being
 accepted as binding, with the design itself verified at exit.
+
+**That the design was in fact completed early does not change the rule.** The
+Phase 9B-0 entry-decision package specified the §10.4.1 state machine because it
+turned out to need no further product decision, not because entry demanded it.
+E5b is still satisfied by the invariants alone; the design is a head start whose
+*implementation* is still verified at exit.
 
 By contrast E5a genuinely belongs at entry: amending an Accepted ADR and the
 public contract, and choosing a posture on a known residual risk, are

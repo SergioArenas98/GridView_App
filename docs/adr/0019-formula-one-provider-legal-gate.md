@@ -21,6 +21,15 @@ Earlier reasoning is preserved in the repository history and its evidence is
 retained in
 [`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md).
 
+> **Followed on 2026-08-21 by
+> [ADR 0020](0020-provider-source-observation-and-reconciliation.md), which
+> supersedes nothing here.** This ADR's licensing decision, compliance
+> obligations and accepted residual risk stand unchanged. ADR 0020 closes the
+> three entry criteria this one deliberately left open — **E5a** (the
+> `sourceUpdatedAt` proxy and the reconciled-ordering posture), **E5b** (the
+> settling invariants, plus the design itself) and **E6** (the OpenF1
+> bound-or-skip rule as a binding requirement) — on the terms set out below.
+
 ## Context
 
 Phase 9 replaces the mock backend provider with a real Formula 1 data source
@@ -201,8 +210,11 @@ the rules. A stale replica serving an older payload GridView never stored is not
 caught by the ledger, which only remembers revisions once current here.
 Reconciled writes are therefore ordered on a **best-effort basis with a
 documented residual failure mode**, and choosing how to handle that residual
-risk is folded into the E5a decision alongside `sourceUpdatedAt`, because both
-have the same root cause. See
+risk was folded into the E5a decision alongside `sourceUpdatedAt`, because both
+have the same root cause. **That choice is now made:
+[ADR 0020](0020-provider-source-observation-and-reconciliation.md) §2 accepts
+the residual risk with monitoring, and does not restore the withdrawn guarantee.**
+See
 [`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md)
 §10.9.1.
 
@@ -259,7 +271,9 @@ fallback if C1 or C3 is relaxed. **API-Sports stays unselected** and unverified.
 
 **11. Phase 9B has not started, and nothing here authorises production
 activation.** No adapter, credential, live provider mode, cron trigger or
-deployment follows from this ADR. The mock provider is preserved permanently.
+deployment follows from this ADR, nor from
+[ADR 0020](0020-provider-source-observation-and-reconciliation.md). The mock
+provider is preserved permanently.
 
 ## Consequences
 
@@ -271,22 +285,29 @@ criteria. Nothing waits on a third party: there is no provider reply to await.
 deciding both the `sourceUpdatedAt` conflict and the residual reconciled-ordering
 risk that shares its root cause — neither adopted source publishes an
 update timestamp, yet the field is contract-required and is ADR 0005's primary
-conflict key, so **an adapter cannot currently produce a contract-valid snapshot
-at all**, and closing that gap means amending an Accepted ADR and the public
-contract or re-keying the conflict semantics. E5b requires the five settling
+conflict key, so **as this ADR was written an adapter could not produce a
+contract-valid snapshot at all**, and closing that gap means amending an
+Accepted ADR and the public contract or re-keying the conflict semantics. E5b requires the five settling
 invariants to be **accepted as binding** — the cadence and settling predicate
 themselves are Phase 9B's first design task, verified at exit, because requiring
 Phase 9B's own specification before Phase 9B may start would be circular. E6
 requires the OpenF1 live-window rule to be specified; it today skips every
 session because no end bound is recorded. **None of the three is resolved by
-this ADR.**
+this ADR** — all three were resolved on 2026-08-21 by
+[ADR 0020](0020-provider-source-observation-and-reconciliation.md), which
+adopts the `sourceObservedAt` proxy with ADR 0005 and the OpenAPI description
+amended to match, accepts the reconciled-ordering risk with monitoring, makes
+I1-I5 binding (and specifies the state machine), and records the OpenF1
+bound-or-skip rule as binding. **The maximum-session-duration bound remains
+unrecorded, so the OpenF1 real-network path remains locked.**
 
 **The obligations are real work.** Attribution surfaces in both the app and the
 API documentation, a per-source attribution model, a documented ShareAlike
 strategy for the normalized output, runtime switches to disable either adapter,
 and licence-terms monitoring are now Phase 9B scope rather than optional polish.
 
-**Phase 9B carries the structural gaps already recorded.** The largest:
+**Phase 9B carries the structural gaps already recorded**, none of which has
+been implemented, scaffolded or stubbed. The largest:
 `fetchSeasonSource(season, jobs)` demands a whole season from one call and cannot
 express two sources with different roles. Alongside it — no live provider mode,
 no production cron, no event-window awareness, no curated identifier mapping
@@ -375,6 +396,7 @@ post-merge CI is green.
 
 - [`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md) — licence-compliance analysis, permitted-use mapping, obligations, feasibility evidence, dual-source design, quota model, residual risk and the optional clarification templates
 - [`0018-advertising-not-retained-for-v1.md`](0018-advertising-not-retained-for-v1.md) — advertising is not retained for v1
+- [`0020-provider-source-observation-and-reconciliation.md`](0020-provider-source-observation-and-reconciliation.md) — the Phase 9B entry decisions that close E5a, E5b and E6
 - [`0005-snapshot-conflict-and-freshness.md`](0005-snapshot-conflict-and-freshness.md) — the existing snapshot-conflict rule the provisional/reconciled rule composes with
 - [`0002-replace-spring-boot-backend-with-cloudflare-edge-api.md`](0002-replace-spring-boot-backend-with-cloudflare-edge-api.md) — the edge architecture the sources sit behind
 - `GridView_Backend_Scheme.md` §2, §3, §7, §8.1, §14-§18, §23.1

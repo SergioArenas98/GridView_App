@@ -1260,9 +1260,11 @@ requirements tracked in
 
 ## 14. Phase 9 - Production provider integration
 
-**Phase 9 has started. Phase 9A engineering and documentation work is finished
-on its branch; Phase 9A is not complete until that branch is merged and its
-post-merge CI is green. Phase 9B has not started.** See §14.0.
+**Phase 9 has started. Phase 9A is complete and merged** (PR #7, merge commit
+`b233da4`), **and its post-merge CI is green. Phase 9B implementation has not
+started**: its twelve entry criteria all hold as of 2026-08-21 (§14.0.3), so it
+is permitted to begin, but no adapter, coordinator, scheduler, mapping registry,
+live provider mode, production cron or provider request exists. See §14.0.
 
 ## 14.0 Phase 9A status
 
@@ -1277,13 +1279,14 @@ architecture and product-risk decision, not as provider approval).
 
 | Item | Status |
 |---|---|
-| Provider evaluation and licensing basis | **Work finished on branch.** Phase 9A may be called complete only after the branch is merged and post-merge CI succeeds. |
+| Provider evaluation and licensing basis | **Complete and merged** — PR #7, merge commit `b233da4`, post-merge CI green. Phase 9A was documentation-only. |
 | Licensing basis | **Settled: the public CC BY-NC-SA 4.0 licence** published by OpenF1 and Jolpica. For uses inside its scope, the licence is the permission. |
 | Individual provider permission | **Not required and not awaited.** Outreach is an optional courtesy channel only. **No inquiry has been sent**, and no waiting period exists. |
 | Provider approval | **None.** No provider, and no Formula 1 entity, has approved, endorsed or reviewed GridView. None has been asked. |
 | Formula 1 rights clearance | **Not obtained and not claimed.** A licensor can only license rights it holds, and CC BY-NC-SA 4.0 §2(b) does not license trademark rights. Accepted as residual risk. |
 | Production provider adapter | **Not implemented and not activated.** Production remains `PROVIDER_MODE = "none"`; the mock provider is unchanged. |
-| Next action | **Merge Phase 9A and confirm post-merge CI.** Phase 9B entry is then governed by the twelve objective criteria in §14.0.3. |
+| Phase 9B entry decisions (E5a, E5b, E6) | **Recorded 2026-08-21** in [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md). Documentation and contract-description only — no adapter, no live request, no infrastructure change. |
+| Next action | **Begin Phase 9B implementation** (§14.3-§14.7), starting from the Jolpica adapter and the coordinator. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
 
 ### 14.0.1 Product constraints governing Phase 9
 
@@ -1378,24 +1381,32 @@ this repository. **No provider email, reply or waiting period is a
 prerequisite.** Full detail in
 [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2.
 
-| # | Criterion |
-|---|---|
-| E1 | The product remains **unmonetised** |
-| E2 | **Both current licence notices are recorded**, with source URL and access date |
-| E3 | **Attribution requirements are part of the implementation plan** — in the app and in the public API documentation |
-| E4 | The **separation of provider-derived data from application source code is specified** |
-| E5 | The normalized data output has a **documented ShareAlike strategy** |
-| E5a | **Both halves of the absent-recency-signal problem are decided** — the `sourceUpdatedAt` conflict ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.7.1) **and** the residual reconciled-ordering risk (§10.9.1), which share one root cause. Neither source publishes an update timestamp, yet the field is contract-required and is [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md)'s primary conflict key, so without this an adapter cannot produce a contract-valid snapshot at all — and without the ordering choice its overwrite behaviour is undefined. |
-| E5b | The **five settling invariants are recorded and accepted as binding** ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1). The design itself is a §14.3 task verified at exit, not an entry condition |
-| E6 | **Live-window and rate-limit restrictions are written down as binding requirements** |
-| E7 | **Independent per-source disablement is specified** — the switches themselves are §14.3 work and are verified at exit |
-| E8 | The **provider-neutrality requirement for the public DTO contract is recorded** |
-| E9 | **No protected images, logos or branding are imported** |
-| E10 | **No provider is described as officially approving GridView** |
+> **Status mirror, not the owner.** The authoritative status table is
+> [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §15.2; this
+> one summarises it and must not diverge. As of **2026-08-21** — Phase 9A merged
+> and its post-merge CI green, and the Phase 9B-0 entry-decision package
+> recorded in [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) —
+> **all twelve hold and Phase 9B implementation may begin.** Entry is not
+> release approval (§14.0.4), and none of the §14.3-§14.7 work has started.
+
+| # | Criterion | Status |
+|---|---|---|
+| E1 | The product remains **unmonetised** | **Holds** (state check, verified 2026-08-21) |
+| E2 | **Both current licence notices are recorded**, with source URL and access date | **Holds** |
+| E3 | **Attribution requirements are part of the implementation plan** — in the app and in the public API documentation | **Holds** (specified; built in §14.3, verified at §14.8) |
+| E4 | The **separation of provider-derived data from application source code is specified** | **Holds** |
+| E5 | The normalized data output has a **documented ShareAlike strategy** | **Holds** |
+| E5a | **Both halves of the absent-recency-signal problem are decided** — the `sourceUpdatedAt` conflict ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.7.1) **and** the residual reconciled-ordering risk (§10.9.1), which share one root cause. Neither source publishes an update timestamp, yet the field is contract-required and is [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md)'s primary conflict key. | **Decided** — [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1 (publish `sourceObservedAt` under `sourceUpdatedAt`; field stays required, wire shape unchanged) and §2 (residual ordering risk accepted with monitoring) |
+| E5b | The **five settling invariants are recorded and accepted as binding** ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1). The design itself is a §14.3 task verified at exit, not an entry condition | **Satisfied at entry** — ADR 0020 §3. The design was additionally completed early (Evaluation §10.4.1); its **implementation** is still a §14.3 task verified at §14.8 |
+| E6 | **Live-window and rate-limit restrictions are written down as binding requirements** | **Specified and binding** — ADR 0020 §5. **Not implemented**; the OpenF1 real-network path stays locked until a session-end bound is recorded |
+| E7 | **Independent per-source disablement is specified** — the switches themselves are §14.3 work and are verified at exit | **Holds** |
+| E8 | The **provider-neutrality requirement for the public DTO contract is recorded** | **Holds** |
+| E9 | **No protected images, logos or branding are imported** | **Holds** (state check, verified 2026-08-21) |
+| E10 | **No provider is described as officially approving GridView** | **Holds** (state check, verified 2026-08-21) |
 
 ADR 0019 records the structural seams Phase 9B must add, the largest being that
 the current single-call provider interface cannot express two sources with
-different roles.
+different roles. **None of G1-G10 has been implemented, scaffolded or stubbed.**
 
 ### 14.0.4 Release remains separately gated
 
@@ -1477,11 +1488,14 @@ another source rather than bypassing the requirement.
 > tested against fixtures but **must not contact the live service** until an end
 > bound is recorded.
 
-- **Specify the post-reconciliation cadence and settling predicate** against the
-  five invariants in
-  [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1,
-  resolving the tension between I3 and I4. This is the **first** design task of
-  the phase and is verified at exit (§14.8).
+- ~~Specify the post-reconciliation cadence and settling predicate.~~
+  **Already specified** in
+  [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1
+  under [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+  §3-§4: the five invariants are binding, and the state machine, the bounded
+  cadence and the fixed-budget slow sweep resolve the I3/I4 tension. The Phase
+  9B task is now to **implement it as specified** and record the implementation
+  against I1-I5 individually, verified at exit (§14.8).
 - Implement the **Jolpica** adapter and the reconciliation coordinator.
 - Implement the **OpenF1** adapter, fixture-tested only, behind the
   bound-or-skip gate.
@@ -1507,9 +1521,16 @@ another source rather than bypassing the requirement.
 - Implement provider-specific error mapping.
 - Add response-size and timeout controls, a fixed-hostname outbound helper, and
   Jolpica's mandatory identifying `User-Agent`.
-- **Resolve the `sourceUpdatedAt` conflict** before the adapter can ship
-  (Evaluation §10.7.1). Neither source publishes an update timestamp, yet the
-  field is contract-required and is ADR 0005's primary conflict key.
+- **Implement the `sourceUpdatedAt` decision** (Evaluation §10.7.1,
+  [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1).
+  Neither source publishes an update timestamp, so the published value is
+  `snapshotObservedAt` — the first observation of the currently published
+  normalized **snapshot revision**, persisted with it in the publication
+  transaction, assigned strictly monotonically per snapshot key, never advanced
+  by an identical revision, and never GridView's fetch time. The per-resource
+  `sourceObservedAt` is **internal** reconciliation state and is never published.
+  Both are **coordinator/publication** state, not adapter state, because deriving
+  them needs the previously stored revision.
 
 ## 14.4 Data validation tasks
 
@@ -1544,12 +1565,17 @@ these are the implementation tasks.
 - Implement the **Jolpica start-anchored cadence** — +5/+9/+15/+24 hours from
   the scheduled session start, then daily — and the six-hourly calendar poll
   that both meets the §25 freshness target and drives every session trigger.
-- Define result finalization. Corroboration and the superseded-revision ledger
-  **reduce** the chance of a stale read rolling data back; they do not prevent
-  it. An older payload GridView never stored passes both while the record is
-  unsettled ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md)
-  §10.9.1). Build to the strategy chosen under **E5a**, and do not certify a
-  guarantee that strategy does not deliver.
+- Implement result finalization to the **specified** state machine
+  ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1),
+  including the bounded cadence, the 14-day ceiling, the fixed-budget weekly
+  post-settlement sweep and both operational events. Corroboration and the
+  superseded-revision ledger **reduce** the chance of a stale read rolling data
+  back; they do not prevent it. An older payload GridView never stored passes
+  both while the record is unsettled (§10.9.1). The strategy chosen under
+  **E5a** is *accept the residual risk with monitoring*
+  ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+  §2), so build the mitigations and the monitoring, and **do not certify a
+  guarantee that strategy does not deliver**.
 - Reserve capacity for manual recovery and configure alerts on **locally
   modelled** counters, since neither source returns quota headers.
 - Verify provider calls remain independent of public request volume.
@@ -1599,10 +1625,18 @@ these are the implementation tasks.
   (Evaluation §7.6).
 - **No GridView request reaches OpenF1 outside its gate**, and the gate is
   either unlocked by a recorded bound or skipping every session.
-- The `sourceUpdatedAt` conflict is resolved rather than worked around, per the
-  E5a decision.
-- The settling design exists, satisfies all five §10.4.1 invariants, and is
-  recorded against them.
+- `sourceUpdatedAt` carries `snapshotObservedAt` per
+  [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1:
+  bound to the snapshot revision, assigned strictly monotonically per snapshot
+  key at millisecond precision, never advanced by an identical revision, never
+  GridView's fetch time, and surviving a restart. A snapshot that changed only
+  by a removal or a membership change is published rather than rejected. No
+  surface describes it as the upstream modification time or claims provider
+  ordering from it.
+- The implementation **matches** the settling design in §10.4.1, satisfies all
+  five invariants, and is recorded against I1-I5 individually.
+- The reconciled-overwrite and staged-review events exist and respect the
+  bounded, non-personal field discipline (ADR 0020 D2.7-D2.9).
 
 ---
 

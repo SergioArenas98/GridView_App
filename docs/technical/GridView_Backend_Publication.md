@@ -59,6 +59,24 @@ pointer is unchanged. Repeating publication of the already active immutable
 version is treated as idempotent. A generated release whose `sourceUpdatedAt` is
 older than the active release is rejected.
 
+That comparison stays well defined once the sources publish no recency signal:
+`sourceUpdatedAt` then carries GridView's first observation of the currently
+published normalized **snapshot revision**, assigned **strictly monotonically**
+per snapshot key as `max(now, previous + 1 millisecond)`
+([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1,
+D1.7-D1.11). Binding it to the snapshot revision rather than to the contributing
+resources is what keeps this rejection rule safe: a snapshot that changed only
+because an entry was **removed** still carries a later timestamp and is
+published, instead of being rejected as "older". The assignment is made in the
+same transaction that publishes the snapshot, so it survives a crash between
+generation and publication. It is a proxy for source age, so the check protects
+the publication sequence GridView itself observed — it does **not** prove
+upstream ordering. And where the `previous + 1 millisecond` branch of the clamp
+fires — two revisions published inside one millisecond, or a backwards host
+clock — the value is a **local monotonic publication clock** rather than a
+literal observation time; it stays a conservative ordering proxy and raises an
+operational event (ADR 0020 D1.11a).
+
 ## Rollback
 
 Rollback resolves the target version from the request body or `previous:{season}`.
