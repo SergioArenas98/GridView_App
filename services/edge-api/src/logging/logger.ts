@@ -19,6 +19,16 @@ export interface LogEvent {
   providerSourceId?: string | null;
   /** Bounded `sourceId -> integer attempt total`. Never a provider response. */
   providerCallsBySource?: Record<string, number>;
+  /** Whether a request actually left GridView for this event. */
+  providerRequestAttempted?: boolean;
+  /** Local pacing decision: when the limiter says capacity returns. */
+  providerRetryAt?: string;
+  /** Upstream 429 instruction, already parsed to an absolute UTC instant. */
+  providerRetryAfter?: string;
+  /** Comma-joined bounded window kinds (`second`, `minute`, `hour`). */
+  providerLimitingWindow?: string;
+  /** Bounded `window kind -> integer remaining`. Never a provider value. */
+  providerWindowHeadroom?: Record<string, number>;
   [key: string]: unknown;
 }
 

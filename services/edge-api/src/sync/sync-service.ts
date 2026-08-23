@@ -24,6 +24,7 @@ import {
 import {
   ProviderError,
   ProviderRateLimitedError,
+  ProviderRequestNotAttemptedError,
   type FormulaOneProvider,
   type ProviderSeasonSource,
 } from '../providers/formula-one-provider';
@@ -192,6 +193,21 @@ export class SynchronizationService {
         plan.dueJobs,
       );
     } catch (error) {
+      if (error instanceof ProviderRequestNotAttemptedError) {
+        // GridView declined to send, so no request left the Worker. Recording
+        // an attempt here would inflate quota usage and provider failure
+        // timestamps for something the provider never saw. Checked before
+        // `ProviderError` on purpose, and this type deliberately does not
+        // extend it.
+        return this.fail(
+          request.season,
+          existing,
+          startedAt,
+          error.category,
+          plan,
+          metricsBefore,
+        );
+      }
       const rateLimited = error instanceof ProviderRateLimitedError;
       const category = rateLimited
         ? 'provider-rate-limited'

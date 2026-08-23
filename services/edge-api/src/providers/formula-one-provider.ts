@@ -74,6 +74,32 @@ export class ProviderError extends Error {
   }
 }
 
+/**
+ * Raised when GridView decided **not to send** a request, so nothing left the
+ * Worker: a local rate-limit deferral, or a limiter that could not answer and
+ * therefore failed closed.
+ *
+ * Deliberately **not** a `ProviderError`. A `ProviderError` means the provider
+ * was contacted and something went wrong, and the synchronization service
+ * records one attempted provider request for it. This means the opposite, and
+ * recording an attempt for it would inflate quota usage and provider failure
+ * timestamps for a request that was never made.
+ *
+ * `ProviderRateLimitedError` is its mirror image and must not be reused here:
+ * that one means the upstream answered 429 *after* an attempt.
+ */
+export class ProviderRequestNotAttemptedError extends Error {
+  constructor(
+    readonly category: string,
+    /** Local pacing hint for a future scheduler. G5 remains open. */
+    readonly retryAt?: string,
+    message = 'No provider request was attempted.',
+  ) {
+    super(message);
+    this.name = 'ProviderRequestNotAttemptedError';
+  }
+}
+
 export class ProviderRateLimitedError extends ProviderError {
   constructor(readonly retryAfter: string) {
     super('provider-rate-limited', 'Provider rate limit reached.');

@@ -64,18 +64,41 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
 
     expect(names.some((name) => name.includes('openf1'))).toBe(false);
     expect(names.some((name) => name.includes('jolpica'))).toBe(false);
+  });
 
-    // Nothing under src/ issues an outbound provider request.
+  /**
+   * Phase 9B-1 asserted that no provider hostname appeared anywhere under
+   * `src/`, which was a sound proxy for "no adapter exists" while nothing
+   * could reach the network at all.
+   *
+   * Phase 9B-2 makes that exact form obsolete rather than merely inconvenient:
+   * the hardened boundary must pin both origins, because pinning them is the
+   * control that stops a future adapter choosing its own. The invariant below
+   * is strictly stronger - the hostnames are confined to the one endpoint
+   * table, and no module anywhere may call global `fetch` on a literal URL.
+   */
+  it('confines provider origins to the hardened boundary and forbids direct fetch', () => {
     const sourceDir = join(repoRoot, 'services', 'edge-api', 'src');
+    const boundary = join('providers', 'http', 'provider-http-client.ts');
     const files = (readdirSync(sourceDir, { recursive: true }) as string[])
       .map((entry) => entry.toString())
       .filter((entry) => entry.endsWith('.ts'));
+
+    const filesNamingAnOrigin: string[] = [];
     for (const file of files) {
       const contents = readFileSync(join(sourceDir, file), 'utf8');
+      // No module may issue an outbound request to a literal URL.
       expect(contents).not.toMatch(/\bfetch\s*\(\s*['"`]https?:/);
-      expect(contents).not.toContain('api.openf1.org');
-      expect(contents).not.toContain('api.jolpi.ca');
+      if (
+        contents.includes('api.openf1.org') ||
+        contents.includes('api.jolpi.ca')
+      ) {
+        filesNamingAnOrigin.push(file);
+      }
     }
+
+    // Exactly one module knows the origins, and it is the hardened boundary.
+    expect(filesNamingAnOrigin).toEqual([boundary]);
   });
 });
 

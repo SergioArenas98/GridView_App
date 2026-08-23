@@ -1262,12 +1262,11 @@ requirements tracked in
 
 **Phase 9 has started. Phase 9A is complete and merged** (PR #7, merge commit
 `b233da4`), **and its post-merge CI is green. Phase 9B implementation has
-started with Phase 9B-1** (source-aware provider accounting and quota
-foundation, 2026-08-23), which closes **G6** and **G10 / G-k**. Everything else
-remains open: **no adapter, coordinator, rate limiter, event-aware scheduler,
-mapping registry, reconciliation or provenance state machine, live provider
-mode, production cron or provider request exists**, and no provider request has
-ever been made. `PROVIDER_MODE` still admits exactly `mock | none` and
+started**: Phase 9B-1 (2026-08-23) closed **G6** and **G10 / G-k**, and
+Phase 9B-2 (2026-08-23) closed **G7** and **G-f**. Everything else remains
+open: **no adapter, coordinator, event-aware scheduler, mapping registry,
+reconciliation or provenance state machine, live provider mode, production cron
+or provider request exists**, and no provider request has ever been made. `PROVIDER_MODE` still admits exactly `mock | none` and
 production remains `"none"`. See §14.0 and §14.0.5.
 
 ## 14.0 Phase 9A status
@@ -1291,6 +1290,7 @@ architecture and product-risk decision, not as provider approval).
 | Production provider adapter | **Not implemented and not activated.** Production remains `PROVIDER_MODE = "none"`; the mock provider is unchanged. |
 | Phase 9B entry decisions (E5a, E5b, E6) | **Recorded 2026-08-21** in [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md). Documentation and contract-description only — no adapter, no live request, no infrastructure change. |
 | Phase 9B-1 (source-aware accounting and quota foundation) | **Implemented 2026-08-23** (§14.0.5). Typed provider identity, typed per-source request accounting and per-source locally modelled quota state. No adapter, no request, no deployment. |
+| Phase 9B-2 (outbound hardening and per-provider rate limiter) | **Implemented 2026-08-23** (§14.0.6). One hardened outbound boundary and a Durable Object rate limiter with one identity per real source. No adapter, no request, nothing provisioned or deployed. |
 | Next action | **Continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter and the coordinator. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
 
 ### 14.0.1 Product constraints governing Phase 9
@@ -1432,7 +1432,7 @@ was added or changed.**
 |---|---|
 | **G6 - untyped provider call counting** | **Implemented.** The `as unknown as { callCount?: unknown }` cast is gone. `FormulaOneProvider` requires a typed `sourceId`, a `quotaPolicy` and a `requestMetrics()` method, so an adapter that omits telemetry fails to compile rather than silently reporting zero. `SyncResult` keeps its `providerCallCount` lifetime total and adds typed `providerRequests` detail: operation-scoped and lifetime attempt counts, split by canonical source and by synchronization job category, with successful, failed and rate-limited attempts counted separately. A failure and a rate-limit rejection both count as attempted requests. |
 | **G10 / G-k - quota state with the wrong windows and no per-source identity** | **Implemented.** The fixed `dailyLimit` / `dailyRemaining` / `perMinuteLimit` / `perMinuteRemaining` shape is replaced by an extensible per-source window collection carrying usage, remaining capacity, window start and reset, a bounded burst-saturation streak, last provider success and failure, `Retry-After`, usage by job category and a derived warning level. OpenF1 is modelled as per-second and per-minute, Jolpica as per-second and per-hour, and **no adopted source is given a daily bucket**. The mock limits are marked test-only. Persistence is source-specific (`quota:provider:<sourceId>`) in both the memory and KV implementations. |
-| **G4, G7 and every other Phase 9B gap** | **Still open.** No provider adapter, no outbound HTTP helper, no per-provider rate limiter or concurrency control, no multi-source coordinator, no event-aware scheduling (G5), no production cron (G3/G-b), no provider-ID mapping registry (G8), no reconciliation or provisional/reconciled state (G9), no `sourceObservedAt` / `snapshotRevision` / `snapshotObservedAt` persistence, no operator backlog, no attribution or ShareAlike publication surface. |
+| **G4 and every other Phase 9B gap** | **Still open at the end of 9B-1**; G7 was subsequently closed by Phase 9B-2 (§14.0.6). No provider adapter, no outbound HTTP helper, no per-provider rate limiter or concurrency control, no multi-source coordinator, no event-aware scheduling (G5), no production cron (G3/G-b), no provider-ID mapping registry (G8), no reconciliation or provisional/reconciled state (G9), no `sourceObservedAt` / `snapshotRevision` / `snapshotObservedAt` persistence, no operator backlog, no attribution or ShareAlike publication surface. |
 | Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; production is `"none"`; the mock provider remains the only runtime provider. Canonical source identifiers are internal and never reach a v1 DTO, the OpenAPI schema or a generated fixture. |
 | OpenF1 | **Still fail-closed and still incapable of a real request** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §5). Recording its published window policy is quota modelling, not an unlock: no adapter exists and the session-end bound remains unrecorded. |
 
@@ -1444,6 +1444,37 @@ saturation stays observable; a provider rate-limit rejection is critical and
 preserves `Retry-After`; the most severe relevant condition wins. **This is
 quota modelling and alert-state calculation, not the per-provider rate limiter
 - G7 is not implemented.**
+
+### 14.0.6 Phase 9B-2 status - outbound hardening and the per-provider rate limiter
+
+Implemented on **2026-08-23**. Code and configuration only, entirely inside the
+Worker: **no provider was contacted, no request was made or made possible, and
+no Cloudflare resource was provisioned or deployed.**
+
+| Item | Status |
+|---|---|
+| **G7 - HTTP hardening and rate limiter** | **Implemented.** One hardened outbound boundary supplies every Backend Scheme §23.3 control, and the per-provider rate limiter is a Durable Object with one identity per canonical real source, reserving across every published window atomically. |
+| **G-f - outbound hardening helper** | **Closed** with the same boundary, including Jolpica's mandatory identifying `User-Agent`. |
+| **G4, G5, G8, G9 and everything else** | **Still open.** No Jolpica or OpenF1 adapter, no multi-source coordinator, no event-aware scheduling, no production cron, no provider-ID mapping registry, no reconciliation or provenance persistence, no operator backlog, no attribution or ShareAlike publication surface. |
+| Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; staging is `mock`, production is `none`; the mock provider remains the only runtime provider and stays deterministic and network-free. |
+| OpenF1 | **Still fail-closed** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §5). Recording its origin and published windows is hardening and pacing, not an unlock: no adapter exists and the session-end bound is still unrecorded. |
+| Cloudflare | The `PROVIDER_RATE_LIMITER` Durable Object binding and its SQLite `exports` entry are declared and validated locally. **Nothing is provisioned or deployed**, and while the namespace is unbound every reservation resolves to `unavailable`, so no request can be issued. |
+
+**A reservation is not a provider attempt.** A local deferral or an unavailable
+limiter means nothing left GridView, so it increments no request ledger, no
+quota usage and no provider success or failure timestamp. A typed
+`ProviderRequestNotAttemptedError` carries that case and deliberately does not
+extend `ProviderError`, so the synchronization service cannot record a failed
+attempt for a request that never happened. An upstream HTTP 429 remains an
+attempted, rate-limited request.
+
+A deferral carries a deterministic `retryAt` for a future scheduler. **Acting
+on it is G5 event-aware scheduling, which remains open**, and nothing in this
+phase reschedules anything.
+
+The **10-second timeout** and **2 MiB response cap** are chosen engineering
+constants, not published provider figures. They are tunable only while
+preserving the bounded-wait and bounded-memory invariants they enforce.
 
 ## 14.1 Objective
 
@@ -1545,11 +1576,18 @@ another source rather than bypassing the requirement.
   nothing and survives a calendar growing past 30.
 - ~~Capture quota headers.~~ **Neither source publishes any**
   (Evaluation §8.6); model quota locally per source instead.
-- Add an **explicit per-provider rate limiter** — serialization does not satisfy
-  a per-second burst limit (Evaluation §11.4).
+- ~~Add an **explicit per-provider rate limiter**.~~ **Done in Phase 9B-2**
+  ([ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)):
+  a Durable Object with one identity per real source performing exact
+  sliding-window reservations across every published window. Nothing is paced
+  yet, because no adapter exists.
 - Implement provider-specific error mapping.
-- Add response-size and timeout controls, a fixed-hostname outbound helper, and
-  Jolpica's mandatory identifying `User-Agent`.
+- ~~Add response-size and timeout controls, a fixed-hostname outbound helper,
+  and Jolpica's mandatory identifying `User-Agent`.~~ **Done in Phase 9B-2**:
+  a 2 MiB streamed body cap, a 10-second whole-operation timeout, pinned
+  origins and path prefixes, no followed redirects, JSON-only content types,
+  no automatic retry, and the identifying `User-Agent` as a reviewed constant.
+  Every future adapter must route through this boundary.
 - **Implement the `sourceUpdatedAt` decision** (Evaluation §10.7.1,
   [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1).
   Neither source publishes an update timestamp, so the published value is
@@ -1624,7 +1662,8 @@ these are the implementation tasks.
 - Jolpica adapter, plus a fixture-tested OpenF1 adapter behind its gate.
 - Reconciliation coordinator with provenance and provisional/reconciled state.
 - Curated provider-ID mapping registry.
-- Locally modelled quota monitoring and a per-provider rate limiter.
+- Locally modelled quota monitoring (Phase 9B-1) and a per-provider rate
+  limiter (Phase 9B-2, [ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
 - Attribution surface in the app and in the public API documentation, held as
   per-source data rather than hard-coded strings.
 - Documented ShareAlike strategy for the normalized output.

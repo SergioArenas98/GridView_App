@@ -12,6 +12,23 @@ compatibility_date = "2026-07-01"
 [vars]
 ENVIRONMENT = "development"
 
+# Provider reservation coordinator (ADR 0021). One Durable Object identity per
+# canonical real source (`jolpica`, `openf1`), so pacing is one global budget
+# rather than a per-isolate or per-location approximation.
+#
+# NOTHING IS PROVISIONED OR DEPLOYED. The binding is declared so the class and
+# its wiring are real and validated; no adapter calls it, no provider request
+# is possible, and the resolver fails closed when the namespace is absent.
+[[durable_objects.bindings]]
+name = "PROVIDER_RATE_LIMITER"
+class_name = "ProviderRateLimiter"
+
+# SQLite-backed storage is required for Durable Objects on the Workers Free
+# plan, and `exports` is the current supported registration form.
+[exports.ProviderRateLimiter]
+type = "durable-object"
+storage = "sqlite"
+
 [env.staging]
 name = "gridview-api-staging"
 workers_dev = true
@@ -21,6 +38,11 @@ preview_urls = false
 ENVIRONMENT = "staging"
 PROVIDER_MODE = "mock"
 PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
+
+# Bindings are not inherited by named environments, so each one redeclares it.
+[[env.staging.durable_objects.bindings]]
+name = "PROVIDER_RATE_LIMITER"
+class_name = "ProviderRateLimiter"
 
 [env.staging.secrets]
 required = ["ADMIN_TOKEN"]
@@ -47,3 +69,7 @@ name = "gridview-api-production"
 [env.production.vars]
 ENVIRONMENT = "production"
 PROVIDER_MODE = "none"
+
+[[env.production.durable_objects.bindings]]
+name = "PROVIDER_RATE_LIMITER"
+class_name = "ProviderRateLimiter"
