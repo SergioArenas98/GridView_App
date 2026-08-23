@@ -1261,10 +1261,14 @@ requirements tracked in
 ## 14. Phase 9 - Production provider integration
 
 **Phase 9 has started. Phase 9A is complete and merged** (PR #7, merge commit
-`b233da4`), **and its post-merge CI is green. Phase 9B implementation has not
-started**: its twelve entry criteria all hold as of 2026-08-21 (§14.0.3), so it
-is permitted to begin, but no adapter, coordinator, scheduler, mapping registry,
-live provider mode, production cron or provider request exists. See §14.0.
+`b233da4`), **and its post-merge CI is green. Phase 9B implementation has
+started with Phase 9B-1** (source-aware provider accounting and quota
+foundation, 2026-08-23), which closes **G6** and **G10 / G-k**. Everything else
+remains open: **no adapter, coordinator, rate limiter, event-aware scheduler,
+mapping registry, reconciliation or provenance state machine, live provider
+mode, production cron or provider request exists**, and no provider request has
+ever been made. `PROVIDER_MODE` still admits exactly `mock | none` and
+production remains `"none"`. See §14.0 and §14.0.5.
 
 ## 14.0 Phase 9A status
 
@@ -1286,7 +1290,8 @@ architecture and product-risk decision, not as provider approval).
 | Formula 1 rights clearance | **Not obtained and not claimed.** A licensor can only license rights it holds, and CC BY-NC-SA 4.0 §2(b) does not license trademark rights. Accepted as residual risk. |
 | Production provider adapter | **Not implemented and not activated.** Production remains `PROVIDER_MODE = "none"`; the mock provider is unchanged. |
 | Phase 9B entry decisions (E5a, E5b, E6) | **Recorded 2026-08-21** in [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md). Documentation and contract-description only — no adapter, no live request, no infrastructure change. |
-| Next action | **Begin Phase 9B implementation** (§14.3-§14.7), starting from the Jolpica adapter and the coordinator. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
+| Phase 9B-1 (source-aware accounting and quota foundation) | **Implemented 2026-08-23** (§14.0.5). Typed provider identity, typed per-source request accounting and per-source locally modelled quota state. No adapter, no request, no deployment. |
+| Next action | **Continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter and the coordinator. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
 
 ### 14.0.1 Product constraints governing Phase 9
 
@@ -1396,7 +1401,7 @@ prerequisite.** Full detail in
 | E3 | **Attribution requirements are part of the implementation plan** — in the app and in the public API documentation | **Holds** (specified; built in §14.3, verified at §14.8) |
 | E4 | The **separation of provider-derived data from application source code is specified** | **Holds** |
 | E5 | The normalized data output has a **documented ShareAlike strategy** | **Holds** |
-| E5a | **Both halves of the absent-recency-signal problem are decided** — the `sourceUpdatedAt` conflict ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.7.1) **and** the residual reconciled-ordering risk (§10.9.1), which share one root cause. Neither source publishes an update timestamp, yet the field is contract-required and is [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md)'s primary conflict key. | **Decided** — [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1 (publish `sourceObservedAt` under `sourceUpdatedAt`; field stays required, wire shape unchanged) and §2 (residual ordering risk accepted with monitoring) |
+| E5a | **Both halves of the absent-recency-signal problem are decided** — the `sourceUpdatedAt` conflict ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.7.1) **and** the residual reconciled-ordering risk (§10.9.1), which share one root cause. Neither source publishes an update timestamp, yet the field is contract-required and is [ADR 0005](../adr/0005-snapshot-conflict-and-freshness.md)'s primary conflict key. | **Decided** — [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1 (publish the snapshot-level `snapshotObservedAt` under `sourceUpdatedAt`, bound to `snapshotRevision`; the resource-level `sourceObservedAt` stays internal and is never published, D1.12; field stays required, wire shape unchanged) and §2 (residual ordering risk accepted with monitoring) |
 | E5b | The **five settling invariants are recorded and accepted as binding** ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §10.4.1). The design itself is a §14.3 task verified at exit, not an entry condition | **Satisfied at entry** — ADR 0020 §3. The design was additionally completed early (Evaluation §10.4.1); its **implementation** is still a §14.3 task verified at §14.8 |
 | E6 | **Live-window and rate-limit restrictions are written down as binding requirements** | **Specified and binding** — ADR 0020 §5. **Not implemented**; the OpenF1 real-network path stays locked until a session-end bound is recorded |
 | E7 | **Independent per-source disablement is specified** — the switches themselves are §14.3 work and are verified at exit | **Holds** |
@@ -1415,6 +1420,30 @@ existing Play, privacy, media and production-environment gates, **plus a final
 licence-compliance sweep** verifying the non-commercial, attribution,
 ShareAlike, no-additional-restrictions and excluded-material obligations in the
 shipped build and the published API documentation.
+
+### 14.0.5 Phase 9B-1 status - source-aware accounting and quota foundation
+
+Implemented on **2026-08-23**. Documentation-plus-code, entirely inside the
+Worker: **no provider was contacted, no outbound request was made or made
+possible, and no Cloudflare resource, binding, secret, migration or deployment
+was added or changed.**
+
+| Item | Status |
+|---|---|
+| **G6 - untyped provider call counting** | **Implemented.** The `as unknown as { callCount?: unknown }` cast is gone. `FormulaOneProvider` requires a typed `sourceId`, a `quotaPolicy` and a `requestMetrics()` method, so an adapter that omits telemetry fails to compile rather than silently reporting zero. `SyncResult` keeps its `providerCallCount` lifetime total and adds typed `providerRequests` detail: operation-scoped and lifetime attempt counts, split by canonical source and by synchronization job category, with successful, failed and rate-limited attempts counted separately. A failure and a rate-limit rejection both count as attempted requests. |
+| **G10 / G-k - quota state with the wrong windows and no per-source identity** | **Implemented.** The fixed `dailyLimit` / `dailyRemaining` / `perMinuteLimit` / `perMinuteRemaining` shape is replaced by an extensible per-source window collection carrying usage, remaining capacity, window start and reset, a bounded burst-saturation streak, last provider success and failure, `Retry-After`, usage by job category and a derived warning level. OpenF1 is modelled as per-second and per-minute, Jolpica as per-second and per-hour, and **no adopted source is given a daily bucket**. The mock limits are marked test-only. Persistence is source-specific (`quota:provider:<sourceId>`) in both the memory and KV implementations. |
+| **G4, G7 and every other Phase 9B gap** | **Still open.** No provider adapter, no outbound HTTP helper, no per-provider rate limiter or concurrency control, no multi-source coordinator, no event-aware scheduling (G5), no production cron (G3/G-b), no provider-ID mapping registry (G8), no reconciliation or provisional/reconciled state (G9), no `sourceObservedAt` / `snapshotRevision` / `snapshotObservedAt` persistence, no operator backlog, no attribution or ShareAlike publication surface. |
+| Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; production is `"none"`; the mock provider remains the only runtime provider. Canonical source identifiers are internal and never reach a v1 DTO, the OpenAPI schema or a generated fixture. |
+| OpenF1 | **Still fail-closed and still incapable of a real request** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §5). Recording its published window policy is quota modelling, not an unlock: no adapter exists and the session-end bound remains unrecorded. |
+
+The warning semantics implemented are the ones in
+[GridView_Backend_Scheme.md](GridView_Backend_Scheme.md) §16.1: sustained
+windows escalate at 30%, 15% and 5% remaining; a single saturated burst window
+is normal pacing pressure and does not follow that progression; repeated burst
+saturation stays observable; a provider rate-limit rejection is critical and
+preserves `Retry-After`; the most severe relevant condition wins. **This is
+quota modelling and alert-state calculation, not the per-provider rate limiter
+- G7 is not implemented.**
 
 ## 14.1 Objective
 

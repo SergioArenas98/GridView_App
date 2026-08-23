@@ -3,12 +3,18 @@ import {
   contentMetadataKey,
   currentSeasonKey,
   parseVersionFromSnapshotKey,
+  legacyGlobalQuotaKey,
   previousKey,
   quotaKey,
   snapshotKey,
   snapshotPrefix,
   syncStateKey,
 } from './keys';
+import type { ProviderSourceId } from '../providers/provider-source';
+import {
+  adaptLegacyMockQuotaState,
+  quotaRecordForSource,
+} from './quota-records';
 import type {
   ContentMetadata,
   QuotaState,
@@ -79,12 +85,25 @@ export class KvSnapshotStorage implements SnapshotStorage {
     await this.put(syncStateKey(season), state);
   }
 
-  async getQuotaState(): Promise<QuotaState | null> {
-    return this.get<QuotaState>(quotaKey);
+  async getQuotaState(sourceId: ProviderSourceId): Promise<QuotaState | null> {
+    const current = quotaRecordForSource(
+      sourceId,
+      await this.get<unknown>(quotaKey(sourceId)),
+    );
+    if (current) return current;
+    // Narrow, mock-only fallback to the pre-Phase-9B-1 global record. It is
+    // never returned for `jolpica` or `openf1`, and it is never deleted.
+    return adaptLegacyMockQuotaState(
+      sourceId,
+      await this.get<unknown>(legacyGlobalQuotaKey),
+    );
   }
 
-  async setQuotaState(state: QuotaState): Promise<void> {
-    await this.put(quotaKey, state);
+  async setQuotaState(
+    sourceId: ProviderSourceId,
+    state: QuotaState,
+  ): Promise<void> {
+    await this.put(quotaKey(sourceId), { ...state, sourceId });
   }
 
   async getContentMetadata(): Promise<ContentMetadata | null> {

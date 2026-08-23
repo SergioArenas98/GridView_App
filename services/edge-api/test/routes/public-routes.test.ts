@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import worker from '../../src/index';
 import {
   createHarness,
+  providerCalls,
   request,
   seedPublishedSnapshot,
 } from '../support/edge-harness';
@@ -31,13 +32,13 @@ describe('public routes', () => {
   it.each(publicRoutes)('serves GET %s from stored snapshots', async (path) => {
     const harness = createHarness();
     await seedPublishedSnapshot(harness);
-    const providerCallsAfterSync = harness.provider.callCount;
+    const providerCallsAfterSync = providerCalls(harness.provider);
 
     const response = await worker.fetch(request(path), harness.env);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('X-Request-ID')).toBeTypeOf('string');
-    expect(harness.provider.callCount).toBe(providerCallsAfterSync);
+    expect(providerCalls(harness.provider)).toBe(providerCallsAfterSync);
     const body = (await response.json()) as {
       data: unknown;
       meta: { requestId: string; sourceUpdatedAt?: string };

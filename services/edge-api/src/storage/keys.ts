@@ -1,3 +1,4 @@
+import type { ProviderSourceId } from '../providers/provider-source';
 import type { SnapshotDocumentName } from './types';
 
 export function snapshotKey(
@@ -22,7 +23,23 @@ export function previousKey(season: number): string {
 
 export const currentSeasonKey = 'meta:current-season';
 export const contentMetadataKey = 'meta:content-schema';
-export const quotaKey = 'quota:provider';
+/**
+ * Source-specific quota record. Every new write uses this key, so one source
+ * can never overwrite another.
+ */
+export function quotaKey(sourceId: ProviderSourceId): string {
+  return `quota:provider:${sourceId}`;
+}
+
+/**
+ * The pre-Phase-9B-1 global quota record, written when only the mock provider
+ * existed and quota had no source dimension.
+ *
+ * It is read only as a narrow fallback for the `mock` source (see
+ * `readLegacyMockQuotaState`), is never written again, and is never deleted
+ * automatically.
+ */
+export const legacyGlobalQuotaKey = 'quota:provider';
 
 export function syncStateKey(season: number): string {
   return `sync:${season}:state`;

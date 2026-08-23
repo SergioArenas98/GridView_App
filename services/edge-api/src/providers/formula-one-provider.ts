@@ -9,11 +9,14 @@ import type {
   GrandPrix,
   RaceResult,
 } from '../contract/types';
-import type { QuotaState, SyncJobCategory } from '../storage/types';
+import type { SyncJobCategory } from '../storage/types';
+import type { ProviderRequestMetrics } from './provider-metrics';
+import type { ProviderQuotaPolicy, ProviderSourceId } from './provider-source';
 
 export interface ProviderStatus {
+  /** Canonical internal source this status describes. Never published. */
+  sourceId: ProviderSourceId;
   status: 'ok' | 'degraded' | 'rate_limited' | 'unavailable';
-  quota: QuotaState;
 }
 
 export interface ProviderSeasonSource {
@@ -32,11 +35,28 @@ export interface ProviderSeasonSource {
   constructorEntries: ConstructorSeasonEntry[];
   driverStandings: DriverStanding[];
   constructorStandings: ConstructorStanding[];
-  quota: QuotaState;
 }
 
 export interface FormulaOneProvider {
+  /** Human-readable implementation name. Never an identity input. */
   readonly name: string;
+  /**
+   * Canonical internal source identity (gap G6). Identity comes from this
+   * typed value, never from `name` or any other free-form string, and never
+   * reaches a public v1 DTO.
+   */
+  readonly sourceId: ProviderSourceId;
+  /**
+   * The published rate-limit windows GridView models locally for this source.
+   * Nothing is read from a provider response: neither adopted source returns
+   * quota headers (GridView_Provider_Evaluation.md §8.6).
+   */
+  readonly quotaPolicy: ProviderQuotaPolicy;
+  /**
+   * Typed request accounting. Required, so an implementation that forgets
+   * telemetry fails to compile instead of silently reporting zero.
+   */
+  requestMetrics(): ProviderRequestMetrics;
   fetchSeasonSource(
     season: number,
     jobs: SyncJobCategory[],

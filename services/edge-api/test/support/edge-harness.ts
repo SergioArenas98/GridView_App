@@ -1,6 +1,7 @@
 import worker, { type Env } from '../../src/index';
 import { MemoryCachePurgeAdapter } from '../../src/cache/purge';
 import { CapturingLogger } from '../../src/logging/logger';
+import type { FormulaOneProvider } from '../../src/providers/formula-one-provider';
 import { MockFormulaOneProvider } from '../../src/providers/mock/mock-provider';
 import { FixedClock } from '../../src/runtime/clock';
 import { MemorySnapshotStorage } from '../../src/storage/local';
@@ -48,6 +49,14 @@ export function createHarness(
     __SNAPSHOT_VALIDATOR: overrides.validator ?? runtimeSnapshotValidator,
   };
   return { env, storage, provider, logger, purger, clock };
+}
+
+/**
+ * Lifetime provider attempts, read through the typed contract rather than a
+ * structural probe. Failed and rate-limited attempts are included.
+ */
+export function providerCalls(provider: FormulaOneProvider): number {
+  return provider.requestMetrics().lifetime.total;
 }
 
 export function request(

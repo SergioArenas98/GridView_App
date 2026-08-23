@@ -3,6 +3,11 @@ import type {
   SeasonSnapshotMeta,
   SnapshotMeta,
 } from '../contract/types';
+import type {
+  ProviderSourceId,
+  QuotaWindowClass,
+  QuotaWindowKind,
+} from '../providers/provider-source';
 
 export type StoredMeta =
   Omit<SeasonSnapshotMeta, 'requestId'> | Omit<SnapshotMeta, 'requestId'>;
@@ -42,11 +47,43 @@ export type SyncJobCategory =
 export type QuotaWarningLevel =
   'normal' | 'warning' | 'high' | 'critical' | 'unknown';
 
+/**
+ * One locally modelled rate-limit window for one source.
+ *
+ * The collection is extensible rather than a fixed set of fields, so a source
+ * publishing per-second and per-hour limits and one publishing per-second and
+ * per-minute limits are both representable without adding
+ * `perSecondRemaining` / `perHourRemaining` columns.
+ *
+ * Every figure is a GridView-local counter derived from a published limit.
+ * Neither adopted source returns quota headers
+ * (GridView_Provider_Evaluation.md §8.6), so none of this is read from a
+ * response.
+ */
+export interface QuotaWindowState {
+  window: QuotaWindowKind;
+  windowClass: QuotaWindowClass;
+  /** The published limit for this window, or the test-only fixture for `mock`. */
+  limit: number;
+  durationSeconds: number;
+  used: number;
+  remaining: number;
+  windowStartedAt: string;
+  resetsAt: string;
+  /**
+   * Consecutive times this window has reached zero without an intervening
+   * window that stayed clean. Bounded, and what separates a single normal
+   * burst saturation from repeated saturation.
+   */
+  saturationStreak: number;
+}
+
 export interface QuotaState {
-  dailyLimit: number | null;
-  dailyRemaining: number | null;
-  perMinuteLimit: number | null;
-  perMinuteRemaining: number | null;
+  /** Canonical internal source this state belongs to. Never published. */
+  sourceId: ProviderSourceId;
+  /** `true` when `limit` values are GridView test fixtures, not published policy. */
+  testOnly: boolean;
+  windows: QuotaWindowState[];
   lastProviderSuccessAt: string | null;
   lastProviderFailureAt: string | null;
   retryAfter: string | null;
@@ -96,8 +133,14 @@ export interface SnapshotStorage {
   setCurrentSeason(season: number): Promise<void>;
   getSyncState(season: number): Promise<SyncState | null>;
   setSyncState(season: number, state: SyncState): Promise<void>;
-  getQuotaState(): Promise<QuotaState | null>;
-  setQuotaState(state: QuotaState): Promise<void>;
+  /**
+   * Reads the modelled quota state for one source. Source selection is
+   * required at compile time, so one source can never be served another
+   * source's record.
+   */
+  getQuotaState(sourceId: ProviderSourceId): Promise<QuotaState | null>;
+  /** Writes under the source-specific key only. */
+  setQuotaState(sourceId: ProviderSourceId, state: QuotaState): Promise<void>;
   getContentMetadata(): Promise<ContentMetadata | null>;
   setContentMetadata(metadata: ContentMetadata): Promise<void>;
   listVersions(season: number): Promise<string[]>;

@@ -110,9 +110,29 @@ is implemented.
 
 ## Quota Behavior
 
-The internal quota model stores daily and per-minute limits/remaining counts,
-last provider success/failure, retry-after, usage by job category and warning
-level.
+The internal quota model is **per source** and holds an extensible collection
+of the windows that source actually publishes, plus last provider
+success/failure, retry-after, usage by job category and a derived warning
+level. OpenF1 publishes per-second and per-minute limits; Jolpica publishes
+per-second and per-hour limits; neither publishes a daily figure, so no daily
+bucket is modelled. The mock provider's limits are explicitly test-only.
+
+Every count is a **GridView-local counter** derived from each project's
+published limits. Neither adopted source returns rate-limit headers
+([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.6), so
+nothing is read from a response.
+
+Records are stored under `quota:provider:<sourceId>`. The pre-Phase-9B-1 global
+`quota:provider` record is read as a narrow fallback for the **mock** source
+only; its daily and per-minute figures are discarded rather than reinterpreted
+as a limit either adopted source publishes. It is never written again and never
+deleted automatically.
+
+Warning levels follow [GridView_Backend_Scheme.md](GridView_Backend_Scheme.md)
+§16.1: sustained windows escalate at 30%, 15% and 5% remaining; a burst window
+reaching zero once is normal pacing pressure and does not escalate, while
+repeated burst saturation stays observable; a provider rate-limit rejection is
+critical and preserves `Retry-After`.
 
 High quota pressure skips low-priority jobs (`profiles`, `home-rebuild`).
 Critical quota preserves capacity and does not perform scheduled jobs. An active
