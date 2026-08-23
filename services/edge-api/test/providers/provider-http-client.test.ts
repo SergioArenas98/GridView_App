@@ -5,15 +5,18 @@ import {
   buildProviderUrl,
   gridViewUserAgent,
   isAcceptedJsonContentType,
+  maxRetryAfterSeconds,
   parseRetryAfter,
   ProviderHttpClient,
   providerMaxResponseBytes,
   providerRequestTimeoutMillis,
   type ProviderTransport,
 } from '../../src/providers/http/provider-http-client';
-import type {
-  ProviderRateLimiterClient,
-  ReservationOutcome,
+import {
+  ReservationCoordinator,
+  type ProviderRateLimiterClient,
+  type ReservationHost,
+  type ReservationOutcome,
 } from '../../src/providers/http/provider-rate-limiter';
 import type { RealProviderSourceId } from '../../src/providers/http/reservation-engine';
 
@@ -54,6 +57,35 @@ function clientWith(
     now: () => now,
   });
   return { client, logger };
+}
+
+/** Minimal in-memory reservation host, serializing like the runtime gate. */
+class FakeReservationHost implements ReservationHost {
+  private readonly values = new Map<string, unknown>();
+  private queue: Promise<unknown> = Promise.resolve();
+
+  storage = {
+    get: async <T>(key: string): Promise<T | undefined> =>
+      this.values.get(key) as T | undefined,
+    put: async <T>(key: string, value: T): Promise<void> => {
+      this.values.set(key, structuredClone(value));
+    },
+  };
+
+  blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(callback);
+    this.queue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
+  ledgerTimestamps(): number[] {
+    const stored = this.values.get('reservation-ledger') as
+      { timestamps: number[] } | undefined;
+    return stored?.timestamps ?? [];
+  }
 }
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
@@ -101,6 +133,42 @@ describe('URL construction and origin pinning', () => {
     for (const path of rejected) {
       expect(buildProviderUrl('jolpica', path)).toBeNull();
     }
+  });
+
+  it('rejects percent-encoded and mixed dot-segment traversal', () => {
+    // `new URL` normalizes `%2e` to a dot segment, so these resolve to `/etc`
+    // and are caught by the post-resolution prefix re-check rather than by the
+    // literal `..` scan. Pinned here because that ordering is load-bearing.
+    for (const path of [
+      '/ergast/f1/%2e%2e/%2e%2e/etc',
+      '/ergast/f1/.%2e/.%2e/etc',
+      '/ergast/f1/%2E%2E/%2E%2E/etc',
+    ]) {
+      expect(buildProviderUrl('jolpica', path)).toBeNull();
+    }
+  });
+
+  it('keeps encoded separators inside the prefix rather than resolving them', () => {
+    // Double-encoded dots and encoded slashes are literal path characters,
+    // not traversal, so they stay inside the pinned origin and prefix.
+    for (const path of [
+      '/ergast/f1/%252e%252e/x',
+      '/ergast/f1/a%2Fb',
+      '/ergast/f1/a%5Cb',
+    ]) {
+      const url = buildProviderUrl('jolpica', path);
+      expect(url?.origin).toBe('https://api.jolpi.ca');
+      expect(url?.pathname.startsWith('/ergast/f1/')).toBe(true);
+    }
+    // A single dot segment normalizes away and still stays inside the prefix.
+    expect(buildProviderUrl('jolpica', '/ergast/f1/./x')?.pathname).toBe(
+      '/ergast/f1/x',
+    );
+  });
+
+  it('treats the path prefix as case-sensitive', () => {
+    expect(buildProviderUrl('jolpica', '/ERGAST/F1/x')).toBeNull();
+    expect(buildProviderUrl('openf1', '/V1/sessions')).toBeNull();
   });
 
   it('enforces the documented path prefix per source', () => {
@@ -369,6 +437,95 @@ describe('response hardening', () => {
     expect(result.ok && result.data.v.length).toBe(filler.length);
   });
 
+  it('handles empty and 204 bodies deliberately, never as an accidental success', async () => {
+    const cases: [string, Response][] = [
+      ['204 without a content type', new Response(null, { status: 204 })],
+      [
+        '204 declaring JSON',
+        new Response(null, {
+          status: 204,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ],
+      [
+        'empty 200 declaring JSON',
+        new Response('', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ],
+    ];
+
+    for (const [, response] of cases) {
+      const { client } = clientWith(async () => response);
+      const result = await client.getJson({
+        sourceId: 'openf1',
+        path: '/v1/sessions',
+      });
+
+      expect(result.ok).toBe(false);
+      // Typed either as a content-type rejection or as malformed JSON - never
+      // a success carrying `undefined` data.
+      expect(['invalid-content-type', 'malformed-json']).toContain(
+        !result.ok && result.kind,
+      );
+    }
+  });
+
+  it('cannot be fooled by a dishonest Content-Length in either direction', async () => {
+    // Understated: streaming still reads the real body and caps it.
+    const understated: ProviderTransport = async () =>
+      new Response(JSON.stringify({ v: 'x'.repeat(1000) }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': '2',
+        },
+      });
+    const small = await clientWith(understated).client.getJson<{ v: string }>({
+      sourceId: 'openf1',
+      path: '/v1/sessions',
+    });
+    expect(small.ok).toBe(true);
+    expect(small.ok && small.data.v.length).toBe(1000);
+
+    // Negative: ignored as a bound, streaming governs.
+    const negative: ProviderTransport = async () =>
+      new Response(JSON.stringify({ v: 1 }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': '-5',
+        },
+      });
+    expect(
+      (
+        await clientWith(negative).client.getJson({
+          sourceId: 'openf1',
+          path: '/v1/sessions',
+        })
+      ).ok,
+    ).toBe(true);
+
+    // Malformed: ignored as a bound, streaming governs.
+    const malformed: ProviderTransport = async () =>
+      new Response(JSON.stringify({ v: 1 }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': 'not-a-number',
+        },
+      });
+    expect(
+      (
+        await clientWith(malformed).client.getJson({
+          sourceId: 'openf1',
+          path: '/v1/sessions',
+        })
+      ).ok,
+    ).toBe(true);
+  });
+
   it('fails safely on malformed JSON without echoing the body', async () => {
     const transport: ProviderTransport = async () =>
       new Response('{"secret-token":"leak", broken', {
@@ -458,11 +615,18 @@ describe('timeout, cancellation and network failures', () => {
     expect(!result.ok && result.kind).toBe('timeout');
   });
 
-  it('reports a pre-aborted caller signal as cancelled without sending', async () => {
+  it('moment 1: a pre-aborted caller reserves nothing and sends nothing', async () => {
     const controller = new AbortController();
     controller.abort();
     const { requests, transport } = capture();
-    const { client } = clientWith(transport);
+    let reservations = 0;
+    const counting: ProviderRateLimiterClient = {
+      async reserve(sourceId) {
+        reservations += 1;
+        return { outcome: 'allowed', sourceId, headroom: [] };
+      },
+    };
+    const { client } = clientWith(transport, counting);
 
     const result = await client.getJson({
       sourceId: 'openf1',
@@ -471,12 +635,79 @@ describe('timeout, cancellation and network failures', () => {
     });
 
     expect(!result.ok && result.kind).toBe('cancelled');
-    // Nothing left GridView, so it is not an attempted provider request.
     expect(!result.ok && result.requestAttempted).toBe(false);
     expect(requests).toHaveLength(0);
+    // The point of the fix: no capacity is taken from the single global
+    // per-source budget for a caller that was already gone.
+    expect(reservations).toBe(0);
   });
 
-  it('distinguishes mid-flight caller cancellation from a timeout', async () => {
+  it('moment 1: dead callers cannot exhaust the real global budget', async () => {
+    // Drives the genuine coordinator, so this asserts persisted state rather
+    // than a stubbed limiter's bookkeeping.
+    const host = new FakeReservationHost();
+    const coordinator = new ReservationCoordinator(host, () => now);
+    const { requests, transport } = capture();
+    const client = new ProviderHttpClient({
+      transport,
+      limiter: coordinator,
+      logger: new CapturingLogger(),
+      now: () => now,
+    });
+
+    // Three cancelled callers, against OpenF1's 3-per-second window.
+    for (let index = 0; index < 3; index += 1) {
+      const dead = new AbortController();
+      dead.abort();
+      const result = await client.getJson({
+        sourceId: 'openf1',
+        path: '/v1/sessions',
+        signal: dead.signal,
+      });
+      expect(!result.ok && result.kind).toBe('cancelled');
+    }
+
+    expect(requests).toHaveLength(0);
+    expect(host.ledgerTimestamps()).toHaveLength(0);
+
+    // A live caller in the same second is still served.
+    const live = await client.getJson({
+      sourceId: 'openf1',
+      path: '/v1/sessions',
+    });
+    expect(live.ok).toBe(true);
+    expect(host.ledgerTimestamps()).toHaveLength(1);
+  });
+
+  it('moment 3: aborting during the reservation keeps the slot and sends nothing', async () => {
+    const controller = new AbortController();
+    const { requests, transport } = capture();
+    const host = new FakeReservationHost();
+    const coordinator = new ReservationCoordinator(host, () => now);
+    const abortingLimiter: ProviderRateLimiterClient = {
+      async reserve(sourceId) {
+        const outcome = await coordinator.reserve(sourceId);
+        // The caller gives up after the reservation has been granted.
+        controller.abort();
+        return outcome;
+      },
+    };
+    const { client } = clientWith(transport, abortingLimiter);
+
+    const result = await client.getJson({
+      sourceId: 'openf1',
+      path: '/v1/sessions',
+      signal: controller.signal,
+    });
+
+    expect(!result.ok && result.kind).toBe('cancelled');
+    expect(!result.ok && result.requestAttempted).toBe(false);
+    expect(requests).toHaveLength(0);
+    // Retained deliberately: releasing a granted slot would race.
+    expect(host.ledgerTimestamps()).toHaveLength(1);
+  });
+
+  it('moment 4: mid-flight cancellation is attempted and distinct from a timeout', async () => {
     const controller = new AbortController();
     const transport: ProviderTransport = (request) =>
       new Promise((_resolve, reject) => {
@@ -568,6 +799,37 @@ describe('provider 429 and Retry-After', () => {
       expect(!result.ok && result.kind).toBe('provider-rate-limited');
       expect(!result.ok && result.retryAfter).toBeUndefined();
     }
+  });
+
+  it('never throws or invents a date for an out-of-range Retry-After', async () => {
+    for (const value of [
+      '999999999999999999',
+      '99999999999999999999999',
+      String(maxRetryAfterSeconds + 1),
+    ]) {
+      // The parser itself must not throw...
+      expect(() => parseRetryAfter(value, now)).not.toThrow();
+      expect(parseRetryAfter(value, now)).toBeNull();
+
+      // ...and the 429 must still be typed as a provider rate limit. Before
+      // the fix the RangeError was swallowed by the request try-block and the
+      // response was silently reclassified as a network failure.
+      const transport: ProviderTransport = async () =>
+        new Response('', { status: 429, headers: { 'Retry-After': value } });
+      const { client } = clientWith(transport);
+      const result = await client.getJson({
+        sourceId: 'jolpica',
+        path: '/ergast/f1/2026.json',
+      });
+
+      expect(!result.ok && result.kind).toBe('provider-rate-limited');
+      expect(!result.ok && result.status).toBe(429);
+      expect(!result.ok && result.retryAfter).toBeUndefined();
+    }
+    // A value just inside the bound is still honoured.
+    expect(parseRetryAfter(String(maxRetryAfterSeconds), now)).toBeTypeOf(
+      'string',
+    );
   });
 
   it('treats an expired Retry-After as not active at the exact boundary', () => {

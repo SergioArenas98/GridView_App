@@ -201,8 +201,16 @@ remains open**.
 Fail-closed everywhere: if the binding is absent - which it is in every
 environment today, because nothing is provisioned - or the object or its
 storage fails, the reservation resolves to `unavailable` and **no request is
-issued**. A granted reservation is not released if the caller cancels first;
-keeping it is the conservative choice and avoids a release race.
+issued**. A storage failure is absorbed inside the object rather than thrown,
+because an exception escaping the serialized section would terminate and reset
+the shared limiter for every caller.
+
+Cancellation is handled at two distinct points. A caller already cancelled when
+the request is entered **reserves nothing**: there is no live request to acquire
+capacity for, and reserving first would spend the single global per-source
+budget on something that will never be sent. A caller that cancels **while the
+reservation is in flight** keeps the granted slot, because releasing it would
+race. Neither sends a request, so neither is an attempted provider request.
 
 **A reservation is not a provider attempt.** A locally deferred or
 limiter-unavailable outcome means nothing left GridView, so it increments no

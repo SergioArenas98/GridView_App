@@ -101,7 +101,26 @@ export class ReservationCoordinator {
     // `blockConcurrencyWhile` serializes the whole read-modify-write, so two
     // in-flight reservations can never both read the same pre-state and
     // oversubscribe a window.
+    //
+    // The callback body is wrapped so it CANNOT throw. Cloudflare documents
+    // that an exception escaping `blockConcurrencyWhile` terminates and resets
+    // the Durable Object, so a transient storage error or a corrupt ledger
+    // would tear down the shared limiter for every caller instead of failing
+    // this one request. Failing closed to `unavailable` keeps the object alive
+    // and still issues no provider request.
     return this.host.blockConcurrencyWhile(async () => {
+      try {
+        return await this.decide(sourceId);
+      } catch {
+        return { outcome: 'unavailable', sourceId } as const;
+      }
+    });
+  }
+
+  private async decide(
+    sourceId: RealProviderSourceId,
+  ): Promise<ReservationOutcome> {
+    {
       const at = this.now();
       const stored =
         await this.host.storage.get<StoredLedger>(ledgerStorageKey);
@@ -140,7 +159,7 @@ export class ReservationCoordinator {
         limitingWindows: decision.limitingWindows,
         headroom: decision.headroom,
       };
-    });
+    }
   }
 }
 

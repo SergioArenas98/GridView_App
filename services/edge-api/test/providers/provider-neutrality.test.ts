@@ -87,8 +87,14 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     const filesNamingAnOrigin: string[] = [];
     for (const file of files) {
       const contents = readFileSync(join(sourceDir, file), 'utf8');
-      // No module may issue an outbound request to a literal URL.
+      // No module may issue an outbound request to a literal URL...
       expect(contents).not.toMatch(/\bfetch\s*\(\s*['"`]https?:/);
+      // ...nor reach the global entry point that would bypass the injected
+      // transport. The transport is a required constructor argument, so there
+      // is no production wiring to global fetch; this pins that there is no
+      // textual one either.
+      expect(contents).not.toContain('globalThis.fetch');
+      expect(contents).not.toMatch(/\bwindow\.fetch\b/);
       if (
         contents.includes('api.openf1.org') ||
         contents.includes('api.jolpi.ca')

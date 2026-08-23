@@ -88,9 +88,19 @@ export class ProviderError extends Error {
  * `ProviderRateLimitedError` is its mirror image and must not be reused here:
  * that one means the upstream answered 429 *after* an attempt.
  */
+/**
+ * Bounded reasons GridView may decline to send. Deliberately a closed union:
+ * this value reaches structured logs and the internal admin response, so an
+ * adapter must not be able to place a provider-controlled string here.
+ */
+export type ProviderNotAttemptedCategory =
+  | 'provider-rate-limit-deferred'
+  | 'provider-limiter-unavailable'
+  | 'provider-request-invalid';
+
 export class ProviderRequestNotAttemptedError extends Error {
   constructor(
-    readonly category: string,
+    readonly category: ProviderNotAttemptedCategory,
     /** Local pacing hint for a future scheduler. G5 remains open. */
     readonly retryAt?: string,
     message = 'No provider request was attempted.',

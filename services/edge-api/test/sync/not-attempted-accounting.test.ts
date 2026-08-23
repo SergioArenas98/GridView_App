@@ -9,6 +9,7 @@ import {
   ProviderRateLimitedError,
   ProviderRequestNotAttemptedError,
   type FormulaOneProvider,
+  type ProviderNotAttemptedCategory,
   type ProviderSeasonSource,
   type ProviderStatus,
 } from '../../src/providers/formula-one-provider';
@@ -52,7 +53,7 @@ class NotAttemptingProvider implements FormulaOneProvider {
   private readonly ledger = new ProviderRequestLedger();
 
   constructor(
-    private readonly category: string,
+    private readonly category: ProviderNotAttemptedCategory,
     private readonly retryAt?: string,
   ) {}
 
@@ -136,7 +137,9 @@ describe('a request GridView never sent is not a provider attempt', () => {
   });
 
   it('keeps the not-attempted type distinct from a real provider failure', () => {
-    const notAttempted = new ProviderRequestNotAttemptedError('deferred');
+    const notAttempted = new ProviderRequestNotAttemptedError(
+      'provider-rate-limit-deferred',
+    );
 
     // Must not be catchable as a ProviderError, or the sync service would
     // record a failed attempt for a request that never happened.

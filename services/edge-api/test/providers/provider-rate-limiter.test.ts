@@ -34,12 +34,21 @@ class FakeHost implements ReservationHost {
     },
   };
 
+  /**
+   * Serializes callbacks exactly as the runtime's input gate does, and
+   * additionally reports a rejecting callback. In production an exception
+   * escaping here terminates and resets the Durable Object, so a test fake that
+   * quietly swallowed it would hide the very failure that matters.
+   */
+  onCallbackRejection: ((error: unknown) => void) | null = null;
+
   blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T> {
     const next = this.queue.then(callback);
-    // Keep the chain alive even when a callback rejects.
     this.queue = next.then(
       () => undefined,
-      () => undefined,
+      (error) => {
+        this.onCallbackRejection?.(error);
+      },
     );
     return next;
   }
@@ -217,21 +226,46 @@ describe('ProviderRateLimiter Durable Object', () => {
     expect(malformed.status).toBe(400);
   });
 
-  it('fails closed when storage fails, never reporting allowed', async () => {
+  it('fails closed on storage failure without terminating the object', async () => {
     const host = new FakeHost();
     host.failStorage = true;
     const object = new ProviderRateLimiter(host);
 
     const response = await object.fetch(post({ sourceId: 'jolpica' }));
-    const body = (await response.json()) as {
-      error?: string;
-      outcome?: string;
+    const body = (await response.json()) as { outcome?: string };
+
+    // Cloudflare terminates and resets a Durable Object when an exception
+    // escapes `blockConcurrencyWhile`, which would tear down the shared
+    // limiter for every caller. The callback therefore absorbs the failure and
+    // answers `unavailable` - fail-closed, but the object survives.
+    expect(body.outcome).toBe('unavailable');
+    expect(body.outcome).not.toBe('allowed');
+    expect(JSON.stringify(body)).not.toContain('injected storage failure');
+
+    // Proof the object was not reset: it serves normally once storage recovers.
+    host.failStorage = false;
+    const recovered = await object.fetch(post({ sourceId: 'jolpica' }));
+    expect(((await recovered.json()) as { outcome: string }).outcome).toBe(
+      'allowed',
+    );
+  });
+
+  it('never lets an exception escape blockConcurrencyWhile', async () => {
+    const host = new FakeHost();
+    host.failStorage = true;
+    let escaped: unknown = null;
+    host.onCallbackRejection = (error) => {
+      escaped = error;
     };
 
-    expect(response.status).toBe(500);
-    expect(body.outcome).toBeUndefined();
-    // The injected message never reaches the response.
-    expect(JSON.stringify(body)).not.toContain('injected storage failure');
+    const outcome = await new ReservationCoordinator(
+      host,
+      () => new Date(base),
+    ).reserve('openf1');
+
+    expect(outcome.outcome).toBe('unavailable');
+    // Nothing rejected, so the runtime would never reset the object.
+    expect(escaped).toBeNull();
   });
 
   it('does not accept a caller-supplied reservation time', async () => {

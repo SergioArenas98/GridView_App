@@ -82,8 +82,10 @@ reservation is likewise not proof that a request was issued.
 | D1.9 | The reservation timestamp is the Durable Object's own clock. A caller cannot choose it. |
 | D1.10 | The object never sleeps, retries or holds a request until capacity returns. |
 | D1.11 | A binding, dispatch or storage failure resolves to `unavailable`, and the boundary then issues **no** request. |
-| D1.12 | A granted reservation is **not** released if the caller is cancelled before the request goes out. Keeping it is deliberately conservative and avoids a release race. |
+| D1.12 | **A caller already cancelled on entry reserves nothing.** There is no live request to acquire capacity for, and reserving first would spend the single global per-source budget on a request that will never be sent - three cancelled callers would exhaust an OpenF1 second and deny a live one. The signal is therefore checked *before* the reservation, not after it. |
+| D1.12a | If the caller cancels **while the reservation is in flight**, the granted slot is **not** released. Keeping it is deliberately conservative and avoids a release race. No request is sent, so it is not an attempted provider request. |
 | D1.13 | Policy reconciliation may only forget real observations, never fabricate historical attempts. |
+| D1.14 | **The serialized callback must not throw.** Cloudflare terminates and resets a Durable Object when an exception escapes `blockConcurrencyWhile`, which would tear down the shared limiter for every caller rather than failing one request. The body is wrapped and a storage or state failure resolves to `unavailable` - still fail-closed, but the object survives. |
 
 ### D2 — Outbound boundary
 
@@ -101,7 +103,8 @@ reservation is likewise not proof that a request was issued.
 | D2.10 | Only `application/json` and `application/*+json` are accepted, with parameters such as `charset=utf-8`. An absent or incompatible type is rejected before parsing. |
 | D2.11 | A **2 MiB** decoded-body cap is enforced by both a trustworthy `Content-Length` and bounded streaming, so a missing or false header cannot bypass it. The stream is cancelled on rejection. |
 | D2.12 | JSON is parsed only after the bounded read succeeds; malformed JSON is a typed safe error. |
-| D2.13 | HTTP 429 is a typed provider rate-limit response. `Retry-After` is parsed in delta-seconds and HTTP-date form; at the exact boundary an expired instruction is not active, and a missing or malformed one yields nothing rather than an invented time. |
+| D2.13 | HTTP 429 is a typed provider rate-limit response. `Retry-After` is parsed in delta-seconds and HTTP-date form; at the exact boundary an expired instruction is not active, and a missing or malformed one yields nothing rather than an invented time. **A delta beyond one year is refused**, because an unbounded integer builds an unrepresentable `Date` whose `RangeError` would be swallowed by the request try-block and silently reclassify the 429 as a network failure. |
+| D2.15 | The not-attempted category is a **closed union**, so an adapter cannot place a provider-controlled string into a log field or the internal admin response. |
 | D2.14 | No provider body, transport exception, query string, header or full URL ever appears in an error, an API response or a log. |
 
 **10 seconds and 2 MiB are chosen engineering constants**, not published
@@ -120,7 +123,8 @@ provider HTTP failure, and provider HTTP 429 with an optional parsed
 means the upstream answered 429 after an attempt. A new
 `ProviderRequestNotAttemptedError` covers the opposite case and deliberately
 does not extend `ProviderError`, so the synchronization service cannot record
-a failed provider attempt for a request that never happened.
+a failed provider attempt for a request that never happened. Its category is a
+bounded union (`ProviderNotAttemptedCategory`), not a free string.
 
 ## Consequences
 

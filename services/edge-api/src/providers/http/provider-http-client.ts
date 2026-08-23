@@ -26,6 +26,13 @@ export const providerRequestTimeoutMillis = 10_000;
 export const providerMaxResponseBytes = 2 * 1024 * 1024; // 2 MiB
 
 /**
+ * Upper bound on a `Retry-After` delta. Anything beyond a year is not a usable
+ * instruction, and accepting an arbitrary integer lets a provider-controlled
+ * header build an unrepresentable `Date`.
+ */
+export const maxRetryAfterSeconds = 366 * 24 * 60 * 60;
+
+/**
  * Jolpica requires a stable identifying `User-Agent`. Held as one reviewed
  * constant rather than assembled from a runtime string, so it cannot drift or
  * leak host detail.
@@ -147,7 +154,14 @@ export function parseRetryAfter(value: string | null, at: Date): string | null {
   if (/^\d+$/.test(trimmed)) {
     const seconds = Number.parseInt(trimmed, 10);
     if (!Number.isFinite(seconds) || seconds < 0) return null;
-    return new Date(at.getTime() + seconds * 1000).toISOString();
+    // A provider-controlled header must never produce an unrepresentable date.
+    // Without this bound `new Date(...).toISOString()` throws `RangeError`, and
+    // because this runs inside the request try-block that throw would be
+    // swallowed and the 429 silently reclassified as a network failure.
+    if (seconds > maxRetryAfterSeconds) return null;
+    const time = at.getTime() + seconds * 1000;
+    if (!Number.isFinite(time)) return null;
+    return new Date(time).toISOString();
   }
   const parsed = Date.parse(trimmed);
   if (Number.isNaN(parsed)) return null;
@@ -288,6 +302,15 @@ export class ProviderHttpClient {
       return this.failure(sourceId, 'invalid-request', false);
     }
 
+    if (request.signal?.aborted) {
+      // The caller was already gone before we got here, so there is nothing to
+      // acquire capacity for. Reserving first would burn a slot out of the
+      // single global per-source budget on behalf of a request that will never
+      // be sent - three dead callers would exhaust an OpenF1 second and deny a
+      // live one. Checked before the reservation, not after it.
+      return this.failure(sourceId, 'cancelled', false);
+    }
+
     const reservation = await this.reserveCapacity(sourceId);
     if (reservation.outcome === 'unavailable') {
       return this.failure(sourceId, 'limiter-unavailable', false);
@@ -360,13 +383,13 @@ export class ProviderHttpClient {
     }, this.timeoutMillis);
     const onCallerAbort = () => controller.abort();
     if (request.signal?.aborted) {
-      // Cancelled before the transport was ever invoked, so no request left
-      // GridView. `addEventListener` would never fire for an already-aborted
-      // signal, so short-circuiting here also avoids hanging until the
-      // internal timeout.
+      // The caller aborted *while the reservation was in flight*, so a slot was
+      // already granted. It is deliberately NOT released: keeping it is the
+      // conservative choice and avoids a release race. No request leaves
+      // GridView, so this is not an attempted provider request.
       //
-      // The reservation granted a moment ago is deliberately NOT released:
-      // keeping it is the conservative choice and avoids a release race.
+      // `addEventListener` would never fire for an already-aborted signal, so
+      // short-circuiting here also avoids hanging until the internal timeout.
       clearTimeout(timer);
       return {
         ok: false,
