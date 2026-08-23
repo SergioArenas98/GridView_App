@@ -30,6 +30,6 @@ export function resolveProviderRateLimiter(
  */
 export const unboundRateLimiter: ProviderRateLimiterClient = {
   async reserve(sourceId: RealProviderSourceId): Promise<ReservationOutcome> {
-    return { outcome: 'unavailable', sourceId };
+    return { outcome: 'unavailable', sourceId, reason: 'limiter-unreachable' };
   },
 };

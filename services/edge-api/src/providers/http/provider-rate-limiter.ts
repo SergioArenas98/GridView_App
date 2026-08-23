@@ -45,10 +45,21 @@ export type ReservationOutcome =
       readonly headroom: readonly WindowHeadroom[];
     }
   | {
-      /** Binding, object or storage failure. Fail closed: issue no request. */
+      /** Fail closed: issue no request. */
       readonly outcome: 'unavailable';
       readonly sourceId: RealProviderSourceId;
+      /** Bounded cause. Never carries a stored value, key or object id. */
+      readonly reason: ReservationUnavailableReason;
     };
+
+/** Closed set of reasons the limiter could not grant. */
+export type ReservationUnavailableReason =
+  /** No binding, unreachable object, or an unusable response. */
+  | 'limiter-unreachable'
+  /** The object's storage read or write failed. */
+  | 'storage-failure'
+  /** Persisted state exists but is not usable. See `readLedger`. */
+  | 'state-corrupt';
 
 /**
  * The subset of `DurableObjectState` the coordinator uses. `DurableObjectState`
@@ -68,21 +79,54 @@ interface StoredLedger {
   timestamps?: unknown;
 }
 
+/**
+ * A reservation timestamp must be a finite, non-negative integer number of
+ * milliseconds: that is the only thing the object's own clock can have
+ * written. Anything else is corruption, not an old entry.
+ */
+function isReservationTimestamp(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 0
+  );
+}
+
+type LedgerRead =
+  /** Nothing stored yet. A genuinely new source starts with full capacity. */
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'valid'; readonly ledger: ReservationLedger }
+  /** Present but unusable. Must fail closed, never be reinterpreted. */
+  | { readonly kind: 'corrupt' };
+
+/**
+ * Classifies the stored record without ever repairing it.
+ *
+ * **Absent and invalid are different things.** Missing state means a new
+ * source and may start empty. Present-but-invalid state must fail closed:
+ * dropping an unreadable entry would *reduce the active count* and hand back
+ * capacity whose safety cannot be established, and adopting a record written
+ * for another source would let one budget be spent as another's.
+ *
+ * Nothing here deletes, resets, relabels or rewrites the stored value. A
+ * corrupt ledger blocks that source until it is repaired out of band; there is
+ * deliberately no automatic recovery path.
+ */
 function readLedger(
   raw: StoredLedger | undefined,
   sourceId: RealProviderSourceId,
-): ReservationLedger {
-  if (!raw || raw.sourceId !== sourceId || !Array.isArray(raw.timestamps)) {
-    // Missing, corrupt or belonging to another source: start clean rather than
-    // adopt state that is not provably this source's.
-    return emptyLedger(sourceId);
-  }
+): LedgerRead {
+  if (raw === undefined || raw === null) return { kind: 'missing' };
+  if (typeof raw !== 'object') return { kind: 'corrupt' };
+  // A record belonging to another source is never adopted, and never
+  // relabelled to this one.
+  if (raw.sourceId !== sourceId) return { kind: 'corrupt' };
+  if (!Array.isArray(raw.timestamps)) return { kind: 'corrupt' };
+  if (!raw.timestamps.every(isReservationTimestamp)) return { kind: 'corrupt' };
   return {
-    sourceId,
-    timestamps: raw.timestamps.filter(
-      (value): value is number =>
-        typeof value === 'number' && Number.isFinite(value),
-    ),
+    kind: 'valid',
+    ledger: { sourceId, timestamps: raw.timestamps },
   };
 }
 
@@ -112,7 +156,11 @@ export class ReservationCoordinator {
       try {
         return await this.decide(sourceId);
       } catch {
-        return { outcome: 'unavailable', sourceId } as const;
+        return {
+          outcome: 'unavailable',
+          sourceId,
+          reason: 'storage-failure',
+        } as const;
       }
     });
   }
@@ -120,46 +168,48 @@ export class ReservationCoordinator {
   private async decide(
     sourceId: RealProviderSourceId,
   ): Promise<ReservationOutcome> {
-    {
-      const at = this.now();
-      const stored =
-        await this.host.storage.get<StoredLedger>(ledgerStorageKey);
-      const ledger = reconcileLedger(
-        readLedger(stored, sourceId),
+    const at = this.now();
+    const stored = await this.host.storage.get<StoredLedger>(ledgerStorageKey);
+    const read = readLedger(stored, sourceId);
+    if (read.kind === 'corrupt') {
+      // Fail closed and leave the record exactly as found.
+      return { outcome: 'unavailable', sourceId, reason: 'state-corrupt' };
+    }
+    const ledger = reconcileLedger(
+      read.kind === 'valid' ? read.ledger : emptyLedger(sourceId),
+      sourceId,
+      at,
+    );
+    const decision = reserve(ledger, quotaPolicyFor(sourceId), at);
+
+    if (decision.outcome === 'allowed') {
+      await this.host.storage.put(ledgerStorageKey, {
         sourceId,
-        at,
-      );
-      const decision = reserve(ledger, quotaPolicyFor(sourceId), at);
-
-      if (decision.outcome === 'allowed') {
-        await this.host.storage.put(ledgerStorageKey, {
-          sourceId,
-          timestamps: decision.ledger.timestamps,
-        });
-        return {
-          outcome: 'allowed',
-          sourceId,
-          headroom: decision.headroom,
-        };
-      }
-
-      // Deferred: no window was mutated. Persist the pruned ledger only when
-      // pruning actually removed something, so a denial stays side-effect free
-      // with respect to capacity while storage stays bounded.
-      if (decision.ledger.timestamps.length !== ledger.timestamps.length) {
-        await this.host.storage.put(ledgerStorageKey, {
-          sourceId,
-          timestamps: decision.ledger.timestamps,
-        });
-      }
+        timestamps: decision.ledger.timestamps,
+      });
       return {
-        outcome: 'deferred',
+        outcome: 'allowed',
         sourceId,
-        retryAt: decision.retryAt,
-        limitingWindows: decision.limitingWindows,
         headroom: decision.headroom,
       };
     }
+
+    // Deferred: no window was mutated. Persist the pruned ledger only when
+    // pruning actually removed something, so a denial stays side-effect free
+    // with respect to capacity while storage stays bounded.
+    if (decision.ledger.timestamps.length !== ledger.timestamps.length) {
+      await this.host.storage.put(ledgerStorageKey, {
+        sourceId,
+        timestamps: decision.ledger.timestamps,
+      });
+    }
+    return {
+      outcome: 'deferred',
+      sourceId,
+      retryAt: decision.retryAt,
+      limitingWindows: decision.limitingWindows,
+      headroom: decision.headroom,
+    };
   }
 }
 
@@ -208,6 +258,22 @@ export class ProviderRateLimiter {
   }
 }
 
+const unavailableReasons: readonly ReservationUnavailableReason[] = [
+  'limiter-unreachable',
+  'storage-failure',
+  'state-corrupt',
+];
+
+function knownReason(value: unknown): ReservationUnavailableReason {
+  return unavailableReasons.includes(value as ReservationUnavailableReason)
+    ? (value as ReservationUnavailableReason)
+    : 'limiter-unreachable';
+}
+
+function unreachable(sourceId: RealProviderSourceId): ReservationOutcome {
+  return { outcome: 'unavailable', sourceId, reason: 'limiter-unreachable' };
+}
+
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -241,17 +307,27 @@ export class DurableObjectRateLimiterClient implements ProviderRateLimiterClient
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sourceId }),
       });
-      if (!response.ok) return { outcome: 'unavailable', sourceId };
+      if (!response.ok) {
+        return unreachable(sourceId);
+      }
       const decoded = (await response.json()) as ReservationOutcome;
       if (decoded.outcome === 'allowed' || decoded.outcome === 'deferred') {
-        if (decoded.sourceId !== sourceId) {
-          return { outcome: 'unavailable', sourceId };
-        }
+        // An outcome naming another source is never trusted.
+        if (decoded.sourceId !== sourceId) return unreachable(sourceId);
         return decoded;
       }
-      return { outcome: 'unavailable', sourceId };
+      if (decoded.outcome === 'unavailable') {
+        // Carry the object's bounded reason through when it is one we know.
+        return {
+          outcome: 'unavailable',
+          sourceId,
+          reason: knownReason(decoded.reason),
+        };
+      }
+      // Anything else - including a malformed body - is fail-closed.
+      return unreachable(sourceId);
     } catch {
-      return { outcome: 'unavailable', sourceId };
+      return unreachable(sourceId);
     }
   }
 }

@@ -145,21 +145,26 @@ describe('ReservationCoordinator', () => {
     ).toBe('jolpica');
   });
 
-  it('never adopts a ledger stored under a different source', async () => {
+  it('fails closed on a ledger stored under a different source', async () => {
     const host = new FakeHost();
     // A ledger that claims to be OpenF1 sitting in the Jolpica object.
-    host.values.set('reservation-ledger', {
+    const foreign = {
       sourceId: 'openf1',
       timestamps: [base, base, base, base],
-    });
+    };
+    host.values.set('reservation-ledger', foreign);
 
     const outcome = await coordinatorAt(host, () => 0).reserve('jolpica');
 
-    // It starts clean rather than inheriting four foreign reservations.
-    expect(outcome.outcome).toBe('allowed');
-    expect(
-      (host.values.get('reservation-ledger') as { sourceId: string }).sourceId,
-    ).toBe('jolpica');
+    // Neither adopted nor discarded. Starting clean would hand back capacity
+    // whose safety cannot be established; relabelling would let one source's
+    // budget be spent as another's.
+    expect(outcome.outcome).toBe('unavailable');
+    expect(outcome.outcome === 'unavailable' && outcome.reason).toBe(
+      'state-corrupt',
+    );
+    expect(host.values.get('reservation-ledger')).toEqual(foreign);
+    expect(host.putCount).toBe(0);
   });
 
   it('does not consume capacity when a reservation is denied', async () => {
@@ -295,13 +300,18 @@ describe('fail-closed limiter clients', () => {
     expect(await client.reserve('jolpica')).toEqual({
       outcome: 'unavailable',
       sourceId: 'jolpica',
+      reason: 'limiter-unreachable',
     });
   });
 
   it('prefers an injected test client over the binding', async () => {
     const injected = {
       reserve: async () =>
-        ({ outcome: 'unavailable', sourceId: 'openf1' }) as const,
+        ({
+          outcome: 'unavailable',
+          sourceId: 'openf1',
+          reason: 'limiter-unreachable',
+        }) as const,
     };
 
     const client = resolveProviderRateLimiter({

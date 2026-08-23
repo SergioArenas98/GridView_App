@@ -205,6 +205,16 @@ issued**. A storage failure is absorbed inside the object rather than thrown,
 because an exception escaping the serialized section would terminate and reset
 the shared limiter for every caller.
 
+Persisted limiter state distinguishes **absent** from **invalid**. A missing
+record means a genuinely new source and starts with full capacity. A record
+that exists but is unusable - written for another source, or holding anything
+that is not a finite, non-negative integer millisecond - blocks that source
+with a bounded `state-corrupt` reason: no reservation is granted and no request
+is issued. The limiter never restores capacity by guessing what invalid data
+meant, and it never repairs, deletes, resets or relabels the record. The source
+stays blocked until the state is fixed out of band; there is deliberately no
+automatic recovery and no administrative repair route.
+
 Cancellation is handled at two distinct points. A caller already cancelled when
 the request is entered **reserves nothing**: there is no live request to acquire
 capacity for, and reserving first would spend the single global per-source

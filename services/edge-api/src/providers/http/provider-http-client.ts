@@ -336,7 +336,11 @@ export class ProviderHttpClient {
     try {
       outcome = await this.limiter.reserve(sourceId);
     } catch {
-      outcome = { outcome: 'unavailable', sourceId };
+      outcome = {
+        outcome: 'unavailable',
+        sourceId,
+        reason: 'limiter-unreachable',
+      };
     }
     if (outcome.outcome === 'allowed') {
       this.logger.info({
@@ -361,7 +365,8 @@ export class ProviderHttpClient {
         operation: 'provider.reservation.unavailable',
         providerSourceId: sourceId,
         providerRequestAttempted: false,
-        failureCategory: 'limiter-unavailable',
+        // Bounded enum only: never a stored value, storage key or object id.
+        failureCategory: outcome.reason,
       });
     }
     return outcome;

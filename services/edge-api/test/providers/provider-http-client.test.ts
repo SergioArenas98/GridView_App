@@ -881,7 +881,11 @@ describe('local pacing never counts as a provider attempt', () => {
     const { requests, transport } = capture();
     const broken: ProviderRateLimiterClient = {
       async reserve(sourceId) {
-        return { outcome: 'unavailable', sourceId };
+        return {
+          outcome: 'unavailable',
+          sourceId,
+          reason: 'limiter-unreachable',
+        };
       },
     };
     const { client, logger } = clientWith(transport, broken);
@@ -898,7 +902,7 @@ describe('local pacing never counts as a provider attempt', () => {
       logger.events.find(
         (e) => e.operation === 'provider.reservation.unavailable',
       )?.failureCategory,
-    ).toBe('limiter-unavailable');
+    ).toBe('limiter-unreachable');
   });
 
   it('fails closed when the limiter itself throws', async () => {
