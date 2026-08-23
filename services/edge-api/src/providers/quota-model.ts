@@ -166,6 +166,137 @@ function consumeOne(window: QuotaWindowState): QuotaWindowState {
   };
 }
 
+/** True while `retryAfter` names an instant strictly in the future. */
+export function retryAfterActive(retryAfter: string | null, at: Date): boolean {
+  if (!retryAfter) return false;
+  const until = Date.parse(retryAfter);
+  return !Number.isNaN(until) && until > at.getTime();
+}
+
+/**
+ * Brings time-dependent quota state up to date **without consuming an
+ * attempt**.
+ *
+ * `warningLevel`, window usage and `Retry-After` are all derived from state
+ * that decays as time passes, but they are persisted. Before this existed the
+ * only code that rolled a window forward was `recordProviderAttempt`, which
+ * runs only *after* a provider request — and a stored `critical` level blocks
+ * the scheduler from ever making one. A source that reached `critical`, by
+ * exhausting a sustained window or by a 429, therefore stayed critical forever:
+ * the state that blocked the request was the only thing the request could have
+ * cleared.
+ *
+ * Refreshing is the fix rather than a bypass. Expired windows roll over,
+ * an expired `Retry-After` is cleared, and the level is re-derived from what is
+ * true *now* — so a level that no longer has a cause disappears, while a
+ * genuinely current one is retained and still blocks.
+ *
+ * Pure, deterministic under a fixed clock, and free of any network or provider
+ * interaction. It never touches provider request metrics, and it never
+ * increments `used`.
+ */
+export function refreshQuotaState(
+  state: QuotaState,
+  sourceId: ProviderSourceId,
+  at: Date,
+): QuotaState {
+  const policy = quotaPolicyFor(sourceId);
+  const base =
+    state.sourceId === sourceId ? state : emptyQuotaState(sourceId, at);
+  // Align then roll over only. `consumeOne` is deliberately absent: a refresh
+  // is an observation of elapsed time, not a request.
+  const windows = alignWindows(base.windows, policy, at).map((window) =>
+    rollOver(window, at),
+  );
+  const retryAfter = retryAfterActive(base.retryAfter, at)
+    ? base.retryAfter
+    : null;
+
+  const refreshed: QuotaState = {
+    ...base,
+    sourceId,
+    testOnly: policy.testOnly,
+    windows,
+    retryAfter,
+    warningLevel: 'unknown',
+  };
+
+  return {
+    ...refreshed,
+    // An active Retry-After is a current provider instruction, so it keeps the
+    // state critical. An expired one contributes nothing.
+    warningLevel: evaluateWarningLevel(refreshed, {
+      rateLimited: retryAfter !== null,
+    }),
+  };
+}
+
+/**
+ * Whether a refresh actually changed anything worth persisting.
+ *
+ * `refreshQuotaState` always returns a new object, so reference comparison
+ * would report a change on every run and write storage needlessly. Only the
+ * fields a refresh can alter are compared.
+ */
+export function quotaStateChanged(
+  before: QuotaState,
+  after: QuotaState,
+): boolean {
+  if (before.sourceId !== after.sourceId) return true;
+  if (before.testOnly !== after.testOnly) return true;
+  if (before.retryAfter !== after.retryAfter) return true;
+  if (before.warningLevel !== after.warningLevel) return true;
+  if (before.windows.length !== after.windows.length) return true;
+  return before.windows.some((window, index) => {
+    const next = after.windows[index];
+    if (!next) return true;
+    return (
+      window.window !== next.window ||
+      window.windowClass !== next.windowClass ||
+      window.limit !== next.limit ||
+      window.durationSeconds !== next.durationSeconds ||
+      window.used !== next.used ||
+      window.remaining !== next.remaining ||
+      window.windowStartedAt !== next.windowStartedAt ||
+      window.resetsAt !== next.resetsAt ||
+      window.saturationStreak !== next.saturationStreak
+    );
+  });
+}
+
+/**
+ * The sustained window with the longest duration - Jolpica's hour, OpenF1's
+ * minute. GridView_Backend_Scheme.md §16.1 reserves part of this window for
+ * manual recovery, so it is the one a recovery attempt is measured against.
+ */
+export function longestSustainedWindow(
+  state: QuotaState,
+): QuotaWindowState | null {
+  return state.windows
+    .filter((window) => window.windowClass === 'sustained')
+    .reduce<QuotaWindowState | null>(
+      (longest, window) =>
+        longest === null || window.durationSeconds > longest.durationSeconds
+          ? window
+          : longest,
+      null,
+    );
+}
+
+/**
+ * Whether a protected manual recovery may proceed against a critical source.
+ *
+ * §16.1 reserves capacity in the longest sustained window for exactly this.
+ * Capacity that cannot be reached by any operation is not reserved capacity, so
+ * a critical level blocks scheduled work but not an explicit operator
+ * recovery - provided that window has something left. Zero remaining means
+ * there is nothing to reserve and the recovery is refused too.
+ */
+export function hasManualRecoveryCapacity(state: QuotaState): boolean {
+  const window = longestSustainedWindow(state);
+  return window === null || window.remaining > 0;
+}
+
 export interface QuotaAttempt {
   readonly at: Date;
   readonly outcome: ProviderAttemptOutcome;

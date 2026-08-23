@@ -147,10 +147,57 @@ reaching zero once is normal pacing pressure and does not escalate, while
 repeated burst saturation stays observable; a provider rate-limit rejection is
 critical and preserves `Retry-After`.
 
-High quota pressure skips low-priority jobs (`profiles`, `home-rebuild`).
-Critical quota preserves capacity and does not perform scheduled jobs. An active
-retry-after prevents immediate retries. Public reads never consume provider
-quota.
+### Refreshed before scheduling
+
+Warning level, window usage and `Retry-After` are all **time-dependent** but
+persisted, so the stored state is refreshed against the current source policy
+and clock **before any scheduler gate reads it**. The refresh rolls expired
+windows forward, clears an expired `Retry-After` and re-derives the warning
+level. It consumes no quota, makes no provider request, increments no usage
+counter, touches no request metric, and is pure and deterministic under a fixed
+clock.
+
+This is what stops a source freezing permanently. Only a provider attempt used
+to roll a window over, but a stored `critical` blocked the scheduler from
+making one, so the state that caused the block was the only thing that could
+have cleared it. A level with no current cause is now removed, while a
+genuinely current one is retained and still blocks. The refreshed state is
+persisted whenever it differs from what was stored, **even when no job runs**,
+so the admin quota surface cannot keep reporting an expired critical state.
+
+### Scheduled versus manual behaviour
+
+| Condition | Scheduled | Protected manual recovery |
+|---|---|---|
+| Active `Retry-After` | Blocked | **Blocked** — a direct provider instruction binds both |
+| Current `critical`, reserve has capacity | Blocked | **Allowed**, spending the reserve |
+| Current `critical`, reserve exhausted | Blocked | Blocked |
+| `high` | Low-priority jobs (`profiles`, `home-rebuild`) skipped | Same |
+
+§16.1 reserves part of the **longest sustained window** — Jolpica's hour,
+OpenF1's minute — for manual recovery. Capacity no operation can reach is not
+reserved capacity, so an explicit operator run may spend it while it lasts, and
+is refused once that window has zero remaining. Manual recovery is a typed
+planning input driven by `SyncRequest.trigger`, not inferred from a forced job
+list. Every manual trigger arrives through the admin-authenticated router;
+there is no public synchronization route, and public reads never consume
+provider quota.
+
+### Failure accounting
+
+Provider-fetch failures and post-fetch failures are accounted separately.
+
+- A **fetch** error records exactly one failed or rate-limited provider
+  attempt, preserving any supplied `Retry-After`.
+- A successful fetch records exactly one successful attempt, before any later
+  work can throw.
+- A **generation, validation, storage or publication** exception after that
+  success fails the synchronization as `snapshot-publication-failure` without
+  recording a second attempt and without rewriting provider quota as a provider
+  failure, so `lastProviderSuccessAt` stands and request metrics, quota
+  timestamps and the reported outcome agree.
+- In every case the previously active snapshot is preserved, and internal
+  exception bodies are never surfaced publicly or logged.
 
 ## Cache Purge
 

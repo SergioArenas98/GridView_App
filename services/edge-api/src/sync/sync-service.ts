@@ -16,11 +16,16 @@ import {
   type ProviderRequestMetrics,
 } from '../providers/provider-metrics';
 import type { ProviderSourceId } from '../providers/provider-source';
-import { recordProviderAttempt } from '../providers/quota-model';
+import {
+  quotaStateChanged,
+  recordProviderAttempt,
+  refreshQuotaState,
+} from '../providers/quota-model';
 import {
   ProviderError,
   ProviderRateLimitedError,
   type FormulaOneProvider,
+  type ProviderSeasonSource,
 } from '../providers/formula-one-provider';
 import { calculateDueJobs } from './scheduler';
 
@@ -104,15 +109,40 @@ export class SynchronizationService {
       lastStartedAt: startedAt,
     });
 
+    // Quota carries time-dependent state, so it is brought up to the current
+    // clock BEFORE any gate reads it. Planning against a stale snapshot is
+    // what previously let an expired `critical` freeze a source permanently:
+    // the level blocked the request, and only a request could clear the level.
     const storedQuota = this.provider
       ? await this.storage.getQuotaState(this.provider.sourceId)
       : null;
-    const plan = calculateDueJobs(
-      this.clock,
-      existing,
-      storedQuota,
-      request.forceJobs,
-    );
+    const quota =
+      this.provider && storedQuota
+        ? refreshQuotaState(
+            storedQuota,
+            this.provider.sourceId,
+            this.clock.now(),
+          )
+        : storedQuota;
+    if (
+      this.provider &&
+      quota &&
+      storedQuota &&
+      quotaStateChanged(storedQuota, quota)
+    ) {
+      // Persist the refresh even when nothing else happens this run, so the
+      // admin quota surface cannot keep reporting an expired critical state.
+      // Compared by value: the refresh always returns a new object, so a
+      // reference check would write on every invocation.
+      await this.storage.setQuotaState(this.provider.sourceId, quota);
+    }
+    const plan = calculateDueJobs(this.clock, existing, quota, {
+      forceJobs: request.forceJobs,
+      // Only a protected, explicitly triggered operator run may spend the
+      // manual-recovery reserve. `scheduled` never can, and no public route
+      // reaches this method.
+      manualRecovery: request.trigger !== 'scheduled',
+    });
     if (plan.dueJobs.length === 0) {
       await this.storage.setSyncState(request.season, {
         ...existing,
@@ -152,18 +182,50 @@ export class SynchronizationService {
       providerCallCount: this.metrics().lifetime.total,
     });
 
+    // The provider boundary is its own try. Only a fetch error may be recorded
+    // as a provider attempt outcome; anything thrown after this block is a
+    // GridView-side failure and must not rewrite provider quota.
+    let source: ProviderSeasonSource;
     try {
-      const source = await this.provider.fetchSeasonSource(
+      source = await this.provider.fetchSeasonSource(
         request.season,
         plan.dueJobs,
       );
+    } catch (error) {
+      const rateLimited = error instanceof ProviderRateLimitedError;
+      const category = rateLimited
+        ? 'provider-rate-limited'
+        : error instanceof ProviderError
+          ? error.category
+          : 'provider-fetch-failure';
       await this.recordQuotaAttempt(
         this.provider.sourceId,
-        storedQuota,
-        'successful',
+        quota,
+        rateLimited ? 'rate-limited' : 'failed',
         plan.dueJobs,
-        null,
+        rateLimited ? error.retryAfter : null,
       );
+      return this.fail(
+        request.season,
+        existing,
+        startedAt,
+        category,
+        plan,
+        metricsBefore,
+      );
+    }
+
+    // Exactly one successful attempt, recorded once, before any post-fetch
+    // work can throw.
+    await this.recordQuotaAttempt(
+      this.provider.sourceId,
+      quota,
+      'successful',
+      plan.dueJobs,
+      null,
+    );
+
+    try {
       const releaseVersion =
         request.forceVersion ?? releaseVersionFor(this.clock.now());
       const set = generateSnapshotSet(
@@ -210,25 +272,17 @@ export class SynchronizationService {
           publication.status === 'failed' ? publication.reason : null,
         ...resultAccounting(accounting),
       };
-    } catch (error) {
-      const rateLimited = error instanceof ProviderRateLimitedError;
-      const category = rateLimited
-        ? 'provider-rate-limited'
-        : error instanceof ProviderError
-          ? error.category
-          : 'sync-failure';
-      await this.recordQuotaAttempt(
-        this.provider.sourceId,
-        storedQuota,
-        rateLimited ? 'rate-limited' : 'failed',
-        plan.dueJobs,
-        rateLimited ? error.retryAfter : null,
-      );
+    } catch {
+      // Generation, validation, storage or publication threw AFTER a
+      // successful fetch. The synchronization failed, but the provider did
+      // not: no second attempt is recorded, provider quota is not rewritten
+      // as a failure, and `lastProviderSuccessAt` stands. The exception body
+      // is deliberately not read into the category or the logs.
       return this.fail(
         request.season,
         existing,
         startedAt,
-        category,
+        'snapshot-publication-failure',
         plan,
         metricsBefore,
       );

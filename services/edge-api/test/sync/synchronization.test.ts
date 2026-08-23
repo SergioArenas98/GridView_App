@@ -71,7 +71,7 @@ describe('synchronization orchestration', () => {
 
   it('skips low-priority jobs when quota is high', async () => {
     const harness = createHarness();
-    await harness.storage.setQuotaState('mock', quota('high'));
+    await harness.storage.setQuotaState('mock', quota('high', 0.125));
 
     const response = await worker.fetch(
       adminRequest('/internal/admin/sync/full'),
@@ -125,9 +125,28 @@ describe('synchronization orchestration', () => {
   });
 });
 
-function quota(warningLevel: QuotaState['warningLevel']): QuotaState {
+/**
+ * Builds a quota state whose sustained window genuinely justifies the level
+ * asked for. The level alone is no longer enough: `refreshQuotaState` re-derives
+ * it from the windows before the scheduler sees it, so a level with no current
+ * cause is correctly discarded.
+ *
+ * `remainingFraction` is applied to the sustained window at the harness clock,
+ * leaving the window unexpired.
+ */
+function quota(
+  warningLevel: QuotaState['warningLevel'],
+  remainingFraction: number,
+): QuotaState {
+  const at = new Date('2026-07-20T12:00:00.000Z');
+  const base = emptyQuotaState('mock', at);
   return {
-    ...emptyQuotaState('mock', new Date('2026-07-20T12:00:00.000Z')),
+    ...base,
+    windows: base.windows.map((window) => {
+      if (window.windowClass !== 'sustained') return window;
+      const remaining = Math.floor(window.limit * remainingFraction);
+      return { ...window, used: window.limit - remaining, remaining };
+    }),
     warningLevel,
   };
 }

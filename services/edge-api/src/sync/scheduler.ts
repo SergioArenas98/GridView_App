@@ -1,3 +1,7 @@
+import {
+  hasManualRecoveryCapacity,
+  retryAfterActive,
+} from '../providers/quota-model';
 import type { Clock } from '../runtime/clock';
 import type { QuotaState, SyncJobCategory, SyncState } from '../storage/types';
 
@@ -5,6 +9,20 @@ export interface DueJobPlan {
   dueJobs: SyncJobCategory[];
   skippedJobs: SyncJobCategory[];
   reason: string | null;
+}
+
+export interface DueJobOptions {
+  forceJobs?: SyncJobCategory[];
+  /**
+   * `true` only for a protected, explicitly triggered operator recovery.
+   *
+   * Passed as a typed input rather than inferred from a non-empty `forceJobs`
+   * array, because forcing jobs and recovering from a critical quota are
+   * different intents that happen to coincide today. A public request can
+   * never set it: there is no public synchronization route, and every manual
+   * trigger comes from the admin-authenticated router.
+   */
+  manualRecovery?: boolean;
 }
 
 const intervalsSeconds: Record<SyncJobCategory, number> = {
@@ -19,16 +37,22 @@ const intervalsSeconds: Record<SyncJobCategory, number> = {
 const allJobs = Object.keys(intervalsSeconds) as SyncJobCategory[];
 const lowPriorityJobs: SyncJobCategory[] = ['profiles', 'home-rebuild'];
 
+/**
+ * `quota` must already have been refreshed for `clock.now()` (see
+ * `refreshQuotaState`). These gates read time-dependent state, so planning
+ * against a stale snapshot is what previously froze a source permanently.
+ */
 export function calculateDueJobs(
   clock: Clock,
   state: SyncState | null,
   quota: QuotaState | null,
-  forceJobs?: SyncJobCategory[],
+  options: DueJobOptions = {},
 ): DueJobPlan {
-  if (
-    quota?.retryAfter &&
-    Date.parse(quota.retryAfter) > clock.now().getTime()
-  ) {
+  const { forceJobs, manualRecovery = false } = options;
+
+  // An active Retry-After is a direct provider instruction and blocks
+  // scheduled and manual work alike.
+  if (retryAfterActive(quota?.retryAfter ?? null, clock.now())) {
     return { dueJobs: [], skippedJobs: allJobs, reason: 'retry-after-active' };
   }
 
@@ -41,11 +65,23 @@ export function calculateDueJobs(
   const skippedJobs: SyncJobCategory[] = [];
 
   if (quota?.warningLevel === 'critical') {
-    return {
-      dueJobs: [],
-      skippedJobs: dueJobs,
-      reason: 'quota-critical-reserved-for-manual-recovery',
-    };
+    // §16.1 reserves part of the longest sustained window for manual
+    // recovery. Capacity no operation can reach is not reserved capacity, so a
+    // protected operator recovery may spend it - but only while it exists.
+    if (!manualRecovery) {
+      return {
+        dueJobs: [],
+        skippedJobs: dueJobs,
+        reason: 'quota-critical-reserved-for-manual-recovery',
+      };
+    }
+    if (!hasManualRecoveryCapacity(quota)) {
+      return {
+        dueJobs: [],
+        skippedJobs: dueJobs,
+        reason: 'quota-critical-recovery-reserve-exhausted',
+      };
+    }
   }
 
   if (quota?.warningLevel === 'high') {
