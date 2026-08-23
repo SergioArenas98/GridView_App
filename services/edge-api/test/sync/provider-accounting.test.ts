@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import worker from '../../src/index';
 import { MockFormulaOneProvider } from '../../src/providers/mock/mock-provider';
+import type { Env, RuntimeConfig } from '../../src/config/environment';
+import { resolveProvider } from '../../src/providers/factory';
 import { SnapshotPublisher } from '../../src/publication/publisher';
+import { FixedClock } from '../../src/runtime/clock';
 import { SynchronizationService } from '../../src/sync/sync-service';
 import type { SyncProviderAccounting } from '../../src/sync/sync-service';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
@@ -183,6 +186,55 @@ describe('typed provider request accounting', () => {
     expect(harness.logger.serialized()).not.toContain(
       'mock-development-provider',
     );
+  });
+});
+
+describe('operation-scoped accounting rests on ledger isolation', () => {
+  it('gives every runtime operation its own provider ledger', () => {
+    // `operation` is a difference of lifetime snapshots, which is only sound
+    // while one provider instance serves one operation. In production that is
+    // structural: resolveProvider constructs a new provider per fetch and per
+    // scheduled invocation, so overlapping runs cannot share a ledger.
+    const env: Env = { ENVIRONMENT: 'development', PROVIDER_MODE: 'mock' };
+    const config: RuntimeConfig = {
+      environment: 'development',
+      providerMode: 'mock',
+      publicBaseUrl: null,
+    };
+    const clock = new FixedClock(new Date('2026-07-20T12:00:00.000Z'));
+
+    const first = resolveProvider(env, config, clock);
+    const second = resolveProvider(env, config, clock);
+
+    expect(first).not.toBe(second);
+    expect(first?.requestMetrics().lifetime.total).toBe(0);
+    expect(second?.requestMetrics().lifetime.total).toBe(0);
+  });
+
+  it('reports each run separately when a provider is deliberately shared', async () => {
+    // The test-only __PROVIDER override is the one shared-instance path. Runs
+    // are sequential, so each still reports its own attempts while the
+    // lifetime total accumulates.
+    const harness = createHarness();
+    const service = syncServiceFor(harness);
+
+    const first = await service.run({
+      season: 2026,
+      trigger: 'manual-full',
+      forceJobs: ['standings'],
+    });
+    const second = await service.run({
+      season: 2026,
+      trigger: 'manual-full',
+      forceJobs: ['results'],
+    });
+
+    expect(first.providerRequests.operation.total).toBe(1);
+    expect(second.providerRequests.operation.total).toBe(1);
+    expect(first.providerRequests.lifetime.total).toBe(1);
+    expect(second.providerRequests.lifetime.total).toBe(2);
+    expect(second.providerRequests.byJobCategory.standings).toBeUndefined();
+    expect(second.providerRequests.byJobCategory.results?.total).toBe(1);
   });
 });
 

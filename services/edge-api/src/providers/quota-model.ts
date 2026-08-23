@@ -108,7 +108,14 @@ function alignWindows(
       (candidate) => candidate.window === windowPolicy.window,
     );
     if (!existing) return freshWindow(windowPolicy, at);
-    const used = Math.min(existing.used, windowPolicy.limit);
+    // Clamp only when the published limit itself changed, so a reduced limit
+    // cannot leave `used` above it. Clamping unconditionally would discard
+    // real over-consumption inside a window, which is exactly the signal a
+    // burst limit exists to surface.
+    const used =
+      existing.limit === windowPolicy.limit
+        ? existing.used
+        : Math.min(existing.used, windowPolicy.limit);
     return {
       ...existing,
       windowClass: windowPolicy.windowClass,
@@ -123,9 +130,16 @@ function alignWindows(
 function rollOver(window: QuotaWindowState, at: Date): QuotaWindowState {
   const resetsAt = Date.parse(window.resetsAt);
   if (!Number.isNaN(resetsAt) && at.getTime() < resetsAt) return window;
-  // A window that expires without ever having saturated breaks the streak; one
-  // that did saturate already contributed at the moment it saturated.
-  const saturationStreak = window.remaining === 0 ? window.saturationStreak : 0;
+  // The streak counts saturation across *consecutive* windows, so it survives
+  // only when the new attempt lands in the window that begins where the
+  // expired one ended. A longer gap means at least one complete window elapsed
+  // without saturating - including a window with no traffic at all - which
+  // breaks the sequence just as a window with light traffic does.
+  const consecutive =
+    !Number.isNaN(resetsAt) &&
+    at.getTime() < resetsAt + window.durationSeconds * 1000;
+  const saturationStreak =
+    consecutive && window.remaining === 0 ? window.saturationStreak : 0;
   return freshWindow(
     {
       window: window.window,

@@ -122,11 +122,24 @@ published limits. Neither adopted source returns rate-limit headers
 ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.6), so
 nothing is read from a response.
 
-Records are stored under `quota:provider:<sourceId>`. The pre-Phase-9B-1 global
-`quota:provider` record is read as a narrow fallback for the **mock** source
-only; its daily and per-minute figures are discarded rather than reinterpreted
-as a limit either adopted source publishes. It is never written again and never
-deleted automatically.
+Records are stored under `quota:provider:<sourceId>`, and a write whose state
+names a different source than its key is rejected rather than relabelled.
+`GET /internal/admin/quota` returns `data.sources`, keyed by canonical source
+id, with `null` for any source that has no modelled state. There is no
+source-neutral quota object, because there is no longer a single quota.
+
+The pre-Phase-9B-1 global `quota:provider` record is read as a narrow fallback
+for the **mock** source only. Its daily and per-minute figures are discarded
+rather than reinterpreted as a limit any source publishes, and **its warning
+level is discarded with them** — that level was derived from those figures, so
+it cannot outlive them; carrying a legacy `critical` forward would skip every
+job forever, since skipping means no provider attempt and no attempt means the
+fallback is never replaced. The migrated level is `unknown` until the first
+attempt evaluates one from policy-backed windows. Last provider success and
+failure, usage by job category and `Retry-After` do survive: an active
+`Retry-After` is a provider instruction and still blocks the next request,
+while an expired one blocks nothing. The legacy record is never written again
+and never deleted automatically.
 
 Warning levels follow [GridView_Backend_Scheme.md](GridView_Backend_Scheme.md)
 §16.1: sustained windows escalate at 30%, 15% and 5% remaining; a burst window

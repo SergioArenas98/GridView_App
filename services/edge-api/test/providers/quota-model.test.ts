@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  burstSaturationStreakCap,
   emptyQuotaState,
   evaluateWarningLevel,
   hasRepeatedBurstSaturation,
@@ -140,6 +141,146 @@ describe('burst-window saturation', () => {
     );
     expect(burst?.saturationStreak).toBe(0);
     expect(hasRepeatedBurstSaturation(state!)).toBe(false);
+  });
+});
+
+/**
+ * A burst window contributes at most ONE saturation event, and the streak
+ * counts saturation across *consecutive* windows only
+ * (GridView_Backend_Scheme.md §16.1: "alert on repeated saturation, not on a
+ * single saturated second").
+ */
+describe('burst saturation counts windows, not calls', () => {
+  const burstOf = (state: QuotaState) =>
+    state.windows.find((window) => window.windowClass === 'burst');
+
+  function fire(
+    state: QuotaState | null,
+    sourceId: ProviderSourceId,
+    secondOffset: number,
+  ): QuotaState {
+    return recordProviderAttempt(state, sourceId, {
+      at: new Date(at.getTime() + secondOffset * 1000),
+      outcome: 'successful',
+      jobCategories: ['standings'],
+    });
+  }
+
+  function saturate(
+    state: QuotaState | null,
+    sourceId: ProviderSourceId,
+    secondOffset: number,
+    limit: number,
+  ): QuotaState {
+    let next = state;
+    for (let index = 0; index < limit; index += 1) {
+      next = fire(next, sourceId, secondOffset);
+    }
+    return next!;
+  }
+
+  it('records one saturation event for one filled OpenF1 second', () => {
+    // OpenF1 publishes 3 requests/second.
+    const state = saturate(null, 'openf1', 0, 3);
+
+    expect(burstOf(state)?.remaining).toBe(0);
+    expect(burstOf(state)?.saturationStreak).toBe(1);
+    expect(hasRepeatedBurstSaturation(state)).toBe(false);
+    expect(state.warningLevel).toBe('normal');
+  });
+
+  it('does not turn extra calls in the same second into a second window', () => {
+    let state = saturate(null, 'openf1', 0, 3);
+    // Four more attempts inside the very same second.
+    for (let index = 0; index < 4; index += 1) {
+      state = fire(state, 'openf1', 0);
+    }
+
+    expect(burstOf(state)?.used).toBe(7);
+    expect(burstOf(state)?.saturationStreak).toBe(1);
+    expect(hasRepeatedBurstSaturation(state)).toBe(false);
+    expect(state.warningLevel).toBe('normal');
+  });
+
+  it('reaches a streak of 2 when the immediately following second saturates', () => {
+    let state = saturate(null, 'openf1', 0, 3);
+    state = saturate(state, 'openf1', 1, 3);
+
+    expect(burstOf(state)?.saturationStreak).toBe(2);
+    expect(hasRepeatedBurstSaturation(state)).toBe(true);
+    expect(state.warningLevel).toBe('warning');
+  });
+
+  it('breaks the sequence on an intervening second with light traffic', () => {
+    let state = saturate(null, 'openf1', 0, 3);
+    state = fire(state, 'openf1', 1); // second 1: one request, not saturated
+    state = fire(state, 'openf1', 2); // second 2: rolls second 1 over
+
+    expect(burstOf(state)?.saturationStreak).toBe(0);
+    expect(hasRepeatedBurstSaturation(state)).toBe(false);
+  });
+
+  it('breaks the sequence on intervening seconds with no traffic at all', () => {
+    let state = saturate(null, 'openf1', 0, 3);
+    expect(burstOf(state)?.saturationStreak).toBe(1);
+
+    // Seconds 1-9 pass with no requests, then second 10 saturates. Those are
+    // not consecutive saturated windows, so this must not read as repeated.
+    state = saturate(state, 'openf1', 10, 3);
+
+    expect(burstOf(state)?.saturationStreak).toBe(1);
+    expect(hasRepeatedBurstSaturation(state)).toBe(false);
+    expect(state.warningLevel).toBe('normal');
+  });
+
+  it('starts again at 1 after a break', () => {
+    let state = saturate(null, 'openf1', 0, 3);
+    state = fire(state, 'openf1', 1); // break
+    state = saturate(state, 'openf1', 2, 3);
+
+    expect(burstOf(state)?.saturationStreak).toBe(1);
+    expect(hasRepeatedBurstSaturation(state)).toBe(false);
+  });
+
+  it('applies the same semantics to the Jolpica four-request burst window', () => {
+    // One filled second: one event.
+    let state = saturate(null, 'jolpica', 0, 4);
+    expect(burstOf(state)?.saturationStreak).toBe(1);
+    state = fire(state, 'jolpica', 0);
+    expect(burstOf(state)?.saturationStreak).toBe(1);
+
+    // Immediately following second: streak 2 and observable.
+    state = saturate(state, 'jolpica', 1, 4);
+    expect(burstOf(state)?.saturationStreak).toBe(2);
+    expect(hasRepeatedBurstSaturation(state)).toBe(true);
+    expect(state.warningLevel).toBe('warning');
+
+    // A gap of empty seconds breaks it.
+    state = saturate(state, 'jolpica', 20, 4);
+    expect(burstOf(state)?.saturationStreak).toBe(1);
+    expect(hasRepeatedBurstSaturation(state)).toBe(false);
+  });
+
+  it('keeps the streak bounded by the documented cap', () => {
+    let state: QuotaState | null = null;
+    for (let second = 0; second < burstSaturationStreakCap + 5; second += 1) {
+      state = saturate(state, 'openf1', second, 3);
+    }
+
+    expect(burstOf(state!)?.saturationStreak).toBe(burstSaturationStreakCap);
+  });
+
+  it('still reports critical for a rate-limit rejection during saturation', () => {
+    let state = saturate(null, 'openf1', 0, 3);
+    state = recordProviderAttempt(state, 'openf1', {
+      at,
+      outcome: 'rate-limited',
+      jobCategories: ['standings'],
+      retryAfter: '2026-07-20T12:00:30.000Z',
+    });
+
+    expect(state.warningLevel).toBe('critical');
+    expect(state.retryAfter).toBe('2026-07-20T12:00:30.000Z');
   });
 });
 

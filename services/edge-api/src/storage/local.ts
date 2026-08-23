@@ -13,6 +13,7 @@ import {
 import type { ProviderSourceId } from '../providers/provider-source';
 import {
   adaptLegacyMockQuotaState,
+  assertQuotaSource,
   quotaRecordForSource,
 } from './quota-records';
 import type {
@@ -118,7 +119,9 @@ export class MemorySnapshotStorage implements SnapshotStorage {
     sourceId: ProviderSourceId,
     state: QuotaState,
   ): Promise<void> {
-    await this.put(quotaKey(sourceId), { ...state, sourceId });
+    // Fail closed rather than relabel: a mismatch throws before any write.
+    assertQuotaSource(sourceId, state);
+    await this.put(quotaKey(sourceId), state);
   }
 
   async getContentMetadata(): Promise<ContentMetadata | null> {

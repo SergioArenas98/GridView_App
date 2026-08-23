@@ -6,6 +6,7 @@ import {
   type ProviderSourceId,
 } from '../../src/providers/provider-source';
 import { legacyGlobalQuotaKey, quotaKey } from '../../src/storage/keys';
+import { QuotaSourceMismatchError } from '../../src/storage/quota-records';
 import { KvSnapshotStorage } from '../../src/storage/kv';
 import { MemorySnapshotStorage } from '../../src/storage/local';
 import type { QuotaState, SnapshotStorage } from '../../src/storage/types';
@@ -146,16 +147,42 @@ describe.each(implementations)(
       expect(keys()).not.toContain(legacyGlobalQuotaKey);
     });
 
-    it('stamps the requested source id onto the stored record', async () => {
+    it('writes and reads back a record whose identity matches its key', async () => {
       const { storage } = createBackend();
 
-      // A mismatched payload cannot smuggle one source into another key.
-      await storage.setQuotaState('jolpica', stateFor('openf1', 'normal'));
+      await storage.setQuotaState('jolpica', stateFor('jolpica', 'warning'));
 
-      expect((await storage.getQuotaState('jolpica'))?.sourceId).toBe(
-        'jolpica',
-      );
+      const stored = await storage.getQuotaState('jolpica');
+      expect(stored?.sourceId).toBe('jolpica');
+      expect(stored?.warningLevel).toBe('warning');
+      expect(stored?.windows.map((window) => window.limit)).toEqual([4, 500]);
+    });
+
+    it('rejects a write whose state names a different source', async () => {
+      const { storage } = createBackend();
+      const original = stateFor('jolpica', 'warning');
+      await storage.setQuotaState('jolpica', original);
+
+      // Relabelling OpenF1's 3/s + 30/min windows as Jolpica state would make a
+      // later rate limiter pace Jolpica against OpenF1's limits.
+      await expect(
+        storage.setQuotaState('jolpica', stateFor('openf1', 'critical')),
+      ).rejects.toBeInstanceOf(QuotaSourceMismatchError);
+
+      // The previous valid value is untouched, and nothing leaked to OpenF1.
+      expect(await storage.getQuotaState('jolpica')).toEqual(original);
       expect(await storage.getQuotaState('openf1')).toBeNull();
+    });
+
+    it('rejects a mismatched write even when no record exists yet', async () => {
+      const { storage, keys } = createBackend();
+
+      await expect(
+        storage.setQuotaState('openf1', stateFor('jolpica', 'normal')),
+      ).rejects.toBeInstanceOf(QuotaSourceMismatchError);
+
+      expect(await storage.getQuotaState('openf1')).toBeNull();
+      expect(keys()).not.toContain(quotaKey('openf1'));
     });
 
     it('falls back to the legacy global record for the mock source only', async () => {
@@ -172,7 +199,10 @@ describe.each(implementations)(
       expect(mock?.lastProviderFailureAt).toBe('2026-07-19T10:00:00.000Z');
       expect(mock?.retryAfter).toBe('2026-07-19T10:05:00.000Z');
       expect(mock?.usageByJobCategory).toEqual({ standings: 3 });
-      expect(mock?.warningLevel).toBe('high');
+      // The legacy level was derived from the discarded windows, so it is not
+      // carried forward - a migrated `high` or `critical` would block work
+      // using inputs that no longer exist.
+      expect(mock?.warningLevel).toBe('unknown');
       // The legacy daily/per-minute figures are discarded, never reinterpreted
       // as a window that a source publishes.
       expect(mock?.windows).toEqual([]);

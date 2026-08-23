@@ -48,6 +48,17 @@ export interface SyncRequest {
  * `bySource` and `byJobCategory` are **operation-scoped**, matching
  * `operation`. One attempt serving several job categories counts once against
  * each, so `byJobCategory` does not sum to `operation.total`.
+ *
+ * **Isolation invariant.** `operation` is the difference between two lifetime
+ * snapshots, which is only sound while one provider instance serves one
+ * synchronization operation. That holds by construction: `resolveProvider`
+ * builds a new provider — and therefore a new ledger — on every `fetch` and
+ * every `scheduled` invocation, so concurrent operations never share one.
+ * The single exception is the test-only `__PROVIDER` override, which is
+ * deliberately shared so a test can observe lifetime totals across runs;
+ * tests drive `run()` sequentially. If a future coordinator ever reuses one
+ * provider across overlapping runs, this difference must be replaced by a
+ * per-operation ledger rather than left to under- or over-count silently.
  */
 export interface SyncProviderAccounting {
   operation: ProviderAttemptCounts;
