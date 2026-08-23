@@ -31,15 +31,10 @@ describe('snapshot publication', () => {
 
   it('preserves the previous active version and treats repeat publication as idempotent', async () => {
     const context = await publishContext('v1');
-    const secondSet = await generatedSet(
-      context.provider,
-      context.clock,
-      'v2',
-      {
-        sourceUpdatedAt: '2026-07-18T12:20:00.000Z',
-        contentVersion: '2026.07.18.2',
-      },
-    );
+    const secondSet = await generatedSet(context.clock, 'v2', {
+      sourceUpdatedAt: '2026-07-18T12:20:00.000Z',
+      contentVersion: '2026.07.18.2',
+    });
     const second = await context.publisher.publish(secondSet);
     const repeat = await context.publisher.publish(secondSet);
 
@@ -62,27 +57,17 @@ describe('snapshot publication', () => {
       context.purger,
       context.logger,
     );
-    const invalidSet = await generatedSet(
-      context.provider,
-      context.clock,
-      'bad',
-      {
-        sourceUpdatedAt: '2026-07-18T12:30:00.000Z',
-        contentVersion: '2026.07.18.3',
-      },
-    );
+    const invalidSet = await generatedSet(context.clock, 'bad', {
+      sourceUpdatedAt: '2026-07-18T12:30:00.000Z',
+      contentVersion: '2026.07.18.3',
+    });
     const rejected = await rejectingPublisher.publish(invalidSet);
 
     context.storage.setWriteFailure((key) => key.includes(':broken:calendar'));
-    const brokenSet = await generatedSet(
-      context.provider,
-      context.clock,
-      'broken',
-      {
-        sourceUpdatedAt: '2026-07-18T12:40:00.000Z',
-        contentVersion: '2026.07.18.4',
-      },
-    );
+    const brokenSet = await generatedSet(context.clock, 'broken', {
+      sourceUpdatedAt: '2026-07-18T12:40:00.000Z',
+      contentVersion: '2026.07.18.4',
+    });
     const failed = await context.publisher.publish(brokenSet);
 
     expect(rejected.status).toBe('rejected');
@@ -93,14 +78,14 @@ describe('snapshot publication', () => {
   it('rejects older source data and rolls back to a complete previous version', async () => {
     const context = await publishContext('v1');
     await context.publisher.publish(
-      await generatedSet(context.provider, context.clock, 'v2', {
+      await generatedSet(context.clock, 'v2', {
         sourceUpdatedAt: '2026-07-18T12:20:00.000Z',
         contentVersion: '2026.07.18.2',
       }),
     );
 
     const older = await context.publisher.publish(
-      await generatedSet(context.provider, context.clock, 'older', {
+      await generatedSet(context.clock, 'older', {
         sourceUpdatedAt: '2026-07-18T10:00:00.000Z',
         contentVersion: '2026.07.18.0',
       }),
@@ -136,12 +121,11 @@ async function publishContext(version: string) {
     purger,
     logger,
   );
-  await publisher.publish(await generatedSet(provider, clock, version));
+  await publisher.publish(await generatedSet(clock, version));
   return { clock, storage, logger, purger, provider, publisher };
 }
 
 async function generatedSet(
-  provider: MockFormulaOneProvider,
   clock: FixedClock,
   version: string,
   overrides: { sourceUpdatedAt?: string; contentVersion?: string } = {},
@@ -158,6 +142,5 @@ async function generatedSet(
     'results',
     'home-rebuild',
   ]);
-  provider.callCount += 1;
   return generateSnapshotSet(source, clock.now().toISOString(), version);
 }

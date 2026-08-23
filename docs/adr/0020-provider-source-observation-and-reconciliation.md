@@ -91,7 +91,7 @@ snapshot revision itself.
 | Rule | Statement |
 |---|---|
 | D1.1 | `sourceObservedAt` is set when a `contentRevision` **becomes the published revision** for a resource, to the observation time of the check at which that revision was **first seen** — not the time it was corroborated, and not the time it was written. |
-| D1.2 | **Re-reading identical normalized content never advances it.** An idempotent re-check refreshes confirmation metadata only; `sourceObservedAt`, and therefore `sourceUpdatedAt`, are unchanged. |
+| D1.2 | **Re-reading identical normalized content never advances it.** An idempotent re-check refreshes confirmation metadata only; `sourceObservedAt` is unchanged. It is internal state (D1.12), so it never sets the wire value on its own: the published `sourceUpdatedAt` is unchanged in this case because the resulting snapshot carries the **same `snapshotRevision`** and therefore keeps its existing `snapshotObservedAt` (D1.9). |
 | D1.3 | It is **persisted with the resource revision**. A Worker restart, a redeploy or another identical fetch must not reset it while that revision remains current. |
 | D1.4 | `fetchedAt` remains GridView's request time for the current request and is **never** published under `sourceUpdatedAt`. |
 | D1.5 | `generatedAt` remains the snapshot generation time and **never** substitutes for source recency. ADR 0005's prohibition is unchanged. |

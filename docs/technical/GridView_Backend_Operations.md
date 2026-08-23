@@ -110,14 +110,94 @@ is implemented.
 
 ## Quota Behavior
 
-The internal quota model stores daily and per-minute limits/remaining counts,
-last provider success/failure, retry-after, usage by job category and warning
-level.
+The internal quota model is **per source** and holds an extensible collection
+of the windows that source actually publishes, plus last provider
+success/failure, retry-after, usage by job category and a derived warning
+level. OpenF1 publishes per-second and per-minute limits; Jolpica publishes
+per-second and per-hour limits; neither publishes a daily figure, so no daily
+bucket is modelled. The mock provider's limits are explicitly test-only.
 
-High quota pressure skips low-priority jobs (`profiles`, `home-rebuild`).
-Critical quota preserves capacity and does not perform scheduled jobs. An active
-retry-after prevents immediate retries. Public reads never consume provider
-quota.
+Every count is a **GridView-local counter** derived from each project's
+published limits. Neither adopted source returns rate-limit headers
+([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.6), so
+nothing is read from a response.
+
+Records are stored under `quota:provider:<sourceId>`, and a write whose state
+names a different source than its key is rejected rather than relabelled.
+`GET /internal/admin/quota` returns `data.sources`, keyed by canonical source
+id, with `null` for any source that has no modelled state. There is no
+source-neutral quota object, because there is no longer a single quota.
+
+The pre-Phase-9B-1 global `quota:provider` record is read as a narrow fallback
+for the **mock** source only. Its daily and per-minute figures are discarded
+rather than reinterpreted as a limit any source publishes, and **its warning
+level is discarded with them** — that level was derived from those figures, so
+it cannot outlive them; carrying a legacy `critical` forward would skip every
+job forever, since skipping means no provider attempt and no attempt means the
+fallback is never replaced. The migrated level is `unknown` until the first
+attempt evaluates one from policy-backed windows. Last provider success and
+failure, usage by job category and `Retry-After` do survive: an active
+`Retry-After` is a provider instruction and still blocks the next request,
+while an expired one blocks nothing. The legacy record is never written again
+and never deleted automatically.
+
+Warning levels follow [GridView_Backend_Scheme.md](GridView_Backend_Scheme.md)
+§16.1: sustained windows escalate at 30%, 15% and 5% remaining; a burst window
+reaching zero once is normal pacing pressure and does not escalate, while
+repeated burst saturation stays observable; a provider rate-limit rejection is
+critical and preserves `Retry-After`.
+
+### Refreshed before scheduling
+
+Warning level, window usage and `Retry-After` are all **time-dependent** but
+persisted, so the stored state is refreshed against the current source policy
+and clock **before any scheduler gate reads it**. The refresh rolls expired
+windows forward, clears an expired `Retry-After` and re-derives the warning
+level. It consumes no quota, makes no provider request, increments no usage
+counter, touches no request metric, and is pure and deterministic under a fixed
+clock.
+
+This is what stops a source freezing permanently. Only a provider attempt used
+to roll a window over, but a stored `critical` blocked the scheduler from
+making one, so the state that caused the block was the only thing that could
+have cleared it. A level with no current cause is now removed, while a
+genuinely current one is retained and still blocks. The refreshed state is
+persisted whenever it differs from what was stored, **even when no job runs**,
+so the admin quota surface cannot keep reporting an expired critical state.
+
+### Scheduled versus manual behaviour
+
+| Condition | Scheduled | Protected manual recovery |
+|---|---|---|
+| Active `Retry-After` | Blocked | **Blocked** — a direct provider instruction binds both |
+| Current `critical`, reserve has capacity | Blocked | **Allowed**, spending the reserve |
+| Current `critical`, reserve exhausted | Blocked | Blocked |
+| `high` | Low-priority jobs (`profiles`, `home-rebuild`) skipped | Same |
+
+§16.1 reserves part of the **longest sustained window** — Jolpica's hour,
+OpenF1's minute — for manual recovery. Capacity no operation can reach is not
+reserved capacity, so an explicit operator run may spend it while it lasts, and
+is refused once that window has zero remaining. Manual recovery is a typed
+planning input driven by `SyncRequest.trigger`, not inferred from a forced job
+list. Every manual trigger arrives through the admin-authenticated router;
+there is no public synchronization route, and public reads never consume
+provider quota.
+
+### Failure accounting
+
+Provider-fetch failures and post-fetch failures are accounted separately.
+
+- A **fetch** error records exactly one failed or rate-limited provider
+  attempt, preserving any supplied `Retry-After`.
+- A successful fetch records exactly one successful attempt, before any later
+  work can throw.
+- A **generation, validation, storage or publication** exception after that
+  success fails the synchronization as `snapshot-publication-failure` without
+  recording a second attempt and without rewriting provider quota as a provider
+  failure, so `lastProviderSuccessAt` stands and request metrics, quota
+  timestamps and the reported outcome agree.
+- In every case the previously active snapshot is preserved, and internal
+  exception bodies are never surfaced publicly or logged.
 
 ## Cache Purge
 

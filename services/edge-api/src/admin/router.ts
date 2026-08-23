@@ -6,7 +6,15 @@ import type { Logger } from '../logging/logger';
 import type { SnapshotPublisher } from '../publication/publisher';
 import type { SynchronizationService } from '../sync/sync-service';
 import { emptySyncState } from '../sync/sync-service';
-import type { SnapshotStorage, SyncJobCategory } from '../storage/types';
+import {
+  providerSourceIds,
+  type ProviderSourceId,
+} from '../providers/provider-source';
+import type {
+  QuotaState,
+  SnapshotStorage,
+  SyncJobCategory,
+} from '../storage/types';
 import { adminAuthOk, unauthorized } from './auth';
 
 interface AdminContext {
@@ -31,9 +39,15 @@ export async function handleAdminRequest(
   const url = new URL(request.url);
   if (request.method === 'GET') {
     if (url.pathname === '/internal/admin/quota') {
+      // Source-aware: one entry per canonical source, so a source with no
+      // modelled state reports `null` rather than borrowing another one's.
+      const bySource: Partial<Record<ProviderSourceId, QuotaState | null>> = {};
+      for (const sourceId of providerSourceIds) {
+        bySource[sourceId] = await context.storage.getQuotaState(sourceId);
+      }
       return jsonResponse(
         {
-          data: await context.storage.getQuotaState(),
+          data: { sources: bySource },
           requestId: context.requestId,
         },
         200,

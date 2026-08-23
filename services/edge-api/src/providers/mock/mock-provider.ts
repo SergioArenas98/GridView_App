@@ -13,7 +13,16 @@ import type {
 } from '../../contract/types';
 import type { Clock } from '../../runtime/clock';
 import { addSeconds } from '../../runtime/clock';
-import type { QuotaState, SyncJobCategory } from '../../storage/types';
+import type { SyncJobCategory } from '../../storage/types';
+import {
+  ProviderRequestLedger,
+  type ProviderRequestMetrics,
+} from '../provider-metrics';
+import {
+  quotaPolicyFor,
+  type ProviderQuotaPolicy,
+  type ProviderSourceId,
+} from '../provider-source';
 import {
   ProviderError,
   ProviderRateLimitedError,
@@ -35,7 +44,6 @@ export interface MockProviderOptions {
   clock: Clock;
   failureMode?: MockFailureMode;
   invalidData?: boolean;
-  quota?: QuotaState;
   sourceUpdatedAt?: string;
   contentVersion?: string;
 }
@@ -46,28 +54,56 @@ type RegistryCircuit = Omit<Circuit, 'media'>;
 
 export class MockFormulaOneProvider implements FormulaOneProvider {
   readonly name = 'mock-development-provider';
-  callCount = 0;
+  readonly sourceId: ProviderSourceId = 'mock';
+  readonly quotaPolicy: ProviderQuotaPolicy = quotaPolicyFor('mock');
+
+  private readonly ledger = new ProviderRequestLedger();
 
   constructor(private readonly options: MockProviderOptions) {}
+
+  /** Typed lifetime accounting for this provider instance (gap G6). */
+  requestMetrics(): ProviderRequestMetrics {
+    return this.ledger.snapshot();
+  }
 
   async fetchSeasonSource(
     season: number,
     jobs: SyncJobCategory[],
   ): Promise<ProviderSeasonSource> {
-    this.callCount += 1;
+    // The attempt is recorded before the outcome is known, so a failure and a
+    // rate-limited rejection are both counted as requests that were made.
     if (this.options.failureMode === 'rate_limited') {
+      this.ledger.record({
+        sourceId: this.sourceId,
+        outcome: 'rate-limited',
+        jobCategories: jobs,
+      });
       throw new ProviderRateLimitedError(
         addSeconds(this.options.clock.now(), 60),
       );
     }
     if (this.options.failureMode === 'failure') {
+      this.ledger.record({
+        sourceId: this.sourceId,
+        outcome: 'failed',
+        jobCategories: jobs,
+      });
       throw new ProviderError('mock-provider-failure');
     }
     if (season !== 2026) {
+      this.ledger.record({
+        sourceId: this.sourceId,
+        outcome: 'failed',
+        jobCategories: jobs,
+      });
       throw new ProviderError('season-not-supported');
     }
+    this.ledger.record({
+      sourceId: this.sourceId,
+      outcome: 'successful',
+      jobCategories: jobs,
+    });
 
-    const quota = quotaWithUsage(this.defaultQuota(), jobs, this.options.clock);
     const drivers = withDriverMedia(
       clone(
         (driversRegistry as unknown as { drivers: RegistryDriver[] }).drivers,
@@ -110,7 +146,6 @@ export class MockFormulaOneProvider implements FormulaOneProvider {
       ),
       driverStandings: buildDriverStandings(),
       constructorStandings: buildConstructorStandings(),
-      quota,
     };
 
     if (this.options.invalidData) {
@@ -122,30 +157,12 @@ export class MockFormulaOneProvider implements FormulaOneProvider {
 
   async getProviderStatus(): Promise<ProviderStatus> {
     if (this.options.failureMode === 'rate_limited') {
-      return { status: 'rate_limited', quota: this.defaultQuota('critical') };
+      return { sourceId: this.sourceId, status: 'rate_limited' };
     }
     if (this.options.failureMode === 'failure') {
-      return { status: 'unavailable', quota: this.defaultQuota('unknown') };
+      return { sourceId: this.sourceId, status: 'unavailable' };
     }
-    return { status: 'ok', quota: this.defaultQuota() };
-  }
-
-  private defaultQuota(
-    warningLevel: QuotaState['warningLevel'] = 'normal',
-  ): QuotaState {
-    return (
-      this.options.quota ?? {
-        dailyLimit: 1000,
-        dailyRemaining: 900,
-        perMinuteLimit: 60,
-        perMinuteRemaining: 55,
-        lastProviderSuccessAt: null,
-        lastProviderFailureAt: null,
-        retryAfter: null,
-        usageByJobCategory: {},
-        warningLevel,
-      }
-    );
+    return { sourceId: this.sourceId, status: 'ok' };
   }
 }
 
@@ -418,22 +435,6 @@ function constructorStanding(
   provisional = false,
 ): ConstructorStanding {
   return { season: 2026, constructorId, position, points, wins, provisional };
-}
-
-function quotaWithUsage(
-  quota: QuotaState,
-  jobs: SyncJobCategory[],
-  clock: Clock,
-): QuotaState {
-  const usageByJobCategory = { ...quota.usageByJobCategory };
-  for (const job of jobs) {
-    usageByJobCategory[job] = (usageByJobCategory[job] ?? 0) + 1;
-  }
-  return {
-    ...quota,
-    lastProviderSuccessAt: clock.now().toISOString(),
-    usageByJobCategory,
-  };
 }
 
 function withDriverMedia(drivers: RegistryDriver[]): Driver[] {

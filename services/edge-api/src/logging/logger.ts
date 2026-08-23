@@ -11,7 +11,14 @@ export interface LogEvent {
   releaseVersion?: string;
   failureCategory?: string;
   cacheOutcome?: string;
+  /** Lifetime attempts by the provider instance driving this operation. */
   providerCallCount?: number;
+  /** Attempts made by this operation alone. */
+  providerOperationCallCount?: number;
+  /** Canonical internal source id. Bounded enum value, never a provider string. */
+  providerSourceId?: string | null;
+  /** Bounded `sourceId -> integer attempt total`. Never a provider response. */
+  providerCallsBySource?: Record<string, number>;
   [key: string]: unknown;
 }
 

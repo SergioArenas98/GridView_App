@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import worker from '../../src/index';
 import { MockFormulaOneProvider } from '../../src/providers/mock/mock-provider';
 import { FixedClock } from '../../src/runtime/clock';
-import { createHarness, seedPublishedSnapshot } from '../support/edge-harness';
+import {
+  createHarness,
+  providerCalls,
+  seedPublishedSnapshot,
+} from '../support/edge-harness';
 
 // The deployed staging cron is `17 3 * * *` (see wrangler.toml). These tests
 // exercise the real `scheduled()` export through the in-memory harness — the
@@ -13,14 +17,14 @@ import { createHarness, seedPublishedSnapshot } from '../support/edge-harness';
 describe('scheduled handler', () => {
   it('runs the same sync-and-publish orchestration and updates sync state and quota', async () => {
     const harness = createHarness();
-    const callsBefore = harness.provider.callCount;
+    const callsBefore = providerCalls(harness.provider);
 
     await worker.scheduled?.({} as ScheduledController, harness.env);
 
     // Reads configured KV state (defaults the season to 2026) and drives the
     // shared SynchronizationService -> SnapshotPublisher path to an applied
     // release — the same orchestration the manual admin sync uses.
-    expect(harness.provider.callCount).toBeGreaterThan(callsBefore);
+    expect(providerCalls(harness.provider)).toBeGreaterThan(callsBefore);
     const activeVersion = await harness.storage.getActiveVersion(2026);
     expect(activeVersion).toBeTypeOf('string');
 
@@ -30,7 +34,7 @@ describe('scheduled handler', () => {
     expect(state?.lastCompletedAt).toBeTypeOf('string');
     expect(state?.lastFailedAt).toBeNull();
 
-    const quotaState = await harness.storage.getQuotaState();
+    const quotaState = await harness.storage.getQuotaState('mock');
     expect(quotaState?.lastProviderSuccessAt).toBeTypeOf('string');
   });
 
@@ -38,11 +42,11 @@ describe('scheduled handler', () => {
     const harness = createHarness();
     await seedPublishedSnapshot(harness);
     const active = await harness.storage.getActiveVersion(2026);
-    const callsAfterSeed = harness.provider.callCount;
+    const callsAfterSeed = providerCalls(harness.provider);
 
     await worker.scheduled?.({} as ScheduledController, harness.env);
 
-    expect(harness.provider.callCount).toBe(callsAfterSeed);
+    expect(providerCalls(harness.provider)).toBe(callsAfterSeed);
     const state = await harness.storage.getSyncState(2026);
     expect(state?.lastPublicationStatus).toBe('skipped');
     expect(await harness.storage.getActiveVersion(2026)).toBe(active);
@@ -65,7 +69,7 @@ describe('scheduled handler', () => {
 
     await worker.scheduled?.({} as ScheduledController, failing.env);
 
-    expect(failingProvider.callCount).toBeGreaterThan(0);
+    expect(providerCalls(failingProvider)).toBeGreaterThan(0);
     // The active release is untouched: setActiveVersion is only reached on the
     // full success path, so any failure preserves the previously published one.
     expect(await seed.storage.getActiveVersion(2026)).toBe(active);
@@ -75,7 +79,7 @@ describe('scheduled handler', () => {
     expect(state?.lastFailureCategory).toBe('mock-provider-failure');
     expect(state?.lastFailedAt).toBeTypeOf('string');
 
-    const quotaState = await seed.storage.getQuotaState();
+    const quotaState = await seed.storage.getQuotaState('mock');
     expect(quotaState?.lastProviderFailureAt).toBeTypeOf('string');
   });
 

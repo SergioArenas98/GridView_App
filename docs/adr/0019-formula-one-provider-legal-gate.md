@@ -295,7 +295,9 @@ requires the OpenF1 live-window rule to be specified; it today skips every
 session because no end bound is recorded. **None of the three is resolved by
 this ADR** — all three were resolved on 2026-08-21 by
 [ADR 0020](0020-provider-source-observation-and-reconciliation.md), which
-adopts the `sourceObservedAt` proxy with ADR 0005 and the OpenAPI description
+adopts the observation-timestamp proxy — publishing the snapshot-level
+`snapshotObservedAt` under `sourceUpdatedAt`, with the resource-level
+`sourceObservedAt` kept internal — with ADR 0005 and the OpenAPI description
 amended to match, accepts the reconciled-ordering risk with monitoring, makes
 I1-I5 binding (and specifies the state machine), and records the OpenF1
 bound-or-skip rule as binding. **The maximum-session-duration bound remains

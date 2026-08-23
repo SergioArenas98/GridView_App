@@ -6,19 +6,21 @@ import type { QuotaState } from '../../src/storage/types';
 import {
   adminRequest,
   createHarness,
+  providerCalls,
   request,
   seedPublishedSnapshot,
 } from '../support/edge-harness';
+import { emptyQuotaState } from '../../src/providers/quota-model';
 
 describe('synchronization orchestration', () => {
   it('performs no provider call when no scheduled job is due', async () => {
     const harness = createHarness();
     await seedPublishedSnapshot(harness);
-    const calls = harness.provider.callCount;
+    const calls = providerCalls(harness.provider);
 
     await worker.scheduled?.({} as ScheduledController, harness.env);
 
-    expect(harness.provider.callCount).toBe(calls);
+    expect(providerCalls(harness.provider)).toBe(calls);
     const state = await harness.storage.getSyncState(2026);
     expect(state?.lastPublicationStatus).toBe('skipped');
   });
@@ -69,7 +71,7 @@ describe('synchronization orchestration', () => {
 
   it('skips low-priority jobs when quota is high', async () => {
     const harness = createHarness();
-    await harness.storage.setQuotaState(quota('high'));
+    await harness.storage.setQuotaState('mock', quota('high', 0.125));
 
     const response = await worker.fetch(
       adminRequest('/internal/admin/sync/full'),
@@ -95,8 +97,8 @@ describe('synchronization orchestration', () => {
       adminRequest('/internal/admin/sync/full'),
       harness.env,
     );
-    const quotaAfterFailure = await harness.storage.getQuotaState();
-    const calls = rateLimitedProvider.callCount;
+    const quotaAfterFailure = await harness.storage.getQuotaState('mock');
+    const calls = providerCalls(rateLimitedProvider);
 
     const workingProvider = new MockFormulaOneProvider({
       clock: harness.clock,
@@ -107,32 +109,44 @@ describe('synchronization orchestration', () => {
 
     expect(first.status).toBe(200);
     expect(quotaAfterFailure?.retryAfter).toBeTypeOf('string');
-    expect(rateLimitedProvider.callCount).toBe(calls);
-    expect(workingProvider.callCount).toBe(0);
+    expect(providerCalls(rateLimitedProvider)).toBe(calls);
+    expect(providerCalls(workingProvider)).toBe(0);
   });
 
   it('public reads consume no provider quota', async () => {
     const harness = createHarness();
     await seedPublishedSnapshot(harness);
-    const calls = harness.provider.callCount;
+    const calls = providerCalls(harness.provider);
 
     await worker.fetch(request('/v1/seasons/2026/calendar'), harness.env);
     await worker.fetch(request('/v1/home?season=2026'), harness.env);
 
-    expect(harness.provider.callCount).toBe(calls);
+    expect(providerCalls(harness.provider)).toBe(calls);
   });
 });
 
-function quota(warningLevel: QuotaState['warningLevel']): QuotaState {
+/**
+ * Builds a quota state whose sustained window genuinely justifies the level
+ * asked for. The level alone is no longer enough: `refreshQuotaState` re-derives
+ * it from the windows before the scheduler sees it, so a level with no current
+ * cause is correctly discarded.
+ *
+ * `remainingFraction` is applied to the sustained window at the harness clock,
+ * leaving the window unexpired.
+ */
+function quota(
+  warningLevel: QuotaState['warningLevel'],
+  remainingFraction: number,
+): QuotaState {
+  const at = new Date('2026-07-20T12:00:00.000Z');
+  const base = emptyQuotaState('mock', at);
   return {
-    dailyLimit: 1000,
-    dailyRemaining: 100,
-    perMinuteLimit: 60,
-    perMinuteRemaining: 10,
-    lastProviderSuccessAt: null,
-    lastProviderFailureAt: null,
-    retryAfter: null,
-    usageByJobCategory: {},
+    ...base,
+    windows: base.windows.map((window) => {
+      if (window.windowClass !== 'sustained') return window;
+      const remaining = Math.floor(window.limit * remainingFraction);
+      return { ...window, used: window.limit - remaining, remaining };
+    }),
     warningLevel,
   };
 }
