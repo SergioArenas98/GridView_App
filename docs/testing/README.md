@@ -1189,6 +1189,29 @@ Checklist:
 25. Confirm the **STAGING** badge remains visible.
 26. Confirm **no "Sample data" banner** appears.
 
+## Provider outbound boundary and rate limiter (Phase 9B-2)
+
+75 Edge tests under `services/edge-api/test/providers/` and
+`services/edge-api/test/sync/not-attempted-accounting.test.ts`. **None touches
+the network**, and none contacts Jolpica, OpenF1 or Cloudflare.
+
+Every test drives the hardened client through an **injected fake transport**:
+the transport is a required constructor argument, so the client has no path to
+global `fetch` at all. `provider-http-client.test.ts` additionally replaces
+`globalThis.fetch` with a throwing stub for the duration of each test, so an
+accidental real request fails loudly instead of silently leaving the machine.
+
+The Durable Object is exercised through an in-memory `ReservationHost` fake
+whose `blockConcurrencyWhile` serializes callbacks exactly as the runtime does,
+which is what makes the concurrency assertions meaningful. The reservation
+engine itself is pure and is driven with fixed clocks, so window boundaries are
+asserted exactly - including capacity returning at precisely `ts + duration`
+rather than a millisecond later.
+
+`provider-neutrality.test.ts` pins the containment invariant: the two provider
+origins may appear in exactly one module, the hardened boundary, and no module
+anywhere may call global `fetch` on a literal URL.
+
 ## Media (Phase 8B)
 
 124 Flutter tests under `test/media/`, plus 74 Edge tests under

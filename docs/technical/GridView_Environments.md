@@ -257,8 +257,20 @@ phase.
 | staging | **not provisioned** | none |
 | production | **not provisioned** | none |
 
-`wrangler.toml` binds a KV namespace for staging and nothing else. **No media
-bucket exists in any environment**, so no image has ever been published and no
+`wrangler.toml` binds a KV namespace for staging, and declares the
+`PROVIDER_RATE_LIMITER` Durable Object binding in development, staging and
+production ([ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
+Bindings are not inherited by named environments, so each declares it; the
+SQLite `exports` entry is declared once, because SQLite-backed storage is what
+Durable Objects require on the Workers Free plan.
+
+**The Durable Object is declared, not provisioned.** Nothing has been deployed,
+no namespace exists, and while the namespace is unbound every provider
+reservation resolves to `unavailable` - the fail-closed default, under which no
+outbound provider request can be issued at all. No provider adapter exists
+either, so nothing calls it.
+
+**No media bucket exists in any environment**, so no image has ever been published and no
 production CDN host appears anywhere in this repository — fabricating one would
 put URLs into a manifest that nothing serves.
 

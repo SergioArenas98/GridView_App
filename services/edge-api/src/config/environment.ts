@@ -6,6 +6,7 @@ export type ProviderMode = (typeof validProviderModes)[number];
 
 interface TestOnlyBindings {
   __LOCAL_STORAGE?: import('../storage/types').SnapshotStorage;
+  __PROVIDER_RATE_LIMITER?: import('../providers/http/provider-rate-limiter').ProviderRateLimiterClient;
   __CLOCK?: import('../runtime/clock').Clock;
   __LOGGER?: import('../logging/logger').Logger;
   __PROVIDER?: import('../providers/formula-one-provider').FormulaOneProvider;
@@ -24,6 +25,13 @@ export interface Env extends TestOnlyBindings {
   MOCK_PROVIDER_SOURCE_UPDATED_AT?: string;
   MOCK_PROVIDER_CONTENT_VERSION?: string;
   GRIDVIEW_DATA?: KVNamespace;
+  /**
+   * Durable Object namespace backing the per-source provider reservation
+   * coordinator (ADR 0021). Optional in the type because no environment has it
+   * provisioned yet and nothing has been deployed; the resolver fails closed
+   * when it is absent.
+   */
+  PROVIDER_RATE_LIMITER?: DurableObjectNamespace;
 }
 
 /**

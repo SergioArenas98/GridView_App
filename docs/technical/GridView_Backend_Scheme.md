@@ -1239,6 +1239,29 @@ percentages, which are meaningful at that size:
 - High warning: 15% remaining.
 - Critical: 5% remaining.
 
+**The per-provider rate limiter now exists** (Phase 9B-2,
+[ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
+It is a **Cloudflare Durable Object, one identity per canonical real source**,
+so `jolpica` and `openf1` each have exactly one global budget rather than one
+per isolate or per Cloudflare location. It performs an exact sliding-window
+reservation across every window that source publishes, atomically and
+all-or-nothing, and returns a deterministic `retryAt` when it defers.
+
+Isolate state, Workers KV and Cloudflare's native Rate Limiting binding were
+all rejected as the authority: an isolate is neither durable nor global, KV is
+eventually consistent with a one-write-per-second same-key limit and no atomic
+read-modify-write, and the Rate Limiting binding is per location, explicitly
+permissive and eventually consistent, and supports only 10- or 60-second
+periods — it cannot express 3/second plus 30/minute, or 4/second plus
+500/hour, as one budget.
+
+**Reservation and provider attempt are different things.** A reservation is
+permission to send; an attempt is a request that actually left GridView. A
+locally deferred reservation increments no request ledger, no quota usage and
+no success or failure timestamp, because nothing was sent. The quota model
+above remains the reporting and scheduling surface; the Durable Object is the
+pacing authority. Neither is a relabelling of the other.
+
 **Burst windows** — the per-second limits — use absolute counts and a
 saturation signal instead:
 
@@ -1547,13 +1570,27 @@ Validate:
 
 ### 23.3 Outbound requests
 
-- Use fixed provider hostnames.
-- Do not accept caller-provided upstream URLs.
-- Set timeouts.
-- Limit redirects.
-- Validate content type.
-- Limit response size where practical.
-- Redact authentication headers in logs.
+**Implemented in Phase 9B-2** as a single hardened boundary
+(`src/providers/http/provider-http-client.ts`,
+[ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
+Every future real provider request must pass through it; an adapter cannot call
+global `fetch`, cannot choose an origin and cannot skip pacing. **No adapter
+exists and no provider request is sent.**
+
+| Rule | Implementation |
+|---|---|
+| Fixed provider hostnames | Pinned HTTPS origins: Jolpica `https://api.jolpi.ca`, OpenF1 `https://api.openf1.org`. Re-verified after URL resolution. |
+| No caller-provided upstream URL | The caller supplies a canonical `ProviderSourceId`, a relative path inside the documented prefix (`/ergast/f1/`, `/v1/`) and structured query parameters. HTTP, credentials, fragments, ports, alternative or lookalike hosts, protocol-relative input and traversal are rejected. |
+| Timeouts | A named **10-second** cap covering the whole operation, body consumption included. Caller cancellation is preserved and stays distinct from the timeout. |
+| Redirects | `redirect: "manual"`; every 3xx is rejected rather than followed. |
+| Content type | Only `application/json` and `application/*+json`, parameters such as `charset=utf-8` allowed. Rejected before parsing. |
+| Response size | A named **2 MiB** decoded cap, enforced by a trustworthy `Content-Length` *and* bounded streaming, so a missing or false header cannot bypass it. The stream is cancelled on rejection. |
+| Header redaction | No `Authorization`, cookie or caller-supplied header is accepted or forwarded — neither adopted source authenticates. Jolpica receives a reviewed constant identifying `User-Agent`. No body, query string, full URL, header or raw exception is ever logged. |
+
+Nothing is retried automatically: not timeouts, network errors, HTTP 429, 5xx,
+redirects or validation failures. The 10-second and 2 MiB figures are chosen
+engineering constants, not published provider limits, and are tunable only
+while preserving the bounded-wait and bounded-memory invariants.
 
 ### 23.4 CORS
 
@@ -1584,6 +1621,21 @@ Each request or synchronization should record:
 - Provider status.
 - Error category.
 - No secret or full sensitive response.
+
+**Provider outbound events (Phase 9B-2,
+[ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).**
+Six bounded structured events exist: reservation allowed, reservation deferred,
+limiter failure, outbound request completed, outbound request failed, and
+provider 429.
+
+Permitted fields are only: operation, canonical source id, bounded failure
+category, HTTP status, duration, limiting window kind, `retryAt`, integer
+remaining counts, and whether a request was attempted.
+
+Never logged: request or response bodies, full URLs, query strings,
+provider-controlled messages, headers, the `User-Agent`, authorization
+material, raw exception messages, stack traces, or Durable Object storage keys
+and object ids.
 
 ### 24.2 Metrics
 

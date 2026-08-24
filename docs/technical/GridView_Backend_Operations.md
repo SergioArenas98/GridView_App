@@ -183,6 +183,67 @@ list. Every manual trigger arrives through the admin-authenticated router;
 there is no public synchronization route, and public reads never consume
 provider quota.
 
+### Outbound pacing and the hardened boundary
+
+Phase 9B-2 added the per-provider rate limiter and the hardened outbound HTTP
+boundary ([ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
+**No provider adapter exists and no provider request is sent**; what exists is
+the seam every future adapter must use.
+
+Pacing is a **Cloudflare Durable Object, one identity per real source**
+(`jolpica`, `openf1`), reached with `idFromName(sourceId)`, so the budget is
+global rather than per isolate or per Cloudflare location. It reserves across
+every published window at once, all-or-nothing, and answers immediately - it
+never sleeps or holds a request waiting for capacity. A deferral carries a
+deterministic `retryAt`; acting on it is **G5 event-aware scheduling, which
+remains open**.
+
+Fail-closed everywhere: if the binding is absent - which it is in every
+environment today, because nothing is provisioned - or the object or its
+storage fails, the reservation resolves to `unavailable` and **no request is
+issued**. A storage failure is absorbed inside the object rather than thrown,
+because an exception escaping the serialized section would terminate and reset
+the shared limiter for every caller.
+
+Persisted limiter state distinguishes **absent** from **invalid**. A missing
+record means a genuinely new source and starts with full capacity. A record
+that exists but is unusable - written for another source, or holding anything
+that is not a finite, non-negative integer millisecond - blocks that source
+with a bounded `state-corrupt` reason: no reservation is granted and no request
+is issued. The limiter never restores capacity by guessing what invalid data
+meant, and it never repairs, deletes, resets or relabels the record. The source
+stays blocked until the state is fixed out of band; there is deliberately no
+automatic recovery and no administrative repair route.
+
+Cancellation is handled at two distinct points. A caller already cancelled when
+the request is entered **reserves nothing**: there is no live request to acquire
+capacity for, and reserving first would spend the single global per-source
+budget on something that will never be sent. A caller that cancels **while the
+reservation is in flight** keeps the granted slot, because releasing it would
+race. Neither sends a request, so neither is an attempted provider request.
+
+**A reservation is not a provider attempt.** A locally deferred or
+limiter-unavailable outcome means nothing left GridView, so it increments no
+request ledger, no quota usage and no provider success or failure timestamp. An
+upstream HTTP 429 is the opposite: a request was attempted and rate-limited,
+and it is accounted as such.
+
+Outbound requests are pinned to fixed HTTPS origins and documented path
+prefixes, are GET-only, use `redirect: "manual"` and reject every 3xx, carry a
+10-second whole-operation timeout, accept only JSON media types, and cap the
+decoded body at 2 MiB using both `Content-Length` and bounded streaming.
+Nothing is retried automatically. Jolpica receives a reviewed constant
+identifying `User-Agent`; neither source authenticates, and no caller header,
+cookie or `Authorization` is accepted or forwarded.
+
+Structured events cover reservation allowed, reservation deferred, limiter
+failure, request completed, request failed and provider 429. They carry only
+bounded fields - operation, canonical source id, bounded failure category, HTTP
+status, duration, limiting window kind, `retryAt`, integer remaining counts and
+whether a request was attempted. They never carry a body, a full URL, a query
+string, a header, a `User-Agent`, a provider-controlled message, a raw
+exception or a Durable Object storage key or id.
+
 ### Failure accounting
 
 Provider-fetch failures and post-fetch failures are accounted separately.

@@ -24,6 +24,17 @@ import { runtimeSnapshotValidator } from './validation/snapshot-validator';
 
 export type { Env };
 
+/**
+ * Durable Object class registered as the `PROVIDER_RATE_LIMITER` binding
+ * (ADR 0021). It must be a named export of the Worker's main module for
+ * Wrangler to resolve `class_name`.
+ *
+ * Exporting it does not provision or start anything: no environment has the
+ * namespace bound yet, no adapter calls the hardened HTTP boundary, and no
+ * provider request is possible.
+ */
+export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const startedAt = Date.now();
