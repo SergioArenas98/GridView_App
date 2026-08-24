@@ -6,6 +6,7 @@ import type {
 import type {
   LimitingWindow,
   RealProviderSourceId,
+  WindowHeadroom,
 } from './reservation-engine';
 
 /**
@@ -574,9 +575,15 @@ export class ProviderHttpClient {
   }
 }
 
-/** Bounded integer headroom for structured logs. Never a provider value. */
+/**
+ * Bounded integer headroom for structured logs. Never a provider value.
+ *
+ * Typed as `WindowHeadroom[]` rather than a structural shape so it can only be
+ * called with a value that `decodeReservationOutcome` produced. Arbitrary
+ * decoded JSON cannot reach it.
+ */
 function headroomCounts(
-  headroom: readonly { window: string; remaining: number }[],
+  headroom: readonly WindowHeadroom[],
 ): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const window of headroom) counts[window.window] = window.remaining;

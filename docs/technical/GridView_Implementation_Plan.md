@@ -1432,7 +1432,7 @@ was added or changed.**
 |---|---|
 | **G6 - untyped provider call counting** | **Implemented.** The `as unknown as { callCount?: unknown }` cast is gone. `FormulaOneProvider` requires a typed `sourceId`, a `quotaPolicy` and a `requestMetrics()` method, so an adapter that omits telemetry fails to compile rather than silently reporting zero. `SyncResult` keeps its `providerCallCount` lifetime total and adds typed `providerRequests` detail: operation-scoped and lifetime attempt counts, split by canonical source and by synchronization job category, with successful, failed and rate-limited attempts counted separately. A failure and a rate-limit rejection both count as attempted requests. |
 | **G10 / G-k - quota state with the wrong windows and no per-source identity** | **Implemented.** The fixed `dailyLimit` / `dailyRemaining` / `perMinuteLimit` / `perMinuteRemaining` shape is replaced by an extensible per-source window collection carrying usage, remaining capacity, window start and reset, a bounded burst-saturation streak, last provider success and failure, `Retry-After`, usage by job category and a derived warning level. OpenF1 is modelled as per-second and per-minute, Jolpica as per-second and per-hour, and **no adopted source is given a daily bucket**. The mock limits are marked test-only. Persistence is source-specific (`quota:provider:<sourceId>`) in both the memory and KV implementations. |
-| **G4 and every other Phase 9B gap** | **Still open at the end of 9B-1**; G7 was subsequently closed by Phase 9B-2 (§14.0.6). No provider adapter, no outbound HTTP helper, no per-provider rate limiter or concurrency control, no multi-source coordinator, no event-aware scheduling (G5), no production cron (G3/G-b), no provider-ID mapping registry (G8), no reconciliation or provisional/reconciled state (G9), no `sourceObservedAt` / `snapshotRevision` / `snapshotObservedAt` persistence, no operator backlog, no attribution or ShareAlike publication surface. |
+| **G4 and every other Phase 9B gap** | **Still open at the end of 9B-1.** G7 - the outbound HTTP helper and the per-provider rate limiter - was subsequently **closed by Phase 9B-2** (§14.0.6); everything below remains open. No provider adapter, no multi-source coordinator, no event-aware scheduling (G5), no production cron (G3/G-b), no provider-ID mapping registry (G8), no reconciliation or provisional/reconciled state (G9), no `sourceObservedAt` / `snapshotRevision` / `snapshotObservedAt` persistence, no operator backlog, no attribution or ShareAlike publication surface. |
 | Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; production is `"none"`; the mock provider remains the only runtime provider. Canonical source identifiers are internal and never reach a v1 DTO, the OpenAPI schema or a generated fixture. |
 | OpenF1 | **Still fail-closed and still incapable of a real request** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §5). Recording its published window policy is quota modelling, not an unlock: no adapter exists and the session-end bound remains unrecorded. |
 
@@ -1442,8 +1442,9 @@ windows escalate at 30%, 15% and 5% remaining; a single saturated burst window
 is normal pacing pressure and does not follow that progression; repeated burst
 saturation stays observable; a provider rate-limit rejection is critical and
 preserves `Retry-After`; the most severe relevant condition wins. **This is
-quota modelling and alert-state calculation, not the per-provider rate limiter
-- G7 is not implemented.**
+quota modelling and alert-state calculation, which is a different concern from
+the per-provider rate limiter**; that limiter was delivered separately by Phase
+9B-2 (§14.0.6).
 
 ### 14.0.6 Phase 9B-2 status - outbound hardening and the per-provider rate limiter
 

@@ -117,7 +117,12 @@ function readLedger(
   raw: StoredLedger | undefined,
   sourceId: RealProviderSourceId,
 ): LedgerRead {
-  if (raw === undefined || raw === null) return { kind: 'missing' };
+  // Absence is `undefined` and nothing else. A stored `null` is a value that
+  // is *present* and unusable - it says nothing about prior usage - so
+  // initialising an empty ledger from it would hand back capacity that may
+  // already have been spent.
+  if (raw === undefined) return { kind: 'missing' };
+  if (raw === null) return { kind: 'corrupt' };
   if (typeof raw !== 'object') return { kind: 'corrupt' };
   // A record belonging to another source is never adopted, and never
   // relabelled to this one.
@@ -264,14 +269,161 @@ const unavailableReasons: readonly ReservationUnavailableReason[] = [
   'state-corrupt',
 ];
 
-function knownReason(value: unknown): ReservationUnavailableReason {
-  return unavailableReasons.includes(value as ReservationUnavailableReason)
-    ? (value as ReservationUnavailableReason)
-    : 'limiter-unreachable';
-}
-
 function unreachable(sourceId: RealProviderSourceId): ReservationOutcome {
   return { outcome: 'unavailable', sourceId, reason: 'limiter-unreachable' };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isCount(value: unknown, limit: number): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= limit
+  );
+}
+
+/**
+ * Validates headroom against the **current typed policy** for the source:
+ * exactly one entry per declared window, no duplicate, no unknown window, and
+ * an integer remaining count within that window's published limit.
+ *
+ * A version-skewed object that omits a window, invents one, or reports an
+ * impossible count is therefore rejected rather than partially believed.
+ */
+function decodeHeadroom(
+  value: unknown,
+  sourceId: RealProviderSourceId,
+): WindowHeadroom[] | null {
+  if (!Array.isArray(value)) return null;
+  const policy = quotaPolicyFor(sourceId);
+  if (value.length !== policy.windows.length) return null;
+
+  const decoded: WindowHeadroom[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!isRecord(entry)) return null;
+    const windowPolicy = policy.windows.find(
+      (candidate) => candidate.window === entry.window,
+    );
+    if (!windowPolicy) return null;
+    if (seen.has(windowPolicy.window)) return null;
+    seen.add(windowPolicy.window);
+    if (entry.limit !== windowPolicy.limit) return null;
+    if (!isCount(entry.remaining, windowPolicy.limit)) return null;
+    decoded.push({
+      window: windowPolicy.window,
+      limit: windowPolicy.limit,
+      remaining: entry.remaining,
+    });
+  }
+  return decoded.length === policy.windows.length ? decoded : null;
+}
+
+/** A syntactically valid, finite ISO-8601 UTC instant. */
+function decodeInstant(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  // Round-tripping rejects a lax string that `Date.parse` would accept but
+  // that is not the ISO UTC form the object emits.
+  return new Date(parsed).toISOString() === value ? value : null;
+}
+
+function decodeLimitingWindows(
+  value: unknown,
+  sourceId: RealProviderSourceId,
+): LimitingWindow[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const policy = quotaPolicyFor(sourceId);
+  if (value.length > policy.windows.length) return null;
+
+  const decoded: LimitingWindow[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!isRecord(entry)) return null;
+    const windowPolicy = policy.windows.find(
+      (candidate) => candidate.window === entry.window,
+    );
+    if (!windowPolicy) return null;
+    if (seen.has(windowPolicy.window)) return null;
+    seen.add(windowPolicy.window);
+    if (entry.limit !== windowPolicy.limit) return null;
+    const retryAt = decodeInstant(entry.retryAt);
+    if (retryAt === null) return null;
+    decoded.push({
+      window: windowPolicy.window,
+      limit: windowPolicy.limit,
+      retryAt,
+    });
+  }
+  return decoded;
+}
+
+/**
+ * Exhaustively decodes a Durable Object response before any field is used.
+ *
+ * Every downstream consumer - `headroomCounts` included - receives only a
+ * value produced here, so a partial, version-skewed, cross-source or malformed
+ * body cannot reach it, throw into synchronization, or be mistaken for a
+ * granted reservation. Anything that fails validation becomes `null`, which
+ * the caller maps to the fail-closed `limiter-unreachable` outcome.
+ *
+ * `retryAt` is checked for syntactic and numeric validity only. It is
+ * deliberately **not** required to be in the future: the object's clock and
+ * the client's can differ, and rejecting a legitimate decision over ordinary
+ * skew would fail unpredictably in the wrong direction.
+ */
+export function decodeReservationOutcome(
+  value: unknown,
+  sourceId: RealProviderSourceId,
+): ReservationOutcome | null {
+  if (!isRecord(value)) return null;
+  // An outcome naming another source is never trusted, whatever else it says.
+  if (value.sourceId !== sourceId) return null;
+
+  if (value.outcome === 'allowed') {
+    const headroom = decodeHeadroom(value.headroom, sourceId);
+    if (!headroom) return null;
+    return { outcome: 'allowed', sourceId, headroom };
+  }
+
+  if (value.outcome === 'deferred') {
+    const headroom = decodeHeadroom(value.headroom, sourceId);
+    if (!headroom) return null;
+    const limitingWindows = decodeLimitingWindows(
+      value.limitingWindows,
+      sourceId,
+    );
+    if (!limitingWindows) return null;
+    const retryAt = decodeInstant(value.retryAt);
+    if (retryAt === null) return null;
+    return {
+      outcome: 'deferred',
+      sourceId,
+      retryAt,
+      limitingWindows,
+      headroom,
+    };
+  }
+
+  if (value.outcome === 'unavailable') {
+    if (
+      !unavailableReasons.includes(value.reason as ReservationUnavailableReason)
+    ) {
+      return null;
+    }
+    return {
+      outcome: 'unavailable',
+      sourceId,
+      reason: value.reason as ReservationUnavailableReason,
+    };
+  }
+
+  return null;
 }
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -310,22 +462,13 @@ export class DurableObjectRateLimiterClient implements ProviderRateLimiterClient
       if (!response.ok) {
         return unreachable(sourceId);
       }
-      const decoded = (await response.json()) as ReservationOutcome;
-      if (decoded.outcome === 'allowed' || decoded.outcome === 'deferred') {
-        // An outcome naming another source is never trusted.
-        if (decoded.sourceId !== sourceId) return unreachable(sourceId);
-        return decoded;
-      }
-      if (decoded.outcome === 'unavailable') {
-        // Carry the object's bounded reason through when it is one we know.
-        return {
-          outcome: 'unavailable',
-          sourceId,
-          reason: knownReason(decoded.reason),
-        };
-      }
-      // Anything else - including a malformed body - is fail-closed.
-      return unreachable(sourceId);
+      // Every field is validated before anything downstream sees it.
+      // Malformed JSON, a partial body, an unknown outcome or reason, a
+      // cross-source answer or an impossible count all fail closed here.
+      return (
+        decodeReservationOutcome(await response.json(), sourceId) ??
+        unreachable(sourceId)
+      );
     } catch {
       return unreachable(sourceId);
     }

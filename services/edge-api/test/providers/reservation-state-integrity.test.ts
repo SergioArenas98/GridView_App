@@ -40,7 +40,12 @@ async function reserveWith(
 ): Promise<{ outcome: ReservationOutcome; host: Host; before: string }> {
   const host = new Host();
   if (stored !== undefined) host.values.set(ledgerKey, stored);
-  const before = JSON.stringify(host.values.get(ledgerKey) ?? null);
+  // Snapshot presence AND value, so a stored `null` is distinguishable from an
+  // absent key when asserting the record was left untouched.
+  const before = JSON.stringify({
+    present: host.values.has(ledgerKey),
+    value: host.values.get(ledgerKey) ?? null,
+  });
   const outcome = await new ReservationCoordinator(
     host,
     () => new Date(base),
@@ -101,6 +106,10 @@ describe('corrupt or foreign persisted state fails closed', () => {
       { sourceId: 'openf1', timestamps: [base, '1784548800000'] },
       'openf1',
     ],
+    // A stored `null` is a value that is PRESENT and unusable. It says nothing
+    // about prior usage, so treating it as absence would hand back capacity
+    // that may already have been spent.
+    ['an explicitly stored null', null, 'openf1'],
     ['a malformed top-level value', 'not-an-object', 'openf1'],
     ['a numeric top-level value', 42, 'openf1'],
     [
@@ -122,7 +131,12 @@ describe('corrupt or foreign persisted state fails closed', () => {
       );
       // The record is left exactly as found: not overwritten, relabelled,
       // reset or deleted. Repair is deliberately out of band.
-      expect(JSON.stringify(host.values.get(ledgerKey) ?? null)).toBe(before);
+      expect(
+        JSON.stringify({
+          present: host.values.has(ledgerKey),
+          value: host.values.get(ledgerKey) ?? null,
+        }),
+      ).toBe(before);
       expect(host.putCount).toBe(0);
     },
   );
@@ -141,6 +155,25 @@ describe('corrupt or foreign persisted state fails closed', () => {
     // Once the record genuinely belongs to this source, it works again.
     host.values.set(ledgerKey, { sourceId: 'openf1', timestamps: [] });
     expect((await coordinator.reserve('openf1')).outcome).toBe('allowed');
+  });
+
+  it('keeps a stored null unavailable and untouched across repeated attempts', async () => {
+    const host = new Host();
+    host.values.set(ledgerKey, null);
+    const coordinator = new ReservationCoordinator(host, () => new Date(base));
+
+    for (let index = 0; index < 3; index += 1) {
+      const outcome = await coordinator.reserve('openf1');
+      expect(outcome.outcome).toBe('unavailable');
+      expect(outcome.outcome === 'unavailable' && outcome.reason).toBe(
+        'state-corrupt',
+      );
+    }
+
+    // Present, still null, never written, never deleted.
+    expect(host.values.has(ledgerKey)).toBe(true);
+    expect(host.values.get(ledgerKey)).toBeNull();
+    expect(host.putCount).toBe(0);
   });
 
   it('does not let corruption in one source affect the other', async () => {
@@ -173,12 +206,6 @@ describe('valid persisted state is still evaluated normally', () => {
 
     expect(outcome.outcome).toBe('allowed');
     expect(host.putCount).toBe(1);
-  });
-
-  it('treats an explicitly null record as missing rather than corrupt', async () => {
-    const { outcome } = await reserveWith(null, 'openf1');
-
-    expect(outcome.outcome).toBe('allowed');
   });
 
   it('counts valid duplicate timestamps independently', async () => {
