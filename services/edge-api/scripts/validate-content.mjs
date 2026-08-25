@@ -10,6 +10,10 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 
 import { heading, printAjvErrors, summarize } from './lib/report.mjs';
+import {
+  validateEvidenceCoverage,
+  validateMappingDocument,
+} from './lib/provider-mapping-rules.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..');
@@ -41,6 +45,8 @@ const kindToSchemaId = {
   'media-rights': 'https://gridview.local/schemas/media-rights.schema.json',
   'provider-mappings':
     'https://gridview.local/schemas/provider-mappings.schema.json',
+  'provider-evidence':
+    'https://gridview.local/schemas/provider-evidence.schema.json',
   overrides: 'https://gridview.local/schemas/overrides.schema.json',
 };
 
@@ -64,6 +70,8 @@ const files = collectJsonFiles(contentDir).filter(
 
 heading('curated content');
 let failures = 0;
+/** Structurally valid documents, kept for the semantic pass below. */
+const parsedByKind = new Map();
 for (const file of files) {
   const label = relative(repoRoot, file);
   const raw = JSON.parse(readFileSync(file, 'utf8'));
@@ -83,10 +91,98 @@ for (const file of files) {
   delete data.$schema;
   if (validate(data)) {
     console.log(`ok   ${label}  (${kind})`);
+    if (!parsedByKind.has(kind)) parsedByKind.set(kind, []);
+    parsedByKind.get(kind).push({ label, data });
   } else {
     printAjvErrors(label, validate.errors);
     failures += 1;
   }
 }
 
-process.exit(summarize('content files', files.length, failures));
+// ---------------------------------------------------------------------------
+// Semantic pass.
+//
+// JSON Schema cannot express composite-key uniqueness, target existence in
+// another file, or coverage of the approved evidence corpus. Those rules live
+// in ./lib/provider-mapping-rules.mjs and are applied here so there is still
+// exactly one content-validation command.
+// ---------------------------------------------------------------------------
+
+heading('provider mapping semantics');
+
+const registryIds = {
+  driver: collectIds('driver-registry', 'drivers'),
+  constructor: collectIds('constructor-registry', 'constructors'),
+  circuit: collectIds('circuit-registry', 'circuits'),
+};
+
+function collectIds(kind, arrayKey) {
+  const ids = new Set();
+  for (const { data } of parsedByKind.get(kind) ?? []) {
+    for (const entry of data[arrayKey] ?? []) ids.add(entry.id);
+  }
+  return ids;
+}
+
+const mappingDocuments = parsedByKind.get('provider-mappings') ?? [];
+const evidenceDocuments = parsedByKind.get('provider-evidence') ?? [];
+
+let semanticChecks = 0;
+
+for (const { label, data } of mappingDocuments) {
+  semanticChecks += 1;
+  const problems = validateMappingDocument(data, registryIds);
+  if (problems.length === 0) {
+    console.log(`ok   ${label}  (${data.mappings.length} mappings)`);
+  } else {
+    console.error(`FAIL ${label}`);
+    for (const problem of problems) console.error(`  - ${problem}`);
+    failures += 1;
+  }
+}
+
+// Every season with an evidence corpus must have a mapping document, and the
+// reverse, so a corpus can never be quietly dropped to make coverage pass.
+for (const { label, data } of evidenceDocuments) {
+  semanticChecks += 1;
+  const mapping = mappingDocuments.find(
+    (candidate) => candidate.data.season === data.season,
+  );
+  if (!mapping) {
+    console.error(`FAIL ${label}`);
+    console.error(
+      `  - (root) no provider-mappings document exists for season ${data.season}`,
+    );
+    failures += 1;
+    continue;
+  }
+  const problems = validateEvidenceCoverage(data, mapping.data);
+  if (problems.length === 0) {
+    console.log(
+      `ok   ${label}  (${data.identities.length} approved identities, ` +
+        `${data.acknowledgedUnmapped.length} acknowledged unmapped)`,
+    );
+  } else {
+    console.error(`FAIL ${label}`);
+    for (const problem of problems) console.error(`  - ${problem}`);
+    failures += 1;
+  }
+}
+
+for (const { label, data } of mappingDocuments) {
+  if (!evidenceDocuments.some((entry) => entry.data.season === data.season)) {
+    console.error(`FAIL ${label}`);
+    console.error(
+      `  - (root) no provider-evidence corpus exists for season ${data.season}`,
+    );
+    failures += 1;
+  }
+}
+
+if (semanticChecks === 0) {
+  console.log('ok   no provider mapping content present');
+}
+
+process.exit(
+  summarize('content files', files.length + semanticChecks, failures),
+);

@@ -69,7 +69,12 @@ labelled `(mock)` values. They must not be presented as authoritative results.
    its `data` schema).
 3. If it introduces a new data shape, add or extend the OpenAPI schema first.
 4. Run `npm run validate` (from `services/edge-api`) and `flutter test`.
-5. Never include a provider ID; the fixture validator scans for and rejects them.
+5. Never include a provider ID; the fixture validator scans for and rejects
+   them, and the mapping containment tests independently assert that no
+   curated provider value reaches a fixture, a public response or the OpenAPI
+   contract. Provider identifiers live only in
+   `content/seasons/<year>/provider-mappings.*.json` and
+   `provider-evidence.*.json`.
 
 ## Validation and code generation
 
@@ -355,6 +360,20 @@ Coverage includes:
 - Fake Workers KV adapter behavior without provisioning KV.
 - Generated snapshot provenance, provider-ID isolation, null preservation and
   fractional points.
+- Curated provider-identifier mapping (Phase 9B-3,
+  [ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)):
+  exact typed resolution of every seeded identity; season, source, entity and
+  field isolation; integer `1` never resolving string `"1"`;
+  the absence of any case-folding, trimming, substring, slug or fuzzy
+  behaviour (asserted behaviourally **and** structurally, so no normalizing
+  primitive can be reintroduced); fail-closed construction on duplicate,
+  ambiguous, dangling, wrong-kind and malformed records with **no partial
+  index and no last-entry-wins**; the bounded unresolved-identity operational
+  signal; provider-ID containment across public responses, fixtures, OpenAPI
+  and Flutter-facing artifacts; and deterministic coverage of the approved
+  evidence corpus, including the four recorded constructor-name
+  disagreements. The mapping tests use fixed local fixtures only and never
+  contact a provider.
 
 The existing fixture validator still reports strict OpenAPI conformance:
 30 conforming fixtures and 1 tolerance-only fixture that must fail strict

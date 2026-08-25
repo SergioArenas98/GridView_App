@@ -1,0 +1,138 @@
+{
+  "$schema": "../../schemas/provider-evidence.schema.json",
+  "kind": "provider-evidence",
+  "schemaVersion": 1,
+  "status": "development",
+  "season": 2026,
+  "note": "INTERNAL ONLY. The closed set of exact 2026 provider identities recorded in docs/technical/GridView_Provider_Evaluation.md section 8. Nothing here was fetched, scraped, inferred from a display name or recalled from memory. Every entry must be mapped in provider-mappings.development.json or acknowledged below; validation fails otherwise.",
+  "identities": [
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "norris",
+      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica driverId slug example."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "antonelli",
+      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica driverId slug example; 8.5 driver championship leader."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "mclaren",
+      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica constructorId slug example."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "mercedes",
+      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica constructorId slug example."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "albert_park",
+      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica circuitId slug example."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "hungaroring",
+      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica circuitId slug example."
+    },
+    {
+      "source": "openf1",
+      "entity": "driver",
+      "providerField": "driver_number",
+      "providerValue": 1,
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - session_result race winner driver_number."
+    },
+    {
+      "source": "openf1",
+      "entity": "driver",
+      "providerField": "driver_number",
+      "providerValue": 12,
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - championship_drivers leader driver_number, matching Jolpica permanentNumber 12."
+    },
+    {
+      "source": "openf1",
+      "entity": "constructor",
+      "providerField": "team_name",
+      "providerValue": "Mercedes",
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - championship_teams leader team_name."
+    },
+    {
+      "source": "openf1",
+      "entity": "constructor",
+      "providerField": "team_name",
+      "providerValue": "Alpine",
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - recorded constructor name disagreement."
+    },
+    {
+      "source": "openf1",
+      "entity": "constructor",
+      "providerField": "team_name",
+      "providerValue": "Cadillac",
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - recorded constructor name disagreement."
+    },
+    {
+      "source": "openf1",
+      "entity": "constructor",
+      "providerField": "team_name",
+      "providerValue": "Racing Bulls",
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - recorded constructor name disagreement."
+    },
+    {
+      "source": "openf1",
+      "entity": "constructor",
+      "providerField": "team_name",
+      "providerValue": "Red Bull Racing",
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - recorded constructor name disagreement."
+    }
+  ],
+  "acknowledgedUnmapped": [
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "antonelli",
+      "reason": "No canonical GridView driver identity exists for this competitor in content/registries/drivers.mock.json. Creating one is a curated-identity decision, not a mapping decision, and inventing a target ID from the provider slug is forbidden. Left unmapped so synchronization fails closed."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "hungaroring",
+      "reason": "No canonical GridView circuit identity exists for the Hungaroring in content/registries/circuits.mock.json. Left unmapped so synchronization fails closed rather than minting a slug."
+    },
+    {
+      "source": "openf1",
+      "entity": "driver",
+      "providerField": "driver_number",
+      "providerValue": 12,
+      "reason": "Number 12 is the same competitor as jolpica driverId 'antonelli', for whom no canonical GridView driver identity exists. Left unmapped for the same reason."
+    },
+    {
+      "source": "openf1",
+      "entity": "constructor",
+      "providerField": "team_name",
+      "providerValue": "Cadillac",
+      "reason": "No canonical GridView constructor identity exists for Cadillac in content/registries/constructors.mock.json, which holds six constructors against the eleven on the recorded grid. One of the four recorded name disagreements; it stays unmapped and fails closed until a curated constructor identity is added by review."
+    },
+    {
+      "source": "openf1",
+      "entity": "constructor",
+      "providerField": "team_name",
+      "providerValue": "Racing Bulls",
+      "reason": "No canonical GridView constructor identity exists for Racing Bulls in content/registries/constructors.mock.json. One of the four recorded name disagreements; it stays unmapped and fails closed until a curated constructor identity is added by review."
+    }
+  ]
+}

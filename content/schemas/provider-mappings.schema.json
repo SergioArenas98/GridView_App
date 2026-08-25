@@ -1,37 +1,180 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gridview.local/schemas/provider-mappings.schema.json",
-  "title": "GridView provider-ID mappings (INTERNAL ONLY)",
-  "description": "Maps external provider identifiers to GridView stable IDs. This file is internal: provider IDs must never appear in a public API fixture or response.",
+  "title": "GridView curated provider-identifier mappings (INTERNAL ONLY)",
+  "description": "Season-qualified, source-qualified mappings from an exact provider identifier to an existing GridView public ID. Provider identifiers are internal: they must never appear in a public API fixture, response, OpenAPI example or published snapshot. Structural validity is necessary but not sufficient - composite-key uniqueness and target existence are enforced semantically by scripts/validate-content.mjs.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "status", "provider", "drivers", "constructors", "circuits"],
+  "required": ["kind", "schemaVersion", "status", "season", "note", "mappings"],
   "properties": {
     "kind": { "const": "provider-mappings" },
-    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
-    "note": { "type": "string" },
-    "provider": {
-      "type": "string",
-      "description": "Provider key (internal), e.g. mock, apiSports.",
-      "minLength": 1
+    "schemaVersion": {
+      "description": "2 is the source-qualified curated model. Version 1 was a per-provider grouped shape with opaque mock identifiers and is not accepted.",
+      "const": 2
     },
-    "season": { "anyOf": [{ "$ref": "common.schema.json#/$defs/season" }, { "type": "null" }] },
-    "drivers": { "type": "array", "items": { "$ref": "#/$defs/mapping" } },
-    "constructors": { "type": "array", "items": { "$ref": "#/$defs/mapping" } },
-    "circuits": { "type": "array", "items": { "$ref": "#/$defs/mapping" } }
+    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
+    "note": { "$ref": "#/$defs/boundedText" },
+    "season": { "$ref": "common.schema.json#/$defs/season" },
+    "mappings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/mapping" }
+    }
   },
   "$defs": {
+    "boundedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "evidence": {
+      "description": "Where the exact provider value is already recorded inside this repository. Never a contract, credential or confidential document.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "providerString": {
+      "description": "Exact upstream string. No control character, no leading or trailing whitespace, never empty. Matched byte-for-byte: no case folding, trimming, slugging or transliteration is ever applied.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^\\u0000-\\u001F\\u007F\\s](?:[^\\u0000-\\u001F\\u007F]*[^\\u0000-\\u001F\\u007F\\s])?$"
+    },
+    "providerInteger": {
+      "description": "Exact upstream integer. Positive and inside the IEEE-754 safe-integer range.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
     "mapping": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["gridviewId", "providerId"],
-      "properties": {
-        "gridviewId": { "$ref": "common.schema.json#/$defs/slug" },
-        "providerId": {
-          "description": "Opaque internal provider identifier; string or integer.",
-          "type": ["string", "integer"]
+      "description": "One curated mapping. The source, entity kind, provider field and provider value type form a single valid discriminated combination; no other combination is representable.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "gridviewId",
+            "evidence"
+          ],
+          "properties": {
+            "source": { "const": "jolpica" },
+            "entity": { "const": "driver" },
+            "providerField": { "const": "driverId" },
+            "providerValue": { "$ref": "#/$defs/providerString" },
+            "gridviewId": { "$ref": "common.schema.json#/$defs/slug" },
+            "evidence": { "$ref": "#/$defs/evidence" },
+            "note": { "$ref": "#/$defs/boundedText" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "gridviewId",
+            "evidence"
+          ],
+          "properties": {
+            "source": { "const": "jolpica" },
+            "entity": { "const": "constructor" },
+            "providerField": { "const": "constructorId" },
+            "providerValue": { "$ref": "#/$defs/providerString" },
+            "gridviewId": { "$ref": "common.schema.json#/$defs/slug" },
+            "evidence": { "$ref": "#/$defs/evidence" },
+            "note": { "$ref": "#/$defs/boundedText" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "gridviewId",
+            "evidence"
+          ],
+          "properties": {
+            "source": { "const": "jolpica" },
+            "entity": { "const": "circuit" },
+            "providerField": { "const": "circuitId" },
+            "providerValue": { "$ref": "#/$defs/providerString" },
+            "gridviewId": { "$ref": "common.schema.json#/$defs/slug" },
+            "evidence": { "$ref": "#/$defs/evidence" },
+            "note": { "$ref": "#/$defs/boundedText" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "gridviewId",
+            "evidence"
+          ],
+          "properties": {
+            "source": { "const": "openf1" },
+            "entity": { "const": "driver" },
+            "providerField": { "const": "driver_number" },
+            "providerValue": { "$ref": "#/$defs/providerInteger" },
+            "gridviewId": { "$ref": "common.schema.json#/$defs/slug" },
+            "evidence": { "$ref": "#/$defs/evidence" },
+            "note": { "$ref": "#/$defs/boundedText" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "gridviewId",
+            "evidence"
+          ],
+          "properties": {
+            "source": { "const": "openf1" },
+            "entity": { "const": "constructor" },
+            "providerField": { "const": "team_name" },
+            "providerValue": { "$ref": "#/$defs/providerString" },
+            "gridviewId": { "$ref": "common.schema.json#/$defs/slug" },
+            "evidence": { "$ref": "#/$defs/evidence" },
+            "note": { "$ref": "#/$defs/boundedText" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "gridviewId",
+            "evidence"
+          ],
+          "properties": {
+            "source": { "const": "openf1" },
+            "entity": { "const": "circuit" },
+            "providerField": { "const": "circuit_key" },
+            "providerValue": { "$ref": "#/$defs/providerInteger" },
+            "gridviewId": { "$ref": "common.schema.json#/$defs/slug" },
+            "evidence": { "$ref": "#/$defs/evidence" },
+            "note": { "$ref": "#/$defs/boundedText" }
+          }
         }
-      }
+      ]
     }
   }
 }

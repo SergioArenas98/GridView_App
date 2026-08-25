@@ -17,10 +17,11 @@ content/
 │   ├── driver-season-entries.schema.json
 │   ├── constructor-season-entries.schema.json
 │   ├── media-assets.schema.json
-│   ├── provider-mappings.schema.json   (INTERNAL: provider IDs live only here)
+│   ├── provider-mappings.schema.json   (INTERNAL: curated provider-ID mappings)
+│   ├── provider-evidence.schema.json   (INTERNAL: approved provider-ID corpus)
 │   └── overrides.schema.json
 ├── registries/        stable identities (drivers, constructors, circuits)
-├── seasons/2026/      season entries, provider mappings, overrides
+├── seasons/2026/      season entries, provider mappings, provider evidence, overrides
 └── media/             media asset metadata
 ```
 
@@ -33,8 +34,9 @@ optional `$schema` editor hint, and a `status` of `mock` or `development`.
   schema before adding it to data.
 - Public IDs are lowercase ASCII kebab-case; `countryCode` is uppercase ISO
   3166-1 alpha-2.
-- Provider identifiers appear **only** in `provider-mappings.*.json`. They must
-  never appear in a public API fixture or response.
+- Provider identifiers appear **only** in `provider-mappings.*.json` and
+  `provider-evidence.*.json`. They must never appear in a public API fixture or
+  response. See `../docs/operations/GridView_Provider_Mapping_Guide.md`.
 - Optional values stay `null` or absent — never substitute `0` or `""`.
 
 ## Validation
@@ -72,3 +74,37 @@ credential or a confidential document. No image binary is committed under
 non-routable `.local` host, and is never a publication source.
 
 See `../docs/technical/GridView_Media.md`.
+
+## Provider-identifier mapping registry
+
+`seasons/<year>/provider-mappings.development.json` (`kind: provider-mappings`)
+maps an **exact** provider identifier to a GridView public ID that already
+exists in one of the curated registries. It is **internal**, and it is
+**dormant**: no provider adapter exists, so nothing consumes it at runtime.
+
+A mapping is keyed on five things together — season, source (`jolpica` or
+`openf1`), entity kind, exact provider field and exact provider value — and is
+matched by exact typed equality. Nothing is trimmed, case-folded, slugged,
+transliterated or fuzzy-matched, and integer `1` is never string `"1"`. There
+is no `mock` source: the mock provider emits GridView-owned identities and must
+not have a mapping.
+
+`seasons/<year>/provider-evidence.development.json` (`kind: provider-evidence`)
+records every provider identity this repository already has evidence for.
+`npm run validate:content` fails unless each one is either mapped or explicitly
+acknowledged as unmapped with a written reason, so a coverage gap is always
+visible and a mapping can never be invented for a value the repository never
+recorded.
+
+Construction is all-or-nothing: a duplicate, ambiguous, dangling or malformed
+record means **no** index is exposed, not a partially usable one. Adding a
+mapping never creates, renames or repoints a public ID — if no canonical
+identity exists yet, add it to the registry first.
+
+Every mapping carries an `evidence` note pointing inside this repository. As
+with the media-rights register, **never commit a contract, a credential, a
+confidential document or a raw provider payload.**
+
+Procedure, including how to read an unmapped-identity signal:
+`../docs/operations/GridView_Provider_Mapping_Guide.md`. Decision and
+rationale: `../docs/adr/0022-curated-provider-identifier-mappings.md`.

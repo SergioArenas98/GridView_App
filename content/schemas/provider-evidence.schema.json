@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/provider-evidence.schema.json",
+  "title": "GridView approved provider-identity evidence corpus (INTERNAL ONLY)",
+  "description": "The closed set of exact provider identities that are already recorded as evidence inside this repository, per season. It exists so coverage is checked deterministically: scripts/validate-content.mjs fails unless every identity here is either mapped in provider-mappings, or explicitly acknowledged as unmapped with a recorded reason. Adding an identity here without doing one of those two things fails validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schemaVersion",
+    "status",
+    "season",
+    "note",
+    "identities",
+    "acknowledgedUnmapped"
+  ],
+  "properties": {
+    "kind": { "const": "provider-evidence" },
+    "schemaVersion": { "const": 1 },
+    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
+    "note": { "$ref": "provider-mappings.schema.json#/$defs/boundedText" },
+    "season": { "$ref": "common.schema.json#/$defs/season" },
+    "identities": {
+      "description": "Every provider identity the repository already records for this season.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/identity" }
+    },
+    "acknowledgedUnmapped": {
+      "description": "Identities deliberately left unmapped, each with a reviewed reason. An entry here must also appear in identities, and must not be mapped.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/acknowledgement" }
+    }
+  },
+  "$defs": {
+    "identity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "evidence"
+          ],
+          "properties": {
+            "source": { "const": "jolpica" },
+            "entity": { "enum": ["driver", "constructor", "circuit"] },
+            "providerField": {
+              "enum": ["driverId", "constructorId", "circuitId"]
+            },
+            "providerValue": {
+              "$ref": "provider-mappings.schema.json#/$defs/providerString"
+            },
+            "evidence": {
+              "$ref": "provider-mappings.schema.json#/$defs/evidence"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "evidence"
+          ],
+          "properties": {
+            "source": { "const": "openf1" },
+            "entity": { "const": "constructor" },
+            "providerField": { "const": "team_name" },
+            "providerValue": {
+              "$ref": "provider-mappings.schema.json#/$defs/providerString"
+            },
+            "evidence": {
+              "$ref": "provider-mappings.schema.json#/$defs/evidence"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "evidence"
+          ],
+          "properties": {
+            "source": { "const": "openf1" },
+            "entity": { "enum": ["driver", "circuit"] },
+            "providerField": { "enum": ["driver_number", "circuit_key"] },
+            "providerValue": {
+              "$ref": "provider-mappings.schema.json#/$defs/providerInteger"
+            },
+            "evidence": {
+              "$ref": "provider-mappings.schema.json#/$defs/evidence"
+            }
+          }
+        }
+      ]
+    },
+    "acknowledgement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "entity",
+        "providerField",
+        "providerValue",
+        "reason"
+      ],
+      "properties": {
+        "source": { "enum": ["jolpica", "openf1"] },
+        "entity": { "enum": ["driver", "constructor", "circuit"] },
+        "providerField": {
+          "enum": [
+            "driverId",
+            "constructorId",
+            "circuitId",
+            "driver_number",
+            "team_name",
+            "circuit_key"
+          ]
+        },
+        "providerValue": {
+          "oneOf": [
+            { "$ref": "provider-mappings.schema.json#/$defs/providerString" },
+            { "$ref": "provider-mappings.schema.json#/$defs/providerInteger" }
+          ]
+        },
+        "reason": { "$ref": "provider-mappings.schema.json#/$defs/boundedText" }
+      }
+    }
+  }
+}

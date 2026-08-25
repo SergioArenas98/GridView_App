@@ -29,6 +29,20 @@ export interface LogEvent {
   providerLimitingWindow?: string;
   /** Bounded `window kind -> integer remaining`. Never a provider value. */
   providerWindowHeadroom?: Record<string, number>;
+  /** Bounded entity kind of an unresolved identity: driver/constructor/circuit. */
+  providerMappingEntity?: string;
+  /** Bounded upstream field name the identity was keyed on. */
+  providerMappingField?: string;
+  /** Closed mapping-failure reason. Never a provider string. */
+  providerMappingFailure?: string;
+  /**
+   * The exact provider value of an unresolved identity, bounded by the curated
+   * schema and truncated again before it is written. This is the one internal
+   * diagnostic field a provider identifier may reach, and it exists so an
+   * operator can find the entity to curate. It never enters a public response,
+   * an OpenAPI example, a fixture, a published snapshot or a cache key.
+   */
+  providerMappingValue?: string;
   [key: string]: unknown;
 }
 
