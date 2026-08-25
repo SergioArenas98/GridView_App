@@ -3,7 +3,10 @@
 - Status: Accepted
 - Date: 2026-08-25
 - Phase: 9B-3
-- Closes: gap **G8** (Provider Evaluation §14.4 **G-e**, Backend Scheme §8.1)
+- Closes: gap **G8** (Provider Evaluation §14.4 **G-e**, Backend Scheme
+  §8.1) — **the mechanism only.** The mapping **dataset** is deliberately
+  limited to identifiers already recorded in Provider Evaluation §8; live
+  provider coverage is incomplete and is tracked separately as **G-l**.
 - Related: [0019](0019-formula-one-provider-legal-gate.md),
   [0020](0020-provider-source-observation-and-reconciliation.md),
   [0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)
@@ -134,7 +137,21 @@ command.
 A second curated file, `provider-evidence.development.json`, records every
 provider identity the repository already has evidence for. Validation fails
 unless each one is either mapped or explicitly acknowledged as unmapped with a
-written reason — so a newly approved identity cannot be silently omitted, and a
+**closed-enum** blocking reason (free prose goes in a separate `detail` field,
+so an acknowledgement cannot become an arbitrary coverage excuse).
+
+**An acknowledgement is a temporary blocker, never a mapping.** It records
+"observed, but no canonical GridView target exists". It never means "coverage
+accepted, so synchronization may continue": the runtime is built from the
+mapping file alone, has no notion of an acknowledgement, still answers
+`unmapped`, and the affected resource still fails closed. An acknowledgement
+that survives after its mapping is added is a validation error, so it cannot
+harden into a second, weaker way of satisfying coverage.
+
+The narrow, honest guarantee is therefore: **a newly approved identity fails
+validation until it is either mapped or explicitly acknowledged** — not "until
+it is mapped". Both are reviewed decisions; only one of them makes the identity
+resolvable. And a
 mapping cannot be invented for a value the repository never recorded.
 
 ### D8 - One invalid record blocks the whole resolver
@@ -182,6 +199,11 @@ row quietly dropped from an otherwise accepted resource.
 - The identity decision an adapter needs is made, recorded and enforced.
 - Unknown provider entities fail synchronization validation, as §8.1 requires.
 - The four recorded constructor-name disagreements are regression-pinned.
+  Two of them (`Alpine`, `Red Bull Racing`) have a resolvable **OpenF1
+  `team_name`** mapping. That is one half of each pair: the other half is a
+  Jolpica `Constructor.name`, which is a _display name_ and never a lookup key,
+  because Jolpica is keyed on its stable `constructorId` slug. Neither pair is
+  reconciled end to end — reconciliation is G4 and G9, which remain open.
 
 ### What stays dormant
 

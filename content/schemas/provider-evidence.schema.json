@@ -15,20 +15,34 @@
     "acknowledgedUnmapped"
   ],
   "properties": {
-    "kind": { "const": "provider-evidence" },
-    "schemaVersion": { "const": 1 },
-    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
-    "note": { "$ref": "provider-mappings.schema.json#/$defs/boundedText" },
-    "season": { "$ref": "common.schema.json#/$defs/season" },
+    "kind": {
+      "const": "provider-evidence"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/mockStatus"
+    },
+    "note": {
+      "$ref": "provider-mappings.schema.json#/$defs/boundedText"
+    },
+    "season": {
+      "$ref": "common.schema.json#/$defs/season"
+    },
     "identities": {
       "description": "Every provider identity the repository already records for this season.",
       "type": "array",
-      "items": { "$ref": "#/$defs/identity" }
+      "items": {
+        "$ref": "#/$defs/identity"
+      }
     },
     "acknowledgedUnmapped": {
       "description": "Identities deliberately left unmapped, each with a reviewed reason. An entry here must also appear in identities, and must not be mapped.",
       "type": "array",
-      "items": { "$ref": "#/$defs/acknowledgement" }
+      "items": {
+        "$ref": "#/$defs/acknowledgement"
+      }
     }
   },
   "$defs": {
@@ -45,8 +59,12 @@
             "evidence"
           ],
           "properties": {
-            "source": { "const": "jolpica" },
-            "entity": { "enum": ["driver", "constructor", "circuit"] },
+            "source": {
+              "const": "jolpica"
+            },
+            "entity": {
+              "enum": ["driver", "constructor", "circuit"]
+            },
             "providerField": {
               "enum": ["driverId", "constructorId", "circuitId"]
             },
@@ -69,9 +87,15 @@
             "evidence"
           ],
           "properties": {
-            "source": { "const": "openf1" },
-            "entity": { "const": "constructor" },
-            "providerField": { "const": "team_name" },
+            "source": {
+              "const": "openf1"
+            },
+            "entity": {
+              "const": "constructor"
+            },
+            "providerField": {
+              "const": "team_name"
+            },
             "providerValue": {
               "$ref": "provider-mappings.schema.json#/$defs/providerString"
             },
@@ -91,9 +115,15 @@
             "evidence"
           ],
           "properties": {
-            "source": { "const": "openf1" },
-            "entity": { "enum": ["driver", "circuit"] },
-            "providerField": { "enum": ["driver_number", "circuit_key"] },
+            "source": {
+              "const": "openf1"
+            },
+            "entity": {
+              "enum": ["driver", "circuit"]
+            },
+            "providerField": {
+              "enum": ["driver_number", "circuit_key"]
+            },
             "providerValue": {
               "$ref": "provider-mappings.schema.json#/$defs/providerInteger"
             },
@@ -115,8 +145,12 @@
         "reason"
       ],
       "properties": {
-        "source": { "enum": ["jolpica", "openf1"] },
-        "entity": { "enum": ["driver", "constructor", "circuit"] },
+        "source": {
+          "enum": ["jolpica", "openf1"]
+        },
+        "entity": {
+          "enum": ["driver", "constructor", "circuit"]
+        },
         "providerField": {
           "enum": [
             "driverId",
@@ -129,12 +163,28 @@
         },
         "providerValue": {
           "oneOf": [
-            { "$ref": "provider-mappings.schema.json#/$defs/providerString" },
-            { "$ref": "provider-mappings.schema.json#/$defs/providerInteger" }
+            {
+              "$ref": "provider-mappings.schema.json#/$defs/providerString"
+            },
+            {
+              "$ref": "provider-mappings.schema.json#/$defs/providerInteger"
+            }
           ]
         },
-        "reason": { "$ref": "provider-mappings.schema.json#/$defs/boundedText" }
-      }
+        "reason": {
+          "description": "Closed set of blocking conditions. Free text is not accepted here, so an acknowledgement cannot be turned into an arbitrary coverage excuse; put the specifics in \"detail\".",
+          "enum": [
+            "no-canonical-gridview-identity",
+            "identity-pending-curation-review",
+            "provider-value-not-yet-evidenced"
+          ]
+        },
+        "detail": {
+          "description": "Human-readable specifics for the reviewer. Never a credential or contract.",
+          "$ref": "provider-mappings.schema.json#/$defs/boundedText"
+        }
+      },
+      "description": "A governance record: an approved identity that is observed but cannot be mapped yet. It is NOT a mapping and never satisfies resolution - the runtime still answers \"unmapped\" and the affected resource still fails closed. It is a temporary blocker that must be removed once a mapping becomes possible."
     }
   }
 }

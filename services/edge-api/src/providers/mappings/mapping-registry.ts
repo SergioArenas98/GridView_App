@@ -17,7 +17,9 @@ import {
   canonicalKey,
   decodeProviderMappingKey,
   isPublicIdGrammar,
+  validateProviderMappingKey,
   type GridViewIdFor,
+  type ProviderKeyProblem,
   type ProviderMappingEntity,
   type ProviderMappingField,
   type ProviderMappingKey,
@@ -36,7 +38,11 @@ import {
  * future adapter classifies them differently.
  */
 export type ProviderMappingFailureReason =
-  'unmapped' | 'registry-invalid' | 'ambiguous' | 'target-missing';
+  | 'unmapped'
+  | 'registry-invalid'
+  | 'ambiguous'
+  | 'target-missing'
+  | 'invalid-key';
 
 /**
  * Typed internal context for a failed lookup.
@@ -47,15 +53,23 @@ export type ProviderMappingFailureReason =
  */
 export interface ProviderMappingFailure {
   readonly reason: ProviderMappingFailureReason;
-  readonly season: number;
-  readonly source: ProviderMappingSource;
-  readonly entity: ProviderMappingEntity;
-  readonly providerField: ProviderMappingField;
+  /** `null` only when the key was malformed and no season could be read. */
+  readonly season: number | null;
+  readonly source: ProviderMappingSource | 'unknown';
+  readonly entity: ProviderMappingEntity | 'unknown';
+  readonly providerField: ProviderMappingField | 'unknown';
   /**
    * The exact provider value, for an internal diagnostic field only. Bounded
    * by the curated schema and by the key decoder; never a provider payload.
+   *
+   * `null` for an `invalid-key` failure. A value that failed validation is
+   * exactly the value that must not be echoed anywhere, and an operator's
+   * action for it is "fix the adapter", not "curate this identifier", so the
+   * bounded `keyProblem` carries the whole diagnosis instead.
    */
-  readonly providerValue: string | number;
+  readonly providerValue: string | number | null;
+  /** Bounded sub-reason; present only when `reason` is `invalid-key`. */
+  readonly keyProblem?: ProviderKeyProblem;
 }
 
 export type ProviderMappingResolution<E extends ProviderMappingEntity> =
@@ -70,6 +84,7 @@ export interface RegistryProblem {
   readonly at: string;
   readonly reason:
     | 'invalid-record'
+    | 'unsupported-document'
     | 'invalid-key-combination'
     | 'invalid-target-grammar'
     | 'duplicate-key'
@@ -113,16 +128,21 @@ export class ProviderMappingRegistry {
     return this.index?.size ?? 0;
   }
 
-  static invalid(
+  /**
+   * Internal factories.
+   *
+   * These are **not** public. A public `valid(index)` would be a structural
+   * bypass of the entire validated-construction boundary: any caller could
+   * hand it a Map of unvalidated entries and get back a registry that reports
+   * `isValid`, has no problems, and hands out branded GridView identities for
+   * targets that exist in no curated registry. `buildProviderMappingRegistry`
+   * is the only way to obtain a registry, and it validates every record.
+   */
+  private static make(
+    index: ReadonlyMap<string, IndexedTarget> | null,
     problems: readonly RegistryProblem[],
   ): ProviderMappingRegistry {
-    return new ProviderMappingRegistry(null, Object.freeze([...problems]));
-  }
-
-  static valid(
-    index: ReadonlyMap<string, IndexedTarget>,
-  ): ProviderMappingRegistry {
-    return new ProviderMappingRegistry(index, Object.freeze([]));
+    return new ProviderMappingRegistry(index, Object.freeze([...problems]));
   }
 
   /**
@@ -136,6 +156,19 @@ export class ProviderMappingRegistry {
   resolve<E extends ProviderMappingEntity>(
     key: ProviderMappingKeyFor<E>,
   ): ProviderMappingResolution<E> {
+    // The caller's types prove the key's *shape*, never its runtime contents.
+    // `providerValue: string` accepts padded, empty and control-character
+    // strings; `number` accepts NaN, -1 and 1.5.
+    // Re-validate here so the resolver's guarantees do not depend on every
+    // future adapter being careful.
+    const validated = validateProviderMappingKey(key);
+    if (!validated.ok) {
+      return {
+        outcome: 'unresolved',
+        failure: invalidKeyFailure(validated.problem),
+      };
+    }
+
     if (this.index === null) {
       return {
         outcome: 'unresolved',
@@ -143,7 +176,7 @@ export class ProviderMappingRegistry {
       };
     }
 
-    const found = this.index.get(canonicalKey(key));
+    const found = this.index.get(canonicalKey(validated.key));
     if (found === undefined) {
       return { outcome: 'unresolved', failure: failureFor(key, 'unmapped') };
     }
@@ -160,14 +193,145 @@ export class ProviderMappingRegistry {
    * A value that is not a complete valid key — an unknown source such as
    * `mock`, a mismatched field, a string where an integer is required — is
    * rejected by the decoder and never reaches the index.
+   *
+   * It returns an explicit `invalid-key` failure rather than a bare `null`.
+   * A malformed provider identity is not "no mapping is required here", and a
+   * caller must not be able to read the two as the same thing and continue
+   * with an unvalidated provider value.
    */
   resolveUnknown(
     value: unknown,
-  ): ProviderMappingResolution<ProviderMappingEntity> | null {
-    const key = decodeProviderMappingKey(value);
-    if (key === null) return null;
-    return this.resolve(key as ProviderMappingKeyFor<ProviderMappingEntity>);
+  ): ProviderMappingResolution<ProviderMappingEntity> {
+    const decoded = decodeProviderMappingKey(value);
+    if (!decoded.ok) {
+      return {
+        outcome: 'unresolved',
+        failure: invalidKeyFailure(decoded.problem),
+      };
+    }
+    return this.resolve(
+      decoded.key as ProviderMappingKeyFor<ProviderMappingEntity>,
+    );
   }
+
+  /**
+   * Builds the registry from one or more curated documents.
+   *
+   * Record order never affects the outcome. A repeated complete key is always an
+   * error — never an overwrite — so no last-entry-wins behaviour exists, and a
+   * repeat that points at a *different* target is reported as `ambiguous-key`
+   * rather than being silently reduced to a duplicate.
+   */
+  static build(
+    documents: readonly unknown[],
+    canonical: CanonicalRegistries,
+  ): ProviderMappingRegistry {
+    const problems: RegistryProblem[] = [];
+    const index = new Map<string, IndexedTarget>();
+
+    documents.forEach((rawDocument, documentIndex) => {
+      if (typeof rawDocument !== 'object' || rawDocument === null) {
+        problems.push({
+          at: `documents[${documentIndex}]`,
+          reason: 'invalid-record',
+        });
+        return;
+      }
+
+      const document = rawDocument as CuratedMappingDocument;
+      const season = document.season;
+
+      if (
+        document.kind !== SUPPORTED_DOCUMENT_KIND ||
+        document.schemaVersion !== SUPPORTED_SCHEMA_VERSION
+      ) {
+        problems.push({
+          at: `documents[${documentIndex}]`,
+          reason: 'unsupported-document',
+        });
+        return;
+      }
+
+      if (!Array.isArray(document.mappings)) {
+        problems.push({
+          at: `documents[${documentIndex}]`,
+          reason: 'invalid-record',
+        });
+        return;
+      }
+
+      document.mappings.forEach((rawRecord: unknown, recordIndex) => {
+        const at = `documents[${documentIndex}].mappings[${recordIndex}]`;
+
+        if (typeof rawRecord !== 'object' || rawRecord === null) {
+          problems.push({ at, reason: 'invalid-record' });
+          return;
+        }
+        const record = rawRecord as Record<string, unknown>;
+
+        const decoded = decodeProviderMappingKey({ ...record, season });
+        if (!decoded.ok) {
+          problems.push({ at, reason: 'invalid-key-combination' });
+          return;
+        }
+        const key = decoded.key;
+
+        const target = record.gridviewId;
+        if (!isPublicIdGrammar(target)) {
+          problems.push({ at, reason: 'invalid-target-grammar' });
+          return;
+        }
+
+        const encoded = canonicalKey(key);
+        const previous = index.get(encoded);
+        if (previous !== undefined) {
+          problems.push({
+            at,
+            reason:
+              previous.gridviewId === target
+                ? 'duplicate-key'
+                : 'ambiguous-key',
+          });
+          return;
+        }
+
+        if (!canonical[key.entity].has(target)) {
+          problems.push({ at, reason: 'target-missing' });
+          return;
+        }
+
+        index.set(encoded, Object.freeze({ gridviewId: target, at }));
+      });
+    });
+
+    if (problems.length > 0) {
+      // Fail closed: discard the partially built index entirely.
+      return ProviderMappingRegistry.make(null, problems);
+    }
+
+    return ProviderMappingRegistry.make(index, []);
+  }
+}
+
+/**
+ * A bounded failure for a key that never passed validation.
+ *
+ * Nothing provider-controlled is carried: the identity fields are `unknown`
+ * and the value is `null`, because an unvalidated value is precisely what must
+ * not reach a diagnostic field. The closed `keyProblem` is the diagnosis.
+ */
+function invalidKeyFailure(
+  problem: ProviderKeyProblem,
+): ProviderMappingFailure {
+  return Object.freeze({
+    reason: 'invalid-key' as const,
+    season: null,
+    source: 'unknown' as const,
+    entity: 'unknown' as const,
+    providerField: 'unknown' as const,
+    providerValue: null,
+    keyProblem: problem,
+  });
 }
 
 function failureFor(
@@ -186,91 +350,37 @@ function failureFor(
 
 /** The shape a curated mapping document must have to be read at all. */
 interface CuratedMappingDocument {
+  readonly kind?: unknown;
+  readonly schemaVersion?: unknown;
   readonly season?: unknown;
   readonly mappings?: unknown;
 }
 
 /**
- * Builds the registry from one or more curated documents.
+ * The one document kind and schema version this resolver understands.
  *
- * Record order never affects the outcome. A repeated complete key is always an
- * error — never an overwrite — so no last-entry-wins behaviour exists, and a
- * repeat that points at a *different* target is reported as `ambiguous-key`
- * rather than being silently reduced to a duplicate.
+ * Checked at runtime, not only by the build-time schema. The `provider-mappings`
+ * kind previously carried an incompatible version-1 shape (per-provider grouped
+ * arrays of opaque mock identifiers), so "which shape is this?" is a real
+ * question rather than a decorative field. An unknown version, a missing
+ * version or another content kind fails closed instead of being partially
+ * interpreted.
+ */
+const SUPPORTED_DOCUMENT_KIND = 'provider-mappings';
+const SUPPORTED_SCHEMA_VERSION = 2;
+
+/**
+ * The only way to obtain a registry.
+ *
+ * Every record is validated before any index is exposed, and the internal
+ * factory that skips validation is private to the class, so there is no
+ * structural bypass through the public exports.
  */
 export function buildProviderMappingRegistry(
   documents: readonly unknown[],
   canonical: CanonicalRegistries,
 ): ProviderMappingRegistry {
-  const problems: RegistryProblem[] = [];
-  const index = new Map<string, IndexedTarget>();
-
-  documents.forEach((rawDocument, documentIndex) => {
-    if (typeof rawDocument !== 'object' || rawDocument === null) {
-      problems.push({
-        at: `documents[${documentIndex}]`,
-        reason: 'invalid-record',
-      });
-      return;
-    }
-
-    const document = rawDocument as CuratedMappingDocument;
-    const season = document.season;
-    if (!Array.isArray(document.mappings)) {
-      problems.push({
-        at: `documents[${documentIndex}]`,
-        reason: 'invalid-record',
-      });
-      return;
-    }
-
-    document.mappings.forEach((rawRecord: unknown, recordIndex) => {
-      const at = `documents[${documentIndex}].mappings[${recordIndex}]`;
-
-      if (typeof rawRecord !== 'object' || rawRecord === null) {
-        problems.push({ at, reason: 'invalid-record' });
-        return;
-      }
-      const record = rawRecord as Record<string, unknown>;
-
-      const key = decodeProviderMappingKey({ ...record, season });
-      if (key === null) {
-        problems.push({ at, reason: 'invalid-key-combination' });
-        return;
-      }
-
-      const target = record.gridviewId;
-      if (!isPublicIdGrammar(target)) {
-        problems.push({ at, reason: 'invalid-target-grammar' });
-        return;
-      }
-
-      const encoded = canonicalKey(key);
-      const previous = index.get(encoded);
-      if (previous !== undefined) {
-        problems.push({
-          at,
-          reason:
-            previous.gridviewId === target ? 'duplicate-key' : 'ambiguous-key',
-        });
-        return;
-      }
-
-      if (!canonical[key.entity].has(target)) {
-        problems.push({ at, reason: 'target-missing' });
-        return;
-      }
-
-      index.set(encoded, Object.freeze({ gridviewId: target, at }));
-    });
-  });
-
-  if (problems.length > 0) {
-    // Fail closed: discard the partially built index entirely.
-    return ProviderMappingRegistry.invalid(problems);
-  }
-
-  return ProviderMappingRegistry.valid(index);
+  return ProviderMappingRegistry.build(documents, canonical);
 }
 
 /** Collects canonical IDs from a curated registry document. */

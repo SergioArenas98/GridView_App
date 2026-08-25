@@ -243,6 +243,33 @@ function isSeason(value: unknown): value is number {
 }
 
 /**
+ * Why a value is not a provider mapping key.
+ *
+ * A closed, bounded set. It is safe to place in a log line and carries no
+ * provider-controlled text of its own.
+ */
+export const providerKeyProblems = [
+  'not-an-object',
+  'invalid-season',
+  'invalid-value',
+  'invalid-combination',
+] as const;
+export type ProviderKeyProblem = (typeof providerKeyProblems)[number];
+
+/**
+ * The result of decoding an untrusted value.
+ *
+ * Deliberately **not** nullable. A malformed provider identity is not the same
+ * thing as "no mapping is required here": returning `null` for both would let
+ * a future adapter treat a corrupt upstream identifier as an optional absence
+ * and continue with an unvalidated provider value. Every rejection is explicit
+ * and carries a bounded reason.
+ */
+export type DecodedProviderMappingKey =
+  | { readonly ok: true; readonly key: ProviderMappingKey }
+  | { readonly ok: false; readonly problem: ProviderKeyProblem };
+
+/**
  * Runtime decoder for an unknown value.
  *
  * Used for curated records read from JSON and for any future adapter input.
@@ -255,14 +282,20 @@ function isSeason(value: unknown): value is number {
  */
 export function decodeProviderMappingKey(
   value: unknown,
-): ProviderMappingKey | null {
-  if (typeof value !== 'object' || value === null) return null;
+): DecodedProviderMappingKey {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return { ok: false, problem: 'not-an-object' };
+  }
   const record = value as Record<string, unknown>;
 
-  if (!isSeason(record.season)) return null;
+  if (!isSeason(record.season)) {
+    return { ok: false, problem: 'invalid-season' };
+  }
 
   const valueType = valueTypeOf(record.providerValue);
-  if (valueType === null) return null;
+  if (valueType === null) {
+    return { ok: false, problem: 'invalid-value' };
+  }
 
   const shape = providerKeyShapes.find(
     (candidate) =>
@@ -271,27 +304,54 @@ export function decodeProviderMappingKey(
       candidate.providerField === record.providerField &&
       candidate.valueType === valueType,
   );
-  if (shape === undefined) return null;
+  if (shape === undefined) {
+    return { ok: false, problem: 'invalid-combination' };
+  }
 
   return {
-    season: record.season,
-    source: shape.source,
-    entity: shape.entity,
-    providerField: shape.providerField,
-    providerValue: record.providerValue,
-  } as ProviderMappingKey;
+    ok: true,
+    key: {
+      season: record.season,
+      source: shape.source,
+      entity: shape.entity,
+      providerField: shape.providerField,
+      providerValue: record.providerValue,
+    } as ProviderMappingKey,
+  };
 }
 
 /**
- * Field separator for the canonical lookup key: NUL.
+ * Re-validates a value that already carries the key **type**.
  *
- * A curated provider value may not contain a control character, so no value
- * can embed the separator and forge a key belonging to another combination.
+ * TypeScript proves the shape of an object literal; it proves nothing about
+ * the runtime string or number inside it. `providerValue: string` happily
+ * accepts `" norris "`, `""`, `"a
+b"` and a five-thousand character string,
+ * and `providerValue: number` accepts `NaN`, `Infinity`, `-1` and a
+ * non-integer. A future adapter that builds its key from decoded provider JSON
+ * would carry all of that straight into the lookup.
+ *
+ * So the resolver re-validates at its own boundary rather than trusting the
+ * caller's types. This is the single validated entry point: there is no other
+ * way to reach the index.
  */
-const KEY_SEPARATOR = String.fromCharCode(0);
+export function validateProviderMappingKey(
+  key: ProviderMappingKey,
+): DecodedProviderMappingKey {
+  return decodeProviderMappingKey(key);
+}
 
 /**
  * The canonical lookup key.
+ *
+ * **Length-prefixed, not separator-joined.** An earlier separator-joined form
+ * was not injective once any component could contain the separator: a forged
+ * `providerField` of `driverId string a` with value `b` serialized
+ * identically to an honest `driverId` with value `a string b`. Prefixing
+ * every component with its own length removes the ambiguity by construction,
+ * so the encoding is injective over *all* inputs rather than only over inputs
+ * that happen to have been validated first. Validation still happens - this
+ * simply stops the encoding depending on it.
  *
  * The value's **type tag** is part of the key, so integer `1` and string `"1"`
  * are different keys. That is what makes the index immune to JavaScript object
@@ -302,12 +362,17 @@ const KEY_SEPARATOR = String.fromCharCode(0);
  * the curated registry.
  */
 export function canonicalKey(key: ProviderMappingKey): string {
-  return [
+  const components = [
     String(key.season),
     key.source,
     key.entity,
     key.providerField,
     typeof key.providerValue === 'number' ? 'integer' : 'string',
     String(key.providerValue),
-  ].join(KEY_SEPARATOR);
+  ];
+  let encoded = '';
+  for (const component of components) {
+    encoded += component.length + ':' + component + ';';
+  }
+  return encoded;
 }

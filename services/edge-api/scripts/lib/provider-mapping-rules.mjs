@@ -65,16 +65,49 @@ export const providerKeyShapes = Object.freeze([
 ]);
 
 /**
- * Field separator for the canonical key: NUL. Curated provider values may not
- * contain any control character, so no value can embed it and forge a key that
- * belongs to a different combination.
+ * Value bounds.
+ *
+ * These must stay identical to `src/providers/mappings/mapping-key.ts`. The
+ * two implementations exist because `validate:content` runs on plain Node
+ * while the resolver ships to the Worker, and neither may import the other
+ * without a dependency or a package-script change. The parity tests feed the
+ * same checked-in case corpus to both and compare verdicts, so a divergence
+ * fails CI rather than sitting undetected.
  */
-const KEY_SEPARATOR = String.fromCharCode(0);
+const PROVIDER_STRING_MAX_LENGTH = 64;
+const SEASON_MIN = 1950;
+const SEASON_MAX = 2100;
+
+/** Exact upstream string: bounded, no control character, no edge whitespace. */
+export function isProviderStringValue(value) {
+  if (typeof value !== 'string') return false;
+  if (value.length === 0 || value.length > PROVIDER_STRING_MAX_LENGTH) {
+    return false;
+  }
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code <= 0x1f || code === 0x7f) return false;
+  }
+  return value.trim() === value;
+}
+
+/** Exact upstream integer: positive and inside the safe-integer range. */
+export function isProviderIntegerValue(value) {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+export function isSeason(value) {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= SEASON_MIN &&
+    value <= SEASON_MAX
+  );
+}
 
 function valueTypeOf(value) {
-  if (typeof value === 'string') return 'string';
-  if (typeof value === 'number' && Number.isSafeInteger(value))
-    return 'integer';
+  if (isProviderStringValue(value)) return 'string';
+  if (isProviderIntegerValue(value)) return 'integer';
   return null;
 }
 
@@ -82,6 +115,7 @@ function valueTypeOf(value) {
 export function isValidKeyShape(record) {
   const valueType = valueTypeOf(record.providerValue);
   if (valueType === null) return false;
+  if (record.season !== undefined && !isSeason(record.season)) return false;
   return providerKeyShapes.some(
     (shape) =>
       shape.source === record.source &&
@@ -95,11 +129,13 @@ export function isValidKeyShape(record) {
  * The canonical lookup key.
  *
  * The value type is part of the key, so integer 1 and string "1" are different
- * keys and can never collide. The separator is NUL, which a curated provider
- * value may not contain (the schema rejects every control character), so no
- * provider value can forge a different key by embedding the separator.
- * Nothing is lower-cased, trimmed or normalized here: the key is the exact
- * value.
+ * keys and can never collide. Components are **length-prefixed** rather than
+ * separator-joined, which makes the encoding injective over all inputs instead
+ * of only over inputs that were validated first. Nothing is lower-cased,
+ * trimmed or normalized here: the key is the exact value.
+ *
+ * Must stay byte-identical to `canonicalKey` in
+ * `src/providers/mappings/mapping-key.ts`.
  */
 export function canonicalKey({
   season,
@@ -112,14 +148,22 @@ export function canonicalKey({
   if (valueType === null) {
     throw new TypeError('provider value must be a string or a safe integer');
   }
-  return [
-    season,
+  if (!isSeason(season)) {
+    throw new TypeError('season must be an integer between 1950 and 2100');
+  }
+  const components = [
+    String(season),
     source,
     entity,
     providerField,
     valueType,
     String(providerValue),
-  ].join(KEY_SEPARATOR);
+  ];
+  let encoded = '';
+  for (const component of components) {
+    encoded += component.length + ':' + component + ';';
+  }
+  return encoded;
 }
 
 /** Human-readable form of a key, for validator output only. */

@@ -36,6 +36,11 @@ export interface LogEvent {
   /** Closed mapping-failure reason. Never a provider string. */
   providerMappingFailure?: string;
   /**
+   * Closed sub-reason when a provider mapping key was malformed. Bounded enum
+   * value; the malformed provider value itself is deliberately never logged.
+   */
+  providerMappingKeyProblem?: string;
+  /**
    * The exact provider value of an unresolved identity, bounded by the curated
    * schema and truncated again before it is written. This is the one internal
    * diagnostic field a provider identifier may reach, and it exists so an

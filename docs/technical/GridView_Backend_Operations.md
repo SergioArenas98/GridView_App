@@ -276,12 +276,13 @@ Logs are structured JSON events for request completion, sync, publication,
 rollback, cache purge, quota-related outcomes and validation failures.
 
 Allowed fields include request ID, operation, route template, HTTP status,
-duration, season, release version and failure category. Phase 9B-3 adds four
+duration, season, release version and failure category. Phase 9B-3 adds five
 bounded provider-mapping fields (`providerMappingEntity`,
-`providerMappingField`, `providerMappingFailure` and the internal
+`providerMappingField`, `providerMappingFailure`,
+`providerMappingKeyProblem` and the internal
 diagnostic `providerMappingValue`), emitted only under
-`failureCategory: provider_mapping_unresolved`. The first three are closed
-enum members; the fourth is the exact provider identifier, bounded by the
+`failureCategory: provider_mapping_unresolved`. The first four are closed
+enum members; the fifth is the exact provider identifier, bounded by the
 curated schema and truncated again before it is written. It is the one
 internal diagnostic field a provider identifier may reach, it exists so an
 operator can find the entity to curate

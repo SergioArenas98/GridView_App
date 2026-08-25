@@ -1,0 +1,389 @@
+{
+  "note": "Shared parity corpus. Consumed independently by the TypeScript decoder test and the .mjs validator test so the build-time and runtime rule sets cannot drift apart unnoticed. INTERNAL: these provider values are test fixtures, not curated content.",
+  "cases": [
+    {
+      "label": "jolpica driver slug",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris"
+      }
+    },
+    {
+      "label": "jolpica constructor slug",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "constructor",
+        "providerField": "constructorId",
+        "providerValue": "mclaren"
+      }
+    },
+    {
+      "label": "jolpica circuit slug with underscore",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "circuit",
+        "providerField": "circuitId",
+        "providerValue": "albert_park"
+      }
+    },
+    {
+      "label": "openf1 driver number",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "driver",
+        "providerField": "driver_number",
+        "providerValue": 1
+      }
+    },
+    {
+      "label": "openf1 team name with spaces",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "constructor",
+        "providerField": "team_name",
+        "providerValue": "Red Bull Racing"
+      }
+    },
+    {
+      "label": "openf1 circuit key",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "circuit",
+        "providerField": "circuit_key",
+        "providerValue": 7
+      }
+    },
+    {
+      "label": "maximum safe integer",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "driver",
+        "providerField": "driver_number",
+        "providerValue": 9007199254740991
+      }
+    },
+    {
+      "label": "64-character string is at the bound",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "constructor",
+        "providerField": "team_name",
+        "providerValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "label": "earliest season bound",
+      "accepted": true,
+      "key": {
+        "season": 1950,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris"
+      }
+    },
+    {
+      "label": "latest season bound",
+      "accepted": true,
+      "key": {
+        "season": 2100,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris"
+      }
+    },
+    {
+      "label": "mock is not a real provider source",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "mock",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "mock-drv-001"
+      }
+    },
+    {
+      "label": "unknown source",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "apiSports",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "x"
+      }
+    },
+    {
+      "label": "jolpica cannot use driver_number",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driver_number",
+        "providerValue": 1
+      }
+    },
+    {
+      "label": "openf1 cannot use driverId",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris"
+      }
+    },
+    {
+      "label": "field belongs to another entity kind",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "constructor",
+        "providerField": "circuitId",
+        "providerValue": "mclaren"
+      }
+    },
+    {
+      "label": "unknown entity kind",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "meeting",
+        "providerField": "meeting_key",
+        "providerValue": 1291
+      }
+    },
+    {
+      "label": "string where an integer is required",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "driver",
+        "providerField": "driver_number",
+        "providerValue": "1"
+      }
+    },
+    {
+      "label": "integer where a string is required",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": 4
+      }
+    },
+    {
+      "label": "empty string",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": ""
+      }
+    },
+    {
+      "label": "leading whitespace",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": " norris"
+      }
+    },
+    {
+      "label": "trailing whitespace",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris "
+      }
+    },
+    {
+      "label": "embedded newline",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "nor\nris"
+      }
+    },
+    {
+      "label": "embedded carriage return",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "nor\rris"
+      }
+    },
+    {
+      "label": "embedded NUL",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "nor\u0000ris"
+      }
+    },
+    {
+      "label": "embedded DEL",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "nor\u007fris"
+      }
+    },
+    {
+      "label": "65 characters exceeds the bound",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "constructor",
+        "providerField": "team_name",
+        "providerValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "label": "zero driver number",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "driver",
+        "providerField": "driver_number",
+        "providerValue": 0
+      }
+    },
+    {
+      "label": "negative driver number",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "driver",
+        "providerField": "driver_number",
+        "providerValue": -1
+      }
+    },
+    {
+      "label": "non-integer driver number",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "driver",
+        "providerField": "driver_number",
+        "providerValue": 1.5
+      }
+    },
+    {
+      "label": "season below the bound",
+      "accepted": false,
+      "key": {
+        "season": 1949,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris"
+      }
+    },
+    {
+      "label": "season above the bound",
+      "accepted": false,
+      "key": {
+        "season": 2101,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris"
+      }
+    },
+    {
+      "label": "non-integer season",
+      "accepted": false,
+      "key": {
+        "season": 2026.5,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris"
+      }
+    },
+    {
+      "label": "null provider value",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": null
+      }
+    },
+    {
+      "label": "missing provider field",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerValue": "norris"
+      }
+    },
+    {
+      "label": "uppercase source is not the source",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "JOLPICA",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris"
+      }
+    }
+  ]
+}

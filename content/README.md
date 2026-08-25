@@ -96,6 +96,12 @@ acknowledged as unmapped with a written reason, so a coverage gap is always
 visible and a mapping can never be invented for a value the repository never
 recorded.
 
+The document envelope is checked at runtime as well as by the schema: the
+resolver accepts only `kind: provider-mappings` with `schemaVersion: 2`.
+Version 1 was an incompatible per-provider grouped shape carrying opaque mock
+identifiers, so an unknown, missing or older version fails closed rather than
+being partially interpreted.
+
 Construction is all-or-nothing: a duplicate, ambiguous, dangling or malformed
 record means **no** index is exposed, not a partially usable one. Adding a
 mapping never creates, renames or repoints a public ID — if no canonical

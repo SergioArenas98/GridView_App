@@ -27,13 +27,24 @@ export function realRegistry(): ProviderMappingRegistry {
   return buildProviderMappingRegistry(curatedMappingDocuments(), canonical);
 }
 
+/** A well-formed curated document wrapper for ad-hoc mapping records. */
+export function documentOf(
+  mappings: readonly unknown[],
+  season: number = SEASON,
+): Record<string, unknown> {
+  return { kind: 'provider-mappings', schemaVersion: 2, season, mappings };
+}
+
 /** A registry over ad-hoc records, sharing the real canonical registries. */
 export function registryOf(
   mappings: readonly unknown[],
   season: number = SEASON,
   registries: CanonicalRegistries = canonical,
 ): ProviderMappingRegistry {
-  return buildProviderMappingRegistry([{ season, mappings }], registries);
+  return buildProviderMappingRegistry(
+    [documentOf(mappings, season)],
+    registries,
+  );
 }
 
 /**

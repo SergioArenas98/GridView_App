@@ -64,14 +64,20 @@ Every field is a bounded enum member, an integer, or the exact provider value
 in the single internal diagnostic field `providerMappingValue`. No mapping
 record, registry dump, upstream payload or exception body is ever logged.
 
+A malformed key is reported as `invalid-key` and carries **no**
+`providerMappingValue` at all: a value that failed validation is exactly the
+one that must not be echoed, so the bounded `providerMappingKeyProblem` field
+carries the whole diagnosis instead.
+
 `providerMappingFailure` is one of:
 
-| Reason             | Meaning                                                                                                     |
-| ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `unmapped`         | The registry is valid and this identity simply has no curated record. **This is the normal operator case.** |
-| `registry-invalid` | The registry failed validation, so _no_ lookup works. Fix the content; see §8.                              |
-| `ambiguous`        | One key was curated with two different targets. Construction rejects this, so it should be unreachable.     |
-| `target-missing`   | A record points at a GridView ID that does not exist. Construction rejects this too.                        |
+| Reason             | Meaning                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `unmapped`         | The registry is valid and this identity simply has no curated record. **This is the normal operator case.**                                                                                                                                                                                                                                                                                                  |
+| `registry-invalid` | The registry failed validation, so _no_ lookup works. Fix the content; see §8.                                                                                                                                                                                                                                                                                                                               |
+| `ambiguous`        | One key was curated with two different targets. Construction rejects this, so it should be unreachable.                                                                                                                                                                                                                                                                                                      |
+| `target-missing`   | A record points at a GridView ID that does not exist. Construction rejects this too.                                                                                                                                                                                                                                                                                                                         |
+| `invalid-key`      | The adapter produced a malformed provider identity: an unknown source, a mismatched field, a padded/empty/control-character string, or a non-positive or unsafe number. **Fix the adapter, do not curate the value.** The value is deliberately not logged; the bounded `providerMappingKeyProblem` field carries the diagnosis (`not-an-object`, `invalid-season`, `invalid-value`, `invalid-combination`). |
 
 ### 2.1 Where to look
 
@@ -138,12 +144,32 @@ If no canonical GridView identity exists, this is **not** a mapping task.
 3. Only then add the provider mapping.
 
 Until step 1 exists, record the identity in the season's
-`provider-evidence.development.json` under `acknowledgedUnmapped` with a
-written reason. That keeps the gap visible and keeps synchronization failing
-closed instead of silently dropping a row.
+`provider-evidence.development.json` under `acknowledgedUnmapped`, with a
+closed-enum `reason` and a written `detail`. That keeps the gap visible and
+keeps synchronization failing closed instead of silently dropping a row.
 
-Two of the four constructor-name disagreements recorded in Provider Evaluation
-§8.5 — `Cadillac` and `Racing Bulls` — sit in exactly this state today.
+> **An acknowledgement is a temporary blocker, not a mapping.** It records
+> _"observed, but no canonical GridView target exists"_. It never means
+> _"coverage accepted, so synchronization may continue"_. The runtime is built
+> from the mapping file alone: it has no notion of an acknowledgement, still
+> answers `unmapped`, and the affected resource still fails closed. Once a
+> mapping becomes possible, add the mapping **and delete the acknowledgement**
+> — validation rejects an identity that is both mapped and acknowledged.
+
+Reasons are a closed set, so an acknowledgement cannot be turned into a
+free-text coverage excuse:
+
+| `reason`                           | Meaning                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `no-canonical-gridview-identity`   | The entity has no curated GridView identity yet. Fix by curating the identity first (§5 step 1). |
+| `identity-pending-curation-review` | The GridView identity is disputed or under review.                                               |
+| `provider-value-not-yet-evidenced` | The provider identifier itself is not yet recorded in the repository.                            |
+
+Five identities sit in this state today: `Cadillac` and `Racing Bulls`
+(OpenF1 `team_name`), `antonelli` (Jolpica `driverId`) with its OpenF1
+`driver_number` `12`, and `hungaroring` (Jolpica `circuitId`). Two of them are
+half of the four constructor-name disagreements recorded in Provider Evaluation
+§8.5.
 
 ---
 

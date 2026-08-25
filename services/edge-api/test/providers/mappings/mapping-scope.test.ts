@@ -198,7 +198,7 @@ describe('scope and isolation', () => {
         providerField: 'driver_number',
         providerValue: 1,
       }),
-    ).toBeNull();
+    ).toMatchObject({ ok: false });
     expect(
       decodeProviderMappingKey({
         season: SEASON,
@@ -207,7 +207,7 @@ describe('scope and isolation', () => {
         providerField: 'driverId',
         providerValue: 'norris',
       }),
-    ).toBeNull();
+    ).toMatchObject({ ok: false });
     // A real field on the wrong entity kind is equally not a key.
     expect(
       decodeProviderMappingKey({
@@ -217,7 +217,7 @@ describe('scope and isolation', () => {
         providerField: 'circuitId',
         providerValue: 'mclaren',
       }),
-    ).toBeNull();
+    ).toMatchObject({ ok: false });
   });
 
   // Case 16
@@ -235,7 +235,7 @@ describe('scope and isolation', () => {
         providerField: 'driverId',
         providerValue: 'mock-drv-001',
       }),
-    ).toBeNull();
+    ).toMatchObject({ ok: false });
 
     // And a curated file naming it cannot build an index.
     const mockRegistry = registryOf([
@@ -285,17 +285,20 @@ describe('scope and isolation', () => {
         providerField: 'driver_number',
         providerValue: '1',
       }),
-    ).toBeNull();
-    // ...and nothing coerces it on the way through the untrusted entry point.
-    expect(
-      numeric.resolveUnknown({
-        season: SEASON,
-        source: 'openf1',
-        entity: 'driver',
-        providerField: 'driver_number',
-        providerValue: '1',
-      }),
-    ).toBeNull();
+    ).toMatchObject({ ok: false });
+    // ...and nothing coerces it on the way through the untrusted entry point,
+    // which rejects it explicitly rather than answering "no mapping needed".
+    const coerced = numeric.resolveUnknown({
+      season: SEASON,
+      source: 'openf1',
+      entity: 'driver',
+      providerField: 'driver_number',
+      providerValue: '1',
+    });
+    expect(coerced.outcome).toBe('unresolved');
+    if (coerced.outcome !== 'unresolved') throw new Error('unreachable');
+    expect(coerced.failure.reason).toBe('invalid-key');
+    expect(coerced.failure.keyProblem).toBe('invalid-combination');
   });
 });
 

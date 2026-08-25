@@ -11,7 +11,14 @@ import {
   type CanonicalRegistries,
 } from '../../../src/providers/mappings';
 
-import { canonical, key, record, registryOf, SEASON } from './support';
+import {
+  canonical,
+  documentOf,
+  key,
+  record,
+  registryOf,
+  SEASON,
+} from './support';
 
 /** Builds a registry and asserts it refused to expose an index. */
 function expectRejected(
@@ -20,7 +27,7 @@ function expectRejected(
   registries: CanonicalRegistries = canonical,
 ) {
   const registry = buildProviderMappingRegistry(
-    [{ season: SEASON, mappings }],
+    [documentOf(mappings)],
     registries,
   );
   expect(registry.isValid).toBe(false);
@@ -186,6 +193,23 @@ describe('a malformed registry never becomes a usable index', () => {
       'nope',
       [],
       { season: 2026 },
+      // Right shape, wrong content kind.
+      { kind: 'media-assets', schemaVersion: 2, season: 2026, mappings: [] },
+      // Right kind, unknown schema version.
+      {
+        kind: 'provider-mappings',
+        schemaVersion: 1,
+        season: 2026,
+        mappings: [],
+      },
+      {
+        kind: 'provider-mappings',
+        schemaVersion: 99,
+        season: 2026,
+        mappings: [],
+      },
+      // Right kind, no version at all.
+      { kind: 'provider-mappings', season: 2026, mappings: [] },
     ]) {
       const registry = buildProviderMappingRegistry([document], canonical);
       expect(registry.isValid).toBe(false);

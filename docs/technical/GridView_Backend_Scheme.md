@@ -678,8 +678,13 @@ Recommended JSON forms:
 - Unknown provider entities must fail synchronization validation instead of silently creating unstable IDs.
 - Mid-season additions require an explicit curated mapping.
 
-> **Implemented in Phase 9B-3** ([ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)),
-> which closes gap **G8** / **G-e**. The curated registry lives in
+> **The mechanism is implemented in Phase 9B-3**
+> ([ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)), which
+> closes gap **G8** / **G-e**. **The mapping dataset is a different question
+> and is not complete**: only identifiers already recorded in Provider
+> Evaluation §8 are curated, so live-provider coverage is incomplete and is
+> tracked separately as **G-l**. Any identity without a curated mapping blocks
+> the affected resource. The curated registry lives in
 > version-controlled content (`content/schemas/provider-mappings.schema.json`
 > and `content/seasons/<year>/provider-mappings.development.json`), and the
 > immutable resolver lives in

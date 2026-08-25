@@ -316,11 +316,42 @@ describe('required case 51 - approved identities cannot be silently omitted', ()
       identities: [...corpus.identities, newIdentity],
       acknowledgedUnmapped: [
         ...corpus.acknowledgedUnmapped,
-        { ...newIdentity, evidence: undefined, reason: 'hypothetical gap' },
+        {
+          ...newIdentity,
+          evidence: undefined,
+          reason: 'no-canonical-gridview-identity',
+          detail: 'hypothetical gap',
+        },
       ],
     };
     delete extended.acknowledgedUnmapped.at(-1).evidence;
     expect(validateEvidenceCoverage(extended, document)).toEqual([]);
+  });
+
+  /**
+   * An acknowledgement is a temporary blocker, so it must not outlive the
+   * blockage. Once a mapping exists the acknowledgement is contradictory and
+   * validation forces its removal - it can never harden into a second, weaker
+   * way of satisfying coverage.
+   */
+  it('forces an acknowledgement to be removed once a mapping exists', () => {
+    const acknowledgedAndMapped = {
+      ...corpus,
+      acknowledgedUnmapped: [
+        ...corpus.acknowledgedUnmapped,
+        {
+          source: 'jolpica',
+          entity: 'driver',
+          providerField: 'driverId',
+          providerValue: 'norris',
+          reason: 'no-canonical-gridview-identity',
+          detail: 'contradicts the mapping that already exists',
+        },
+      ],
+    };
+    const problems = validateEvidenceCoverage(acknowledgedAndMapped, document);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/a mapping exists for it/);
   });
 
   it('rejects a mapping for an identity the corpus never recorded', () => {
@@ -353,7 +384,7 @@ describe('required case 51 - approved identities cannot be silently omitted', ()
           entity: 'driver',
           providerField: 'driverId',
           providerValue: 'norris',
-          reason: 'contradicts the mapping that exists',
+          reason: 'no-canonical-gridview-identity',
         },
       ],
     };
@@ -372,7 +403,7 @@ describe('required case 51 - approved identities cannot be silently omitted', ()
           entity: 'driver',
           providerField: 'driverId',
           providerValue: 'ghost',
-          reason: 'never recorded as evidence',
+          reason: 'no-canonical-gridview-identity',
         },
       ],
     };

@@ -31,7 +31,9 @@ export const PROVIDER_MAPPING_OPERATION = 'provider.mapping.resolve';
 const DIAGNOSTIC_VALUE_MAX_LENGTH = 64;
 
 function boundedDiagnosticValue(value: string | number): string {
-  const text = typeof value === 'number' ? String(value) : value;
+  // Defensive: a caller that casts past the types must not be able to reach
+  // `.slice` on a non-string and throw from inside a logging helper.
+  const text = typeof value === 'string' ? value : String(value);
   return text.length <= DIAGNOSTIC_VALUE_MAX_LENGTH
     ? text
     : `${text.slice(0, DIAGNOSTIC_VALUE_MAX_LENGTH)}...`;
@@ -46,14 +48,29 @@ function boundedDiagnosticValue(value: string | number): string {
 export function providerMappingFailureEvent(
   failure: ProviderMappingFailure,
 ): LogEvent {
-  return {
+  const event: LogEvent = {
     operation: PROVIDER_MAPPING_OPERATION,
     failureCategory: PROVIDER_MAPPING_FAILURE_CATEGORY,
     providerSourceId: failure.source,
-    season: failure.season,
     providerMappingEntity: failure.entity,
     providerMappingField: failure.providerField,
     providerMappingFailure: failure.reason,
-    providerMappingValue: boundedDiagnosticValue(failure.providerValue),
   };
+
+  // Omitted rather than nulled for a malformed key: there is no season to
+  // report, and `season` is a shared bounded integer field in the logger
+  // contract that other operations also use.
+  if (failure.season !== null) event.season = failure.season;
+
+  // An `invalid-key` failure deliberately carries no provider value. The
+  // value that failed validation is exactly the one that must not be echoed,
+  // and the bounded `keyProblem` is the whole diagnosis.
+  if (failure.providerValue !== null) {
+    event.providerMappingValue = boundedDiagnosticValue(failure.providerValue);
+  }
+  if (failure.keyProblem !== undefined) {
+    event.providerMappingKeyProblem = failure.keyProblem;
+  }
+
+  return event;
 }

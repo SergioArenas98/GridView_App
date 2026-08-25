@@ -32,6 +32,7 @@ interface EvidenceRecord {
   providerValue: string | number;
   evidence?: string;
   reason?: string;
+  detail?: string;
 }
 
 interface Corpus {
@@ -61,12 +62,13 @@ const registry = realRegistry();
 
 function toKey(record: EvidenceRecord, season: number): ProviderMappingKey {
   const decoded = decodeProviderMappingKey({ ...record, season });
-  if (decoded === null) {
+  if (!decoded.ok) {
     throw new Error(
-      `corpus record is not a valid provider key: ${JSON.stringify(record)}`,
+      `corpus record is not a valid provider key (${decoded.problem}): ` +
+        JSON.stringify(record),
     );
   }
-  return decoded;
+  return decoded.key;
 }
 
 describe('every approved provider identity is accounted for', () => {
@@ -109,11 +111,13 @@ describe('every approved provider identity is accounted for', () => {
     for (const encoded of acknowledged) expect(known.has(encoded)).toBe(true);
   });
 
-  it('records a reason for every acknowledged coverage gap', () => {
+  it('records a closed reason and written detail for every coverage gap', () => {
     expect(corpus.acknowledgedUnmapped.length).toBeGreaterThan(0);
     for (const record of corpus.acknowledgedUnmapped) {
+      // The reason is a closed enum member, so an acknowledgement cannot be
+      // turned into an arbitrary coverage excuse; the prose lives in detail.
       expect(record.reason, JSON.stringify(record)).toBeTruthy();
-      expect(String(record.reason).length).toBeGreaterThan(40);
+      expect(String(record.detail).length).toBeGreaterThan(40);
     }
   });
 
