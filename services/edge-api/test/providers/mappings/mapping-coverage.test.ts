@@ -61,7 +61,15 @@ const document = readContent<MappingDocument>(
 const registry = realRegistry();
 
 function toKey(record: EvidenceRecord, season: number): ProviderMappingKey {
-  const decoded = decodeProviderMappingKey({ ...record, season });
+  // Built field by field: a provider key is a closed shape, and an evidence
+  // record legitimately carries `evidence`, `reason` and `detail` besides.
+  const decoded = decodeProviderMappingKey({
+    season,
+    source: record.source,
+    entity: record.entity,
+    providerField: record.providerField,
+    providerValue: record.providerValue,
+  });
   if (!decoded.ok) {
     throw new Error(
       `corpus record is not a valid provider key (${decoded.problem}): ` +

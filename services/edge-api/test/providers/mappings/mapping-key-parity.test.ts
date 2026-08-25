@@ -41,6 +41,17 @@ describe('the shared key corpus is meaningful', () => {
   it('has a unique label per case', () => {
     expect(new Set(cases.map((entry) => entry.label)).size).toBe(cases.length);
   });
+
+  /**
+   * The same sorted-label assertion the `.mjs` twin makes. Both suites derive
+   * it from the one physical file and neither filters, so an identical list
+   * proves both validators saw exactly the same cases.
+   */
+  it('runs every case, unfiltered', () => {
+    const labels = [...cases.map((entry) => entry.label)].sort();
+    expect(labels.length).toBe(cases.length);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
 });
 
 describe('the TypeScript decoder agrees with the shared corpus', () => {
@@ -121,6 +132,89 @@ describe('the canonical encoding is injective over the corpus', () => {
         providerValue: 'norris',
       }),
     ).toBe('4:2026;7:jolpica;6:driver;8:driverId;6:string;6:norris;');
+  });
+
+  /**
+   * The length prefix counts **JavaScript UTF-16 code units** - `String#length`
+   * - not code points or UTF-8 bytes. Any deterministic measure works so long
+   * as encoder and decoder agree; this documents which one is in use, and the
+   * cases below pin that it stays injective across scripts, astral pairs and
+   * combining marks.
+   */
+  it('stays injective across non-ASCII, astral and combining input', () => {
+    const values = [
+      'Alpine',
+      'Alpiné',
+      'Alpine\u0301',
+      'ALPINE',
+      'Ålpine',
+      'Alpine ',
+      ' Alpine',
+      'Al pine',
+      '\u{1F3CE}\u{FE0F}',
+      '\u{1F3CE}',
+      'Ａlpine',
+      'a'.repeat(64),
+      'a'.repeat(63) + 'b',
+      '',
+      ';',
+      '6:string;',
+      '2:26;',
+    ];
+
+    const encoded = values.map((providerValue) =>
+      canonicalKey({
+        season: 2026,
+        source: 'openf1',
+        entity: 'constructor',
+        providerField: 'team_name',
+        providerValue,
+      } as unknown as ProviderMappingKey),
+    );
+
+    expect(new Set(encoded).size).toBe(values.length);
+  });
+
+  it('separates a season, source, entity or field swap', () => {
+    const variants = [
+      {
+        season: 2026,
+        source: 'jolpica',
+        entity: 'driver',
+        providerField: 'driverId',
+      },
+      {
+        season: 2027,
+        source: 'jolpica',
+        entity: 'driver',
+        providerField: 'driverId',
+      },
+      {
+        season: 2026,
+        source: 'openf1',
+        entity: 'constructor',
+        providerField: 'team_name',
+      },
+      {
+        season: 2026,
+        source: 'jolpica',
+        entity: 'constructor',
+        providerField: 'constructorId',
+      },
+      {
+        season: 2026,
+        source: 'jolpica',
+        entity: 'circuit',
+        providerField: 'circuitId',
+      },
+    ];
+    const encoded = variants.map((variant) =>
+      canonicalKey({
+        ...variant,
+        providerValue: 'x',
+      } as unknown as ProviderMappingKey),
+    );
+    expect(new Set(encoded).size).toBe(variants.length);
   });
 
   it('separates values whose concatenation would otherwise coincide', () => {

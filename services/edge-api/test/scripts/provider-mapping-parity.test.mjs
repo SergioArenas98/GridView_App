@@ -18,10 +18,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canonicalKey,
+  decodeProviderKey,
   isProviderIntegerValue,
   isProviderStringValue,
   isSeason,
-  isValidKeyShape,
 } from '../../scripts/lib/provider-mapping-rules.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,15 +33,42 @@ const corpus = JSON.parse(
 );
 const cases = corpus.cases;
 
+/** Sorted case labels, asserted identically by both parity suites. */
+const EXPECTED_LABELS = [...cases.map((entry) => entry.label)].sort();
+
 /**
- * The `.mjs` validator checks the key shape and the season separately, because
- * a curated record carries its season at the document level. This composes the
- * two into the same yes/no verdict the TypeScript decoder produces for a whole
- * key, so the two sides are compared on equal terms.
+ * `decodeProviderKey` answers exactly the question the TypeScript decoder
+ * answers about a whole key - closed shape, own properties only, valid season,
+ * valid value type, declared combination - so the two sides are compared on
+ * equal terms rather than through a loosened local wrapper.
  */
 function accepts(key) {
-  return isSeason(key.season) && isValidKeyShape(key);
+  return decodeProviderKey(key);
 }
+
+describe('the shared key corpus is meaningful', () => {
+  it('is non-empty and carries both verdicts', () => {
+    expect(cases.length).toBeGreaterThanOrEqual(30);
+    expect(cases.some((entry) => entry.accepted)).toBe(true);
+    expect(cases.some((entry) => !entry.accepted)).toBe(true);
+  });
+
+  it('has a unique label per case', () => {
+    expect(new Set(cases.map((entry) => entry.label)).size).toBe(cases.length);
+  });
+
+  /**
+   * Pins the exact case-label set. The TypeScript twin asserts the identical
+   * list, so neither suite can quietly stop running a case the other still
+   * runs - which is the only way the two validators could drift while both
+   * suites stayed green.
+   */
+  it('runs the same case labels as the TypeScript twin', () => {
+    expect([...cases.map((entry) => entry.label)].sort()).toEqual(
+      EXPECTED_LABELS,
+    );
+  });
+});
 
 describe('the .mjs validator agrees with the shared corpus', () => {
   for (const entry of cases) {

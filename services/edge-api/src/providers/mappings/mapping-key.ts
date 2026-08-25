@@ -243,6 +243,48 @@ function isSeason(value: unknown): value is number {
 }
 
 /**
+ * The complete, closed set of properties a provider mapping key may carry.
+ *
+ * This mirrors `additionalProperties: false` in the curated JSON Schema, so
+ * the runtime boundary is as strict as the build-time one rather than merely
+ * ignoring what the schema rejects.
+ */
+export const PROVIDER_KEY_PROPERTIES: ReadonlySet<string> = new Set([
+  'season',
+  'source',
+  'entity',
+  'providerField',
+  'providerValue',
+]);
+
+/**
+ * True when `value` carries exactly `allowed` as **own enumerable** properties
+ * - no more, no fewer.
+ *
+ * Own properties only, deliberately: a plain property read walks the prototype
+ * chain, so an object could otherwise supply a key field it does not actually
+ * own. An object created with `Object.create(null)` that carries exactly the
+ * required own properties is still accepted, because it is a legitimate way to
+ * build a key without inheriting anything at all.
+ *
+ * `Object.keys` returns only own enumerable string keys, which is precisely
+ * the surface a JSON payload can produce. It also means a `__proto__` or
+ * `constructor` key that arrived as real own data is reported as an
+ * unexpected property rather than being read as a key field.
+ */
+export function hasExactlyOwnProperties(
+  value: object,
+  allowed: ReadonlySet<string>,
+): boolean {
+  const own = Object.keys(value);
+  if (own.length !== allowed.size) return false;
+  for (const property of own) {
+    if (!allowed.has(property)) return false;
+  }
+  return true;
+}
+
+/**
  * Why a value is not a provider mapping key.
  *
  * A closed, bounded set. It is safe to place in a log line and carries no
@@ -250,6 +292,7 @@ function isSeason(value: unknown): value is number {
  */
 export const providerKeyProblems = [
   'not-an-object',
+  'unexpected-property',
   'invalid-season',
   'invalid-value',
   'invalid-combination',
@@ -287,6 +330,17 @@ export function decodeProviderMappingKey(
     return { ok: false, problem: 'not-an-object' };
   }
   const record = value as Record<string, unknown>;
+
+  // A provider key is a *closed* shape, so an object carrying a second
+  // identity representation is rejected rather than silently narrowed. An
+  // extra `gridviewId`, `target` or `providerId` alongside a valid key is a
+  // confused-deputy hazard: today nothing reads it, but a future adapter that
+  // spreads the same object into a domain record would carry the smuggled
+  // identity with it. Own enumerable properties only, so a value cannot pass
+  // by inheriting fields from a prototype either.
+  if (!hasExactlyOwnProperties(record, PROVIDER_KEY_PROPERTIES)) {
+    return { ok: false, problem: 'unexpected-property' };
+  }
 
   if (!isSeason(record.season)) {
     return { ok: false, problem: 'invalid-season' };
@@ -346,8 +400,8 @@ export function validateProviderMappingKey(
  *
  * **Length-prefixed, not separator-joined.** An earlier separator-joined form
  * was not injective once any component could contain the separator: a forged
- * `providerField` of `driverId string a` with value `b` serialized
- * identically to an honest `driverId` with value `a string b`. Prefixing
+ * `providerField` of `driverId\0string\0a` with value `b` serialized
+ * identically to an honest `driverId` with value `a\0string\0b`. Prefixing
  * every component with its own length removes the ambiguity by construction,
  * so the encoding is injective over *all* inputs rather than only over inputs
  * that happen to have been validated first. Validation still happens - this

@@ -172,11 +172,10 @@
           ]
         },
         "reason": {
-          "description": "Closed set of blocking conditions. Free text is not accepted here, so an acknowledgement cannot be turned into an arbitrary coverage excuse; put the specifics in \"detail\".",
+          "description": "Closed set of blocking conditions. Free text is not accepted here, so an acknowledgement cannot be turned into an arbitrary coverage excuse; put the specifics in \"detail\". Every acknowledgement describes one EXACT observed provider identity and must correspond to an entry in \"identities\", so only exact-identity reasons exist. A field-level gap - a provider field for which the repository records no approved value at all, such as OpenF1 circuit_key - cannot be expressed here without fabricating a provider value, and is tracked as gap G-l in GridView_Provider_Evaluation.md instead.",
           "enum": [
             "no-canonical-gridview-identity",
-            "identity-pending-curation-review",
-            "provider-value-not-yet-evidenced"
+            "identity-pending-curation-review"
           ]
         },
         "detail": {

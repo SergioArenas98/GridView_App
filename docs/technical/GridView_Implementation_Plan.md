@@ -1705,9 +1705,13 @@ these are the implementation tasks.
 
 - Jolpica adapter, plus a fixture-tested OpenF1 adapter behind its gate.
 - Reconciliation coordinator with provenance and provisional/reconciled state.
-- ~~Curated provider-ID mapping registry.~~ **Delivered in Phase 9B-3**
-  (§14.0.7, [ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)),
-  dormant until an adapter consumes it.
+- ~~Curated provider-ID mapping registry.~~ **Mechanism delivered in Phase
+  9B-3** (§14.0.7,
+  [ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)), dormant
+  until an adapter consumes it. **The mapping dataset remains incomplete and
+  is still outstanding work under gap G-l**: eight exact mappings are curated
+  and five approved identities are explicitly acknowledged as unmapped, so any
+  identity outside that set still blocks its resource.
 - Locally modelled quota monitoring (Phase 9B-1) and a per-provider rate
   limiter (Phase 9B-2, [ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
 - Attribution surface in the app and in the public API documentation, held as

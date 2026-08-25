@@ -1,5 +1,5 @@
 {
-  "note": "Shared parity corpus. Consumed independently by the TypeScript decoder test and the .mjs validator test so the build-time and runtime rule sets cannot drift apart unnoticed. INTERNAL: these provider values are test fixtures, not curated content.",
+  "note": "Shared parity corpus. Consumed independently by the TypeScript decoder test and the .mjs validator test so the build-time and runtime rule sets cannot drift apart unnoticed. Every case runs in both suites, unfiltered. NaN and Infinity cannot be encoded in JSON, so they stay as explicit TypeScript-only boundary cases in mapping-boundary.test.ts. INTERNAL: these provider values are test fixtures, not curated content.",
   "cases": [
     {
       "label": "jolpica driver slug",
@@ -273,7 +273,7 @@
         "source": "jolpica",
         "entity": "driver",
         "providerField": "driverId",
-        "providerValue": "nor\u007fris"
+        "providerValue": "norris"
       }
     },
     {
@@ -380,6 +380,124 @@
       "key": {
         "season": 2026,
         "source": "JOLPICA",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris"
+      }
+    },
+    {
+      "label": "additional property: gridviewId",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris",
+        "gridviewId": "max-verstappen"
+      }
+    },
+    {
+      "label": "additional property: target",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris",
+        "target": "max-verstappen"
+      }
+    },
+    {
+      "label": "additional property: providerId",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris",
+        "providerId": "mock-drv-001"
+      }
+    },
+    {
+      "label": "additional property: kind",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris",
+        "kind": "provider-mappings"
+      }
+    },
+    {
+      "label": "additional property: providerValueType",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris",
+        "providerValueType": "string"
+      }
+    },
+    {
+      "label": "additional property: resolved",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris",
+        "resolved": true
+      }
+    },
+    {
+      "label": "additional property: mock",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris",
+        "mock": true
+      }
+    },
+    {
+      "label": "additional property: constructor",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris",
+        "constructor": "evil"
+      }
+    },
+    {
+      "label": "additional property: evidence",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": "norris",
+        "evidence": "not part of a key"
+      }
+    },
+    {
+      "label": "missing season",
+      "accepted": false,
+      "key": {
+        "source": "jolpica",
         "entity": "driver",
         "providerField": "driverId",
         "providerValue": "norris"

@@ -22,7 +22,10 @@ import { describe, expect, it } from 'vitest';
 import {
   ProviderMappingRegistry,
   buildProviderMappingRegistry,
+  providerMappingEntities,
   providerMappingFailureEvent,
+  providerMappingFields,
+  providerMappingSources,
   type ProviderMappingKeyFor,
 } from '../../../src/providers/mappings';
 import { CapturingLogger } from '../../../src/logging/logger';
@@ -175,6 +178,51 @@ describe('an untrusted value is rejected explicitly, never as a bare absence', (
     // No season is invented for a key that never had a valid one.
     expect(logger.events[0]).not.toHaveProperty('season');
     expect(JSON.parse(serialized)).toBeInstanceOf(Array);
+  });
+});
+
+describe('the widened failure type stays contained', () => {
+  it('never presents the unknown sentinel as a real provider identity', () => {
+    const result = registry.resolveUnknown(null);
+    if (result.outcome !== 'unresolved') throw new Error('unreachable');
+
+    // `unknown` is a diagnostic sentinel, not a source, entity or field.
+    expect(result.failure.source).toBe('unknown');
+    expect(providerMappingSources as readonly string[]).not.toContain(
+      result.failure.source,
+    );
+    expect(providerMappingEntities as readonly string[]).not.toContain(
+      result.failure.entity,
+    );
+    expect(providerMappingFields as readonly string[]).not.toContain(
+      result.failure.providerField,
+    );
+  });
+
+  it('never stringifies a null provider value into "null"', () => {
+    const result = registry.resolveUnknown(null);
+    if (result.outcome !== 'unresolved') throw new Error('unreachable');
+
+    const logger = new CapturingLogger();
+    logger.warn(providerMappingFailureEvent(result.failure));
+    const serialized = logger.serialized();
+
+    expect(serialized).not.toContain('"providerMappingValue"');
+    expect(serialized).not.toContain('"null"');
+    expect(logger.events[0]).not.toHaveProperty('providerMappingValue');
+  });
+
+  it('emits only bounded scalar fields, never a spread object', () => {
+    const result = registry.resolveUnknown(42);
+    if (result.outcome !== 'unresolved') throw new Error('unreachable');
+    const event = providerMappingFailureEvent(result.failure);
+
+    for (const [name, value] of Object.entries(event)) {
+      expect(
+        typeof value === 'string' || typeof value === 'number',
+        name + ' must be a bounded scalar',
+      ).toBe(true);
+    }
   });
 });
 

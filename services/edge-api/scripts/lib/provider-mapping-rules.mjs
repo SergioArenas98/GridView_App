@@ -111,6 +111,63 @@ function valueTypeOf(value) {
   return null;
 }
 
+/**
+ * The complete, closed set of properties a provider mapping *key* may carry.
+ * Mirrors `PROVIDER_KEY_PROPERTIES` in
+ * `src/providers/mappings/mapping-key.ts`.
+ */
+export const PROVIDER_KEY_PROPERTIES = new Set([
+  'season',
+  'source',
+  'entity',
+  'providerField',
+  'providerValue',
+]);
+
+/**
+ * The closed set of properties a curated *mapping record* may carry: the key
+ * fields minus the document-level season, plus the target and its provenance.
+ * Mirrors `additionalProperties: false` in the curated JSON Schema.
+ */
+export const MAPPING_RECORD_PROPERTIES = new Set([
+  'source',
+  'entity',
+  'providerField',
+  'providerValue',
+  'gridviewId',
+  'evidence',
+  'note',
+]);
+
+/** True when `value` carries no own enumerable property outside `allowed`. */
+export function hasNoUnexpectedProperty(value, allowed) {
+  for (const property of Object.keys(value)) {
+    if (!allowed.has(property)) return false;
+  }
+  return true;
+}
+
+/**
+ * Decodes a whole provider key, exactly as the TypeScript runtime does.
+ *
+ * Used by the shared parity corpus so both sides answer the same yes/no
+ * question about the same object. A key is a closed shape: an extra property
+ * such as `gridviewId` or `target` alongside a valid key is rejected rather
+ * than ignored, and own enumerable properties only, so nothing can supply a
+ * key field by inheriting it from a prototype.
+ */
+export function decodeProviderKey(value) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  if (!hasNoUnexpectedProperty(value, PROVIDER_KEY_PROPERTIES)) return false;
+  if (Object.keys(value).length !== PROVIDER_KEY_PROPERTIES.size) {
+    return false;
+  }
+  if (!isSeason(value.season)) return false;
+  return isValidKeyShape(value);
+}
+
 /** True when the four discriminators form one declared combination. */
 export function isValidKeyShape(record) {
   const valueType = valueTypeOf(record.providerValue);
@@ -202,6 +259,16 @@ export function validateMappingDocument(document, canonicalIds) {
   document.mappings.forEach((record, index) => {
     const at = 'mappings[' + index + ']';
     const described = describeKey({ season: document.season, ...record });
+
+    if (!hasNoUnexpectedProperty(record, MAPPING_RECORD_PROPERTIES)) {
+      problems.push(
+        at +
+          ': unexpected property on a curated mapping record (' +
+          described +
+          ')',
+      );
+      return;
+    }
 
     if (!isValidKeyShape(record)) {
       problems.push(

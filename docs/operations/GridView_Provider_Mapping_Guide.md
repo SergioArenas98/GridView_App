@@ -163,7 +163,13 @@ free-text coverage excuse:
 | ---------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `no-canonical-gridview-identity`   | The entity has no curated GridView identity yet. Fix by curating the identity first (§5 step 1). |
 | `identity-pending-curation-review` | The GridView identity is disputed or under review.                                               |
-| `provider-value-not-yet-evidenced` | The provider identifier itself is not yet recorded in the repository.                            |
+
+Both reasons describe **one exact observed provider identity**, and every
+acknowledgement must correspond to an entry in `identities`. A _field-level_
+gap - a provider field for which the repository records no approved value at
+all, such as OpenF1 `circuit_key` - cannot be written here without fabricating
+a provider value. Those are tracked as gap **G-l** in
+`../technical/GridView_Provider_Evaluation.md` instead.
 
 Five identities sit in this state today: `Cadillac` and `Racing Bulls`
 (OpenF1 `team_name`), `antonelli` (Jolpica `driverId`) with its OpenF1

@@ -69,6 +69,24 @@ describe('an acknowledgement reason is a closed set', () => {
     }
   });
 
+  /**
+   * Fails on 8f419e0, where the enum also offered
+   * `provider-value-not-yet-evidenced` - a *field-level* reason meaning "no
+   * approved exact value exists to map". Every acknowledgement here describes
+   * one exact observed identity and must correspond to an entry in
+   * `identities`, so that reason could only ever be attached to a record that
+   * contradicts it, and validation accepted the contradiction. Field-level
+   * gaps such as the uncurated OpenF1 `circuit_key` are tracked as G-l.
+   */
+  it('offers only reasons its shape can truthfully express', () => {
+    const reasons = schema.$defs.acknowledgement.properties.reason.enum ?? [];
+    expect(reasons).toEqual([
+      'no-canonical-gridview-identity',
+      'identity-pending-curation-review',
+    ]);
+    expect(reasons).not.toContain('provider-value-not-yet-evidenced');
+  });
+
   it('keeps the human explanation in a separate detail field', () => {
     for (const record of corpus.acknowledgedUnmapped) {
       expect(record.detail, JSON.stringify(record)).toBeTruthy();

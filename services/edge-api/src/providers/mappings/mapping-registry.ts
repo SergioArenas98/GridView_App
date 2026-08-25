@@ -85,6 +85,7 @@ export interface RegistryProblem {
   readonly reason:
     | 'invalid-record'
     | 'unsupported-document'
+    | 'unexpected-property'
     | 'invalid-key-combination'
     | 'invalid-target-grammar'
     | 'duplicate-key'
@@ -252,6 +253,14 @@ export class ProviderMappingRegistry {
         return;
       }
 
+      if (!hasNoUnexpectedProperty(rawDocument, DOCUMENT_PROPERTIES)) {
+        problems.push({
+          at: `documents[${documentIndex}]`,
+          reason: 'unexpected-property',
+        });
+        return;
+      }
+
       if (!Array.isArray(document.mappings)) {
         problems.push({
           at: `documents[${documentIndex}]`,
@@ -269,7 +278,21 @@ export class ProviderMappingRegistry {
         }
         const record = rawRecord as Record<string, unknown>;
 
-        const decoded = decodeProviderMappingKey({ ...record, season });
+        if (!hasNoUnexpectedProperty(rawRecord, MAPPING_RECORD_PROPERTIES)) {
+          problems.push({ at, reason: 'unexpected-property' });
+          return;
+        }
+
+        // Built field by field rather than spread, because the decoder now
+        // requires an exact closed shape and a curated record legitimately
+        // carries `gridviewId`, `evidence` and `note` alongside the key.
+        const decoded = decodeProviderMappingKey({
+          season,
+          source: record.source,
+          entity: record.entity,
+          providerField: record.providerField,
+          providerValue: record.providerValue,
+        });
         if (!decoded.ok) {
           problems.push({ at, reason: 'invalid-key-combination' });
           return;
@@ -368,6 +391,45 @@ interface CuratedMappingDocument {
  */
 const SUPPORTED_DOCUMENT_KIND = 'provider-mappings';
 const SUPPORTED_SCHEMA_VERSION = 2;
+
+/**
+ * The closed property sets, mirroring `additionalProperties: false` in the
+ * curated JSON Schema so the runtime boundary is as strict as the build-time
+ * one rather than merely ignoring what the schema rejects.
+ *
+ * `$schema` is an editor hint the schema itself tolerates, so it is allowed
+ * here too; `status` and `note` are optional curated metadata.
+ */
+const DOCUMENT_PROPERTIES: ReadonlySet<string> = new Set([
+  '$schema',
+  'kind',
+  'schemaVersion',
+  'status',
+  'note',
+  'season',
+  'mappings',
+]);
+
+const MAPPING_RECORD_PROPERTIES: ReadonlySet<string> = new Set([
+  'source',
+  'entity',
+  'providerField',
+  'providerValue',
+  'gridviewId',
+  'evidence',
+  'note',
+]);
+
+/** True when `value` carries no own enumerable property outside `allowed`. */
+function hasNoUnexpectedProperty(
+  value: object,
+  allowed: ReadonlySet<string>,
+): boolean {
+  for (const property of Object.keys(value)) {
+    if (!allowed.has(property)) return false;
+  }
+  return true;
+}
 
 /**
  * The only way to obtain a registry.
