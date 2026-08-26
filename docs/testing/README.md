@@ -374,10 +374,68 @@ Coverage includes:
   evidence corpus, including the four recorded constructor-name
   disagreements. The mapping tests use fixed local fixtures only and never
   contact a provider.
+- Multi-source provider coordination (Phase 9B-4,
+  [ADR 0023](../adr/0023-multi-source-provider-coordination.md)): see below.
 
 The existing fixture validator still reports strict OpenAPI conformance:
 30 conforming fixtures and 1 tolerance-only fixture that must fail strict
 validation.
+
+## Multi-source provider coordination (Phase 9B-4)
+
+**73 Edge tests** under `services/edge-api/test/providers/coordination/`. None
+touches the network, needs a Cloudflare binding or contacts Jolpica or OpenF1:
+the ports are local fakes, there is no transport at all, and one test replaces
+`globalThis.fetch` with a rejecting stub for the whole coordinate-and-publish
+path so an accidental request fails loudly.
+
+Fixtures are **derived from the checked-in curated content through the
+production mock provider**, so no test duplicates assembly logic or invents a
+season. The publication tests drive the **real** `SnapshotPublisher` over
+in-memory storage, and the mapping tests drive the **real** Phase 9B-3
+registry.
+
+Coverage:
+
+- An empty plan performs zero adapter calls; a duplicate logical resource
+  rejects the whole plan with nothing attempted and no accounting written.
+- Each source succeeds independently, and no adapter is ever shown the plan,
+  another source's outcome or the selection.
+- A capability violation is rejected **before** the adapter is called, and the
+  provisional source is skipped by default because no session-end bound is
+  recorded - with no reservation, no transport and no attempted accounting.
+  Absence, `null`, a bare number, a wrong discriminant, a non-integer, a
+  non-positive value, an absurd value and an extra property are each pinned as
+  **locked**.
+- The complete selection matrix: reconciled wins over provisional; reconciled
+  wins against every provisional terminal failure while the diagnostic outcome
+  is retained; a provisional candidate is returned only when the reconciled
+  source failed **and** the resource is provisional-capable, and is never
+  relabelled; both unavailable yields no usable candidate; and neither source
+  completion order nor plan order can change any of it.
+- Failure isolation: one resource failing never blocks an independent one; a
+  mapping failure or an invalid registry blocks only the affected contribution
+  and never folds, trims, slugs or guesses an identity; a malformed outcome, a
+  well-formed answer to a different question and a thrown adapter error all
+  fail closed without throwing, and nothing from the thrown value survives.
+- Accounting: a limiter deferral stays not attempted and retains `retryAt`; a
+  429 stays attempted and source-attributed; each real request is counted
+  exactly once per source and credited to every job category it served; and one
+  request reused for two derived resources is **not** double-counted.
+- Cancellation and concurrency: a pre-cancelled run does nothing at all; a
+  mid-run cancellation schedules nothing further and never publishes; the
+  bounded pool never exceeds its ceiling and defaults to sequential; and a run
+  is byte-identical when its operations complete in the opposite order.
+- Publication: an incomplete, cancelled or rejected run never reaches the
+  publisher; a complete run calls it exactly once; a publisher failure leaves
+  the active release unchanged; and last-known-good survives every combination
+  of source failure across both sources.
+- Containment: public reads still perform no provider work, coordination
+  vocabulary reaches no public response, fixture or OpenAPI text, every log
+  event for every failure category carries only bounded scalars, a hostile
+  transport reference and a hostile retry hint reach no log line, and no
+  runtime module outside `src/providers/coordination/` consumes the
+  coordinator.
 
 ## Staging verification (Phase 5B)
 

@@ -1130,6 +1130,29 @@ The handler:
    figures instead.
 10. Logs success or failure.
 
+> **The multi-source coordination seam exists as of Phase 9B-4**
+> ([ADR 0023](../adr/0023-multi-source-provider-coordination.md)), which closes
+> gap **G4**. Steps 4 to 8 are no longer expressible as one whole-season
+> provider call. A coordinator above the adapters executes an explicit plan of
+> **individual logical resources**, drives one **independent port per source**,
+> and returns typed per-resource outcomes with complete partial-success and
+> partial-failure semantics. Jolpica is the `reconciled` source and OpenF1 the
+> `provisional` one; selection consults the declared source role and the typed
+> resource identity and nothing else, so provisional data can never overwrite
+> reconciled data.
+>
+> **It is dormant.** No adapter exists, so no port is registered anywhere; the
+> mock provider still serves the synchronization path unchanged, and
+> `PROVIDER_MODE` still admits exactly `mock` and `none`. The coordinator never
+> publishes and never writes an active pointer: publication stays all-or-nothing
+> through the existing publisher (§13.1), and a partial coordination run is
+> withheld with a bounded reason rather than replacing a complete active
+> release.
+>
+> Event-aware scheduling (**G5**) and persisted provenance or
+> provisional/reconciled record state (**G9**) remain open, and the coordinator
+> implements neither.
+
 ### 14.2 No public sync endpoint
 
 The legacy pattern of public routes such as:
@@ -1675,6 +1698,21 @@ Never logged: request or response bodies, full URLs, query strings,
 provider-controlled messages, headers, the `User-Agent`, authorization
 material, raw exception messages, stack traces, or Durable Object storage keys
 and object ids.
+
+**Coordination events (Phase 9B-4,
+[ADR 0023](../adr/0023-multi-source-provider-coordination.md)).** Three bounded
+structured events exist: one source's contribution to one resource, the
+coordinated selection for one resource, and the run summary.
+
+Permitted fields are only: operation, season, canonical source id, declared
+source role, coordinated resource kind, job category, contribution or run
+status, selection outcome, whether a request was attempted, a closed failure
+reason, an already-validated `retryAt` or `retryAfter`, and integer counts.
+
+Never logged: provider payloads, public snapshot bodies, entity identities,
+transport references, raw exceptions — or the Phase 9B-3 mapping-failure
+detail, which the mapping boundary raises itself and which is never duplicated
+here.
 
 ### 24.2 Metrics
 

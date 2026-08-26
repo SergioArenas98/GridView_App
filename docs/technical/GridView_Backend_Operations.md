@@ -228,6 +228,44 @@ request ledger, no quota usage and no provider success or failure timestamp. An
 upstream HTTP 429 is the opposite: a request was attempted and rate-limited,
 and it is accounted as such.
 
+### Multi-source coordination
+
+Phase 9B-4 added the coordination seam above the adapters
+([ADR 0023](../adr/0023-multi-source-provider-coordination.md)). **No provider
+adapter exists, no port is registered in production wiring and no provider
+request is possible**; what exists is the mechanism a future pair of adapters
+will be driven through, and the mock provider still serves the synchronization
+path unchanged.
+
+An operator reading a coordination run sees, per resource: which sources were
+considered, which one was selected and under which declared role, whether each
+source's request was actually attempted, and a bounded closed reason when it
+was not. Jolpica is the `reconciled` source and OpenF1 the `provisional` one;
+selection consults the declared role and nothing else, so provisional data can
+never overwrite reconciled data, and a provisional candidate is only ever
+returned for a resource OpenF1 is capable of serving.
+
+**OpenF1 is skipped, and that is the expected steady state.** Eligibility is an
+already-decided input, not something the coordinator calculates, and **no
+maximum-session-duration bound is recorded anywhere in the repository**. A
+skipped source performs no reservation, issues no request and increments no
+attempted-request accounting, so `source-locked` in a coordination log is
+normal rather than an incident.
+
+**Partial coordination does not publish.** The coordinator never writes an
+active pointer. A completed run whose every planned resource produced a
+candidate is assembled into one complete season and handed to the existing
+publisher exactly once; anything else - a cancelled run, a rejected plan, an
+unavailable resource, a missing required resource, a calendar round without a
+race classification - is withheld with a bounded reason, and the previous
+active release keeps serving. A publisher failure is not retried or
+compensated, so last-known-good survives it too.
+
+`retryAt` on a deferred contribution is carried as **data only**. Acting on it
+is **G5 event-aware scheduling, which remains open**, and no persisted
+provenance or provisional/reconciled record state exists - that is **G9**,
+which also remains open.
+
 Outbound requests are pinned to fixed HTTPS origins and documented path
 prefixes, are GET-only, use `redirect: "manual"` and reject every 3xx, carry a
 10-second whole-operation timeout, accept only JSON media types, and cap the
@@ -276,7 +314,13 @@ Logs are structured JSON events for request completion, sync, publication,
 rollback, cache purge, quota-related outcomes and validation failures.
 
 Allowed fields include request ID, operation, route template, HTTP status,
-duration, season, release version and failure category. Phase 9B-3 adds five
+duration, season, release version and failure category. Phase 9B-4 adds nine
+bounded coordination fields (`providerSourceRole`, `coordinationResource`,
+`jobCategory`, `coordinationStatus`, `coordinationOutcome`,
+`coordinationMissing` and the integer run counts), all closed enum members or
+integers. A coordination line never carries a provider payload, a public
+snapshot body, an entity identity, a transport reference, a raw exception or a
+duplicate of the mapping-failure detail below. Phase 9B-3 adds five
 bounded provider-mapping fields (`providerMappingEntity`,
 `providerMappingField`, `providerMappingFailure`,
 `providerMappingKeyProblem` and the internal

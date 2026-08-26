@@ -29,6 +29,23 @@ export interface LogEvent {
   providerLimitingWindow?: string;
   /** Bounded `window kind -> integer remaining`. Never a provider value. */
   providerWindowHeadroom?: Record<string, number>;
+  /** Bounded declared role of a coordinated source: reconciled/provisional. */
+  providerSourceRole?: string;
+  /** Bounded coordinated resource kind. Never a resource payload. */
+  coordinationResource?: string;
+  /** Existing bounded synchronization job category. */
+  jobCategory?: string;
+  /** Bounded contribution or run status. */
+  coordinationStatus?: string;
+  /** Bounded selection or publication outcome. */
+  coordinationOutcome?: string;
+  /** Bounded resource kinds a publishable season was missing. */
+  coordinationMissing?: string[];
+  /** Integer counts for one coordination run. */
+  coordinationPlanned?: number;
+  coordinationSelected?: number;
+  coordinationUnavailable?: number;
+  coordinationNotAttempted?: number;
   /** Bounded entity kind of an unresolved identity: driver/constructor/circuit. */
   providerMappingEntity?: string;
   /** Bounded upstream field name the identity was keyed on. */
