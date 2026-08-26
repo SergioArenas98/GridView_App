@@ -35,3 +35,4 @@ GridView reconstruction.
 | [0019](0019-formula-one-provider-legal-gate.md) | Formula 1 data sources under a public-licence compliance model | Accepted |
 | [0020](0020-provider-source-observation-and-reconciliation.md) | Source observation, reconciled ordering and the settling design | Accepted |
 | [0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md) | Hardened outbound provider boundary and Durable Object rate limiter | Accepted |
+| [0022](0022-curated-provider-identifier-mappings.md) | Curated provider-identifier mapping registry | Accepted |

@@ -192,6 +192,15 @@ recurs every season, while `round` numbers are not stable across seasons.
 - Mid-season additions require an explicit curated mapping before they can be
   published.
 
+The mapping registry itself was added in Phase 9B-3
+([ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)). It does not
+change identity **meaning**, which this document owns: a mapping only points at
+a GridView identity that already exists in a curated registry, and never
+creates, renames or repoints one. Mappings are season-qualified, matched by
+exact typed equality with no normalisation or slug minting, and several
+explicit provider aliases may target one GridView identity. The registry is
+dormant until a provider adapter exists.
+
 ---
 
 ## 5. Type, nullability and time rules

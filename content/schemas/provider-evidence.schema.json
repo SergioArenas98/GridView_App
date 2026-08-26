@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/provider-evidence.schema.json",
+  "title": "GridView approved provider-identity evidence corpus (INTERNAL ONLY)",
+  "description": "The closed set of exact provider identities that are already recorded as evidence inside this repository, per season. It exists so coverage is checked deterministically: scripts/validate-content.mjs fails unless every identity here is either mapped in provider-mappings, or explicitly acknowledged as unmapped with a recorded reason. Adding an identity here without doing one of those two things fails validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schemaVersion",
+    "status",
+    "season",
+    "note",
+    "identities",
+    "acknowledgedUnmapped"
+  ],
+  "properties": {
+    "kind": {
+      "const": "provider-evidence"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/mockStatus"
+    },
+    "note": {
+      "$ref": "provider-mappings.schema.json#/$defs/boundedText"
+    },
+    "season": {
+      "$ref": "common.schema.json#/$defs/season"
+    },
+    "identities": {
+      "description": "Every provider identity the repository already records for this season.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/identity"
+      }
+    },
+    "acknowledgedUnmapped": {
+      "description": "Identities deliberately left unmapped, each with a reviewed reason. An entry here must also appear in identities, and must not be mapped.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/acknowledgement"
+      }
+    }
+  },
+  "$defs": {
+    "identity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "evidence"
+          ],
+          "properties": {
+            "source": {
+              "const": "jolpica"
+            },
+            "entity": {
+              "enum": ["driver", "constructor", "circuit"]
+            },
+            "providerField": {
+              "enum": ["driverId", "constructorId", "circuitId"]
+            },
+            "providerValue": {
+              "$ref": "provider-mappings.schema.json#/$defs/providerString"
+            },
+            "evidence": {
+              "$ref": "provider-mappings.schema.json#/$defs/evidence"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "evidence"
+          ],
+          "properties": {
+            "source": {
+              "const": "openf1"
+            },
+            "entity": {
+              "const": "constructor"
+            },
+            "providerField": {
+              "const": "team_name"
+            },
+            "providerValue": {
+              "$ref": "provider-mappings.schema.json#/$defs/providerString"
+            },
+            "evidence": {
+              "$ref": "provider-mappings.schema.json#/$defs/evidence"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "evidence"
+          ],
+          "properties": {
+            "source": {
+              "const": "openf1"
+            },
+            "entity": {
+              "enum": ["driver", "circuit"]
+            },
+            "providerField": {
+              "enum": ["driver_number", "circuit_key"]
+            },
+            "providerValue": {
+              "$ref": "provider-mappings.schema.json#/$defs/providerInteger"
+            },
+            "evidence": {
+              "$ref": "provider-mappings.schema.json#/$defs/evidence"
+            }
+          }
+        }
+      ]
+    },
+    "acknowledgement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "entity",
+        "providerField",
+        "providerValue",
+        "reason"
+      ],
+      "properties": {
+        "source": {
+          "enum": ["jolpica", "openf1"]
+        },
+        "entity": {
+          "enum": ["driver", "constructor", "circuit"]
+        },
+        "providerField": {
+          "enum": [
+            "driverId",
+            "constructorId",
+            "circuitId",
+            "driver_number",
+            "team_name",
+            "circuit_key"
+          ]
+        },
+        "providerValue": {
+          "oneOf": [
+            {
+              "$ref": "provider-mappings.schema.json#/$defs/providerString"
+            },
+            {
+              "$ref": "provider-mappings.schema.json#/$defs/providerInteger"
+            }
+          ]
+        },
+        "reason": {
+          "description": "Closed set of blocking conditions. Free text is not accepted here, so an acknowledgement cannot be turned into an arbitrary coverage excuse; put the specifics in \"detail\". Every acknowledgement describes one EXACT observed provider identity and must correspond to an entry in \"identities\", so only exact-identity reasons exist. A field-level gap - a provider field for which the repository records no approved value at all, such as OpenF1 circuit_key - cannot be expressed here without fabricating a provider value, and is tracked as gap G-l in GridView_Provider_Evaluation.md instead.",
+          "enum": [
+            "no-canonical-gridview-identity",
+            "identity-pending-curation-review"
+          ]
+        },
+        "detail": {
+          "description": "Human-readable specifics for the reviewer. Never a credential or contract.",
+          "$ref": "provider-mappings.schema.json#/$defs/boundedText"
+        }
+      },
+      "description": "A governance record: an approved identity that is observed but cannot be mapped yet. It is NOT a mapping and never satisfies resolution - the runtime still answers \"unmapped\" and the affected resource still fails closed. It is a temporary blocker that must be removed once a mapping becomes possible."
+    }
+  }
+}

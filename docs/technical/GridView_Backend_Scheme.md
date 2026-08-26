@@ -678,6 +678,45 @@ Recommended JSON forms:
 - Unknown provider entities must fail synchronization validation instead of silently creating unstable IDs.
 - Mid-season additions require an explicit curated mapping.
 
+> **The mechanism is implemented in Phase 9B-3**
+> ([ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)), which
+> closes gap **G8** / **G-e**. **The mapping dataset is a different question
+> and is not complete**: only identifiers already recorded in Provider
+> Evaluation §8 are curated, so live-provider coverage is incomplete and is
+> tracked separately as **G-l**. Any identity without a curated mapping blocks
+> the affected resource. The curated registry lives in
+> version-controlled content (`content/schemas/provider-mappings.schema.json`
+> and `content/seasons/<year>/provider-mappings.development.json`), and the
+> immutable resolver lives in
+> `services/edge-api/src/providers/mappings/`.
+>
+> A mapping is keyed on **season, source, entity kind, exact provider field and
+> exact provider value** together, matched by exact typed equality. Every
+> mapping is season-qualified — required for OpenF1, whose `driver_number` is
+> reassigned between seasons (Provider Evaluation §8.7 M2). No normalization,
+> slug minting or similarity matching exists anywhere in resolution, because
+> joining constructors by name matched only 7 of 11 (§8.5). Several explicit
+> aliases may target one GridView ID; each alias is its own curated record.
+>
+> Validation is structural (JSON Schema 2020-12) **and** semantic
+> (composite-key uniqueness, target existence in the matching curated registry,
+> and coverage of the approved evidence corpus), both inside
+> `npm run validate:content`. One invalid record blocks the whole resolver: no
+> partial index is ever exposed, and there is no last-entry-wins behaviour.
+>
+> An unresolved identity produces one bounded structured event
+> (`failureCategory: provider_mapping_unresolved`) carrying source, season,
+> entity kind, provider field, a closed failure reason and the bounded exact
+> value in an internal diagnostic field only. It never becomes a guessed ID, an
+> empty result or a dropped row.
+>
+> The registry is **dormant**: no adapter consumes it, `PROVIDER_MODE` still
+> admits exactly `mock` and `none`, and the mock provider emits GridView-owned
+> identities so `mock` is not a valid mapping source at all. There is no admin
+> mutation endpoint and no KV, Durable Object or database store — an operator
+> changes the registry through a reviewed repository change
+> ([operations guide](../operations/GridView_Provider_Mapping_Guide.md)).
+
 ---
 
 ## 9. Source-of-truth model

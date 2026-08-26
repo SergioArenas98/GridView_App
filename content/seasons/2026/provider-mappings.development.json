@@ -1,0 +1,79 @@
+{
+  "$schema": "../../schemas/provider-mappings.schema.json",
+  "kind": "provider-mappings",
+  "schemaVersion": 2,
+  "status": "development",
+  "season": 2026,
+  "note": "INTERNAL ONLY. Every provider value below is an exact identifier already recorded in docs/technical/GridView_Provider_Evaluation.md section 8. Matching is byte-for-byte: no case folding, trimming, slugging, transliteration or similarity search is ever applied. Targets are read from the curated GridView registries and are never minted from a provider name. These values must never appear in a public API fixture, response, OpenAPI example or published snapshot. Dormant: no adapter consumes this registry yet.",
+  "mappings": [
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "norris",
+      "gridviewId": "lando-norris",
+      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica driverId slug example; 8.5 identifies Norris as the compared race winner.",
+      "note": "The Jolpica slug is a surname only. It is not derivable from the GridView ID by any rule, which is why the mapping is curated rather than computed."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "mclaren",
+      "gridviewId": "mclaren",
+      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica constructorId slug example."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "mercedes",
+      "gridviewId": "mercedes",
+      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica constructorId slug example; 8.5 constructor championship leader."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "albert_park",
+      "gridviewId": "albert-park",
+      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica circuitId slug example.",
+      "note": "Jolpica separates words with an underscore and GridView with a hyphen. Converting one into the other would be slug minting, which is forbidden; the pair is curated instead."
+    },
+    {
+      "source": "openf1",
+      "entity": "driver",
+      "providerField": "driver_number",
+      "providerValue": 1,
+      "gridviewId": "lando-norris",
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - session_result position 1 carries driver_number 1 and joins to Jolpica's Norris on 25 points over 70 laps.",
+      "note": "Season-qualified deliberately. Number 1 is the reigning champion's per-season choice and is reassigned between seasons (8.7 M2), so it can never be a cross-season key."
+    },
+    {
+      "source": "openf1",
+      "entity": "constructor",
+      "providerField": "team_name",
+      "providerValue": "Mercedes",
+      "gridviewId": "mercedes",
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - championship_teams leader team_name 'Mercedes' on 379 points, agreeing exactly with Jolpica.",
+      "note": "One of the seven of eleven constructors whose name happens to agree between the two sources. It is still an explicit curated entry: agreement today is not a matching rule."
+    },
+    {
+      "source": "openf1",
+      "entity": "constructor",
+      "providerField": "team_name",
+      "providerValue": "Alpine",
+      "gridviewId": "alpine",
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - recorded name disagreement, OpenF1 'Alpine' against Jolpica 'Alpine F1 Team'."
+    },
+    {
+      "source": "openf1",
+      "entity": "constructor",
+      "providerField": "team_name",
+      "providerValue": "Red Bull Racing",
+      "gridviewId": "red-bull",
+      "evidence": "GridView_Provider_Evaluation.md 8.5 - recorded name disagreement, OpenF1 'Red Bull Racing' against Jolpica 'Red Bull'.",
+      "note": "The GridView constructor is named 'Red Bull' in the curated registry, which is the string the other source uses. Neither name is the key; the curated ID is."
+    }
+  ]
+}

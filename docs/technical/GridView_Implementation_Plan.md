@@ -1291,6 +1291,7 @@ architecture and product-risk decision, not as provider approval).
 | Phase 9B entry decisions (E5a, E5b, E6) | **Recorded 2026-08-21** in [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md). Documentation and contract-description only — no adapter, no live request, no infrastructure change. |
 | Phase 9B-1 (source-aware accounting and quota foundation) | **Implemented 2026-08-23** (§14.0.5). Typed provider identity, typed per-source request accounting and per-source locally modelled quota state. No adapter, no request, no deployment. |
 | Phase 9B-2 (outbound hardening and per-provider rate limiter) | **Implemented 2026-08-23** (§14.0.6). One hardened outbound boundary and a Durable Object rate limiter with one identity per real source. No adapter, no request, nothing provisioned or deployed. |
+| Phase 9B-3 (curated provider-identifier mapping registry) | **Implemented 2026-08-25** (§14.0.7). A season-qualified, exactly-matched, fail-closed identifier mapping registry with structural and semantic validation. **Dormant: no adapter consumes it.** No request, nothing deployed. |
 | Next action | **Continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter and the coordinator. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
 
 ### 14.0.1 Product constraints governing Phase 9
@@ -1432,7 +1433,7 @@ was added or changed.**
 |---|---|
 | **G6 - untyped provider call counting** | **Implemented.** The `as unknown as { callCount?: unknown }` cast is gone. `FormulaOneProvider` requires a typed `sourceId`, a `quotaPolicy` and a `requestMetrics()` method, so an adapter that omits telemetry fails to compile rather than silently reporting zero. `SyncResult` keeps its `providerCallCount` lifetime total and adds typed `providerRequests` detail: operation-scoped and lifetime attempt counts, split by canonical source and by synchronization job category, with successful, failed and rate-limited attempts counted separately. A failure and a rate-limit rejection both count as attempted requests. |
 | **G10 / G-k - quota state with the wrong windows and no per-source identity** | **Implemented.** The fixed `dailyLimit` / `dailyRemaining` / `perMinuteLimit` / `perMinuteRemaining` shape is replaced by an extensible per-source window collection carrying usage, remaining capacity, window start and reset, a bounded burst-saturation streak, last provider success and failure, `Retry-After`, usage by job category and a derived warning level. OpenF1 is modelled as per-second and per-minute, Jolpica as per-second and per-hour, and **no adopted source is given a daily bucket**. The mock limits are marked test-only. Persistence is source-specific (`quota:provider:<sourceId>`) in both the memory and KV implementations. |
-| **G4 and every other Phase 9B gap** | **Still open at the end of 9B-1.** G7 - the outbound HTTP helper and the per-provider rate limiter - was subsequently **closed by Phase 9B-2** (§14.0.6); everything below remains open. No provider adapter, no multi-source coordinator, no event-aware scheduling (G5), no production cron (G3/G-b), no provider-ID mapping registry (G8), no reconciliation or provisional/reconciled state (G9), no `sourceObservedAt` / `snapshotRevision` / `snapshotObservedAt` persistence, no operator backlog, no attribution or ShareAlike publication surface. |
+| **G4 and every other Phase 9B gap** | **Still open at the end of 9B-1.** G7 - the outbound HTTP helper and the per-provider rate limiter - was subsequently **closed by Phase 9B-2** (§14.0.6), and G8 - the provider-ID mapping registry - by **Phase 9B-3** (§14.0.7); everything below remains open. No provider adapter, no multi-source coordinator, no event-aware scheduling (G5), no production cron (G3/G-b), no reconciliation or provisional/reconciled state (G9), no `sourceObservedAt` / `snapshotRevision` / `snapshotObservedAt` persistence, no operator backlog, no attribution or ShareAlike publication surface. |
 | Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; production is `"none"`; the mock provider remains the only runtime provider. Canonical source identifiers are internal and never reach a v1 DTO, the OpenAPI schema or a generated fixture. |
 | OpenF1 | **Still fail-closed and still incapable of a real request** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §5). Recording its published window policy is quota modelling, not an unlock: no adapter exists and the session-end bound remains unrecorded. |
 
@@ -1456,7 +1457,7 @@ no Cloudflare resource was provisioned or deployed.**
 |---|---|
 | **G7 - HTTP hardening and rate limiter** | **Implemented.** One hardened outbound boundary supplies every Backend Scheme §23.3 control, and the per-provider rate limiter is a Durable Object with one identity per canonical real source, reserving across every published window atomically. |
 | **G-f - outbound hardening helper** | **Closed** with the same boundary, including Jolpica's mandatory identifying `User-Agent`. |
-| **G4, G5, G8, G9 and everything else** | **Still open.** No Jolpica or OpenF1 adapter, no multi-source coordinator, no event-aware scheduling, no production cron, no provider-ID mapping registry, no reconciliation or provenance persistence, no operator backlog, no attribution or ShareAlike publication surface. |
+| **G4, G5, G9 and everything else** | **Still open at the end of 9B-2.** G8 - the provider-ID mapping registry - was subsequently **closed by Phase 9B-3** (§14.0.7). No Jolpica or OpenF1 adapter, no multi-source coordinator, no event-aware scheduling, no production cron, no reconciliation or provenance persistence, no operator backlog, no attribution or ShareAlike publication surface. |
 | Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; staging is `mock`, production is `none`; the mock provider remains the only runtime provider and stays deterministic and network-free. |
 | OpenF1 | **Still fail-closed** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §5). Recording its origin and published windows is hardening and pacing, not an unlock: no adapter exists and the session-end bound is still unrecorded. |
 | Cloudflare | The `PROVIDER_RATE_LIMITER` Durable Object binding and its SQLite `exports` entry are declared and validated locally. **Nothing is provisioned or deployed**, and while the namespace is unbound every reservation resolves to `unavailable`, so no request can be issued. |
@@ -1476,6 +1477,43 @@ phase reschedules anything.
 The **10-second timeout** and **2 MiB response cap** are chosen engineering
 constants, not published provider figures. They are tunable only while
 preserving the bounded-wait and bounded-memory invariants they enforce.
+
+### 14.0.7 Phase 9B-3 status - the curated provider-identifier mapping registry
+
+Implemented on **2026-08-25**. Curated content, validation and Worker code
+only: **no provider was contacted, no request was made or made possible, and
+nothing was provisioned or deployed.**
+
+| Item | Status |
+|---|---|
+| **G8 / G-e - provider-ID mapping registry (mechanism)** | **Implemented.** A curated, version-controlled, season-qualified registry keyed on season, source, entity kind, exact provider field and exact provider value together, with an immutable typed resolver that fails closed. Backend Scheme §8.1 is satisfied: unknown provider entities fail synchronization validation instead of minting an unstable ID. |
+| Matching | **Exact typed equality only.** The value type is part of the key, so integer `1` is never string `"1"`. No case folding, trimming before lookup, punctuation removal, transliteration, whitespace collapsing, slug generation, substring matching, display-name fallback, fuzzy matching or cross-field fallback exists anywhere in resolution, and a test asserts the modules contain no such primitive. |
+| Validation | **Structural and semantic.** JSON Schema 2020-12 owns one record (closed discriminated union of the six valid combinations, `additionalProperties: false`, bounded strings, no empty or whitespace-padded value, safe-integer bounds, public-ID grammar). Composite-key uniqueness, target existence in the matching curated registry and evidence coverage are enforced semantically, both inside the existing `npm run validate:content`. |
+| Failure mode | **All-or-nothing.** One malformed, duplicated, ambiguous or dangling record means no index is exposed at all and every lookup answers `registry-invalid`. There is no valid subset and no last-entry-wins behaviour. |
+| Operational signal | One bounded structured event (`failureCategory: provider_mapping_unresolved`) carrying source, season, entity kind, provider field and a closed failure reason, plus the bounded exact provider value in a single **internal** diagnostic field. No registry, mapping record, upstream payload or exception body is serialized. |
+| Provider-ID containment | **Unchanged and extended.** Provider identifiers appear only in the curated mapping and evidence content, the internal diagnostic log field and narrowly scoped internal tests. Tests assert they reach no public v1 response, no OpenAPI text, no public fixture, no published snapshot and no Flutter-facing artifact. |
+| Operator workflow | A **reviewed repository change**, documented in [GridView_Provider_Mapping_Guide.md](../operations/GridView_Provider_Mapping_Guide.md). There is no admin mutation endpoint and no KV, Durable Object or database store. |
+| **G-l - mapping dataset coverage** | **Open, and deliberately so.** The mechanism is complete; the dataset is not. Only identifiers already recorded in Provider Evaluation §8 are curated, and five approved identities are explicitly acknowledged as unmapped because no canonical GridView identity exists for them. Every one blocks the affected resource. This is tracked separately from G8 so "the registry works" is never read as "the season is mapped". |
+| **G4, G5, G9 and everything else** | **Still open.** No Jolpica or OpenF1 adapter, no multi-source coordinator, no event-aware scheduling (G5), no production cron (G3/G-b), no reconciliation or provisional/reconciled state (G9), no `sourceObservedAt` / `snapshotRevision` / `snapshotObservedAt` persistence, no operator backlog, no attribution or ShareAlike publication surface. |
+| Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; staging is `mock`, production is `none`. |
+| OpenF1 | **Still fail-closed** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §5). Recording its field names and a driver number is curation, not an unlock. |
+
+**The registry is dormant.** No adapter consumes it, and a test asserts that no
+runtime module outside `src/providers/mappings/` imports it. The mock provider
+emits GridView-owned identities and therefore neither needs nor may have a
+mapping: `mock` is not a member of the mapping-source union at all.
+
+**Coverage is bounded by recorded evidence.** Only identifiers already recorded
+in [GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8 are
+seeded; nothing was fetched, scraped, inferred from a display name or recalled
+from memory. Two of the four §8.5 constructor-name disagreements -
+`Cadillac` and `Racing Bulls` - have **no canonical GridView
+constructor identity** (the curated registry holds six constructors against the
+eleven on the recorded grid), so they are left unmapped with a written reason
+rather than having an ID minted for them. No OpenF1 `circuit_key` value is
+recorded anywhere, so no OpenF1 circuit mapping could be seeded. **This does not
+establish live-provider coverage**, and nothing here authorizes production
+synchronization or public release.
 
 ## 14.1 Objective
 
@@ -1561,9 +1599,14 @@ another source rather than bypassing the requirement.
 - Implement the **OpenF1** adapter, fixture-tested only, behind the
   bound-or-skip gate.
 - Add runtime response validation.
-- Add the **curated provider-ID mapping registry** — mandatory, because 4 of 11
+- ~~Add the **curated provider-ID mapping registry** — mandatory, because 4 of 11
   constructor names differ between the two sources
-  ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.5).
+  ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.5).~~
+  **Done in Phase 9B-3** (§14.0.7,
+  [ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)): season-qualified,
+  exactly matched, fail-closed, structurally and semantically validated. It is
+  **dormant** until an adapter consumes it, and it seeds only identifiers already
+  recorded in §8.
 - Add the **curated maximum-session-duration bound** that unlocks the OpenF1
   path, with an official source and access date. **Until this exists every
   provisional fetch is skipped.**
@@ -1662,7 +1705,13 @@ these are the implementation tasks.
 
 - Jolpica adapter, plus a fixture-tested OpenF1 adapter behind its gate.
 - Reconciliation coordinator with provenance and provisional/reconciled state.
-- Curated provider-ID mapping registry.
+- ~~Curated provider-ID mapping registry.~~ **Mechanism delivered in Phase
+  9B-3** (§14.0.7,
+  [ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)), dormant
+  until an adapter consumes it. **The mapping dataset remains incomplete and
+  is still outstanding work under gap G-l**: eight exact mappings are curated
+  and five approved identities are explicitly acknowledged as unmapped, so any
+  identity outside that set still blocks its resource.
 - Locally modelled quota monitoring (Phase 9B-1) and a per-provider rate
   limiter (Phase 9B-2, [ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
 - Attribution surface in the app and in the public API documentation, held as
@@ -2321,7 +2370,8 @@ Additional documents to create during implementation:
 - Environment configuration guide.
 - API contract.
 - Database schema and migration guide.
-- Data-provider mapping guide.
+- ~~Data-provider mapping guide.~~ **Created in Phase 9B-3**:
+  [`../operations/GridView_Provider_Mapping_Guide.md`](../operations/GridView_Provider_Mapping_Guide.md).
 - Media-rights register.
 - Analytics tracking plan.
 - Test strategy.

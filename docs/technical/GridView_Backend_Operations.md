@@ -276,7 +276,20 @@ Logs are structured JSON events for request completion, sync, publication,
 rollback, cache purge, quota-related outcomes and validation failures.
 
 Allowed fields include request ID, operation, route template, HTTP status,
-duration, season, release version and failure category. Authorization headers,
+duration, season, release version and failure category. Phase 9B-3 adds five
+bounded provider-mapping fields (`providerMappingEntity`,
+`providerMappingField`, `providerMappingFailure`,
+`providerMappingKeyProblem` and the internal
+diagnostic `providerMappingValue`), emitted only under
+`failureCategory: provider_mapping_unresolved`. The first four are closed
+enum members; the fifth is the exact provider identifier, bounded by the
+curated schema and truncated again before it is written. It is the one
+internal diagnostic field a provider identifier may reach, it exists so an
+operator can find the entity to curate
+([mapping guide](../operations/GridView_Provider_Mapping_Guide.md)), and it
+never enters a public response, an OpenAPI example, a fixture, a published
+snapshot or a client-visible cache key. No mapping record, registry dump,
+upstream payload or exception body is ever logged. Authorization headers,
 tokens, provider bodies, full public responses and stack traces are not logged;
 the logger redacts sensitive keys (`authorization`, `adminToken`, `token`,
 `secret`, `providerKey`, `apiKey`, `password`) to `[redacted]`.
