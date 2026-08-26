@@ -1,5 +1,5 @@
 {
-  "note": "Shared parity corpus. Consumed independently by the TypeScript decoder test and the .mjs validator test so the build-time and runtime rule sets cannot drift apart unnoticed. Every case runs in both suites, unfiltered. NaN and Infinity cannot be encoded in JSON, so they stay as explicit TypeScript-only boundary cases in mapping-boundary.test.ts. INTERNAL: these provider values are test fixtures, not curated content.",
+  "note": "Shared parity corpus. Consumed independently by the TypeScript decoder test and the .mjs validator test so the build-time and runtime rule sets cannot drift apart unnoticed. Every case runs in both suites, unfiltered. The 64/65 supplementary-plane boundary cases live here because JSON can encode them and both validators must agree on the Unicode code-point bound. NaN and Infinity cannot be encoded in JSON, so they stay as explicit TypeScript-only boundary cases in mapping-boundary.test.ts. INTERNAL: these provider values are test fixtures, not curated content.",
   "cases": [
     {
       "label": "jolpica driver slug",
@@ -501,6 +501,50 @@
         "entity": "driver",
         "providerField": "driverId",
         "providerValue": "norris"
+      }
+    },
+    {
+      "label": "64 supplementary code points is at the bound",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "constructor",
+        "providerField": "team_name",
+        "providerValue": "🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎"
+      }
+    },
+    {
+      "label": "65 supplementary code points exceeds the bound",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "constructor",
+        "providerField": "team_name",
+        "providerValue": "🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎"
+      }
+    },
+    {
+      "label": "mixed BMP and non-BMP, 64 code points",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "constructor",
+        "providerField": "team_name",
+        "providerValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎"
+      }
+    },
+    {
+      "label": "mixed BMP and non-BMP, 65 code points",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "constructor",
+        "providerField": "team_name",
+        "providerValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎"
       }
     }
   ]

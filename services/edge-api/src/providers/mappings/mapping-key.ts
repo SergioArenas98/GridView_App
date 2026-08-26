@@ -197,10 +197,12 @@ const PUBLIC_ID_MAX_LENGTH = 64;
 const PROVIDER_STRING_MAX_LENGTH = 64;
 
 export function isPublicIdGrammar(value: unknown): value is string {
+  // The grammar itself is ASCII-only, so code points and code units coincide
+  // here; counted the same way as the provider bound for consistency.
   return (
     typeof value === 'string' &&
     value.length > 0 &&
-    value.length <= PUBLIC_ID_MAX_LENGTH &&
+    [...value].length <= PUBLIC_ID_MAX_LENGTH &&
     PUBLIC_ID.test(value)
   );
 }
@@ -213,10 +215,21 @@ export function isPublicIdGrammar(value: unknown): value is string {
  */
 export function isProviderStringValue(value: unknown): value is string {
   if (typeof value !== 'string') return false;
-  if (value.length === 0 || value.length > PROVIDER_STRING_MAX_LENGTH) {
+
+  // Counted in **Unicode code points**, matching JSON Schema `maxLength`.
+  // `String#length` counts UTF-16 code units, so a 40-code-point
+  // supplementary-plane value measures 80 there: the curated schema would
+  // accept it and this predicate would reject it, and because the registry
+  // fails closed as a whole, content that passed `validate:content` could
+  // invalidate the entire runtime registry. The two layers must agree.
+  const codePoints = [...value];
+  if (
+    codePoints.length === 0 ||
+    codePoints.length > PROVIDER_STRING_MAX_LENGTH
+  ) {
     return false;
   }
-  for (const character of value) {
+  for (const character of codePoints) {
     const code = character.codePointAt(0) ?? 0;
     if (code <= 0x1f || code === 0x7f) return false;
   }
@@ -397,6 +410,13 @@ export function validateProviderMappingKey(
 
 /**
  * The canonical lookup key.
+ *
+ * The length prefix is a **UTF-16 code-unit** count (`String#length`), and
+ * that is deliberate: it is a serialization detail, not a validation bound.
+ * The 64-character *acceptance* limit counts Unicode **code points** to match
+ * JSON Schema `maxLength`; the prefix only has to be deterministic and
+ * unambiguous over the already-validated string, which a code-unit count is.
+ * Mixing the two concerns would change the wire key for no benefit.
  *
  * **Length-prefixed, not separator-joined.** An earlier separator-joined form
  * was not injective once any component could contain the separator: a forged

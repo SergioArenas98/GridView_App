@@ -13,6 +13,7 @@ import { heading, printAjvErrors, summarize } from './lib/report.mjs';
 import {
   validateEvidenceCoverage,
   validateMappingDocument,
+  validateSeasonalDocumentSet,
 } from './lib/provider-mapping-rules.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -129,53 +130,48 @@ const evidenceDocuments = parsedByKind.get('provider-evidence') ?? [];
 
 let semanticChecks = 0;
 
-for (const { label, data } of mappingDocuments) {
+// One canonical document of each kind per season, paired one-to-one. Checked
+// before coverage: a duplicate would otherwise let every document after the
+// first bypass the evidence corpus entirely.
+const { problems: structureProblems, mappingsBySeason } =
+  validateSeasonalDocumentSet(mappingDocuments, evidenceDocuments);
+
+for (const problem of structureProblems) {
   semanticChecks += 1;
-  const problems = validateMappingDocument(data, registryIds);
-  if (problems.length === 0) {
-    console.log(`ok   ${label}  (${data.mappings.length} mappings)`);
-  } else {
-    console.error(`FAIL ${label}`);
-    for (const problem of problems) console.error(`  - ${problem}`);
-    failures += 1;
-  }
+  failures += 1;
+  console.error(`FAIL ${problem.label}`);
+  console.error(`  - (root) ${problem.message}`);
 }
 
-// Every season with an evidence corpus must have a mapping document, and the
-// reverse, so a corpus can never be quietly dropped to make coverage pass.
-for (const { label, data } of evidenceDocuments) {
-  semanticChecks += 1;
-  const mapping = mappingDocuments.find(
-    (candidate) => candidate.data.season === data.season,
-  );
-  if (!mapping) {
-    console.error(`FAIL ${label}`);
-    console.error(
-      `  - (root) no provider-mappings document exists for season ${data.season}`,
-    );
-    failures += 1;
-    continue;
+if (structureProblems.length === 0) {
+  for (const { label, data } of mappingDocuments) {
+    semanticChecks += 1;
+    const problems = validateMappingDocument(data, registryIds);
+    if (problems.length === 0) {
+      console.log(`ok   ${label}  (${data.mappings.length} mappings)`);
+    } else {
+      console.error(`FAIL ${label}`);
+      for (const problem of problems) console.error(`  - ${problem}`);
+      failures += 1;
+    }
   }
-  const problems = validateEvidenceCoverage(data, mapping.data);
-  if (problems.length === 0) {
-    console.log(
-      `ok   ${label}  (${data.identities.length} approved identities, ` +
-        `${data.acknowledgedUnmapped.length} acknowledged unmapped)`,
-    );
-  } else {
-    console.error(`FAIL ${label}`);
-    for (const problem of problems) console.error(`  - ${problem}`);
-    failures += 1;
-  }
-}
 
-for (const { label, data } of mappingDocuments) {
-  if (!evidenceDocuments.some((entry) => entry.data.season === data.season)) {
-    console.error(`FAIL ${label}`);
-    console.error(
-      `  - (root) no provider-evidence corpus exists for season ${data.season}`,
-    );
-    failures += 1;
+  for (const { label, data } of evidenceDocuments) {
+    semanticChecks += 1;
+    // Safe: uniqueness and pairing were proven above, so exactly one mapping
+    // document exists for this season.
+    const mapping = mappingsBySeason.get(data.season)[0];
+    const problems = validateEvidenceCoverage(data, mapping.data);
+    if (problems.length === 0) {
+      console.log(
+        `ok   ${label}  (${data.identities.length} approved identities, ` +
+          `${data.acknowledgedUnmapped.length} acknowledged unmapped)`,
+      );
+    } else {
+      console.error(`FAIL ${label}`);
+      for (const problem of problems) console.error(`  - ${problem}`);
+      failures += 1;
+    }
   }
 }
 

@@ -81,10 +81,17 @@ const SEASON_MAX = 2100;
 /** Exact upstream string: bounded, no control character, no edge whitespace. */
 export function isProviderStringValue(value) {
   if (typeof value !== 'string') return false;
-  if (value.length === 0 || value.length > PROVIDER_STRING_MAX_LENGTH) {
+  // Unicode code points, matching JSON Schema `maxLength` and the TypeScript
+  // runtime. `String#length` would count UTF-16 code units and reject a
+  // supplementary-plane value the curated schema accepts.
+  const codePoints = [...value];
+  if (
+    codePoints.length === 0 ||
+    codePoints.length > PROVIDER_STRING_MAX_LENGTH
+  ) {
     return false;
   }
-  for (const character of value) {
+  for (const character of codePoints) {
     const code = character.codePointAt(0) ?? 0;
     if (code <= 0x1f || code === 0x7f) return false;
   }
@@ -242,6 +249,91 @@ export function describeKey({
     ' = ' +
     JSON.stringify(providerValue)
   );
+}
+
+/**
+ * Enforces one canonical seasonal document of each kind, paired one-to-one.
+ *
+ * The runtime imports exactly one mapping document per season, so accepting
+ * several at build time would let a second file diverge from what actually
+ * ships. Merging them would preserve that divergence rather than remove it, so
+ * duplicates are rejected outright.
+ *
+ * This must run **before** coverage: a `.find()` over duplicates silently
+ * checks the first document and lets every other one bypass the evidence
+ * corpus entirely, which is exactly the gap this rule closes.
+ *
+ * `mappingDocuments` and `evidenceDocuments` are `{ label, data }` entries.
+ * Returns `{ problems, mappingsBySeason }`; `problems` is empty when the set is
+ * well-formed. Output order depends only on the season, never on file
+ * discovery order, and no document content is echoed.
+ */
+export function validateSeasonalDocumentSet(
+  mappingDocuments,
+  evidenceDocuments,
+) {
+  const problems = [];
+
+  const group = (documents) => {
+    const bySeason = new Map();
+    for (const entry of documents) {
+      const season = entry.data.season;
+      if (!bySeason.has(season)) bySeason.set(season, []);
+      bySeason.get(season).push(entry);
+    }
+    return bySeason;
+  };
+
+  const mappingsBySeason = group(mappingDocuments);
+  const evidenceBySeason = group(evidenceDocuments);
+
+  const bySeasonOrder = (a, b) => Number(a) - Number(b);
+
+  const reportDuplicates = (bySeason, kind) => {
+    for (const season of [...bySeason.keys()].sort(bySeasonOrder)) {
+      const entries = bySeason.get(season);
+      if (entries.length <= 1) continue;
+      const paths = entries.map((entry) => entry.label).sort();
+      problems.push({
+        label: paths[0],
+        message:
+          'season ' +
+          season +
+          ' has ' +
+          entries.length +
+          ' ' +
+          kind +
+          ' documents; exactly one is allowed: ' +
+          paths.join(', '),
+      });
+    }
+  };
+
+  reportDuplicates(mappingsBySeason, 'provider-mappings');
+  reportDuplicates(evidenceBySeason, 'provider-evidence');
+
+  const seasons = new Set([
+    ...mappingsBySeason.keys(),
+    ...evidenceBySeason.keys(),
+  ]);
+  for (const season of [...seasons].sort(bySeasonOrder)) {
+    const mappings = mappingsBySeason.get(season) ?? [];
+    const evidence = evidenceBySeason.get(season) ?? [];
+    if (mappings.length > 0 && evidence.length === 0) {
+      problems.push({
+        label: mappings[0].label,
+        message: 'no provider-evidence corpus exists for season ' + season,
+      });
+    }
+    if (evidence.length > 0 && mappings.length === 0) {
+      problems.push({
+        label: evidence[0].label,
+        message: 'no provider-mappings document exists for season ' + season,
+      });
+    }
+  }
+
+  return { problems, mappingsBySeason };
 }
 
 /**

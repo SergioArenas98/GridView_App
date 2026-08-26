@@ -119,6 +119,38 @@ describe('the .mjs value predicates match the runtime bounds', () => {
     }
   });
 
+  /**
+   * The build-time half of the Unicode boundary.
+   *
+   * JSON Schema `maxLength` counts Unicode code points, so this predicate must
+   * too. The identical values are asserted against the curated schema and the
+   * TypeScript runtime in
+   * `test/providers/mappings/mapping-unicode-bounds.test.ts`, and both suites
+   * additionally run them through the shared corpus above.
+   */
+  it('counts the provider-string bound in Unicode code points', () => {
+    const astral = String.fromCodePoint(0x1f3ce);
+    const atBound = astral.repeat(64);
+    const overBound = astral.repeat(65);
+
+    // The whole point: 64 code points is 128 UTF-16 code units.
+    expect([...atBound].length).toBe(64);
+    expect(atBound.length).toBe(128);
+
+    expect(isProviderStringValue(atBound)).toBe(true);
+    expect(isProviderStringValue(overBound)).toBe(false);
+
+    // Mixed BMP / non-BMP, and the unchanged ASCII behaviour.
+    expect(isProviderStringValue('a'.repeat(32) + astral.repeat(32))).toBe(
+      true,
+    );
+    expect(isProviderStringValue('a'.repeat(33) + astral.repeat(32))).toBe(
+      false,
+    );
+    expect(isProviderStringValue('a'.repeat(64))).toBe(true);
+    expect(isProviderStringValue('a'.repeat(65))).toBe(false);
+  });
+
   it('bounds the season', () => {
     expect(isSeason(1950)).toBe(true);
     expect(isSeason(2026)).toBe(true);

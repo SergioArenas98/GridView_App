@@ -32,11 +32,15 @@ const DIAGNOSTIC_VALUE_MAX_LENGTH = 64;
 
 function boundedDiagnosticValue(value: string | number): string {
   // Defensive: a caller that casts past the types must not be able to reach
-  // `.slice` on a non-string and throw from inside a logging helper.
+  // string methods on a non-string and throw from inside a logging helper.
   const text = typeof value === 'string' ? value : String(value);
-  return text.length <= DIAGNOSTIC_VALUE_MAX_LENGTH
+  // Truncated by **code point**, so a supplementary character is never split
+  // into a lone surrogate that would render as a replacement character in the
+  // log stream. The bound matches the curated schema's code-point limit.
+  const codePoints = [...text];
+  return codePoints.length <= DIAGNOSTIC_VALUE_MAX_LENGTH
     ? text
-    : `${text.slice(0, DIAGNOSTIC_VALUE_MAX_LENGTH)}...`;
+    : `${codePoints.slice(0, DIAGNOSTIC_VALUE_MAX_LENGTH).join('')}...`;
 }
 
 /**

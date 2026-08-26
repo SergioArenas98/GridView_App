@@ -85,6 +85,7 @@ export interface RegistryProblem {
   readonly reason:
     | 'invalid-record'
     | 'unsupported-document'
+    | 'duplicate-season-document'
     | 'unexpected-property'
     | 'invalid-key-combination'
     | 'invalid-target-grammar'
@@ -229,6 +230,17 @@ export class ProviderMappingRegistry {
   ): ProviderMappingRegistry {
     const problems: RegistryProblem[] = [];
     const index = new Map<string, IndexedTarget>();
+    /**
+     * Seasons already claimed by an accepted document.
+     *
+     * Exactly one curated mapping document per season, matching what
+     * `validate:content` enforces and what the module-scope registry actually
+     * imports. A second same-season document is rejected even when its entries
+     * are disjoint or empty: allowing it would let build-time content diverge
+     * from the single document that ships, and the first would silently shadow
+     * the rest. Different seasons remain independent.
+     */
+    const seasonsSeen = new Set<number>();
 
     documents.forEach((rawDocument, documentIndex) => {
       if (typeof rawDocument !== 'object' || rawDocument === null) {
@@ -260,6 +272,15 @@ export class ProviderMappingRegistry {
         });
         return;
       }
+
+      if (typeof season === 'number' && seasonsSeen.has(season)) {
+        problems.push({
+          at: `documents[${documentIndex}]`,
+          reason: 'duplicate-season-document',
+        });
+        return;
+      }
+      if (typeof season === 'number') seasonsSeen.add(season);
 
       if (!Array.isArray(document.mappings)) {
         problems.push({
