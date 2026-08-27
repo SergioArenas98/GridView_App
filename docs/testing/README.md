@@ -398,7 +398,11 @@ registry.
 Coverage:
 
 - An empty plan performs zero adapter calls; a duplicate logical resource
-  rejects the whole plan with nothing attempted and no accounting written.
+  rejects the whole plan with nothing attempted and no accounting written; an
+  identity carrying a scope its kind does not have is rejected as invalid
+  rather than admitted as a second identity for one resource; a hostile value
+  inside a plan entry is rejected without throwing; and the reported plan
+  problem does not depend on the order the entries arrived in.
 - Each source succeeds independently, and no adapter is ever shown the plan,
   another source's outcome or the selection.
 - A capability violation is rejected **before** the adapter is called, and the
@@ -417,15 +421,22 @@ Coverage:
   mapping failure or an invalid registry blocks only the affected contribution
   and never folds, trims, slugs or guesses an identity; a malformed outcome, a
   well-formed answer to a different question and a thrown adapter error all
-  fail closed without throwing, and nothing from the thrown value survives.
+  fail closed without throwing, and nothing from the thrown value survives; an
+  answer that detonates while it is being read - a throwing accessor, a hostile
+  proxy - is contained as a bounded coordination failure too.
 - Accounting: a limiter deferral stays not attempted and retains `retryAt`; a
   429 stays attempted and source-attributed; each real request is counted
-  exactly once per source and credited to every job category it served; and one
-  request reused for two derived resources is **not** double-counted.
+  exactly once per source and credited to every job category it served; one
+  request reused for two derived resources is **not** double-counted; the same
+  token minted independently by both sources is **not** collapsed and cannot
+  discard either source's contribution; and a same-source token claiming two
+  different attempt outcomes fails the later contribution closed.
 - Cancellation and concurrency: a pre-cancelled run does nothing at all; a
-  mid-run cancellation schedules nothing further and never publishes; the
-  bounded pool never exceeds its ceiling and defaults to sequential; and a run
-  is byte-identical when its operations complete in the opposite order.
+  mid-run cancellation schedules nothing further and never publishes; a
+  deterministic deferred-promise race proves that a saturated pool cancelled
+  with work still unclaimed claims none of it; the bounded pool never exceeds
+  its ceiling and defaults to sequential; and a run is byte-identical when its
+  operations complete in the opposite order.
 - Publication: an incomplete, cancelled or rejected run never reaches the
   publisher; a complete run calls it exactly once; a publisher failure leaves
   the active release unchanged; and last-known-good survives every combination

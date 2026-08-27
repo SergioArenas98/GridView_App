@@ -156,9 +156,18 @@ An outcome carries a bounded **transport reference** identifying the single
 physical request it was derived from. One response legitimately serving several
 derived resources reports the same reference from each, and the coordinator —
 never the adapter — counts it once while crediting every job category it
-served. A reference re-used across different sources or claiming a different
-attempt outcome cannot describe one request, so the later claim fails closed as
-a `coordination-invariant` violation.
+served. The same reference claiming a _different attempt outcome_ cannot
+describe one request, so the later claim fails closed as a
+`coordination-invariant` violation.
+
+A reference is scoped to **its source**. It is a token one adapter mints for
+itself, and by D1 the adapters are independent — neither imports, calls or
+knows about the other — so they share no namespace and cannot agree to avoid
+each other's tokens. The same string arriving from both sources is a
+coincidence, never evidence about one request: the two are never deduplicated
+against each other, never treated as a conflict, and each is counted and
+attributed in full. Scoping the reference is what keeps D8 true, because
+otherwise one source's choice of token could discard the other's candidate.
 
 The reference is never logged. It is a correlation token, bounded at 64 code
 points, and it exists only inside one run.
@@ -190,6 +199,14 @@ rather than canonicalized: a duplicate is a caller defect, and collapsing it
 silently would hide the defect while quietly changing what was asked for.
 Rejection happens before any expansion, so nothing is reserved, nothing is
 called and nothing is counted. There is no last-entry-wins behaviour anywhere.
+
+Duplicates are decided on **semantic identity**, which is why an identity is
+validated as a closed shape: a resource carrying a scope its kind does not have
+names the same logical resource as the same identity without it, so it is
+rejected as invalid rather than admitted as a second identity for one resource.
+Each class of plan violation is also decided over the whole plan before the
+next is considered, so the reported problem depends on the plan's contents and
+a fixed precedence, never on the order the entries arrived in.
 
 ### D10 - Mapping stays a separate fail-closed boundary
 

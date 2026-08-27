@@ -176,11 +176,41 @@ function isRound(value: unknown): value is number {
 }
 
 /**
+ * How many own properties each kind's identity has, exactly.
+ *
+ * An identity is validated as a **closed shape**, not as a set of fields that
+ * merely happen to be present. An extra property is rejected rather than
+ * ignored: `{ kind: 'season-calendar', season: 2026, round: 7 }` names exactly
+ * the same logical resource as `{ kind: 'season-calendar', season: 2026 }`, so
+ * tolerating it would let one logical resource enter a plan twice under two
+ * different identities - defeating duplicate rejection and sending the same
+ * request twice - and would let an unvalidated, unbounded, caller-controlled
+ * value ride along inside a resource identity.
+ */
+const resourceArity: Record<CoordinatedResourceKind, number> = {
+  'season-calendar': 2,
+  'season-participants': 2,
+  'season-circuits': 2,
+  'driver-standings': 2,
+  'constructor-standings': 2,
+  'event-schedule': 3,
+  'session-classification': 4,
+};
+
+function isResourceKind(value: unknown): value is CoordinatedResourceKind {
+  return (
+    typeof value === 'string' &&
+    (coordinatedResourceKinds as readonly string[]).includes(value)
+  );
+}
+
+/**
  * Runtime validation of a resource identity.
  *
  * The caller's types prove the shape, never the runtime contents: `season:
- * number` accepts `NaN`, `-1` and `1.5` just as happily as `2026`. A plan is
- * an input boundary, so it is re-validated here rather than trusted.
+ * number` accepts `NaN`, `-1` and `1.5` just as happily as `2026`, and a
+ * structural type accepts any number of extra properties. A plan is an input
+ * boundary, so it is re-validated here rather than trusted.
  */
 export function isCoordinatedResource(
   value: unknown,
@@ -189,6 +219,8 @@ export function isCoordinatedResource(
     return false;
   }
   const record = value as Record<string, unknown>;
+  if (!isResourceKind(record.kind)) return false;
+  if (Object.keys(record).length !== resourceArity[record.kind]) return false;
   if (!isSeason(record.season)) return false;
   switch (record.kind) {
     case 'season-calendar':
@@ -206,9 +238,20 @@ export function isCoordinatedResource(
           record.sessionType,
         )
       );
-    default:
-      return false;
   }
+}
+
+/** A closed, bounded component. Anything else contributes nothing at all. */
+function scopeComponent(value: unknown): string {
+  return typeof value === 'number' && Number.isSafeInteger(value)
+    ? String(value)
+    : '';
+}
+
+function sessionComponent(value: unknown): string {
+  return (classifiedSessionTypes as readonly unknown[]).includes(value)
+    ? (value as ClassifiedSessionType)
+    : '';
 }
 
 /**
@@ -224,12 +267,28 @@ export function isCoordinatedResource(
  * Nothing is lower-cased, trimmed or otherwise normalized.
  */
 export function resourceKey(resource: CoordinatedResource): string {
+  // Components are chosen by **kind**, never by probing which properties
+  // happen to exist, so an identity that carries a scope its kind does not
+  // have keys identically to the same identity without it, and no
+  // unvalidated value can enter the key or throw while being stringified.
   const components: string[] = [
-    resource.kind,
-    String(resource.season),
-    'round' in resource ? String(resource.round) : '',
-    'sessionType' in resource ? resource.sessionType : '',
+    isResourceKind(resource.kind) ? resource.kind : '',
+    scopeComponent(resource.season),
   ];
+  switch (resource.kind) {
+    case 'event-schedule':
+      components.push(scopeComponent(resource.round), '');
+      break;
+    case 'session-classification':
+      components.push(
+        scopeComponent(resource.round),
+        sessionComponent(resource.sessionType),
+      );
+      break;
+    default:
+      components.push('', '');
+      break;
+  }
   let encoded = '';
   for (const component of components) {
     encoded += component.length + ':' + component + ';';

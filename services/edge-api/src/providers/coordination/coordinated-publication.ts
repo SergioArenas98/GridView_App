@@ -75,8 +75,13 @@ export class CoordinatedSeasonPublication {
         coordinationStatus: run.status,
         coordinationOutcome: 'withheld',
         failureCategory: assembly.gap,
-        // Bounded: closed resource kinds only, never an identity payload.
-        coordinationMissing: assembly.missing.map((resource) => resource.kind),
+        // Bounded twice over: closed resource kinds only - never an identity
+        // payload - and *distinct*, so the field can hold at most one entry
+        // per member of the closed kind union however many resources an
+        // adapter-supplied calendar made unavailable.
+        coordinationMissing: [
+          ...new Set(assembly.missing.map((resource) => resource.kind)),
+        ],
       });
       return {
         outcome: 'withheld',

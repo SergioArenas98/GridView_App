@@ -142,6 +142,21 @@ export type ProviderResourceOutcome =
  */
 export interface ProviderResourcePort {
   readonly sourceId: CoordinatedSourceId;
+  /**
+   * Answers with a typed outcome. **An adapter must not throw**, and in
+   * particular must not throw once transport may have left GridView: an
+   * outcome is the only thing that can report an attempt, so a throw after a
+   * request was issued discards that attempt from the coordinator's summary.
+   *
+   * A throw is therefore an adapter contract violation, and the coordinator
+   * treats it as one: it becomes `adapter-error`, and the coordinator makes
+   * **no claim either way** about whether transport occurred, because it
+   * cannot know. It does not invent an attempt, and the summary is knowingly
+   * an under-report in exactly this defect case. Nothing is unsafe about that
+   * here - the Durable Object reservation ledger is the pacing authority and
+   * already holds any slot a real request consumed, since capacity is
+   * reserved before transport and never returned.
+   */
   fetchResource(
     request: ProviderResourceRequest,
   ): Promise<ProviderResourceOutcome>;

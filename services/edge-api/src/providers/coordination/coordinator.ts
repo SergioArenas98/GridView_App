@@ -331,7 +331,18 @@ export class MultiSourceCoordinator {
 
     operations.forEach((operation, index) => {
       const result = results[index] ?? { kind: 'not-executed' as const };
-      list.push(this.contributionFor(operation, result, transports));
+      try {
+        list.push(this.contributionFor(operation, result, transports));
+      } catch {
+        // Reading the adapter's own answer threw - an accessor, a proxy or an
+        // exotic object. Nothing it claims can be believed, including any
+        // attempt, so it fails closed as malformed and is never counted. This
+        // is what keeps "nothing here can throw" true for a hostile value and
+        // not merely for a badly shaped one.
+        list.push(
+          contribution(operation, 'failed', false, 'malformed-outcome'),
+        );
+      }
     });
 
     return { list, metrics: toMetrics(transports) };
@@ -445,14 +456,42 @@ function select(
 }
 
 /**
- * Registers one transport attempt, returning `true` when the reference
- * conflicts with an already-registered one.
+ * The identity of one physical request: its **source and** its reference.
  *
- * A repeated reference from the **same** source with the **same** outcome is
+ * A transport reference is a token one adapter generates for itself. Adapters
+ * are independent by construction - neither imports, calls or knows about the
+ * other - so they share no namespace and cannot agree to avoid each other's
+ * tokens. Two sources emitting the same token is therefore an ordinary
+ * coincidence, never evidence about one request, and the two must not be able
+ * to interact at all. Length-prefixed for the same injectivity-by-
+ * construction reason as `resourceKey`.
+ */
+function transportKey(source: CoordinatedSourceId, reference: string): string {
+  return (
+    source.length +
+    ':' +
+    source +
+    ';' +
+    reference.length +
+    ':' +
+    reference +
+    ';'
+  );
+}
+
+/**
+ * Registers one transport attempt, returning `true` when the claim conflicts
+ * with an already-registered one **from the same source**.
+ *
+ * A repeated reference from the same source with the same outcome is
  * legitimate: one request served more than one derived resource, and it is
- * counted once while contributing its job category to that single attempt.
- * A repeated reference claiming a different source or a different outcome
- * cannot both be true, so the later claim fails closed.
+ * counted once while contributing its job category to that single attempt. The
+ * same reference claiming a different outcome cannot describe one request, so
+ * the later claim fails closed.
+ *
+ * The same reference from a *different* source is never deduplicated and never
+ * treated as a conflict: they are two independent physical requests, each
+ * counted and attributed in full.
  */
 function registerTransport(
   transports: Map<string, TransportRecord>,
@@ -462,19 +501,17 @@ function registerTransport(
     readonly outcome: ProviderAttemptOutcome;
   },
 ): boolean {
-  const existing = transports.get(attempt.reference);
+  const key = transportKey(operation.source, attempt.reference);
+  const existing = transports.get(key);
   if (existing === undefined) {
-    transports.set(attempt.reference, {
+    transports.set(key, {
       source: operation.source,
       outcome: attempt.outcome,
       jobCategories: new Set([operation.jobCategory]),
     });
     return false;
   }
-  if (
-    existing.source !== operation.source ||
-    existing.outcome !== attempt.outcome
-  ) {
+  if (existing.outcome !== attempt.outcome) {
     return true;
   }
   existing.jobCategories.add(operation.jobCategory);
@@ -537,10 +574,20 @@ function notAttempted(
  * with nothing attempted, which no partial execution can do.
  */
 function validatePlan(plan: CoordinationPlan): PlanProblem | null {
-  const seen = new Set<string>();
+  // Each class of violation is decided over the whole plan before the next is
+  // considered, so the reported problem is a property of the plan's contents
+  // and a fixed precedence - never of the order the entries happen to be in.
+  // It also means the duplicate key set is only ever built for a plan whose
+  // every entry is already a validated, in-season, closed-shape identity, so
+  // nothing unbounded or caller-shaped can be accumulated here.
   for (const resource of plan.resources) {
     if (!isCoordinatedResource(resource)) return 'invalid-resource';
+  }
+  for (const resource of plan.resources) {
     if (resource.season !== plan.season) return 'season-mismatch';
+  }
+  const seen = new Set<string>();
+  for (const resource of plan.resources) {
     const key = resourceKey(resource);
     if (seen.has(key)) return 'duplicate-resource';
     seen.add(key);

@@ -132,6 +132,79 @@ describe('cancellation performs and publishes nothing', () => {
     expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
   });
 
+  it('claims no further work once cancellation is observed, at full concurrency', async () => {
+    // A deterministic race: every operation parks on a deferred promise, so
+    // the pool is provably saturated and the cursor provably has entries left
+    // when the abort happens. Nothing is timing-dependent.
+    const source = await seasonFixture();
+    const resources: CoordinatedResource[] = [
+      raceResource(12),
+      raceResource(13),
+      raceResource(14),
+      raceResource(15),
+      raceResource(16),
+      raceResource(17),
+      raceResource(18),
+      raceResource(19),
+    ];
+    const gates: (() => void)[] = [];
+    let started = 0;
+    let saturated: () => void = () => {};
+    const saturation = new Promise<void>((resolve) => {
+      saturated = resolve;
+    });
+
+    const port = new FakePort('jolpica', async (request) => {
+      started += 1;
+      const sequence = started;
+      if (started === maxAllowedConcurrentOperations) saturated();
+      await new Promise<void>((resolve) => gates.push(resolve));
+      const payload = payloadFor(source, request.resource);
+      if (payload === null) throw new Error('fixture gap');
+      return {
+        outcome: 'candidate',
+        attempt: attempt(`j-${sequence}`),
+        payload,
+      };
+    });
+
+    const controller = new AbortController();
+    const { subject } = coordinator([port], maxAllowedConcurrentOperations);
+    const pending = subject.coordinate({
+      plan: { season: SEASON, resources },
+      signal: controller.signal,
+    });
+
+    await saturation;
+    expect(port.requests).toHaveLength(maxAllowedConcurrentOperations);
+
+    // Cancel while the pool is full and six operations remain unclaimed, then
+    // release the in-flight work. Each released worker must observe the abort
+    // and stop rather than claim the next index.
+    controller.abort();
+    for (const release of gates) release();
+    const run = await pending;
+
+    expect(port.requests).toHaveLength(maxAllowedConcurrentOperations);
+    expect(port.peakInFlight).toBeLessThanOrEqual(
+      maxAllowedConcurrentOperations,
+    );
+    expect(run.status).toBe('cancelled');
+    // The four that were already in flight are honoured; nothing after them.
+    expect(run.accounting.lifetime.total).toBe(maxAllowedConcurrentOperations);
+    expect(run.counts.attempted).toBe(maxAllowedConcurrentOperations);
+    const cancelled = run.resources.filter((resource) =>
+      resource.contributions.some(
+        (contribution) =>
+          contribution.source === 'jolpica' &&
+          contribution.reason === 'cancelled',
+      ),
+    );
+    expect(cancelled).toHaveLength(
+      resources.length - maxAllowedConcurrentOperations,
+    );
+  });
+
   it('propagates the caller signal to the port, not a substitute', async () => {
     const source = await seasonFixture();
     const controller = new AbortController();

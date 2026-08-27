@@ -324,6 +324,87 @@ describe('a defective adapter fails closed instead of throwing', () => {
     expect(source.calendar.length).toBeGreaterThan(0);
   });
 
+  it('contains an adapter answer that throws while being read', async () => {
+    // The answer is an object, so nothing about it is caught by the try around
+    // `fetchResource`; it detonates later, while the coordinator is reading
+    // it. Hostile or merely exotic, it must fail closed like any other
+    // malformed outcome rather than escape the coordinator.
+    const hostile: [unknown, string][] = [
+      [
+        {
+          outcome: 'candidate',
+          attempt: { reference: 'r', outcome: 'successful' },
+          get payload() {
+            throw new Error('hostile payload accessor');
+          },
+        },
+        'malformed-outcome',
+      ],
+      [
+        {
+          get outcome() {
+            throw new Error('hostile discriminant accessor');
+          },
+        },
+        'malformed-outcome',
+      ],
+      [
+        // Detonates on every property read, including the `then` lookup the
+        // adapter call itself performs, so it is contained one layer earlier.
+        new Proxy(
+          {},
+          {
+            get() {
+              throw new Error('hostile proxy');
+            },
+          },
+        ),
+        'adapter-error',
+      ],
+    ];
+
+    for (const [answer, expected] of hostile) {
+      const port = new FakePort(
+        'jolpica',
+        () => answer as ProviderResourceOutcome,
+      );
+      const run = await coordinate([port], [CALENDAR]);
+
+      expect(run.status).toBe('completed');
+      expect(run.resources[0]?.selection.outcome).toBe('unavailable');
+      expect(run.resources[0]?.contributions[0]?.reason).toBe(expected);
+      expect(run.resources[0]?.contributions[0]?.attempted).toBe(false);
+      expect(run.accounting.lifetime.total).toBe(0);
+    }
+  });
+
+  it('keeps an unrelated resource healthy beside a detonating answer', async () => {
+    const source = await seasonFixture();
+    const port = new FakePort('jolpica', (request) => {
+      if (request.resource.kind === 'season-calendar') {
+        return {
+          outcome: 'candidate',
+          attempt: { reference: 'r', outcome: 'successful' },
+          get payload(): never {
+            throw new Error('hostile payload accessor');
+          },
+        } as unknown as ProviderResourceOutcome;
+      }
+      const payload = payloadFor(source, request.resource);
+      if (payload === null) throw new Error('fixture gap');
+      return { outcome: 'candidate', attempt: attempt('j-2'), payload };
+    });
+
+    const run = await coordinate([port], [CALENDAR, raceResource(12)]);
+
+    expect(run.resources[0]?.selection.outcome).toBe('unavailable');
+    expect(run.resources[1]?.selection).toMatchObject({
+      outcome: 'selected',
+      source: 'jolpica',
+    });
+    expect(run.counts.selected).toBe(1);
+  });
+
   it('rejects a well-formed answer to a different question', async () => {
     const source = await seasonFixture();
     const wrongResource = new FakePort('jolpica', () => ({

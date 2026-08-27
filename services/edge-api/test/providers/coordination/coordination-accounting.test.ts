@@ -204,7 +204,11 @@ describe('an attempted request is counted exactly once', () => {
     const source = await seasonFixture();
     const payload = payloadFor(source, RACE);
     if (payload === null) throw new Error('fixture gap');
-    // The same token from two different sources cannot describe one request.
+    // A transport reference is a token one adapter mints for itself. The two
+    // adapters are independent, so they share no namespace and cannot avoid
+    // each other's tokens: the same string from both is a coincidence, not a
+    // claim about one request. Neither deduplicated, nor treated as a
+    // conflict - two real requests, counted twice and attributed separately.
     const jolpica = new FakePort('jolpica', () => ({
       outcome: 'candidate',
       attempt: attempt('shared'),
@@ -225,7 +229,101 @@ describe('an attempted request is counted exactly once', () => {
       (entry) => entry.source === 'openf1',
     );
 
-    expect(provisional?.reason).toBe('coordination-invariant');
+    expect(provisional?.status).toBe('candidate');
+    expect(provisional?.reason).toBeNull();
+    expect(provisional?.attempted).toBe(true);
+    expect(run.accounting.bySource).toEqual({
+      jolpica: { total: 1, successful: 1, failed: 0, rateLimited: 0 },
+      openf1: { total: 1, successful: 1, failed: 0, rateLimited: 0 },
+    });
+    expect(run.accounting.lifetime.total).toBe(2);
+    // The reconciled source still wins the resource itself.
+    expect(run.resources[0]?.selection).toMatchObject({
+      outcome: 'selected',
+      source: 'jolpica',
+      role: 'reconciled',
+    });
+  });
+
+  it('never lets one source’s token collapse another source’s request', async () => {
+    const source = await seasonFixture();
+    const A = RACE;
+    const B = STANDINGS;
+    // The reconciled source happens to mint, for resource B, the very token
+    // the provisional source already used for resource A. Before this was
+    // scoped by source, that coincidence discarded the reconciled candidate
+    // and let the provisional one be selected in its place.
+    let issued = 0;
+    const jolpica = new FakePort('jolpica', (request) => {
+      issued += 1;
+      const payload = payloadFor(source, request.resource);
+      if (payload === null) throw new Error('fixture gap');
+      return {
+        outcome: 'candidate',
+        attempt: attempt(issued === 1 ? 'j-1' : 'collision'),
+        payload,
+      };
+    });
+    let provisionalIssued = 0;
+    const openf1 = new FakePort('openf1', (request) => {
+      provisionalIssued += 1;
+      const payload = payloadFor(source, request.resource);
+      if (payload === null) throw new Error('fixture gap');
+      return {
+        outcome: 'candidate',
+        attempt: attempt(provisionalIssued === 1 ? 'collision' : 'o-2'),
+        payload,
+      };
+    });
+
+    const run = await coordinate(
+      [jolpica, openf1],
+      [A, B],
+      testOnlyProvisionalBound,
+    );
+
+    for (const resource of run.resources) {
+      expect(resource.selection).toMatchObject({
+        outcome: 'selected',
+        source: 'jolpica',
+        role: 'reconciled',
+      });
+      for (const contribution of resource.contributions) {
+        expect(contribution.reason).not.toBe('coordination-invariant');
+      }
+    }
+    // Four physical requests: two per source, none collapsed into another's.
+    expect(jolpica.requests).toHaveLength(2);
+    expect(openf1.requests).toHaveLength(2);
+    expect(run.accounting.lifetime.total).toBe(4);
+    expect(run.counts.attempted).toBe(4);
+  });
+
+  it('still fails a same-source reference claiming two outcomes closed', async () => {
+    const source = await seasonFixture();
+    const payload = payloadFor(source, RACE);
+    if (payload === null) throw new Error('fixture gap');
+    let call = 0;
+    // One source, one token, two contradictory claims about how the single
+    // request it names ended. Both cannot be true, so the later fails closed.
+    const jolpica = new FakePort('jolpica', () => {
+      call += 1;
+      return call === 1
+        ? { outcome: 'candidate', attempt: attempt('one'), payload }
+        : {
+            outcome: 'failed',
+            attempt: attempt('one', 'failed'),
+            reason: 'provider-unavailable',
+          };
+    });
+
+    const run = await coordinate([jolpica], [RACE, STANDINGS]);
+    const second = run.resources[1]?.contributions.find(
+      (entry) => entry.source === 'jolpica',
+    );
+
+    expect(second?.reason).toBe('coordination-invariant');
+    expect(second?.attempted).toBe(false);
     expect(run.accounting.bySource).toEqual({
       jolpica: { total: 1, successful: 1, failed: 0, rateLimited: 0 },
     });

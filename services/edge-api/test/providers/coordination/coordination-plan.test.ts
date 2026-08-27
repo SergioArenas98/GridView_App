@@ -136,6 +136,106 @@ describe('a plan is validated before anything is executed', () => {
     expect(reconciled.requests).toHaveLength(0);
   });
 
+  it('rejects an identity carrying a scope its kind does not have', async () => {
+    const source = await seasonFixture();
+    const reconciled = completePort('jolpica', source);
+    const { subject } = coordinator([reconciled]);
+
+    // The same logical resource wearing an extra property. Tolerating it would
+    // let one resource enter a plan twice under two identities, so it is
+    // rejected outright rather than ignored.
+    const twin = {
+      kind: 'season-calendar',
+      season: SEASON,
+      round: 3,
+    } as unknown as CoordinatedResource;
+
+    expect(isCoordinatedResource(twin)).toBe(false);
+    expect(
+      isCoordinatedResource({
+        kind: 'event-schedule',
+        season: SEASON,
+        round: 3,
+        sessionType: 'race',
+      }),
+    ).toBe(false);
+
+    const run = await subject.coordinate({
+      plan: {
+        season: SEASON,
+        resources: [{ kind: 'season-calendar', season: SEASON }, twin],
+      },
+    });
+
+    expect(run.planProblem).toBe('invalid-resource');
+    expect(run.status).toBe('plan-rejected');
+    expect(reconciled.requests).toHaveLength(0);
+    expect(run.accounting.lifetime.total).toBe(0);
+  });
+
+  it('never throws on a hostile value inside a plan entry', async () => {
+    const source = await seasonFixture();
+    const reconciled = completePort('jolpica', source);
+    const { subject } = coordinator([reconciled]);
+
+    const hostile: unknown[] = [
+      {
+        kind: 'season-circuits',
+        season: SEASON,
+        round: {
+          toString: () => {
+            throw new Error('boom');
+          },
+        },
+      },
+      {
+        kind: 'season-calendar',
+        season: SEASON,
+        sessionType: 'x'.repeat(5000),
+      },
+      { kind: 'event-schedule', season: SEASON, round: Symbol('round') },
+      {
+        kind: 'session-classification',
+        season: SEASON,
+        round: 1,
+        sessionType: {
+          toString: () => {
+            throw new Error('boom');
+          },
+        },
+      },
+    ];
+
+    for (const resource of hostile) {
+      const run = await subject.coordinate({
+        plan: { season: SEASON, resources: [resource as CoordinatedResource] },
+      });
+      expect(run.planProblem).toBe('invalid-resource');
+      expect(run.resources).toEqual([]);
+    }
+    expect(reconciled.requests).toHaveLength(0);
+  });
+
+  it('reports the same problem however the entries are ordered', async () => {
+    const source = await seasonFixture();
+    const reconciled = completePort('jolpica', source);
+    const { subject } = coordinator([reconciled]);
+
+    const invalid = { kind: 'telemetry', season: SEASON } as never;
+    const duplicated = raceResource(12);
+    const forwards = await subject.coordinate({
+      plan: { season: SEASON, resources: [invalid, duplicated, duplicated] },
+    });
+    const backwards = await subject.coordinate({
+      plan: { season: SEASON, resources: [duplicated, duplicated, invalid] },
+    });
+
+    expect(forwards.planProblem).toBe('invalid-resource');
+    expect(backwards.planProblem).toBe(forwards.planProblem);
+    expect(backwards.status).toBe(forwards.status);
+    expect(reconciled.requests).toHaveLength(0);
+  });
+
   it('validates identity contents, not just declared shape', () => {
     expect(
       isCoordinatedResource({ kind: 'season-calendar', season: 2026 }),

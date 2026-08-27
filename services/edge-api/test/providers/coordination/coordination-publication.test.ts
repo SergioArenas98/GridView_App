@@ -12,6 +12,7 @@ import {
   CoordinatedSeasonPublication,
   MultiSourceCoordinator,
   assembleSeasonSource,
+  coordinatedResourceKinds,
   type CoordinatedResource,
   type CoordinationRun,
   type ProviderResourceOutcome,
@@ -217,6 +218,45 @@ describe('an incomplete run never reaches the publisher', () => {
       expect(harness.publishCalls, scenario.name).toBe(0);
       expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
     }
+  });
+
+  it('bounds the withheld signal however much went missing', async () => {
+    const source = await seasonFixture();
+    // Every round is planned and every one fails, so `missing` is as long as
+    // the calendar - which is adapter-supplied data, not a bounded quantity.
+    // The log line must stay bounded by the closed resource-kind union.
+    const run = await coordinate(
+      [
+        new FakePort('jolpica', () => ({
+          outcome: 'failed',
+          attempt: attempt('j-fail', 'failed'),
+          reason: 'provider-unavailable',
+        })),
+      ],
+      fullPlan(source).resources,
+    );
+    const harness = publicationHarness();
+
+    const outcome = await new CoordinatedSeasonPublication({
+      publisher: harness.publisher,
+      logger: harness.logger,
+    }).publish(run, metadataFor(source), GENERATED_AT, 'release-y');
+
+    expect(outcome.outcome).toBe('withheld');
+    if (outcome.outcome !== 'withheld') throw new Error('unreachable');
+    expect(outcome.missing.length).toBe(fullPlan(source).resources.length);
+
+    const withheld = harness.logger.events.find(
+      (event) => event.coordinationOutcome === 'withheld',
+    );
+    const logged = withheld?.coordinationMissing as string[];
+    expect(logged.length).toBeLessThan(outcome.missing.length);
+    expect(new Set(logged).size).toBe(logged.length);
+    expect(logged.length).toBeLessThanOrEqual(coordinatedResourceKinds.length);
+    for (const kind of logged) {
+      expect(coordinatedResourceKinds as readonly string[]).toContain(kind);
+    }
+    expect(harness.publishCalls).toBe(0);
   });
 
   it('withholds a rejected plan without touching the publisher', async () => {

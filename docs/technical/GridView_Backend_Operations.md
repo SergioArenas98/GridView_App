@@ -314,7 +314,7 @@ Logs are structured JSON events for request completion, sync, publication,
 rollback, cache purge, quota-related outcomes and validation failures.
 
 Allowed fields include request ID, operation, route template, HTTP status,
-duration, season, release version and failure category. Phase 9B-4 adds nine
+duration, season, release version and failure category. Phase 9B-4 adds ten
 bounded coordination fields (`providerSourceRole`, `coordinationResource`,
 `jobCategory`, `coordinationStatus`, `coordinationOutcome`,
 `coordinationMissing` and the integer run counts), all closed enum members or
