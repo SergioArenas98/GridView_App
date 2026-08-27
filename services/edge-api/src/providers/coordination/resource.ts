@@ -307,6 +307,37 @@ function isArrayOfObjects(value: unknown): boolean {
 }
 
 /**
+ * True when every entry of a collection is an object whose `season` is
+ * **exactly** the requested season.
+ *
+ * A source is asked for one season. A collection that carries entries for
+ * another one does not answer that question, and the layers below cannot catch
+ * it: season assembly copies a selected collection into the season source
+ * verbatim, and the snapshot validator checks each entry against its own
+ * schema rather than against the season it is being published under. So this
+ * is the boundary where the request and the answer are still both in hand.
+ *
+ * Three deliberate properties:
+ *
+ * - **No coercion.** `===` against an already-validated integer, so `'2026'`,
+ *   `2026.5`, `NaN` and a missing field are all mismatches. Nothing is parsed,
+ *   trimmed, rounded or defaulted.
+ * - **One bad entry rejects the whole collection.** A partially correct
+ *   collection is not a smaller correct one.
+ * - **No filtering.** Publishing the matching subset would silently answer a
+ *   narrower question than the one asked and would look like a complete
+ *   season, so the contribution fails closed instead.
+ */
+function everyEntryInSeason(value: unknown, season: number): boolean {
+  return (
+    isArrayOfObjects(value) &&
+    (value as Record<string, unknown>[]).every(
+      (entry) => entry.season === season,
+    )
+  );
+}
+
+/**
  * True when `payload` is a structurally sound contribution **for this exact
  * resource**.
  *
@@ -314,10 +345,18 @@ function isArrayOfObjects(value: unknown): boolean {
  *
  * 1. The payload's discriminant equals the resource kind, so a standings
  *    payload can never be selected as a calendar.
- * 2. The payload's own scope fields agree with the requested identity - the
- *    round of an event schedule, and the season, round and session type of a
- *    classification. An adapter that answers a different question than the one
- *    it was asked is a malformed outcome, not a candidate.
+ * 2. Every identity field the payload's own normalized contract carries agrees
+ *    with the requested identity: the season of each calendar event, standing
+ *    and season entry, the round of an event schedule, and the season, round
+ *    and session type of a classification. An adapter that answers a different
+ *    question than the one it was asked is a malformed outcome, not a
+ *    candidate - and a collection that answers the right question for only
+ *    some of its entries is rejected whole, never filtered down to the subset
+ *    that happens to match.
+ *
+ * An identity field is required only where the normalized contract actually
+ * has one. Driver, constructor and circuit profiles are season-independent by
+ * contract, so nothing is demanded of them and no DTO is widened to invent it.
  *
  * Deep contract validation stays with the adapter, which is the component that
  * normalizes provider data. This is the coordinator's own containment check:
@@ -334,24 +373,25 @@ export function payloadMatchesResource(
 
   switch (resource.kind) {
     case 'season-calendar':
-      return (
-        isArrayOfObjects(record.events) &&
-        (record.events as GrandPrix[]).every(
-          (event) => event.season === resource.season,
-        )
-      );
+      return everyEntryInSeason(record.events, resource.season);
     case 'season-participants':
+      // A driver and a constructor are season-independent profiles: neither
+      // carries a season in the normalized contract, so none is demanded of
+      // them. The two *entry* collections beside them are the season-scoped
+      // half of this payload, and both are bound.
       return (
         isArrayOfObjects(record.drivers) &&
         isArrayOfObjects(record.constructors) &&
-        isArrayOfObjects(record.driverEntries) &&
-        isArrayOfObjects(record.constructorEntries)
+        everyEntryInSeason(record.driverEntries, resource.season) &&
+        everyEntryInSeason(record.constructorEntries, resource.season)
       );
     case 'season-circuits':
+      // A circuit carries no season either. Widening the DTO to create an
+      // identity field this seam could check is not this seam's business.
       return isArrayOfObjects(record.circuits);
     case 'driver-standings':
     case 'constructor-standings':
-      return isArrayOfObjects(record.standings);
+      return everyEntryInSeason(record.standings, resource.season);
     case 'event-schedule':
       return (
         record.round === resource.round && isArrayOfObjects(record.sessions)

@@ -182,6 +182,27 @@ function isAttempt(value: unknown): value is ProviderTransportAttempt {
 }
 
 /**
+ * A `candidate` may only rest on an attempt that says the transport
+ * **succeeded**.
+ *
+ * The two halves of a candidate are claims about the same request: the payload
+ * says "here is usable data" and the attempt says how the request that
+ * produced it ended. `candidate` with a `failed` or `rate-limited` attempt
+ * describes no possible run - a request that failed returned nothing to
+ * normalize, and a rate-limited one was refused - so believing either half
+ * would mean selecting, and possibly publishing, a payload while the run's own
+ * accounting simultaneously recorded that its request did not succeed.
+ *
+ * A response that arrived and then failed *after* transport is already
+ * expressible without this contradiction: `failed` with `invalid-payload`, or
+ * `mapping-failure`, both of which keep their `successful` attempt and are
+ * counted as the request they were.
+ */
+function isSuccessfulAttempt(value: unknown): boolean {
+  return isAttempt(value) && value.outcome === 'successful';
+}
+
+/**
  * A syntactically valid absolute UTC instant, round-tripped.
  *
  * A retry hint is data a future scheduler may consume, so a lax string that
@@ -203,6 +224,12 @@ export function isInstant(value: unknown): value is string {
  * outcome must fail closed as an unavailable contribution, never throw out of
  * the coordinator and never be partially believed.
  *
+ * An outcome must also be **internally consistent**: a variant's own attempt
+ * record has to describe a request that could have produced it. A `candidate`
+ * therefore requires a `successful` attempt, so an outcome that claims usable
+ * data while reporting that its transport failed or was rate-limited fails
+ * closed here rather than being selected.
+ *
  * The payload's match against the requested resource is checked separately by
  * `payloadMatchesResource`, so a structurally valid outcome carrying the wrong
  * resource's data is still rejected.
@@ -214,7 +241,13 @@ export function isWellFormedOutcome(value: unknown): boolean {
   const record = value as Record<string, unknown>;
   switch (record.outcome) {
     case 'candidate':
-      return isAttempt(record.attempt) && typeof record.payload === 'object';
+      // A contradictory candidate is a coordination failure, not an attempted
+      // one: nothing the outcome claims can be believed, including its own
+      // attempt record, so no request activity is invented from it either.
+      return (
+        isSuccessfulAttempt(record.attempt) &&
+        typeof record.payload === 'object'
+      );
     case 'not-attempted':
       return (
         (notAttemptedReasons as readonly unknown[]).includes(record.reason) &&
