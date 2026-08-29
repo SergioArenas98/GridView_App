@@ -187,7 +187,12 @@ describe('hasResults matches the selected race result exactly', () => {
           ? { ...event, status: 'scheduled' as const, hasResults: false }
           : {
               ...event,
-              status: 'completed' as const,
+              // Only the genuinely classified round may be completed; a
+              // completed round without a classification blocks publication.
+              status:
+                event.round === classified
+                  ? ('completed' as const)
+                  : event.status,
               hasResults: event.round === classified,
             },
       ),

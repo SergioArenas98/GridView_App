@@ -105,7 +105,11 @@ export type {
   SeasonSnapshotMetadata,
 } from './season-assembly';
 
-export { seasonRelations, validateSeasonReferences } from './season-integrity';
+export {
+  isClassifiedResult,
+  seasonRelations,
+  validateSeasonReferences,
+} from './season-integrity';
 export type { SeasonRelation } from './season-integrity';
 
 export {

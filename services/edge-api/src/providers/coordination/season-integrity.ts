@@ -86,7 +86,7 @@ export type SeasonRelation = (typeof seasonRelations)[number];
  * nothing, so neither may assert availability. This is the same
  * fail-towards-not-fabricating rule the event-status table uses.
  */
-function isClassified(status: ResultStatus): boolean {
+export function isClassifiedResult(status: ResultStatus): boolean {
   return status === 'final' || status === 'provisional';
 }
 
@@ -285,7 +285,7 @@ export function validateSeasonReferences(
   // closed as a whole.
   const classifiedRounds = new Set(
     source.results
-      .filter((result) => isClassified(result.status))
+      .filter((result) => isClassifiedResult(result.status))
       .map((result) => result.round),
   );
   for (const event of source.calendar) {

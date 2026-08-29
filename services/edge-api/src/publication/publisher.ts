@@ -443,9 +443,21 @@ export class SnapshotPublisher {
       'calendar',
     );
     if (Array.isArray(calendar?.data)) {
-      for (const event of calendar.data as Array<{ round?: number }>) {
-        if (typeof event.round === 'number') {
-          out.push(`grand-prix:${event.round}`);
+      // Mirror what publication actually generates. Every event has a detail
+      // document, but a results document exists only where the calendar
+      // advertises a classification - the generator emits one only when a
+      // classification exists, and the cross-resource preflight binds
+      // `hasResults` to `final` or `provisional`. Demanding one for every round
+      // would make a perfectly valid active-season release unreachable as a
+      // rollback target, while a completed classified round still cannot evade
+      // the check, because its own flag is what requires the document.
+      for (const event of calendar.data as Array<{
+        round?: number;
+        hasResults?: unknown;
+      }>) {
+        if (typeof event.round !== 'number') continue;
+        out.push(`grand-prix:${event.round}`);
+        if (event.hasResults === true) {
           out.push(`grand-prix:${event.round}:results`);
         }
       }

@@ -33,6 +33,7 @@ import type { EventStatus } from '../../contract/enums';
 import type { ProviderSeasonSource } from '../formula-one-provider';
 import type { CoordinationRun, ResourceCoordination } from './outcome';
 import {
+  isClassifiedResult,
   validateSeasonReferences,
   type SeasonRelation,
 } from './season-integrity';
@@ -272,13 +273,28 @@ export function assembleSeasonSource(
   // classification is a perfectly valid *coordination* result and remains
   // visible in the run; this phase simply has no public document to carry it,
   // and inventing one would widen the v1 contract.
+  // Two different things, deliberately kept apart:
+  //
+  // - `classifications` is the set of selected race-result *resources*. A
+  //   round that has not been classified still has one, because the contract
+  //   requires a not-yet-run session to answer with a meaningful absence
+  //   (`status: 'unavailable'`, no entries) rather than a fabricated empty
+  //   classification. Dropping it would remove that answer from the release.
+  // - `classifiedRounds` is the set of rounds that actually *have* a
+  //   classification. Only `final` and `provisional` qualify, so the presence
+  //   of a document proves nothing here.
+  //
+  // Completeness for a completed round is proved against the second set. The
+  // first is what gets published.
   const classifications: RaceResult[] = [];
-  const racesByRound = new Set<number>();
+  const classifiedRounds = new Set<number>();
   for (const entry of selectedPayloads(run, 'session-classification')) {
     if (entry.payload.kind !== 'session-classification') continue;
     if (entry.payload.result.sessionType !== 'race') continue;
     classifications.push(entry.payload.result);
-    racesByRound.add(entry.payload.result.round);
+    if (isClassifiedResult(entry.payload.result.status)) {
+      classifiedRounds.add(entry.payload.result.round);
+    }
   }
 
   const calendar: GrandPrix[] = [...calendarPayload.events]
@@ -297,7 +313,7 @@ export function assembleSeasonSource(
     .filter(
       (event) =>
         requiresRaceClassification(event.status) &&
-        !racesByRound.has(event.round),
+        !classifiedRounds.has(event.round),
     )
     .map(
       (event) =>

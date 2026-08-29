@@ -15,6 +15,7 @@ import {
   CoordinatedSeasonPublication,
   MultiSourceCoordinator,
   assembleSeasonSource,
+  isClassifiedResult,
   type CoordinatedResource,
   type CoordinationRun,
 } from '../../../src/providers/coordination';
@@ -54,14 +55,30 @@ async function activeSeason(futureStatus: EventStatus = 'scheduled'): Promise<{
   const all = rounds(base);
   const futureRound = all[all.length - 1];
   if (futureRound === undefined) throw new Error('fixture gap');
-  const completedRounds = all.filter((round) => round !== futureRound);
+  // Only a round the season has actually classified may be marked completed:
+  // a completed round without a `final` or `provisional` result is precisely
+  // the state that must block publication, so it cannot be the baseline here.
+  const classified = new Set(
+    base.results
+      .filter((result) => isClassifiedResult(result.status))
+      .map((result) => result.round),
+  );
+  const completedRounds = all.filter(
+    (round) => round !== futureRound && classified.has(round),
+  );
 
   const source: ProviderSeasonSource = {
     ...base,
     calendar: base.calendar.map((event) =>
       event.round === futureRound
         ? { ...event, status: futureStatus, hasResults: false }
-        : { ...event, status: 'completed' },
+        : {
+            ...event,
+            status: classified.has(event.round)
+              ? ('completed' as const)
+              : event.status,
+            hasResults: classified.has(event.round),
+          },
     ),
     results: base.results.filter((result) => result.round !== futureRound),
   };

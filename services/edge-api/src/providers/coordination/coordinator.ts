@@ -195,9 +195,24 @@ export class MultiSourceCoordinator {
     const contributions = this.attribute(operations, results);
     const resources = this.decide(plan, operations, contributions.list);
 
+    // A same-source transport contradiction is a property of the **run**, not
+    // of one contribution. Two outcomes claiming one physical request with
+    // different endings cannot both be true, so the run's request accounting is
+    // already corrupted; letting the other source's healthy candidate carry the
+    // resource would publish a complete-looking season on top of an impossible
+    // adapter history (ADR 0023 D7/D9). The conflicting contribution is still
+    // rejected where it happens, and the run additionally becomes unpublishable.
+    const tainted = contributions.list.some(
+      (contribution) => contribution.reason === 'coordination-invariant',
+    );
+
     const run: CoordinationRun = {
       season: plan.season,
-      status: cancelled ? 'cancelled' : 'completed',
+      status: cancelled
+        ? 'cancelled'
+        : tainted
+          ? 'invariant-violated'
+          : 'completed',
       planProblem: null,
       resources,
       accounting: contributions.metrics,

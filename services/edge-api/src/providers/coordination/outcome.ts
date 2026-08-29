@@ -152,7 +152,15 @@ export interface CoordinationCounts {
  */
 export interface CoordinationRun {
   readonly season: number;
-  readonly status: 'completed' | 'cancelled' | 'plan-rejected';
+  /**
+   * `invariant-violated` means the run observed something that cannot be true
+   * of any real execution - today, one source claiming two different endings
+   * for one physical request. It is distinct from `cancelled` and from a
+   * rejected plan because the work *did* run; what is unusable is the run's own
+   * account of it. A healthy subset cannot restore publishability afterwards.
+   */
+  readonly status:
+    'completed' | 'cancelled' | 'plan-rejected' | 'invariant-violated';
   readonly planProblem: PlanProblem | null;
   readonly resources: readonly ResourceCoordination[];
   /**

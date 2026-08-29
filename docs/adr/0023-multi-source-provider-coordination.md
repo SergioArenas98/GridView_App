@@ -190,8 +190,23 @@ physical request it was derived from. One response legitimately serving several
 derived resources reports the same reference from each, and the coordinator —
 never the adapter — counts it once while crediting every job category it
 served. The same reference claiming a _different attempt outcome_ cannot
-describe one request, so the later claim fails closed as a
-`coordination-invariant` violation.
+describe one request, so the later claim is rejected immediately as a
+`coordination-invariant` violation — **and the contradiction taints the whole
+run**. The two claims purport to describe one physical request and cannot both
+be true, so the run's own request accounting is already unusable; the run is
+marked `invariant-violated`, no season source may be assembled as complete, and
+neither generation nor publication runs. Nothing is repaired, no claim is
+chosen over the other, and no other source may mask it. Accounting established
+before the contradiction is preserved as it stood, the reference is not counted
+twice, and no request activity is invented from the rejected claim. Diagnostics
+name the invariant category and the source; the reference itself is never
+logged.
+
+This is deliberately narrow. It applies only to a same-source, same-reference
+contradiction. An ordinary `provider-unavailable`, `provider-rate-limited`,
+`invalid-payload`, mapping failure, missing resource or legitimate cross-source
+disagreement is **not** a run-level violation, and a healthy fallback remains
+exactly the right answer for those.
 
 A reference is scoped to **its source**. It is a token one adapter mints for
 itself, and by D1 the adapters are independent — neither imports, calls or
@@ -223,9 +238,19 @@ source is capable of serving, and it is never relabelled as reconciled.
 
 Each resource carries its own selection and the full list of what every
 considered source contributed, including diagnostic outcomes for sources that
-lost. One failing resource never blocks an independent one, a failure stays
-attached to its exact resource and source, and a healthy subset never conceals
-a coordination invariant violation.
+lost. One failing resource never blocks an independent one, and a failure stays
+attached to its exact resource and source.
+
+**A healthy subset cannot restore publishability after a coordination-invariant
+violation.** Partial success is first-class for provider failures, where the
+worst case is missing data; it is not a way to recover from a run whose account
+of its own requests is impossible. So a fallback candidate may still be
+_selected_ for the affected resource — attribution stays exact — but the run is
+`invariant-violated` and withheld regardless of how complete the selection
+looks. This is what makes "a healthy subset never conceals a coordination
+invariant violation" true in the published output rather than only in the
+diagnostics, and it settles the tension with D7: D7 rejects the contradictory
+contribution, and D9 refuses to let anything else compensate for it.
 
 A duplicate logical resource in a plan is **rejected fail-closed as a whole**
 rather than canonicalized: a duplicate is a caller defect, and collapsing it
@@ -294,6 +319,19 @@ snapshot — some rounds raced, the rest still ahead — publishes normally. A
 `completed` round whose classification is genuinely missing still withholds the
 whole snapshot and preserves last-known-good.
 
+**A completed round needs an actual classification, not merely a document.**
+Every round carries a race-result resource, because a not-yet-run session must
+answer with a meaningful absence rather than a fabricated empty classification,
+so the presence of a document proves nothing. Two sets are therefore kept
+apart: the _selected race-result resources_, which are what gets published, and
+the _classified rounds_, which are what proves completeness. Only `final` and
+`provisional` enter the second; `unavailable`, `unknown` and any unrecognised
+value do not. A completed round whose result is an absence document withholds
+the whole candidate and preserves last-known-good, while a non-completed round
+keeps publishing that same absence document exactly as before. The
+`unavailable` contribution is never discarded to force completeness, and
+`hasResults` is never rewritten.
+
 **This is publication completeness, not scheduling.** The predicate reads one
 field of data the source supplied. No clock, event offset, session duration,
 cadence or due-job calculation is involved, and G5 remains untouched. A
@@ -331,6 +369,19 @@ circuit's `lapRecord` is an optional historical fact whose driver need not be
 on this season's grid, and one driver may legitimately hold several season
 entries, because mid-season participation is modelled as split spans
 (GridView_Domain_Model.md §6.7, decision M6).
+
+**Rollback requires exactly the documents publication produces.** The
+required-document set for a rollback target is rebuilt from the stored,
+validated calendar, and it mirrors generation: every event requires its detail
+document, and a results document is required exactly when that event advertises
+`hasResults: true`. An event advertising no classification does not make a
+results document mandatory merely by appearing in the calendar, and an optional
+absence document that _is_ present does not disturb the check either. Because
+the cross-resource preflight binds `hasResults` to `final` or `provisional`, a
+completed classified round still cannot evade results-document verification —
+its own flag is what demands the document. Without this, an active-season
+release would be publishable but unreachable as a rollback target, both
+explicitly and through the previous pointer.
 
 **Publication is a phase transition with one irreversible point.** KV offers
 ordered writes, not a transaction, and the design says so rather than
