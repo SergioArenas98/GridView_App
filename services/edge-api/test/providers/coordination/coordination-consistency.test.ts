@@ -21,6 +21,8 @@ import {
   CoordinatedSeasonPublication,
   MultiSourceCoordinator,
   assembleSeasonSource,
+  attemptOutcomesForFailureReason,
+  attemptedFailureReasons,
   coordinationFor,
   isWellFormedOutcome,
   payloadMatchesResource,
@@ -725,5 +727,273 @@ describe('a candidate requires a successful transport attempt', () => {
       expect(resource.selection.source).toBe('jolpica');
       expect(resource.selection.role).toBe('reconciled');
     }
+  });
+});
+
+describe('a failure reason agrees with its transport attempt', () => {
+  const everyAttemptOutcome: readonly ProviderAttemptOutcome[] = [
+    'successful',
+    'failed',
+    'rate-limited',
+  ];
+
+  function failedOutcome(
+    reason: string,
+    attemptOutcome: unknown,
+  ): Record<string, unknown> {
+    return {
+      outcome: 'failed',
+      attempt: { reference: 'j-1', outcome: attemptOutcome },
+      reason,
+    };
+  }
+
+  it('publishes one total matrix covering every attempted failure reason', () => {
+    for (const reason of attemptedFailureReasons) {
+      const allowed = attemptOutcomesForFailureReason(reason);
+      expect(allowed.length, reason).toBeGreaterThan(0);
+      for (const outcome of allowed) {
+        expect(everyAttemptOutcome, reason).toContain(outcome);
+      }
+    }
+    expect([
+      ...attemptOutcomesForFailureReason('provider-rate-limited'),
+    ]).toEqual(['rate-limited']);
+    expect([...attemptOutcomesForFailureReason('invalid-payload')]).toEqual([
+      'successful',
+    ]);
+    // `provider-unavailable` genuinely covers two different endings: a
+    // transport that never completed, and a response that arrived and was
+    // rejected by GridView's own content-type or response-size policy.
+    expect(
+      [...attemptOutcomesForFailureReason('provider-unavailable')].sort(),
+    ).toEqual(['failed', 'successful']);
+  });
+
+  it('accepts and rejects each reason exactly as the matrix says', () => {
+    for (const reason of attemptedFailureReasons) {
+      const allowed = attemptOutcomesForFailureReason(reason);
+      for (const attemptOutcome of everyAttemptOutcome) {
+        expect(
+          isWellFormedOutcome(failedOutcome(reason, attemptOutcome)),
+          `${reason} + ${attemptOutcome}`,
+        ).toBe(allowed.includes(attemptOutcome));
+      }
+    }
+  });
+
+  it('rejects a rate-limit failure that claims a successful transport', async () => {
+    expect(
+      isWellFormedOutcome(failedOutcome('provider-rate-limited', 'successful')),
+    ).toBe(false);
+
+    const port = new FakePort(
+      'jolpica',
+      () =>
+        failedOutcome(
+          'provider-rate-limited',
+          'successful',
+        ) as unknown as ProviderResourceOutcome,
+    );
+    const run = await coordinate([port], [CALENDAR]);
+    const contribution = run.resources[0]?.contributions[0];
+
+    expect(contribution?.reason).toBe('malformed-outcome');
+    expect(contribution?.attempted).toBe(false);
+    expect(run.accounting.lifetime.total).toBe(0);
+  });
+
+  it('rejects an invalid payload that claims a non-successful transport', async () => {
+    expect(
+      isWellFormedOutcome(failedOutcome('invalid-payload', 'rate-limited')),
+    ).toBe(false);
+    expect(
+      isWellFormedOutcome(failedOutcome('invalid-payload', 'failed')),
+    ).toBe(false);
+
+    const port = new FakePort(
+      'jolpica',
+      () =>
+        failedOutcome(
+          'invalid-payload',
+          'rate-limited',
+        ) as unknown as ProviderResourceOutcome,
+    );
+    const run = await coordinate([port], [CALENDAR]);
+
+    expect(run.resources[0]?.contributions[0]?.reason).toBe(
+      'malformed-outcome',
+    );
+    expect(run.accounting.lifetime.total).toBe(0);
+  });
+
+  it('keeps every legitimate pairing usable and counted', async () => {
+    const legitimate: {
+      reason: string;
+      attemptOutcome: ProviderAttemptOutcome;
+      counted: 'successful' | 'failed' | 'rateLimited';
+    }[] = [
+      {
+        reason: 'provider-rate-limited',
+        attemptOutcome: 'rate-limited',
+        counted: 'rateLimited',
+      },
+      {
+        reason: 'invalid-payload',
+        attemptOutcome: 'successful',
+        counted: 'successful',
+      },
+      {
+        reason: 'provider-unavailable',
+        attemptOutcome: 'failed',
+        counted: 'failed',
+      },
+      // A response rejected by the content-type or response-size policy: the
+      // request left GridView and was answered, so the attempt succeeded even
+      // though no contribution came of it.
+      {
+        reason: 'provider-unavailable',
+        attemptOutcome: 'successful',
+        counted: 'successful',
+      },
+    ];
+
+    for (const entry of legitimate) {
+      const port = new FakePort(
+        'jolpica',
+        () =>
+          failedOutcome(
+            entry.reason,
+            entry.attemptOutcome,
+          ) as unknown as ProviderResourceOutcome,
+      );
+      const run = await coordinate([port], [CALENDAR]);
+      const contribution = run.resources[0]?.contributions[0];
+
+      expect(contribution?.reason, entry.reason).toBe(entry.reason);
+      expect(contribution?.attempted, entry.reason).toBe(true);
+      expect(run.accounting.lifetime.total, entry.reason).toBe(1);
+      expect(run.accounting.lifetime[entry.counted], entry.reason).toBe(1);
+    }
+  });
+
+  it('keeps a mapping failure tied to a successful attempt', async () => {
+    expect(
+      isWellFormedOutcome({
+        outcome: 'mapping-failure',
+        attempt: attempt('j-1', 'successful'),
+      }),
+    ).toBe(true);
+    for (const attemptOutcome of ['failed', 'rate-limited'] as const) {
+      expect(
+        isWellFormedOutcome({
+          outcome: 'mapping-failure',
+          attempt: attempt('j-1', attemptOutcome),
+        }),
+        attemptOutcome,
+      ).toBe(false);
+    }
+
+    const port = new FakePort('jolpica', () => ({
+      outcome: 'mapping-failure',
+      attempt: attempt('j-1', 'successful'),
+    }));
+    const run = await coordinate([port], [CALENDAR]);
+    const contribution = run.resources[0]?.contributions[0];
+
+    expect(contribution?.reason).toBe('mapping-unresolved');
+    expect(contribution?.attempted).toBe(true);
+    expect(run.accounting.lifetime.successful).toBe(1);
+  });
+
+  it('keeps a contradictory pairing out of selection, assembly and publication', async () => {
+    const source = await seasonFixture();
+    const harness = publicationHarness();
+    const port = new FakePort('jolpica', (request) => {
+      if (request.resource.kind === 'season-circuits') {
+        return failedOutcome(
+          'provider-rate-limited',
+          'successful',
+        ) as unknown as ProviderResourceOutcome;
+      }
+      const payload = payloadFor(source, request.resource);
+      if (payload === null) throw new Error('fixture gap');
+      return {
+        outcome: 'candidate',
+        attempt: attempt(`j-${request.resource.kind}`),
+        payload,
+      } as ProviderResourceOutcome;
+    });
+
+    const run = await new MultiSourceCoordinator({
+      ports: [port],
+      logger: harness.logger,
+    }).coordinate({ plan: fullPlan(source) });
+    const outcome = await new CoordinatedSeasonPublication({
+      publisher: harness.publisher,
+      logger: harness.logger,
+    }).publish(run, metadataFor(source), FIXED_NOW, 'v1');
+
+    expect(coordinationFor(run, CIRCUITS)?.selection.outcome).toBe(
+      'unavailable',
+    );
+    expect(outcome.outcome).toBe('withheld');
+    expect(harness.publishCalls).toBe(0);
+    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+  });
+
+  it('keeps transport deduplication source-qualified under the matrix', async () => {
+    const source = await seasonFixture();
+    // Both sources mint the same token for genuinely independent requests.
+    const reconciled = new FakePort('jolpica', (request) => {
+      const payload = payloadFor(source, request.resource);
+      if (payload === null) throw new Error('fixture gap');
+      return {
+        outcome: 'candidate',
+        attempt: attempt('shared'),
+        payload,
+      } as ProviderResourceOutcome;
+    });
+    const provisional = new FakePort(
+      'openf1',
+      () =>
+        failedOutcome(
+          'provider-rate-limited',
+          'rate-limited',
+        ) as unknown as ProviderResourceOutcome,
+    );
+
+    const run = await new MultiSourceCoordinator({
+      ports: [reconciled, provisional],
+      logger: new CapturingLogger(),
+      provisionalSessionEndBound: testOnlyProvisionalBound,
+    }).coordinate({
+      plan: { season: SEASON, resources: [DRIVER_STANDINGS] },
+    });
+
+    expect(run.accounting.lifetime.total).toBe(2);
+    expect(run.accounting.lifetime.successful).toBe(1);
+    expect(run.accounting.lifetime.rateLimited).toBe(1);
+  });
+
+  it('never writes a contradictory reason or attempt value into a log line', async () => {
+    const logger = new CapturingLogger();
+    const hostile = 'https://api.jolpi.ca/2026?token=SECRET';
+    const port = new FakePort(
+      'jolpica',
+      () =>
+        ({
+          outcome: 'failed',
+          attempt: { reference: hostile, outcome: 'successful' },
+          reason: 'provider-rate-limited',
+        }) as unknown as ProviderResourceOutcome,
+    );
+
+    const run = await coordinate([port], [CALENDAR], logger);
+    const serialized = logger.serialized();
+
+    expect(run.resources[0]?.selection.outcome).toBe('unavailable');
+    expect(serialized).not.toContain('SECRET');
+    expect(serialized).not.toContain('jolpi.ca');
   });
 });

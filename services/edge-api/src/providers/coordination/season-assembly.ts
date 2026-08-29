@@ -32,12 +32,14 @@ import type {
 import type { ProviderSeasonSource } from '../formula-one-provider';
 import type { CoordinationRun, ResourceCoordination } from './outcome';
 import {
-  classifiedSessionTypes,
-  type ClassifiedSessionType,
-  type CoordinatedPayload,
-  type CoordinatedPayloadFor,
-  type CoordinatedResource,
-  type CoordinatedResourceKind,
+  validateSeasonReferences,
+  type SeasonRelation,
+} from './season-integrity';
+import type {
+  CoordinatedPayload,
+  CoordinatedPayloadFor,
+  CoordinatedResource,
+  CoordinatedResourceKind,
 } from './resource';
 
 /**
@@ -65,6 +67,11 @@ export const assemblyGaps = [
   'missing-required-resource',
   /** A calendar round has no selected race classification. */
   'missing-round-classification',
+  /**
+   * The selected payloads are individually valid but mutually inconsistent:
+   * a reference snapshot generation depends on does not resolve.
+   */
+  'inconsistent-references',
 ] as const;
 
 export type AssemblyGap = (typeof assemblyGaps)[number];
@@ -76,6 +83,12 @@ export type SeasonAssembly =
       readonly gap: AssemblyGap;
       /** The exact identities that are missing. Bounded enum members and integers. */
       readonly missing: readonly CoordinatedResource[];
+      /**
+       * For `inconsistent-references`: the relations that did not resolve.
+       * Closed enum members only - never an identifier - and empty for every
+       * other gap.
+       */
+      readonly relations: readonly SeasonRelation[];
     };
 
 /**
@@ -122,10 +135,6 @@ function selectedPayloads(
   return out;
 }
 
-const sessionOrder = new Map<ClassifiedSessionType, number>(
-  classifiedSessionTypes.map((type, index) => [type, index]),
-);
-
 /**
  * Assembles the season, or reports the first gap that blocks it.
  *
@@ -139,7 +148,12 @@ export function assembleSeasonSource(
   metadata: SeasonSnapshotMetadata,
 ): SeasonAssembly {
   if (run.status !== 'completed') {
-    return { complete: false, gap: 'run-not-completed', missing: [] };
+    return {
+      complete: false,
+      gap: 'run-not-completed',
+      missing: [],
+      relations: [],
+    };
   }
 
   const unavailable = run.resources
@@ -150,6 +164,7 @@ export function assembleSeasonSource(
       complete: false,
       gap: 'resource-unavailable',
       missing: unavailable,
+      relations: [],
     };
   }
 
@@ -161,6 +176,7 @@ export function assembleSeasonSource(
       complete: false,
       gap: 'missing-required-resource',
       missing: missingRequired,
+      relations: [],
     };
   }
 
@@ -178,7 +194,12 @@ export function assembleSeasonSource(
   ) {
     // Unreachable after the check above; retained so the narrowing below is
     // proven rather than asserted.
-    return { complete: false, gap: 'missing-required-resource', missing: [] };
+    return {
+      complete: false,
+      gap: 'missing-required-resource',
+      missing: [],
+      relations: [],
+    };
   }
 
   const schedules = new Map<number, readonly Session[]>();
@@ -187,14 +208,21 @@ export function assembleSeasonSource(
     schedules.set(entry.payload.round, entry.payload.sessions);
   }
 
+  // **Only the race classification is publishable.** The public resource
+  // `/v1/seasons/{season}/grand-prix/{round}/results` is defined as the race
+  // classification, and the generator picks its document with a lookup by
+  // round alone - so any non-race classification sitting in this collection
+  // could be published in the race's place. A qualifying or sprint
+  // classification is a perfectly valid *coordination* result and remains
+  // visible in the run; this phase simply has no public document to carry it,
+  // and inventing one would widen the v1 contract.
   const classifications: RaceResult[] = [];
   const racesByRound = new Set<number>();
   for (const entry of selectedPayloads(run, 'session-classification')) {
     if (entry.payload.kind !== 'session-classification') continue;
+    if (entry.payload.result.sessionType !== 'race') continue;
     classifications.push(entry.payload.result);
-    if (entry.payload.result.sessionType === 'race') {
-      racesByRound.add(entry.payload.result.round);
-    }
+    racesByRound.add(entry.payload.result.round);
   }
 
   const calendar: GrandPrix[] = [...calendarPayload.events]
@@ -225,16 +253,15 @@ export function assembleSeasonSource(
       complete: false,
       gap: 'missing-round-classification',
       missing: missingClassifications,
+      relations: [],
     };
   }
 
-  const results = classifications.slice().sort((left, right) => {
-    if (left.round !== right.round) return left.round - right.round;
-    return (
-      (sessionOrder.get(left.sessionType as ClassifiedSessionType) ?? 0) -
-      (sessionOrder.get(right.sessionType as ClassifiedSessionType) ?? 0)
-    );
-  });
+  // Every member is a race classification for a distinct round, so round
+  // order is a total order and no session tiebreak is reachable.
+  const results = classifications
+    .slice()
+    .sort((left, right) => left.round - right.round);
 
   const source: ProviderSeasonSource = {
     season: run.season,
@@ -257,5 +284,19 @@ export function assembleSeasonSource(
       ...constructorStandingsPayload.standings,
     ] as ConstructorStanding[],
   };
+  // The last gate: individually valid payloads must also agree with each
+  // other. Generation assumes these references resolve - some by throwing,
+  // some by publishing a dangling identifier - so they are settled here, while
+  // nothing has been generated and nothing has been written.
+  const relations = validateSeasonReferences(source);
+  if (relations.length > 0) {
+    return {
+      complete: false,
+      gap: 'inconsistent-references',
+      missing: [],
+      relations,
+    };
+  }
+
   return { complete: true, source };
 }

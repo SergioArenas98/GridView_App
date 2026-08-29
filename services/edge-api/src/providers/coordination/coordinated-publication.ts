@@ -15,6 +15,10 @@
  *   all, so it cannot replace the active release.
  * - A publisher failure is returned as-is. Nothing here compensates, rolls
  *   forward or republishes, so the prior active release stands.
+ * - **This boundary returns; it does not throw.** Assembly settles referential
+ *   integrity before generation, and generation itself is contained, so an
+ *   unexpected defect becomes a bounded withheld outcome rather than a
+ *   rejected promise the caller never agreed to handle.
  */
 
 import type { Logger } from '../../logging/logger';
@@ -28,6 +32,7 @@ import {
   type AssemblyGap,
   type SeasonSnapshotMetadata,
 } from './season-assembly';
+import type { SeasonRelation } from './season-integrity';
 
 export const COORDINATED_PUBLICATION_OPERATION =
   'provider.coordination.publication';
@@ -36,8 +41,10 @@ export type CoordinatedPublicationOutcome =
   | { readonly outcome: 'published'; readonly result: PublicationResult }
   | {
       readonly outcome: 'withheld';
-      readonly gap: AssemblyGap;
+      readonly gap: AssemblyGap | 'generation-failed';
       readonly missing: readonly CoordinatedResource[];
+      /** Bounded relation names for `inconsistent-references`; else empty. */
+      readonly relations: readonly SeasonRelation[];
     };
 
 export interface CoordinatedSeasonPublicationOptions {
@@ -82,15 +89,47 @@ export class CoordinatedSeasonPublication {
         coordinationMissing: [
           ...new Set(assembly.missing.map((resource) => resource.kind)),
         ],
+        // Closed relation members, already distinct and already bounded by the
+        // relation union - never an entity identifier.
+        coordinationRelations: [...assembly.relations],
       });
       return {
         outcome: 'withheld',
         gap: assembly.gap,
         missing: assembly.missing,
+        relations: assembly.relations,
       };
     }
 
-    const set = generateSnapshotSet(assembly.source, generatedAt, version);
+    // Narrowly around generation only. Preflight settles every reference the
+    // generator looks up, but generation also derives values from caller
+    // inputs it cannot vouch for, and this boundary promises an outcome rather
+    // than a thrown error. The thrown value is never read: it can embed a
+    // payload, an identifier or a stack.
+    let set;
+    try {
+      set = generateSnapshotSet(assembly.source, generatedAt, version);
+    } catch {
+      this.logger.warn({
+        operation: COORDINATED_PUBLICATION_OPERATION,
+        season: run.season,
+        coordinationStatus: run.status,
+        coordinationOutcome: 'withheld',
+        failureCategory: 'generation-failed',
+      });
+      // Nothing was generated, so the publisher is never reached, no pointer
+      // moves and the prior active release keeps serving.
+      return {
+        outcome: 'withheld',
+        gap: 'generation-failed',
+        missing: [],
+        relations: [],
+      };
+    }
+
+    // Past this point the publisher owns the result. Its failures are its own
+    // and are returned unchanged - they are never reinterpreted as a
+    // generation failure.
     const result = await this.publisher.publish(set);
     this.logger.info({
       operation: COORDINATED_PUBLICATION_OPERATION,

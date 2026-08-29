@@ -138,6 +138,39 @@ A `429` remains an attempted, source-attributed, rate-limited request; a
 limiter deferral remains not attempted and may carry `retryAt` as **data
 only** — nothing in this phase schedules on it, because that is G5.
 
+**A reason and its attempt outcome are two statements about one request, so
+they must agree.** One total table decides which pairings describe a request
+that could actually have happened, and an outcome that contradicts itself is
+rejected as `malformed-outcome` rather than believed in either direction:
+
+| Outcome / reason                   | Allowed `attempt.outcome`    |
+| ---------------------------------- | ---------------------------- |
+| `candidate`                        | `successful`                 |
+| `mapping-failure`                  | `successful`                 |
+| `failed` + `provider-rate-limited` | `rate-limited`               |
+| `failed` + `invalid-payload`       | `successful`                 |
+| `failed` + `provider-unavailable`  | `failed` **or** `successful` |
+
+`provider-unavailable` is deliberately the one reason with two allowed endings,
+because it genuinely covers two. `timeout`, `network`, `redirect-rejected` and
+`provider-http-error` are transports that never completed usefully; but
+`invalid-content-type`, `response-too-large` and `malformed-json` are
+GridView's own policy rejecting a response that **arrived**, with a status,
+after a request that left and was answered — the hardened boundary records
+`requestAttempted: true` for exactly those
+([ADR 0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
+Forcing `failed` on them would make coordination contradict the transport layer
+and under-report a real answered request. It still never admits `rate-limited`:
+a `429` has its own reason, so that pairing remains a contradiction.
+
+A contradictory pairing is a **coordination** failure, not an attempted one. It
+is not selected, not assembled, not published, and **no request activity is
+derived from it**: an outcome whose shape is self-contradictory makes its own
+attempt record unusable, so counting it would write a provider failure
+timestamp on the strength of a claim already known to be false. This
+under-reports for the same reason `adapter-error` does, and the Durable Object
+reservation ledger remains the pacing authority.
+
 A `mapping-unresolved` failure follows a request that _was_ sent and _was_
 answered, so its transport attempt still counts while the resource contribution
 fails. An `adapter-error` — a port that threw instead of answering — is
@@ -232,12 +265,53 @@ with no loop and no retry. The publisher remains the sole publication
 authority, the active pointer remains its final write, and
 [ADR 0007](0007-versioned-kv-publication-active-pointer.md) is unchanged.
 
+**Only a race classification is publishable.** The public resource
+`/v1/seasons/{season}/grand-prix/{round}/results` is defined as the race
+classification, and the generator selects its document by round alone, so any
+non-race classification left in the assembled `results` could be published in
+the race's place. Assembly therefore admits `sessionType: 'race'` only. A
+qualifying or sprint classification remains a valid _coordination_ result and
+stays visible in the run; this phase simply has no public document to carry it,
+and no session-scoped result document is added, because that would widen the v1
+contract. A non-race classification consequently cannot satisfy a round's
+race-result completeness either.
+
+**Referential integrity is settled before generation.** Every resource is
+selected independently, so nothing upstream compares a calendar event against
+the circuits collection or a standing against the driver profiles. Two
+individually valid candidates can be mutually inconsistent, and generation
+assumes those references resolve in two ways that are both unacceptable here:
+it **throws** on a missing driver, constructor or circuit — which would escape
+the publication boundary as a rejected promise rather than the bounded outcome
+it promises — and it **publishes the dangling identifier** for standings and
+classification entries, which are copied through verbatim.
+
+One preflight therefore re-states the generator's lookup assumptions as a
+closed set of named relations and reports which of them do not hold. One broken
+relation withholds the whole candidate as `inconsistent-references`; nothing is
+resolved, repaired, normalized or dropped, no partial subset is published, and
+the diagnostic carries relation names only, never an identifier. Two relations
+are deliberately excluded because requiring them would reject correct data: a
+circuit's `lapRecord` is an optional historical fact whose driver need not be
+on this season's grid, and one driver may legitimately hold several season
+entries, because mid-season participation is modelled as split spans
+(GridView_Domain_Model.md §6.7, decision M6).
+
+**Generation itself is contained.** Preflight settles every reference, but
+generation also derives values from caller inputs it cannot vouch for, so the
+call is guarded and an unexpected defect becomes a bounded `generation-failed`
+withheld outcome. The thrown value is never read or logged, the publisher is
+never reached, no pointer moves and the prior active release keeps serving. The
+guard is around generation only: once the publisher has been reached, its own
+result is returned unchanged and never reinterpreted.
+
 **The all-or-nothing publication contract is not weakened.** The generator
 derives every document from one whole season, so a partial run simply does not
 publish: it is represented explicitly and withheld with a bounded gap reason.
 A cancelled run, a rejected plan, an unavailable planned resource, a missing
-required resource and a calendar round without a race classification are all
-distinct, and none of them reaches the publisher. A publisher failure is
+required resource, a calendar round without a race classification, an
+inconsistent set of references and a failed generation are all distinct, and
+none of them reaches the publisher. A publisher failure is
 returned as-is — nothing compensates, rolls forward or republishes — so the
 prior active release keeps serving.
 

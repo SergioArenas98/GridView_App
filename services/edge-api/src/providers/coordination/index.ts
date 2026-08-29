@@ -62,6 +62,7 @@ export type {
 } from './outcome';
 
 export {
+  attemptOutcomesForFailureReason,
   attemptedFailureReasons,
   isInstant,
   isWellFormedOutcome,
@@ -99,6 +100,9 @@ export type {
   SeasonAssembly,
   SeasonSnapshotMetadata,
 } from './season-assembly';
+
+export { seasonRelations, validateSeasonReferences } from './season-integrity';
+export type { SeasonRelation } from './season-integrity';
 
 export {
   coordinatedSourceIds,

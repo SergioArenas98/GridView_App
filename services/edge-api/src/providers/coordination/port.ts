@@ -97,6 +97,60 @@ export const attemptedFailureReasons = [
 export type AttemptedFailureReason = (typeof attemptedFailureReasons)[number];
 
 /**
+ * How each attempted failure may have ended at the transport layer.
+ *
+ * A reason and an attempt outcome are two statements about **one** request, so
+ * they can contradict each other. One total table decides which pairings
+ * describe a request that could actually have happened; nothing compares them
+ * ad hoc anywhere else.
+ *
+ * The sets are derived from what the hardened HTTP boundary
+ * (`providers/http/provider-http-client.ts`) can actually produce, not from
+ * symmetry:
+ *
+ * - **`provider-rate-limited` requires `rate-limited`.** It exists for exactly
+ *   one situation - upstream answered `429` after the request was attempted -
+ *   and the ledger must record that as the rate-limited attempt it was.
+ * - **`invalid-payload` requires `successful`.** By its own definition the
+ *   response *was read*; only contract validation failed afterwards. A
+ *   transport that failed or was refused returned nothing to validate.
+ * - **`provider-unavailable` admits `failed` **or** `successful`**, because it
+ *   genuinely covers two different endings. `timeout`, `network`,
+ *   `redirect-rejected` and `provider-http-error` are transports that did not
+ *   complete usefully. But `invalid-content-type`, `response-too-large` and
+ *   `malformed-json` are GridView's own policy rejecting a response that
+ *   *arrived*, with a status, after a request that left and was answered -
+ *   `requestAttempted: true` at the HTTP boundary. Forcing `failed` on those
+ *   would make the coordinator contradict the transport layer and under-report
+ *   a real answered request. It never admits `rate-limited`: a `429` has its
+ *   own reason, so that pairing is still a contradiction.
+ */
+const allowedAttemptOutcomes: Record<
+  AttemptedFailureReason,
+  readonly ProviderAttemptOutcome[]
+> = {
+  'provider-rate-limited': ['rate-limited'],
+  'provider-unavailable': ['failed', 'successful'],
+  'invalid-payload': ['successful'],
+};
+
+/** The attempt outcomes one attempted failure reason may legitimately carry. */
+export function attemptOutcomesForFailureReason(
+  reason: AttemptedFailureReason,
+): readonly ProviderAttemptOutcome[] {
+  return allowedAttemptOutcomes[reason];
+}
+
+function isAttemptedFailureReason(
+  value: unknown,
+): value is AttemptedFailureReason {
+  return (
+    typeof value === 'string' &&
+    (attemptedFailureReasons as readonly string[]).includes(value)
+  );
+}
+
+/**
  * The typed adapter result.
  *
  * Closed by construction, and deliberately not nullable anywhere: "no data"
@@ -226,9 +280,12 @@ export function isInstant(value: unknown): value is string {
  *
  * An outcome must also be **internally consistent**: a variant's own attempt
  * record has to describe a request that could have produced it. A `candidate`
- * therefore requires a `successful` attempt, so an outcome that claims usable
- * data while reporting that its transport failed or was rate-limited fails
- * closed here rather than being selected.
+ * and a `mapping-failure` therefore require a `successful` attempt, and every
+ * attempted failure must pair its reason with an attempt outcome
+ * `attemptOutcomesForFailureReason` allows. An outcome that claims usable data
+ * while reporting that its transport failed, or that reports a `429` reason
+ * over a successful transport, fails closed here rather than being selected
+ * and reported.
  *
  * The payload's match against the requested resource is checked separately by
  * `payloadMatchesResource`, so a structurally valid outcome carrying the wrong
@@ -256,13 +313,16 @@ export function isWellFormedOutcome(value: unknown): boolean {
     case 'failed':
       return (
         isAttempt(record.attempt) &&
-        (attemptedFailureReasons as readonly unknown[]).includes(
-          record.reason,
+        isAttemptedFailureReason(record.reason) &&
+        attemptOutcomesForFailureReason(record.reason).includes(
+          record.attempt.outcome,
         ) &&
         (record.retryAfter === undefined || isInstant(record.retryAfter))
       );
     case 'mapping-failure':
-      return isAttempt(record.attempt);
+      // The mapping boundary runs on a response that was read, so the request
+      // behind it always succeeded (see `ProviderTransportAttempt.outcome`).
+      return isSuccessfulAttempt(record.attempt);
     default:
       return false;
   }
