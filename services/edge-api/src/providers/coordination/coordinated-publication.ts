@@ -15,10 +15,18 @@
  *   all, so it cannot replace the active release.
  * - A publisher failure is returned as-is. Nothing here compensates, rolls
  *   forward or republishes, so the prior active release stands.
- * - **This boundary returns; it does not throw.** Assembly settles referential
- *   integrity before generation, and generation itself is contained, so an
- *   unexpected defect becomes a bounded withheld outcome rather than a
- *   rejected promise the caller never agreed to handle.
+ * - **Expected operational failures are contained, not propagated.** Assembly
+ *   settles referential integrity before generation; generation is guarded; and
+ *   `SnapshotPublisher` converts its own storage, validation, cleanup and purge
+ *   failures into bounded results. So a caller gets an outcome for every
+ *   failure this system anticipates.
+ *
+ *   That is deliberately narrower than "nothing can ever throw here". An
+ *   arbitrary programmer defect is not claimed to be impossible, because the
+ *   only honest report for one would have to state whether publication
+ *   committed - and nothing outside the publisher can know that. The publisher
+ *   is therefore where the guarantee lives, and this boundary does not wrap it
+ *   in a catch that would have to guess.
  */
 
 import type { Logger } from '../../logging/logger';
@@ -127,9 +135,10 @@ export class CoordinatedSeasonPublication {
       };
     }
 
-    // Past this point the publisher owns the result. Its failures are its own
-    // and are returned unchanged - they are never reinterpreted as a
-    // generation failure.
+    // Past this point the publisher owns the result, including whether the
+    // commit point was crossed. Its outcomes are returned unchanged: a
+    // committed release whose cache purge failed is still `published`, and is
+    // never downgraded to `withheld`, because the release is serving.
     const result = await this.publisher.publish(set);
     this.logger.info({
       operation: COORDINATED_PUBLICATION_OPERATION,

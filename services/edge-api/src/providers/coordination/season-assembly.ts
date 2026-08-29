@@ -29,6 +29,7 @@ import type {
   RaceResult,
   Session,
 } from '../../contract/types';
+import type { EventStatus } from '../../contract/enums';
 import type { ProviderSeasonSource } from '../formula-one-provider';
 import type { CoordinationRun, ResourceCoordination } from './outcome';
 import {
@@ -108,6 +109,61 @@ const requiredSeasonResources: readonly CoordinatedResourceKind[] = [
   'driver-standings',
   'constructor-standings',
 ];
+
+/**
+ * Whether an event's race classification is **required** for a season snapshot
+ * to be complete.
+ *
+ * Only `completed` establishes that a race was run and therefore that a
+ * classification must exist. Every other status leaves the result legitimately
+ * absent, and the public contract already says so: the Grand Prix results
+ * resource "returns the race classification when available", and an
+ * unavailable future result must be a meaningful absence rather than a
+ * fabricated empty classification (GridView_Backend_Scheme.md §10.5). The
+ * generator honours that by emitting a results document only when one exists,
+ * so a non-completed round simply has none.
+ *
+ * | Status        | Race result required |
+ * | ------------- | -------------------- |
+ * | `scheduled`   | no                   |
+ * | `upcoming`    | no                   |
+ * | `in_progress` | no                   |
+ * | `completed`   | **yes**              |
+ * | `postponed`   | no                   |
+ * | `cancelled`   | no                   |
+ * | `unknown`     | no                   |
+ *
+ * `in_progress` is excluded because a race under way has no stable
+ * classification yet, and `unknown` because it establishes nothing - inventing
+ * a requirement from it would block an entire season on a value the contract
+ * defines as "not recognised". Both choices fail towards *not fabricating*
+ * data, which is the direction the result contract already takes.
+ *
+ * **This is publication completeness, not scheduling.** It reads one field of
+ * data the source supplied. No clock, event offset, session duration, cadence
+ * or due-job calculation is involved, and gap G5 remains untouched.
+ */
+const raceClassificationRequiredByStatus: Record<EventStatus, boolean> = {
+  scheduled: false,
+  upcoming: false,
+  in_progress: false,
+  completed: true,
+  postponed: false,
+  cancelled: false,
+  unknown: false,
+};
+
+/**
+ * A pure, total predicate over the closed status union.
+ *
+ * Compared with `=== true` rather than used as a truthy lookup: `status` is
+ * typed but arrives from an adapter, and an unrecognised value must behave
+ * like `unknown` - the additive-safe fallback the enum contract defines - not
+ * like a missing entry that could throw or read as required.
+ */
+export function requiresRaceClassification(status: EventStatus): boolean {
+  return raceClassificationRequiredByStatus[status] === true;
+}
 
 function payloadOf<K extends CoordinatedResourceKind>(
   run: CoordinationRun,
@@ -238,7 +294,11 @@ export function assembleSeasonSource(
     .sort((left, right) => left.round - right.round);
 
   const missingClassifications = calendar
-    .filter((event) => !racesByRound.has(event.round))
+    .filter(
+      (event) =>
+        requiresRaceClassification(event.status) &&
+        !racesByRound.has(event.round),
+    )
     .map(
       (event) =>
         ({

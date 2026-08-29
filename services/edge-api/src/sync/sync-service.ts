@@ -250,6 +250,22 @@ export class SynchronizationService {
         releaseVersion,
       );
       const publication = await this.publisher.publish(set);
+      if (publication.status === 'failed') {
+        // The publisher contained an operational failure and reported it
+        // rather than throwing. It is still a failed run, so it takes the
+        // failure path in full - one `sync.failed` line, failed sync state -
+        // instead of being logged as completed while the response says
+        // otherwise. The publisher's own bounded reason is carried through,
+        // because it is more precise than the generic post-fetch category.
+        return this.fail(
+          request.season,
+          existing,
+          startedAt,
+          publication.reason ?? 'snapshot-publication-failure',
+          plan,
+          metricsBefore,
+        );
+      }
       const completedAt = this.clock.now().toISOString();
       const nextState: SyncState = {
         ...existing,
@@ -277,15 +293,17 @@ export class SynchronizationService {
         providerOperationCallCount: accounting.providerRequests.operation.total,
         providerCallsBySource: totalsBySource(accounting.operationMetrics),
       });
+      // A failed publication returned above, so everything reaching here
+      // committed: `applied`, or `skipped`/`rejected`, which leave the prior
+      // release serving without failing the run.
       return {
-        status: publication.status === 'failed' ? 'failed' : 'completed',
+        status: 'completed',
         season: request.season,
         dueJobs: plan.dueJobs,
         skippedJobs: plan.skippedJobs,
         publicationStatus: publication.status,
         releaseVersion: publication.version,
-        failureCategory:
-          publication.status === 'failed' ? publication.reason : null,
+        failureCategory: null,
         ...resultAccounting(accounting),
       };
     } catch {

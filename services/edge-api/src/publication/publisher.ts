@@ -10,14 +10,92 @@ import type { GeneratedSnapshotSet } from '../snapshots/generator';
 
 export type PublicationStatus = 'applied' | 'skipped' | 'rejected' | 'failed';
 
+/**
+ * Why a publication ended the way it did. Closed and bounded: these values
+ * reach structured logs and stored sync state, so no adapter-supplied or
+ * exception-derived string may ever occupy one.
+ */
+export const publicationReasons = [
+  /** The active version already is this version, and it is complete. */
+  'idempotent',
+  /** The active version already is this version, but documents are missing. */
+  'active-version-incomplete',
+  /** The candidate is older than what is already serving. */
+  'older-source-updated-at',
+  /** A generated document failed contract validation, or validation threw. */
+  'contract-validation',
+  /** A read the decision depended on could not be completed. */
+  'storage-read',
+  /** A write before or at the commit point could not be completed. */
+  'storage-write',
+  /** Documents were written but the version did not read back complete. */
+  'incomplete-version',
+  /** Publication committed; the post-commit cache purge did not succeed. */
+  'cache-purge-failed',
+  /** Rollback was asked for with no previous version recorded. */
+  'missing-previous-version',
+  /** The rollback target has no documents. */
+  'rollback-target-missing',
+  /** The rollback target is missing documents. */
+  'rollback-target-incomplete',
+] as const;
+
+export type PublicationReason = (typeof publicationReasons)[number];
+
+/**
+ * What happened to the post-commit cache purge.
+ *
+ * A closed domain rather than a free-form warning string, so a caller decides
+ * on a value it can exhaustively switch over instead of parsing prose.
+ * `not-required` means no purge was attempted at all - the publication did not
+ * reach the commit point, or nothing changed.
+ */
+export const cachePurgeDispositions = [
+  'not-required',
+  'succeeded',
+  'failed',
+] as const;
+
+export type CachePurgeDisposition = (typeof cachePurgeDispositions)[number];
+
 export interface PublicationResult {
   status: PublicationStatus;
   season: number;
   version: string;
   previousVersion: string | null;
-  reason: string | null;
+  reason: PublicationReason | null;
   cachePurgeOk: boolean;
+  /**
+   * Bounded purge outcome. `failed` alongside `status: 'applied'` is the
+   * truthful shape of a committed release whose cache purge did not succeed:
+   * the new version **is** serving, and the stale cache is a separate,
+   * recoverable operational fact.
+   */
+  cachePurge: CachePurgeDisposition;
   purgedUrls: string[];
+}
+
+/** The outcome of one guarded operational step. */
+type Attempt<T> =
+  { readonly ok: true; readonly value: T } | { readonly ok: false };
+
+/**
+ * Runs one operational dependency call and converts a synchronous throw or a
+ * promise rejection into a bounded negative result.
+ *
+ * The thrown value is never read, logged or re-raised: it can embed a storage
+ * key, a provider body, a snapshot payload or a stack. Only the fact of
+ * failure crosses this boundary; the caller decides which bounded reason that
+ * fact maps to, because only the caller knows which phase it was in.
+ */
+async function attempt<T>(
+  operation: () => Promise<T> | T,
+): Promise<Attempt<T>> {
+  try {
+    return { ok: true, value: await operation() };
+  } catch {
+    return { ok: false };
+  }
 }
 
 export class SnapshotPublisher {
@@ -29,34 +107,70 @@ export class SnapshotPublisher {
     private readonly purgeOrigin = 'https://api.gridview.local',
   ) {}
 
+  /**
+   * Publishes one generated set, as three explicit phases.
+   *
+   * **Pre-commit** - reads, contract validation, inactive writes and the
+   * bookkeeping pointers. Nothing is serving yet, so any operational failure
+   * here returns a bounded `failed` result, leaves the previous active pointer
+   * exactly where it was, leaves the half-written version inactive and
+   * performs no purge.
+   *
+   * **Commit** - `setActiveVersion` is the last storage write and the only
+   * irreversible step. Before it the new release is not active; after it, it
+   * is.
+   *
+   * **Post-commit** - the cache purge. It runs *after* the release is already
+   * serving, so it cannot make the publication not have happened. A purge
+   * failure is therefore reported as `applied` with a bounded
+   * `cachePurge: 'failed'`, never as a failure that would imply the old
+   * release is still active.
+   *
+   * **Expected operational failures never reject this promise.** A storage
+   * outage, a validator defect, a failed cleanup and a purge outage all become
+   * `PublicationResult` values, because this class is the only component that
+   * knows whether the commit point was crossed - and a caller cannot recover
+   * that fact from an exception.
+   */
   async publish(set: GeneratedSnapshotSet): Promise<PublicationResult> {
-    const activeVersion = await this.storage.getActiveVersion(set.season);
-    const previousVersion = activeVersion;
     const documents = new Map(
       set.documents.map((document) => [document.documentName, document]),
     );
     const required = set.documents.map((document) => document.documentName);
 
+    const active = await attempt(() =>
+      this.storage.getActiveVersion(set.season),
+    );
+    if (!active.ok) return this.failed(set, null, 'storage-read');
+    const activeVersion = active.value;
+    const previousVersion = activeVersion;
+
     if (activeVersion === set.version) {
-      const complete = await this.versionComplete(
-        set.season,
-        set.version,
-        required,
+      const complete = await attempt(() =>
+        this.versionComplete(set.season, set.version, required),
       );
+      if (!complete.ok)
+        return this.failed(set, previousVersion, 'storage-read');
       return {
-        status: complete ? 'skipped' : 'rejected',
+        status: complete.value ? 'skipped' : 'rejected',
         season: set.season,
         version: set.version,
         previousVersion,
-        reason: complete ? 'idempotent' : 'active-version-incomplete',
+        reason: complete.value ? 'idempotent' : 'active-version-incomplete',
         cachePurgeOk: true,
+        cachePurge: 'not-required',
         purgedUrls: [],
       };
     }
 
-    const activeSourceUpdatedAt = activeVersion
-      ? await this.activeSourceUpdatedAt(set.season, activeVersion)
-      : null;
+    let activeSourceUpdatedAt: string | null = null;
+    if (activeVersion) {
+      const read = await attempt(() =>
+        this.activeSourceUpdatedAt(set.season, activeVersion),
+      );
+      if (!read.ok) return this.failed(set, previousVersion, 'storage-read');
+      activeSourceUpdatedAt = read.value;
+    }
     if (
       activeSourceUpdatedAt &&
       Date.parse(set.sourceUpdatedAt) < Date.parse(activeSourceUpdatedAt)
@@ -68,19 +182,21 @@ export class SnapshotPublisher {
         previousVersion,
         reason: 'older-source-updated-at',
         cachePurgeOk: true,
+        cachePurge: 'not-required',
         purgedUrls: [],
       };
     }
 
     for (const document of documents.values()) {
-      const issues = this.validator.validate(document);
-      if (issues.length > 0) {
+      // A validator is an ordinary dependency: it may throw as well as report.
+      const validated = await attempt(() => this.validator.validate(document));
+      if (!validated.ok || validated.value.length > 0) {
         this.logger.warn({
           operation: 'publication.validation_failed',
           season: set.season,
           releaseVersion: set.version,
           failureCategory: 'contract-validation',
-          issueCount: issues.length,
+          issueCount: validated.ok ? validated.value.length : 0,
           documentName: document.documentName,
         });
         return {
@@ -90,12 +206,13 @@ export class SnapshotPublisher {
           previousVersion,
           reason: 'contract-validation',
           cachePurgeOk: true,
+          cachePurge: 'not-required',
           purgedUrls: [],
         };
       }
     }
 
-    try {
+    const written = await attempt(async () => {
       for (const document of documents.values()) {
         await this.storage.writeVersionedDocument(
           set.season,
@@ -104,8 +221,7 @@ export class SnapshotPublisher {
         );
       }
       if (!(await this.versionComplete(set.season, set.version, required))) {
-        await this.storage.deleteUnpublishedVersion(set.season, set.version);
-        return failure(set, previousVersion, 'incomplete-version');
+        return 'incomplete-version' as const;
       }
       if (activeVersion) {
         await this.storage.setPreviousVersion(set.season, activeVersion);
@@ -120,31 +236,60 @@ export class SnapshotPublisher {
         );
       }
       await this.storage.setCurrentSeason(set.season);
+      // The commit point, and deliberately the final storage write.
       await this.storage.setActiveVersion(set.season, set.version);
-    } catch {
-      await this.storage.deleteUnpublishedVersion(set.season, set.version);
-      return failure(set, previousVersion, 'storage-write');
+      return 'committed' as const;
+    });
+
+    if (!written.ok || written.value === 'incomplete-version') {
+      // The compensating delete is itself an operational call that can fail.
+      // Its failure must not replace the real publication failure, and must
+      // not escape: the classification the caller needs is the one from the
+      // phase that actually failed.
+      await attempt(() =>
+        this.storage.deleteUnpublishedVersion(set.season, set.version),
+      );
+      return this.failed(
+        set,
+        previousVersion,
+        written.ok ? 'incomplete-version' : 'storage-write',
+      );
     }
 
-    const purgeResult = await this.purger.purgePublicUrls(
-      publicUrlsForDocuments(this.purgeOrigin, set.season, required),
+    // Committed. Everything below is best-effort and cannot un-publish.
+    const purged = await attempt(() =>
+      this.purger.purgePublicUrls(
+        publicUrlsForDocuments(this.purgeOrigin, set.season, required),
+      ),
     );
+    const purgeOk = purged.ok && purged.value.ok;
     this.logger.info({
       operation: 'publication.completed',
       season: set.season,
       releaseVersion: set.version,
       status: 200,
-      cacheOutcome: purgeResult.ok ? 'purged' : 'purge-failed',
+      cacheOutcome: purgeOk ? 'purged' : 'purge-failed',
     });
     return {
       status: 'applied',
       season: set.season,
       version: set.version,
       previousVersion,
-      reason: purgeResult.failureCategory,
-      cachePurgeOk: purgeResult.ok,
-      purgedUrls: purgeResult.urls,
+      // Bounded by construction: a purge adapter's own category string never
+      // becomes the publication reason.
+      reason: purgeOk ? null : 'cache-purge-failed',
+      cachePurgeOk: purgeOk,
+      cachePurge: purgeOk ? 'succeeded' : 'failed',
+      purgedUrls: purged.ok ? purged.value.urls : [],
     };
+  }
+
+  private failed(
+    set: GeneratedSnapshotSet,
+    previousVersion: string | null,
+    reason: PublicationReason,
+  ): PublicationResult {
+    return failure(set, previousVersion, reason);
   }
 
   async rollback(
@@ -162,6 +307,7 @@ export class SnapshotPublisher {
         previousVersion: activeVersion,
         reason: 'missing-previous-version',
         cachePurgeOk: true,
+        cachePurge: 'not-required',
         purgedUrls: [],
       };
     }
@@ -177,6 +323,7 @@ export class SnapshotPublisher {
         previousVersion: activeVersion,
         reason: 'rollback-target-missing',
         cachePurgeOk: true,
+        cachePurge: 'not-required',
         purgedUrls: [],
       };
     }
@@ -188,6 +335,7 @@ export class SnapshotPublisher {
         previousVersion: activeVersion,
         reason: 'rollback-target-incomplete',
         cachePurgeOk: true,
+        cachePurge: 'not-required',
         purgedUrls: [],
       };
     }
@@ -209,8 +357,9 @@ export class SnapshotPublisher {
       season,
       version: previousVersion,
       previousVersion: activeVersion,
-      reason: purgeResult.failureCategory,
+      reason: purgeResult.ok ? null : 'cache-purge-failed',
       cachePurgeOk: purgeResult.ok,
+      cachePurge: purgeResult.ok ? 'succeeded' : 'failed',
       purgedUrls: purgeResult.urls,
     };
   }
@@ -323,7 +472,7 @@ export class SnapshotPublisher {
 function failure(
   set: GeneratedSnapshotSet,
   previousVersion: string | null,
-  reason: string,
+  reason: PublicationReason,
 ): PublicationResult {
   return {
     status: 'failed',
@@ -332,6 +481,8 @@ function failure(
     previousVersion,
     reason,
     cachePurgeOk: true,
+    // Nothing committed, so nothing was purged.
+    cachePurge: 'not-required',
     purgedUrls: [],
   };
 }

@@ -189,8 +189,12 @@ describe('an incomplete run never reaches the publisher', () => {
         gap: 'missing-required-resource',
       },
       {
-        name: 'a calendar round has no race classification',
-        resources: [...seasonResources, raceResource(12)],
+        // Round 12 is the season's only *completed* event, so it is the only
+        // one whose classification is required. Planning none at all leaves
+        // exactly that one unmet; the upcoming, postponed and cancelled rounds
+        // are legitimately without a result and must not create a gap.
+        name: 'a completed calendar round has no race classification',
+        resources: [...seasonResources],
         port: completePort('jolpica', source),
         gap: 'missing-round-classification',
       },

@@ -265,6 +265,41 @@ with no loop and no retry. The publisher remains the sole publication
 authority, the active pointer remains its final write, and
 [ADR 0007](0007-versioned-kv-publication-active-pointer.md) is unchanged.
 
+**Only `completed` rounds require a race classification.** Completeness is
+decided per event by a pure, total predicate over the closed status union, and
+by nothing else:
+
+| Event status  | Race result required |
+| ------------- | -------------------- |
+| `scheduled`   | no                   |
+| `upcoming`    | no                   |
+| `in_progress` | no                   |
+| `completed`   | **yes**              |
+| `postponed`   | no                   |
+| `cancelled`   | no                   |
+| `unknown`     | no                   |
+
+Only `completed` establishes that a race was run and therefore that a
+classification must exist. `in_progress` is excluded because a race under way
+has no stable result yet, and `unknown` because it establishes nothing —
+inventing a requirement from it would block an entire season on a value the
+enum contract defines as merely "not recognised". Both choices fail towards
+**not fabricating data**, which is the direction the result contract already
+takes: the Grand Prix results resource returns the race classification _when
+available_, and an unavailable future result must be a meaningful absence
+rather than a fabricated empty classification (GridView_Backend_Scheme.md
+§10.5). The generator honours that by emitting a results document only when one
+exists, so a non-completed round simply has none, and an ordinary in-season
+snapshot — some rounds raced, the rest still ahead — publishes normally. A
+`completed` round whose classification is genuinely missing still withholds the
+whole snapshot and preserves last-known-good.
+
+**This is publication completeness, not scheduling.** The predicate reads one
+field of data the source supplied. No clock, event offset, session duration,
+cadence or due-job calculation is involved, and G5 remains untouched. A
+classification supplied for a non-completed event is governed by the existing
+result contract and is not specially rejected here.
+
 **Only a race classification is publishable.** The public resource
 `/v1/seasons/{season}/grand-prix/{round}/results` is defined as the race
 classification, and the generator selects its document by round alone, so any
@@ -296,6 +331,48 @@ circuit's `lapRecord` is an optional historical fact whose driver need not be
 on this season's grid, and one driver may legitimately hold several season
 entries, because mid-season participation is modelled as split spans
 (GridView_Domain_Model.md §6.7, decision M6).
+
+**Publication is a phase transition with one irreversible point.** KV offers
+ordered writes, not a transaction, and the design says so rather than
+pretending otherwise:
+
+1. active-version read;
+2. idempotency and completed-version reads;
+3. active-source-updated-at read;
+4. snapshot-set contract validation;
+5. inactive version writes;
+6. completion check, previous-pointer and metadata writes;
+7. **`setActiveVersion` — the commit point, and deliberately the final storage
+   write**;
+8. post-commit cache purge.
+
+Before step 7 the new release is not serving; after it, it is.
+`SnapshotPublisher` is the only component that knows which side of that line a
+run ended on, so it is where expected operational failures are converted into
+bounded `PublicationResult` values instead of rejected promises. Every failure
+in steps 1–7 returns `failed` (or `rejected` for a contract violation),
+preserves the previous active pointer, leaves any partial version inactive and
+performs no purge. If the compensating `deleteUnpublishedVersion` also fails,
+its rejection is contained and the **original** failure classification is
+preserved: the caller needs the phase that actually failed, not the cleanup.
+Neither raw error is read, returned or logged.
+
+The purge runs only after the commit point, so it cannot un-publish anything.
+A purge that throws or rejects therefore returns **`applied` with a bounded
+`cachePurge: 'failed'`** — never `withheld`, never a failure implying the old
+release still serves, and with no rollback. `cachePurge` is a closed internal
+domain (`not-required | succeeded | failed`) so a caller switches over a value
+rather than parsing a warning string, and the publication reason vocabulary is
+likewise closed, so an adapter's own category string can never become the
+published reason. Nothing about the public v1 contract changes.
+
+The guarantee is deliberately stated as **expected operational failures are
+contained**, not as "nothing can throw". An arbitrary programmer defect is not
+claimed to be impossible, because the only honest report for one would have to
+say whether publication committed — and nothing outside the publisher can know
+that. `CoordinatedSeasonPublication` therefore does not wrap the publisher in a
+catch that would have to guess; it returns the publisher's truthful result,
+and a committed release whose purge failed stays `published`.
 
 **Generation itself is contained.** Preflight settles every reference, but
 generation also derives values from caller inputs it cannot vouch for, so the

@@ -94,7 +94,11 @@ export type {
   CoordinatedResourceKind,
 } from './resource';
 
-export { assembleSeasonSource, assemblyGaps } from './season-assembly';
+export {
+  assembleSeasonSource,
+  assemblyGaps,
+  requiresRaceClassification,
+} from './season-assembly';
 export type {
   AssemblyGap,
   SeasonAssembly,
