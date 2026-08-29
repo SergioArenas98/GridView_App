@@ -353,13 +353,38 @@ describe('every pre-commit phase returns a bounded failed result', () => {
     expect(await storage.getActiveVersion(SEASON)).toBe(PRIOR);
   });
 
-  it('contains a validator that throws', async () => {
+  it('contains a validator that throws, as an operational failure', async () => {
     const source = await seasonFixture();
     const { storage, logger } = await seeded(source);
     const purger = new CountingPurger();
 
     const outcome = await settle(() =>
       publisherFor(storage, purger, logger, throwingValidator).publish(
+        setFor(source, NEXT),
+      ),
+    );
+
+    expect(outcome.rejected).toBe(false);
+    // A validator that *throws* is a broken dependency, not a document that
+    // failed its contract. `rejected` would tell the synchronization service
+    // the candidate was examined and declined, which is exactly what did not
+    // happen.
+    expect(outcome.value?.status).toBe('failed');
+    expect(outcome.value?.reason).toBe('contract-validation');
+    expect(await storage.getActiveVersion(SEASON)).toBe(PRIOR);
+    expect(purger.calls).toBe(0);
+  });
+
+  it('still reports a validator that returns issues as rejected', async () => {
+    const source = await seasonFixture();
+    const { storage, logger } = await seeded(source);
+    const purger = new CountingPurger();
+    const reportingValidator: SnapshotValidator = {
+      validate: () => [{ path: 'data', message: 'forced contract issue' }],
+    };
+
+    const outcome = await settle(() =>
+      publisherFor(storage, purger, logger, reportingValidator).publish(
         setFor(source, NEXT),
       ),
     );
@@ -718,6 +743,72 @@ describe('the public contract is untouched by the purge disposition', () => {
         fixture,
       ).not.toContain('cachePurge');
     }
+  });
+});
+
+describe('a broken validator fails the synchronization', () => {
+  function serviceWith(
+    harness: ReturnType<typeof createHarness>,
+    validator: SnapshotValidator,
+  ): SynchronizationService {
+    return new SynchronizationService(
+      harness.storage,
+      harness.provider,
+      new SnapshotPublisher(
+        harness.storage,
+        validator,
+        harness.purger,
+        harness.logger,
+        'https://api.gridview.test',
+      ),
+      harness.clock,
+      harness.logger,
+    );
+  }
+
+  it('reports failed and never marks due jobs successful', async () => {
+    const harness = createHarness();
+    const before = await harness.storage.getSyncState(SEASON);
+
+    const result = await serviceWith(harness, throwingValidator).run({
+      season: SEASON,
+      trigger: 'manual-full',
+      forceVersion: NEXT,
+    });
+
+    // Nothing was published, so nothing may look like a success.
+    expect(result.status).toBe('failed');
+    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+
+    const state = await harness.storage.getSyncState(SEASON);
+    expect(state?.lastFailedAt).toBeTypeOf('string');
+    expect(state?.lastCompletedAt ?? null).toBe(
+      before?.lastCompletedAt ?? null,
+    );
+    for (const job of result.dueJobs) {
+      expect(state?.lastSuccessByJob?.[job] ?? null, job).toBe(
+        before?.lastSuccessByJob?.[job] ?? null,
+      );
+    }
+
+    const events = harness.logger.events.map((event) => event.operation);
+    expect(events).toContain('sync.failed');
+    expect(events).not.toContain('sync.completed');
+    // The validator's own exception text never reaches a log line.
+    expect(harness.logger.serialized()).not.toContain('validator exploded');
+    expect(harness.logger.serialized()).not.toContain('secret-key');
+  });
+
+  it('also fails the run when the validator reports issues', async () => {
+    const harness = createHarness();
+    const result = await serviceWith(harness, {
+      validate: () => [{ path: 'data', message: 'forced contract issue' }],
+    }).run({ season: SEASON, trigger: 'manual-full', forceVersion: NEXT });
+
+    // A declined candidate publishes nothing either, but it is a *different*
+    // fact: the documents were examined and did not satisfy the contract.
+    expect(result.publicationStatus).toBe('rejected');
+    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
   });
 });
 

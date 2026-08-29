@@ -189,14 +189,34 @@ export class SnapshotPublisher {
 
     for (const document of documents.values()) {
       // A validator is an ordinary dependency: it may throw as well as report.
+      // The two are **different facts** and must not share a branch.
       const validated = await attempt(() => this.validator.validate(document));
-      if (!validated.ok || validated.value.length > 0) {
+      if (!validated.ok) {
+        // The validator broke. Nothing was examined, so nothing was declined:
+        // this is an operational failure like any other dependency outage.
+        // Reporting it as `rejected` would tell the synchronization service the
+        // candidate was assessed and refused - which is what makes it record a
+        // completed run and mark every due job successful, hiding a broken
+        // validator until the next cadence.
         this.logger.warn({
           operation: 'publication.validation_failed',
           season: set.season,
           releaseVersion: set.version,
           failureCategory: 'contract-validation',
-          issueCount: validated.ok ? validated.value.length : 0,
+          issueCount: 0,
+          documentName: document.documentName,
+        });
+        return this.failed(set, previousVersion, 'contract-validation');
+      }
+      if (validated.value.length > 0) {
+        // The documents were examined and did not satisfy the contract. That
+        // is a genuine rejection of this candidate, and stays one.
+        this.logger.warn({
+          operation: 'publication.validation_failed',
+          season: set.season,
+          releaseVersion: set.version,
+          failureCategory: 'contract-validation',
+          issueCount: validated.value.length,
           documentName: document.documentName,
         });
         return {

@@ -366,6 +366,17 @@ rather than parsing a warning string, and the publication reason vocabulary is
 likewise closed, so an adapter's own category string can never become the
 published reason. Nothing about the public v1 contract changes.
 
+**A broken validator and a rejected candidate are different facts.** A
+validator that _returns issues_ has examined the documents and found them
+wanting: that is a genuine `rejected`, and the candidate is declined. A
+validator that _throws_ has examined nothing — it is a broken dependency, like
+any other operational failure, and returns `failed`. Collapsing the two would
+be more than imprecise: `SynchronizationService` diverts only `failed`
+publications to its failure path, so a thrown validator reported as `rejected`
+would record a completed run and mark every due job successful while nothing
+was published, suppressing retries until the next cadence and hiding the
+breakage. Neither branch exposes the exception.
+
 The guarantee is deliberately stated as **expected operational failures are
 contained**, not as "nothing can throw". An arbitrary programmer defect is not
 claimed to be impossible, because the only honest report for one would have to
@@ -373,6 +384,36 @@ say whether publication committed — and nothing outside the publisher can know
 that. `CoordinatedSeasonPublication` therefore does not wrap the publisher in a
 catch that would have to guess; it returns the publisher's truthful result,
 and a committed release whose purge failed stays `published`.
+
+**`hasResults` is an exact cross-resource assertion, not a local flag.** The
+calendar states whether a round's classification is available and the client
+acts on it: with nothing cached, a `false` flag means the classification is
+never requested at all. The flag must therefore equal, exactly, whether that
+round has a selected race result carrying an actual classification. Availability
+means `final` or `provisional`; `unavailable` is the contract's meaningful
+absence for a session that has not run, and `unknown` establishes nothing, so
+neither asserts availability — the same fail-towards-not-fabricating rule the
+event-status table uses. Both mismatch directions fail closed: a classification
+published under a `false` flag would be invisible, and a `true` flag with no
+classification advertises data that does not exist. No flag is rewritten and no
+result is fabricated or discarded to repair the disagreement.
+
+**Grand Prix round and Grand Prix id are independently unique.** The local
+database keys `grand_prix` on `id` _and_ carries `UNIQUE(season, round)`, so
+they are two separate constraints and both are checked. Two rounds sharing one
+id would silently overwrite each other on write and the stored season would
+lose a round.
+
+Duplicate detection is one mechanism over a closed set of identity categories —
+driver, constructor, circuit, event, event round, session, race result, race
+result round, race result entry, driver standing, constructor standing, driver
+season entry and constructor season entry — each one an identity the domain
+model defines and persistence keys a single row on. Documented multiplicity is
+preserved rather than outlawed: a driver may hold several `driverEntries` rows,
+because mid-season participation is modelled as split spans keyed by their own
+`id` (GridView_Domain_Model.md §6.7, decision M6), so the _entry ids_ are
+checked and the driver ids are not; and a circuit's `lapRecord` may name a
+driver outside the current grid, so it is not an identity of this season at all.
 
 **Generation itself is contained.** Preflight settles every reference, but
 generation also derives values from caller inputs it cannot vouch for, so the

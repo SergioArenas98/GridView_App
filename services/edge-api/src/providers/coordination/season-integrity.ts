@@ -27,6 +27,7 @@
  * diagnostic.
  */
 
+import type { ResultStatus } from '../../contract/enums';
 import type { ProviderSeasonSource } from '../formula-one-provider';
 
 /**
@@ -56,17 +57,38 @@ export const seasonRelations = [
   'constructor-standing-constructor',
   /** A classification must belong to a calendar event, by round and by id. */
   'result-event',
+  /**
+   * `GrandPrix.hasResults` must agree exactly with whether that round has a
+   * selected race classification.
+   */
+  'event-has-results',
   /** `results[].entries[].driverId` is published verbatim. */
   'result-entry-driver',
   /** `results[].entries[].constructorId` is published verbatim. */
   'result-entry-constructor',
   /** `results[].fastestLap.driverId`, when present, is published verbatim. */
   'result-fastest-lap-driver',
-  /** Two profiles, events or classifications claiming one published document. */
+  /** Two payloads claiming one identity that storage keys a single row on. */
   'duplicate-identity',
 ] as const;
 
 export type SeasonRelation = (typeof seasonRelations)[number];
+
+/**
+ * Whether a result document carries an actual classification.
+ *
+ * A result *object* existing is not the same as a result being available: the
+ * public contract requires a not-yet-run session to return
+ * `status = 'unavailable'` with an empty `entries` array rather than a
+ * fabricated empty classification (GridView_Backend_Scheme.md §10.5), and the
+ * provider emits exactly that. Only `final` and `provisional` denote a real
+ * classification; `unavailable` says so explicitly, and `unknown` establishes
+ * nothing, so neither may assert availability. This is the same
+ * fail-towards-not-fabricating rule the event-status table uses.
+ */
+function isClassified(status: ResultStatus): boolean {
+  return status === 'final' || status === 'provisional';
+}
 
 function idSet(values: readonly { readonly id: string }[]): Set<string> {
   return new Set(values.map((value) => value.id));
@@ -75,6 +97,97 @@ function idSet(values: readonly { readonly id: string }[]): Set<string> {
 /** True when a collection contains the same identity twice. */
 function hasDuplicate(values: readonly (string | number)[]): boolean {
   return new Set(values).size !== values.length;
+}
+
+/**
+ * A composite identity, length-prefixed so it is injective by construction
+ * rather than by hoping no component contains the separator.
+ */
+function composite(...parts: readonly string[]): string {
+  let encoded = '';
+  for (const part of parts) encoded += part.length + ':' + part + ';';
+  return encoded;
+}
+
+/**
+ * The closed set of identities that back exactly one stored row.
+ *
+ * Each member is an identity the domain model defines and the local database
+ * keys on, so two payloads sharing one means the later silently overwrites the
+ * earlier. Which of them survives would be an ordering accident, so neither is
+ * allowed to: the whole candidate fails closed instead.
+ *
+ * Deliberately **not** here, because multiplicity is legitimate:
+ *
+ * - a driver may hold several `driverEntries` rows, since mid-season
+ *   participation is modelled as split spans keyed by their own `id`
+ *   (GridView_Domain_Model.md §6.7, decision M6) - the *entry ids* are checked,
+ *   the driver ids are not;
+ * - a circuit's `lapRecord` may name a driver outside the current grid, so it
+ *   is not an identity of this season at all.
+ */
+const duplicateIdentityCategories = [
+  'driver',
+  'constructor',
+  'circuit',
+  'event',
+  'event-round',
+  'session',
+  'race-result',
+  'race-result-round',
+  'race-result-entry',
+  'driver-standing',
+  'constructor-standing',
+  'driver-season-entry',
+  'constructor-season-entry',
+] as const;
+
+export type DuplicateIdentityCategory =
+  (typeof duplicateIdentityCategories)[number];
+
+/**
+ * Every identity list to check, by category.
+ *
+ * One place, one mechanism: adding a stored identity means adding a category
+ * here, never another ad hoc `Set` comparison somewhere else.
+ */
+function identitiesByCategory(
+  source: ProviderSeasonSource,
+): Record<DuplicateIdentityCategory, readonly (string | number)[]> {
+  return {
+    // `drivers.id`, `constructors.id`, `circuits.id` are primary keys.
+    driver: source.drivers.map((driver) => driver.id),
+    constructor: source.constructors.map((entry) => entry.id),
+    circuit: source.circuits.map((circuit) => circuit.id),
+    // `grand_prix` keys on `id` **and** carries UNIQUE(season, round): two
+    // independent constraints, so both are checked independently.
+    event: source.calendar.map((event) => event.id),
+    'event-round': source.calendar.map((event) => event.round),
+    // `sessions.id` is a primary key across the whole database, not per event.
+    session: source.calendar.flatMap((event) =>
+      event.sessions.map((session) => session.id),
+    ),
+    'race-result': source.results.map((result) => result.id),
+    'race-result-round': source.results.map((result) => result.round),
+    // `race_result_entries` keys on (resultId, driverId): one classification
+    // per driver per result.
+    'race-result-entry': source.results.flatMap((result) =>
+      result.entries.map((entry) => composite(result.id, entry.driverId)),
+    ),
+    // Standings key on (season, driverId) / (season, constructorId); the season
+    // is uniform across an assembled source, so the participant is the identity.
+    'driver-standing': source.driverStandings.map(
+      (standing) => standing.driverId,
+    ),
+    'constructor-standing': source.constructorStandings.map(
+      (standing) => standing.constructorId,
+    ),
+    'driver-season-entry': source.driverEntries.map((entry) => entry.id),
+    // UNIQUE(season, constructorId): exactly one entry per team per season.
+    'constructor-season-entry': source.constructorEntries.map(
+      (entry) => entry.constructorId,
+    ),
+  };
 }
 
 /**
@@ -162,17 +275,29 @@ export function validateSeasonReferences(
     }
   }
 
-  // Each of these collections backs a per-identity published document, so a
-  // repeated identity means two payloads competing for one document name.
-  // Which one would win is an ordering accident, so neither is allowed to.
-  if (
-    drivers.size !== source.drivers.length ||
-    constructors.size !== source.constructors.length ||
-    circuits.size !== source.circuits.length ||
-    hasDuplicate(source.calendar.map((event) => event.round)) ||
-    hasDuplicate(source.results.map((result) => result.round))
-  ) {
-    fail('duplicate-identity');
+  // `hasResults` is not a local flag: it is an assertion about the *results*
+  // collection, and the client acts on it. With nothing cached it decides
+  // whether the classification is requested at all, so a classification
+  // published under a `false` flag is invisible to a fresh client, and a `true`
+  // flag with no classification advertises data that does not exist. Both
+  // directions are equally wrong, and neither is repaired here - no flag is
+  // rewritten and no result is fabricated or dropped; the candidate fails
+  // closed as a whole.
+  const classifiedRounds = new Set(
+    source.results
+      .filter((result) => isClassified(result.status))
+      .map((result) => result.round),
+  );
+  for (const event of source.calendar) {
+    if (event.hasResults !== classifiedRounds.has(event.round)) {
+      fail('event-has-results');
+    }
+  }
+
+  // One mechanism over a closed set of stored identities.
+  const identities = identitiesByCategory(source);
+  for (const category of duplicateIdentityCategories) {
+    if (hasDuplicate(identities[category])) fail('duplicate-identity');
   }
 
   return seasonRelations.filter((relation) => failed.has(relation));
