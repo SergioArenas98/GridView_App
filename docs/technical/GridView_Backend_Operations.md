@@ -301,12 +301,28 @@ Provider-fetch failures and post-fetch failures are accounted separately.
 ## Cache Purge
 
 Local/development uses an in-memory fake purge adapter; staging and production
-use the Cloudflare Cache API adapter. Publication and rollback compute the
-affected public URLs from the published document set and purge only those URLs.
+use the Cloudflare Cache API adapter. Publication computes the affected public
+URLs from the published document set and purges only those URLs.
+
+**Rollback purges a wider set than it validates.** Whether a version is a legal
+rollback target and which public responses may still carry the outgoing
+version's representation are two different questions, so they use two different
+sets. Target completeness stays gated on `hasResults`: a results document is
+required exactly when the target calendar advertises a classification. Cache
+invalidation is not gated on it at all — rollback purges the **union** of the
+currently active version's and the target version's public route identities,
+including each round's results URL for every round in either calendar even when
+neither version advertises a classification for it. Otherwise a final
+classification cached from the newer version would keep being served at a URL
+the rollback restored to a meaningful absence. The union is deduplicated and
+sorted deterministically.
+
 A purge failure is returned (`207`) and logged, but never corrupts or reverts the
 active snapshot pointer — reader correctness relies on weak-ETag revalidation, not
-on purge success. Purge covers only the URLs GridView derives, not arbitrary
-downstream caches.
+on purge success. The rollback purge runs after the pointer write, so a purge
+that fails, throws or rejects still reports the rollback as applied with a
+bounded `cachePurge: 'failed'`. Purge covers only the URLs GridView derives, not
+arbitrary downstream caches.
 
 ## Structured Logging
 

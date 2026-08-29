@@ -134,6 +134,41 @@ The `not-attempted` outcome variant **carries no attempt field at all**, so
 counting one as a provider request is structurally impossible rather than
 merely forbidden.
 
+**That claim is enforced at runtime, not only in the type.** An adapter is an
+input boundary, so a compile-time union proves nothing about the object that
+actually arrives: a validator that merely recognises enough fields to enter a
+branch would accept `not-attempted` carrying a real `attempt`, classify the
+operation as skipped and lose the request from accounting entirely. The union
+is therefore validated as a **closed discriminated union**. One centralized,
+discriminator-keyed table states each variant's required, permitted-optional
+and consequently forbidden properties, and an outcome is admitted only when it
+carries exactly the properties its own variant declares:
+
+| Variant           | Required (besides `outcome`) | Optional     |
+| ----------------- | ---------------------------- | ------------ |
+| `candidate`       | `attempt`, `payload`         | —            |
+| `not-attempted`   | `reason`                     | `retryAt`    |
+| `failed`          | `attempt`, `reason`          | `retryAfter` |
+| `mapping-failure` | `attempt`                    | —            |
+
+Presence is decided **structurally, never by value**: an own `attempt` property
+holding `undefined` is still an attempt-bearing outcome and is rejected, as is
+one reachable only through the prototype chain. A property another variant
+declares — `retryAt` on `failed`, `payload` on `mapping-failure` — is rejected
+rather than silently ignored. Nothing on a rejected outcome is read afterwards,
+so a malformed answer can neither hide a request from accounting nor
+contribute one, and a hostile accessor or proxy trap is contained by the same
+bounded attribution boundary that contains a throwing adapter.
+
+**A malformed shape never becomes accounting data.** It takes the existing
+`malformed-outcome` contribution reason, stays `attempted: false`, registers no
+transport, is not selected, assembled or published, and leaves the lifetime
+total at zero. The embedded attempt is not re-read as trustworthy accounting
+data: its containing outcome is malformed, so under-reporting is preferred to
+inventing a request from an unusable answer — and the Durable Object
+reservation ledger remains the pacing authority, exactly as it does for
+`adapter-error`.
+
 A `429` remains an attempted, source-attributed, rate-limited request; a
 limiter deferral remains not attempted and may carry `retryAt` as **data
 only** — nothing in this phase schedules on it, because that is G5.
@@ -382,6 +417,41 @@ completed classified round still cannot evade results-document verification —
 its own flag is what demands the document. Without this, an active-season
 release would be publishable but unreachable as a rollback target, both
 explicitly and through the previous pointer.
+
+**Target completeness and cache invalidation are two different sets.** They
+answer two different questions and are deliberately not derived from one
+another:
+
+| Set                   | Question                                                                                          | Rule                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Target completeness   | Which documents must the target contain to be a legal rollback target?                            | Gated on `hasResults`, as described above.                                     |
+| Rollback invalidation | Which public routes may still serve the outgoing version's representation once the pointer moves? | The **union** of both versions' route identities, never gated on `hasResults`. |
+
+Using the completeness set for both left a real gap: a target advertising
+`hasResults: false` for a round — whether it stores an `unavailable` absence
+document or no results document at all — excluded that round's public results
+URL from the purge, so a **final classification cached from the newer version
+kept being served** after the pointer had rolled back to the meaningful
+absence.
+
+Rollback therefore purges the union of the **currently active** version's and
+the **target** version's public route identities: the season-level documents,
+every event's detail _and_ results URL for every round present in either
+calendar regardless of either version's `hasResults` flag, and every driver,
+constructor and circuit route either version carries. A route present in only
+one of the two versions is still invalidated, in both directions. The union is
+deduplicated and sorted deterministically.
+
+This is intentionally conservative. Purging a results URL whose new
+representation is a meaningful absence, or which has no document at all, costs
+one cache miss; leaving the newer version's classification cached contradicts
+the pointer the rollback just restored. Validation still runs before the
+pointer moves, a completeness rejection moves no pointer and purges nothing,
+`setActiveVersion` remains the commit point, and the purge remains
+**post-commit**: it cannot un-move the pointer, so a purge that fails, throws
+or rejects is reported as `applied` with `cachePurge: 'failed'` and never
+reverts the rollback. Explicit-target and `previous:{season}` rollback behave
+identically, and publication-time purge behaviour is unchanged.
 
 **Publication is a phase transition with one irreversible point.** KV offers
 ordered writes, not a transaction, and the design says so rather than

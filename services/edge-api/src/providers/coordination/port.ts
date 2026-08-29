@@ -44,7 +44,10 @@ export const transportReferenceMaxLength = 64;
  * coordinator - not the adapter - is what enforces that.
  *
  * A `not-attempted` outcome has no attempt field at all, so "not attempted"
- * can never be miscounted as an attempt: it is structurally unrepresentable.
+ * can never be miscounted as an attempt. That is enforced at runtime, not only
+ * in the type: `isWellFormedOutcome` validates the union as a **closed** set of
+ * shapes, so an adapter that hands back `not-attempted` carrying an `attempt`
+ * is rejected as malformed rather than silently accounted as a skip.
  */
 export interface ProviderTransportAttempt {
   /** Correlates outcomes that came from the same physical request. */
@@ -270,6 +273,95 @@ export function isInstant(value: unknown): value is string {
   return new Date(parsed).toISOString() === value;
 }
 
+/** The discriminator values `ProviderResourceOutcome` declares. */
+type ProviderOutcomeVariant = ProviderResourceOutcome['outcome'];
+
+/**
+ * Every property name any variant of the union declares.
+ *
+ * A variant's *forbidden* set is derived from this list rather than written
+ * out, so a property one variant legitimately carries can never be silently
+ * tolerated on another.
+ */
+const declaredOutcomeKeys = [
+  'outcome',
+  'attempt',
+  'payload',
+  'reason',
+  'retryAt',
+  'retryAfter',
+] as const;
+
+type DeclaredOutcomeKey = (typeof declaredOutcomeKeys)[number];
+
+interface OutcomeShape {
+  readonly required: readonly DeclaredOutcomeKey[];
+  readonly optional: readonly DeclaredOutcomeKey[];
+}
+
+/**
+ * One centralized description of each variant's exact shape.
+ *
+ * Keyed by the discriminator, so adding a variant to `ProviderResourceOutcome`
+ * without describing its shape here is a compile error rather than a silently
+ * unvalidated branch.
+ */
+const outcomeShapes: Record<ProviderOutcomeVariant, OutcomeShape> = {
+  candidate: { required: ['outcome', 'attempt', 'payload'], optional: [] },
+  'not-attempted': { required: ['outcome', 'reason'], optional: ['retryAt'] },
+  failed: {
+    required: ['outcome', 'attempt', 'reason'],
+    optional: ['retryAfter'],
+  },
+  'mapping-failure': { required: ['outcome', 'attempt'], optional: [] },
+};
+
+function isOutcomeVariant(value: unknown): value is ProviderOutcomeVariant {
+  return typeof value === 'string' && Object.hasOwn(outcomeShapes, value);
+}
+
+/**
+ * Whether an outcome carries exactly the properties its variant declares.
+ *
+ * The union is a runtime trust boundary, so "enough fields to enter a branch"
+ * is not the contract - the contract is the declared shape. Three checks,
+ * because an adapter can smuggle a property in three different ways:
+ *
+ * - **Every own key is declared by this variant.** `Reflect.ownKeys` covers
+ *   non-enumerable and symbol-keyed own properties as well, neither of which
+ *   any declared variant has.
+ * - **Every required key is an own property.** A required field inherited from
+ *   a prototype is not this variant either.
+ * - **No key another variant declares is reachable at all.** `in` walks the
+ *   prototype chain, which is what makes an `attempt` planted on a prototype
+ *   fail closed on `not-attempted` rather than being read later.
+ *
+ * Presence is decided structurally, never by value: `attempt: undefined` is an
+ * own property and is therefore still an attempt-bearing outcome.
+ *
+ * Nothing here reads a property's *value*, so a throwing accessor cannot fire
+ * from this function. A hostile proxy can still throw from `ownKeys` or `has`;
+ * that is contained by the coordinator's bounded attribution boundary, exactly
+ * as a throwing adapter is.
+ */
+function hasClosedShape(
+  record: Record<string, unknown>,
+  variant: ProviderOutcomeVariant,
+): boolean {
+  const shape = outcomeShapes[variant];
+  const allowed = new Set<string>([...shape.required, ...shape.optional]);
+  for (const key of Reflect.ownKeys(record)) {
+    if (typeof key !== 'string' || !allowed.has(key)) return false;
+  }
+  for (const key of shape.required) {
+    if (!Object.hasOwn(record, key)) return false;
+  }
+  for (const key of declaredOutcomeKeys) {
+    if (!allowed.has(key) && key in record) return false;
+  }
+  return true;
+}
+
 /**
  * Structural validation of an adapter outcome, independent of the payload.
  *
@@ -287,6 +379,12 @@ export function isInstant(value: unknown): value is string {
  * over a successful transport, fails closed here rather than being selected
  * and reported.
  *
+ * An outcome must first be **shape-closed**: exactly the properties its own
+ * variant declares, and none another variant declares. That is what makes
+ * `not-attempted` genuinely unable to carry an attempt at runtime - the
+ * property is rejected before any branch reads it, so a malformed adapter
+ * answer can neither hide a real request from accounting nor contribute one.
+ *
  * The payload's match against the requested resource is checked separately by
  * `payloadMatchesResource`, so a structurally valid outcome carrying the wrong
  * resource's data is still rejected.
@@ -296,7 +394,13 @@ export function isWellFormedOutcome(value: unknown): boolean {
     return false;
   }
   const record = value as Record<string, unknown>;
-  switch (record.outcome) {
+  const variant = record.outcome;
+  if (!isOutcomeVariant(variant)) return false;
+  // Shape closure decides membership before any value is read, so nothing on a
+  // malformed outcome - least of all an attempt it must not carry - is
+  // inspected, registered or counted.
+  if (!hasClosedShape(record, variant)) return false;
+  switch (variant) {
     case 'candidate':
       // A contradictory candidate is a coordination failure, not an attempted
       // one: nothing the outcome claims can be believed, including its own
@@ -323,7 +427,5 @@ export function isWellFormedOutcome(value: unknown): boolean {
       // The mapping boundary runs on a response that was read, so the request
       // behind it always succeeded (see `ProviderTransportAttempt.outcome`).
       return isSuccessfulAttempt(record.attempt);
-    default:
-      return false;
   }
 }

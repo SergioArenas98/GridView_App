@@ -98,6 +98,22 @@ async function attempt<T>(
   }
 }
 
+/**
+ * One stored version, as the raw facts both rollback questions are derived
+ * from. Kept separate from either derivation so neither can quietly become the
+ * other.
+ */
+interface VersionInventory {
+  /** Season-level documents this version actually stores. */
+  readonly collections: SnapshotDocumentName[];
+  /** Every round the stored calendar declares. */
+  readonly rounds: number[];
+  /** The subset of those rounds advertising `hasResults: true`. */
+  readonly classifiedRounds: number[];
+  /** Driver, constructor and circuit detail documents. */
+  readonly entities: SnapshotDocumentName[];
+}
+
 export class SnapshotPublisher {
   constructor(
     private readonly storage: SnapshotStorage,
@@ -331,7 +347,7 @@ export class SnapshotPublisher {
         purgedUrls: [],
       };
     }
-    const required = await this.documentNamesForVersion(
+    const required = await this.requiredDocumentsForVersion(
       season,
       previousVersion,
     );
@@ -359,28 +375,47 @@ export class SnapshotPublisher {
         purgedUrls: [],
       };
     }
+    // Decided before the pointer moves, while "what is serving" is still
+    // unambiguous, and deliberately from a different set than the completeness
+    // check above: see `cacheRoutesForVersion`.
+    const invalidated = [
+      ...(activeVersion
+        ? await this.cacheRoutesForVersion(season, activeVersion)
+        : []),
+      ...(await this.cacheRoutesForVersion(season, previousVersion)),
+    ];
+
     if (activeVersion) {
       await this.storage.setPreviousVersion(season, activeVersion);
     }
     await this.storage.setActiveVersion(season, previousVersion);
-    const purgeResult = await this.purger.purgePublicUrls(
-      publicUrlsForDocuments(this.purgeOrigin, season, required),
+
+    // Committed. The purge is post-commit and best-effort here for exactly the
+    // reason it is in `publish`: it cannot un-move the pointer, so its failure
+    // is reported alongside a truthful `applied`, never as a rollback that did
+    // not happen. A purge adapter that throws or rejects is an ordinary
+    // dependency outage and must not escape as a rejected promise.
+    const purged = await attempt(() =>
+      this.purger.purgePublicUrls(
+        publicUrlsForDocuments(this.purgeOrigin, season, invalidated),
+      ),
     );
+    const purgeOk = purged.ok && purged.value.ok;
     this.logger.warn({
       operation: 'rollback.completed',
       season,
       releaseVersion: previousVersion,
-      cacheOutcome: purgeResult.ok ? 'purged' : 'purge-failed',
+      cacheOutcome: purgeOk ? 'purged' : 'purge-failed',
     });
     return {
       status: 'applied',
       season,
       version: previousVersion,
       previousVersion: activeVersion,
-      reason: purgeResult.ok ? null : 'cache-purge-failed',
-      cachePurgeOk: purgeResult.ok,
-      cachePurge: purgeResult.ok ? 'succeeded' : 'failed',
-      purgedUrls: purgeResult.urls,
+      reason: purgeOk ? null : 'cache-purge-failed',
+      cachePurgeOk: purgeOk,
+      cachePurge: purgeOk ? 'succeeded' : 'failed',
+      purgedUrls: purged.ok ? purged.value.urls : [],
     };
   }
 
@@ -415,10 +450,25 @@ export class SnapshotPublisher {
     return snapshot?.meta.sourceUpdatedAt ?? null;
   }
 
-  private async documentNamesForVersion(
+  /**
+   * What one stored version actually holds, read once and derived from twice.
+   *
+   * Two different questions are asked of a rollback target, and answering them
+   * from one list is what let a cached classification survive a rollback:
+   *
+   * - **Completeness** - which documents must the target contain to be a legal
+   *   rollback target at all (`requiredDocumentsForVersion`).
+   * - **Cache invalidation** - which public routes may still be serving the
+   *   outgoing version's representation once the pointer moves
+   *   (`cacheRoutesForVersion`).
+   *
+   * The second is strictly wider than the first and is deliberately not
+   * derived from it.
+   */
+  private async inventoryForVersion(
     season: number,
     version: string,
-  ): Promise<SnapshotDocumentName[]> {
+  ): Promise<VersionInventory> {
     const known: SnapshotDocumentName[] = [
       'season',
       'bootstrap',
@@ -431,37 +481,32 @@ export class SnapshotPublisher {
       'standings:constructors',
       'content:manifest',
     ];
-    const out: SnapshotDocumentName[] = [];
+    const collections: SnapshotDocumentName[] = [];
     for (const name of known) {
       if (await this.storage.readVersionedDocument(season, version, name)) {
-        out.push(name);
+        collections.push(name);
       }
     }
+
+    const rounds: number[] = [];
+    const classifiedRounds: number[] = [];
     const calendar = await this.storage.readVersionedDocument(
       season,
       version,
       'calendar',
     );
     if (Array.isArray(calendar?.data)) {
-      // Mirror what publication actually generates. Every event has a detail
-      // document, but a results document exists only where the calendar
-      // advertises a classification - the generator emits one only when a
-      // classification exists, and the cross-resource preflight binds
-      // `hasResults` to `final` or `provisional`. Demanding one for every round
-      // would make a perfectly valid active-season release unreachable as a
-      // rollback target, while a completed classified round still cannot evade
-      // the check, because its own flag is what requires the document.
       for (const event of calendar.data as Array<{
         round?: number;
         hasResults?: unknown;
       }>) {
         if (typeof event.round !== 'number') continue;
-        out.push(`grand-prix:${event.round}`);
-        if (event.hasResults === true) {
-          out.push(`grand-prix:${event.round}:results`);
-        }
+        rounds.push(event.round);
+        if (event.hasResults === true) classifiedRounds.push(event.round);
       }
     }
+
+    const entities: SnapshotDocumentName[] = [];
     const drivers = await this.storage.readVersionedDocument(
       season,
       version,
@@ -469,8 +514,9 @@ export class SnapshotPublisher {
     );
     if (Array.isArray(drivers?.data)) {
       for (const driver of drivers.data as Array<{ driverId?: string }>) {
-        if (typeof driver.driverId === 'string')
-          out.push(`driver:${driver.driverId}`);
+        if (typeof driver.driverId === 'string') {
+          entities.push(`driver:${driver.driverId}`);
+        }
       }
     }
     const constructors = await this.storage.readVersionedDocument(
@@ -483,7 +529,7 @@ export class SnapshotPublisher {
         constructorId?: string;
       }>) {
         if (typeof constructor.constructorId === 'string') {
-          out.push(`constructor:${constructor.constructorId}`);
+          entities.push(`constructor:${constructor.constructorId}`);
         }
       }
     }
@@ -494,10 +540,79 @@ export class SnapshotPublisher {
     );
     if (Array.isArray(circuits?.data)) {
       for (const circuit of circuits.data as Array<{ id?: string }>) {
-        if (typeof circuit.id === 'string') out.push(`circuit:${circuit.id}`);
+        if (typeof circuit.id === 'string') {
+          entities.push(`circuit:${circuit.id}`);
+        }
       }
     }
-    return out;
+
+    return { collections, rounds, classifiedRounds, entities };
+  }
+
+  /**
+   * The documents a version must contain to be a valid rollback target.
+   *
+   * Mirrors what publication actually generates. Every event has a detail
+   * document, but a results document exists only where the calendar advertises
+   * a classification - the generator emits one only when a classification
+   * exists, and the cross-resource preflight binds `hasResults` to `final` or
+   * `provisional`. Demanding one for every round would make a perfectly valid
+   * active-season release unreachable as a rollback target, while a completed
+   * classified round still cannot evade the check, because its own flag is
+   * what requires the document.
+   *
+   * This set answers completeness **only**. It is never the purge set: an
+   * absent optional document does not mean the public route behind it has no
+   * cached representation to invalidate.
+   */
+  private async requiredDocumentsForVersion(
+    season: number,
+    version: string,
+  ): Promise<SnapshotDocumentName[]> {
+    const inventory = await this.inventoryForVersion(season, version);
+    return [
+      ...inventory.collections,
+      ...inventory.rounds.map(
+        (round) => `grand-prix:${round}` as SnapshotDocumentName,
+      ),
+      ...inventory.classifiedRounds.map(
+        (round) => `grand-prix:${round}:results` as SnapshotDocumentName,
+      ),
+      ...inventory.entities,
+    ];
+  }
+
+  /**
+   * Every public route one version can be responsible for, as document names.
+   *
+   * Deliberately conservative, and deliberately **not** gated on `hasResults`.
+   * A round the calendar says has no classification still owns the public
+   * results route, and that route may hold the other version's final
+   * classification: purging a URL whose new representation is a meaningful
+   * absence, or has no document at all, costs one cache miss, while leaving it
+   * cached keeps serving data the pointer change was meant to withdraw.
+   *
+   * The caller unions the outgoing active version's routes with the incoming
+   * target's, so a round, profile or collection that exists in only one of the
+   * two is still invalidated. `publicUrlsForDocuments` deduplicates and sorts,
+   * so the resulting request is deterministic.
+   */
+  private async cacheRoutesForVersion(
+    season: number,
+    version: string,
+  ): Promise<SnapshotDocumentName[]> {
+    const inventory = await this.inventoryForVersion(season, version);
+    return [
+      ...inventory.collections,
+      ...inventory.rounds.flatMap(
+        (round) =>
+          [
+            `grand-prix:${round}`,
+            `grand-prix:${round}:results`,
+          ] as SnapshotDocumentName[],
+      ),
+      ...inventory.entities,
+    ];
   }
 }
 
