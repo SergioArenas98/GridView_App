@@ -40,6 +40,7 @@ export type StoragePhase =
   | 'readVersionInventory'
   | 'writeVersionInventory'
   | 'setContentMetadata'
+  | 'getCurrentSeason'
   | 'setCurrentSeason'
   | 'deleteUnpublishedVersion';
 
@@ -179,6 +180,11 @@ export class ScriptableStorage extends MemorySnapshotStorage {
   ): Promise<void> {
     await this.guard('setContentMetadata');
     return super.setContentMetadata(metadata);
+  }
+
+  override async getCurrentSeason(): Promise<number | null> {
+    await this.guard('getCurrentSeason');
+    return super.getCurrentSeason();
   }
 
   override async setCurrentSeason(season: number): Promise<void> {

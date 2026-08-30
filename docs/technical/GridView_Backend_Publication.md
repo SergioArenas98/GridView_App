@@ -65,7 +65,9 @@ never be mapped to a public URL, and is removed with the version by
 8. Update content/current-season metadata.
 9. Write `active:{season}` last. **This is the commit point.**
 10. Record the outgoing version as `previous:{season}`, after the commit.
-11. Purge only affected public URLs through the cache-purge abstraction.
+11. Purge every affected public URL - each document's canonical numeric URL,
+    plus the current-season aliases when the affected season is current -
+    through the cache-purge abstraction.
 
 If validation, provider fetch or pre-activation storage writes fail, the active
 pointer is unchanged. Repeating publication of the already active immutable
@@ -175,6 +177,62 @@ outage must still be told which side of the commit point the attempt ended on:
 No raw storage message reaches a response or a log line; only the bounded phase
 and category are recorded.
 
+### Cache invalidation covers every accepted URL alias
+
+Numeric-season URLs stay canonical, and the public router keeps serving the
+`current` and omitted-season forms exactly as before. Nothing about routing,
+cache keys, TTLs or the OpenAPI contract changes; what changed is only which
+URLs an invalidation covers.
+
+A CDN keys on the request URL, and the router accepts the same document under
+more than one. `season` may be omitted - `params.ts` defaults it to `current` -
+or given explicitly as `current`, and `/v1/seasons/current` is matched as its
+own path. Those are separate cache entries, so purging only
+`/v1/bootstrap?season=2026` left `/v1/bootstrap` and
+`/v1/bootstrap?season=current` serving the withdrawn release until their TTL
+expired - an hour for a profile route.
+
+When the affected season is the current one, invalidation therefore expands to
+every alias the router accepts for the affected documents:
+
+| Document                                    | Canonical URL                    | Current-season aliases                                                  |
+| ------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------- |
+| `bootstrap`                                 | `/v1/bootstrap?season={season}`  | `/v1/bootstrap`, `/v1/bootstrap?season=current`                          |
+| `home`                                      | `/v1/home?season={season}`       | `/v1/home`, `/v1/home?season=current`                                    |
+| `season`                                    | `/v1/seasons/{season}`           | `/v1/seasons/current`                                                    |
+| `driver:`, `constructor:`, `circuit:`       | `/v1/{kind}/{id}?season={season}`| `/v1/{kind}/{id}`, `/v1/{kind}/{id}?season=current`                      |
+| `content:manifest`                          | `/v1/content/manifest`           | none - the URL carries no season and rejects every query key             |
+| calendar, collections, standings, event routes | `/v1/seasons/{season}/...`    | none - those paths accept no query and no `current` segment              |
+
+The alias set is **derived from the route table**, not hand-maintained. There is
+no `/v1/seasons/current/calendar` or any other `current` sub-path:
+`resolveSeasonRoute` parses that segment with the four-digit season pattern, so
+those forms are rejected as invalid parameters rather than served, and purging
+one would be inventing an alias. Duplicated `season` query keys are accepted by
+the parameter guard but unbounded in number, so they are not enumerable and are
+not part of the surface.
+
+Publication, rollback and `POST /internal/admin/cache/purge` all expand through
+the **same** mechanism, so none of the three can fall back to numeric-only
+invalidation. A season known **not** to be current keeps numeric-only
+invalidation: its aliases belong to whatever season is current, and purging them
+would evict a valid entry.
+
+Current-season identity is read from the stored pointer, never inferred from a
+clock. An unreadable or unset pointer expands the aliases anyway, because
+purging an alias that was not stale costs one cache miss while skipping one that
+was leaves a withdrawn release serving.
+
+A publication that **moves** the current-season pointer also invalidates the
+alias URLs the outgoing season was being served through, taken from that
+season's own inventory - aliases only, since its numeric URLs still serve
+correct content. Most aliases are covered already, because an alias URL is
+season-independent; what this adds is a profile the outgoing season carried and
+the incoming one does not. If that inventory cannot be read the surface is not
+enumerable, and the purge reports `cachePurge: 'failed'` rather than claiming a
+success that leaves a withdrawn profile serving. That remains post-commit and
+never reverts the pointer.
+
 ### Cache invalidation on rollback
 
 The purge set is the **union** of the outgoing active version's and the target
@@ -191,9 +249,9 @@ commit. An outgoing active version carrying no inventory contributes nothing to
 the union rather than blocking the recovery it is being rolled back from.
 
 `POST /internal/admin/cache/purge` uses the same exact inventory and the same
-route mapper for the **active** version, so an operator purge covers the whole
-active release. It moves no pointer and writes nothing; with no active version
-or no inventory it returns a bounded `207`.
+route expansion for the **active** version, so an operator purge covers the
+whole active release, aliases included. It moves no pointer and writes nothing;
+with no active version or no inventory it returns a bounded `207`.
 
 ## KV Consistency Boundary
 

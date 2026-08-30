@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest';
 
 import worker from '../../src/index';
-import { publicUrlsForDocuments } from '../../src/cache/purge';
+import { invalidationUrlsForDocuments } from '../../src/cache/purge';
 import type {
   CachePurgeAdapter,
   CachePurgeResult,
@@ -88,10 +88,17 @@ describe('the manual purge covers every public route the active version carries'
     const purged = harness.purger.purgedUrls.slice(before);
 
     expect(result.status).toBe(200);
-    expect(purged).toEqual(publicUrlsForDocuments(ORIGIN, SEASON, inventory));
-    expect(result.data.urls).toEqual(
-      publicUrlsForDocuments(ORIGIN, SEASON, inventory),
+    // The curated season is the one the `current` aliases resolve to, so the
+    // operator purge covers the canonical URLs *and* every alias the router
+    // accepts for them - not the canonical set alone.
+    const expected = invalidationUrlsForDocuments(
+      ORIGIN,
+      SEASON,
+      inventory,
+      'season-is-current',
     );
+    expect(purged).toEqual(expected);
+    expect(result.data.urls).toEqual(expected);
   });
 
   it('covers the routes the previous hard-coded set omitted', async () => {

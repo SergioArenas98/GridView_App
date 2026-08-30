@@ -25,6 +25,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MemoryCachePurgeAdapter,
+  invalidationUrlsForDocuments,
   publicUrlsForDocuments,
 } from '../../src/cache/purge';
 import type { SnapshotPublisher } from '../../src/publication/publisher';
@@ -234,10 +235,14 @@ describe('the rollback purge set is the exact union of both inventories', () => 
     await publish(harness, active, NEWER, LATER);
 
     const result = await harness.publisher.rollback(SEASON, TARGET);
-    const expected = publicUrlsForDocuments(ORIGIN, SEASON, [
-      ...documentNames(target, TARGET),
-      ...documentNames(active, NEWER),
-    ]);
+    // The curated season is current, so the union carries each canonical URL
+    // together with the `current` aliases the router serves it under.
+    const expected = invalidationUrlsForDocuments(
+      ORIGIN,
+      SEASON,
+      [...documentNames(target, TARGET), ...documentNames(active, NEWER)],
+      'season-is-current',
+    );
 
     expect(result.status).toBe('applied');
     expect(result.purgedUrls).toEqual(expected);

@@ -390,6 +390,30 @@ Local/development uses an in-memory fake purge adapter; staging and production
 use the Cloudflare Cache API adapter. Publication computes the affected public
 URLs from the published version's exact inventory and purges only those URLs.
 
+**Purge completeness is not numeric-URL completeness.** A CDN keys on the
+request URL, and the public router serves the same document under several: the
+canonical numeric season, an explicit `season=current`, an **omitted** `season`
+that defaults to `current`, and the path form `/v1/seasons/current`. Those are
+separate cache entries. When the affected season is the current one, publication,
+rollback and the operator purge all expand invalidation - through one shared
+mechanism - to every alias the router accepts for the affected documents:
+`/v1/bootstrap`, `/v1/home` and the driver, constructor and circuit profile
+routes in both their omitted and explicit-`current` forms, plus
+`/v1/seasons/current`. `/v1/content/manifest` carries no season and needs none,
+and the remaining season routes accept no query and no `current` segment, so they
+have exactly one URL each. Nothing about routing, cache keys, TTLs or the public
+contract changes - only which URLs an invalidation covers.
+
+A season known **not** to be current keeps numeric-only invalidation, because its
+aliases belong to whatever season is current. Current-season identity is read
+from the stored pointer, never from a clock; if it cannot be read the aliases are
+purged anyway, since over-invalidating costs one cache miss and under-invalidating
+serves a withdrawn release. A publication that moves the current-season pointer
+additionally purges the alias URLs the outgoing season was served through, from
+that season's own inventory; if that inventory cannot be read the purge reports
+`cachePurge: 'failed'` rather than a success it cannot stand behind, still
+post-commit and still without reverting the pointer.
+
 **Rollback purges a wider set than it validates.** Whether a version is a legal
 rollback target and which public responses may still carry the outgoing
 version's representation are two different questions. Completeness is decided
@@ -407,10 +431,11 @@ active version carrying no inventory contributes nothing to the union rather
 than blocking the recovery it is being rolled back from.
 
 **`POST /internal/admin/cache/purge` covers the whole active release.** It maps
-the active version's exact inventory through the same public-route mapper, so
+the active version's exact inventory through the same public-route expansion, so
 the season detail, both standings, all three collections, the content manifest
 and every driver, constructor, circuit, Grand Prix and results route are
-included. It moves no pointer and writes nothing. With no active version it
+included - together with their current-season aliases when the season it is
+purging is the current one. It moves no pointer and writes nothing. With no active version it
 returns `207` with `no-active-version`; with an active version carrying no
 inventory it returns `207` with `missing-version-inventory`; a purge adapter
 that fails, throws or rejects is contained and also returns `207`.

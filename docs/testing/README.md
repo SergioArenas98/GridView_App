@@ -491,7 +491,18 @@ surviving a failed commit, a post-commit maintenance failure reported as
 applied-but-degraded, a bounded result for a read or write failure at every
 rollback phase, a purge that throws or rejects, the exact purge union and its
 sorted deduplicated ordering, and a manual purge that covers every active
-public route and moves no pointer. `services/edge-api/test/sync/` covers the
+public route and moves no pointer.
+`test/publication/current-season-alias-invalidation.test.ts` pins the URL
+surface itself: publication, rollback and the operator purge each invalidating
+the canonical numeric URL together with every alias the router accepts for the
+current season - omitted `season`, explicit `season=current` and
+`/v1/seasons/current` - across every public route family; no alias invented for
+a form the router rejects; a historical season keeping numeric-only
+invalidation; a current-season transition invalidating the aliases of both the
+outgoing and the incoming season, and reporting a failed purge when the outgoing
+surface cannot be enumerated; an unreadable current-season pointer expanding
+aliases rather than skipping them; and the committed pointer surviving an
+aliased purge that fails. `services/edge-api/test/sync/` covers the
 rejected-publication decision table over the exported reason union, both
 integrity refusals failing the run, the benign older-source no-op completing,
 and last-known-good preservation in every case.

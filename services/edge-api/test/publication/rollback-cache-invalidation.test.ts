@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MemoryCachePurgeAdapter,
-  publicUrlsForDocuments,
+  invalidationUrlsForDocuments,
   type CachePurgeAdapter,
   type CachePurgeResult,
 } from '../../src/cache/purge';
@@ -155,14 +155,21 @@ function classify(
   };
 }
 
-/** Every public route a generated version carries, in purge order. */
+/**
+ * Every public route a generated version carries, in purge order.
+ *
+ * The curated season is the current one throughout this suite, so the routes
+ * include the `current` aliases the router serves alongside each canonical
+ * numeric URL.
+ */
 function routesFor(source: ProviderSeasonSource, version: string): string[] {
-  return publicUrlsForDocuments(
+  return invalidationUrlsForDocuments(
     ORIGIN,
     SEASON,
     generateSnapshotSet(source, FIXED_NOW, version).documents.map(
       (document) => document.documentName,
     ),
+    'season-is-current',
   );
 }
 

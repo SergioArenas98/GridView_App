@@ -1,4 +1,9 @@
-import { publicUrlsForDocuments, type CachePurgeAdapter } from '../cache/purge';
+import {
+  currentAliasUrlsForDocuments,
+  invalidationUrlsForDocuments,
+  type CachePurgeAdapter,
+  type SeasonAliasing,
+} from '../cache/purge';
 import type { Logger } from '../logging/logger';
 import {
   contentMetadataFromManifest,
@@ -148,6 +153,44 @@ const activePointerDerivedDocuments: readonly SnapshotDocumentName[] = [
   'content:manifest',
 ];
 
+/**
+ * The season the public `current` aliases pointed at before an operation moved
+ * the current-season pointer, when that is not the season being written.
+ *
+ * Only publication can produce anything but `none`: it is the one operation
+ * that writes `setCurrentSeason`. Rollback and the operator purge never move
+ * it, so for them the outgoing and incoming current season are the same thing.
+ *
+ * `unresolved` is a distinct value on purpose. "Nothing else was current" and
+ * "we could not find out what was current" are different facts, and only the
+ * first one means there is nothing left to invalidate.
+ */
+type OutgoingCurrentSeason =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'season'; readonly season: number }
+  | { readonly kind: 'unresolved' };
+
+const noOutgoingCurrentSeason: OutgoingCurrentSeason = { kind: 'none' };
+
+/**
+ * Classifies the pre-commit current-season read against the season being
+ * published.
+ *
+ * Publishing the season that is already current moves nothing, and a pointer
+ * that was unset was not serving any aliases: both leave nothing extra to
+ * invalidate. Only a genuine change of identity does.
+ */
+function outgoingCurrentSeason(
+  read: Attempt<number | null>,
+  season: number,
+): OutgoingCurrentSeason {
+  if (!read.ok) return { kind: 'unresolved' };
+  if (read.value === null || read.value === season) {
+    return noOutgoingCurrentSeason;
+  }
+  return { kind: 'season', season: read.value };
+}
+
 /** The outcome of one guarded operational step. */
 type Attempt<T> =
   { readonly ok: true; readonly value: T } | { readonly ok: false };
@@ -232,6 +275,14 @@ export class SnapshotPublisher {
     if (!active.ok) return this.failed(set, null, 'storage-read');
     const activeVersion = active.value;
     const previousVersion = activeVersion;
+
+    // Read before the commit block, which overwrites it. This is a cache
+    // concern only, so its failure is never allowed to reject a publication
+    // that is otherwise fine: it is carried as `unresolved` and settled by the
+    // post-commit purge, which reports a failed invalidation rather than a
+    // success it cannot stand behind.
+    const currentBefore = await attempt(() => this.storage.getCurrentSeason());
+    const outgoing = outgoingCurrentSeason(currentBefore, set.season);
 
     if (activeVersion === set.version) {
       // Idempotency is decided over the version's own recorded inventory, not
@@ -382,7 +433,7 @@ export class SnapshotPublisher {
       activeVersion,
       'publication',
     );
-    const purge = await this.purgeRoutes(set.season, inventory);
+    const purge = await this.purgeRoutes(set.season, inventory, outgoing);
     this.logger.info({
       operation: 'publication.completed',
       season: set.season,
@@ -636,20 +687,96 @@ export class SnapshotPublisher {
     return 'failed';
   }
 
-  /** Purges the public routes for a set of documents, containing any outage. */
+  /**
+   * Purges the public routes for a set of documents, containing any outage.
+   *
+   * The set is the canonical numeric URLs plus - when this season is the one
+   * the public `current` aliases resolve to - every alias the router accepts
+   * for those same documents. A CDN keys on the request URL, so
+   * `/v1/seasons/2026` and `/v1/seasons/current` are two entries and purging
+   * one says nothing about the other.
+   *
+   * When a publication moves the current-season pointer, the alias URLs were
+   * serving the **outgoing** season. Most of them are covered already, because
+   * an alias URL is season-independent and the incoming season carries the same
+   * season-level documents. What is not covered is a profile the outgoing
+   * season had and the incoming one does not, so those aliases are added from
+   * the outgoing season's own inventory. If that inventory cannot be read the
+   * surface is not enumerable, and the purge reports failure rather than
+   * claiming a success that leaves a withdrawn profile serving.
+   */
   private async purgeRoutes(
     season: number,
     documents: readonly SnapshotDocumentName[],
+    outgoing: OutgoingCurrentSeason = noOutgoingCurrentSeason,
   ): Promise<{ ok: boolean; urls: string[] }> {
-    const urls = publicUrlsForDocuments(this.purgeOrigin, season, [
-      ...documents,
-      ...activePointerDerivedDocuments,
-    ]);
+    const aliasing = await this.seasonAliasing(season);
+    const invalidated = new Set(
+      invalidationUrlsForDocuments(
+        this.purgeOrigin,
+        season,
+        [...documents, ...activePointerDerivedDocuments],
+        aliasing,
+      ),
+    );
+    const outgoingAliases = await this.outgoingAliasUrls(outgoing);
+    for (const url of outgoingAliases ?? []) invalidated.add(url);
+
+    const urls = [...invalidated].sort();
     const purged = await attempt(() => this.purger.purgePublicUrls(urls));
     return {
-      ok: purged.ok && purged.value.ok,
+      ok: outgoingAliases !== null && purged.ok && purged.value.ok,
       urls: purged.ok ? purged.value.urls : [],
     };
+  }
+
+  /**
+   * Whether this season is the one the public `current` aliases resolve to.
+   *
+   * Decided from the stored pointer, never from a clock: "the current season"
+   * is a published fact, and a wall-clock guess would invalidate the wrong
+   * aliases around a season boundary.
+   *
+   * An unreadable or unset pointer answers `season-is-current`, which is the
+   * conservative direction. Purging an alias that was not stale costs one cache
+   * miss; not purging one that was leaves a withdrawn release serving for the
+   * whole of its TTL.
+   */
+  private async seasonAliasing(season: number): Promise<SeasonAliasing> {
+    const current = await attempt(() => this.storage.getCurrentSeason());
+    if (!current.ok || current.value === null) return 'season-is-current';
+    return current.value === season
+      ? 'season-is-current'
+      : 'season-is-historical';
+  }
+
+  /**
+   * The alias URLs the outgoing current season was being served through.
+   *
+   * Aliases only: the outgoing season's numeric URLs still serve correct
+   * content and evicting them would be over-invalidation with no stale entry to
+   * justify it. `null` means the surface could not be enumerated at all.
+   */
+  private async outgoingAliasUrls(
+    outgoing: OutgoingCurrentSeason,
+  ): Promise<string[] | null> {
+    if (outgoing.kind === 'none') return [];
+    if (outgoing.kind === 'unresolved') return null;
+
+    const active = await attempt(() =>
+      this.storage.getActiveVersion(outgoing.season),
+    );
+    if (!active.ok) return null;
+    if (active.value === null) return [];
+
+    const inventory = await attempt(() =>
+      this.storage.readVersionInventory(
+        outgoing.season,
+        active.value as string,
+      ),
+    );
+    if (!inventory.ok || inventory.value === null) return null;
+    return currentAliasUrlsForDocuments(this.purgeOrigin, inventory.value);
   }
 
   /**

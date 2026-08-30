@@ -24,8 +24,8 @@ export function snapshotPrefix(season: number, version: string): string {
  *   documents would describe a version that no longer exists.
  * - Its suffix is not, and cannot become, a `SnapshotDocumentName`: that union
  *   is closed, so nothing can ask for this key through
- *   `readVersionedDocument`, and `publicUrlsForDocuments` can never map it to
- *   a public route.
+ *   `readVersionedDocument`, and `invalidationUrlsForDocuments` can never map
+ *   it to a public route or to one of that route's aliases.
  */
 export function versionInventoryKey(season: number, version: string): string {
   return `${snapshotPrefix(season, version)}__inventory`;
