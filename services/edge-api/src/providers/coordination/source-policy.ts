@@ -184,6 +184,37 @@ const BOUND_MAX_SECONDS = 24 * 60 * 60;
 export const recordedProvisionalSessionEndBound: ProvisionalSessionEndBound | null =
   null;
 
+/** The exact own properties a recorded bound declares. */
+const provisionalBoundKeys = ['kind', 'boundSeconds'] as const;
+
+/**
+ * The value of one **own data property**, or `null` when the key is absent,
+ * inherited, or present as an accessor.
+ *
+ * A descriptor rather than a property read, for two reasons:
+ *
+ * - A plain read walks the prototype chain, so a record could supply a
+ *   declared field it does not actually own.
+ * - A descriptor **describes** an accessor without invoking it. This boundary
+ *   decides whether a policy-locked source may be driven at all, so a getter
+ *   on either declared field is refused rather than executed: it cannot throw
+ *   from here, cannot answer differently on a second call, and cannot run
+ *   caller code merely because the shape was being checked.
+ *
+ * A data descriptor's `value` is inert - reading it runs nothing - so taking
+ * it here is not a value read in the sense the ordering rule cares about. What
+ * the value *means* is still decided afterwards, by the caller.
+ */
+function ownDataProperty(
+  target: object,
+  key: string,
+): { readonly value: unknown } | null {
+  const descriptor = Object.getOwnPropertyDescriptor(target, key);
+  if (descriptor === undefined) return null;
+  if (!('value' in descriptor)) return null;
+  return { value: descriptor.value };
+}
+
 /**
  * Decides provisional eligibility from an untrusted value.
  *
@@ -192,28 +223,69 @@ export const recordedProvisionalSessionEndBound: ProvisionalSessionEndBound | nu
  * non-integer, zero, a negative, an absurd value or an object carrying an
  * extra property all mean **locked**. Absence and malformation are never read
  * as permission.
+ *
+ * **This is the only boundary that can unlock a policy-locked source.**
+ * `sourceSelectable` is `unlockedByPolicy || eligibility.eligible`, so for the
+ * provisional source - the one declared `unlockedByPolicy: false` - the value
+ * decoded here is the sole gate. It is therefore closed with the same
+ * mechanism `resource.ts`, `port.ts` and `coordinator.ts` use, and for the
+ * same reason: a property *count* can see neither the names of the properties
+ * it counts nor where they live, so two arbitrary own keys over a prototype
+ * carrying the declared fields counted as a valid record, and a symbol-keyed
+ * or non-enumerable extra was invisible to a count that only walks own
+ * enumerable string keys.
+ *
+ * - **Shape before value.** `Reflect.ownKeys` closes the own-key set against
+ *   the declared names, so a foreign key of any kind - enumerable, symbol or
+ *   non-enumerable - is rejected before anything is taken from the record.
+ * - **Own data properties only.** Both declared fields must be own, and
+ *   neither may be an accessor; an inherited or accessor-backed field is not a
+ *   recorded bound.
+ * - **Nothing escapes.** Reflection and descriptor inspection are all
+ *   caller-reachable through a proxy, so the whole decision is contained: a
+ *   throwing `ownKeys` or `getOwnPropertyDescriptor` trap becomes the ordinary
+ *   locked result rather than an exception out of a gate whose only job is to
+ *   fail closed. The thrown value is never read, logged or re-raised - it is
+ *   caller-controlled, and this module logs nothing at all.
+ *
+ * Nothing is coerced, trimmed, parsed or defaulted, and the numeric domain is
+ * unchanged.
  */
 export function decideProvisionalEligibility(
   value: unknown,
 ): ProvisionalEligibility {
   const locked = { eligible: false, reason: 'bound-unavailable' } as const;
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  try {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return locked;
+    }
+    const allowed = new Set<string>(provisionalBoundKeys);
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== 'string' || !allowed.has(key)) return locked;
+    }
+    // Both declared fields must be own data properties. Together with the
+    // closure above, that makes the own-key set exactly the declared two.
+    const kind = ownDataProperty(value, 'kind');
+    if (kind === null) return locked;
+    const declaredBound = ownDataProperty(value, 'boundSeconds');
+    if (declaredBound === null) return locked;
+
+    if (kind.value !== 'session-end-bound-recorded') return locked;
+    const bound = declaredBound.value;
+    if (
+      typeof bound !== 'number' ||
+      !Number.isSafeInteger(bound) ||
+      bound <= 0 ||
+      bound > BOUND_MAX_SECONDS
+    ) {
+      return locked;
+    }
+    return { eligible: true, boundSeconds: bound };
+  } catch {
+    // A hostile proxy trap. Nothing it claims can be believed, and a gate that
+    // exists to fail closed must not answer an outage with an exception.
     return locked;
   }
-  const own = Object.keys(value);
-  if (own.length !== 2) return locked;
-  const record = value as Record<string, unknown>;
-  if (record.kind !== 'session-end-bound-recorded') return locked;
-  const bound = record.boundSeconds;
-  if (
-    typeof bound !== 'number' ||
-    !Number.isSafeInteger(bound) ||
-    bound <= 0 ||
-    bound > BOUND_MAX_SECONDS
-  ) {
-    return locked;
-  }
-  return { eligible: true, boundSeconds: bound };
 }
 
 /**

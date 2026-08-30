@@ -112,7 +112,11 @@ scheduled start or end time.
 
 Absence, `null`, a bare number, a wrong discriminant, a non-integer, a
 non-positive value, an absurd value and an object carrying an extra property
-**all mean locked**. Nothing is read as permission by default.
+**all mean locked**. Nothing is read as permission by default. "An extra
+property" means an extra property of any kind, and the two declared fields must
+be the record's own data properties — see _The plan and the attempt are runtime
+boundaries too_ under D6, which closes this gate with the same mechanism as the
+rest of the boundary.
 
 **No bound is recorded.** The production policy constant is `null`, so every
 production wiring is locked, and the lock is checked before capability
@@ -246,6 +250,21 @@ validated identity is copied into a plain frozen object whose declared fields
 were each read once, and the coordinator executes **that** copy: an accessor
 cannot answer differently on a second read, so a plan cannot pass duplicate
 detection and then expand into two different requests.
+
+**The provisional eligibility record is closed the same way, and one step
+further.** It is the only value that can unlock a policy-locked source —
+`sourceSelectable` is `unlockedByPolicy || eligibility.eligible`, so for OpenF1
+the decoded bound is the sole gate — and it too was admitted on a property
+count, which sees neither the names of the properties it counts nor where they
+live. Its own keys are now exactly `kind` and `boundSeconds`, both must be own
+**data** properties, and an accessor for either is refused rather than
+executed: a getter on the value that decides whether a locked source may be
+driven never runs at all, so it can neither throw from a shape decision nor
+answer differently on a second call. A throwing `ownKeys` or
+`getOwnPropertyDescriptor` trap is contained and returns the ordinary locked
+result, because a gate whose whole purpose is to fail closed must not answer
+with an exception. The numeric domain is unchanged, nothing is coerced, and
+**no bound is recorded** — the production constant is still `null`.
 
 **A transport attempt is shape-closed.** It is the value the run's whole
 accounting is keyed by — two outcomes sharing one reference are counted once,

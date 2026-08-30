@@ -413,7 +413,13 @@ describe('the provisional source is locked closed by default', () => {
     }
   });
 
-  it('reads absence, malformation and an out-of-range bound as locked', () => {
+  // Absence, a wrong kind, an out-of-range bound and a plainly visible extra
+  // property. This is the *value* domain only: an enumerable own extra is the
+  // one shape violation a property count can see, so passing here says nothing
+  // about prototype-borne fields, symbol-keyed or non-enumerable extras, or
+  // accessors. Those belong to the boundary's own closure suite
+  // (`provisional-eligibility-closure.test.ts`) and are asserted there.
+  it('reads absence, a wrong kind, an out-of-range bound and a visible extra property as locked', () => {
     for (const value of [
       undefined,
       null,

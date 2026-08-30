@@ -460,6 +460,17 @@ Coverage:
   `null` or array candidate payload are all refused, while every valid
   attempt-bearing outcome is preserved and an all-astral reference at the
   declared bound still passes.
+- Provisional eligibility closure: the record that is the sole gate on the
+  policy-locked source admits exactly its two declared own **data** properties.
+  Required fields reachable only through a prototype, a mixed own/inherited
+  pair, and enumerable, symbol-keyed or non-enumerable extras are each refused;
+  an accessor for either field is refused **without being executed**; a
+  throwing `ownKeys` or `getOwnPropertyDescriptor` trap is contained as the
+  ordinary locked result; the traps a shape decision has no business consulting
+  are pinned as never reached; a null-prototype and a frozen record carrying
+  exactly the two fields stay accepted; the whole numeric and type domain is
+  re-pinned; and every hostile or malformed record is proved to leave OpenF1
+  unselectable while the production constant stays `null`.
 - Season entry identity: two constructor entries sharing one entry `id` and two
   sharing one constructor are both rejected, symmetrically with the driver
   cases, while split driver participation spans and a historical circuit
