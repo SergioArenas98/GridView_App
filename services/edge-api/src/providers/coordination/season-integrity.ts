@@ -125,6 +125,13 @@ function composite(...parts: readonly string[]): string {
  *   the driver ids are not;
  * - a circuit's `lapRecord` may name a driver outside the current grid, so it
  *   is not an identity of this season at all.
+ *
+ * A season entry has **two** independent stored identities and both are
+ * checked: the row's own `id`, which is its primary key, and the participant
+ * it names, which carries its own UNIQUE constraint. Checking only one of them
+ * lets two rows collide on the other - two constructor entries naming different
+ * teams under one entry id satisfy `UNIQUE(season, constructorId)` while still
+ * overwriting each other on the primary key.
  */
 const duplicateIdentityCategories = [
   'driver',
@@ -138,8 +145,9 @@ const duplicateIdentityCategories = [
   'race-result-entry',
   'driver-standing',
   'constructor-standing',
-  'driver-season-entry',
-  'constructor-season-entry',
+  'driver-season-entry-id',
+  'constructor-season-entry-id',
+  'constructor-season-entry-team',
 ] as const;
 
 export type DuplicateIdentityCategory =
@@ -182,9 +190,14 @@ function identitiesByCategory(
     'constructor-standing': source.constructorStandings.map(
       (standing) => standing.constructorId,
     ),
-    'driver-season-entry': source.driverEntries.map((entry) => entry.id),
+    // Primary keys. A driver deliberately has no participant check here:
+    // split participation spans are legitimate and each carries its own id.
+    'driver-season-entry-id': source.driverEntries.map((entry) => entry.id),
+    'constructor-season-entry-id': source.constructorEntries.map(
+      (entry) => entry.id,
+    ),
     // UNIQUE(season, constructorId): exactly one entry per team per season.
-    'constructor-season-entry': source.constructorEntries.map(
+    'constructor-season-entry-team': source.constructorEntries.map(
       (entry) => entry.constructorId,
     ),
   };

@@ -218,6 +218,52 @@ belongs to the Durable Object reservation ledger
 it already holds any slot a real request consumed — and these counts are
 reporting, not admission control.
 
+#### The plan and the attempt are runtime boundaries too
+
+The result taxonomy above is only closed if the values entering and leaving it
+are. Two of them were still admitted on weaker evidence than the outcome
+variant itself, and both are now checked with the same mechanism.
+
+**A plan is untrusted input, not a typed value.** `CoordinationPlan` proves
+nothing at runtime: a caller can hand over a proxy whose `ownKeys` trap throws,
+an object whose `season` getter throws, a `resources` that is not an array, or
+an entry carrying a symbol-keyed, non-enumerable or prototype-borne field.
+Validation now closes the plan's own root shape, bounds its season to the
+supported domain, requires `resources` to be an actual array, reads it by index
+rather than through a caller-reachable iterator, and performs every reflection
+and property access inside containment. Every malformed or hostile plan becomes
+a bounded `plan-rejected` result with **no port call, no transport
+registration, no accounting and no hostile detail in any log line**. A plan
+whose season could never be read reports `season: 0`, which is outside the
+supported domain and therefore unambiguous.
+
+Resource identities are closed with the **same** key-inspection principle the
+outcome boundary uses — `Reflect.ownKeys`, `Object.hasOwn` and `in` rather than
+an `Object.keys` count, which sees neither a symbol-keyed nor a non-enumerable
+nor a prototype-borne field — and shape is decided before any value is read, so
+a throwing accessor on a scope field never fires from a shape decision. A
+validated identity is copied into a plain frozen object whose declared fields
+were each read once, and the coordinator executes **that** copy: an accessor
+cannot answer differently on a second read, so a plan cannot pass duplicate
+detection and then expand into two different requests.
+
+**A transport attempt is shape-closed.** It is the value the run's whole
+accounting is keyed by — two outcomes sharing one reference are counted once,
+and a reference claiming two endings fails the run closed — so admitting it on
+two readable fields would let an adapter hang a URL, a body or a provider
+identifier on the one object the coordinator retains and compares. Its own keys
+are now exactly `reference` and `outcome`, nothing is coerced, a required field
+inherited from a prototype is not an attempt, and a throwing accessor is
+contained rather than escaping into attribution. The reference bound is decided
+from the UTF-16 length before the string is walked, so an adapter-supplied
+value cannot decide how much work the boundary performs.
+
+**A candidate payload must be a plain object before anything asks what it
+contains.** `typeof null === 'object'` and `typeof [] === 'object'` are both
+true, so neither was refused at the outcome boundary. Both are now rejected as
+a precondition; the payload's actual contract is still decided in one place, by
+`payloadMatchesResource`.
+
 ### D7 - One transport request is counted exactly once
 
 An outcome carries a bounded **transport reference** identifying the single
@@ -405,27 +451,47 @@ on this season's grid, and one driver may legitimately hold several season
 entries, because mid-season participation is modelled as split spans
 (GridView_Domain_Model.md §6.7, decision M6).
 
-**Rollback requires exactly the documents publication produces.** The
-required-document set for a rollback target is rebuilt from the stored,
-validated calendar, and it mirrors generation: every event requires its detail
-document, and a results document is required exactly when that event advertises
-`hasResults: true`. An event advertising no classification does not make a
-results document mandatory merely by appearing in the calendar, and an optional
-absence document that _is_ present does not disturb the check either. Because
-the cross-resource preflight binds `hasResults` to `final` or `provisional`, a
-completed classified round still cannot evade results-document verification —
-its own flag is what demands the document. Without this, an active-season
-release would be publishable but unreachable as a rollback target, both
-explicitly and through the previous pointer.
+**A version's contents are recorded, not reconstructed.** Every version stores
+the sorted, deduplicated set of document names generation actually produced, as
+internal metadata under its own snapshot prefix. Nothing about a version is
+inferred from its collection documents any more.
+
+Reconstruction was wrong, and provably so against the shipped content. The
+`circuits`, `drivers` and `constructors` collections are derived from the
+calendar and from the season entry lists, while the matching detail documents
+are generated from the registries — so a circuit with no calendar event, or a
+registry driver with no season entry, is generated and stored while appearing
+in no collection at all. The curated content already contains one such circuit.
+Reconstruction therefore under-reported what a version holds, which silently
+accepted an incomplete rollback target and silently skipped that document's
+public route during invalidation.
+
+Completeness is now decided over the exact inventory: every inventoried
+document must exist, every required season-level document must be inventoried,
+every calendar event must have its detail document, and every event advertising
+`hasResults: true` must have its results document. Because the cross-resource
+preflight binds `hasResults` to `final` or `provisional`, a completed
+classified round still cannot evade results-document verification — its own
+flag is what demands the document — while an event advertising no
+classification does not make a results document mandatory merely by appearing
+in the calendar. A generated optional absence document _is_ inventoried and so
+must exist; a classification generation never produced is never inventoried, so
+an ordinary active-season release stays a valid rollback target both explicitly
+and through the previous pointer. Nothing is fabricated into an inventory.
+
+A version carrying **no** inventory fails closed as a rollback target with
+`missing-version-inventory`. Falling back to the collection heuristic is not
+available, because that heuristic is exactly what was proven to under-report.
+No deployed coordinated snapshot depends on this compatibility path.
 
 **Target completeness and cache invalidation are two different sets.** They
-answer two different questions and are deliberately not derived from one
-another:
+answer two different questions over the same exact inventories, and are
+deliberately not derived from one another:
 
-| Set                   | Question                                                                                          | Rule                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Target completeness   | Which documents must the target contain to be a legal rollback target?                            | Gated on `hasResults`, as described above.                                     |
-| Rollback invalidation | Which public routes may still serve the outgoing version's representation once the pointer moves? | The **union** of both versions' route identities, never gated on `hasResults`. |
+| Set                   | Question                                                                                          | Rule                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Target completeness   | Which documents must the target contain to be a legal rollback target?                            | The target's own exact inventory, plus the calendar-derived requirements above.                  |
+| Rollback invalidation | Which public routes may still serve the outgoing version's representation once the pointer moves? | The **union** of both versions' exact inventories mapped to routes, never gated on `hasResults`. |
 
 Using the completeness set for both left a real gap: a target advertising
 `hasResults: false` for a round — whether it stores an `unavailable` absence
@@ -435,12 +501,22 @@ kept being served** after the pointer had rolled back to the meaningful
 absence.
 
 Rollback therefore purges the union of the **currently active** version's and
-the **target** version's public route identities: the season-level documents,
-every event's detail _and_ results URL for every round present in either
-calendar regardless of either version's `hasResults` flag, and every driver,
-constructor and circuit route either version carries. A route present in only
-one of the two versions is still invalidated, in both directions. The union is
-deduplicated and sorted deterministically.
+the **target** version's exact inventories mapped to public routes, plus the
+season-wide routes whose representation depends on the active pointer: every
+event's detail _and_ results URL for every round present in either version
+regardless of either version's `hasResults` flag, and every driver, constructor
+and circuit route either version carries — including an orphan profile no
+collection names. A route present in only one of the two versions is still
+invalidated, in both directions. The union is deduplicated and sorted
+deterministically, and one rollback issues exactly one purge request. An
+outgoing active version carrying no inventory contributes nothing to the union
+rather than blocking the recovery it is being rolled back from.
+
+The same exact inventory and the same route mapper serve
+`POST /internal/admin/cache/purge` for the **active** version, so an operator
+purge covers the whole active release rather than a hand-maintained subset. It
+moves no pointer and writes nothing; with no active version or no inventory it
+returns a bounded result.
 
 This is intentionally conservative. Purging a results URL whose new
 representation is a meaningful absence, or which has no document at all, costs
@@ -458,25 +534,52 @@ ordered writes, not a transaction, and the design says so rather than
 pretending otherwise:
 
 1. active-version read;
-2. idempotency and completed-version reads;
+2. idempotency and completed-version reads, over the active version's own
+   recorded inventory;
 3. active-source-updated-at read;
 4. snapshot-set contract validation;
 5. inactive version writes;
-6. completion check, previous-pointer and metadata writes;
+6. exact-inventory write, completion check and metadata writes;
 7. **`setActiveVersion` — the commit point, and deliberately the final storage
-   write**;
-8. post-commit cache purge.
+   write that decides what serves**;
+8. post-commit previous-pointer maintenance;
+9. post-commit cache purge.
 
 Before step 7 the new release is not serving; after it, it is.
 `SnapshotPublisher` is the only component that knows which side of that line a
 run ended on, so it is where expected operational failures are converted into
 bounded `PublicationResult` values instead of rejected promises. Every failure
 in steps 1–7 returns `failed` (or `rejected` for a contract violation),
-preserves the previous active pointer, leaves any partial version inactive and
-performs no purge. If the compensating `deleteUnpublishedVersion` also fails,
-its rejection is contained and the **original** failure classification is
+preserves **both** pointers, leaves any partial version inactive and performs
+no purge. If the compensating `deleteUnpublishedVersion` also fails, its
+rejection is contained and the **original** failure classification is
 preserved: the caller needs the phase that actually failed, not the cleanup.
 Neither raw error is read, returned or logged.
+
+**The previous pointer is maintained after the commit, never before it.**
+Writing it first made a failed commit overwrite the one version a default
+rollback can reach with the version that was still serving: the release had not
+changed, but the recovery path from it was destroyed — and a rollback whose
+target was already active did the same thing while reporting a transition that
+never happened. So `previous` is written in step 8, and an already-active
+rollback is an explicit bounded no-op (`skipped`, reason `idempotent`) that
+writes no pointer, purges nothing and preserves the existing rollback target.
+
+Steps 8 and 9 are post-commit and cannot un-move the pointer, so each reports
+its own bounded disposition alongside a truthful `applied`:
+`pointerMaintenance: 'failed'` for the maintenance write and
+`cachePurge: 'failed'` for the purge. Maintenance failure does not skip the
+purge — the release is serving and its stale routes still have to go. The
+single `reason` field reports the maintenance failure first when both occurred,
+because a stale `previous` silently removes the recovery path while a stale
+cache is visible and self-correcting.
+
+**Rollback is contained the same way.** It is the operation an operator reaches
+for during an outage, so every expected storage or purge failure returns a
+bounded result naming the phase — `storage-read` before the commit,
+`storage-write` at it, `applied` with a degraded disposition after it — rather
+than a rejected promise the caller cannot classify. No raw storage message
+reaches a response or a log line.
 
 The purge runs only after the commit point, so it cannot un-publish anything.
 A purge that throws or rejects therefore returns **`applied` with a bounded
@@ -536,6 +639,17 @@ because mid-season participation is modelled as split spans keyed by their own
 checked and the driver ids are not; and a circuit's `lapRecord` may name a
 driver outside the current grid, so it is not an identity of this season at all.
 
+**A season entry has two independent stored identities, and both are checked.**
+`constructor_season_entries` keys rows on the entry's own `id` and additionally
+carries `UNIQUE(season, constructorId)`. Only the second was checked, so two
+entries naming different constructors under one entry `id` satisfied the UNIQUE
+constraint while still colliding on the primary key — the exact collision the
+driver side already rejected, because `driver-season-entry` was keyed on
+`entry.id`. Both entry collections are now checked on both of their own
+identities, symmetrically, and the documented multiplicities are unaffected: a
+driver may still hold several entry rows for split participation spans, and a
+circuit's `lapRecord` may still name a driver outside the current grid.
+
 **Generation itself is contained.** Preflight settles every reference, but
 generation also derives values from caller inputs it cannot vouch for, so the
 call is guarded and an unexpected defect becomes a bounded `generation-failed`
@@ -557,6 +671,46 @@ prior active release keeps serving.
 Publication metadata (`contentVersion`, `mediaVersion`, `attributionVersion`,
 `sourceUpdatedAt`, the season label), the generation timestamp and the release
 version are **inputs**, not derivations. See D13.
+
+**A rejected publication is not automatically a successful synchronization.**
+`publish` returns four statuses, and only `failed` used to take the failure
+path. Everything else — including a candidate refused for failing contract
+validation, and an active version that read back incomplete — was recorded as a
+completed run: `lastCompletedAt` advanced, every due job was marked successful
+and one `sync.completed` line was emitted, so the next cadence saw nothing due
+and a season that could not be published looked healthy until an operator read
+the publication status by hand.
+
+Exactly one rejection is benign:
+
+| Publication rejection                       | Synchronization consequence                                   |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| `older-source-updated-at`                   | Benign completed no-op                                        |
+| `contract-validation`                       | Failed synchronization                                        |
+| `active-version-incomplete`                 | Failed synchronization                                        |
+| Any integrity or malformed-snapshot refusal | Failed synchronization                                        |
+| Any future rejection reason                 | Must be classified explicitly; there is no permissive default |
+
+A candidate older than what is already serving is the pacing system working:
+nothing needed publishing, completion advances under the existing documented
+semantics, due jobs are marked successful and no `sync.failed` line is emitted.
+
+An integrity refusal fails the run: the overall status is `failed`,
+`lastCompletedAt` does not advance, no due job is marked successful, one
+`sync.failed` line is emitted instead of `sync.completed`, and the publisher's
+own precise bounded reason is preserved. Last-known-good is untouched — nothing
+published — and the publication's own status stays `rejected` in the result and
+in stored sync state, because a declined candidate and a broken dependency are
+different facts.
+
+The mapping is a single exhaustive switch over `PublicationReason` with **no
+default**, so a new reason is a compile error rather than something that
+silently takes the success path. An absent reason fails closed.
+
+An `applied` publication whose post-commit `previous` maintenance failed is
+still a completed run — the release is serving — and the run's
+`sync.completed` line carries the bounded `pointerMaintenance` disposition so
+the degraded rollback path is visible without reading storage.
 
 ### D12 - Cancellation contains, and never publishes
 
@@ -606,6 +760,44 @@ G9.
 `PROVIDER_MODE` still admits exactly `mock` and `none`; staging is `mock`,
 production is `none`.
 
+#### Deep normalized-contract validation is an activation gate
+
+`SnapshotValidator` is **not** a deep per-field OpenAPI validator, and nothing
+here should be read as claiming that it is. What `RuntimeSnapshotValidator`
+enforces today is:
+
+- snapshot **metadata** validity, against the `SeasonSnapshotMeta` /
+  `SnapshotMeta` schema;
+- required **top-level shape** of each document — a collection document must be
+  an array, any document body must be an object or an array;
+- **provider neutrality** — no provider identifier may appear anywhere in a
+  document body.
+
+That is structural. It does not check a driver's fields, a standing's points, a
+session's timestamps or any other per-field contract detail, and it is not a
+substitute for one.
+
+**Deep normalized-contract validation is an adapter responsibility.** The
+adapter is the component that normalizes provider data into the public contract
+types, so it is the only place with both the provider payload and the
+normalization in hand. The coordinator's own containment checks — closed
+resource identities, closed outcome and attempt shapes, and
+`payloadMatchesResource` binding a payload's identity fields to the resource it
+answers — prevent selecting a payload that does not belong to the request. They
+do not, and are not intended to, prove the payload satisfies the public
+contract field by field.
+
+This is therefore recorded as a **gate on adapter registration and on G4
+activation**, not as evidence of reconciliation running today:
+
+- A real Jolpica or OpenF1 adapter **must not be registered or enabled** until
+  its normalized outputs pass the authoritative contract validators.
+- Until then G4 stays dormant: no port is registered, `SynchronizationService`
+  is not rewired, and the mock provider continues to serve the synchronization
+  path unchanged.
+- The gate belongs to **G1** (live provider mode) and to the adapter work, and
+  is open alongside them.
+
 ## Consequences
 
 ### What this delivers
@@ -637,10 +829,12 @@ provider was contacted.
 **G9 remains open** — no persisted provenance and no provisional/reconciled
 record state. **G-l remains open** — the mapping dataset is still limited to
 identifiers already recorded in Provider Evaluation §8. **G1 and G3 remain
-open** — no live provider mode and no production cron. Both adapters remain
-unimplemented, OpenF1 remains fail-closed pending a justified
-maximum-session-duration bound, and nothing here authorizes production
-synchronization, deployment or public release. Every EUR 0 budget,
+open** — no live provider mode and no production cron. **Deep
+normalized-contract validation for a real adapter remains open** and is an
+activation gate on registering one (D14). Both adapters remain unimplemented,
+OpenF1 remains fail-closed pending a justified maximum-session-duration bound,
+and nothing here authorizes production synchronization, deployment or public
+release. Every EUR 0 budget,
 non-commercial, licensing, attribution and ShareAlike conclusion of
 [ADR 0019](0019-formula-one-provider-legal-gate.md) is unchanged.
 

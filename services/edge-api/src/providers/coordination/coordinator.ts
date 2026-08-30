@@ -53,9 +53,9 @@ import {
   type ProviderResourcePort,
 } from './port';
 import {
-  isCoordinatedResource,
   jobCategoryForResource,
   payloadMatchesResource,
+  readCoordinatedResource,
   resourceKey,
   type CoordinatedPayload,
   type CoordinatedResource,
@@ -177,16 +177,24 @@ export class MultiSourceCoordinator {
   }
 
   async coordinate(request: CoordinationRequest): Promise<CoordinationRun> {
-    const { plan } = request;
-    const planProblem = validatePlan(plan);
-    if (planProblem !== null) {
+    const validation = validatePlan(request.plan);
+    if (!validation.ok) {
       // Fail closed before anything runs: no reservation, no adapter call, no
       // accounting write, and no partially valid subset that could conceal the
       // violation.
-      const run = rejectedRun(plan, planProblem);
+      const run = rejectedRun(
+        validation.season,
+        validation.planned,
+        validation.problem,
+      );
       this.logger.warn(runEvent(run));
       return run;
     }
+    // Everything below executes the plan that was **validated**, never the
+    // object the caller handed over: each identity is a plain frozen copy whose
+    // fields were read once, so no accessor can answer differently on a second
+    // read and no unvalidated value can ride along.
+    const plan = validation.plan;
 
     const operations = this.expand(plan);
     const results = await this.execute(operations, request.signal);
@@ -580,48 +588,142 @@ function notAttempted(
   return { kind: 'answered', outcome: { outcome: 'not-attempted', reason } };
 }
 
+/** The exact own properties a plan declares. */
+const planKeys = ['season', 'resources'] as const;
+
+/** The season reported for a plan whose own season could never be read. */
+const unknownPlanSeason = 0;
+
+/**
+ * The outcome of validating one plan.
+ *
+ * On success it carries the **normalized** plan the coordinator will execute.
+ * On failure it carries whatever was safely established before the violation,
+ * so the rejection can still be reported with bounded counts.
+ */
+type PlanValidation =
+  | { readonly ok: true; readonly plan: CoordinationPlan }
+  | {
+      readonly ok: false;
+      readonly problem: PlanProblem;
+      readonly season: number;
+      readonly planned: number;
+    };
+
+function planRejected(
+  problem: PlanProblem,
+  season: number,
+  planned: number,
+): PlanValidation {
+  return { ok: false, problem, season, planned };
+}
+
 /**
  * Validates the plan before any execution.
+ *
+ * **A plan is an untrusted runtime boundary, not a typed value.** The
+ * `CoordinationPlan` type proves nothing at runtime: a caller can hand over a
+ * proxy whose `ownKeys` trap throws, an object whose `season` getter throws, a
+ * `resources` that is not an array, or an entry carrying a symbol-keyed or
+ * prototype-borne field. Every one of those has to become a bounded rejection
+ * with **no port call, no accounting and no hostile detail in any log line** -
+ * so reflection, iteration and property access are all performed inside
+ * containment rather than trusted to behave.
  *
  * The duplicate rule is **reject the whole plan**, not canonicalize it. A
  * duplicate is a caller defect, and silently collapsing it would hide the
  * defect while quietly changing what was asked for. Rejecting fails closed
  * with nothing attempted, which no partial execution can do.
  */
-function validatePlan(plan: CoordinationPlan): PlanProblem | null {
-  // Each class of violation is decided over the whole plan before the next is
-  // considered, so the reported problem is a property of the plan's contents
-  // and a fixed precedence - never of the order the entries happen to be in.
-  // It also means the duplicate key set is only ever built for a plan whose
-  // every entry is already a validated, in-season, closed-shape identity, so
-  // nothing unbounded or caller-shaped can be accumulated here.
-  for (const resource of plan.resources) {
-    if (!isCoordinatedResource(resource)) return 'invalid-resource';
+function validatePlan(value: unknown): PlanValidation {
+  try {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return planRejected('invalid-plan', unknownPlanSeason, 0);
+    }
+    const allowed = new Set<string>(planKeys);
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== 'string' || !allowed.has(key)) {
+        return planRejected('invalid-plan', unknownPlanSeason, 0);
+      }
+    }
+    for (const key of planKeys) {
+      if (!Object.hasOwn(value, key)) {
+        return planRejected('invalid-plan', unknownPlanSeason, 0);
+      }
+    }
+
+    const record = value as Record<string, unknown>;
+    const season = record.season;
+    if (!isPlanSeason(season)) {
+      return planRejected('invalid-season', unknownPlanSeason, 0);
+    }
+    const declared = record.resources;
+    if (!Array.isArray(declared)) {
+      return planRejected('invalid-plan', season, 0);
+    }
+
+    // Index access rather than iteration: `Array.isArray` is true of a proxy
+    // over an array, so a spread would run a caller-supplied iterator. Any
+    // trap that throws is contained by the enclosing block.
+    const resources: CoordinatedResource[] = [];
+    for (let index = 0; index < declared.length; index += 1) {
+      const resource = readCoordinatedResource(declared[index]);
+      if (resource === null) {
+        return planRejected('invalid-resource', season, declared.length);
+      }
+      resources.push(resource);
+    }
+
+    // Each class of violation is decided over the whole plan before the next is
+    // considered, so the reported problem is a property of the plan's contents
+    // and a fixed precedence - never of the order the entries happen to be in.
+    // It also means the duplicate key set is only ever built for a plan whose
+    // every entry is already a validated, in-season, closed-shape identity, so
+    // nothing unbounded or caller-shaped can be accumulated here.
+    for (const resource of resources) {
+      if (resource.season !== season) {
+        return planRejected('season-mismatch', season, resources.length);
+      }
+    }
+    const seen = new Set<string>();
+    for (const resource of resources) {
+      const key = resourceKey(resource);
+      if (seen.has(key)) {
+        return planRejected('duplicate-resource', season, resources.length);
+      }
+      seen.add(key);
+    }
+    return { ok: true, plan: { season, resources } };
+  } catch {
+    // A hostile proxy or accessor somewhere in the plan. The thrown value is
+    // never read, logged or re-raised: it is caller-controlled.
+    return planRejected('invalid-plan', unknownPlanSeason, 0);
   }
-  for (const resource of plan.resources) {
-    if (resource.season !== plan.season) return 'season-mismatch';
-  }
-  const seen = new Set<string>();
-  for (const resource of plan.resources) {
-    const key = resourceKey(resource);
-    if (seen.has(key)) return 'duplicate-resource';
-    seen.add(key);
-  }
-  return null;
+}
+
+/** The supported season domain, matching a resource identity's own bound. */
+function isPlanSeason(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 1950 &&
+    value <= 2100
+  );
 }
 
 function rejectedRun(
-  plan: CoordinationPlan,
+  season: number,
+  planned: number,
   problem: PlanProblem,
 ): CoordinationRun {
   return {
-    season: plan.season,
+    season,
     status: 'plan-rejected',
     planProblem: problem,
     resources: [],
     accounting: emptyRequestMetrics(),
     counts: {
-      planned: plan.resources.length,
+      planned,
       selected: 0,
       unavailable: 0,
       attempted: 0,

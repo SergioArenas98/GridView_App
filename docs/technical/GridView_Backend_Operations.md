@@ -266,6 +266,27 @@ is **G5 event-aware scheduling, which remains open**, and no persisted
 provenance or provisional/reconciled record state exists - that is **G9**,
 which also remains open.
 
+**A plan is untrusted input.** The coordinator validates the plan object itself
+before anything runs: closed root shape, a season bounded to the supported
+domain, `resources` required to be an actual array and read by index rather
+than through a caller-reachable iterator, and every reflection and property
+access inside containment. A malformed or hostile plan - a throwing `ownKeys`
+trap, a throwing getter, a non-iterable `resources`, a symbol-keyed or
+prototype-borne field on an entry - becomes a bounded `plan-rejected` run with
+no port call, no accounting and no hostile detail in any log line. A plan whose
+season could never be read reports `season: 0`, outside the supported domain
+and therefore unambiguous.
+
+**`SnapshotValidator` is structural, not a deep contract validator.** It checks
+snapshot metadata, the required top-level shape of each document and provider
+neutrality of the body. It does not validate a driver's fields, a standing's
+points or any other per-field contract detail. Deep normalized-contract
+validation is an **adapter** responsibility, and a real Jolpica or OpenF1
+adapter must not be registered or enabled until its normalized outputs pass the
+authoritative contract validators. That is an activation gate on G1 and on the
+adapter work, not a control running today
+([ADR 0023](../adr/0023-multi-source-provider-coordination.md) D14).
+
 Outbound requests are pinned to fixed HTTPS origins and documented path
 prefixes, are GET-only, use `redirect: "manual"` and reject every 3xx, carry a
 10-second whole-operation timeout, accept only JSON media types, and cap the
@@ -297,6 +318,44 @@ Provider-fetch failures and post-fetch failures are accounted separately.
   timestamps and the reported outcome agree.
 - In every case the previously active snapshot is preserved, and internal
   exception bodies are never surfaced publicly or logged.
+
+### A rejected publication is not automatically a successful run
+
+`publish` returns four statuses, and a rejection is the publisher declining a
+candidate it examined - a different fact from an operational failure. Exactly
+one rejection is benign:
+
+| Publication rejection                       | Synchronization consequence |
+| ------------------------------------------- | --------------------------- |
+| `older-source-updated-at`                   | Benign completed no-op      |
+| `contract-validation`                       | Failed synchronization      |
+| `active-version-incomplete`                 | Failed synchronization      |
+| Any integrity or malformed-snapshot refusal | Failed synchronization      |
+| Any future rejection reason                 | Must be classified explicitly; there is no permissive default |
+
+A candidate older than what is already serving is the pacing system working:
+completion advances under the existing documented semantics, due jobs are
+marked successful and no `sync.failed` line is emitted.
+
+An integrity refusal fails the run — overall status `failed`,
+`lastCompletedAt` does not advance, no due job is marked successful, one
+`sync.failed` line instead of `sync.completed`, and the publisher's own precise
+bounded reason preserved. Last-known-good is untouched because nothing
+published, and the publication's own status stays `rejected` in the result and
+in stored sync state: a declined candidate and a broken dependency are
+different facts, and an operator has to be able to tell them apart.
+
+Recording an integrity refusal as a completed run advanced `lastCompletedAt`
+and marked every due job successful, so the next cadence saw nothing due and a
+season that could not be published looked healthy until someone read the
+publication status by hand.
+
+The mapping is one exhaustive switch over the closed reason union with no
+default, so a new reason is a compile error rather than something that silently
+takes the success path. An `applied` publication whose post-commit `previous`
+maintenance failed is still a completed run — the release is serving — and its
+`sync.completed` line carries the bounded `pointerMaintenance` disposition so
+the degraded rollback path is visible without reading storage.
 
 ## Version transitions and rollback
 

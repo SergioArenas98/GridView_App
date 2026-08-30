@@ -219,23 +219,88 @@ export interface ProviderResourcePort {
   ): Promise<ProviderResourceOutcome>;
 }
 
+/**
+ * A non-empty reference of at most `transportReferenceMaxLength` code points.
+ *
+ * The bound is decided before the string is walked. A UTF-16 unit count is not
+ * a code point count, but it brackets one: every code point is one or two
+ * units, so a string longer than twice the bound is over it and one no longer
+ * than the bound is under it, both without inspecting a character. Only the
+ * narrow band between those two needs counting, and that count stops the
+ * moment it exceeds the bound. Materializing the whole string first - which is
+ * what spreading it does - would make an adapter-supplied value decide how much
+ * work this boundary performs, which is exactly what a bound exists to prevent.
+ */
 function isBoundedReference(value: unknown): value is string {
   if (typeof value !== 'string') return false;
-  const codePoints = [...value];
-  return (
-    codePoints.length > 0 && codePoints.length <= transportReferenceMaxLength
-  );
+  if (value.length === 0) return false;
+  if (value.length > transportReferenceMaxLength * 2) return false;
+  if (value.length <= transportReferenceMaxLength) return true;
+  let codePoints = 0;
+  for (let index = 0; index < value.length;) {
+    const codePoint = value.codePointAt(index);
+    index += codePoint !== undefined && codePoint > 0xffff ? 2 : 1;
+    codePoints += 1;
+    if (codePoints > transportReferenceMaxLength) return false;
+  }
+  return true;
 }
 
+/** The exact own properties a transport attempt declares. */
+const attemptKeys = ['reference', 'outcome'] as const;
+
+/**
+ * A transport attempt is a **closed runtime shape**, like the outcome that
+ * carries it.
+ *
+ * It is the value the whole run's accounting is keyed by: two outcomes sharing
+ * one reference are counted once, and a reference claiming two endings fails
+ * the run closed. Admitting it on the strength of two readable fields would let
+ * an adapter hang a URL, a response body or a provider identifier on the one
+ * object the coordinator retains and compares - enumerable, non-enumerable or
+ * symbol-keyed, none of which a two-field check can see.
+ *
+ * Nothing is coerced, a required field inherited from a prototype is not an
+ * attempt, and a throwing accessor is contained here rather than escaping into
+ * attribution.
+ */
 function isAttempt(value: unknown): value is ProviderTransportAttempt {
-  if (typeof value !== 'object' || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    isBoundedReference(record.reference) &&
-    (record.outcome === 'successful' ||
-      record.outcome === 'failed' ||
-      record.outcome === 'rate-limited')
-  );
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  try {
+    const allowed = new Set<string>(attemptKeys);
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== 'string' || !allowed.has(key)) return false;
+    }
+    for (const key of attemptKeys) {
+      if (!Object.hasOwn(value, key)) return false;
+    }
+    const record = value as Record<string, unknown>;
+    return (
+      isBoundedReference(record.reference) &&
+      (record.outcome === 'successful' ||
+        record.outcome === 'failed' ||
+        record.outcome === 'rate-limited')
+    );
+  } catch {
+    // A hostile accessor or proxy trap. The thrown value is never read.
+    return false;
+  }
+}
+
+/**
+ * A candidate payload has to be a plain object before anything asks what it
+ * contains.
+ *
+ * `typeof null === 'object'` and `typeof [] === 'object'` are both true, so
+ * without this neither is refused here: `null` reaches a property read and an
+ * array reaches a discriminant comparison it can only fail by accident. The
+ * payload's actual contract is still decided by `payloadMatchesResource`; this
+ * is only the precondition that makes asking meaningful.
+ */
+function isCandidatePayload(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -407,7 +472,7 @@ export function isWellFormedOutcome(value: unknown): boolean {
       // attempt record, so no request activity is invented from it either.
       return (
         isSuccessfulAttempt(record.attempt) &&
-        typeof record.payload === 'object'
+        isCandidatePayload(record.payload)
       );
     case 'not-attempted':
       return (

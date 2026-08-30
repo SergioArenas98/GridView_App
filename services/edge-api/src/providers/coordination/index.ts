@@ -84,6 +84,7 @@ export {
   isCoordinatedResource,
   jobCategoryForResource,
   payloadMatchesResource,
+  readCoordinatedResource,
   resourceKey,
 } from './resource';
 export type {

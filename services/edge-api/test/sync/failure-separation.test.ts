@@ -201,11 +201,13 @@ describe('post-fetch failures never rewrite provider accounting', () => {
     expect(await seed.storage.getActiveVersion(2026)).toBe(active);
   });
 
-  it('preserves the existing semantics of an ordinary rejected publication', async () => {
+  it('records no provider failure for a rejected publication', async () => {
     // A rejecting validator makes publish() return a non-throwing rejection.
-    // How `rejected` maps to the synchronization status is pre-existing
-    // behaviour and deliberately unchanged here; what this correction requires
-    // is that no provider failure is recorded for it.
+    // A contract-validation refusal now fails the synchronization run, because
+    // the season is not in the state the run was asked to produce - but it is a
+    // GridView-side refusal, so no provider failure may be recorded for it and
+    // the publication's own `rejected` status stays distinguishable from a
+    // broken dependency.
     const harness = createHarness({ validator: rejectingValidator });
 
     const body = await fullSync(harness);
@@ -218,6 +220,8 @@ describe('post-fetch failures never rewrite provider accounting', () => {
       rateLimited: 0,
     });
     expect(body.data.publicationStatus).toBe('rejected');
+    expect(body.data.status).toBe('failed');
+    expect(body.data.failureCategory).toBe('contract-validation');
     expect(quota?.lastProviderSuccessAt).toBe('2026-07-20T12:00:00.000Z');
     expect(quota?.lastProviderFailureAt).toBeNull();
     expect(await harness.storage.getActiveVersion(2026)).toBeNull();

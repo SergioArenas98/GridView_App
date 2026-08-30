@@ -1164,7 +1164,18 @@ The handler:
 >
 > Event-aware scheduling (**G5**) and persisted provenance or
 > provisional/reconciled record state (**G9**) remain open, and the coordinator
-> implements neither.
+> implements neither. **Deep normalized-contract validation also remains
+> open**: the runtime snapshot validator is structural - metadata, required
+> top-level document shape and provider neutrality - and per-field contract
+> validation is an adapter responsibility that gates registering a real
+> adapter at all (ADR 0023 D14).
+>
+> A publication the publisher **rejects** is not automatically a successful
+> run. Only a candidate older than what is already serving is a benign
+> completed no-op; a contract-validation refusal, an incomplete active version
+> and every other integrity refusal fail the synchronization, so a season that
+> cannot be published cannot look healthy until the next cadence
+> ([GridView_Backend_Operations.md](GridView_Backend_Operations.md)).
 
 ### 14.2 No public sync endpoint
 

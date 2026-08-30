@@ -130,6 +130,16 @@ export const planProblems = [
   'invalid-resource',
   /** An entry named a season other than the run's season. */
   'season-mismatch',
+  /**
+   * The plan itself was not a well-formed closed object: a missing or foreign
+   * root field, a `resources` that was not an array, or reflection, iteration
+   * or property access that threw. Nothing about the plan can be believed, so
+   * the run reports `season: 0` - outside the supported domain, and therefore
+   * unambiguous - when the season could not be read.
+   */
+  'invalid-plan',
+  /** The plan's season was not a finite integer in the supported domain. */
+  'invalid-season',
 ] as const;
 
 export type PlanProblem = (typeof planProblems)[number];

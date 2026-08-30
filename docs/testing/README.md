@@ -383,7 +383,7 @@ validation.
 
 ## Multi-source provider coordination (Phase 9B-4)
 
-**73 Edge tests** under `services/edge-api/test/providers/coordination/`. None
+**Edge tests** under `services/edge-api/test/providers/coordination/`. None
 touches the network, needs a Cloudflare binding or contacts Jolpica or OpenF1:
 the ports are local fakes, there is no transport at all, and one test replaces
 `globalThis.fetch` with a rejecting stub for the whole coordinate-and-publish
@@ -447,6 +447,43 @@ Coverage:
   transport reference and a hostile retry hint reach no log line, and no
   runtime module outside `src/providers/coordination/` consumes the
   coordinator.
+- Plan boundary: a null, array, string, key-incomplete or key-extra plan; a
+  `NaN`, fractional, infinite, string, boxed or out-of-domain season; a
+  non-iterable `resources`; a throwing `ownKeys` trap on the plan or on an
+  entry; a throwing `season` or `resources` getter; a throwing iterator; and a
+  symbol-keyed, non-enumerable or prototype-borne field on an entry each become
+  a bounded `plan-rejected` run with no port call, no accounting and no hostile
+  detail in the serialized log.
+- Attempt and payload closure: an undeclared enumerable, non-enumerable or
+  symbol-keyed property on a transport attempt, a required field reachable only
+  through a prototype, a coerced reference, a throwing reference accessor, and a
+  `null` or array candidate payload are all refused, while every valid
+  attempt-bearing outcome is preserved and an all-astral reference at the
+  declared bound still passes.
+- Season entry identity: two constructor entries sharing one entry `id` and two
+  sharing one constructor are both rejected, symmetrically with the driver
+  cases, while split driver participation spans and a historical circuit
+  lap-record driver stay accepted.
+- Validator scope and the activation gate: the runtime validator accepts a
+  driver collection whose entries are nonsense as `SeasonDriverSummary`, which
+  pins that it is structural rather than a deep per-field contract validator;
+  and no runtime module constructs a coordinator, names `ProviderResourcePort`,
+  rewires `SynchronizationService` or teaches the provider factory a real
+  source.
+
+**Publication and synchronization.** `services/edge-api/test/publication/` and
+`services/edge-api/test/admin/` additionally cover the exact per-version
+inventory (the shipped orphan circuit, orphan driver and constructor profiles,
+active-only and target-only entities), completeness over that inventory, a
+legacy version with none, the already-active rollback no-op, both pointers
+surviving a failed commit, a post-commit maintenance failure reported as
+applied-but-degraded, a bounded result for a read or write failure at every
+rollback phase, a purge that throws or rejects, the exact purge union and its
+sorted deduplicated ordering, and a manual purge that covers every active
+public route and moves no pointer. `services/edge-api/test/sync/` covers the
+rejected-publication decision table over the exported reason union, both
+integrity refusals failing the run, the benign older-source no-op completing,
+and last-known-good preservation in every case.
 
 ## Staging verification (Phase 5B)
 

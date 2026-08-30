@@ -1,5 +1,16 @@
 export type LogLevel = 'info' | 'warn' | 'error';
 
+/**
+ * The closed vocabulary of structured log fields.
+ *
+ * Every member is a bounded value: a closed enum member, an integer, a boolean,
+ * an already-validated instant, or a bounded map of those. There is
+ * deliberately **no index signature**: an open `[key: string]: unknown` would
+ * make the "no provider payload, response body, URL, header, storage key or
+ * raw exception ever reaches a log line" rule a convention that every call site
+ * has to remember, instead of one the compiler enforces. Adding a field is a
+ * deliberate edit here, where its boundedness is documented alongside it.
+ */
 export interface LogEvent {
   level?: LogLevel;
   requestId?: string;
@@ -65,7 +76,16 @@ export interface LogEvent {
    * an OpenAPI example, a fixture, a published snapshot or a cache key.
    */
   providerMappingValue?: string;
-  [key: string]: unknown;
+  /** Bounded relation names a publishable season failed. Never an identifier. */
+  coordinationRelations?: string[];
+  /** Bounded internal document name. Never a document body. */
+  documentName?: string;
+  /** How many contract issues one document produced. */
+  issueCount?: number;
+  /** Bounded outcome of a post-commit previous-pointer maintenance write. */
+  pointerMaintenance?: string;
+  /** Bounded publication status: applied, skipped, rejected or failed. */
+  publicationStatus?: string;
 }
 
 export interface Logger {

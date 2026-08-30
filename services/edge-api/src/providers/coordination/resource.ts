@@ -176,7 +176,23 @@ function isRound(value: unknown): value is number {
 }
 
 /**
- * How many own properties each kind's identity has, exactly.
+ * Every property name any resource identity declares.
+ *
+ * A kind's *forbidden* set is derived from this list rather than written out,
+ * so a scope one kind legitimately carries can never be silently tolerated -
+ * or silently reachable through a prototype - on another.
+ */
+const declaredResourceKeys = [
+  'kind',
+  'season',
+  'round',
+  'sessionType',
+] as const;
+
+type DeclaredResourceKey = (typeof declaredResourceKeys)[number];
+
+/**
+ * The exact own properties each kind's identity has.
  *
  * An identity is validated as a **closed shape**, not as a set of fields that
  * merely happen to be present. An extra property is rejected rather than
@@ -186,15 +202,25 @@ function isRound(value: unknown): value is number {
  * different identities - defeating duplicate rejection and sending the same
  * request twice - and would let an unvalidated, unbounded, caller-controlled
  * value ride along inside a resource identity.
+ *
+ * The mechanism is deliberately the **same one the outcome boundary uses**
+ * (`port.ts`): `Reflect.ownKeys` rather than `Object.keys`, so a
+ * non-enumerable or symbol-keyed own property is counted rather than invisible,
+ * `Object.hasOwn` for required fields, and `in` for keys another kind declares,
+ * so a scope planted on a prototype fails closed instead of riding along. A
+ * key-count comparison could see none of those three.
  */
-const resourceArity: Record<CoordinatedResourceKind, number> = {
-  'season-calendar': 2,
-  'season-participants': 2,
-  'season-circuits': 2,
-  'driver-standings': 2,
-  'constructor-standings': 2,
-  'event-schedule': 3,
-  'session-classification': 4,
+const resourceShapes: Record<
+  CoordinatedResourceKind,
+  readonly DeclaredResourceKey[]
+> = {
+  'season-calendar': ['kind', 'season'],
+  'season-participants': ['kind', 'season'],
+  'season-circuits': ['kind', 'season'],
+  'driver-standings': ['kind', 'season'],
+  'constructor-standings': ['kind', 'season'],
+  'event-schedule': ['kind', 'season', 'round'],
+  'session-classification': ['kind', 'season', 'round', 'sessionType'],
 };
 
 function isResourceKind(value: unknown): value is CoordinatedResourceKind {
@@ -202,6 +228,97 @@ function isResourceKind(value: unknown): value is CoordinatedResourceKind {
     typeof value === 'string' &&
     (coordinatedResourceKinds as readonly string[]).includes(value)
   );
+}
+
+/**
+ * Whether an identity carries exactly the properties its kind declares.
+ *
+ * Nothing here reads a property's *value*, so a throwing accessor on a scope
+ * field cannot fire from this function: shape is decided before any value is
+ * inspected. A hostile proxy can still throw from `ownKeys`, `has` or
+ * `getOwnPropertyDescriptor`; that is contained by `readCoordinatedResource`.
+ */
+function hasClosedResourceShape(
+  record: object,
+  kind: CoordinatedResourceKind,
+): boolean {
+  const allowed = new Set<string>(resourceShapes[kind]);
+  for (const key of Reflect.ownKeys(record)) {
+    if (typeof key !== 'string' || !allowed.has(key)) return false;
+  }
+  for (const key of resourceShapes[kind]) {
+    if (!Object.hasOwn(record, key)) return false;
+  }
+  for (const key of declaredResourceKeys) {
+    if (!allowed.has(key) && key in record) return false;
+  }
+  return true;
+}
+
+/**
+ * Validates one resource identity and returns a **plain frozen copy** of it.
+ *
+ * A copy rather than the caller's object, for one reason that matters: every
+ * declared field is read exactly once, here, while the identity is being
+ * validated. The coordinator then executes the identity it validated rather
+ * than an object whose accessors could answer differently on the second read -
+ * which is what would let a plan pass duplicate detection and then expand into
+ * two different requests.
+ *
+ * Returns `null` for anything that is not a valid identity, and **never
+ * throws**: reflection, `in` and property access are all caller-reachable
+ * code, so the whole inspection is contained.
+ */
+export function readCoordinatedResource(
+  value: unknown,
+): CoordinatedResource | null {
+  try {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return null;
+    }
+    const record = value as Record<string, unknown>;
+    // The discriminant has to be read to know which shape applies at all; it
+    // is the only read that precedes shape closure.
+    const kind = record.kind;
+    if (!isResourceKind(kind)) return null;
+    if (!hasClosedResourceShape(record, kind)) return null;
+    const season = record.season;
+    if (!isSeason(season)) return null;
+
+    switch (kind) {
+      case 'season-calendar':
+      case 'season-participants':
+      case 'season-circuits':
+      case 'driver-standings':
+      case 'constructor-standings':
+        return Object.freeze({ kind, season });
+      case 'event-schedule': {
+        const round = record.round;
+        if (!isRound(round)) return null;
+        return Object.freeze({ kind, season, round });
+      }
+      case 'session-classification': {
+        const round = record.round;
+        const sessionType = record.sessionType;
+        if (!isRound(round)) return null;
+        if (
+          !(classifiedSessionTypes as readonly unknown[]).includes(sessionType)
+        ) {
+          return null;
+        }
+        return Object.freeze({
+          kind,
+          season,
+          round,
+          sessionType: sessionType as ClassifiedSessionType,
+        });
+      }
+    }
+  } catch {
+    // A hostile proxy or accessor. Nothing it claims can be believed, and the
+    // thrown value is never read: it is caller-controlled.
+    return null;
+  }
 }
 
 /**
@@ -215,30 +332,7 @@ function isResourceKind(value: unknown): value is CoordinatedResourceKind {
 export function isCoordinatedResource(
   value: unknown,
 ): value is CoordinatedResource {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  if (!isResourceKind(record.kind)) return false;
-  if (Object.keys(record).length !== resourceArity[record.kind]) return false;
-  if (!isSeason(record.season)) return false;
-  switch (record.kind) {
-    case 'season-calendar':
-    case 'season-participants':
-    case 'season-circuits':
-    case 'driver-standings':
-    case 'constructor-standings':
-      return true;
-    case 'event-schedule':
-      return isRound(record.round);
-    case 'session-classification':
-      return (
-        isRound(record.round) &&
-        (classifiedSessionTypes as readonly unknown[]).includes(
-          record.sessionType,
-        )
-      );
-  }
+  return readCoordinatedResource(value) !== null;
 }
 
 /** A closed, bounded component. Anything else contributes nothing at all. */
@@ -367,7 +461,13 @@ export function payloadMatchesResource(
   resource: CoordinatedResource,
   payload: unknown,
 ): payload is CoordinatedPayload {
-  if (typeof payload !== 'object' || payload === null) return false;
+  // An array is not a payload. `typeof [] === 'object'` alone would let one
+  // through to a discriminant check it can only fail by accident, and `null`
+  // would reach a property read. Neither can describe any payload member, so
+  // both are refused before resource-specific validation - which stays the
+  // single place the actual payload contract is decided.
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload))
+    return false;
   const record = payload as Record<string, unknown>;
   if (record.kind !== resource.kind) return false;
 
