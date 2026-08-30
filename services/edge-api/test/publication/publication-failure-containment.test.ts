@@ -68,6 +68,8 @@ type StorageMethod =
   | 'getActiveVersion'
   | 'readVersionedDocument'
   | 'writeVersionedDocument'
+  | 'readVersionInventory'
+  | 'writeVersionInventory'
   | 'setPreviousVersion'
   | 'setContentMetadata'
   | 'setCurrentSeason'
@@ -119,6 +121,21 @@ class ArmableStorage implements SnapshotStorage {
   ): Promise<StoredSnapshot | null> {
     await this.guard('readVersionedDocument');
     return this.inner.readVersionedDocument(season, version, documentName);
+  }
+  async readVersionInventory(
+    season: number,
+    version: string,
+  ): Promise<SnapshotDocumentName[] | null> {
+    await this.guard('readVersionInventory');
+    return this.inner.readVersionInventory(season, version);
+  }
+  async writeVersionInventory(
+    season: number,
+    version: string,
+    documentNames: readonly SnapshotDocumentName[],
+  ): Promise<void> {
+    await this.guard('writeVersionInventory');
+    return this.inner.writeVersionInventory(season, version, documentNames);
   }
   async getActiveVersion(season: number): Promise<string | null> {
     await this.guard('getActiveVersion');
@@ -287,11 +304,20 @@ describe('every pre-commit phase returns a bounded failed result', () => {
       label: 'later inactive write',
     },
     {
+      method: 'writeVersionInventory',
+      onCall: 1,
+      label: 'exact inventory write',
+    },
+    {
+      method: 'readVersionInventory',
+      onCall: 1,
+      label: 'completeness inventory read',
+    },
+    {
       method: 'readVersionedDocument',
       onCall: 2,
-      label: 'version-complete marker read',
+      label: 'version-complete document read',
     },
-    { method: 'setPreviousVersion', onCall: 1, label: 'previous pointer' },
     { method: 'setContentMetadata', onCall: 1, label: 'content metadata' },
     { method: 'setCurrentSeason', onCall: 1, label: 'current season' },
     { method: 'setActiveVersion', onCall: 1, label: 'active pointer commit' },
@@ -330,15 +356,39 @@ describe('every pre-commit phase returns a bounded failed result', () => {
     await publisherFor(storage, purger, logger).publish(setFor(source, NEXT));
 
     // Both are skipped entirely when nothing is active, so their presence here
-    // is what proves the seeded prior release exercised them.
+    // is what proves the seeded prior release exercised them. The previous
+    // pointer is now written *after* the commit, so it is post-commit
+    // maintenance rather than a pre-commit phase.
     expect(storage.calls).toContain('readVersionedDocument');
     expect(storage.calls).toContain('setPreviousVersion');
+    expect(storage.calls.indexOf('setPreviousVersion')).toBeGreaterThan(
+      storage.calls.indexOf('setActiveVersion'),
+    );
+  });
+
+  it('leaves both pointers untouched when the commit itself fails', async () => {
+    const source = await seasonFixture();
+    const { storage, logger } = await seeded(source);
+    storage.arm('setActiveVersion', 1);
+
+    const outcome = await settle(() =>
+      publisherFor(storage, new CountingPurger(), logger).publish(
+        setFor(source, NEXT),
+      ),
+    );
+
+    expect(outcome.value?.status).toBe('failed');
+    expect(await storage.getActiveVersion(SEASON)).toBe(PRIOR);
+    // Writing `previous` before the commit would have overwritten the only
+    // version a default rollback can reach with the one still serving.
+    expect(await storage.getPreviousVersion(SEASON)).toBeNull();
+    expect(storage.calls).not.toContain('setPreviousVersion');
   });
 
   it('contains an idempotency read rejection', async () => {
     const source = await seasonFixture();
     const { storage, logger } = await seeded(source);
-    storage.arm('readVersionedDocument', 1);
+    storage.arm('readVersionInventory', 1);
 
     // Republishing the active version drives the completed-version read.
     const outcome = await settle(() =>
@@ -438,18 +488,23 @@ describe('the commit point is the final storage write', () => {
       setFor(source, NEXT),
     );
 
-    const writes = storage.calls.filter(
+    // The commit point is the last write that decides *what serves*. Only the
+    // post-commit `previous` pointer maintenance may follow it, and that write
+    // can no longer precede it - which is what keeps a failed commit from
+    // destroying the recovery path.
+    const decisive = storage.calls.filter(
       (call) =>
         call === 'writeVersionedDocument' ||
-        call === 'setPreviousVersion' ||
+        call === 'writeVersionInventory' ||
         call === 'setContentMetadata' ||
         call === 'setCurrentSeason' ||
         call === 'setActiveVersion',
     );
-    expect(writes.at(-1)).toBe('setActiveVersion');
-    expect(writes.filter((call) => call === 'setActiveVersion')).toHaveLength(
+    expect(decisive.at(-1)).toBe('setActiveVersion');
+    expect(decisive.filter((call) => call === 'setActiveVersion')).toHaveLength(
       1,
     );
+    expect(storage.calls.at(-1)).toBe('setPreviousVersion');
   });
 
   it('attempts no rollback after committing', async () => {

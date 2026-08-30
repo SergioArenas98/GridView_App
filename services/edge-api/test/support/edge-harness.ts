@@ -24,10 +24,11 @@ export function createHarness(
     providerMode: string;
     provider: MockFormulaOneProvider;
     validator: SnapshotValidator;
+    storage: MemorySnapshotStorage;
   }> = {},
 ): EdgeHarness {
   const clock = new FixedClock(new Date('2026-07-20T12:00:00.000Z'));
-  const storage = new MemorySnapshotStorage();
+  const storage = overrides.storage ?? new MemorySnapshotStorage();
   const logger = new CapturingLogger();
   const purger = new MemoryCachePurgeAdapter();
   const provider =

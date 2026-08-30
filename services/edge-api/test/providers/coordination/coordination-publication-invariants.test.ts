@@ -646,6 +646,7 @@ describe('snapshot generation cannot throw out of publication', () => {
         reason: 'storage-write' as const,
         cachePurgeOk: true,
         cachePurge: 'not-required' as const,
+        pointerMaintenance: 'not-required' as const,
         purgedUrls: [],
       };
     };

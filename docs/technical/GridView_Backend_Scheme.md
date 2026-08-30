@@ -1083,19 +1083,32 @@ To avoid mixed snapshots during updates:
 1. Generate all documents using a new release version.
 2. Validate all documents.
 3. Write versioned keys.
-4. Update a small active-version pointer last.
-5. Public reads resolve through the active version.
-6. Retain the previous version for rollback.
+4. Record the version's exact document inventory.
+5. Verify completeness against that inventory.
+6. Update a small active-version pointer last. This is the commit point.
+7. Public reads resolve through the active version.
+8. Record the outgoing version as the rollback target, after the commit.
 
 Example:
 
 ```text
 snapshot:2026:20260717T180000Z:calendar
 snapshot:2026:20260717T180000Z:standings:drivers
+snapshot:2026:20260717T180000Z:__inventory
 active:2026 -> 20260717T180000Z
+previous:2026 -> 20260717T060000Z
 ```
 
 This avoids exposing half-updated data if synchronization fails midway.
+
+Completeness, rollback eligibility and cache invalidation are all decided over
+the exact inventory, never reconstructed from the collection documents: the
+collections are derived from the calendar and the season entry lists while the
+detail documents are generated from the registries, so a version legitimately
+carries documents no collection names. Writing the active pointer as the commit
+point, and the previous pointer only after it, is what keeps a failed
+publication from destroying the recovery path. Full detail is in
+[GridView_Backend_Publication.md](GridView_Backend_Publication.md).
 
 ---
 

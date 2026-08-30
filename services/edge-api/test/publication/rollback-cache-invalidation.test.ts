@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MemoryCachePurgeAdapter,
+  publicUrlsForDocuments,
   type CachePurgeAdapter,
   type CachePurgeResult,
 } from '../../src/cache/purge';
@@ -48,6 +49,17 @@ interface Harness {
   storage: MemorySnapshotStorage;
   purger: MemoryCachePurgeAdapter;
   publisher: SnapshotPublisher;
+}
+
+/** Records how many purge requests were issued, and the exact batch of each. */
+class CountingPurger extends MemoryCachePurgeAdapter {
+  calls = 0;
+  readonly batches: string[][] = [];
+  override purgePublicUrls(urls: string[]): Promise<CachePurgeResult> {
+    this.calls += 1;
+    this.batches.push([...urls]);
+    return super.purgePublicUrls(urls);
+  }
 }
 
 function harnessFor(purger: MemoryCachePurgeAdapter): Harness {
@@ -143,6 +155,22 @@ function classify(
   };
 }
 
+/** Every public route a generated version carries, in purge order. */
+function routesFor(source: ProviderSeasonSource, version: string): string[] {
+  return publicUrlsForDocuments(
+    ORIGIN,
+    SEASON,
+    generateSnapshotSet(source, FIXED_NOW, version).documents.map(
+      (document) => document.documentName,
+    ),
+  );
+}
+
+/** The exact union both versions carry, sorted and deduplicated. */
+function unionOf(a: readonly string[], b: readonly string[]): string[] {
+  return [...new Set([...a, ...b])].sort();
+}
+
 describe('rollback invalidates every public route the pointer change affects', () => {
   it('purges the results URL of a target round that stores an absence document', async () => {
     const purger = new MemoryCachePurgeAdapter();
@@ -196,7 +224,7 @@ describe('rollback invalidates every public route the pointer change affects', (
   });
 
   it('purges routes for a round only the outgoing active version had', async () => {
-    const purger = new MemoryCachePurgeAdapter();
+    const purger = new CountingPurger();
     const harness = harnessFor(purger);
     const full = await seasonFixture();
     const shortened = withRounds(
@@ -209,15 +237,20 @@ describe('rollback invalidates every public route the pointer change affects', (
     await publish(harness, full, NEWER, LATER);
 
     const before = purger.purgedUrls.length;
-    await harness.publisher.rollback(SEASON, TARGET);
+    const result = await harness.publisher.rollback(SEASON, TARGET);
     const purged = purger.purgedUrls.slice(before);
 
+    // Exactly the union, not merely a superset that happens to contain it.
+    expect(purged).toEqual(
+      unionOf(routesFor(shortened, TARGET), routesFor(full, NEWER)),
+    );
+    expect(result.purgedUrls).toEqual(purged);
     expect(purged).toContain(detailUrl(LAST_ROUND));
     expect(purged).toContain(resultsUrl(LAST_ROUND));
   });
 
   it('purges routes for a round only the rollback target has', async () => {
-    const purger = new MemoryCachePurgeAdapter();
+    const purger = new CountingPurger();
     const harness = harnessFor(purger);
     const full = await seasonFixture();
     const shortened = withRounds(
@@ -230,15 +263,19 @@ describe('rollback invalidates every public route the pointer change affects', (
     await publish(harness, shortened, NEWER, LATER);
 
     const before = purger.purgedUrls.length;
-    await harness.publisher.rollback(SEASON, TARGET);
+    const result = await harness.publisher.rollback(SEASON, TARGET);
     const purged = purger.purgedUrls.slice(before);
 
+    expect(purged).toEqual(
+      unionOf(routesFor(full, TARGET), routesFor(shortened, NEWER)),
+    );
+    expect(result.purgedUrls).toEqual(purged);
     expect(purged).toContain(detailUrl(LAST_ROUND));
     expect(purged).toContain(resultsUrl(LAST_ROUND));
   });
 
   it('purges both routes for every round when the calendars are identical', async () => {
-    const purger = new MemoryCachePurgeAdapter();
+    const purger = new CountingPurger();
     const harness = harnessFor(purger);
     const source = await seasonFixture();
     await publish(harness, source, TARGET);
@@ -248,23 +285,41 @@ describe('rollback invalidates every public route the pointer change affects', (
     await harness.publisher.rollback(SEASON, TARGET);
     const purged = purger.purgedUrls.slice(before);
 
+    expect(purged).toEqual(routesFor(source, TARGET));
     for (const event of source.calendar) {
       expect(purged, `round ${event.round}`).toContain(detailUrl(event.round));
       expect(purged, `round ${event.round}`).toContain(resultsUrl(event.round));
     }
   });
 
-  it('deduplicates deterministically and returns a sorted set', async () => {
-    const purger = new MemoryCachePurgeAdapter();
+  it('issues exactly one sorted, deduplicated purge request', async () => {
+    const purger = new CountingPurger();
     const harness = harnessFor(purger);
     const source = await seasonFixture();
     await publish(harness, source, TARGET);
     await publish(harness, source, NEWER, LATER);
+    const publishCalls = purger.calls;
 
     const result = await harness.publisher.rollback(SEASON, TARGET);
 
     expect(new Set(result.purgedUrls).size).toBe(result.purgedUrls.length);
     expect(result.purgedUrls).toEqual([...result.purgedUrls].sort());
+    expect(purger.calls).toBe(publishCalls + 1);
+    expect(purger.batches.at(-1)).toEqual(result.purgedUrls);
+  });
+
+  it('purges nothing at all before the pointer commits', async () => {
+    const purger = new CountingPurger();
+    const harness = harnessFor(purger);
+    const source = await seasonFixture();
+    await publish(harness, source, TARGET);
+    await publish(harness, source, NEWER, LATER);
+    const publishCalls = purger.calls;
+
+    const rejected = await harness.publisher.rollback(SEASON, 'no-such-target');
+
+    expect(rejected.status).toBe('rejected');
+    expect(purger.calls).toBe(publishCalls);
   });
 
   it('applies the same route union through the previous pointer', async () => {

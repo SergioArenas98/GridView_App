@@ -1,5 +1,4 @@
 import type { CachePurgeAdapter } from '../cache/purge';
-import { publicUrlsForDocuments } from '../cache/purge';
 import type { Env } from '../config/environment';
 import { jsonResponse } from '../http/envelope';
 import type { Logger } from '../logging/logger';
@@ -140,32 +139,17 @@ export async function handleAdminRequest(
     );
   }
   if (url.pathname === '/internal/admin/cache/purge') {
-    const activeVersion = await context.storage.getActiveVersion(season);
-    const calendar =
-      activeVersion === null
-        ? null
-        : await context.storage.readVersionedDocument(
-            season,
-            activeVersion,
-            'calendar',
-          );
-    const docs = ['bootstrap', 'home', 'calendar'] as const;
-    const result = await context.purger.purgePublicUrls(
-      publicUrlsForDocuments(context.purgeOrigin, season, [
-        ...docs,
-        ...(Array.isArray(calendar?.data)
-          ? (calendar.data as Array<{ round: number }>).flatMap((event) => [
-              `grand-prix:${event.round}` as const,
-              `grand-prix:${event.round}:results` as const,
-            ])
-          : []),
-      ]),
-    );
+    // The publisher owns the active version's exact inventory and the public
+    // route mapping, so an operator purge covers exactly what the active
+    // release carries rather than a hand-maintained subset of it. It moves no
+    // pointer and contains its own storage and purge failures.
+    const result = await context.publisher.purgeActiveVersion(season);
     context.logger.info({
       operation: 'cache.purge',
       requestId: context.requestId,
       season,
       cacheOutcome: result.ok ? 'purged' : 'purge-failed',
+      ...(result.reason === null ? {} : { failureCategory: result.reason }),
     });
     return ok(result, context.requestId, result.ok ? 200 : 207);
   }

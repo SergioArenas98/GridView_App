@@ -24,6 +24,7 @@ import {
   SEASON,
   seasonFixture,
 } from '../providers/coordination/support';
+import { ScriptableStorage, publisherFor } from './support';
 
 const ACTIVE = 'v1';
 const NEXT = 'v2';
@@ -167,14 +168,14 @@ describe('an active-season release stays a valid rollback target', () => {
     expect(await harness.storage.getActiveVersion(SEASON)).toBe(ACTIVE);
   });
 
-  it('still requires the results document a classified round advertises', async () => {
+  it('refuses to publish a version missing the results a round advertises', async () => {
     const harness = harnessFor();
     const { source, classifiedRound } = await activeSeason();
 
     // The calendar entry says `hasResults: true`, so this document is genuinely
-    // required. Publishing a version without it proves that relaxing the
-    // future-round rule did not become a blanket existence bypass: `publish`
-    // only verifies what it generated, so the gap only shows up at rollback.
+    // required. Completeness is now decided over the exact inventory *and* the
+    // calendar it stored, so the gap is caught at the commit boundary instead
+    // of surviving to become an unusable rollback target.
     const set = generateSnapshotSet(source, FIXED_NOW, ACTIVE);
     const stripped = {
       ...set,
@@ -184,20 +185,45 @@ describe('an active-season release stays a valid rollback target', () => {
       ),
     };
     expect(stripped.documents.length).toBe(set.documents.length - 1);
-    expect((await harness.publisher.publish(stripped)).status).toBe('applied');
-    await publishActive(harness, source, NEXT, '2026-07-25T00:00:00.000Z');
 
-    const purgedBefore = harness.purger.purgedUrls.length;
-    const result = await harness.publisher.rollback(SEASON, ACTIVE);
+    const result = await harness.publisher.publish(stripped);
 
-    expect(result.status).toBe('rejected');
-    expect(result.reason).toBe('rollback-target-incomplete');
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(NEXT);
-    expect(harness.purger.purgedUrls).toHaveLength(purgedBefore);
+    expect(result.status).toBe('failed');
+    expect(result.reason).toBe('incomplete-version');
+    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.purger.purgedUrls).toHaveLength(0);
     expect(classifiedRound).toBeGreaterThan(0);
   });
 
-  it('still rejects a target missing a required detail document', async () => {
+  it('still rejects a target that loses the results a round advertises', async () => {
+    const storage = new ScriptableStorage();
+    const purger = new MemoryCachePurgeAdapter();
+    const publisher = publisherFor(storage, purger);
+    const { source, classifiedRound } = await activeSeason();
+    const harness: Harness = {
+      storage,
+      purger,
+      logger: new CapturingLogger(),
+      publisher,
+    };
+    await publishActive(harness, source, ACTIVE);
+    await publishActive(harness, source, NEXT, '2026-07-25T00:00:00.000Z');
+    storage.hideDocument(
+      SEASON,
+      ACTIVE,
+      `grand-prix:${classifiedRound}:results`,
+    );
+
+    const purgedBefore = purger.purgedUrls.length;
+    const result = await publisher.rollback(SEASON, ACTIVE);
+
+    expect(result.status).toBe('rejected');
+    expect(result.reason).toBe('rollback-target-incomplete');
+    expect(await storage.getActiveVersion(SEASON)).toBe(NEXT);
+    expect(purger.purgedUrls).toHaveLength(purgedBefore);
+  });
+
+  it('still rejects a target that was never published', async () => {
     const harness = harnessFor();
     const { source } = await activeSeason();
     await publishActive(harness, source, ACTIVE);
@@ -207,7 +233,7 @@ describe('an active-season release stays a valid rollback target', () => {
     const result = await harness.publisher.rollback(SEASON, 'no-such-version');
 
     expect(result.status).toBe('rejected');
-    expect(result.reason).toBe('rollback-target-missing');
+    expect(result.reason).toBe('missing-version-inventory');
     expect(await harness.storage.getActiveVersion(SEASON)).toBe(NEXT);
     expect(harness.purger.purgedUrls).toHaveLength(purgedBefore);
   });

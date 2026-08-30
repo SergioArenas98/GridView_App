@@ -41,6 +41,18 @@ Document names mirror public resources: `bootstrap`, `home`, `season`,
 `calendar`, `grand-prix:{round}`, `grand-prix:{round}:results`, collections,
 standings, detail documents and `content:manifest`.
 
+Each version additionally stores its **exact document inventory** under its own
+snapshot prefix:
+
+```text
+snapshot:{season}:{version}:__inventory
+```
+
+The suffix is deliberately not a `SnapshotDocumentName`. That union is closed,
+so the inventory can never be requested through `readVersionedDocument`, can
+never be mapped to a public URL, and is removed with the version by
+`deleteUnpublishedVersion`.
+
 ## Publication Algorithm
 
 1. Generate a unique immutable release version.
@@ -48,16 +60,72 @@ standings, detail documents and `content:manifest`.
 3. Generate every required public document for the release.
 4. Validate each generated document before any pointer change.
 5. Write every versioned document under the release version.
-6. Read back the required set to verify completeness.
-7. Preserve the current active version as `previous:{season}`.
+6. Record the exact inventory of what was generated.
+7. Read back that inventory to verify completeness.
 8. Update content/current-season metadata.
-9. Write `active:{season}` last.
-10. Purge only affected public URLs through the cache-purge abstraction.
+9. Write `active:{season}` last. **This is the commit point.**
+10. Record the outgoing version as `previous:{season}`, after the commit.
+11. Purge only affected public URLs through the cache-purge abstraction.
 
 If validation, provider fetch or pre-activation storage writes fail, the active
 pointer is unchanged. Repeating publication of the already active immutable
-version is treated as idempotent. A generated release whose `sourceUpdatedAt` is
+version is treated as idempotent, and its completeness is decided over that
+version's own recorded inventory. A generated release whose `sourceUpdatedAt` is
 older than the active release is rejected.
+
+### Exact per-version inventory
+
+Completeness and cache invalidation are decided over the sorted, deduplicated
+set of document names generation actually produced - never reconstructed from
+the collection documents.
+
+The two sets are not the same. `circuits`, `drivers` and `constructors` are
+derived from the calendar and from the season entry lists, while the matching
+detail documents are generated from the registries, so a circuit with no
+calendar event or a registry driver with no season entry is generated and stored
+while appearing in no collection. The shipped curated content already contains
+one such circuit. Reconstruction therefore under-reports what a version holds,
+which silently accepts an incomplete rollback target and silently skips a public
+route during invalidation.
+
+A version is complete when:
+
+- every inventoried document exists;
+- every required season-level document is inventoried;
+- every calendar event has its detail document; and
+- every event advertising `hasResults: true` has its results document.
+
+A generated optional `unavailable` classification is inventoried, so its absence
+means a corrupted version. A classification generation never produced is never
+inventoried, so an ordinary in-season release remains a valid rollback target.
+Nothing is fabricated into an inventory.
+
+A version carrying **no** inventory fails closed: it is rejected as a rollback
+target with `missing-version-inventory` rather than falling back to the
+collection heuristic. No deployed coordinated snapshot depends on this
+compatibility path.
+
+### Pointer transitions
+
+`active:{season}` is the commit point and the last write that decides what
+serves. `previous:{season}` is written **after** it.
+
+Writing `previous` first means a failed commit overwrites the one version a
+default rollback can reach with the version that is still serving: the release
+did not change, but the recovery path from it was destroyed. Ordering the two
+writes this way makes that impossible.
+
+| Phase                              | Outcome on failure                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| Any pre-commit read or write       | `failed`; both pointers unchanged; nothing purged                            |
+| Active-pointer commit              | `failed`, `storage-write`; both pointers unchanged; nothing purged           |
+| Post-commit `previous` maintenance | `applied` with `pointerMaintenance: 'failed'`; the required purge still runs |
+| Post-commit cache purge            | `applied` with `cachePurge: 'failed'`                                        |
+
+`pointerMaintenance` and `cachePurge` are independent bounded dispositions. The
+single `reason` field reports the maintenance failure first when both occurred,
+because a stale `previous` silently removes the recovery path while a stale
+cache is visible and self-correcting.
 
 That comparison stays well defined once the sources publish no recency signal:
 `sourceUpdatedAt` then carries GridView's first observation of the currently
@@ -80,9 +148,52 @@ operational event (ADR 0020 D1.11a).
 ## Rollback
 
 Rollback resolves the target version from the request body or `previous:{season}`.
-It verifies that the target release has the required document set before writing
+It verifies the target against that version's exact inventory before writing
 `active:{season}`. Cache purge failure is reported but does not undo the pointer
 change.
+
+**A rollback whose target is already active is a bounded no-op**: `skipped` with
+reason `idempotent`, mapped to HTTP `200`. It writes no pointer, purges nothing
+and preserves the existing rollback target. Reporting a transition that did not
+happen - and overwriting `previous` while doing it - is precisely how the
+recovery path is lost.
+
+**Every expected operational failure returns a bounded result rather than
+throwing.** Rollback is the recovery path, so a caller reaching for it during an
+outage must still be told which side of the commit point the attempt ended on:
+
+| Situation                                  | Result                                              |
+| ------------------------------------------ | --------------------------------------------------- |
+| Storage read before the commit fails       | `failed`, `storage-read`; both pointers unchanged    |
+| Target carries no inventory                | `rejected`, `missing-version-inventory`              |
+| Target inventory is empty                  | `rejected`, `rollback-target-missing`                |
+| Target is missing an inventoried document  | `rejected`, `rollback-target-incomplete`             |
+| Active-pointer commit fails                | `failed`, `storage-write`; both pointers unchanged   |
+| Post-commit `previous` maintenance fails   | `applied`, `pointerMaintenance: 'failed'`            |
+| Post-commit purge fails, throws or rejects | `applied`, `cachePurge: 'failed'`                    |
+
+No raw storage message reaches a response or a log line; only the bounded phase
+and category are recorded.
+
+### Cache invalidation on rollback
+
+The purge set is the **union** of the outgoing active version's and the target
+version's exact inventories mapped to public routes, plus the season-wide routes
+whose representation depends on the active pointer. It is not gated on
+`hasResults`: a round's results URL is purged whenever either version carries
+it, because otherwise a classification cached from the newer version keeps being
+served at a URL the rollback restored to a meaningful absence.
+
+The union covers orphan profile details, added and removed profiles, and rounds
+present in only one of the two calendars. It is deduplicated and sorted
+deterministically, and one rollback issues exactly one purge request, after the
+commit. An outgoing active version carrying no inventory contributes nothing to
+the union rather than blocking the recovery it is being rolled back from.
+
+`POST /internal/admin/cache/purge` uses the same exact inventory and the same
+route mapper for the **active** version, so an operator purge covers the whole
+active release. It moves no pointer and writes nothing; with no active version
+or no inventory it returns a bounded `207`.
 
 ## KV Consistency Boundary
 

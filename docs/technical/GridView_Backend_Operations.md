@@ -298,24 +298,63 @@ Provider-fetch failures and post-fetch failures are accounted separately.
 - In every case the previously active snapshot is preserved, and internal
   exception bodies are never surfaced publicly or logged.
 
+## Version transitions and rollback
+
+Every version records the exact set of document names generation produced
+([GridView_Backend_Publication.md](../technical/GridView_Backend_Publication.md)).
+Completeness, rollback eligibility, cache invalidation and the operator purge
+are all derived from that one set, never from the collection documents, which
+are known to omit documents a version really carries.
+
+`active:{season}` is the commit point. Everything before it may fail without
+changing what serves; everything after it may fail without un-moving the
+pointer. `previous:{season}` is written **after** the commit, so a failed
+publication can no longer overwrite the one version a default rollback reaches.
+
+| Situation | Result | Operator action |
+| --- | --- | --- |
+| Rollback target equals the active version | `skipped`, `idempotent`, HTTP `200` | None. No pointer moved and the existing rollback target is preserved. |
+| Target carries no inventory | `rejected`, `missing-version-inventory`, HTTP `409` | Roll back to a version that records one, or republish. Nothing is reconstructed heuristically. |
+| Target inventory is empty | `rejected`, `rollback-target-missing`, HTTP `409` | Choose another target. |
+| Target is missing an inventoried document | `rejected`, `rollback-target-incomplete`, HTTP `409` | Choose another target. No pointer moved, nothing purged. |
+| Any storage read before the commit fails | `failed`, `storage-read`, HTTP `409` | Retry once storage recovers. Both pointers are unchanged. |
+| The active-pointer commit fails | `failed`, `storage-write`, HTTP `409` | Retry. Both pointers are unchanged and nothing was purged. |
+| The post-commit `previous` write fails | `applied`, `pointerMaintenance: 'failed'`, HTTP `200` | **The transition applied.** The rollback target is stale, so a default rollback would land on the wrong version — roll back explicitly by version until a later successful transition repairs it. |
+| The post-commit purge fails | `applied`, `cachePurge: 'failed'`, HTTP `200` | The transition applied. Re-run the manual purge. |
+
+No storage or purge failure escapes rollback as an exception, and no raw storage
+message reaches a response or a log line.
+
 ## Cache Purge
 
 Local/development uses an in-memory fake purge adapter; staging and production
 use the Cloudflare Cache API adapter. Publication computes the affected public
-URLs from the published document set and purges only those URLs.
+URLs from the published version's exact inventory and purges only those URLs.
 
 **Rollback purges a wider set than it validates.** Whether a version is a legal
 rollback target and which public responses may still carry the outgoing
-version's representation are two different questions, so they use two different
-sets. Target completeness stays gated on `hasResults`: a results document is
-required exactly when the target calendar advertises a classification. Cache
-invalidation is not gated on it at all — rollback purges the **union** of the
-currently active version's and the target version's public route identities,
-including each round's results URL for every round in either calendar even when
-neither version advertises a classification for it. Otherwise a final
-classification cached from the newer version would keep being served at a URL
-the rollback restored to a meaningful absence. The union is deduplicated and
-sorted deterministically.
+version's representation are two different questions. Completeness is decided
+over one version's exact inventory; cache invalidation is decided over the
+**union** of the outgoing active version's and the target version's exact
+inventories, mapped to public routes, plus the season-wide routes whose
+representation depends on the active pointer. It is not gated on `hasResults` at
+all — a round's results URL is purged whenever either version carries it, because
+otherwise a final classification cached from the newer version would keep being
+served at a URL the rollback restored to a meaningful absence. The union covers
+orphan profile details, added and removed profiles, and rounds present in only
+one of the two calendars. It is deduplicated and sorted deterministically, and
+one rollback issues exactly one purge request, after the commit. An outgoing
+active version carrying no inventory contributes nothing to the union rather
+than blocking the recovery it is being rolled back from.
+
+**`POST /internal/admin/cache/purge` covers the whole active release.** It maps
+the active version's exact inventory through the same public-route mapper, so
+the season detail, both standings, all three collections, the content manifest
+and every driver, constructor, circuit, Grand Prix and results route are
+included. It moves no pointer and writes nothing. With no active version it
+returns `207` with `no-active-version`; with an active version carrying no
+inventory it returns `207` with `missing-version-inventory`; a purge adapter
+that fails, throws or rejects is contained and also returns `207`.
 
 A purge failure is returned (`207`) and logged, but never corrupts or reverts the
 active snapshot pointer — reader correctness relies on weak-ETag revalidation, not

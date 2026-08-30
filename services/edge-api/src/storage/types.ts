@@ -125,6 +125,29 @@ export interface SnapshotStorage {
     version: string,
     documentName: SnapshotDocumentName,
   ): Promise<StoredSnapshot | null>;
+  /**
+   * The exact set of document names one version generated, or `null` when the
+   * version carries no inventory.
+   *
+   * `null` is a distinct answer from `[]`: the first means "this version never
+   * recorded what it holds", which no completeness or cache decision may be
+   * derived from, and the second means "this version recorded that it holds
+   * nothing". Callers must not collapse them.
+   */
+  readVersionInventory(
+    season: number,
+    version: string,
+  ): Promise<SnapshotDocumentName[] | null>;
+  /**
+   * Records the exact inventory of one inactive version. Written before the
+   * version is verified complete, and removed with the version by
+   * `deleteUnpublishedVersion`.
+   */
+  writeVersionInventory(
+    season: number,
+    version: string,
+    documentNames: readonly SnapshotDocumentName[],
+  ): Promise<void>;
   getActiveVersion(season: number): Promise<string | null>;
   setActiveVersion(season: number, version: string): Promise<void>;
   getPreviousVersion(season: number): Promise<string | null>;
