@@ -578,6 +578,38 @@ and the incoming one drops; when that inventory cannot be read the purge reports
 `cachePurge: 'failed'` rather than a success it cannot stand behind. All of it
 remains post-commit, so no purge outcome moves or reverts a pointer.
 
+**A replacement release withdraws routes, and only the version it replaces can
+name them.** Publication mapped the **incoming** version's inventory alone. That
+covers every route the new release still carries and misses every route the
+outgoing release carried and the new one drops - a driver who left the grid, a
+cancelled round, results reclassified as absent. The origin stops answering
+those URLs the moment `setActiveVersion` moves, while the CDN keeps the
+withdrawn body for the rest of its TTL: for the current season that is the
+canonical numeric URL **and** both of its aliases. Rollback already avoided this
+by unioning both inventories; publication did not, and the gap predates this
+ADR's branch exactly as the alias gap did. It is corrected in the same place and
+for the same reason.
+
+Replacing a version therefore purges the union of the **incoming** version's
+inventory, the **replaced** version's exact inventory and the season-wide routes
+derived from the active pointer. The union is passed through the one shared
+route expansion, so withdrawn routes gain current-season aliases by the same
+rule as retained ones and a historical season keeps numeric-only invalidation.
+The ten base documents cannot be withdrawn: a version missing one of them is
+`incomplete` and is rejected before the commit point, so the withdrawable
+families are exactly the profile and event routes.
+
+This is not the cross-season case and is deliberately typed apart from it. A
+season that stops being current keeps its own active version, so only its
+`current` aliases go stale and only those are purged; a season whose active
+version is replaced has every dropped route go stale, canonical URLs included.
+The replaced version's inventory is read **before** the commit block, while that
+version is still the one serving. A season with no active version has withdrawn
+nothing and is an ordinary first publication; an existing version whose
+inventory is missing, malformed or unreadable is not the same fact, and is
+reported as `cachePurge: 'failed'` rather than read as an empty surface that
+would turn a still-serving withdrawn release into a reported success.
+
 None of this unlocks a provider, activates G4 or changes API routing semantics.
 
 This is intentionally conservative. Purging a results URL whose new
@@ -589,7 +621,9 @@ pointer moves, a completeness rejection moves no pointer and purges nothing,
 **post-commit**: it cannot un-move the pointer, so a purge that fails, throws
 or rejects is reported as `applied` with `cachePurge: 'failed'` and never
 reverts the rollback. Explicit-target and `previous:{season}` rollback behave
-identically, and publication-time purge behaviour is unchanged.
+identically, and publication reaches the same containment through the same
+shared purge: a widened set changes which URLs are invalidated, never which
+phase is allowed to fail a release.
 
 **Publication is a phase transition with one irreversible point.** KV offers
 ordered writes, not a transaction, and the design says so rather than

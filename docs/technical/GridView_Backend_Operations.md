@@ -388,7 +388,10 @@ message reaches a response or a log line.
 
 Local/development uses an in-memory fake purge adapter; staging and production
 use the Cloudflare Cache API adapter. Publication computes the affected public
-URLs from the published version's exact inventory and purges only those URLs.
+URLs from exact inventories - the published version's and the version it
+replaces - and purges only those URLs. A purge the adapter reports as failed is
+reported as failed: the URL list on a result is the set that was submitted, not
+a claim that every entry was evicted.
 
 **Purge completeness is not numeric-URL completeness.** A CDN keys on the
 request URL, and the public router serves the same document under several: the
@@ -403,6 +406,19 @@ routes in both their omitted and explicit-`current` forms, plus
 and the remaining season routes accept no query and no `current` segment, so they
 have exactly one URL each. Nothing about routing, cache keys, TTLs or the public
 contract changes - only which URLs an invalidation covers.
+
+**A replacement release also purges what it withdraws.** Publication invalidates
+the union of the incoming version's inventory and the exact inventory of the
+version it replaces in that season, so a route the new release drops - a driver
+who left the grid, a cancelled round, results reclassified as absent - is
+invalidated rather than left serving a withdrawn body until its TTL expires. The
+union goes through the same expansion, so a withdrawn route on the current season
+covers its canonical URL and both aliases. A season with no active version has
+withdrawn nothing and is an ordinary first publication; an existing version whose
+inventory is missing, malformed or unreadable reports `cachePurge: 'failed'`
+rather than being read as an empty surface. The ten base documents cannot be
+withdrawn, because a version missing one of them is rejected before the commit
+point.
 
 A season known **not** to be current keeps numeric-only invalidation, because its
 aliases belong to whatever season is current. Current-season identity is read

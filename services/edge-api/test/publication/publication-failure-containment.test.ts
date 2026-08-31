@@ -309,8 +309,13 @@ describe('every pre-commit phase returns a bounded failed result', () => {
       label: 'exact inventory write',
     },
     {
+      // Call 1 is the replaced version's inventory, read for the withdrawn
+      // routes. That one is a cache concern and is contained as a failed purge
+      // on an applied publication, not as a pre-commit failure - it is pinned
+      // in `withdrawn-route-invalidation.test.ts` instead. The completeness
+      // read this phase names is the one inside the write block.
       method: 'readVersionInventory',
-      onCall: 1,
+      onCall: 2,
       label: 'completeness inventory read',
     },
     {

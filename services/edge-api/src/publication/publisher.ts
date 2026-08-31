@@ -191,6 +191,50 @@ function outgoingCurrentSeason(
   return { kind: 'season', season: read.value };
 }
 
+/**
+ * The documents the version being **replaced** in this season was serving.
+ *
+ * Deliberately not the same concept as `OutgoingCurrentSeason`, and named so it
+ * cannot be mistaken for it. That one is about a *different* season losing the
+ * `current` aliases while its own active version stays put, so only its aliases
+ * go stale. This one is about the *same* season's active version changing, so
+ * every route the replaced version carried and the new one drops goes stale -
+ * canonical URLs included.
+ *
+ * `unenumerable` is a distinct value on purpose. An existing version whose
+ * inventory is missing, malformed or unreadable is not a version that carried
+ * nothing: it is a surface we cannot describe, and reading it as empty would
+ * turn a withdrawn release still serving from a CDN into a reported success.
+ */
+type ReplacedVersionDocuments =
+  | {
+      readonly kind: 'documents';
+      readonly documents: readonly SnapshotDocumentName[];
+    }
+  | { readonly kind: 'unenumerable' };
+
+/** No version was replaced: a first publication has withdrawn nothing. */
+const noReplacedVersion: ReplacedVersionDocuments = {
+  kind: 'documents',
+  documents: [],
+};
+
+/**
+ * Whether a stored inventory is shaped like one at all.
+ *
+ * `readVersionInventory` is typed, but its value is deserialized from storage
+ * and a truncated or hand-edited entry can deserialize to anything. A string
+ * would spread into single characters and a number would throw inside the route
+ * mapper, so the shape is checked once, here, rather than trusted downstream.
+ */
+function isDocumentNameList(
+  value: unknown,
+): value is readonly SnapshotDocumentName[] {
+  return (
+    Array.isArray(value) && value.every((name) => typeof name === 'string')
+  );
+}
+
 /** The outcome of one guarded operational step. */
 type Attempt<T> =
   { readonly ok: true; readonly value: T } | { readonly ok: false };
@@ -376,6 +420,18 @@ export class SnapshotPublisher {
       }
     }
 
+    // The routes this release **withdraws** are exactly the ones its own
+    // inventory cannot name, so they are read from the version being replaced -
+    // while that version is still the one serving, and before the commit block
+    // moves the pointer that identifies it. Like the current-season read above
+    // this is a cache concern only: it never rejects a publication that is
+    // otherwise fine, and an unenumerable outgoing surface is settled by the
+    // post-commit purge reporting a failure instead of a success.
+    const replaced =
+      activeVersion === null
+        ? noReplacedVersion
+        : await this.replacedVersionDocuments(set.season, activeVersion);
+
     const written = await attempt(async () => {
       for (const document of documents.values()) {
         await this.storage.writeVersionedDocument(
@@ -433,7 +489,12 @@ export class SnapshotPublisher {
       activeVersion,
       'publication',
     );
-    const purge = await this.purgeRoutes(set.season, inventory, outgoing);
+    const purge = await this.purgeRoutes(
+      set.season,
+      inventory,
+      outgoing,
+      replaced,
+    );
     this.logger.info({
       operation: 'publication.completed',
       season: set.season,
@@ -696,6 +757,17 @@ export class SnapshotPublisher {
    * `/v1/seasons/2026` and `/v1/seasons/current` are two entries and purging
    * one says nothing about the other.
    *
+   * `replaced` carries the documents of the version this operation is replacing
+   * **in the same season**, and it is unioned into the same expansion rather
+   * than mapped separately. A route the replaced version carried and the new
+   * one drops is the one route the incoming inventory can never name, and it is
+   * exactly the one that keeps serving a withdrawn response: the origin stops
+   * answering it the moment the pointer moves, while the CDN holds the old body
+   * for the rest of its TTL. Rollback passes its union through `documents` for
+   * the same reason; publication has a second inventory to name, so it has its
+   * own parameter. When that surface is `unenumerable` the purge is reported as
+   * failed - it may be complete, but nothing here can say so.
+   *
    * When a publication moves the current-season pointer, the alias URLs were
    * serving the **outgoing** season. Most of them are covered already, because
    * an alias URL is season-independent and the incoming season carries the same
@@ -709,13 +781,16 @@ export class SnapshotPublisher {
     season: number,
     documents: readonly SnapshotDocumentName[],
     outgoing: OutgoingCurrentSeason = noOutgoingCurrentSeason,
+    replaced: ReplacedVersionDocuments = noReplacedVersion,
   ): Promise<{ ok: boolean; urls: string[] }> {
     const aliasing = await this.seasonAliasing(season);
+    const withdrawn =
+      replaced.kind === 'documents' ? replaced.documents : ([] as const);
     const invalidated = new Set(
       invalidationUrlsForDocuments(
         this.purgeOrigin,
         season,
-        [...documents, ...activePointerDerivedDocuments],
+        [...documents, ...withdrawn, ...activePointerDerivedDocuments],
         aliasing,
       ),
     );
@@ -725,9 +800,34 @@ export class SnapshotPublisher {
     const urls = [...invalidated].sort();
     const purged = await attempt(() => this.purger.purgePublicUrls(urls));
     return {
-      ok: outgoingAliases !== null && purged.ok && purged.value.ok,
+      ok:
+        replaced.kind === 'documents' &&
+        outgoingAliases !== null &&
+        purged.ok &&
+        purged.value.ok,
       urls: purged.ok ? purged.value.urls : [],
     };
+  }
+
+  /**
+   * The exact documents one version of this season recorded.
+   *
+   * Separate from `outgoingAliasUrls`, which answers a different question about
+   * a different season. This one is read pre-commit and returns documents, not
+   * URLs, so the one shared route expansion stays the only place that knows how
+   * a document becomes a URL.
+   */
+  private async replacedVersionDocuments(
+    season: number,
+    version: string,
+  ): Promise<ReplacedVersionDocuments> {
+    const inventory = await attempt(() =>
+      this.storage.readVersionInventory(season, version),
+    );
+    if (!inventory.ok || !isDocumentNameList(inventory.value)) {
+      return { kind: 'unenumerable' };
+    }
+    return { kind: 'documents', documents: inventory.value };
   }
 
   /**

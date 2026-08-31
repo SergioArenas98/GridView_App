@@ -67,7 +67,9 @@ never be mapped to a public URL, and is removed with the version by
 10. Record the outgoing version as `previous:{season}`, after the commit.
 11. Purge every affected public URL - each document's canonical numeric URL,
     plus the current-season aliases when the affected season is current -
-    through the cache-purge abstraction.
+    through the cache-purge abstraction. The affected documents are the union
+    of the incoming version's inventory and the replaced version's, so a route
+    the new release withdraws is invalidated too.
 
 If validation, provider fetch or pre-activation storage writes fail, the active
 pointer is unchanged. Repeating publication of the already active immutable
@@ -232,6 +234,39 @@ the incoming one does not. If that inventory cannot be read the surface is not
 enumerable, and the purge reports `cachePurge: 'failed'` rather than claiming a
 success that leaves a withdrawn profile serving. That remains post-commit and
 never reverts the pointer.
+
+### Cache invalidation of withdrawn routes
+
+Replacing a version in the same season purges the **union** of the incoming
+version's inventory and the replaced version's exact inventory, plus the
+season-wide routes derived from the active pointer. A route the new release
+drops - a driver who left the grid, a cancelled round, results reclassified as
+absent - is named by no other set: the origin stops answering it as soon as
+`active:{season}` moves, while the CDN keeps the withdrawn body for the rest of
+its TTL. The union goes through the same route expansion as everything else, so
+a withdrawn route on the current season is invalidated at its canonical numeric
+URL and at both of its aliases, and a historical season keeps numeric-only
+invalidation.
+
+The ten base documents cannot be withdrawn. A version missing one of them is
+`incomplete` and rejected before the commit point, so the withdrawable families
+are exactly the driver, constructor and circuit profiles and the Grand Prix
+detail and results routes - including a results document withdrawn while its
+round is retained.
+
+This is **not** the cross-season case. A season that stops being current keeps
+its own active version, so only its aliases are invalidated; a season whose
+active version is replaced has every dropped route go stale, canonical URLs
+included. The replaced version's inventory is read before the commit block,
+while that version is still the one serving.
+
+A season with no active version has withdrawn nothing: that is an ordinary
+first publication, not a fault. An existing version whose inventory is missing,
+malformed or unreadable is a different fact - the withdrawn surface cannot be
+enumerated at all - and the purge reports `cachePurge: 'failed'` rather than
+reading it as empty and claiming a success it cannot stand behind. Like every
+other post-commit outcome it never reverts the committed pointer, and it never
+turns an applied publication into a failed one.
 
 ### Cache invalidation on rollback
 

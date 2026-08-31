@@ -502,7 +502,18 @@ invalidation; a current-season transition invalidating the aliases of both the
 outgoing and the incoming season, and reporting a failed purge when the outgoing
 surface cannot be enumerated; an unreadable current-season pointer expanding
 aliases rather than skipping them; and the committed pointer surviving an
-aliased purge that fails. `services/edge-api/test/sync/` covers the
+aliased purge that fails.
+`test/publication/withdrawn-route-invalidation.test.ts` pins what a replacement
+release removes: a driver, constructor or circuit profile, a Grand Prix detail
+and its results, and a results document withdrawn while its round is retained,
+each invalidated at every URL the router serves it under; the purge set being
+exactly the aliased union of the outgoing and incoming inventories, still
+deduplicated and sorted; a historical season keeping the withdrawn canonical URL
+and no alias; a first publication having nothing to withdraw and reporting a
+clean purge; a cross-season transition still leaving the outgoing season's
+season-scoped URLs alone; and a missing, malformed, throwing or rejecting
+outgoing inventory reporting `cachePurge: 'failed'` on an applied publication
+whose committed pointer stands. `services/edge-api/test/sync/` covers the
 rejected-publication decision table over the exported reason union, both
 integrity refusals failing the run, the benign older-source no-op completing,
 and last-known-good preservation in every case.
