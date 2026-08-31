@@ -1162,13 +1162,26 @@ The handler:
 > withheld with a bounded reason rather than replacing a complete active
 > release.
 >
+> **An accepted candidate payload is the coordinator's own detached snapshot.**
+> It is detached the instant an adapter's outcome crosses the coordination
+> boundary, resource binding is evaluated against that detached value, and the
+> same value is what is stored in the contribution, selected, assembled and
+> published. An adapter that keeps and mutates the object it returned, refills
+> one buffer for its next request, or answers through a stateful accessor
+> therefore cannot change a contribution after it was classified. A payload that
+> cannot be detached is contained as the existing bounded `malformed-outcome`
+> contribution: it is never selected, never assembles and never publishes, while
+> the request that really occurred stays accounted exactly once as the attempt
+> it was.
+>
 > Event-aware scheduling (**G5**) and persisted provenance or
 > provisional/reconciled record state (**G9**) remain open, and the coordinator
 > implements neither. **Deep normalized-contract validation also remains
 > open**: the runtime snapshot validator is structural - metadata, required
 > top-level document shape and provider neutrality - and per-field contract
 > validation is an adapter responsibility that gates registering a real
-> adapter at all (ADR 0023 D14).
+> adapter at all (ADR 0023 D14). The detached snapshot is an aliasing and
+> time-of-check/time-of-use guarantee and does **not** close that gate.
 >
 > A publication the publisher **rejects** is not automatically a successful
 > run. Only a candidate older than what is already serving is a benign

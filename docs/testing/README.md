@@ -475,6 +475,32 @@ Coverage:
   sharing one constructor are both rejected, symmetrically with the driver
   cases, while split driver participation spans and a historical circuit
   lap-record driver stay accepted.
+- Candidate payload snapshots
+  (`test/providers/coordination/candidate-payload-snapshot.test.ts`): the value
+  that passed resource binding is the value that is stored, selected and
+  assembled. An adapter that rewrites the payload it returned - whole standings
+  collections, a single row, a calendar's nested session arrays, a
+  classification's nested entries, or a participants payload's entry
+  collections - changes nothing after the contribution was classified, and
+  season assembly is proved to read the snapshot rather than the mutated
+  fixture. An adapter that refills **one buffer** for its next request cannot
+  rewrite an earlier accepted answer, two contributions built from that buffer
+  do not alias each other, and a fallback candidate cannot mutate the selected
+  one. A stateful accessor that answers a valid value on one read and a
+  different-season value on the next has the validated value retained - asserted
+  as a stable, correct stored snapshot rather than as a getter invocation count,
+  which the runtime does not guarantee. Reversing plan order changes nothing.
+  A payload that cannot be detached - a function-valued field, a function nested
+  inside a collection, a hostile `ownKeys` proxy - is contained as the existing
+  bounded `malformed-outcome` contribution: never selected, never assembled,
+  never published, with the run still `completed`, the real request accounted
+  exactly once by source and job category, `attempted` still true, a healthy
+  fallback still able to carry the resource, and nothing about the value in any
+  log line. Ordinary payloads are pinned unchanged across every resource kind,
+  and for `null` values, numeric zero, empty strings, empty collections, nested
+  objects, a frozen payload and a null-prototype payload; role precedence,
+  attribution, source-qualified transport deduplication, run-level
+  contradiction handling and ordinary publication are all re-pinned alongside.
 - Validator scope and the activation gate: the runtime validator accepts a
   driver collection whose entries are nonsense as `SeasonDriverSummary`, which
   pins that it is structural rather than a deep per-field contract validator;

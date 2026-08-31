@@ -283,6 +283,97 @@ true, so neither was refused at the outcome boundary. Both are now rejected as
 a precondition; the payload's actual contract is still decided in one place, by
 `payloadMatchesResource`.
 
+#### The coordinator owns a detached snapshot of every accepted payload
+
+Closing the shape of an answer decides what the value _was_ when it was
+inspected. It does not decide what the value _is_ afterwards, and the
+coordinator retains a candidate payload for the whole rest of the run:
+selection reads it, season assembly copies it, and snapshot generation derives
+every public document from it.
+
+Retaining the adapter's own object made resource binding a statement about a
+value that could still change. Three concrete ways it could:
+
+- **A retained reference.** The adapter still holds the object it returned and
+  mutates it after the contribution was classified.
+- **A reused buffer.** One adapter fills a single object or nested array for
+  each request in turn, so a later request rewrites an answer that was already
+  given.
+- **A stateful accessor.** A getter answers a valid, in-season value on one
+  read and a different-season value on the next.
+
+In each case a 2026 standings payload could pass `payloadMatchesResource()` and
+become a 2025 payload before assembly copied its rows — and nothing below can
+catch it: assembly copies a selected collection verbatim, and the snapshot
+validator checks each entry against its own schema rather than against the
+season it is being published under. It is an aliasing and
+time-of-check/time-of-use defect, present since the initial coordination
+commit.
+
+**The decision is that the coordinator owns the value, not that the adapter
+promises to behave.** Aliasing is a property of the boundary, not of any one
+implementation on the far side of it, and an adapter obligation cannot be
+enforced by the component that would be harmed by breaking it. So the payload
+of every answered outcome is **detached the instant the outcome crosses the
+boundary** — before shape closure, before resource binding, and before the next
+operation in the plan can run. Resource binding is then evaluated against that
+detached snapshot, and _the same snapshot_ is what is stored in the
+contribution, selected, assembled and published. The adapter-owned original is
+never stored and never published.
+
+The ordering is deliberate and the weaker one is explicitly rejected:
+validating the adapter's object and copying it afterwards would leave the copy
+free to be taken from a value the check never saw. Detaching on arrival also
+closes the reused-buffer case, which detaching at classification time could
+not: attribution deliberately runs after the whole plan has executed, so a
+buffer refilled for a later request would already have rewritten the earlier
+answer before anything looked at it.
+
+The mechanism is `structuredClone`, the platform's own deep-detachment
+primitive, supported by both the Workers runtime and the Node test runtime. A
+JSON round trip was rejected: it is a _normalization_, not a copy — it drops
+`undefined` members, coerces through `toJSON` and turns unsupported values into
+silently different data, which is exactly the kind of quiet rewriting this
+boundary exists to prevent. Every normalized contract payload is JSON-like —
+plain objects, arrays, strings, numbers, booleans and `null`, with no date,
+map, set, typed array, class instance, function, symbol or prototype anywhere —
+so structured cloning preserves each one exactly, including nested arrays,
+`null` values, numeric zero and empty strings, and every generated public
+document is byte-identical for an ordinary input.
+
+**A payload that cannot be detached fails closed in the existing vocabulary.**
+A function-valued field, a hostile proxy or any other non-cloneable value is
+not usable data, so it becomes the ordinary bounded `malformed-outcome`
+contribution — no new public failure reason, no exception out of `coordinate()`
+and nothing about the thrown value or the payload in any log line. **Accounting
+is unaffected**: the request behind the outcome really left GridView, is
+registered as the single attempt it was, and the contribution stays
+`attempted`. A clone failure is not a transport-reference contradiction and
+does not taint the run; a healthy fallback candidate for the same resource is
+still selected under the ordinary role precedence, and the affected resource
+simply becomes unavailable if there is none.
+
+Exactly one clone is taken per accepted candidate. Selection, fallback
+evaluation and assembly all read that single snapshot, so the cost is bounded
+by one coordination plan and is not multiplied by either.
+
+**This is not deep normalized-contract validation, and does not stand in for
+it.** It guarantees that the value which passed the coordinator's own binding
+check is the value that is published — nothing about whether that value
+satisfies the public contract field by field. That remains an adapter
+responsibility and an explicit activation gate (D14).
+
+**Freezing the returned run was considered and deliberately not added.** The
+snapshot is coordinator-owned and unreachable from the adapter, and the only
+callers of a `CoordinationRun` are inside the coordination package itself — the
+seam is dormant, and a test asserts that no runtime module outside
+`src/providers/coordination/` consumes the coordinator. Detachment closes the
+reported defect; recursive freezing would add a second traversal of every
+payload to defend against a caller that does not exist, and would change the
+type contract of values the public documents are derived from. If the run ever
+becomes reachable by an external caller, that is the point at which ownership
+past the return needs its own decision.
+
 ### D7 - One transport request is counted exactly once
 
 An outcome carries a bounded **transport reference** identifying the single
@@ -877,11 +968,13 @@ substitute for one.
 adapter is the component that normalizes provider data into the public contract
 types, so it is the only place with both the provider payload and the
 normalization in hand. The coordinator's own containment checks — closed
-resource identities, closed outcome and attempt shapes, and
+resource identities, closed outcome and attempt shapes,
 `payloadMatchesResource` binding a payload's identity fields to the resource it
-answers — prevent selecting a payload that does not belong to the request. They
-do not, and are not intended to, prove the payload satisfies the public
-contract field by field.
+answers, and the detached snapshot that makes the value it bound the value that
+is published — prevent selecting a payload that does not belong to the request,
+and prevent it from turning into another one afterwards. They do not, and are
+not intended to, prove the payload satisfies the public contract field by
+field.
 
 This is therefore recorded as a **gate on adapter registration and on G4
 activation**, not as evidence of reconciliation running today:
@@ -908,6 +1001,10 @@ activation**, not as evidence of reconciliation running today:
   and depends on declared role alone.
 - Provider request accounting is exact: never inflated by work GridView
   declined to send, never doubled for one request serving several consumers.
+- An accepted candidate payload is the coordinator's own detached snapshot, so
+  the value that passed resource binding is the value that is selected,
+  assembled and published, whatever the adapter does with its own object
+  afterwards.
 - Every established guarantee is preserved: atomic publication, last-known-good
   on every failure combination, provider neutrality of the public contract,
   no provider work on a public read, and bounded logs.
@@ -927,7 +1024,9 @@ record state. **G-l remains open** — the mapping dataset is still limited to
 identifiers already recorded in Provider Evaluation §8. **G1 and G3 remain
 open** — no live provider mode and no production cron. **Deep
 normalized-contract validation for a real adapter remains open** and is an
-activation gate on registering one (D14). Both adapters remain unimplemented,
+activation gate on registering one (D14); the coordinator-owned payload
+snapshot is an aliasing and time-of-check/time-of-use guarantee and does not
+close it. Both adapters remain unimplemented,
 OpenF1 remains fail-closed pending a justified maximum-session-duration bound,
 and nothing here authorizes production synchronization, deployment or public
 release. Every EUR 0 budget,
@@ -949,6 +1048,10 @@ run, and cannot run until an adapter exists.
 | Canonicalize a duplicate plan entry                                        | Hides a caller defect and silently changes what was asked for. Rejecting the plan fails closed with nothing attempted                                                              |
 | Wire the coordinator into `SynchronizationService` now                     | Every branch would be unreachable — no adapter can register a port — producing a dead duplicate orchestration path beside the service that actually runs                           |
 | Derive `sourceUpdatedAt` during assembly                                   | That is the observation state ADR 0020 §1 defines, which requires persistence. Implementing it here would be G9 by stealth                                                         |
+| Make payload stability an adapter obligation                               | An obligation on the far side of the boundary cannot be enforced by the component it protects. Aliasing and time-of-check/time-of-use integrity belong to the coordinator          |
+| Validate the adapter's payload and clone it afterwards                     | The clone could be taken from a value the check never saw — an accessor or a reused buffer answering differently the second time. Detaching first is what makes the check binding  |
+| Detach with `JSON.parse(JSON.stringify(...))`                              | A JSON round trip normalizes rather than copies: dropped `undefined` members, `toJSON` coercion and silently different unsupported values. Silent normalization is not a snapshot  |
+| Recursively freeze the returned run                                        | Defends against a caller that does not exist — the seam is dormant and only the coordination package consumes a run — at the cost of a second traversal of every published payload |
 
 ## References
 
