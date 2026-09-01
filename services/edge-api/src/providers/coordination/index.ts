@@ -67,10 +67,14 @@ export {
   isInstant,
   isWellFormedOutcome,
   notAttemptedReasons,
+  readProviderOutcome,
   transportReferenceMaxLength,
 } from './port';
 export type {
   AttemptedFailureReason,
+  CandidatePayloadSnapshot,
+  NormalizedProviderOutcome,
+  NormalizedTransportAttempt,
   NotAttemptedReason,
   ProviderResourceOutcome,
   ProviderResourcePort,

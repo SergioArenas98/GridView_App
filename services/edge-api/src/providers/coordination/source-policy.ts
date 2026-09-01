@@ -15,6 +15,7 @@
 
 import { realProviderSourceIds } from '../http/reservation-engine';
 import type { RealProviderSourceId } from '../http/reservation-engine';
+import { ownDataProperty } from './own-property';
 import type { CoordinatedResourceKind } from './resource';
 
 /**
@@ -186,34 +187,6 @@ export const recordedProvisionalSessionEndBound: ProvisionalSessionEndBound | nu
 
 /** The exact own properties a recorded bound declares. */
 const provisionalBoundKeys = ['kind', 'boundSeconds'] as const;
-
-/**
- * The value of one **own data property**, or `null` when the key is absent,
- * inherited, or present as an accessor.
- *
- * A descriptor rather than a property read, for two reasons:
- *
- * - A plain read walks the prototype chain, so a record could supply a
- *   declared field it does not actually own.
- * - A descriptor **describes** an accessor without invoking it. This boundary
- *   decides whether a policy-locked source may be driven at all, so a getter
- *   on either declared field is refused rather than executed: it cannot throw
- *   from here, cannot answer differently on a second call, and cannot run
- *   caller code merely because the shape was being checked.
- *
- * A data descriptor's `value` is inert - reading it runs nothing - so taking
- * it here is not a value read in the sense the ordering rule cares about. What
- * the value *means* is still decided afterwards, by the caller.
- */
-function ownDataProperty(
-  target: object,
-  key: string,
-): { readonly value: unknown } | null {
-  const descriptor = Object.getOwnPropertyDescriptor(target, key);
-  if (descriptor === undefined) return null;
-  if (!('value' in descriptor)) return null;
-  return { value: descriptor.value };
-}
 
 /**
  * Decides provisional eligibility from an untrusted value.

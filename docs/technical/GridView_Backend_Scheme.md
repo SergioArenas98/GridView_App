@@ -1162,17 +1162,32 @@ The handler:
 > withheld with a bounded reason rather than replacing a complete active
 > release.
 >
-> **An accepted candidate payload is the coordinator's own detached snapshot.**
-> It is detached the instant an adapter's outcome crosses the coordination
-> boundary, resource binding is evaluated against that detached value, and the
-> same value is what is stored in the contribution, selected, assembled and
-> published. An adapter that keeps and mutates the object it returned, refills
-> one buffer for its next request, or answers through a stateful accessor
-> therefore cannot change a contribution after it was classified. A payload that
-> cannot be detached is contained as the existing bounded `malformed-outcome`
-> contribution: it is never selected, never assembles and never publishes, while
-> the request that really occurred stays accounted exactly once as the attempt
-> it was.
+> **An answered outcome is the coordinator's own normalized copy.** The instant
+> an adapter's answer crosses the coordination boundary it is parsed rather than
+> merely validated: its shape is closed against the variant it declares, each
+> declared field is taken **once** through a property descriptor - so an
+> inherited or accessor-backed field is refused rather than invoked - the values
+> taken are what get validated, and a candidate's payload is detached. Resource
+> binding is evaluated against that detached payload, and the same value is what
+> is stored in the contribution, selected, assembled and published. Everything
+> downstream - transport deduplication, request accounting, classification,
+> selection and every log line - reads the copy, so an adapter that keeps and
+> mutates the object it returned, refills one object for its next request, or
+> answers through a stateful accessor cannot change what its answer means. In
+> particular a retry hint reaches `providerRetryAt` / `providerRetryAfter` only
+> as a validated absolute instant, so no provider-controlled string can occupy a
+> logged field.
+>
+> The whole outcome is deliberately **not** structured-cloned: cloning discards
+> symbol-keyed and non-enumerable properties, which is exactly what shape closure
+> exists to see, and would launder a malformed answer into a clean one.
+>
+> A malformed **shape** supports no claim at all, including any attempt it
+> appeared to carry, so nothing about it is counted. A valid outcome whose
+> **payload** cannot be detached is a different fact and is contained as the
+> existing bounded `malformed-outcome` contribution: it is never selected, never
+> assembles and never publishes, while the request that really occurred stays
+> accounted exactly once as the attempt it was.
 >
 > Event-aware scheduling (**G5**) and persisted provenance or
 > provisional/reconciled record state (**G9**) remain open, and the coordinator
@@ -1180,7 +1195,7 @@ The handler:
 > open**: the runtime snapshot validator is structural - metadata, required
 > top-level document shape and provider neutrality - and per-field contract
 > validation is an adapter responsibility that gates registering a real
-> adapter at all (ADR 0023 D14). The detached snapshot is an aliasing and
+> adapter at all (ADR 0023 D14). The normalized outcome is an aliasing and
 > time-of-check/time-of-use guarantee and does **not** close that gate.
 >
 > A publication the publisher **rejects** is not automatically a successful

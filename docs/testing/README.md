@@ -501,6 +501,32 @@ Coverage:
   objects, a frozen payload and a null-prototype payload; role precedence,
   attribution, source-qualified transport deduplication, run-level
   contradiction handling and ordinary publication are all re-pinned alongside.
+- Normalized provider outcomes
+  (`test/providers/coordination/outcome-normalization.test.ts`): every value the
+  coordinator uses after the port boundary is a copy taken once, and is the value
+  that was validated. An `attempt` accessor answering `successful` to validation
+  and `failed`, a different reference, or an overlong reference with an unknown
+  attempt outcome afterwards is refused outright rather than selected over
+  contradictory accounting; accessor-backed payloads, reasons and discriminants
+  and prototype-borne declared fields are refused with nothing counted. An
+  adapter reusing one `attempt` object, reusing one whole outcome object, or
+  mutating an answered outcome into another variant in either direction - a
+  candidate into a failure, a failure into a candidate - changes neither the
+  classification nor the request accounting, and two genuine requests are still
+  counted as two. A `retryAt` or `retryAfter` accessor cannot put a URL, a token
+  or an unbounded string into `providerRetryAt` / `providerRetryAfter`. Every
+  bucket is asserted to satisfy `total == successful + failed + rateLimited`, so
+  an unvalidated attempt outcome reaching the ledger is caught rather than
+  merely looking odd. Ordinary candidate, not-attempted, failed,
+  mapping-failure and rate-limited paths, one reference serving two resources,
+  run-level contradiction handling, clone-failure accounting with `attempted`
+  still true, fallback selection and cancellation are all re-pinned alongside;
+  symbol-keyed and non-enumerable extras and throwing `ownKeys` /
+  `getOwnPropertyDescriptor` traps stay contained with nothing in any log line.
+  The sequential default is proved to close object reuse completely, while every
+  permitted pool size is proved to stay self-consistent and non-aliasing - an
+  object shared between simultaneously in-flight requests is an adapter contract
+  stated on `fetchResource`, not a coordinator guarantee.
 - Validator scope and the activation gate: the runtime validator accepts a
   driver collection whose entries are nonsense as `SeasonDriverSummary`, which
   pins that it is structural rather than a deep per-field contract validator;

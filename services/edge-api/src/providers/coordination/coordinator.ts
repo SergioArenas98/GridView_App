@@ -23,12 +23,16 @@
  * error or a violated invariant becomes a bounded typed contribution and the
  * affected resource becomes unavailable; every other resource continues.
  *
- * **An accepted candidate payload is the coordinator's own detached snapshot.**
- * It is taken the instant an adapter's outcome crosses this boundary, resource
- * binding is evaluated against that snapshot, and the same snapshot is what is
- * stored, selected and later assembled - so an adapter that mutates what it
- * returned, reuses one buffer across requests or answers through an accessor
- * cannot change a contribution after it was classified. This is an aliasing and
+ * **An answered outcome is the coordinator's own normalized copy.** The instant
+ * an adapter's answer crosses this boundary it is parsed by
+ * `readProviderOutcome`: its shape is closed, each declared field is taken once
+ * as an own data property, the values taken are validated, and a candidate's
+ * payload is detached. Everything afterwards - transport registration, request
+ * accounting, classification, resource binding, selection, assembly,
+ * publication and every log line - reads that copy. The adapter's object is
+ * never retained and never read twice, so an adapter that mutates what it
+ * returned, reuses one object across requests or answers through an accessor
+ * cannot change what its answer means. This is an aliasing and
  * time-of-check/time-of-use guarantee, and is distinct from deep
  * normalized-contract validation, which stays an adapter responsibility and an
  * activation gate (ADR 0023 D14).
@@ -58,8 +62,9 @@ import type {
   SourceContribution,
 } from './outcome';
 import {
-  isWellFormedOutcome,
-  type ProviderResourceOutcome,
+  readProviderOutcome,
+  type NormalizedProviderOutcome,
+  type NormalizedTransportAttempt,
   type ProviderResourcePort,
 } from './port';
 import {
@@ -135,20 +140,19 @@ interface Operation {
 /**
  * What one operation produced, before deterministic post-processing.
  *
- * An answered operation carries **two** things: the adapter's own outcome,
- * whose shape is still decided later, and the coordinator's detached snapshot
- * of its payload, taken the instant the outcome crossed the boundary. Both are
- * needed: shape closure has to inspect the object the adapter actually
- * returned - `Reflect.ownKeys` sees a symbol-keyed or non-enumerable property a
- * copy would have dropped - while everything downstream of acceptance reads
- * only the snapshot.
+ * An answered operation carries the coordinator's **normalized** outcome - not
+ * the adapter's object. Every field was taken once at the boundary, so what
+ * attribution reads is a fact about the request that produced it rather than
+ * whatever the adapter's object happens to say by the time the whole plan has
+ * finished executing.
+ *
+ * `malformed` is a distinct kind rather than a normalized variant: an answer
+ * whose shape could not be trusted supports no claim at all, including any
+ * attempt it appeared to carry, so nothing about it may be counted.
  */
 type OperationResult =
-  | {
-      readonly kind: 'answered';
-      readonly outcome: ProviderResourceOutcome;
-      readonly snapshot: PayloadSnapshot;
-    }
+  | { readonly kind: 'answered'; readonly outcome: NormalizedProviderOutcome }
+  | { readonly kind: 'malformed' }
   | { readonly kind: 'threw' }
   | { readonly kind: 'not-executed' };
 
@@ -349,22 +353,21 @@ export class MultiSourceCoordinator {
     if (port === undefined) return notAttempted('source-unavailable');
 
     try {
-      const outcome = await port.fetchResource({
+      const answer: unknown = await port.fetchResource({
         source: operation.source,
         resource: operation.resource,
         ...(signal ? { signal } : {}),
       });
-      // The snapshot is taken **here**, the instant the outcome crosses the
-      // boundary, and not later during attribution. Attribution runs after the
-      // whole plan has executed, so an adapter that refills one buffer for its
-      // next request would otherwise have rewritten this answer before anything
-      // ever looked at it. Detaching on arrival is what makes each answer a
-      // fact about the request that produced it.
-      return {
-        kind: 'answered',
-        outcome,
-        snapshot: detachCandidatePayload(outcome),
-      };
+      // Normalized **here**, the instant the answer crosses the boundary, and
+      // not later during attribution. Attribution runs after the whole plan has
+      // executed, so an adapter that refills one object for its next request
+      // would otherwise have rewritten this answer before anything ever looked
+      // at it. Taking the coordinator's own copy on arrival is what makes each
+      // answer a fact about the request that produced it.
+      const outcome = readProviderOutcome(answer);
+      return outcome === null
+        ? { kind: 'malformed' }
+        : { kind: 'answered', outcome };
     } catch {
       // The thrown value is never read, logged or re-raised: it can embed a
       // URL, a provider body or a stack.
@@ -391,11 +394,12 @@ export class MultiSourceCoordinator {
       try {
         list.push(this.contributionFor(operation, result, transports));
       } catch {
-        // Reading the adapter's own answer threw - an accessor, a proxy or an
-        // exotic object. Nothing it claims can be believed, including any
-        // attempt, so it fails closed as malformed and is never counted. This
-        // is what keeps "nothing here can throw" true for a hostile value and
-        // not merely for a badly shaped one.
+        // Unreachable by construction: every value read below is a primitive
+        // this package copied at the port boundary, so no accessor, proxy or
+        // exotic object survives to be read here. Retained because "nothing
+        // here can throw" is a guarantee about the boundary, not about the
+        // current shape of the code behind it - a malformed result is never
+        // counted, whichever step declined to believe it.
         list.push(
           contribution(operation, 'failed', false, 'malformed-outcome'),
         );
@@ -416,17 +420,23 @@ export class MultiSourceCoordinator {
     if (result.kind === 'threw') {
       return contribution(operation, 'failed', false, 'adapter-error');
     }
-
-    const outcome = result.outcome;
-    if (!isWellFormedOutcome(outcome)) {
+    if (result.kind === 'malformed') {
+      // The answer's own shape could not be trusted, so nothing it appeared to
+      // claim is believed - including any attempt. No request activity is
+      // invented from it.
       return contribution(operation, 'failed', false, 'malformed-outcome');
     }
+
+    // Everything below reads the coordinator's normalized copy. The adapter's
+    // object is unreachable from here, so no field can have changed since it
+    // was validated and none is read a second time.
+    const outcome = result.outcome;
 
     if (outcome.outcome === 'not-attempted') {
       const status: ContributionStatus =
         outcome.reason === 'rate-limit-deferred' ? 'deferred' : 'skipped';
       return contribution(operation, status, false, outcome.reason, {
-        retryAt: outcome.retryAt ?? null,
+        retryAt: outcome.retryAt,
       });
     }
 
@@ -440,7 +450,7 @@ export class MultiSourceCoordinator {
 
     if (outcome.outcome === 'failed') {
       return contribution(operation, 'failed', true, outcome.reason, {
-        retryAfter: outcome.retryAfter ?? null,
+        retryAfter: outcome.retryAfter,
       });
     }
     if (outcome.outcome === 'mapping-failure') {
@@ -448,16 +458,17 @@ export class MultiSourceCoordinator {
       return contribution(operation, 'failed', true, 'mapping-unresolved');
     }
 
-    // **Validate the detached snapshot, and keep exactly that value.** The
-    // adapter still owns the object it returned, so a reference to it is not a
-    // fact: it can be mutated after this contribution is classified, can be
-    // one reused buffer a later request already rewrote, or can be an accessor
+    // **Bind the detached snapshot, and keep exactly that value.** The adapter
+    // still owns the object it returned, so a reference to it is not a fact:
+    // it can be mutated after this contribution is classified, can be one
+    // reused buffer a later request already rewrote, or can be an accessor
     // that answers differently on a second read. Validating the adapter's own
     // object and copying it afterwards would close none of those - the copy
-    // could be taken from a value the check never saw. So the snapshot taken on
-    // arrival is what the binding check reads, and the same snapshot is what is
-    // stored, selected and later assembled.
-    if (!result.snapshot.detached) {
+    // could be taken from a value the check never saw. So the snapshot taken
+    // on arrival is what the binding check reads, and the same snapshot is
+    // what is stored, selected and later assembled.
+    const snapshot = outcome.payload;
+    if (!snapshot.detached) {
       // A payload that cannot be detached - a function-valued field, a hostile
       // proxy, an exotic value - is not usable data, so it fails closed as the
       // malformed outcome it is. The request itself really happened and is
@@ -465,7 +476,7 @@ export class MultiSourceCoordinator {
       // the run's request accounting is unchanged.
       return contribution(operation, 'failed', true, 'malformed-outcome');
     }
-    const candidate = result.snapshot.payload;
+    const candidate = snapshot.payload;
     if (!payloadMatchesResource(operation.resource, candidate)) {
       // A structurally valid answer to a different question. Never selected.
       return contribution(operation, 'failed', true, 'malformed-outcome');
@@ -531,68 +542,6 @@ function select(
 }
 
 /**
- * The result of detaching one candidate payload from its adapter.
- *
- * A closed two-state answer rather than a nullable payload: `null` is a value
- * a payload could in principle carry, so "could not be detached" needs to be
- * unrepresentable as data.
- */
-type PayloadSnapshot =
-  | { readonly detached: true; readonly payload: unknown }
-  | { readonly detached: false };
-
-/**
- * Takes the coordinator's own copy of one candidate payload.
- *
- * **Why the coordinator owns a snapshot at all.** Once an outcome crosses this
- * boundary, the coordinator retains its payload for the rest of the run:
- * selection reads it, season assembly copies it and publication generates from
- * it. An adapter that returned the object still holds it, and nothing in the
- * port contract makes it immutable - so resource binding checked against the
- * adapter's object proves something about a value that can change afterwards.
- * That is a time-of-check/time-of-use gap, and it belongs here rather than in a
- * future adapter promise: aliasing is a property of the boundary, not of any
- * one implementation on the far side of it.
- *
- * `structuredClone` is the platform's own deep-detachment primitive, supported
- * by both the Workers runtime and the Node test runtime. It is used in
- * preference to a JSON round trip because a round trip is a *normalization*,
- * not a copy: it drops `undefined` members, coerces values through
- * `toJSON`, and turns unsupported values into silently different data. Every
- * normalized contract payload is JSON-like - plain objects, arrays, strings,
- * numbers, booleans and `null`, with no date, map, set, typed array or class
- * instance anywhere - so structured cloning preserves each one exactly, while
- * a value outside that contract fails loudly here instead of quietly changing.
- *
- * Never throws, and reads the outcome's payload **exactly once**. A
- * function-valued field, a hostile proxy, a throwing accessor or any other
- * non-cloneable value becomes the negative answer, which the classification
- * boundary turns into the existing bounded malformed-outcome contribution. The
- * thrown value is never read, logged or re-raised: it is adapter-controlled and
- * can embed a payload, an identifier or a stack.
- *
- * A variant that carries no payload at all snapshots `undefined`, which no
- * branch ever reads: only an accepted `candidate` consults the snapshot, so
- * exactly one clone is taken per accepted candidate and none is taken twice.
- */
-function detachCandidatePayload(
-  outcome: ProviderResourceOutcome,
-): PayloadSnapshot {
-  try {
-    const payload = (outcome as { readonly payload?: unknown }).payload;
-    return { detached: true, payload: structuredClone(payload) };
-  } catch {
-    return { detached: false };
-  }
-}
-
-/** The snapshot of an operation that never reached an adapter. */
-const noPayloadSnapshot: PayloadSnapshot = {
-  detached: true,
-  payload: undefined,
-};
-
-/**
  * The identity of one physical request: its **source and** its reference.
  *
  * A transport reference is a token one adapter generates for itself. Adapters
@@ -633,10 +582,7 @@ function transportKey(source: CoordinatedSourceId, reference: string): string {
 function registerTransport(
   transports: Map<string, TransportRecord>,
   operation: Operation,
-  attempt: {
-    readonly reference: string;
-    readonly outcome: ProviderAttemptOutcome;
-  },
+  attempt: NormalizedTransportAttempt,
 ): boolean {
   const key = transportKey(operation.source, attempt.reference);
   const existing = transports.get(key);
@@ -699,10 +645,11 @@ function contribution(
 function notAttempted(
   reason: 'resource-unsupported' | 'source-locked' | 'source-unavailable',
 ): OperationResult {
+  // Already normalized: this outcome is the coordinator's own, no adapter was
+  // reached, and there is no payload to detach.
   return {
     kind: 'answered',
-    outcome: { outcome: 'not-attempted', reason },
-    snapshot: noPayloadSnapshot,
+    outcome: { outcome: 'not-attempted', reason, retryAt: null },
   };
 }
 

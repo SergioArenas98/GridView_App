@@ -374,6 +374,93 @@ type contract of values the public documents are derived from. If the run ever
 becomes reachable by an external caller, that is the point at which ownership
 past the return needs its own decision.
 
+#### The whole outcome is parsed once, not validated and re-read
+
+Detaching the payload closed aliasing for the payload alone. It left every
+other declared field a **reference into the adapter's object**, checked at one
+moment and consumed at another — and those two moments are far apart, because
+attribution deliberately runs after the whole plan has executed. Three vectors
+followed from that, all reproduced against the previous head:
+
+- **A reused object.** An adapter that refills one `attempt` record — or one
+  whole outcome — for each request in turn has rewritten the earlier answer
+  before attribution reads it. Two genuine requests were then counted as one:
+  a real provider request concealed by another request's reference.
+- **Mutation after answering.** An adapter that rewrites its first answer while
+  serving the second turned a `candidate` into a `failed` contribution, flipped
+  the attempt outcome in the run's accounting, and made the resource
+  unavailable — none of which had happened.
+- **A stateful accessor.** An `attempt` getter answering `successful` to
+  validation and `failed`, a different reference, or an unbounded string with
+  an unknown attempt outcome to `registerTransport` produced a _selected_
+  candidate whose request the ledger simultaneously recorded as failed or
+  rate-limited — exactly the candidate/transport contradiction
+  `isSuccessfulAttempt` exists to prevent. The same shape applied to `retryAt`
+  and `retryAfter` put an arbitrary provider-controlled string — a URL, a
+  token, 120 characters of anything — into `providerRetryAt` /
+  `providerRetryAfter` in a structured log line, breaking the bounded-logging
+  rule that no provider-controlled string may occupy a logged field.
+
+**The decision is that the coordinator parses the answer into a value it owns,
+rather than validating a value someone else owns.** `readProviderOutcome`
+replaces the `isWellFormedOutcome` predicate at the boundary and returns a
+`NormalizedProviderOutcome`: the variant, the attempt's reference and outcome,
+the failure reason, the resolved retry hints and the detached payload snapshot,
+every one of them copied out. `isWellFormedOutcome` remains, as a thin view over
+the parser, so the predicate and the parser cannot disagree about what the
+boundary accepts.
+
+The parsing model is fixed, and each step is a precondition for the next:
+
+1. A non-null, non-array object.
+2. The discriminant, taken as an **own data property** — the only field read
+   before shape closure, and read the same way as every other, because a
+   getter-backed discriminant could otherwise select one shape and then be a
+   different variant.
+3. Shape closure: exactly the own keys the variant declares, every required one
+   present, and no key another variant declares reachable even through the
+   prototype. `Reflect.ownKeys` sees symbol-keyed and non-enumerable own
+   properties; `in` sees planted prototype fields.
+4. Each declared field taken **once**, through
+   `Object.getOwnPropertyDescriptor`. An inherited or accessor-backed declared
+   field is not this variant either, so it is refused rather than invoked.
+5. Value validation of **what was taken** — never of a second read.
+6. Internal consistency, unchanged: a `candidate` and a `mapping-failure`
+   require a `successful` attempt, and an attempted failure must pair its reason
+   with an attempt outcome `attemptOutcomesForFailureReason` allows.
+7. Detachment of the payload, so the value bound to the resource is the value
+   published.
+
+**Cloning the whole outcome was considered and rejected.** Structured cloning
+discards symbol-keyed and non-enumerable properties, which is precisely what the
+`Reflect.ownKeys` closure exists to _see_: a malformed answer carrying a hidden
+property would have been laundered into a clean one and then accepted. Shape
+closure must inspect the object the adapter actually returned; only the values
+that survive it are copied.
+
+**Accounting semantics are preserved exactly, and the distinction matters.** An
+answer whose _shape_ cannot be trusted supports no claim at all, including any
+attempt it appeared to carry, so it is a `malformed-outcome` contribution with
+`attempted: false` and nothing counted. An answer whose outcome and attempt are
+valid but whose _payload_ cannot be detached is a different fact: the request
+really left GridView and its attempt has already been validated, so payload
+detachment keeps its own containment, the contribution stays `attempted`, and
+the request is counted exactly once. A clone failure is still not a
+transport-reference contradiction, still does not taint the run, and still
+leaves a healthy fallback selectable under ordinary role precedence. No new
+public reason was introduced for any of this.
+
+**One adapter obligation remains, and only above the default.** The copy is
+taken the instant the port's promise resolves, which closes reuse between
+_sequential_ requests completely — the default pool is one. An object shared
+between requests that are **simultaneously in flight** has aliased two live
+answers before either could be observed, and nothing on this side of the
+boundary can recover what distinguished them. That is stated on
+`fetchResource`: an adapter answering concurrent requests must give each its own
+object. What the coordinator still guarantees at any permitted pool size is that
+nothing it reports is internally contradictory and that two contributions never
+share one payload object.
+
 ### D7 - One transport request is counted exactly once
 
 An outcome carries a bounded **transport reference** identifying the single
@@ -1001,10 +1088,13 @@ activation**, not as evidence of reconciliation running today:
   and depends on declared role alone.
 - Provider request accounting is exact: never inflated by work GridView
   declined to send, never doubled for one request serving several consumers.
-- An accepted candidate payload is the coordinator's own detached snapshot, so
-  the value that passed resource binding is the value that is selected,
-  assembled and published, whatever the adapter does with its own object
-  afterwards.
+- An answered outcome is the coordinator's own normalized copy: shape closed,
+  every declared field taken once as an own data property, values validated as
+  taken, and the payload detached. The value that passed resource binding is the
+  value that is selected, assembled and published, and the reference, attempt
+  outcome, reason and retry hints that drive accounting, classification and
+  logging cannot change after they were validated — whatever the adapter does
+  with its own object afterwards.
 - Every established guarantee is preserved: atomic publication, last-known-good
   on every failure combination, provider neutrality of the public contract,
   no provider work on a public read, and bounded logs.
@@ -1024,8 +1114,8 @@ record state. **G-l remains open** — the mapping dataset is still limited to
 identifiers already recorded in Provider Evaluation §8. **G1 and G3 remain
 open** — no live provider mode and no production cron. **Deep
 normalized-contract validation for a real adapter remains open** and is an
-activation gate on registering one (D14); the coordinator-owned payload
-snapshot is an aliasing and time-of-check/time-of-use guarantee and does not
+activation gate on registering one (D14); the coordinator-owned normalized
+outcome is an aliasing and time-of-check/time-of-use guarantee and does not
 close it. Both adapters remain unimplemented,
 OpenF1 remains fail-closed pending a justified maximum-session-duration bound,
 and nothing here authorizes production synchronization, deployment or public
@@ -1052,6 +1142,8 @@ run, and cannot run until an adapter exists.
 | Validate the adapter's payload and clone it afterwards                     | The clone could be taken from a value the check never saw — an accessor or a reused buffer answering differently the second time. Detaching first is what makes the check binding  |
 | Detach with `JSON.parse(JSON.stringify(...))`                              | A JSON round trip normalizes rather than copies: dropped `undefined` members, `toJSON` coercion and silently different unsupported values. Silent normalization is not a snapshot  |
 | Recursively freeze the returned run                                        | Defends against a caller that does not exist — the seam is dormant and only the coordination package consumes a run — at the cost of a second traversal of every published payload |
+| Structured-clone the whole outcome instead of parsing it                   | Cloning discards symbol-keyed and non-enumerable properties, which is exactly what shape closure exists to see. A malformed answer would be laundered into a clean one             |
+| Keep validating the raw outcome and read its fields when needed            | Validation and use are different moments: attribution runs after the whole plan. A reused object, a post-return mutation or an accessor changes what a checked answer says         |
 
 ## References
 

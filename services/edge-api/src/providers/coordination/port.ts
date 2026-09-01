@@ -14,6 +14,7 @@
  */
 
 import type { ProviderAttemptOutcome } from '../provider-metrics';
+import { ownDataProperty } from './own-property';
 import type { CoordinatedPayload, CoordinatedResource } from './resource';
 import type { CoordinatedSourceId } from './source-policy';
 
@@ -213,6 +214,17 @@ export interface ProviderResourcePort {
    * here - the Durable Object reservation ledger is the pacing authority and
    * already holds any slot a real request consumed, since capacity is
    * reserved before transport and never returned.
+   *
+   * **An adapter may reuse its objects, with exactly one limit.** The
+   * coordinator takes its own copy of every answer the instant the promise
+   * resolves (`readProviderOutcome`), so mutating a returned outcome, refilling
+   * one buffer for the *next* request, or holding a payload after answering all
+   * change nothing. The one case no copy on this side can undo is an object
+   * shared between requests that are **simultaneously in flight**: two live
+   * answers aliased to one object have already lost what distinguished them
+   * before either could be observed. That only arises above
+   * `defaultMaxConcurrentOperations`, which is 1, and an adapter that answers
+   * concurrent requests must give each its own object.
    */
   fetchResource(
     request: ProviderResourceRequest,
@@ -264,29 +276,31 @@ const attemptKeys = ['reference', 'outcome'] as const;
  * attempt, and a throwing accessor is contained here rather than escaping into
  * attribution.
  */
-function isAttempt(value: unknown): value is ProviderTransportAttempt {
+function readAttempt(outcome: object): NormalizedTransportAttempt | null {
+  const field = ownDataProperty(outcome, 'attempt');
+  if (field === null) return null;
+  const value = field.value;
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
+    return null;
   }
-  try {
-    const allowed = new Set<string>(attemptKeys);
-    for (const key of Reflect.ownKeys(value)) {
-      if (typeof key !== 'string' || !allowed.has(key)) return false;
-    }
-    for (const key of attemptKeys) {
-      if (!Object.hasOwn(value, key)) return false;
-    }
-    const record = value as Record<string, unknown>;
-    return (
-      isBoundedReference(record.reference) &&
-      (record.outcome === 'successful' ||
-        record.outcome === 'failed' ||
-        record.outcome === 'rate-limited')
-    );
-  } catch {
-    // A hostile accessor or proxy trap. The thrown value is never read.
-    return false;
+  const allowed = new Set<string>(attemptKeys);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || !allowed.has(key)) return null;
   }
+  // Absent, inherited and accessor-backed are all `null` here, so the required
+  // -own-property rule and the read-once rule are the same single step.
+  const reference = ownDataProperty(value, 'reference');
+  const attemptOutcome = ownDataProperty(value, 'outcome');
+  if (reference === null || attemptOutcome === null) return null;
+  if (!isBoundedReference(reference.value)) return null;
+  if (!isAttemptOutcome(attemptOutcome.value)) return null;
+  return { reference: reference.value, outcome: attemptOutcome.value };
+}
+
+function isAttemptOutcome(value: unknown): value is ProviderAttemptOutcome {
+  return (
+    value === 'successful' || value === 'failed' || value === 'rate-limited'
+  );
 }
 
 /**
@@ -320,8 +334,37 @@ function isCandidatePayload(value: unknown): boolean {
  * `mapping-failure`, both of which keep their `successful` attempt and are
  * counted as the request they were.
  */
-function isSuccessfulAttempt(value: unknown): boolean {
-  return isAttempt(value) && value.outcome === 'successful';
+function readSuccessfulAttempt(
+  outcome: object,
+): NormalizedTransportAttempt | null {
+  const attempt = readAttempt(outcome);
+  return attempt !== null && attempt.outcome === 'successful' ? attempt : null;
+}
+
+/**
+ * One optional retry hint, taken once and validated once.
+ *
+ * Three answers, not two: the key may be legitimately **absent**, may carry a
+ * valid instant, or may be present as something a scheduler must never be
+ * handed. The outer `null` is the third - it means the whole outcome is
+ * malformed - so an invalid hint can never be silently downgraded to "no
+ * hint", and an accessor can never answer an instant to validation and a URL,
+ * a token or an unbounded string to the log line that carries it.
+ *
+ * `retryAt: undefined` remains an accepted absence: it is an own data property
+ * whose value is exactly what "no hint" means, and the declared shape already
+ * admits the key.
+ */
+function readOptionalInstant(
+  outcome: object,
+  key: 'retryAt' | 'retryAfter',
+): { readonly value: string | null } | null {
+  const descriptor = Object.getOwnPropertyDescriptor(outcome, key);
+  if (descriptor === undefined) return { value: null };
+  if (!('value' in descriptor)) return null;
+  const hint: unknown = descriptor.value;
+  if (hint === undefined) return { value: null };
+  return isInstant(hint) ? { value: hint } : null;
 }
 
 /**
@@ -410,7 +453,7 @@ function isOutcomeVariant(value: unknown): value is ProviderOutcomeVariant {
  * as a throwing adapter is.
  */
 function hasClosedShape(
-  record: Record<string, unknown>,
+  record: object,
   variant: ProviderOutcomeVariant,
 ): boolean {
   const shape = outcomeShapes[variant];
@@ -427,70 +470,225 @@ function hasClosedShape(
   return true;
 }
 
+/** One transport attempt, as **the coordinator's own** copied primitives. */
+export interface NormalizedTransportAttempt {
+  readonly reference: string;
+  readonly outcome: ProviderAttemptOutcome;
+}
+
 /**
- * Structural validation of an adapter outcome, independent of the payload.
+ * The coordinator's detached copy of one candidate payload.
+ *
+ * A closed two-state answer rather than a nullable payload: `null` is a value
+ * a payload could in principle carry, so "could not be detached" needs to be
+ * unrepresentable as data.
+ */
+export type CandidatePayloadSnapshot =
+  | { readonly detached: true; readonly payload: unknown }
+  | { readonly detached: false };
+
+/**
+ * What the coordinator keeps of an adapter's answer.
+ *
+ * Structurally the same union as `ProviderResourceOutcome`, with two
+ * deliberate differences: every field is a value this module copied out of the
+ * adapter's object rather than a reference into it, and the optional retry
+ * hints are resolved to `string | null` so no consumer has to re-read them.
+ * Nothing downstream ever holds the adapter's object again.
+ */
+export type NormalizedProviderOutcome =
+  | {
+      readonly outcome: 'candidate';
+      readonly attempt: NormalizedTransportAttempt;
+      readonly payload: CandidatePayloadSnapshot;
+    }
+  | {
+      readonly outcome: 'not-attempted';
+      readonly reason: NotAttemptedReason;
+      readonly retryAt: string | null;
+    }
+  | {
+      readonly outcome: 'failed';
+      readonly attempt: NormalizedTransportAttempt;
+      readonly reason: AttemptedFailureReason;
+      readonly retryAfter: string | null;
+    }
+  | {
+      readonly outcome: 'mapping-failure';
+      readonly attempt: NormalizedTransportAttempt;
+    };
+
+/**
+ * Takes the coordinator's own copy of one candidate payload.
+ *
+ * `structuredClone` is the platform's own deep-detachment primitive, supported
+ * by both the Workers runtime and the Node test runtime. It is used in
+ * preference to a JSON round trip because a round trip is a *normalization*,
+ * not a copy: it drops `undefined` members, coerces values through `toJSON`,
+ * and turns unsupported values into silently different data. Every normalized
+ * contract payload is JSON-like - plain objects, arrays, strings, numbers,
+ * booleans and `null`, with no date, map, set, typed array or class instance
+ * anywhere - so structured cloning preserves each one exactly, while a value
+ * outside that contract fails loudly here instead of quietly changing.
+ *
+ * **Its own containment, deliberately.** A non-cloneable payload is a
+ * malformed *payload*, not an untrustworthy *outcome*: the request behind it
+ * really left GridView and its attempt has already been validated. Letting the
+ * throw escape to the enclosing boundary would discard that attempt and
+ * under-report a real request, so the failure is answered as data here and the
+ * attempt survives.
+ */
+function detachPayload(payload: unknown): CandidatePayloadSnapshot {
+  try {
+    return { detached: true, payload: structuredClone(payload) };
+  } catch {
+    // Adapter-controlled: the thrown value is never read, logged or re-raised.
+    return { detached: false };
+  }
+}
+
+/**
+ * Parses an adapter outcome into a value the coordinator owns.
  *
  * An adapter is an input boundary: it may be a future third-party-shaped
  * module, a fixture double or a partially migrated implementation. A malformed
  * outcome must fail closed as an unavailable contribution, never throw out of
- * the coordinator and never be partially believed.
+ * the coordinator and never be partially believed. Returns `null` for anything
+ * that is not a well-formed outcome, and **never throws**.
  *
- * An outcome must also be **internally consistent**: a variant's own attempt
- * record has to describe a request that could have produced it. A `candidate`
- * and a `mapping-failure` therefore require a `successful` attempt, and every
- * attempted failure must pair its reason with an attempt outcome
- * `attemptOutcomesForFailureReason` allows. An outcome that claims usable data
- * while reporting that its transport failed, or that reports a `429` reason
- * over a successful transport, fails closed here rather than being selected
- * and reported.
+ * **Why a parser and not a predicate.** Validating leaves the adapter owning
+ * every value, and validation and use are not the same moment: attribution
+ * runs after the whole plan has executed. An adapter that refills one object
+ * for its next request, mutates what it returned, or answers from a getter can
+ * therefore change what a checked outcome *says* between the check and the
+ * use - turning a candidate into a failure, hiding a real request behind
+ * another request's reference, or handing a validated instant to `isInstant`
+ * and an unbounded provider string to the log line. So each declared field is
+ * taken **once**, through `Object.getOwnPropertyDescriptor`, and the copied
+ * primitives are what the coordinator keeps. Aliasing is a property of the
+ * boundary, not of any one implementation on the far side of it.
  *
- * An outcome must first be **shape-closed**: exactly the properties its own
- * variant declares, and none another variant declares. That is what makes
- * `not-attempted` genuinely unable to carry an attempt at runtime - the
- * property is rejected before any branch reads it, so a malformed adapter
- * answer can neither hide a real request from accounting nor contribute one.
+ * The order is fixed and each step is a precondition for the next:
  *
- * The payload's match against the requested resource is checked separately by
- * `payloadMatchesResource`, so a structurally valid outcome carrying the wrong
- * resource's data is still rejected.
+ * 1. **A non-null, non-array object.** Nothing else can be an outcome.
+ * 2. **The discriminant, as an own data property.** It decides which shape
+ *    applies, so it is the only field read before shape closure - and it is
+ *    read the same way as every other, because a getter-backed discriminant
+ *    could otherwise select one shape and then be a different variant.
+ * 3. **Shape closure.** Exactly the own keys this variant declares, every
+ *    required one present, and no key another variant declares reachable even
+ *    through the prototype. `Reflect.ownKeys` sees symbol-keyed and
+ *    non-enumerable own properties; `in` sees planted prototype fields.
+ * 4. **Each declared field, once, as an own data property.** An inherited or
+ *    accessor-backed declared field is not this variant either.
+ * 5. **Value validation of what was taken** - never of a second read.
+ * 6. **Internal consistency.** A `candidate` and a `mapping-failure` require a
+ *    `successful` attempt, and an attempted failure must pair its reason with
+ *    an attempt outcome `attemptOutcomesForFailureReason` allows. An outcome
+ *    claiming usable data while reporting failed transport, or a `429` reason
+ *    over a successful transport, describes no possible run.
+ * 7. **Detachment of the payload**, so the value bound to the resource is the
+ *    value published.
+ *
+ * The payload's match against the *requested resource* is checked separately
+ * by `payloadMatchesResource`, against the detached snapshot returned here, so
+ * a structurally valid outcome carrying another resource's data is still
+ * rejected - and cannot become a third value afterwards.
+ */
+export function readProviderOutcome(
+  value: unknown,
+): NormalizedProviderOutcome | null {
+  try {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return null;
+    }
+    const discriminant = ownDataProperty(value, 'outcome');
+    if (discriminant === null) return null;
+    const variant = discriminant.value;
+    if (!isOutcomeVariant(variant)) return null;
+    // Shape closure decides membership before any other field is taken, so
+    // nothing on a malformed outcome - least of all an attempt it must not
+    // carry - is inspected, registered or counted.
+    if (!hasClosedShape(value, variant)) return null;
+
+    switch (variant) {
+      case 'candidate': {
+        // A contradictory candidate is a coordination failure, not an
+        // attempted one: nothing it claims can be believed, including its own
+        // attempt record, so no request activity is invented from it either.
+        const attempt = readSuccessfulAttempt(value);
+        if (attempt === null) return null;
+        const payload = ownDataProperty(value, 'payload');
+        if (payload === null || !isCandidatePayload(payload.value)) return null;
+        return {
+          outcome: 'candidate',
+          attempt,
+          payload: detachPayload(payload.value),
+        };
+      }
+      case 'not-attempted': {
+        const reason = ownDataProperty(value, 'reason');
+        if (
+          reason === null ||
+          !(notAttemptedReasons as readonly unknown[]).includes(reason.value)
+        ) {
+          return null;
+        }
+        const retryAt = readOptionalInstant(value, 'retryAt');
+        if (retryAt === null) return null;
+        return {
+          outcome: 'not-attempted',
+          reason: reason.value as NotAttemptedReason,
+          retryAt: retryAt.value,
+        };
+      }
+      case 'failed': {
+        const attempt = readAttempt(value);
+        if (attempt === null) return null;
+        const reason = ownDataProperty(value, 'reason');
+        if (reason === null || !isAttemptedFailureReason(reason.value)) {
+          return null;
+        }
+        if (
+          !attemptOutcomesForFailureReason(reason.value).includes(
+            attempt.outcome,
+          )
+        ) {
+          return null;
+        }
+        const retryAfter = readOptionalInstant(value, 'retryAfter');
+        if (retryAfter === null) return null;
+        return {
+          outcome: 'failed',
+          attempt,
+          reason: reason.value,
+          retryAfter: retryAfter.value,
+        };
+      }
+      case 'mapping-failure': {
+        // The mapping boundary runs on a response that was read, so the
+        // request behind it always succeeded (see
+        // `ProviderTransportAttempt.outcome`).
+        const attempt = readSuccessfulAttempt(value);
+        return attempt === null
+          ? null
+          : { outcome: 'mapping-failure', attempt };
+      }
+    }
+  } catch {
+    // A hostile proxy: `ownKeys`, `has` and `getOwnPropertyDescriptor` are all
+    // adapter-reachable traps. The thrown value is never read, logged or
+    // re-raised - it can embed a URL, a provider body or a stack.
+    return null;
+  }
+}
+
+/**
+ * Whether an adapter outcome is well formed.
+ *
+ * A thin view over `readProviderOutcome`, so the predicate and the parser can
+ * never disagree about what the boundary accepts.
  */
 export function isWellFormedOutcome(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  const variant = record.outcome;
-  if (!isOutcomeVariant(variant)) return false;
-  // Shape closure decides membership before any value is read, so nothing on a
-  // malformed outcome - least of all an attempt it must not carry - is
-  // inspected, registered or counted.
-  if (!hasClosedShape(record, variant)) return false;
-  switch (variant) {
-    case 'candidate':
-      // A contradictory candidate is a coordination failure, not an attempted
-      // one: nothing the outcome claims can be believed, including its own
-      // attempt record, so no request activity is invented from it either.
-      return (
-        isSuccessfulAttempt(record.attempt) &&
-        isCandidatePayload(record.payload)
-      );
-    case 'not-attempted':
-      return (
-        (notAttemptedReasons as readonly unknown[]).includes(record.reason) &&
-        (record.retryAt === undefined || isInstant(record.retryAt))
-      );
-    case 'failed':
-      return (
-        isAttempt(record.attempt) &&
-        isAttemptedFailureReason(record.reason) &&
-        attemptOutcomesForFailureReason(record.reason).includes(
-          record.attempt.outcome,
-        ) &&
-        (record.retryAfter === undefined || isInstant(record.retryAfter))
-      );
-    case 'mapping-failure':
-      // The mapping boundary runs on a response that was read, so the request
-      // behind it always succeeded (see `ProviderTransportAttempt.outcome`).
-      return isSuccessfulAttempt(record.attempt);
-  }
+  return readProviderOutcome(value) !== null;
 }
