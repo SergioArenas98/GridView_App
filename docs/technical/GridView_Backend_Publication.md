@@ -109,6 +109,61 @@ target with `missing-version-inventory` rather than falling back to the
 collection heuristic. No deployed coordinated snapshot depends on this
 compatibility path.
 
+#### One validated boundary for persisted inventories
+
+A stored inventory is **deserialized data, not a typed value**. The storage
+signature declares `SnapshotDocumentName[] | null`, but that describes what a
+correct write produces, not what a read returns: KV hands back whatever JSON the
+key holds, so a truncated write, a hand-edited entry or a partially rolled-back
+migration can deserialize to a number, a string, an object or an array carrying
+a non-string - all valid JSON, none of them an inventory.
+
+Every consumer downstream assumes an array of strings. The route mapper calls
+`startsWith` on each entry, the purge builders spread the list, and the
+completeness check iterates it; spreading a number throws and `startsWith` on a
+number throws, neither inside the guarded purge-adapter call.
+
+`src/publication/version-inventory.ts` is therefore the **single** point at
+which a persisted inventory is validated, and every reader passes through it -
+the replaced-version read, the outgoing-current-season alias read, both rollback
+reads, the operator purge read and the completeness check. There is no second
+shape test anywhere else, and no route knowledge is duplicated: the boundary
+accepts an array of strings and stops there, because an unrecognised document
+name maps to no canonical path and no alias and is therefore inert, while a
+non-string is exactly what throws.
+
+It returns a four-valued discriminated result, because *absent*, *malformed* and
+*unreadable* are three different facts and only the calling phase knows which
+bounded outcome each maps to:
+
+| Value        | Meaning                                                        |
+| ------------ | -------------------------------------------------------------- |
+| `documents`  | A validated list, safe to spread, map to routes and alias       |
+| `absent`     | The key holds `null` - a version predating exact inventories    |
+| `malformed`  | The key holds something that is not a list of document names    |
+| `unreadable` | The read itself failed; nothing at all is known about the version |
+
+#### Phase-specific behaviour for a malformed inventory
+
+The phase that discovers a malformed inventory decides the outcome, and the
+commit point is the dividing line:
+
+| Where it is discovered                             | Outcome                                                        |
+| -------------------------------------------------- | -------------------------------------------------------------- |
+| Rollback target, pre-commit                        | `rejected`, `missing-version-inventory`; pointer unchanged       |
+| Rollback outgoing active version, pre-commit       | `rejected`, `missing-version-inventory`; pointer unchanged       |
+| Replaced same-season version, post-commit purge    | `applied`, `cachePurge: 'failed'`, `cache-purge-failed`          |
+| Outgoing current-season aliases, post-commit purge | `applied`, `cachePurge: 'failed'`, `cache-purge-failed`          |
+| Operator purge of the active version               | Bounded `207`, `missing-version-inventory`, no URLs purged       |
+| Completeness check of a republished active version | `rejected`, `active-version-incomplete`                          |
+
+A malformed inventory never escapes as a rejected promise, never un-publishes a
+committed release, and never adds a status or reason to the closed vocabulary.
+`absent` keeps its established meanings unchanged: a rollback *target* with no
+inventory is still rejected with `missing-version-inventory`, and an *outgoing*
+version with no inventory still contributes nothing to the rollback purge union
+rather than blocking the recovery.
+
 ### Pointer transitions
 
 `active:{season}` is the commit point and the last write that decides what
@@ -169,7 +224,8 @@ outage must still be told which side of the commit point the attempt ended on:
 | Situation                                  | Result                                              |
 | ------------------------------------------ | --------------------------------------------------- |
 | Storage read before the commit fails       | `failed`, `storage-read`; both pointers unchanged    |
-| Target carries no inventory                | `rejected`, `missing-version-inventory`              |
+| Target carries no or a malformed inventory | `rejected`, `missing-version-inventory`              |
+| Outgoing version has a malformed inventory | `rejected`, `missing-version-inventory`              |
 | Target inventory is empty                  | `rejected`, `rollback-target-missing`                |
 | Target is missing an inventoried document  | `rejected`, `rollback-target-incomplete`             |
 | Active-pointer commit fails                | `failed`, `storage-write`; both pointers unchanged   |
@@ -281,12 +337,17 @@ The union covers orphan profile details, added and removed profiles, and rounds
 present in only one of the two calendars. It is deduplicated and sorted
 deterministically, and one rollback issues exactly one purge request, after the
 commit. An outgoing active version carrying no inventory contributes nothing to
-the union rather than blocking the recovery it is being rolled back from.
+the union rather than blocking the recovery it is being rolled back from. One
+carrying a *malformed* inventory is a different fact and refuses the rollback
+pre-commit with `missing-version-inventory`, because moving the pointer over a
+surface that cannot be described would silently drop every route only that
+version carried.
 
 `POST /internal/admin/cache/purge` uses the same exact inventory and the same
 route expansion for the **active** version, so an operator purge covers the
 whole active release, aliases included. It moves no pointer and writes nothing;
-with no active version or no inventory it returns a bounded `207`.
+with no active version, or with an inventory that is missing, malformed or
+unreadable, it returns a bounded `207` rather than throwing.
 
 ## KV Consistency Boundary
 

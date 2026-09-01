@@ -66,6 +66,7 @@ export class ScriptableStorage extends MemorySnapshotStorage {
   private armed: Armed | null = null;
   private readonly hiddenDocuments = new Set<string>();
   private readonly hiddenInventories = new Set<string>();
+  private readonly corruptedInventories = new Map<string, unknown>();
 
   arm(
     phase: StoragePhase,
@@ -95,6 +96,19 @@ export class ScriptableStorage extends MemorySnapshotStorage {
 
   hideInventory(season: number, version: string): void {
     this.hiddenInventories.add(versionKey(season, version));
+  }
+
+  /**
+   * Makes one stored inventory deserialize to a malformed value.
+   *
+   * KV hands back whatever JSON the key holds, and the storage signature is a
+   * *declaration*, not a runtime guarantee: a truncated write or a hand-edited
+   * entry can deserialize to a number, a string or an array holding neither.
+   * The double reproduces exactly that - the read succeeds, and the value is
+   * not an inventory.
+   */
+  corruptInventory(season: number, version: string, value: unknown): void {
+    this.corruptedInventories.set(versionKey(season, version), value);
   }
 
   private async guard(phase: StoragePhase): Promise<void> {
@@ -136,7 +150,11 @@ export class ScriptableStorage extends MemorySnapshotStorage {
     version: string,
   ): Promise<SnapshotDocumentName[] | null> {
     await this.guard('readVersionInventory');
-    if (this.hiddenInventories.has(versionKey(season, version))) return null;
+    const key = versionKey(season, version);
+    if (this.hiddenInventories.has(key)) return null;
+    if (this.corruptedInventories.has(key)) {
+      return this.corruptedInventories.get(key) as SnapshotDocumentName[];
+    }
     return super.readVersionInventory(season, version);
   }
 

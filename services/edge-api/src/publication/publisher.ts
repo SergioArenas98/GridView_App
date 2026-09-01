@@ -10,6 +10,7 @@ import {
   type SnapshotStorage,
 } from '../storage/types';
 import type { SnapshotDocumentName } from '../storage/types';
+import { readStoredInventory, validatedInventory } from './version-inventory';
 import type { SnapshotValidator } from '../validation/snapshot-validator';
 import type { GeneratedSnapshotSet } from '../snapshots/generator';
 
@@ -218,22 +219,6 @@ const noReplacedVersion: ReplacedVersionDocuments = {
   kind: 'documents',
   documents: [],
 };
-
-/**
- * Whether a stored inventory is shaped like one at all.
- *
- * `readVersionInventory` is typed, but its value is deserialized from storage
- * and a truncated or hand-edited entry can deserialize to anything. A string
- * would spread into single characters and a number would throw inside the route
- * mapper, so the shape is checked once, here, rather than trusted downstream.
- */
-function isDocumentNameList(
-  value: unknown,
-): value is readonly SnapshotDocumentName[] {
-  return (
-    Array.isArray(value) && value.every((name) => typeof name === 'string')
-  );
-}
 
 /** The outcome of one guarded operational step. */
 type Attempt<T> =
@@ -587,17 +572,22 @@ export class SnapshotPublisher {
       };
     }
 
-    const targetInventory = await attempt(() =>
-      this.storage.readVersionInventory(season, target),
+    const targetInventory = await readStoredInventory(
+      this.storage,
+      season,
+      target,
     );
-    if (!targetInventory.ok) {
+    if (targetInventory.kind === 'unreadable') {
       return rollbackFailure(season, target, activeVersion, 'storage-read');
     }
-    if (targetInventory.value === null) {
-      // A version published before exact inventories existed. Nothing may be
-      // reconstructed for it: the collection documents are known not to name
-      // every document a version carries, so accepting it would be accepting a
-      // completeness verdict that has already been proven wrong.
+    if (targetInventory.kind !== 'documents') {
+      // Either a version published before exact inventories existed, or one
+      // whose inventory no longer deserializes to a list of documents. Nothing
+      // may be reconstructed for either: the collection documents are known not
+      // to name every document a version carries, so accepting one would be
+      // accepting a completeness verdict that has already been proven wrong.
+      // Decided **pre-commit**, so the rollback is refused with the pointer
+      // exactly where it was.
       return rollbackRejection(
         season,
         target,
@@ -605,7 +595,7 @@ export class SnapshotPublisher {
         'missing-version-inventory',
       );
     }
-    if (targetInventory.value.length === 0) {
+    if (targetInventory.documents.length === 0) {
       return rollbackRejection(
         season,
         target,
@@ -632,15 +622,36 @@ export class SnapshotPublisher {
     // route only one of them carries is still a route the pointer change
     // affects. An outgoing version with no inventory contributes nothing here
     // rather than blocking the recovery it is being rolled back from.
-    let invalidated: SnapshotDocumentName[] = [...targetInventory.value];
+    let invalidated: SnapshotDocumentName[] = [...targetInventory.documents];
     if (activeVersion !== null) {
-      const activeInventory = await attempt(() =>
-        this.storage.readVersionInventory(season, activeVersion),
+      const activeInventory = await readStoredInventory(
+        this.storage,
+        season,
+        activeVersion,
       );
-      if (!activeInventory.ok) {
+      if (activeInventory.kind === 'unreadable') {
         return rollbackFailure(season, target, activeVersion, 'storage-read');
       }
-      invalidated = [...invalidated, ...(activeInventory.value ?? [])];
+      if (activeInventory.kind === 'malformed') {
+        // Still pre-commit. An outgoing version whose inventory is corrupt is a
+        // surface that cannot be described, and rolling back over it would move
+        // the pointer while silently dropping every route only that version
+        // carried. `absent` is a different fact and keeps its documented
+        // behaviour below: a version predating exact inventories contributes
+        // nothing rather than blocking the recovery it is being rolled back to.
+        return rollbackRejection(
+          season,
+          target,
+          activeVersion,
+          'missing-version-inventory',
+        );
+      }
+      invalidated = [
+        ...invalidated,
+        ...(activeInventory.kind === 'documents'
+          ? activeInventory.documents
+          : []),
+      ];
     }
 
     const committed = await attempt(() =>
@@ -698,13 +709,18 @@ export class SnapshotPublisher {
       return manualPurgeFailure(season, null, 'no-active-version');
     }
 
-    const inventory = await attempt(() =>
-      this.storage.readVersionInventory(season, activeVersion),
+    const inventory = await readStoredInventory(
+      this.storage,
+      season,
+      activeVersion,
     );
-    if (!inventory.ok) {
+    if (inventory.kind === 'unreadable') {
       return manualPurgeFailure(season, activeVersion, 'storage-read');
     }
-    if (inventory.value === null) {
+    if (inventory.kind !== 'documents') {
+      // Nothing enumerable to purge, and no pointer to move. The operator is
+      // told the surface could not be described rather than handed an exception
+      // or a success over a partial route set.
       return manualPurgeFailure(
         season,
         activeVersion,
@@ -712,7 +728,7 @@ export class SnapshotPublisher {
       );
     }
 
-    const purge = await this.purgeRoutes(season, inventory.value);
+    const purge = await this.purgeRoutes(season, inventory.documents);
     return {
       season,
       activeVersion,
@@ -821,13 +837,9 @@ export class SnapshotPublisher {
     season: number,
     version: string,
   ): Promise<ReplacedVersionDocuments> {
-    const inventory = await attempt(() =>
-      this.storage.readVersionInventory(season, version),
-    );
-    if (!inventory.ok || !isDocumentNameList(inventory.value)) {
-      return { kind: 'unenumerable' };
-    }
-    return { kind: 'documents', documents: inventory.value };
+    const inventory = await readStoredInventory(this.storage, season, version);
+    if (inventory.kind !== 'documents') return { kind: 'unenumerable' };
+    return { kind: 'documents', documents: inventory.documents };
   }
 
   /**
@@ -869,14 +881,13 @@ export class SnapshotPublisher {
     if (!active.ok) return null;
     if (active.value === null) return [];
 
-    const inventory = await attempt(() =>
-      this.storage.readVersionInventory(
-        outgoing.season,
-        active.value as string,
-      ),
+    const inventory = await readStoredInventory(
+      this.storage,
+      outgoing.season,
+      active.value,
     );
-    if (!inventory.ok || inventory.value === null) return null;
-    return currentAliasUrlsForDocuments(this.purgeOrigin, inventory.value);
+    if (inventory.kind !== 'documents') return null;
+    return currentAliasUrlsForDocuments(this.purgeOrigin, inventory.documents);
   }
 
   /**
@@ -910,15 +921,22 @@ export class SnapshotPublisher {
     season: number,
     version: string,
   ): Promise<VersionAssessment> {
-    const inventory = await this.storage.readVersionInventory(season, version);
-    if (inventory === null) return 'no-inventory';
-    if (inventory.length === 0) return 'empty';
-    const recorded = new Set<string>(inventory);
+    // The *validator* rather than the reader: a read failure here is still
+    // classified by this method's callers, each of which already wraps the call
+    // in the `attempt` its own phase needs. Only the shape is settled here, and
+    // a value that is not a list of documents records no usable inventory.
+    const inventory = validatedInventory(
+      await this.storage.readVersionInventory(season, version),
+    );
+    if (inventory.kind !== 'documents') return 'no-inventory';
+    const documents = inventory.documents;
+    if (documents.length === 0) return 'empty';
+    const recorded = new Set<string>(documents);
 
     for (const name of baseDocumentNames) {
       if (!recorded.has(name)) return 'incomplete';
     }
-    for (const name of inventory) {
+    for (const name of documents) {
       if (!(await this.storage.readVersionedDocument(season, version, name))) {
         return 'incomplete';
       }

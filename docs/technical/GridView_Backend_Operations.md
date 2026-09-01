@@ -373,7 +373,8 @@ publication can no longer overwrite the one version a default rollback reaches.
 | Situation | Result | Operator action |
 | --- | --- | --- |
 | Rollback target equals the active version | `skipped`, `idempotent`, HTTP `200` | None. No pointer moved and the existing rollback target is preserved. |
-| Target carries no inventory | `rejected`, `missing-version-inventory`, HTTP `409` | Roll back to a version that records one, or republish. Nothing is reconstructed heuristically. |
+| Target carries no inventory, or one that is malformed | `rejected`, `missing-version-inventory`, HTTP `409` | Roll back to a version that records a well-formed one, or republish. Nothing is reconstructed heuristically or repaired. |
+| The outgoing active version has a malformed inventory | `rejected`, `missing-version-inventory`, HTTP `409` | Republish the affected season so it records a well-formed inventory, then retry. No pointer moved, nothing purged. |
 | Target inventory is empty | `rejected`, `rollback-target-missing`, HTTP `409` | Choose another target. |
 | Target is missing an inventoried document | `rejected`, `rollback-target-incomplete`, HTTP `409` | Choose another target. No pointer moved, nothing purged. |
 | Any storage read before the commit fails | `failed`, `storage-read`, HTTP `409` | Retry once storage recovers. Both pointers are unchanged. |
@@ -444,7 +445,10 @@ orphan profile details, added and removed profiles, and rounds present in only
 one of the two calendars. It is deduplicated and sorted deterministically, and
 one rollback issues exactly one purge request, after the commit. An outgoing
 active version carrying no inventory contributes nothing to the union rather
-than blocking the recovery it is being rolled back from.
+than blocking the recovery it is being rolled back from. One carrying a
+*malformed* inventory refuses the rollback before the commit instead, because
+moving the pointer over a surface that cannot be described would silently drop
+every route only that version carried.
 
 **`POST /internal/admin/cache/purge` covers the whole active release.** It maps
 the active version's exact inventory through the same public-route expansion, so
@@ -452,9 +456,23 @@ the season detail, both standings, all three collections, the content manifest
 and every driver, constructor, circuit, Grand Prix and results route are
 included - together with their current-season aliases when the season it is
 purging is the current one. It moves no pointer and writes nothing. With no active version it
-returns `207` with `no-active-version`; with an active version carrying no
-inventory it returns `207` with `missing-version-inventory`; a purge adapter
-that fails, throws or rejects is contained and also returns `207`.
+returns `207` with `no-active-version`; with an active version whose inventory
+is missing or malformed it returns `207` with `missing-version-inventory`, and
+whose inventory cannot be read at all it returns `207` with `storage-read`; a
+purge adapter that fails, throws or rejects is contained and also returns `207`.
+
+**A stored inventory is validated once, at one boundary.** KV returns whatever
+JSON a key holds, so an inventory can deserialize to a number, a string or an
+array carrying a non-string. Every reader - the replaced-version read, the
+outgoing-current-season alias read, both rollback reads, the operator purge read
+and the completeness check - passes through
+`src/publication/version-inventory.ts` before anything spreads the value, maps
+it to a route or builds an alias from it. A malformed value never escapes as a
+thrown error: discovered **before** a commit point it rejects the operation with
+`missing-version-inventory` and leaves both pointers untouched; discovered
+**after** one it degrades only the purge, reporting `applied` with
+`cachePurge: 'failed'`. No new status or reason was introduced for it. See
+`GridView_Backend_Publication.md` for the full phase table.
 
 A purge failure is returned (`207`) and logged, but never corrupts or reverts the
 active snapshot pointer — reader correctness relies on weak-ETag revalidation, not

@@ -710,6 +710,36 @@ A version carrying **no** inventory fails closed as a rollback target with
 available, because that heuristic is exactly what was proven to under-report.
 No deployed coordinated snapshot depends on this compatibility path.
 
+**A stored inventory is deserialized data, and is validated at one boundary.**
+The storage signature declares `SnapshotDocumentName[] | null`, but that
+describes a correct _write_; a read returns whatever JSON the key holds, so a
+truncated write or a hand-edited entry can deserialize to a number, a string, an
+object or an array carrying a non-string. Every consumer downstream assumes an
+array of strings — the route mapper calls `startsWith` per entry, the purge
+builders spread the list, the completeness check iterates it — and none of those
+throws is inside the guarded purge-adapter call.
+
+`src/publication/version-inventory.ts` is therefore the single point at which a
+persisted inventory is validated, and every reader passes through it: the
+replaced-version read, the outgoing-current-season alias read, both rollback
+reads, the operator purge read and the completeness check. It duplicates no
+route knowledge — it accepts an array of strings and stops there, because an
+unrecognised document name maps to no canonical path and no alias and is inert,
+while a non-string is exactly what throws. It returns a four-valued result
+(`documents`, `absent`, `malformed`, `unreadable`) rather than "an array or
+nothing", because only the calling phase knows which bounded outcome each maps
+to.
+
+The phase decides, and the commit point is the dividing line. A malformed
+inventory found **before** a commit rejects the operation with
+`missing-version-inventory` and leaves both pointers untouched; found **after**
+one it degrades only the purge, reporting the established `applied` with
+`cachePurge: 'failed'`, because a post-commit fact can never make a committed
+publication not have happened. The operator purge, which moves nothing, returns
+its bounded failure representation rather than throwing. `absent` keeps its
+established meanings unchanged. No public status or reason was added: the
+existing vocabulary already represents every one of these paths.
+
 **Target completeness and cache invalidation are two different sets.** They
 answer two different questions over the same exact inventories, and are
 deliberately not derived from one another:
@@ -741,8 +771,8 @@ rather than blocking the recovery it is being rolled back from.
 The same exact inventory and the same route expansion serve
 `POST /internal/admin/cache/purge` for the **active** version, so an operator
 purge covers the whole active release rather than a hand-maintained subset. It
-moves no pointer and writes nothing; with no active version or no inventory it
-returns a bounded result.
+moves no pointer and writes nothing; with no active version, or with an
+inventory that is missing, malformed or unreadable, it returns a bounded result.
 
 **A complete purge is not a complete set of numeric-season URLs.** Mapping each
 document to one canonical `?season={season}` or `/v1/seasons/{season}` URL was

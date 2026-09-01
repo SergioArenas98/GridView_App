@@ -585,7 +585,28 @@ and no alias; a first publication having nothing to withdraw and reporting a
 clean purge; a cross-season transition still leaving the outgoing season's
 season-scoped URLs alone; and a missing, malformed, throwing or rejecting
 outgoing inventory reporting `cachePurge: 'failed'` on an applied publication
-whose committed pointer stands. `services/edge-api/test/sync/` covers the
+whose committed pointer stands.
+`test/publication/version-inventory-containment.test.ts` pins the single
+validated boundary every persisted inventory passes through
+(`src/publication/version-inventory.ts`). A stored inventory is deserialized
+data, not a typed value, so the suite drives eight malformed-but-valid JSON
+values - a number, a string, a boolean, an object, and arrays holding a number,
+`null`, an object or a nested array - through every consumer independently: the
+same-season replaced inventory, the outgoing-current-season alias expansion,
+both rollback inventories, and the operator purge. Each is asserted on its exact
+phase-appropriate outcome rather than on a length, and a storage read that
+**throws** is distinguished from one that **rejects** at each of them. The
+reported post-commit defect is reproduced end to end - the active pointer moves,
+alias expansion meets a malformed outgoing inventory, and the publication
+returns its bounded `applied` with `cachePurge: 'failed'` instead of rejecting.
+Pre-commit discovery rejects with `missing-version-inventory` and both pointers
+unchanged; the operator purge returns its bounded failure with no URLs and no
+adapter call; a republished active version with an unusable inventory is
+`rejected` as `active-version-incomplete` rather than claimed idempotent; and
+valid inventories are re-asserted unchanged throughout - purged URL batches
+still sorted, deduplicated and complete - so containment cannot be bought with a
+narrower purge. No malformed content reaches a log line.
+`services/edge-api/test/sync/` covers the
 rejected-publication decision table over the exported reason union, both
 integrity refusals failing the run, the benign older-source no-op completing,
 and last-known-good preservation in every case.
