@@ -648,6 +648,35 @@ on this season's grid, and one driver may legitimately hold several season
 entries, because mid-season participation is modelled as split spans
 (GridView_Domain_Model.md §6.7, decision M6).
 
+**A session is bound to the calendar event it is filed under.** Most identities
+in the contract are opaque slugs. A session's is not: the domain model defines
+it as `{grandPrixId}-{sessionType}` (GridView_Domain_Model.md §6), so the
+identity itself carries the parent relationship and can therefore contradict
+it. Nothing upstream could catch that. An `event-schedule` resource names only a
+season and a round, so the coordinator's payload boundary has no event id to
+check the sessions against; assembly then replaces that round's sessions
+**wholesale**, by design, because a refreshed schedule supersedes the calendar's
+own list. A schedule declaring the right round while carrying another Grand
+Prix's sessions was therefore published under the wrong event.
+
+Duplicate detection did not cover it, and could not: it answers a different
+question. Sessions borrowed from an event that is _also_ in the calendar collide
+on `sessions.id` and are caught as a duplicate primary key — but sessions
+borrowed from an event that is not in the calendar are unique, collide with
+nothing, and were accepted. Parent identity and stored-row uniqueness are two
+independent checks, and the season now runs both.
+
+The relation is enforced in the preflight, where the event and its sessions are
+finally both in hand, as exact equality against the identity a single shared
+constructor builds (`canonicalSessionId`, which the mock provider now also uses,
+so the rule has one implementation rather than one per site). Deliberately not a
+prefix test: a prefix would accept `{event}-race-2` and would accept a
+`qualifying`-suffixed identity on a `race` session, and the contract defines an
+identity, not a namespace. Nothing is rewritten, re-derived or dropped — a
+mismatch withholds the whole candidate as `inconsistent-references` with the
+bounded relation name `session-event`, exactly like every other broken relation,
+and generation and publication are never reached.
+
 **A version's contents are recorded, not reconstructed.** Every version stores
 the sorted, deduplicated set of document names generation actually produced, as
 internal metadata under its own snapshot prefix. Nothing about a version is
@@ -1095,6 +1124,9 @@ activation**, not as evidence of reconciliation running today:
   outcome, reason and retry hints that drive accounting, classification and
   logging cannot change after they were validated — whatever the adapter does
   with its own object afterwards.
+- A session published under a calendar event carries that event's own canonical
+  identity for its session type, so a schedule refresh can never file another
+  Grand Prix's sessions under it.
 - Every established guarantee is preserved: atomic publication, last-known-good
   on every failure combination, provider neutrality of the public contract,
   no provider work on a public read, and bounded logs.
@@ -1115,8 +1147,9 @@ identifiers already recorded in Provider Evaluation §8. **G1 and G3 remain
 open** — no live provider mode and no production cron. **Deep
 normalized-contract validation for a real adapter remains open** and is an
 activation gate on registering one (D14); the coordinator-owned normalized
-outcome is an aliasing and time-of-check/time-of-use guarantee and does not
-close it. Both adapters remain unimplemented,
+outcome is an aliasing and time-of-check/time-of-use guarantee, and the
+session-to-event relation is one declared identity rule, so neither closes it.
+Both adapters remain unimplemented,
 OpenF1 remains fail-closed pending a justified maximum-session-duration bound,
 and nothing here authorizes production synchronization, deployment or public
 release. Every EUR 0 budget,
@@ -1144,6 +1177,8 @@ run, and cannot run until an adapter exists.
 | Recursively freeze the returned run                                        | Defends against a caller that does not exist — the seam is dormant and only the coordination package consumes a run — at the cost of a second traversal of every published payload |
 | Structured-clone the whole outcome instead of parsing it                   | Cloning discards symbol-keyed and non-enumerable properties, which is exactly what shape closure exists to see. A malformed answer would be laundered into a clean one             |
 | Keep validating the raw outcome and read its fields when needed            | Validation and use are different moments: attribution runs after the whole plan. A reused object, a post-return mutation or an accessor changes what a checked answer says         |
+| Enforce the session-to-event relation in `payloadMatchesResource`          | An `event-schedule` resource names only a season and a round. The event id does not exist at that boundary, and inventing one would expand the resource contract                   |
+| Rewrite, re-derive or drop a mis-bound session identity                    | That would repair a provider defect into published data. The preflight resolves nothing and repairs nothing: one broken relation withholds the whole candidate                     |
 
 ## References
 

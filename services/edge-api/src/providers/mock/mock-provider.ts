@@ -1,3 +1,4 @@
+import { canonicalSessionId } from '../../contract/identity';
 import type {
   Circuit,
   Constructor,
@@ -196,7 +197,7 @@ function session(
   startTime: string,
 ): Session {
   return {
-    id: `${grandPrixId}-${type.replaceAll('_', '-')}`,
+    id: canonicalSessionId(grandPrixId, type),
     type,
     name,
     startTime,

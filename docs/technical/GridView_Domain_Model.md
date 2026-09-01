@@ -378,6 +378,14 @@ Identity: `id` (`{season}-{eventSlug}`). A season-scoped event.
 
 Identity: `id` (`{grandPrixId}-{sessionType}`). One entry per scheduled session.
 
+This identity is **derived from the parent event**, so it can contradict the
+event it is filed under. It is built by one shared constructor
+(`canonicalSessionId`) and enforced as exact equality by the referential
+preflight before any snapshot is generated: a session whose identity names
+another Grand Prix withholds the whole season candidate. That is a separate
+check from stored-row uniqueness - a borrowed session from an event outside the
+calendar is unique and collides with nothing.
+
 | Field | Type | R/N | Meaning |
 |---|---|---|---|
 | `id` | string | R | e.g. `2026-belgian-grand-prix-race`. |

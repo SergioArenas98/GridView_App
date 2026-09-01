@@ -28,6 +28,7 @@
  */
 
 import type { ResultStatus } from '../../contract/enums';
+import { canonicalSessionId } from '../../contract/identity';
 import type { ProviderSeasonSource } from '../formula-one-provider';
 
 /**
@@ -41,6 +42,19 @@ import type { ProviderSeasonSource } from '../formula-one-provider';
 export const seasonRelations = [
   /** `calendar[].circuitId` must resolve. `requireOne` throws otherwise. */
   'event-circuit',
+  /**
+   * `calendar[].sessions[].id` must be that event's own canonical identity for
+   * that session type.
+   *
+   * A session identity is *derived* from its parent event
+   * (GridView_Domain_Model.md §6: `{grandPrixId}-{sessionType}`), so it is the
+   * one field that can contradict the event it is filed under. Nothing
+   * upstream can catch it: an `event-schedule` resource names only a season
+   * and a round, so the coordinator's payload boundary has no event id to
+   * check against, and assembly then replaces that round's sessions wholesale.
+   * This is where the event and its sessions are finally both in hand.
+   */
+  'session-event',
   /** `driverEntries[].driverId` must resolve. `requireOne` throws otherwise. */
   'driver-entry-driver',
   /** `driverEntries[].constructorId` is published verbatim on the summary. */
@@ -238,6 +252,17 @@ export function validateSeasonReferences(
 
   for (const event of source.calendar) {
     if (!circuits.has(event.circuitId)) fail('event-circuit');
+    for (const session of event.sessions) {
+      // Exact equality against the identity the domain model defines, built by
+      // the one shared constructor. Deliberately not a prefix test: a prefix
+      // would accept `{event}-race-2` and `{event}-qualifying` under a `race`
+      // session alike, and the contract defines an identity, not a namespace.
+      // Nothing is rewritten, coerced or inferred - a mismatch withholds the
+      // whole candidate, exactly as every other broken relation does.
+      if (session.id !== canonicalSessionId(event.id, session.type)) {
+        fail('session-event');
+      }
+    }
   }
   for (const entry of source.driverEntries) {
     if (!drivers.has(entry.driverId)) fail('driver-entry-driver');

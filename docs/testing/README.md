@@ -527,6 +527,26 @@ Coverage:
   permitted pool size is proved to stay self-consistent and non-aliasing - an
   object shared between simultaneously in-flight requests is an adapter contract
   stated on `fetchResource`, not a coordinator guarantee.
+- Session-to-event identity
+  (`test/providers/coordination/session-event-identity.test.ts`): every session
+  published under a calendar event carries that event's own canonical identity
+  for its session type. A schedule declaring the correct round while carrying
+  sessions belonging to an event **absent from the calendar** is rejected as
+  `session-event` and explicitly **not** as `duplicate-identity`, which is the
+  case stored-row uniqueness cannot see; sessions borrowed from an event that is
+  in the calendar fail both relations, and duplicated sessions that do belong to
+  their event still fail duplicate detection alone. A single mismatched session
+  among valid ones rejects the whole source, and so do a correct event with the
+  wrong session-type suffix, a foreign event with the correct suffix, and
+  near-miss identities differing only by case, padding, separator or a trailing
+  hyphen. Every declared session type is accepted under its own event, the
+  curated season and an event with no sessions stay accepted, and the existing
+  classification-to-event binding is proved unaffected. End to end, a mis-bound
+  schedule withholds the assembled source as `inconsistent-references` in either
+  plan order, never reaches generation or publication, leaves no active pointer
+  and puts no identifier in a log line, while the provisional source stays
+  structurally excluded from schedules; a correctly bound schedule refresh still
+  publishes and still supersedes the calendar's own session list.
 - Validator scope and the activation gate: the runtime validator accepts a
   driver collection whose entries are nonsense as `SeasonDriverSummary`, which
   pins that it is structural rather than a deep per-field contract validator;

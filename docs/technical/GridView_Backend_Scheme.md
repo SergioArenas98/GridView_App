@@ -1189,6 +1189,19 @@ The handler:
 > assembles and never publishes, while the request that really occurred stays
 > accounted exactly once as the attempt it was.
 >
+> **A session is bound to the calendar event it is filed under.** A session
+> identity is derived from its parent (`{grandPrixId}-{sessionType}`,
+> GridView_Domain_Model.md §6), so the referential preflight requires every
+> session attached to an event to carry that event's own canonical identity for
+> its session type. A refreshed event schedule replaces a round's sessions
+> wholesale, and the schedule resource names only a season and a round, so this
+> is the first point at which the event and its sessions are both in hand. It is
+> a **separate check from duplicate identity**: sessions borrowed from another
+> calendar event collide on the stored primary key, but sessions borrowed from an
+> event that is not in the calendar are unique and collide with nothing. Nothing
+> is rewritten or inferred; a mismatch withholds the whole candidate as
+> `inconsistent-references` with the bounded relation `session-event`.
+>
 > Event-aware scheduling (**G5**) and persisted provenance or
 > provisional/reconciled record state (**G9**) remain open, and the coordinator
 > implements neither. **Deep normalized-contract validation also remains
@@ -1196,7 +1209,8 @@ The handler:
 > top-level document shape and provider neutrality - and per-field contract
 > validation is an adapter responsibility that gates registering a real
 > adapter at all (ADR 0023 D14). The normalized outcome is an aliasing and
-> time-of-check/time-of-use guarantee and does **not** close that gate.
+> time-of-check/time-of-use guarantee, and the session-to-event relation is one
+> declared identity rule; neither closes that gate.
 >
 > A publication the publisher **rejects** is not automatically a successful
 > run. Only a candidate older than what is already serving is a benign
