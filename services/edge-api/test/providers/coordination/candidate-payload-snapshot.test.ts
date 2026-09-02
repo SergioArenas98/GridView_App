@@ -601,19 +601,25 @@ describe('ordinary payloads survive detachment unchanged', () => {
     }
   });
 
-  it('preserves nulls, zeroes, empty strings and empty collections', async () => {
+  it('preserves nulls and zeroes exactly', async () => {
+    // Every value here is one the contract permits and is easy to lose in a
+    // careless copy: an explicit `null`, several zeroes and `false`. The
+    // payload is contract-complete because a candidate is validated at the
+    // boundary before it can be selected, so the undeclared nested fields this
+    // case once carried would now be refused rather than snapshotted - which is
+    // the point of the closed rule, and is covered by the contract suites.
     const payload = {
       kind: 'driver-standings',
       standings: [
         {
           season: SEASON,
-          position: 0,
+          driverId: 'max-verstappen',
+          constructorId: null,
+          position: 1,
           points: 0,
           wins: 0,
-          driverId: '',
-          constructorId: null,
-          notes: [],
-          detail: { nested: { deeper: [null, 0, ''] } },
+          podiums: 0,
+          provisional: false,
         },
       ],
     };
@@ -622,6 +628,34 @@ describe('ordinary payloads survive detachment unchanged', () => {
     const run = await coordinate([payloadPort(payload)], [DRIVER_STANDINGS]);
     expect(run.resources[0]?.selection.outcome).toBe('selected');
     expect(selectedPayload(run, DRIVER_STANDINGS)).toEqual(expected);
+  });
+
+  it('preserves empty strings and empty collections exactly', async () => {
+    // The same preservation question where the contract does allow a free-form
+    // string and a nested object: a classification entry carries `dnfReason`
+    // and `gapText`, and the result carries an entries collection and a nested
+    // `fastestLap`.
+    const source = await seasonFixture();
+    const race = source.results[0];
+    if (race === undefined) throw new Error('fixture gap');
+    const round = race.round;
+    const entry = race.entries[0];
+    if (entry === undefined) throw new Error('fixture gap');
+
+    const payload = {
+      kind: 'session-classification',
+      result: {
+        ...deepCopy(race),
+        entries: [{ ...deepCopy(entry), dnfReason: '', gapText: '' }],
+        fastestLap: { driverId: null, timeMillis: 0, lap: 0 },
+      },
+    };
+    const expected = deepCopy(payload);
+
+    const resource = raceResource(round);
+    const run = await coordinate([payloadPort(payload)], [resource]);
+    expect(run.resources[0]?.selection.outcome).toBe('selected');
+    expect(selectedPayload(run, resource)).toEqual(expected);
   });
 
   it('accepts an empty but valid collection', async () => {

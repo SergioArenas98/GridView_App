@@ -47,8 +47,36 @@ const INSTANT = '2026-09-01T00:00:00.000Z';
 /** A provider-controlled string that must never reach a log or a contribution. */
 const HOSTILE = 'https://provider.invalid/secret?token=LEAKED';
 
+/**
+ * A contract-complete standings payload.
+ *
+ * Every declared property is present: a normalized candidate is validated
+ * against the public contract at the coordination boundary, so a minimal stub
+ * would be refused before any of the normalization behaviour this file is
+ * about could be observed.
+ */
 function standings(kind: string): Record<string, unknown> {
-  return { kind, standings: [{ season: SEASON, position: 1, points: 25 }] };
+  const entry =
+    kind === 'constructor-standings'
+      ? {
+          season: SEASON,
+          constructorId: 'red-bull',
+          position: 1,
+          points: 25,
+          wins: 1,
+          provisional: false,
+        }
+      : {
+          season: SEASON,
+          driverId: 'max-verstappen',
+          constructorId: 'red-bull',
+          position: 1,
+          points: 25,
+          wins: 1,
+          podiums: 1,
+          provisional: false,
+        };
+  return { kind, standings: [entry] };
 }
 
 function coordinate(

@@ -30,6 +30,7 @@ import {
   type CoordinationRun,
 } from '../../../src/providers/coordination';
 import type { ProviderSeasonSource } from '../../../src/providers/formula-one-provider';
+import { canonicalRaceResultId } from '../../../src/contract/identity';
 import type { RaceResult } from '../../../src/contract/types';
 import {
   FIXED_NOW,
@@ -84,7 +85,14 @@ function nonRaceResultFor(
   sessionType: 'qualifying' | 'sprint' | 'sprint_qualifying',
 ): RaceResult {
   const race = raceResultFor(source, round);
-  return { ...race, id: `${race.id}-${sessionType}`, sessionType };
+  // Built with the shared identity constructor rather than by hand: a
+  // hand-appended `sessionType` produced `...-sprint_qualifying`, whose
+  // underscore is not the contract's identifier grammar.
+  return {
+    ...race,
+    id: canonicalRaceResultId(race.grandPrixId, sessionType),
+    sessionType,
+  };
 }
 
 function coordinate(
