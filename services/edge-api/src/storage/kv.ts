@@ -9,6 +9,7 @@ import {
   snapshotKey,
   snapshotPrefix,
   syncStateKey,
+  versionInventoryKey,
 } from './keys';
 import type { ProviderSourceId } from '../providers/provider-source';
 import {
@@ -45,6 +46,23 @@ export class KvSnapshotStorage implements SnapshotStorage {
     documentName: SnapshotDocumentName,
   ): Promise<StoredSnapshot | null> {
     return this.get<StoredSnapshot>(snapshotKey(season, version, documentName));
+  }
+
+  async readVersionInventory(
+    season: number,
+    version: string,
+  ): Promise<SnapshotDocumentName[] | null> {
+    return this.get<SnapshotDocumentName[]>(
+      versionInventoryKey(season, version),
+    );
+  }
+
+  async writeVersionInventory(
+    season: number,
+    version: string,
+    documentNames: readonly SnapshotDocumentName[],
+  ): Promise<void> {
+    await this.put(versionInventoryKey(season, version), [...documentNames]);
   }
 
   async getActiveVersion(season: number): Promise<string | null> {

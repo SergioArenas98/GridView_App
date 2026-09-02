@@ -374,10 +374,268 @@ Coverage includes:
   evidence corpus, including the four recorded constructor-name
   disagreements. The mapping tests use fixed local fixtures only and never
   contact a provider.
+- Multi-source provider coordination (Phase 9B-4,
+  [ADR 0023](../adr/0023-multi-source-provider-coordination.md)): see below.
 
 The existing fixture validator still reports strict OpenAPI conformance:
 30 conforming fixtures and 1 tolerance-only fixture that must fail strict
 validation.
+
+## Multi-source provider coordination (Phase 9B-4)
+
+**Edge tests** under `services/edge-api/test/providers/coordination/`. None
+touches the network, needs a Cloudflare binding or contacts Jolpica or OpenF1:
+the ports are local fakes, there is no transport at all, and one test replaces
+`globalThis.fetch` with a rejecting stub for the whole coordinate-and-publish
+path so an accidental request fails loudly.
+
+Fixtures are **derived from the checked-in curated content through the
+production mock provider**, so no test duplicates assembly logic or invents a
+season. The publication tests drive the **real** `SnapshotPublisher` over
+in-memory storage, and the mapping tests drive the **real** Phase 9B-3
+registry.
+
+Coverage:
+
+- An empty plan performs zero adapter calls; a duplicate logical resource
+  rejects the whole plan with nothing attempted and no accounting written; an
+  identity carrying a scope its kind does not have is rejected as invalid
+  rather than admitted as a second identity for one resource; a hostile value
+  inside a plan entry is rejected without throwing; and the reported plan
+  problem does not depend on the order the entries arrived in.
+- Each source succeeds independently, and no adapter is ever shown the plan,
+  another source's outcome or the selection.
+- A capability violation is rejected **before** the adapter is called, and the
+  provisional source is skipped by default because no session-end bound is
+  recorded - with no reservation, no transport and no attempted accounting.
+  Absence, `null`, a bare number, a wrong discriminant, a non-integer, a
+  non-positive value, an absurd value and an extra property are each pinned as
+  **locked**.
+- The complete selection matrix: reconciled wins over provisional; reconciled
+  wins against every provisional terminal failure while the diagnostic outcome
+  is retained; a provisional candidate is returned only when the reconciled
+  source failed **and** the resource is provisional-capable, and is never
+  relabelled; both unavailable yields no usable candidate; and neither source
+  completion order nor plan order can change any of it.
+- Failure isolation: one resource failing never blocks an independent one; a
+  mapping failure or an invalid registry blocks only the affected contribution
+  and never folds, trims, slugs or guesses an identity; a malformed outcome, a
+  well-formed answer to a different question and a thrown adapter error all
+  fail closed without throwing, and nothing from the thrown value survives; an
+  answer that detonates while it is being read - a throwing accessor, a hostile
+  proxy - is contained as a bounded coordination failure too.
+- Accounting: a limiter deferral stays not attempted and retains `retryAt`; a
+  429 stays attempted and source-attributed; each real request is counted
+  exactly once per source and credited to every job category it served; one
+  request reused for two derived resources is **not** double-counted; the same
+  token minted independently by both sources is **not** collapsed and cannot
+  discard either source's contribution; and a same-source token claiming two
+  different attempt outcomes fails the later contribution closed.
+- Cancellation and concurrency: a pre-cancelled run does nothing at all; a
+  mid-run cancellation schedules nothing further and never publishes; a
+  deterministic deferred-promise race proves that a saturated pool cancelled
+  with work still unclaimed claims none of it; the bounded pool never exceeds
+  its ceiling and defaults to sequential; and a run is byte-identical when its
+  operations complete in the opposite order.
+- Publication: an incomplete, cancelled or rejected run never reaches the
+  publisher; a complete run calls it exactly once; a publisher failure leaves
+  the active release unchanged; and last-known-good survives every combination
+  of source failure across both sources.
+- Containment: public reads still perform no provider work, coordination
+  vocabulary reaches no public response, fixture or OpenAPI text, every log
+  event for every failure category carries only bounded scalars, a hostile
+  transport reference and a hostile retry hint reach no log line, and no
+  runtime module outside `src/providers/coordination/` consumes the
+  coordinator.
+- Plan boundary: a null, array, string, key-incomplete or key-extra plan; a
+  `NaN`, fractional, infinite, string, boxed or out-of-domain season; a
+  non-iterable `resources`; a throwing `ownKeys` trap on the plan or on an
+  entry; a throwing `season` or `resources` getter; a throwing iterator; and a
+  symbol-keyed, non-enumerable or prototype-borne field on an entry each become
+  a bounded `plan-rejected` run with no port call, no accounting and no hostile
+  detail in the serialized log.
+- Attempt and payload closure: an undeclared enumerable, non-enumerable or
+  symbol-keyed property on a transport attempt, a required field reachable only
+  through a prototype, a coerced reference, a throwing reference accessor, and a
+  `null` or array candidate payload are all refused, while every valid
+  attempt-bearing outcome is preserved and an all-astral reference at the
+  declared bound still passes.
+- Provisional eligibility closure: the record that is the sole gate on the
+  policy-locked source admits exactly its two declared own **data** properties.
+  Required fields reachable only through a prototype, a mixed own/inherited
+  pair, and enumerable, symbol-keyed or non-enumerable extras are each refused;
+  an accessor for either field is refused **without being executed**; a
+  throwing `ownKeys` or `getOwnPropertyDescriptor` trap is contained as the
+  ordinary locked result; the traps a shape decision has no business consulting
+  are pinned as never reached; a null-prototype and a frozen record carrying
+  exactly the two fields stay accepted; the whole numeric and type domain is
+  re-pinned; and every hostile or malformed record is proved to leave OpenF1
+  unselectable while the production constant stays `null`.
+- Season entry identity: two constructor entries sharing one entry `id` and two
+  sharing one constructor are both rejected, symmetrically with the driver
+  cases, while split driver participation spans and a historical circuit
+  lap-record driver stay accepted.
+- Candidate payload snapshots
+  (`test/providers/coordination/candidate-payload-snapshot.test.ts`): the value
+  that passed resource binding is the value that is stored, selected and
+  assembled. An adapter that rewrites the payload it returned - whole standings
+  collections, a single row, a calendar's nested session arrays, a
+  classification's nested entries, or a participants payload's entry
+  collections - changes nothing after the contribution was classified, and
+  season assembly is proved to read the snapshot rather than the mutated
+  fixture. An adapter that refills **one buffer** for its next request cannot
+  rewrite an earlier accepted answer, two contributions built from that buffer
+  do not alias each other, and a fallback candidate cannot mutate the selected
+  one. A stateful accessor that answers a valid value on one read and a
+  different-season value on the next has the validated value retained - asserted
+  as a stable, correct stored snapshot rather than as a getter invocation count,
+  which the runtime does not guarantee. Reversing plan order changes nothing.
+  A payload that cannot be detached - a function-valued field, a function nested
+  inside a collection, a hostile `ownKeys` proxy - is contained as the existing
+  bounded `malformed-outcome` contribution: never selected, never assembled,
+  never published, with the run still `completed`, the real request accounted
+  exactly once by source and job category, `attempted` still true, a healthy
+  fallback still able to carry the resource, and nothing about the value in any
+  log line. Ordinary payloads are pinned unchanged across every resource kind,
+  and for `null` values, numeric zero, empty strings, empty collections, nested
+  objects, a frozen payload and a null-prototype payload; role precedence,
+  attribution, source-qualified transport deduplication, run-level
+  contradiction handling and ordinary publication are all re-pinned alongside.
+- Normalized provider outcomes
+  (`test/providers/coordination/outcome-normalization.test.ts`): every value the
+  coordinator uses after the port boundary is a copy taken once, and is the value
+  that was validated. An `attempt` accessor answering `successful` to validation
+  and `failed`, a different reference, or an overlong reference with an unknown
+  attempt outcome afterwards is refused outright rather than selected over
+  contradictory accounting; accessor-backed payloads, reasons and discriminants
+  and prototype-borne declared fields are refused with nothing counted. An
+  adapter reusing one `attempt` object, reusing one whole outcome object, or
+  mutating an answered outcome into another variant in either direction - a
+  candidate into a failure, a failure into a candidate - changes neither the
+  classification nor the request accounting, and two genuine requests are still
+  counted as two. A `retryAt` or `retryAfter` accessor cannot put a URL, a token
+  or an unbounded string into `providerRetryAt` / `providerRetryAfter`. Every
+  bucket is asserted to satisfy `total == successful + failed + rateLimited`, so
+  an unvalidated attempt outcome reaching the ledger is caught rather than
+  merely looking odd. Ordinary candidate, not-attempted, failed,
+  mapping-failure and rate-limited paths, one reference serving two resources,
+  run-level contradiction handling, clone-failure accounting with `attempted`
+  still true, fallback selection and cancellation are all re-pinned alongside;
+  symbol-keyed and non-enumerable extras and throwing `ownKeys` /
+  `getOwnPropertyDescriptor` traps stay contained with nothing in any log line.
+  The sequential default is proved to close object reuse completely, while every
+  permitted pool size is proved to stay self-consistent and non-aliasing - an
+  object shared between simultaneously in-flight requests is an adapter contract
+  stated on `fetchResource`, not a coordinator guarantee.
+- Session-to-event identity
+  (`test/providers/coordination/session-event-identity.test.ts`): every session
+  published under a calendar event carries that event's own canonical identity
+  for its session type. A schedule declaring the correct round while carrying
+  sessions belonging to an event **absent from the calendar** is rejected as
+  `session-event` and explicitly **not** as `duplicate-identity`, which is the
+  case stored-row uniqueness cannot see; sessions borrowed from an event that is
+  in the calendar fail both relations, and duplicated sessions that do belong to
+  their event still fail duplicate detection alone. A single mismatched session
+  among valid ones rejects the whole source, and so do a correct event with the
+  wrong session-type suffix, a foreign event with the correct suffix, and
+  near-miss identities differing only by case, padding, separator or a trailing
+  hyphen. Every declared session type is accepted under its own event, the
+  curated season and an event with no sessions stay accepted, and the existing
+  classification-to-event binding is proved unaffected. End to end, a mis-bound
+  schedule withholds the assembled source as `inconsistent-references` in either
+  plan order, never reaches generation or publication, leaves no active pointer
+  and puts no identifier in a log line, while the provisional source stays
+  structurally excluded from schedules; a correctly bound schedule refresh still
+  publishes and still supersedes the calendar's own session list.
+- Race-result identity
+  (`test/providers/coordination/race-result-identity.test.ts`): every published
+  classification carries its own parent's canonical identity for its session
+  type, `{grandPrixId}-{sessionType}-results`, built by the one shared
+  constructor `canonicalRaceResultId`. The constructor is pinned directly
+  (race, sprint, and a multi-word type hyphenated exactly as session identities
+  are) and the curated fixture is proved to already carry it, so the mock
+  provider and the preflight share one implementation. The relation is proved
+  **independent of its three neighbours**: an arbitrary unique `id` under an
+  otherwise correct result fails `result-identity` and explicitly not
+  `result-event`, `duplicate-identity` or `session-event`; a result naming a
+  foreign parent *and* identified from it fails `result-event` and not
+  `result-identity`; two canonical copies fail duplicate detection alone, while
+  results carrying two *different* arbitrary ids fail identity alone and collide
+  with nothing. Also rejected: the correct parent with a wrong result suffix
+  (`-race`, `-results`, `-race-result`, `-race-results-2`, another session
+  type), a canonical-looking id built for a different Grand Prix, and near
+  misses differing only by case, separator, padding or a trailing or leading
+  hyphen. Every supported result session type is accepted under its own parent
+  and the curated season stays accepted. End to end, a mis-identified
+  classification withholds the assembled source as `inconsistent-references` in
+  either plan order, never reaches generation or publication, leaves no active
+  pointer, and puts neither the provider-controlled id nor the parent identity
+  in a log line or in the structured outcome; the payload boundary is proved
+  unchanged - the classification is still a valid *candidate* for its resource -
+  and a correctly identified classification refresh still publishes.
+- Validator scope and the activation gate: the runtime validator accepts a
+  driver collection whose entries are nonsense as `SeasonDriverSummary`, which
+  pins that it is structural rather than a deep per-field contract validator;
+  and no runtime module constructs a coordinator, names `ProviderResourcePort`,
+  rewires `SynchronizationService` or teaches the provider factory a real
+  source.
+
+**Publication and synchronization.** `services/edge-api/test/publication/` and
+`services/edge-api/test/admin/` additionally cover the exact per-version
+inventory (the shipped orphan circuit, orphan driver and constructor profiles,
+active-only and target-only entities), completeness over that inventory, a
+legacy version with none, the already-active rollback no-op, both pointers
+surviving a failed commit, a post-commit maintenance failure reported as
+applied-but-degraded, a bounded result for a read or write failure at every
+rollback phase, a purge that throws or rejects, the exact purge union and its
+sorted deduplicated ordering, and a manual purge that covers every active
+public route and moves no pointer.
+`test/publication/current-season-alias-invalidation.test.ts` pins the URL
+surface itself: publication, rollback and the operator purge each invalidating
+the canonical numeric URL together with every alias the router accepts for the
+current season - omitted `season`, explicit `season=current` and
+`/v1/seasons/current` - across every public route family; no alias invented for
+a form the router rejects; a historical season keeping numeric-only
+invalidation; a current-season transition invalidating the aliases of both the
+outgoing and the incoming season, and reporting a failed purge when the outgoing
+surface cannot be enumerated; an unreadable current-season pointer expanding
+aliases rather than skipping them; and the committed pointer surviving an
+aliased purge that fails.
+`test/publication/withdrawn-route-invalidation.test.ts` pins what a replacement
+release removes: a driver, constructor or circuit profile, a Grand Prix detail
+and its results, and a results document withdrawn while its round is retained,
+each invalidated at every URL the router serves it under; the purge set being
+exactly the aliased union of the outgoing and incoming inventories, still
+deduplicated and sorted; a historical season keeping the withdrawn canonical URL
+and no alias; a first publication having nothing to withdraw and reporting a
+clean purge; a cross-season transition still leaving the outgoing season's
+season-scoped URLs alone; and a missing, malformed, throwing or rejecting
+outgoing inventory reporting `cachePurge: 'failed'` on an applied publication
+whose committed pointer stands.
+`test/publication/version-inventory-containment.test.ts` pins the single
+validated boundary every persisted inventory passes through
+(`src/publication/version-inventory.ts`). A stored inventory is deserialized
+data, not a typed value, so the suite drives eight malformed-but-valid JSON
+values - a number, a string, a boolean, an object, and arrays holding a number,
+`null`, an object or a nested array - through every consumer independently: the
+same-season replaced inventory, the outgoing-current-season alias expansion,
+both rollback inventories, and the operator purge. Each is asserted on its exact
+phase-appropriate outcome rather than on a length, and a storage read that
+**throws** is distinguished from one that **rejects** at each of them. The
+reported post-commit defect is reproduced end to end - the active pointer moves,
+alias expansion meets a malformed outgoing inventory, and the publication
+returns its bounded `applied` with `cachePurge: 'failed'` instead of rejecting.
+Pre-commit discovery rejects with `missing-version-inventory` and both pointers
+unchanged; the operator purge returns its bounded failure with no URLs and no
+adapter call; a republished active version with an unusable inventory is
+`rejected` as `active-version-incomplete` rather than claimed idempotent; and
+valid inventories are re-asserted unchanged throughout - purged URL batches
+still sorted, deduplicated and complete - so containment cannot be bought with a
+narrower purge. No malformed content reaches a log line.
+`services/edge-api/test/sync/` covers the
+rejected-publication decision table over the exported reason union, both
+integrity refusals failing the run, the benign older-source no-op completing,
+and last-known-good preservation in every case.
 
 ## Staging verification (Phase 5B)
 

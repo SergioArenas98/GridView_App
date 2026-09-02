@@ -13,6 +13,24 @@ export function snapshotPrefix(season: number, version: string): string {
   return `snapshot:${season}:${version}:`;
 }
 
+/**
+ * The exact document inventory of one version.
+ *
+ * Deliberately keyed **under the version's own snapshot prefix**, for two
+ * reasons that are both correctness rather than convenience:
+ *
+ * - It is part of the inactive version, so `deleteUnpublishedVersion` removes
+ *   it with the documents it describes. An inventory that outlived its
+ *   documents would describe a version that no longer exists.
+ * - Its suffix is not, and cannot become, a `SnapshotDocumentName`: that union
+ *   is closed, so nothing can ask for this key through
+ *   `readVersionedDocument`, and `invalidationUrlsForDocuments` can never map
+ *   it to a public route or to one of that route's aliases.
+ */
+export function versionInventoryKey(season: number, version: string): string {
+  return `${snapshotPrefix(season, version)}__inventory`;
+}
+
 export function activeKey(season: number): string {
   return `active:${season}`;
 }

@@ -1,7 +1,10 @@
 import type { Logger } from '../logging/logger';
 import type { Clock } from '../runtime/clock';
 import { generateSnapshotSet } from '../snapshots/generator';
-import type { SnapshotPublisher } from '../publication/publisher';
+import type {
+  PublicationReason,
+  SnapshotPublisher,
+} from '../publication/publisher';
 import type {
   QuotaState,
   SnapshotStorage,
@@ -88,6 +91,52 @@ export interface SyncResult {
   providerCallCount: number;
   /** Typed detail; the total above is `providerRequests.lifetime.total`. */
   providerRequests: SyncProviderAccounting;
+}
+
+/**
+ * What a **rejected** publication means for the synchronization run.
+ *
+ * A rejection is the publisher declining a candidate it examined, which is a
+ * different fact from an operational failure. Only one rejection is benign.
+ */
+export type RejectedPublicationConsequence = 'completed-no-op' | 'failed';
+
+/**
+ * The product decision for every declared publication reason.
+ *
+ * A candidate older than what is already serving is the pacing system working:
+ * nothing needed publishing and the run legitimately completed. **Every other
+ * rejection is an integrity refusal.** Recording one as a completed run
+ * advances `lastCompletedAt` and marks every due job successful, so the next
+ * cadence sees nothing due and a season that cannot be published looks healthy
+ * until an operator reads the publication status by hand.
+ *
+ * The switch is exhaustive over `PublicationReason` with **no default**, so a
+ * new reason is a compile error here rather than silently taking whichever
+ * branch a default happened to be. An absent reason fails closed.
+ */
+export function consequenceForRejectedPublication(
+  reason: PublicationReason | null,
+): RejectedPublicationConsequence {
+  if (reason === null) return 'failed';
+  switch (reason) {
+    case 'older-source-updated-at':
+      return 'completed-no-op';
+    case 'idempotent':
+    case 'active-version-incomplete':
+    case 'contract-validation':
+    case 'storage-read':
+    case 'storage-write':
+    case 'incomplete-version':
+    case 'cache-purge-failed':
+    case 'previous-pointer-maintenance-failed':
+    case 'missing-previous-version':
+    case 'rollback-target-missing':
+    case 'rollback-target-incomplete':
+    case 'missing-version-inventory':
+    case 'no-active-version':
+      return 'failed';
+  }
 }
 
 export class SynchronizationService {
@@ -250,6 +299,45 @@ export class SynchronizationService {
         releaseVersion,
       );
       const publication = await this.publisher.publish(set);
+      if (publication.status === 'failed') {
+        // The publisher contained an operational failure and reported it
+        // rather than throwing. It is still a failed run, so it takes the
+        // failure path in full - one `sync.failed` line, failed sync state -
+        // instead of being logged as completed while the response says
+        // otherwise. The publisher's own bounded reason is carried through,
+        // because it is more precise than the generic post-fetch category.
+        return this.fail(
+          request.season,
+          existing,
+          startedAt,
+          publication.reason ?? 'snapshot-publication-failure',
+          plan,
+          metricsBefore,
+        );
+      }
+      if (
+        publication.status === 'rejected' &&
+        consequenceForRejectedPublication(publication.reason) === 'failed'
+      ) {
+        // An integrity refusal. The candidate was examined and declined, so
+        // nothing published and last-known-good stands - but the season is not
+        // in the state the run was asked to produce, and recording a completed
+        // run would hide that until the next cadence found nothing due.
+        //
+        // The publisher's precise bounded reason **and** its own status are
+        // both preserved: the run failed, and the publication was rejected.
+        // Reporting the publication as `failed` would erase the difference
+        // between a declined candidate and a broken dependency.
+        return this.fail(
+          request.season,
+          existing,
+          startedAt,
+          publication.reason ?? 'snapshot-publication-failure',
+          plan,
+          metricsBefore,
+          publication.status,
+        );
+      }
       const completedAt = this.clock.now().toISOString();
       const nextState: SyncState = {
         ...existing,
@@ -276,16 +364,26 @@ export class SynchronizationService {
         providerCallCount: accounting.providerCallCount,
         providerOperationCallCount: accounting.providerRequests.operation.total,
         providerCallsBySource: totalsBySource(accounting.operationMetrics),
+        // Bounded, and reported for an applied publication only: a committed
+        // release whose post-commit `previous` maintenance failed **is**
+        // serving, so the run completed - but its rollback target is stale and
+        // an operator has to see that without reading storage.
+        ...(publication.status === 'applied'
+          ? { pointerMaintenance: publication.pointerMaintenance }
+          : {}),
       });
+      // A failed publication and an integrity rejection both returned above, so
+      // everything reaching here either committed (`applied`) or is a benign
+      // no-op (`skipped`, or a `rejected` older-source candidate) that leaves
+      // the prior release serving without failing the run.
       return {
-        status: publication.status === 'failed' ? 'failed' : 'completed',
+        status: 'completed',
         season: request.season,
         dueJobs: plan.dueJobs,
         skippedJobs: plan.skippedJobs,
         publicationStatus: publication.status,
         releaseVersion: publication.version,
-        failureCategory:
-          publication.status === 'failed' ? publication.reason : null,
+        failureCategory: null,
         ...resultAccounting(accounting),
       };
     } catch {
@@ -358,6 +456,15 @@ export class SynchronizationService {
     await this.storage.setQuotaState(sourceId, next);
   }
 
+  /**
+   * Records a failed run.
+   *
+   * `publicationStatus` defaults to `failed` because most failures never reach
+   * the publisher at all. A caller passes the publisher's own status when the
+   * publisher did answer - an integrity rejection is a failed run whose
+   * publication was `rejected`, and collapsing the two would lose the
+   * difference between a declined candidate and a broken dependency.
+   */
   private async fail(
     season: number,
     existing: SyncState,
@@ -365,6 +472,7 @@ export class SynchronizationService {
     category: string,
     plan: { dueJobs: SyncJobCategory[]; skippedJobs: SyncJobCategory[] },
     metricsBefore: ProviderRequestMetrics,
+    publicationStatus = 'failed',
   ): Promise<SyncResult> {
     const failedAt = this.clock.now().toISOString();
     await this.storage.setSyncState(season, {
@@ -373,7 +481,7 @@ export class SynchronizationService {
       lastFailedAt: failedAt,
       lastFailureCategory: category,
       lastSkippedJobs: plan.skippedJobs,
-      lastPublicationStatus: 'failed',
+      lastPublicationStatus: publicationStatus,
       lastFailureByJob: markJobs(
         existing.lastFailureByJob,
         plan.dueJobs,
@@ -395,7 +503,7 @@ export class SynchronizationService {
       season,
       dueJobs: plan.dueJobs,
       skippedJobs: plan.skippedJobs,
-      publicationStatus: 'failed',
+      publicationStatus,
       releaseVersion: null,
       failureCategory: category,
       ...resultAccounting(accounting),

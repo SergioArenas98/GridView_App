@@ -39,8 +39,10 @@ const rejectingValidator: SnapshotValidator = {
 
 /**
  * Throws during cache purge, which the publisher runs *outside* its internal
- * storage try. This is the genuine post-fetch exception path: the provider
- * fetch already succeeded, and something on GridView's side then threw.
+ * storage try. It runs *after* the active pointer has moved, so it can no
+ * longer fail a publication - the release is already serving. It is kept here
+ * to pin exactly that: a purge explosion is a completed synchronization with a
+ * bounded cache warning, never a synchronization failure.
  */
 const throwingPurger: CachePurgeAdapter = {
   purgePublicUrls: () => {
@@ -113,9 +115,12 @@ describe('post-fetch failures never rewrite provider accounting', () => {
     const later = createHarness();
     later.env.__LOCAL_STORAGE = seed.storage;
     later.env.__CLOCK = { now: () => new Date('2026-07-21T14:00:00.000Z') };
-    later.env.__CACHE_PURGER = throwingPurger;
+    // A pre-commit storage write failure: publication cannot reach the active
+    // pointer, so the synchronization genuinely failed on GridView's side.
+    seed.storage.setWriteFailure((key) => key.includes(':calendar'));
 
     const body = await fullSync(later);
+    seed.storage.setWriteFailure(null);
     const quota = await seed.storage.getQuotaState('mock');
 
     // Provider side: exactly one success, zero failures.
@@ -133,12 +138,16 @@ describe('post-fetch failures never rewrite provider accounting', () => {
     expect(quota?.warningLevel).not.toBe('critical');
     // The synchronization still failed, attributed to GridView, not the source.
     expect(body.data.status).toBe('failed');
-    expect(body.data.failureCategory).toBe('snapshot-publication-failure');
+    // The publisher now contains the failure and reports its own bounded
+    // reason, which is more precise than the generic post-fetch category and
+    // still a closed value. What matters is that it is a GridView-side
+    // category, never a provider one.
+    expect(body.data.failureCategory).toBe('storage-write');
     expect(body.data.failureCategory).not.toBe('mock-provider-failure');
     expect(body.data.failureCategory).not.toBe('provider-rate-limited');
     const syncState = await seed.storage.getSyncState(2026);
     expect(syncState?.lastFailedAt).toBeTypeOf('string');
-    expect(syncState?.lastFailureCategory).toBe('snapshot-publication-failure');
+    expect(syncState?.lastFailureCategory).toBe('storage-write');
     // The internal exception body never reaches the response or the logs.
     expect(JSON.stringify(body)).not.toContain('sensitive detail');
     expect(later.logger.serialized()).not.toContain('sensitive detail');
@@ -192,11 +201,13 @@ describe('post-fetch failures never rewrite provider accounting', () => {
     expect(await seed.storage.getActiveVersion(2026)).toBe(active);
   });
 
-  it('preserves the existing semantics of an ordinary rejected publication', async () => {
+  it('records no provider failure for a rejected publication', async () => {
     // A rejecting validator makes publish() return a non-throwing rejection.
-    // How `rejected` maps to the synchronization status is pre-existing
-    // behaviour and deliberately unchanged here; what this correction requires
-    // is that no provider failure is recorded for it.
+    // A contract-validation refusal now fails the synchronization run, because
+    // the season is not in the state the run was asked to produce - but it is a
+    // GridView-side refusal, so no provider failure may be recorded for it and
+    // the publication's own `rejected` status stays distinguishable from a
+    // broken dependency.
     const harness = createHarness({ validator: rejectingValidator });
 
     const body = await fullSync(harness);
@@ -209,6 +220,8 @@ describe('post-fetch failures never rewrite provider accounting', () => {
       rateLimited: 0,
     });
     expect(body.data.publicationStatus).toBe('rejected');
+    expect(body.data.status).toBe('failed');
+    expect(body.data.failureCategory).toBe('contract-validation');
     expect(quota?.lastProviderSuccessAt).toBe('2026-07-20T12:00:00.000Z');
     expect(quota?.lastProviderFailureAt).toBeNull();
     expect(await harness.storage.getActiveVersion(2026)).toBeNull();
@@ -235,6 +248,30 @@ describe('post-fetch failures never rewrite provider accounting', () => {
   });
 });
 
+describe('a post-commit purge explosion does not fail the synchronization', () => {
+  it('reports a completed run because the release is already serving', async () => {
+    const seed = createHarness();
+    await seedPublishedSnapshot(seed);
+    const before = await seed.storage.getActiveVersion(2026);
+
+    const later = createHarness();
+    later.env.__LOCAL_STORAGE = seed.storage;
+    later.env.__CLOCK = { now: () => new Date('2026-07-21T14:00:00.000Z') };
+    later.env.__CACHE_PURGER = throwingPurger;
+
+    const body = await fullSync(later);
+
+    // The active pointer moved, so the publication committed. Calling this a
+    // `snapshot-publication-failure` would claim the old release still serves.
+    expect(body.data.status).toBe('completed');
+    expect(body.data.publicationStatus).toBe('applied');
+    expect(await seed.storage.getActiveVersion(2026)).not.toBe(before);
+    // The injected detail never reaches a log line or the response.
+    expect(later.logger.serialized()).not.toContain('sensitive detail');
+    expect(JSON.stringify(body)).not.toContain('sensitive detail');
+  });
+});
+
 describe('telemetry agrees across logs, quota and the admin result', () => {
   it('reports the same counts and source in the log line and the response', async () => {
     const seed = createHarness();
@@ -243,8 +280,9 @@ describe('telemetry agrees across logs, quota and the admin result', () => {
     const later = createHarness();
     later.env.__LOCAL_STORAGE = seed.storage;
     later.env.__CLOCK = { now: () => new Date('2026-07-21T14:00:00.000Z') };
-    later.env.__CACHE_PURGER = throwingPurger;
+    seed.storage.setWriteFailure((key) => key.includes(':calendar'));
     const body = await fullSync(later);
+    seed.storage.setWriteFailure(null);
 
     const failed = later.logger.events.find(
       (event) => event.operation === 'sync.failed',

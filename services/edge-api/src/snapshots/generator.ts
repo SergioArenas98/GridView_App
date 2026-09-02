@@ -205,44 +205,6 @@ export function generateSnapshotSet(
   };
 }
 
-export function requiredDocumentNames(
-  source: ProviderSeasonSource,
-): SnapshotDocumentName[] {
-  return generateRequiredDocumentNames(
-    source.calendar.map((event) => event.round),
-    source.drivers.map((driver) => driver.id),
-    source.constructors.map((constructor) => constructor.id),
-    source.circuits.map((circuit) => circuit.id),
-  );
-}
-
-export function generateRequiredDocumentNames(
-  rounds: number[],
-  driverIds: string[],
-  constructorIds: string[],
-  circuitIds: string[],
-): SnapshotDocumentName[] {
-  return [
-    'season',
-    'bootstrap',
-    'home',
-    'calendar',
-    'drivers',
-    'constructors',
-    'circuits',
-    'standings:drivers',
-    'standings:constructors',
-    'content:manifest',
-    ...rounds.flatMap((round) => [
-      `grand-prix:${round}` as const,
-      `grand-prix:${round}:results` as const,
-    ]),
-    ...driverIds.map((id) => `driver:${id}` as const),
-    ...constructorIds.map((id) => `constructor:${id}` as const),
-    ...circuitIds.map((id) => `circuit:${id}` as const),
-  ];
-}
-
 function seasonData(source: ProviderSeasonSource): Season {
   const rounds = source.calendar.map((event) => event.round);
   const dates = source.calendar

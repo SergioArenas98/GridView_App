@@ -36,3 +36,4 @@ GridView reconstruction.
 | [0020](0020-provider-source-observation-and-reconciliation.md) | Source observation, reconciled ordering and the settling design | Accepted |
 | [0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md) | Hardened outbound provider boundary and Durable Object rate limiter | Accepted |
 | [0022](0022-curated-provider-identifier-mappings.md) | Curated provider-identifier mapping registry | Accepted |
+| [0023](0023-multi-source-provider-coordination.md) | Multi-source provider coordination | Accepted |

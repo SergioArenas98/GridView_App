@@ -41,6 +41,18 @@ Document names mirror public resources: `bootstrap`, `home`, `season`,
 `calendar`, `grand-prix:{round}`, `grand-prix:{round}:results`, collections,
 standings, detail documents and `content:manifest`.
 
+Each version additionally stores its **exact document inventory** under its own
+snapshot prefix:
+
+```text
+snapshot:{season}:{version}:__inventory
+```
+
+The suffix is deliberately not a `SnapshotDocumentName`. That union is closed,
+so the inventory can never be requested through `readVersionedDocument`, can
+never be mapped to a public URL, and is removed with the version by
+`deleteUnpublishedVersion`.
+
 ## Publication Algorithm
 
 1. Generate a unique immutable release version.
@@ -48,16 +60,131 @@ standings, detail documents and `content:manifest`.
 3. Generate every required public document for the release.
 4. Validate each generated document before any pointer change.
 5. Write every versioned document under the release version.
-6. Read back the required set to verify completeness.
-7. Preserve the current active version as `previous:{season}`.
+6. Record the exact inventory of what was generated.
+7. Read back that inventory to verify completeness.
 8. Update content/current-season metadata.
-9. Write `active:{season}` last.
-10. Purge only affected public URLs through the cache-purge abstraction.
+9. Write `active:{season}` last. **This is the commit point.**
+10. Record the outgoing version as `previous:{season}`, after the commit.
+11. Purge every affected public URL - each document's canonical numeric URL,
+    plus the current-season aliases when the affected season is current -
+    through the cache-purge abstraction. The affected documents are the union
+    of the incoming version's inventory and the replaced version's, so a route
+    the new release withdraws is invalidated too.
 
 If validation, provider fetch or pre-activation storage writes fail, the active
 pointer is unchanged. Repeating publication of the already active immutable
-version is treated as idempotent. A generated release whose `sourceUpdatedAt` is
+version is treated as idempotent, and its completeness is decided over that
+version's own recorded inventory. A generated release whose `sourceUpdatedAt` is
 older than the active release is rejected.
+
+### Exact per-version inventory
+
+Completeness and cache invalidation are decided over the sorted, deduplicated
+set of document names generation actually produced - never reconstructed from
+the collection documents.
+
+The two sets are not the same. `circuits`, `drivers` and `constructors` are
+derived from the calendar and from the season entry lists, while the matching
+detail documents are generated from the registries, so a circuit with no
+calendar event or a registry driver with no season entry is generated and stored
+while appearing in no collection. The shipped curated content already contains
+one such circuit. Reconstruction therefore under-reports what a version holds,
+which silently accepts an incomplete rollback target and silently skips a public
+route during invalidation.
+
+A version is complete when:
+
+- every inventoried document exists;
+- every required season-level document is inventoried;
+- every calendar event has its detail document; and
+- every event advertising `hasResults: true` has its results document.
+
+A generated optional `unavailable` classification is inventoried, so its absence
+means a corrupted version. A classification generation never produced is never
+inventoried, so an ordinary in-season release remains a valid rollback target.
+Nothing is fabricated into an inventory.
+
+A version carrying **no** inventory fails closed: it is rejected as a rollback
+target with `missing-version-inventory` rather than falling back to the
+collection heuristic. No deployed coordinated snapshot depends on this
+compatibility path.
+
+#### One validated boundary for persisted inventories
+
+A stored inventory is **deserialized data, not a typed value**. The storage
+signature declares `SnapshotDocumentName[] | null`, but that describes what a
+correct write produces, not what a read returns: KV hands back whatever JSON the
+key holds, so a truncated write, a hand-edited entry or a partially rolled-back
+migration can deserialize to a number, a string, an object or an array carrying
+a non-string - all valid JSON, none of them an inventory.
+
+Every consumer downstream assumes an array of strings. The route mapper calls
+`startsWith` on each entry, the purge builders spread the list, and the
+completeness check iterates it; spreading a number throws and `startsWith` on a
+number throws, neither inside the guarded purge-adapter call.
+
+`src/publication/version-inventory.ts` is therefore the **single** point at
+which a persisted inventory is validated, and every reader passes through it -
+the replaced-version read, the outgoing-current-season alias read, both rollback
+reads, the operator purge read and the completeness check. There is no second
+shape test anywhere else, and no route knowledge is duplicated: the boundary
+accepts an array of strings and stops there, because an unrecognised document
+name maps to no canonical path and no alias and is therefore inert, while a
+non-string is exactly what throws.
+
+It returns a four-valued discriminated result, because *absent*, *malformed* and
+*unreadable* are three different facts and only the calling phase knows which
+bounded outcome each maps to:
+
+| Value        | Meaning                                                        |
+| ------------ | -------------------------------------------------------------- |
+| `documents`  | A validated list, safe to spread, map to routes and alias       |
+| `absent`     | The key holds `null` - a version predating exact inventories    |
+| `malformed`  | The key holds something that is not a list of document names    |
+| `unreadable` | The read itself failed; nothing at all is known about the version |
+
+#### Phase-specific behaviour for a malformed inventory
+
+The phase that discovers a malformed inventory decides the outcome, and the
+commit point is the dividing line:
+
+| Where it is discovered                             | Outcome                                                        |
+| -------------------------------------------------- | -------------------------------------------------------------- |
+| Rollback target, pre-commit                        | `rejected`, `missing-version-inventory`; pointer unchanged       |
+| Rollback outgoing active version, pre-commit       | `rejected`, `missing-version-inventory`; pointer unchanged       |
+| Replaced same-season version, post-commit purge    | `applied`, `cachePurge: 'failed'`, `cache-purge-failed`          |
+| Outgoing current-season aliases, post-commit purge | `applied`, `cachePurge: 'failed'`, `cache-purge-failed`          |
+| Operator purge of the active version               | Bounded `207`, `missing-version-inventory`, no URLs purged       |
+| Completeness check of a republished active version | `rejected`, `active-version-incomplete`                          |
+
+A malformed inventory never escapes as a rejected promise, never un-publishes a
+committed release, and never adds a status or reason to the closed vocabulary.
+`absent` keeps its established meanings unchanged: a rollback *target* with no
+inventory is still rejected with `missing-version-inventory`, and an *outgoing*
+version with no inventory still contributes nothing to the rollback purge union
+rather than blocking the recovery.
+
+### Pointer transitions
+
+`active:{season}` is the commit point and the last write that decides what
+serves. `previous:{season}` is written **after** it.
+
+Writing `previous` first means a failed commit overwrites the one version a
+default rollback can reach with the version that is still serving: the release
+did not change, but the recovery path from it was destroyed. Ordering the two
+writes this way makes that impossible.
+
+| Phase                              | Outcome on failure                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| Any pre-commit read or write       | `failed`; both pointers unchanged; nothing purged                            |
+| Active-pointer commit              | `failed`, `storage-write`; both pointers unchanged; nothing purged           |
+| Post-commit `previous` maintenance | `applied` with `pointerMaintenance: 'failed'`; the required purge still runs |
+| Post-commit cache purge            | `applied` with `cachePurge: 'failed'`                                        |
+
+`pointerMaintenance` and `cachePurge` are independent bounded dispositions. The
+single `reason` field reports the maintenance failure first when both occurred,
+because a stale `previous` silently removes the recovery path while a stale
+cache is visible and self-correcting.
 
 That comparison stays well defined once the sources publish no recency signal:
 `sourceUpdatedAt` then carries GridView's first observation of the currently
@@ -80,9 +207,147 @@ operational event (ADR 0020 D1.11a).
 ## Rollback
 
 Rollback resolves the target version from the request body or `previous:{season}`.
-It verifies that the target release has the required document set before writing
+It verifies the target against that version's exact inventory before writing
 `active:{season}`. Cache purge failure is reported but does not undo the pointer
 change.
+
+**A rollback whose target is already active is a bounded no-op**: `skipped` with
+reason `idempotent`, mapped to HTTP `200`. It writes no pointer, purges nothing
+and preserves the existing rollback target. Reporting a transition that did not
+happen - and overwriting `previous` while doing it - is precisely how the
+recovery path is lost.
+
+**Every expected operational failure returns a bounded result rather than
+throwing.** Rollback is the recovery path, so a caller reaching for it during an
+outage must still be told which side of the commit point the attempt ended on:
+
+| Situation                                  | Result                                              |
+| ------------------------------------------ | --------------------------------------------------- |
+| Storage read before the commit fails       | `failed`, `storage-read`; both pointers unchanged    |
+| Target carries no or a malformed inventory | `rejected`, `missing-version-inventory`              |
+| Outgoing version has a malformed inventory | `rejected`, `missing-version-inventory`              |
+| Target inventory is empty                  | `rejected`, `rollback-target-missing`                |
+| Target is missing an inventoried document  | `rejected`, `rollback-target-incomplete`             |
+| Active-pointer commit fails                | `failed`, `storage-write`; both pointers unchanged   |
+| Post-commit `previous` maintenance fails   | `applied`, `pointerMaintenance: 'failed'`            |
+| Post-commit purge fails, throws or rejects | `applied`, `cachePurge: 'failed'`                    |
+
+No raw storage message reaches a response or a log line; only the bounded phase
+and category are recorded.
+
+### Cache invalidation covers every accepted URL alias
+
+Numeric-season URLs stay canonical, and the public router keeps serving the
+`current` and omitted-season forms exactly as before. Nothing about routing,
+cache keys, TTLs or the OpenAPI contract changes; what changed is only which
+URLs an invalidation covers.
+
+A CDN keys on the request URL, and the router accepts the same document under
+more than one. `season` may be omitted - `params.ts` defaults it to `current` -
+or given explicitly as `current`, and `/v1/seasons/current` is matched as its
+own path. Those are separate cache entries, so purging only
+`/v1/bootstrap?season=2026` left `/v1/bootstrap` and
+`/v1/bootstrap?season=current` serving the withdrawn release until their TTL
+expired - an hour for a profile route.
+
+When the affected season is the current one, invalidation therefore expands to
+every alias the router accepts for the affected documents:
+
+| Document                                    | Canonical URL                    | Current-season aliases                                                  |
+| ------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------- |
+| `bootstrap`                                 | `/v1/bootstrap?season={season}`  | `/v1/bootstrap`, `/v1/bootstrap?season=current`                          |
+| `home`                                      | `/v1/home?season={season}`       | `/v1/home`, `/v1/home?season=current`                                    |
+| `season`                                    | `/v1/seasons/{season}`           | `/v1/seasons/current`                                                    |
+| `driver:`, `constructor:`, `circuit:`       | `/v1/{kind}/{id}?season={season}`| `/v1/{kind}/{id}`, `/v1/{kind}/{id}?season=current`                      |
+| `content:manifest`                          | `/v1/content/manifest`           | none - the URL carries no season and rejects every query key             |
+| calendar, collections, standings, event routes | `/v1/seasons/{season}/...`    | none - those paths accept no query and no `current` segment              |
+
+The alias set is **derived from the route table**, not hand-maintained. There is
+no `/v1/seasons/current/calendar` or any other `current` sub-path:
+`resolveSeasonRoute` parses that segment with the four-digit season pattern, so
+those forms are rejected as invalid parameters rather than served, and purging
+one would be inventing an alias. Duplicated `season` query keys are accepted by
+the parameter guard but unbounded in number, so they are not enumerable and are
+not part of the surface.
+
+Publication, rollback and `POST /internal/admin/cache/purge` all expand through
+the **same** mechanism, so none of the three can fall back to numeric-only
+invalidation. A season known **not** to be current keeps numeric-only
+invalidation: its aliases belong to whatever season is current, and purging them
+would evict a valid entry.
+
+Current-season identity is read from the stored pointer, never inferred from a
+clock. An unreadable or unset pointer expands the aliases anyway, because
+purging an alias that was not stale costs one cache miss while skipping one that
+was leaves a withdrawn release serving.
+
+A publication that **moves** the current-season pointer also invalidates the
+alias URLs the outgoing season was being served through, taken from that
+season's own inventory - aliases only, since its numeric URLs still serve
+correct content. Most aliases are covered already, because an alias URL is
+season-independent; what this adds is a profile the outgoing season carried and
+the incoming one does not. If that inventory cannot be read the surface is not
+enumerable, and the purge reports `cachePurge: 'failed'` rather than claiming a
+success that leaves a withdrawn profile serving. That remains post-commit and
+never reverts the pointer.
+
+### Cache invalidation of withdrawn routes
+
+Replacing a version in the same season purges the **union** of the incoming
+version's inventory and the replaced version's exact inventory, plus the
+season-wide routes derived from the active pointer. A route the new release
+drops - a driver who left the grid, a cancelled round, results reclassified as
+absent - is named by no other set: the origin stops answering it as soon as
+`active:{season}` moves, while the CDN keeps the withdrawn body for the rest of
+its TTL. The union goes through the same route expansion as everything else, so
+a withdrawn route on the current season is invalidated at its canonical numeric
+URL and at both of its aliases, and a historical season keeps numeric-only
+invalidation.
+
+The ten base documents cannot be withdrawn. A version missing one of them is
+`incomplete` and rejected before the commit point, so the withdrawable families
+are exactly the driver, constructor and circuit profiles and the Grand Prix
+detail and results routes - including a results document withdrawn while its
+round is retained.
+
+This is **not** the cross-season case. A season that stops being current keeps
+its own active version, so only its aliases are invalidated; a season whose
+active version is replaced has every dropped route go stale, canonical URLs
+included. The replaced version's inventory is read before the commit block,
+while that version is still the one serving.
+
+A season with no active version has withdrawn nothing: that is an ordinary
+first publication, not a fault. An existing version whose inventory is missing,
+malformed or unreadable is a different fact - the withdrawn surface cannot be
+enumerated at all - and the purge reports `cachePurge: 'failed'` rather than
+reading it as empty and claiming a success it cannot stand behind. Like every
+other post-commit outcome it never reverts the committed pointer, and it never
+turns an applied publication into a failed one.
+
+### Cache invalidation on rollback
+
+The purge set is the **union** of the outgoing active version's and the target
+version's exact inventories mapped to public routes, plus the season-wide routes
+whose representation depends on the active pointer. It is not gated on
+`hasResults`: a round's results URL is purged whenever either version carries
+it, because otherwise a classification cached from the newer version keeps being
+served at a URL the rollback restored to a meaningful absence.
+
+The union covers orphan profile details, added and removed profiles, and rounds
+present in only one of the two calendars. It is deduplicated and sorted
+deterministically, and one rollback issues exactly one purge request, after the
+commit. An outgoing active version carrying no inventory contributes nothing to
+the union rather than blocking the recovery it is being rolled back from. One
+carrying a *malformed* inventory is a different fact and refuses the rollback
+pre-commit with `missing-version-inventory`, because moving the pointer over a
+surface that cannot be described would silently drop every route only that
+version carried.
+
+`POST /internal/admin/cache/purge` uses the same exact inventory and the same
+route expansion for the **active** version, so an operator purge covers the
+whole active release, aliases included. It moves no pointer and writes nothing;
+with no active version, or with an inventory that is missing, malformed or
+unreadable, it returns a bounded `207` rather than throwing.
 
 ## KV Consistency Boundary
 

@@ -1083,19 +1083,32 @@ To avoid mixed snapshots during updates:
 1. Generate all documents using a new release version.
 2. Validate all documents.
 3. Write versioned keys.
-4. Update a small active-version pointer last.
-5. Public reads resolve through the active version.
-6. Retain the previous version for rollback.
+4. Record the version's exact document inventory.
+5. Verify completeness against that inventory.
+6. Update a small active-version pointer last. This is the commit point.
+7. Public reads resolve through the active version.
+8. Record the outgoing version as the rollback target, after the commit.
 
 Example:
 
 ```text
 snapshot:2026:20260717T180000Z:calendar
 snapshot:2026:20260717T180000Z:standings:drivers
+snapshot:2026:20260717T180000Z:__inventory
 active:2026 -> 20260717T180000Z
+previous:2026 -> 20260717T060000Z
 ```
 
 This avoids exposing half-updated data if synchronization fails midway.
+
+Completeness, rollback eligibility and cache invalidation are all decided over
+the exact inventory, never reconstructed from the collection documents: the
+collections are derived from the calendar and the season entry lists while the
+detail documents are generated from the registries, so a version legitimately
+carries documents no collection names. Writing the active pointer as the commit
+point, and the previous pointer only after it, is what keeps a failed
+publication from destroying the recovery path. Full detail is in
+[GridView_Backend_Publication.md](GridView_Backend_Publication.md).
 
 ---
 
@@ -1129,6 +1142,104 @@ The handler:
    there are none to record; limits are tracked against each project's published
    figures instead.
 10. Logs success or failure.
+
+> **The multi-source coordination seam exists as of Phase 9B-4**
+> ([ADR 0023](../adr/0023-multi-source-provider-coordination.md)), which closes
+> gap **G4**. Steps 4 to 8 are no longer expressible as one whole-season
+> provider call. A coordinator above the adapters executes an explicit plan of
+> **individual logical resources**, drives one **independent port per source**,
+> and returns typed per-resource outcomes with complete partial-success and
+> partial-failure semantics. Jolpica is the `reconciled` source and OpenF1 the
+> `provisional` one; selection consults the declared source role and the typed
+> resource identity and nothing else, so provisional data can never overwrite
+> reconciled data.
+>
+> **It is dormant.** No adapter exists, so no port is registered anywhere; the
+> mock provider still serves the synchronization path unchanged, and
+> `PROVIDER_MODE` still admits exactly `mock` and `none`. The coordinator never
+> publishes and never writes an active pointer: publication stays all-or-nothing
+> through the existing publisher (§13.1), and a partial coordination run is
+> withheld with a bounded reason rather than replacing a complete active
+> release.
+>
+> **An answered outcome is the coordinator's own normalized copy.** The instant
+> an adapter's answer crosses the coordination boundary it is parsed rather than
+> merely validated: its shape is closed against the variant it declares, each
+> declared field is taken **once** through a property descriptor - so an
+> inherited or accessor-backed field is refused rather than invoked - the values
+> taken are what get validated, and a candidate's payload is detached. Resource
+> binding is evaluated against that detached payload, and the same value is what
+> is stored in the contribution, selected, assembled and published. Everything
+> downstream - transport deduplication, request accounting, classification,
+> selection and every log line - reads the copy, so an adapter that keeps and
+> mutates the object it returned, refills one object for its next request, or
+> answers through a stateful accessor cannot change what its answer means. In
+> particular a retry hint reaches `providerRetryAt` / `providerRetryAfter` only
+> as a validated absolute instant, so no provider-controlled string can occupy a
+> logged field.
+>
+> The whole outcome is deliberately **not** structured-cloned: cloning discards
+> symbol-keyed and non-enumerable properties, which is exactly what shape closure
+> exists to see, and would launder a malformed answer into a clean one.
+>
+> A malformed **shape** supports no claim at all, including any attempt it
+> appeared to carry, so nothing about it is counted. A valid outcome whose
+> **payload** cannot be detached is a different fact and is contained as the
+> existing bounded `malformed-outcome` contribution: it is never selected, never
+> assembles and never publishes, while the request that really occurred stays
+> accounted exactly once as the attempt it was.
+>
+> **A session is bound to the calendar event it is filed under.** A session
+> identity is derived from its parent (`{grandPrixId}-{sessionType}`,
+> GridView_Domain_Model.md §6), so the referential preflight requires every
+> session attached to an event to carry that event's own canonical identity for
+> its session type. A refreshed event schedule replaces a round's sessions
+> wholesale, and the schedule resource names only a season and a round, so this
+> is the first point at which the event and its sessions are both in hand. It is
+> a **separate check from duplicate identity**: sessions borrowed from another
+> calendar event collide on the stored primary key, but sessions borrowed from an
+> event that is not in the calendar are unique and collide with nothing. Nothing
+> is rewritten or inferred; a mismatch withholds the whole candidate as
+> `inconsistent-references` with the bounded relation `session-event`.
+>
+> **A classification is bound to the session it is filed under.** The same rule
+> applies one level down: a race result's identity is derived from its parent
+> session (`{grandPrixId}-{sessionType}-results`, GridView_Domain_Model.md §4.2
+> and §6.11), so the preflight requires every classification to carry its own
+> parent's canonical identity, built by the same shared constructor family
+> (`canonicalRaceResultId`). A `session-classification` resource names a season,
+> a round and a session type and has no event identity to check the `id`
+> against, so the preflight - where the result, its parent event and the
+> assembled season are all in hand - is the first point at which this can be
+> decided. It is a **separate check from both** `result-event`, which a
+> mis-identified result satisfies because `grandPrixId` is correct, **and**
+> duplicate identity, because two results carrying two different arbitrary ids
+> collide with nothing. Nothing is rewritten, coerced or repaired; a mismatch
+> withholds the whole candidate as `inconsistent-references` with the bounded
+> relation `result-identity`, and no provider-controlled identifier reaches the
+> diagnostic.
+>
+> Event-aware scheduling (**G5**) and persisted provenance or
+> provisional/reconciled record state (**G9**) remain open, and the coordinator
+> implements neither. **Deep normalized-contract validation also remains
+> open**: the runtime snapshot validator is structural - metadata, required
+> top-level document shape and provider neutrality - and per-field contract
+> validation is an adapter responsibility that gates registering a real
+> adapter at all (ADR 0023 D14). The normalized outcome is an aliasing and
+> time-of-check/time-of-use guarantee, and the session-to-event and
+> classification-to-session relations are two declared identity rules; none of
+> them closes that gate, and none of them activates **G4**. The same is true of
+> the validated boundary for persisted version inventories
+> (`GridView_Backend_Publication.md`): it contains malformed stored data inside
+> the existing bounded publication vocabulary and asserts nothing about provider
+> payload contents.
+>
+> A publication the publisher **rejects** is not automatically a successful
+> run. Only a candidate older than what is already serving is a benign
+> completed no-op; a contract-validation refusal, an incomplete active version
+> and every other integrity refusal fail the synchronization, so a season that
+> cannot be published cannot look healthy until the next cadence
+> ([GridView_Backend_Operations.md](GridView_Backend_Operations.md)).
 
 ### 14.2 No public sync endpoint
 
@@ -1675,6 +1786,21 @@ Never logged: request or response bodies, full URLs, query strings,
 provider-controlled messages, headers, the `User-Agent`, authorization
 material, raw exception messages, stack traces, or Durable Object storage keys
 and object ids.
+
+**Coordination events (Phase 9B-4,
+[ADR 0023](../adr/0023-multi-source-provider-coordination.md)).** Three bounded
+structured events exist: one source's contribution to one resource, the
+coordinated selection for one resource, and the run summary.
+
+Permitted fields are only: operation, season, canonical source id, declared
+source role, coordinated resource kind, job category, contribution or run
+status, selection outcome, whether a request was attempted, a closed failure
+reason, an already-validated `retryAt` or `retryAfter`, and integer counts.
+
+Never logged: provider payloads, public snapshot bodies, entity identities,
+transport references, raw exceptions — or the Phase 9B-3 mapping-failure
+detail, which the mapping boundary raises itself and which is never duplicated
+here.
 
 ### 24.2 Metrics
 

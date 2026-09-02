@@ -103,8 +103,11 @@ describe('snapshot publication', () => {
 
     const rollback = await context.publisher.rollback(2026, 'missing');
 
+    // A version that was never published records no inventory, so nothing may
+    // be derived about it at all - which is a stricter and more precise
+    // refusal than "it holds no documents".
     expect(rollback.status).toBe('rejected');
-    expect(rollback.reason).toBe('rollback-target-missing');
+    expect(rollback.reason).toBe('missing-version-inventory');
     expect(await context.storage.getActiveVersion(2026)).toBe('v1');
   });
 });
