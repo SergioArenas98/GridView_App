@@ -1262,12 +1262,17 @@ requirements tracked in
 
 **Phase 9 has started. Phase 9A is complete and merged** (PR #7, merge commit
 `b233da4`), **and its post-merge CI is green. Phase 9B implementation has
-started**: Phase 9B-1 (2026-08-23) closed **G6** and **G10 / G-k**, and
-Phase 9B-2 (2026-08-23) closed **G7** and **G-f**. Everything else remains
-open: **no adapter, coordinator, event-aware scheduler, mapping registry,
+started**: Phase 9B-1 (2026-08-23) closed **G6** and **G10 / G-k**,
+Phase 9B-2 (2026-08-23) closed **G7** and **G-f**, Phase 9B-3 (2026-08-25)
+closed **G8 / G-e**, Phase 9B-4 (2026-08-26) closed **G4 / G-c**, and
+Phase 9B-5 (2026-09-02) closed **deep normalized-contract validation** - the
+[ADR 0023](../adr/0023-multi-source-provider-coordination.md) D14 activation
+gate - together with the deferred **F3**, **F4** and **F5** referential
+findings. Everything else remains open: **no adapter, event-aware scheduler,
 reconciliation or provenance state machine, live provider mode, production cron
-or provider request exists**, and no provider request has ever been made. `PROVIDER_MODE` still admits exactly `mock | none` and
-production remains `"none"`. See §14.0 and §14.0.5.
+or provider request exists**, and no provider request has ever been made.
+`PROVIDER_MODE` still admits exactly `mock | none` and production remains
+`"none"`. See §14.0 and §14.0.5-§14.0.9.
 
 ## 14.0 Phase 9A status
 
@@ -1561,6 +1566,38 @@ Real multi-source synchronization is not operating, has never run, and cannot
 run until an adapter exists. Nothing here authorizes a live provider mode, a
 cron trigger, a deployment, production synchronization or public release.
 
+### 14.0.9 Phase 9B-5 status - deep normalized-contract validation
+
+Implemented on **2026-09-02**. Worker code, tests and documentation only: **no
+provider was contacted, no request was made or made possible, and nothing was
+provisioned or deployed.**
+
+| Item | Status |
+|---|---|
+| **Deep normalized-contract validation** | **Implemented as a mechanism**, closing the [ADR 0023](../adr/0023-multi-source-provider-coordination.md) D14 activation gate ([ADR 0024](../adr/0024-deep-normalized-contract-validation.md)). `src/contract/normalized/` validates a normalized value field by field - property presence, exact primitive types, integer versus general number, finiteness, identifier grammar, patterned strings, enumerated vocabularies, calendar dates, RFC 3339 date-times, absolute URLs, array elements and nested objects - over every entity the seven `CoordinatedPayload` variants carry. |
+| Authority | **Explicit and ordered.** `src/contract/types.ts` decides which properties exist (declared without `?` means present; absent optionals are represented as `null`, and only `MediaVariants` declares optional keys). `docs/api/gridview-api-v1.yaml` decides what values may be; its `required` list is the floor a *consumer* may rely on, not a licence for a producer to omit a declared property. |
+| Bounds | **Only what the contract states.** `position >= 1`, `round >= 1` and the season range are enforced. No sign or range rule is invented for wins, podiums, laps, lengths, corner counts, coordinates, aspect ratios, durations, gaps or points, and tests pin those as accepted. |
+| Unknown properties | **Refused**, including symbol-keyed and non-enumerable own keys. This is the producing direction and does not contradict the tolerant-consumer posture: `snapshots/generator.ts` carries a normalized entity into `driver:{id}`, `constructor:{id}`, `circuit:{id}`, `grand-prix:{round}`, `grand-prix:{round}:results`, `standings:*`, `home` and `bootstrap` **verbatim**, so an undeclared property is provider-controlled content published unexamined. Both consumer-tolerance fixtures are asserted to be *refused* by the producing rule, so the distinction is pinned rather than assumed. `unknown` stays a valid enum member - it is what an adapter must normalize an unrecognised token into - while the raw token is refused. |
+| Where it runs | **The coordination boundary**, after outcome normalization, after payload detachment and after resource binding, on the same detached snapshot that is later selected, assembled and published. Publication is deliberately not the place: a document reaching the publisher was already assembled from candidates. `RuntimeSnapshotValidator` keeps its existing structural scope **unchanged**. |
+| Failure containment | The **existing** `invalid-payload` attempted-failure contribution. No new reason, status or vocabulary. The contribution stays `attempted`, the transport is counted exactly once, the payload is never selected, assembled or published, a healthy fallback still carries the resource, an independent resource is unaffected, and the run is not tainted. |
+| Redaction | An issue says **where** and **what kind**, never **what**. Structural paths and closed codes only - no value, no key name, no upstream token - and the issue list reaches neither a contribution nor a log line. |
+| Hostile input | **Contained, never executed.** Accessor-backed, inherited, prototype-polluted, symbol-keyed, non-enumerable, sparse-array and throwing-proxy cases all answer bounded issues rather than throwing. Every declared field is read once through the shared `ownDataProperty` discipline, which moved to `src/runtime/` so the contract validator and the coordination package can share one implementation without either depending on the other. |
+| Bounds on traversal | A documented collection cap and issue cap, both an order of magnitude above real season data. **No depth limit is invented**: the schema is finite and non-recursive, so traversal depth is bounded statically. |
+| **F3 / F4 / F5** | **Closed**, and recorded in the repository rather than only in PR #12's discussion. Three independent relations join the closed `seasonRelations` vocabulary: `event-identity` (`calendar[].id` must equal `{season}-{eventSlug}`), `constructor-entry-identity` (`{season}-{constructorId}`) and `driver-entry-span` (no inverted or overlapping participation spans, mirroring `CompetitorDao._validateDriverSpans()` including its null-bound semantics and its treatment of touching spans). No symmetric identity relation is added for a *driver* season entry, because §6.7 appends a start round for a split seat and its identity is therefore not a strict function of the payload. |
+| Non-vacuity | The curated mock season and every production public fixture validate clean, so the gate is demonstrably openable rather than merely closed. |
+| **G1, G3, G5, G9, G-l** | **Open.** No live provider mode, no production cron, no event-aware scheduling, no persisted provenance or provisional/reconciled state, and the mapping dataset is still limited to identifiers already recorded in Provider Evaluation §8. |
+| Adapters | **Still none.** Registering a real adapter remains gated on that adapter's own normalization being correct for its source: this validator proves conformance of what an adapter produces, not that it maps its provider's semantics correctly, which is per-source work needing recorded evidence. |
+| OpenF1 | **Still fail-closed** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §5). No maximum-session-duration bound is recorded; the production policy constant is still `null`. |
+| Attribution and ShareAlike | **Still outstanding.** No per-source attribution or ShareAlike publication surface exists. |
+| Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; staging is `mock`, production is `none`. |
+
+**The seam stays dormant.** No class implements `ProviderResourcePort`, no
+production module constructs `MultiSourceCoordinator`,
+`SynchronizationService` remains on the single-provider path, the rate-limiter
+namespace remains unbound, and the existing dormancy assertions are unchanged
+and green. Nothing here authorizes a live provider mode, a cron trigger, a
+deployment, production synchronization or public release.
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in
@@ -1651,7 +1688,13 @@ another source rather than bypassing the requirement.
 - Implement the **Jolpica** adapter against the coordination port.
 - Implement the **OpenF1** adapter, fixture-tested only, behind the
   bound-or-skip gate.
-- Add runtime response validation.
+- ~~Add runtime response validation.~~ **Done in Phase 9B-5** (§14.0.9,
+  [ADR 0024](../adr/0024-deep-normalized-contract-validation.md)): an
+  authoritative per-field validator for every entity a coordinated payload
+  carries, enforced at the coordination boundary on the detached snapshot, with
+  a closed unknown-property rule, bounded redacted issues and hostile-value
+  containment. A real adapter is still responsible for **normalizing** its own
+  source correctly; this is what **verifies** the result.
 - ~~Add the **curated provider-ID mapping registry** — mandatory, because 4 of 11
   constructor names differ between the two sources
   ([GridView_Provider_Evaluation.md](GridView_Provider_Evaluation.md) §8.5).~~

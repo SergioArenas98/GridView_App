@@ -37,3 +37,4 @@ GridView reconstruction.
 | [0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md) | Hardened outbound provider boundary and Durable Object rate limiter | Accepted |
 | [0022](0022-curated-provider-identifier-mappings.md) | Curated provider-identifier mapping registry | Accepted |
 | [0023](0023-multi-source-provider-coordination.md) | Multi-source provider coordination | Accepted |
+| [0024](0024-deep-normalized-contract-validation.md) | Deep normalized-contract validation at the coordination boundary | Accepted |

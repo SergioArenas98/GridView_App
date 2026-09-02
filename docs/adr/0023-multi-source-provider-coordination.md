@@ -1134,6 +1134,21 @@ production is `none`.
 
 #### Deep normalized-contract validation is an activation gate
 
+> **Amended by [ADR 0024](0024-deep-normalized-contract-validation.md)
+> (Phase 9B-5, 2026-09-02).** The gate described below is now closed as a
+> mechanism. The authoritative per-field validator exists
+> (`src/contract/normalized/`) and runs at the **coordination boundary**, on the
+> detached snapshot, before a payload can become a candidate; a failure is the
+> existing `invalid-payload` contribution. The division of labour is refined
+> rather than reversed: an adapter still **normalizes** its own source, and the
+> coordinator now **verifies** the result, exactly as it already declines to
+> take an adapter's word on outcome shape, attempt accounting or payload
+> ownership. `RuntimeSnapshotValidator` keeps the structural scope described
+> here, unchanged. What remains gated on registering a real adapter is that
+> adapter's own per-source normalization being correct, which needs recorded
+> evidence rather than more validation code. The rest of this section describes
+> the state before that amendment and is retained for the record.
+
 `SnapshotValidator` is **not** a deep per-field OpenAPI validator, and nothing
 here should be read as claiming that it is. What `RuntimeSnapshotValidator`
 enforces today is:
