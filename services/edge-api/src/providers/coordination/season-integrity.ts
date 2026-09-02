@@ -29,9 +29,12 @@
 
 import type { ResultStatus } from '../../contract/enums';
 import {
+  canonicalConstructorSeasonEntryId,
+  canonicalGrandPrixId,
   canonicalRaceResultId,
   canonicalSessionId,
 } from '../../contract/identity';
+import type { DriverSeasonEntry } from '../../contract/types';
 import type { ProviderSeasonSource } from '../formula-one-provider';
 
 /**
@@ -45,6 +48,25 @@ import type { ProviderSeasonSource } from '../formula-one-provider';
 export const seasonRelations = [
   /** `calendar[].circuitId` must resolve. `requireOne` throws otherwise. */
   'event-circuit',
+  /**
+   * `calendar[].id` must be the event's own canonical identity.
+   *
+   * A Grand Prix edition identity is *derived* from the event
+   * (GridView_Domain_Model.md §4.2: `{season}-{eventSlug}`), so like a session
+   * or a classification identity it is a field that can contradict what it
+   * describes. Nothing upstream catches it: a `season-calendar` resource names
+   * only a season, so the coordinator's payload boundary has no event identity
+   * to check the `id` against, and an event carrying an arbitrary unique id
+   * passes `session-event` and `result-event` alike as long as its sessions and
+   * classifications consistently use that same wrong id.
+   *
+   * Deliberately separate from `duplicate-identity`, which needs two payloads
+   * to collide: two events carrying two *different* arbitrary ids collide with
+   * nothing at all, and are both wrong. The local database keys events by this
+   * `id`, so an arbitrary id and a later corrected one are two primary keys for
+   * one edition.
+   */
+  'event-identity',
   /**
    * `calendar[].sessions[].id` must be that event's own canonical identity for
    * that session type.
@@ -62,8 +84,40 @@ export const seasonRelations = [
   'driver-entry-driver',
   /** `driverEntries[].constructorId` is published verbatim on the summary. */
   'driver-entry-constructor',
+  /**
+   * A driver's participation spans must be internally consistent.
+   *
+   * Multiple entries for one driver are legitimate - mid-season participation
+   * is modelled as split spans rather than by mutating identity
+   * (GridView_Domain_Model.md §6.7) - but an *inverted* span
+   * (`startRound > endRound`) or two *overlapping* stints for the same driver
+   * are not. The local write rejects both
+   * (`CompetitorDao._validateDriverSpans()`), so publishing either fails the
+   * client's roster refresh transaction and leaves users on stale data with no
+   * server-side signal that anything went wrong.
+   *
+   * Null bounds carry the meaning the local rule gives them: a null
+   * `startRound` is the season start and a null `endRound` the season end, so
+   * neither can invert. Touching spans overlap, because the shared round would
+   * belong to both.
+   */
+  'driver-entry-span',
   /** `constructorEntries[].constructorId` must resolve. `requireOne` throws. */
   'constructor-entry-constructor',
+  /**
+   * `constructorEntries[].id` must be the entry's own canonical identity.
+   *
+   * The model defines it as exactly `{season}-{constructorId}`
+   * (GridView_Domain_Model.md §4.2), and both components are on the payload.
+   * `constructor-entry-constructor` asks only whether `constructorId` resolves,
+   * and `duplicate-identity` needs a collision, so an arbitrary unique id
+   * passes both and reaches the published constructor documents.
+   *
+   * There is no symmetric relation for a *driver* season entry: §6.7 appends a
+   * start round for a split seat, so its identity is not a strict function of
+   * the payload and demanding one would reject a correct season.
+   */
+  'constructor-entry-identity',
   /** `constructorEntries[].driverLineup[]` must resolve. `requireOne` throws. */
   'constructor-entry-lineup',
   /** `driverStandings[].driverId` is published verbatim. */
@@ -132,6 +186,43 @@ export function isClassifiedResult(status: ResultStatus): boolean {
 
 function idSet(values: readonly { readonly id: string }[]): Set<string> {
   return new Set(values.map((value) => value.id));
+}
+
+/**
+ * Whether any driver's participation spans are inverted or overlapping.
+ *
+ * Mirrors `CompetitorDao._validateDriverSpans()` in the Flutter client, which
+ * is the rule that would actually reject the write, including its null-bound
+ * semantics: an absent `startRound` is the season start and an absent
+ * `endRound` the season end. `Number.NEGATIVE_INFINITY` and
+ * `Number.POSITIVE_INFINITY` express those directly rather than reusing the
+ * client's sentinel integers, which exist only because Dart lacks a
+ * double-typed round.
+ *
+ * Spans are grouped per driver, so two drivers sharing a round are untouched,
+ * and each group is ordered by start before consecutive pairs are compared -
+ * the arrival order of the entries therefore cannot change the answer.
+ */
+function hasInvalidDriverSpans(entries: readonly DriverSeasonEntry[]): boolean {
+  const byDriver = new Map<string, { start: number; end: number }[]>();
+  for (const entry of entries) {
+    const start = entry.startRound ?? Number.NEGATIVE_INFINITY;
+    const end = entry.endRound ?? Number.POSITIVE_INFINITY;
+    if (start > end) return true;
+    const spans = byDriver.get(entry.driverId) ?? [];
+    spans.push({ start, end });
+    byDriver.set(entry.driverId, spans);
+  }
+  for (const spans of byDriver.values()) {
+    const ordered = [...spans].sort((left, right) => left.start - right.start);
+    for (let index = 1; index < ordered.length; index += 1) {
+      // `<=`, not `<`: a stint starting on the round the previous one ended is
+      // two seats for one round, which is exactly the case the local write
+      // refuses.
+      if (ordered[index]!.start <= ordered[index - 1]!.end) return true;
+    }
+  }
+  return false;
 }
 
 /** True when a collection contains the same identity twice. */
@@ -278,6 +369,13 @@ export function validateSeasonReferences(
 
   for (const event of source.calendar) {
     if (!circuits.has(event.circuitId)) fail('event-circuit');
+    // Exact equality against the identity the domain model defines, built by
+    // the one shared constructor. Nothing is rewritten, trimmed, case-folded or
+    // inferred - a mismatch withholds the whole candidate, exactly as every
+    // other broken relation does.
+    if (event.id !== canonicalGrandPrixId(event.season, event.eventSlug)) {
+      fail('event-identity');
+    }
     for (const session of event.sessions) {
       // Exact equality against the identity the domain model defines, built by
       // the one shared constructor. Deliberately not a prefix test: a prefix
@@ -296,9 +394,16 @@ export function validateSeasonReferences(
       fail('driver-entry-constructor');
     }
   }
+  if (hasInvalidDriverSpans(source.driverEntries)) fail('driver-entry-span');
   for (const entry of source.constructorEntries) {
     if (!constructors.has(entry.constructorId)) {
       fail('constructor-entry-constructor');
+    }
+    if (
+      entry.id !==
+      canonicalConstructorSeasonEntryId(entry.season, entry.constructorId)
+    ) {
+      fail('constructor-entry-identity');
     }
     for (const driverId of entry.driverLineup ?? []) {
       if (!drivers.has(driverId)) fail('constructor-entry-lineup');
