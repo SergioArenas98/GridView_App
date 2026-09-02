@@ -14,7 +14,7 @@
  */
 
 import type { ProviderAttemptOutcome } from '../provider-metrics';
-import { ownDataProperty } from './own-property';
+import { ownDataProperty } from '../../runtime/own-property';
 import type { CoordinatedPayload, CoordinatedResource } from './resource';
 import type { CoordinatedSourceId } from './source-policy';
 
