@@ -485,6 +485,27 @@ A constructor's championship standing row for a season.
 Identity: `id` (`{grandPrixId}-{sessionType}-results`). The classification for a
 points-awarding session (race or sprint).
 
+This identity is **derived from the parent session**, exactly as a session
+identity is derived from its parent event (§6.6), so it can contradict what it
+is filed under. It is built by one shared constructor
+(`canonicalRaceResultId`, itself expressed as `canonicalSessionId` plus the
+`-results` suffix so the two can never disagree about how a multi-word session
+type is spelled) and enforced as exact equality by the referential preflight
+before any snapshot is generated: a classification whose `id` is not its own
+parent's canonical identity for its session type withholds the whole season
+candidate. Nothing is rewritten, coerced, repaired or discarded.
+
+That is a **separate** check from two neighbouring ones. `result-event` asks
+whether `grandPrixId` names the event at that round, and a result can name the
+right event while carrying a wrong `id`. Stored-row uniqueness needs two
+payloads to collide, and two results carrying two *different* arbitrary ids
+collide with nothing while both being wrong. The local database makes the
+consequence concrete: it keys results by this `id` (`PRIMARY KEY`) while
+enforcing `UNIQUE(grandPrixId, sessionType)`, so a classification published
+under an arbitrary id and a later corrected one published under a different
+arbitrary id are two primary keys for one unique session, and the refresh
+transaction that tries to hold both fails.
+
 | Field | Type | R/N | Meaning |
 |---|---|---|---|
 | `id` | string | R | Result document ID, e.g. `2026-belgian-grand-prix-race-results`. |

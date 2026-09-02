@@ -1,4 +1,7 @@
-import { canonicalSessionId } from '../../contract/identity';
+import {
+  canonicalRaceResultId,
+  canonicalSessionId,
+} from '../../contract/identity';
 import type {
   Circuit,
   Constructor,
@@ -306,7 +309,7 @@ function buildResults(): RaceResult[] {
   return calendar.map((event) => {
     if (event.hasResults) {
       return {
-        id: `${event.id}-race-results`,
+        id: canonicalRaceResultId(event.id, 'race'),
         season: event.season,
         round: event.round,
         grandPrixId: event.id,
@@ -347,7 +350,7 @@ function buildResults(): RaceResult[] {
       };
     }
     return {
-      id: `${event.id}-race-results`,
+      id: canonicalRaceResultId(event.id, 'race'),
       season: event.season,
       round: event.round,
       grandPrixId: event.id,

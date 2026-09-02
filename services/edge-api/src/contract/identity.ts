@@ -45,3 +45,26 @@ export function canonicalSessionId(
 ): string {
   return `${grandPrixId}-${sessionTypeSegment(sessionType)}`;
 }
+
+/**
+ * The canonical identity of one classification:
+ * `{grandPrixId}-{sessionType}-results`.
+ *
+ * Deliberately expressed as the session identity plus one suffix rather than
+ * as a second template over the same parts (GridView_Domain_Model.md §4.2,
+ * §6.11). The two identities share the session-type segment rule, so building
+ * this one on `canonicalSessionId` makes it impossible for them to disagree
+ * about how a multi-word type is spelled.
+ *
+ * Like a session, a classification is a row filed under its parent: the local
+ * database keys results by this `id` while enforcing
+ * `UNIQUE(grandPrixId, sessionType)`, so a classification published under an
+ * arbitrary id and a later corrected one published under a different arbitrary
+ * id are two primary keys for one unique session.
+ */
+export function canonicalRaceResultId(
+  grandPrixId: string,
+  sessionType: SessionType,
+): string {
+  return `${canonicalSessionId(grandPrixId, sessionType)}-results`;
+}

@@ -1202,6 +1202,23 @@ The handler:
 > is rewritten or inferred; a mismatch withholds the whole candidate as
 > `inconsistent-references` with the bounded relation `session-event`.
 >
+> **A classification is bound to the session it is filed under.** The same rule
+> applies one level down: a race result's identity is derived from its parent
+> session (`{grandPrixId}-{sessionType}-results`, GridView_Domain_Model.md §4.2
+> and §6.11), so the preflight requires every classification to carry its own
+> parent's canonical identity, built by the same shared constructor family
+> (`canonicalRaceResultId`). A `session-classification` resource names a season,
+> a round and a session type and has no event identity to check the `id`
+> against, so the preflight - where the result, its parent event and the
+> assembled season are all in hand - is the first point at which this can be
+> decided. It is a **separate check from both** `result-event`, which a
+> mis-identified result satisfies because `grandPrixId` is correct, **and**
+> duplicate identity, because two results carrying two different arbitrary ids
+> collide with nothing. Nothing is rewritten, coerced or repaired; a mismatch
+> withholds the whole candidate as `inconsistent-references` with the bounded
+> relation `result-identity`, and no provider-controlled identifier reaches the
+> diagnostic.
+>
 > Event-aware scheduling (**G5**) and persisted provenance or
 > provisional/reconciled record state (**G9**) remain open, and the coordinator
 > implements neither. **Deep normalized-contract validation also remains
@@ -1209,8 +1226,13 @@ The handler:
 > top-level document shape and provider neutrality - and per-field contract
 > validation is an adapter responsibility that gates registering a real
 > adapter at all (ADR 0023 D14). The normalized outcome is an aliasing and
-> time-of-check/time-of-use guarantee, and the session-to-event relation is one
-> declared identity rule; neither closes that gate.
+> time-of-check/time-of-use guarantee, and the session-to-event and
+> classification-to-session relations are two declared identity rules; none of
+> them closes that gate, and none of them activates **G4**. The same is true of
+> the validated boundary for persisted version inventories
+> (`GridView_Backend_Publication.md`): it contains malformed stored data inside
+> the existing bounded publication vocabulary and asserts nothing about provider
+> payload contents.
 >
 > A publication the publisher **rejects** is not automatically a successful
 > run. Only a candidate older than what is already serving is a benign

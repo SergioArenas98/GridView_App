@@ -547,6 +547,32 @@ Coverage:
   and puts no identifier in a log line, while the provisional source stays
   structurally excluded from schedules; a correctly bound schedule refresh still
   publishes and still supersedes the calendar's own session list.
+- Race-result identity
+  (`test/providers/coordination/race-result-identity.test.ts`): every published
+  classification carries its own parent's canonical identity for its session
+  type, `{grandPrixId}-{sessionType}-results`, built by the one shared
+  constructor `canonicalRaceResultId`. The constructor is pinned directly
+  (race, sprint, and a multi-word type hyphenated exactly as session identities
+  are) and the curated fixture is proved to already carry it, so the mock
+  provider and the preflight share one implementation. The relation is proved
+  **independent of its three neighbours**: an arbitrary unique `id` under an
+  otherwise correct result fails `result-identity` and explicitly not
+  `result-event`, `duplicate-identity` or `session-event`; a result naming a
+  foreign parent *and* identified from it fails `result-event` and not
+  `result-identity`; two canonical copies fail duplicate detection alone, while
+  results carrying two *different* arbitrary ids fail identity alone and collide
+  with nothing. Also rejected: the correct parent with a wrong result suffix
+  (`-race`, `-results`, `-race-result`, `-race-results-2`, another session
+  type), a canonical-looking id built for a different Grand Prix, and near
+  misses differing only by case, separator, padding or a trailing or leading
+  hyphen. Every supported result session type is accepted under its own parent
+  and the curated season stays accepted. End to end, a mis-identified
+  classification withholds the assembled source as `inconsistent-references` in
+  either plan order, never reaches generation or publication, leaves no active
+  pointer, and puts neither the provider-controlled id nor the parent identity
+  in a log line or in the structured outcome; the payload boundary is proved
+  unchanged - the classification is still a valid *candidate* for its resource -
+  and a correctly identified classification refresh still publishes.
 - Validator scope and the activation gate: the runtime validator accepts a
   driver collection whose entries are nonsense as `SeasonDriverSummary`, which
   pins that it is structural rather than a deep per-field contract validator;

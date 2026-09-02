@@ -28,7 +28,10 @@
  */
 
 import type { ResultStatus } from '../../contract/enums';
-import { canonicalSessionId } from '../../contract/identity';
+import {
+  canonicalRaceResultId,
+  canonicalSessionId,
+} from '../../contract/identity';
 import type { ProviderSeasonSource } from '../formula-one-provider';
 
 /**
@@ -71,6 +74,29 @@ export const seasonRelations = [
   'constructor-standing-constructor',
   /** A classification must belong to a calendar event, by round and by id. */
   'result-event',
+  /**
+   * `results[].id` must be that classification's own canonical identity for
+   * its parent event and session type.
+   *
+   * A result identity is *derived* from its parent session
+   * (GridView_Domain_Model.md §4.2, §6.11:
+   * `{grandPrixId}-{sessionType}-results`), so like a session identity it is
+   * the one field that can contradict what it is filed under. Nothing upstream
+   * can catch it: a `session-classification` resource names a season, a round
+   * and a session type, so the coordinator's payload boundary has those three
+   * to check and no event identity to check the `id` against, and assembly
+   * then carries the result through verbatim.
+   *
+   * Deliberately separate from `result-event`, which asks whether
+   * `grandPrixId` names the event at that round: a result can name the right
+   * event and still carry a wrong `id`. Equally separate from
+   * `duplicate-identity`, which needs two payloads to collide - two results
+   * carrying two *different* arbitrary ids collide with nothing at all, and
+   * are both wrong. The local database keys results by this `id` while
+   * enforcing `UNIQUE(grandPrixId, sessionType)`, so an arbitrary id and a
+   * later corrected arbitrary id are two primary keys for one unique session.
+   */
+  'result-identity',
   /**
    * `GrandPrix.hasResults` must agree exactly with whether that round has a
    * selected race classification.
@@ -297,6 +323,18 @@ export function validateSeasonReferences(
     // an event that exists *and* be the classification of that same event.
     if (eventIdByRound.get(result.round) !== result.grandPrixId) {
       fail('result-event');
+    }
+    // Exact equality against the identity the domain model defines, built by
+    // the one shared constructor. Deliberately not a prefix or suffix test: the
+    // contract defines an identity, not a namespace, so `{gp}-race-results-2`
+    // and `{gp}-race-result` are both wrong. Nothing is rewritten, coerced,
+    // repaired or discarded - a mismatch withholds the whole candidate, exactly
+    // as every other broken relation does.
+    if (
+      result.id !==
+      canonicalRaceResultId(result.grandPrixId, result.sessionType)
+    ) {
+      fail('result-identity');
     }
     if (
       result.fastestLap !== null &&

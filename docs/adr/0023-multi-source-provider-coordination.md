@@ -677,6 +677,45 @@ mismatch withholds the whole candidate as `inconsistent-references` with the
 bounded relation name `session-event`, exactly like every other broken relation,
 and generation and publication are never reached.
 
+**A classification is bound to the session it is filed under.** The same
+argument applies one level down, and for the same structural reason. A race
+result's identity is `{grandPrixId}-{sessionType}-results`
+(GridView_Domain_Model.md §4.2, §6.11), so it too carries its parent
+relationship and can contradict it. A `session-classification` resource names a
+season, a round and a session type, so the coordinator's payload boundary can
+check those three and has no event identity to check the `id` against; assembly
+then carries the result through verbatim. A classification with the requested
+season, round, Grand Prix and session type but an arbitrary unique `id` was
+therefore accepted and published.
+
+Neither neighbouring check covers it. `result-event` compares `grandPrixId`
+against the event at that round, which a mis-identified result satisfies
+perfectly. Duplicate detection needs a collision, and two results carrying two
+_different_ arbitrary ids collide with nothing at all while both being wrong.
+The cost is concrete downstream: the local database keys results by this `id`
+while enforcing `UNIQUE(grandPrixId, sessionType)`, so an arbitrary id and a
+later corrected arbitrary id are two primary keys for one unique session, and
+the refresh transaction that tries to hold both fails.
+
+The relation is enforced in the preflight, where the result, its parent Grand
+Prix and the assembled season are all in hand, as exact equality against the
+identity one shared constructor builds (`canonicalRaceResultId`, which the mock
+provider now also uses, so the rule has one implementation rather than one per
+site). It is expressed as the session identity plus the `-results` suffix, so
+the two derived identities cannot disagree about the session-type segment.
+Deliberately not a prefix or suffix test: the contract defines an identity, not
+a namespace, so `{gp}-race-results-2` and `{gp}-race-result` are both wrong. It
+is a distinct member of the closed relation vocabulary, `result-identity`, kept
+separate from `result-event`, `duplicate-identity` and `session-event`; nothing
+is rewritten, coerced, repaired or dropped, and no provider-controlled
+identifier reaches public or structured failure output. `payloadMatchesResource`
+is deliberately unchanged: widening it would mean inventing an event identity
+the resource does not have.
+
+Neither this correction nor the inventory boundary above activates **G4** or
+closes deep normalized-contract validation. Both remain exactly where the
+activation ledger already records them.
+
 **A version's contents are recorded, not reconstructed.** Every version stores
 the sorted, deduplicated set of document names generation actually produced, as
 internal metadata under its own snapshot prefix. Nothing about a version is
