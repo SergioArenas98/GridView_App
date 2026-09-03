@@ -31,8 +31,17 @@ const gridViewIdMaxLength = 96;
 const countryCodePattern = /^[A-Z]{2}$/;
 const colorHexPattern = /^#[0-9a-fA-F]{6}$/;
 const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+/**
+ * RFC 3339 `date-time`, with the numeric offset **captured** so it can be
+ * bounded rather than merely shaped.
+ *
+ * Groups 7 and 8 are the offset hour and minute; both are `undefined` for `Z`.
+ * Every quantifier is fixed-length or bounded (`\d{1,9}`), and the pattern is
+ * fully anchored with no nested repetition, so it cannot backtrack
+ * catastrophically on adversarial input.
+ */
 const dateTimePattern =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
 
 /**
  * The supported season range, taken from `Season.year` in the OpenAPI schema,
@@ -161,7 +170,21 @@ export const isoDateTime: Check = (value, path, collector) => {
     return collector.add(path, 'timestamp');
   // A leap second is representable in RFC 3339, so 60 is permitted here rather
   // than treated as an off-by-one.
-  if (hour > 23 || minute > 59 || second > 60) collector.add(path, 'timestamp');
+  if (hour > 23 || minute > 59 || second > 60) {
+    return collector.add(path, 'timestamp');
+  }
+  // The offset is part of the value, so it is bounded like every other
+  // component. Matching `[+-]dd:dd` says only that the offset is *shaped* like
+  // one; `+99:99` is not a date-time, and a gate whose whole job is to decide
+  // whether a value is one may not wave it through. Both components are absent
+  // for `Z`, and present together otherwise.
+  const offsetHour = parts[7];
+  const offsetMinute = parts[8];
+  if (offsetHour !== undefined && offsetMinute !== undefined) {
+    if (Number(offsetHour) > 23 || Number(offsetMinute) > 59) {
+      collector.add(path, 'timestamp');
+    }
+  }
 };
 
 /** Media variant URLs. Bounded, absolute, and `http`/`https` only. */

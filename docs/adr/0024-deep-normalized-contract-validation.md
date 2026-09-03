@@ -132,10 +132,20 @@ and no upstream token appears in an issue, and the issue list is not carried
 into a contribution or a log line: the failing paths are diagnostic detail about
 provider-controlled content, and the bounded reason is what an operator acts on.
 
+A value is accepted as a record only when its prototype is `Object.prototype`
+or `null`, decided by identity rather than by `instanceof`, which would consult
+`Symbol.hasInstance` and would accept any subclass of `Object`. "Not null and
+not an array" is a weaker question that a `Date`, a `Map`, a typed array, a
+boxed primitive and a class instance all pass, and where every declared property
+is optional - `MediaVariants` is the only such object in the contract - such a
+value produces no issue at all. `null` is accepted because a null-prototype
+record inherits nothing and is therefore safer, not more dangerous.
+
 The validator never throws. Every declared field is read once through the shared
 `ownDataProperty` discipline, so an accessor is described rather than invoked
-and an inherited property is not mistaken for an own one; both reflective traps
-are contained; array holes are missing elements; and an outer guard makes
+and an inherited property is not mistaken for an own one; every reflective trap
+it touches - `getPrototypeOf`, `ownKeys` and `getOwnPropertyDescriptor` - is
+contained; array holes are missing elements; and an outer guard makes
 "never throws" true by construction rather than by having enumerated every trap
 correctly. Traversal is bounded by a documented collection cap and a documented
 issue cap. **No depth limit is invented**: the schema is finite and

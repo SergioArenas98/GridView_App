@@ -454,18 +454,40 @@ describe('hostile values are contained, never executed', () => {
   });
 
   it('refuses an inherited declared property', () => {
-    const value = Object.create({ fullName: 'Max Verstappen' }) as Record<
-      string,
-      unknown
-    >;
-    for (const [key, entry] of Object.entries(
-      driver() as Record<string, unknown>,
-    )) {
-      if (key !== 'fullName') value[key] = entry;
+    // Inheritance is exercised through a polluted `Object.prototype` rather
+    // than through `Object.create({...})`: a custom prototype is no longer a
+    // record at all, so that carrier would prove the wrong thing. Pollution is
+    // also the realistic shape - it reaches an ordinary literal, which is
+    // exactly what an adapter hands over.
+    const value = driver() as Record<string, unknown>;
+    delete value.fullName;
+    const polluted = Object.getPrototypeOf({}) as Record<string, unknown>;
+    polluted.fullName = 'Max Verstappen';
+    try {
+      expect(codesAt(validateDriver(value, 'data'), 'data.fullName')).toEqual([
+        'missing',
+      ]);
+    } finally {
+      delete polluted.fullName;
     }
+  });
 
-    expect(codesAt(validateDriver(value, 'data'), 'data.fullName')).toEqual([
-      'missing',
+  it('refuses an object with a custom prototype outright', () => {
+    // The stricter record classifier answers this one before any field is
+    // read: an object whose prototype is neither `Object.prototype` nor `null`
+    // is not an ordinary record, so it is one bounded failure rather than a
+    // field-by-field report.
+    const value = Object.assign(
+      Object.create({ marker: 1 }) as Record<string, unknown>,
+      driver(),
+    );
+
+    expect(validateDriver(value, 'data')).toEqual([
+      {
+        path: 'data',
+        code: 'type',
+        message: expect.any(String) as unknown as string,
+      },
     ]);
   });
 
