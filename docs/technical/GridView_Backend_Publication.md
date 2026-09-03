@@ -358,6 +358,146 @@ validated and verified. During KV propagation, an edge location may briefly read
 an older active pointer. It must not observe an unpublished version unless that
 pointer has already changed.
 
+## Snapshot revision (`snapshotRevision`)
+
+**Implemented as a mechanism in Phase 9B-6 (PR 1). It has no production caller,
+and no published value changes because of it.** What it computes is the
+equality-and-identity signal
+[ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1
+D1.7 defines. Binding it to a `snapshotObservedAt` and publishing that under
+`meta.sourceUpdatedAt` is the second half of Phase 9B-6 and is **blocked** — see
+*Why the observation clock is not implemented yet* below.
+
+### The canonical input is constructed, never filtered
+
+D1.7 excludes envelope, provenance, transport and time-varying metadata
+"without exception". A recursive serializer that filtered a deny-list of
+envelope keys would satisfy that only for the fields somebody remembered to
+name — and the field that is easiest to miss is not in the envelope at all:
+`HomeData.freshness` carries `generatedAt`, `sourceUpdatedAt`, `staleAfter` and
+the server-`stale` flag **inside `data`**, so such a serializer would hash
+`sourceUpdatedAt` into the input that derives it.
+
+So the input is **constructed** from a declared schema, one per snapshot key
+(`src/publication/canonical/snapshot-schemas.ts`). The projection reads the
+declared properties and nothing else, which makes every exclusion an exclusion
+by construction: `requestId`, `generatedAt`, `sourceUpdatedAt`,
+`snapshotObservedAt`, `staleAfter`, ETags, server-stale flags, provider
+identifiers, `fetchedAt`, `reconciledAt`, retry and reconciliation state and a
+payload-derived `contentVersion` are not declared, so none of them is read.
+
+Exactly three things are hashed:
+
+| Part | Why |
+|---|---|
+| `data`, projected onto the schema for this key | The normalized public payload, and only that |
+| `schemaVersion` | D1.7: a schema change genuinely changes the public representation |
+| `documentName` | A **domain separator**, not content. Two keys with byte-identical payloads stay two keys. It cannot cause a false revision change, because a key's name is fixed for the life of the key |
+
+`freshness` is excluded **wholesale**: all five of its properties are D1.7
+exclusions, the `contentVersion` among them being freshness metadata rather than
+payload. `BootstrapData.contentVersion` / `mediaVersion` and the whole of
+`content:manifest` **are** declared — those are top-level payload fields the
+client reads, and a curated content bump is a genuine change to what is served.
+
+### Determinism rules
+
+| Aspect | Rule |
+|---|---|
+| Key ordering | Lexicographic **UTF-8 byte** order, which is Unicode code-point order by construction of the encoding. JavaScript's default comparison is *not* this order — it compares UTF-16 code units, so a supplementary code point sorts below ordinary BMP characters above U+DFFF — so a dedicated comparator is used and pinned by non-ASCII and supplementary-code-point tests |
+| Ordered arrays | Serialized in domain order, which is part of the content: calendar rounds, standings positions, classification entries, weekend sessions, the upcoming-event list, and a constructor's driver lineup (a presentation order the client renders) |
+| Unordered arrays | Exactly two, each declared with the stable GridView identity it sorts by: `media` (curated assets, no domain order) by `id`, and `supportedSeasons` (a set of years) by value. The policy is **per declaration**; no array is sorted heuristically |
+| Null vs absent | Absent and explicitly `null` collapse onto one representation for the properties `contract/types.ts` declares with `?` — only `MediaVariants`. A **required** property keeps the distinction: absent is a contract violation, not a null |
+| Dates | RFC 3339 canonicalized to UTC: case-normalized designators, numeric offsets converted, insignificant trailing zeros dropped. **No truncation.** See the precision note below |
+| Numbers | One spelling per value: no exponent, no `-0`, no insignificant trailing zeros. Fractional championship points hash stably |
+| Encoding | UTF-8, from one shared `TextEncoder` — the same bytes the digest is taken over |
+| Framing | Length-prefixed rather than delimited, so no escaping rule exists to disagree about and no two distinct canonical values serialize to the same text |
+| Hostile values | Every property is taken once through the shared `ownDataProperty` discipline (an accessor is described, never invoked); records are classified by prototype rather than by `typeof`; every reflective trap that can throw is contained. The public boundary never throws, and a mismatch becomes a bounded marker carrying the *kind* of mismatch, never the value |
+
+### Format and algorithm
+
+The canonical text is prefixed `gv-canon/1` — inside the hashed bytes, because a
+change to the serialization rules must change every revision. The digest is
+**SHA-256** over its UTF-8 bytes via `crypto.subtle`, rendered lowercase
+hexadecimal and prefixed with the algorithm: `sha256:<64 hex digits>`, so a
+later algorithm is a visibly different value rather than a silent
+reinterpretation of the same one. Both the exact canonical text and the digest
+encoding are pinned by test.
+
+### Fractional precision: the ADR reading
+
+D1.7 says dates are serialized "as ISO-8601 UTC with a fixed precision". Phase
+9B-5 accepts `time-secfrac = "." 1*DIGIT` with **no ceiling**, exactly as RFC
+3339 §5.6 writes it, so the wire contract carries unbounded fractional
+precision. Reading "fixed precision" as *truncate to the millisecond the
+publication clock uses* would make `…:00.0001Z` and `…:00.0002Z` share a
+revision — two distinct instants, one identity.
+
+It is therefore read as **one canonical spelling**, not a digit cap: the zone is
+normalized, insignificant trailing zeros are dropped, and every significant
+digit survives. That satisfies the ADR without narrowing the contract, and it
+is recorded as an implementation note on ADR 0020 rather than a change to the
+decision.
+
+`Date.parse` and `new Date` are never used. Both roll a leap second silently
+into the following minute, so `1998-12-31T23:59:60Z` and `1999-01-01T00:00:00Z`
+would collapse onto one revision. Offsets are applied with integer civil-date
+arithmetic, and because an RFC 3339 offset is a whole number of minutes it never
+touches the seconds field.
+
+### Why the observation clock is not implemented yet
+
+D1.9 binds `snapshotObservedAt` to `snapshotRevision`; D1.10 requires the
+assignment to be **strictly monotonic per snapshot key**,
+`max(now, previous + 1 ms)`; D1.11 requires that guarantee end to end.
+
+Storing the revision/timestamp pair with the **immutable versioned document**
+would satisfy D1.9 and every failure property that follows from it: the pair is
+reachable only through `active:{season}`, so it cannot be separated from the
+release it describes; a pre-commit failure leaves the previous active release
+and its pair untouched; `deleteUnpublishedVersion` refuses the active version;
+and rollback republishes a historical version's own documents, so it restores
+that pair exactly without fabricating a timestamp.
+
+It does **not** establish D1.10. The assignment must be computed **before** the
+commit point, from the pair the active pointer currently names, and two
+publications for one season can both reach `SnapshotPublisher` — the staging
+cron (`[env.staging.triggers]`) and the protected `/internal/admin/sync/full`,
+which forces every job and always publishes. Both read the same active pointer,
+neither observes the other, and the pointer ends wherever the interleaving puts
+it. Two changed revisions can then receive **equal** timestamps (ADR 0005 rule 3
+then makes the client skip a genuinely changed snapshot) or a **decreasing**
+one (rule 1 then makes the client reject the active release). Workers KV offers
+no compare-and-set and no cross-isolate lock ([ADR 0007](../adr/0007-versioned-kv-publication-active-pointer.md),
+[ADR 0010](../adr/0010-workers-kv-consistency-limitation.md)), and a
+read-before-write check, a last-write-wins race or an in-isolate mutex is not a
+serialization guarantee.
+
+The published `meta.sourceUpdatedAt` is therefore **unchanged**, and the second
+half of Phase 9B-6 is blocked on a genuine serialization mechanism. G-i stays
+open in **both** halves.
+
+### Database transactions are not what makes this atomic
+
+Worth restating, because D1.9 says the pair is assigned "in the same publication
+transaction" and KV has no transactions. GridView has never had one: what it has
+is **reader atomicity**, and the two are different guarantees.
+
+- A *database transaction* would make a set of writes commit or fail together.
+  Workers KV provides none, and GridView does not claim one.
+- *Reader atomicity* is what the active pointer buys: every document of a
+  version is written and verified while nothing selects it, and
+  `setActiveVersion` — the single last decisive write — is what makes the whole
+  set reachable at once. A reader therefore never sees half a release.
+
+Carrying the revision/timestamp pair inside the versioned documents keeps it on
+the reader-atomic side of that line, which is what "the same publication
+transaction" has to mean here. It is also why a **mutable per-snapshot record**
+is the wrong shape even when it is written before `setActiveVersion`: it would
+be reachable independently of the pointer, so it could be updated by a
+publication that never commits, and a rollback would find it describing a
+release that is no longer serving.
+
 ## ETag Semantics
 
 Stored snapshots do not contain `requestId`; it is added per request. Because the

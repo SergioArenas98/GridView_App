@@ -637,6 +637,51 @@ rejected-publication decision table over the exported reason union, both
 integrity refusals failing the run, the benign older-source no-op completing,
 and last-known-good preservation in every case.
 
+**Snapshot revision identity (Phase 9B-6, PR 1).** 51 tests under
+`services/edge-api/test/publication/canonical/`, over
+`src/publication/snapshot-revision.ts` and `src/publication/canonical/`. None
+touches the network, and **none exercises a production caller: there is none.**
+
+`canonical-number.test.ts` pins the single numeric spelling - integers without a
+point, `-0` collapsed, trailing zeros trimmed, every exponent-printed magnitude
+expanded in full, distinct values still distinct across the exponent boundary,
+non-finite values refused rather than spelled, and every canonical form
+round-tripping back to the same double.
+
+`canonical-instant.test.ts` pins the two properties that pull against each
+other: equivalent instants hashing identically (`Z`/`z`, `T`/`t`, numeric
+offsets, all-zero fractions, offsets carried across day, month and leap-year
+boundaries), and distinct instants staying distinct (arbitrary fractional
+precision preserved, sub-millisecond neighbours separated, a leap second kept
+rather than rolled into the following minute). Every form the public contract
+refuses is asserted refused, and canonicalization is asserted idempotent.
+
+`canonical-ordering.test.ts` pins the comparator against JavaScript's default,
+which is **not** the documented rule: the suite asserts that an emoji compares
+below U+FFFD under `<` - UTF-16 unit order - and above it under `compareUtf8`,
+that a mixed non-ASCII set sorts differently from `Array.prototype.sort`, and
+that the comparator is a total order.
+
+`canonical-serialization.test.ts` pins the projection: insertion-order
+independence at every nesting level, an ordered-array permutation changing the
+revision and an unordered one not, additions, removals and membership changes
+all detected, an empty collection separated from an absent one, required-absent
+separated from null while an absent *optional* collapses onto null, every
+excluded envelope and provenance field having no effect, the `freshness` block
+inside `home` having no effect, `schemaVersion` changing the revision, and
+hostile accessors and proxies contained - the getter is asserted **never
+invoked**, and the storage key embedded in the proxy's exception is asserted
+absent from the output.
+
+`snapshot-revision.test.ts` pins the format and the algorithm literally - the
+exact canonical text for a small document, and the digest against an
+independently computed SHA-256 - then runs the whole generated mock season
+through it: every document gets a revision, regenerating at a different time
+moves none of them, changing only the provider's `sourceUpdatedAt` moves none of
+them, a removed standing moves exactly the documents that carry it, a removal
+cannot collide with the snapshot it was removed from, and two snapshot keys with
+byte-identical payloads do not share a digest.
+
 ## Staging verification (Phase 5B)
 
 The staging Worker (`gridview-api-staging`) is verified with automated helpers

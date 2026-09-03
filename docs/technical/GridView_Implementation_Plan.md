@@ -1298,7 +1298,9 @@ architecture and product-risk decision, not as provider approval).
 | Phase 9B-2 (outbound hardening and per-provider rate limiter) | **Implemented 2026-08-23** (§14.0.6). One hardened outbound boundary and a Durable Object rate limiter with one identity per real source. No adapter, no request, nothing provisioned or deployed. |
 | Phase 9B-3 (curated provider-identifier mapping registry) | **Implemented 2026-08-25** (§14.0.7). A season-qualified, exactly-matched, fail-closed identifier mapping registry with structural and semantic validation. **Dormant: no adapter consumes it.** No request, nothing deployed. |
 | Phase 9B-4 (multi-source provider coordination) | **Implemented 2026-08-26** (§14.0.8). A typed, deterministic, fail-closed coordination seam over independent per-source resource ports, superseding the whole-season provider call. **Dormant: no adapter consumes it and no port is registered.** No request, nothing deployed. |
-| Next action | **Continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter, which is now the first thing the coordination seam is missing. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
+| Phase 9B-5 (deep normalized-contract validation) | **Implemented 2026-09-02** (§14.0.9). Field-by-field validation of every normalized value an adapter produces, at the coordination boundary. **Dormant: no adapter produces one.** No request, nothing deployed. |
+| Phase 9B-6 (snapshot revision identity) | **Partially implemented 2026-09-03** (§14.0.10). The canonical revision input and `snapshotRevision` hashing exist and are tested; **they have no production caller and no published value changed.** The observation clock is **blocked** on a serialization guarantee Workers KV cannot provide. |
+| Next action | **Take the publication-serialization decision that Phase 9B-6 is blocked on** (§14.0.10), then complete the observation clock; independently, **continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter, which the coordination seam is still missing. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
 
 ### 14.0.1 Product constraints governing Phase 9
 
@@ -1597,6 +1599,36 @@ production module constructs `MultiSourceCoordinator`,
 namespace remains unbound, and the existing dormancy assertions are unchanged
 and green. Nothing here authorizes a live provider mode, a cron trigger, a
 deployment, production synchronization or public release.
+
+### 14.0.10 Phase 9B-6 status - snapshot revision identity (partial)
+
+Implemented on **2026-09-03**, as the **inert half** of the block. Worker code,
+tests and documentation only: **no provider was contacted, no request was made
+or made possible, nothing was provisioned or deployed, and no published value
+changed.**
+
+| Item | Status |
+|---|---|
+| **Canonical revision input** | **Implemented.** A schema-aware canonical representation of the normalized public `data` payload plus its `schemaVersion`, one declaration per snapshot key (`src/publication/canonical/snapshot-schemas.ts`). The input is **constructed**, never filtered out of a serialized envelope, so every [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) D1.7 exclusion holds by construction. |
+| **`snapshotRevision`** | **Implemented.** SHA-256 over the UTF-8 bytes of a length-framed canonical text prefixed `gv-canon/1`, rendered `sha256:<64 hex digits>`. Both the canonical text and the digest encoding are pinned by test. |
+| Determinism | UTF-8 byte key ordering with a dedicated comparator (JavaScript's default UTF-16 unit order is **not** the documented rule); ordered arrays kept in domain order; exactly two arrays declared unordered, each with its stable GridView identity; absent/null collapsed only for the properties the contract declares with `?`; RFC 3339 canonicalized to UTC without truncating fractional precision and without `Date`; one canonical numeric spelling. |
+| `freshness` | **Excluded wholesale.** `HomeData.freshness` is the one place excluded metadata lives inside `data`, and all five of its properties are D1.7 exclusions - `sourceUpdatedAt` among them, which would otherwise be hashed into the input that derives it. |
+| Precision | ADR 0020's "fixed precision" is implemented as **one canonical spelling**, not a digit cap. Truncating to the publication clock's millisecond would make two distinct instants share a revision, which contradicts the wire contract Phase 9B-5 deliberately accepts. Recorded as an ADR implementation note, not a change to the decision. |
+| Hostile input | **Contained, never executed.** Every property is taken once through the shared `ownDataProperty` discipline, records are classified by prototype, and every reflective trap that can throw is contained. The public boundary never throws; a mismatch becomes a bounded marker carrying the *kind* of mismatch, never the value. |
+| **`snapshotObservedAt` / D1.9-D1.11** | **Not implemented, and D1.10 is blocked.** The assignment `max(now, previous + 1 ms)` must be computed pre-commit from the pair the active pointer names, and two publications for one season can both reach `SnapshotPublisher` - the staging cron and the protected `/internal/admin/sync/full`, which forces every job and always publishes. Both read the same pointer, neither observes the other, and the commit order is decided by interleaving, so two changed revisions can receive equal or decreasing timestamps. Workers KV offers no compare-and-set and no cross-isolate lock ([ADR 0007](../adr/0007-versioned-kv-publication-active-pointer.md), [ADR 0010](../adr/0010-workers-kv-consistency-limitation.md)). Closing it needs a mechanism that genuinely serializes the assignment - an infrastructure decision Phase 9B-6 was not authorized to take. |
+| **`meta.sourceUpdatedAt`** | **Unchanged.** Still the provider-supplied value; staging still publishes the mock provider's constant. No wire, DTO, OpenAPI, Drift or client change. |
+| **G-i** | **Open, in both halves.** Neither the published-snapshot half nor the resource-level half is complete. |
+| **G1, G3, G5, G9, G-l** | **Open.** No live provider mode, no production cron, no event-aware scheduling, no persisted provenance or provisional/reconciled state, and no curated identity work. |
+| Adapters | **Still none.** |
+| OpenF1 | **Still fail-closed.** No maximum-session-duration bound is recorded; the production policy constant is still `null`. |
+| Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; staging is `mock`, production is `none`. |
+
+**The seam stays dormant.** No class implements `ProviderResourcePort`, no
+production module constructs `MultiSourceCoordinator`,
+`SynchronizationService` remains on the single-provider path, the rate-limiter
+namespace remains unbound, and `src/publication/snapshot-revision.ts` has **no
+production caller at all**. Nothing here authorizes a live provider mode, a cron
+trigger, a deployment, production synchronization or public release.
 
 ## 14.1 Objective
 
