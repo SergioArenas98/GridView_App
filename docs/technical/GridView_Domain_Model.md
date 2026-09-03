@@ -165,6 +165,20 @@ The OpenAPI contract expresses these with two schemas: `Slug` (atomic entity
 references, max 64 chars) and `GridViewId` (composite IDs, max 96 chars). Both
 enforce the same kebab-case pattern.
 
+**The derived identities are enforced, not merely documented.** A Grand Prix
+edition, a session, a race result and a constructor season entry are each a
+strict function of their components, so a candidate carrying a different value
+is contradicting itself rather than choosing a different name. The edge
+referential preflight builds each one with a single shared constructor
+(`contract/identity.ts`) and compares by exact equality - `event-identity`,
+`session-event`, `result-identity` and `constructor-entry-identity` - and a
+mismatch withholds the whole candidate rather than repairing it. The **driver**
+season entry is deliberately excluded: it appends a start round for a split
+seat, so it is not a strict function of the payload and no equality rule could
+be stated for it. What *is* enforced for driver participation is span validity
+(`driver-entry-span`): no inverted span, and no two overlapping stints for one
+driver, matching the local write rule exactly.
+
 A **Grand Prix edition ID embeds the season year** because an event edition is
 season-specific: the same `eventSlug` (`belgian-grand-prix`, `monaco-grand-prix`)
 recurs every season, while `round` numbers are not stable across seasons.

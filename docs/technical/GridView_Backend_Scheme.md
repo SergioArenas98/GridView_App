@@ -1221,14 +1221,21 @@ The handler:
 >
 > Event-aware scheduling (**G5**) and persisted provenance or
 > provisional/reconciled record state (**G9**) remain open, and the coordinator
-> implements neither. **Deep normalized-contract validation also remains
-> open**: the runtime snapshot validator is structural - metadata, required
-> top-level document shape and provider neutrality - and per-field contract
-> validation is an adapter responsibility that gates registering a real
-> adapter at all (ADR 0023 D14). The normalized outcome is an aliasing and
+> implements neither. **Deep normalized-contract validation is closed as a
+> mechanism** by Phase 9B-5 (ADR 0024), which amends ADR 0023 D14: the runtime
+> snapshot validator keeps its structural scope - metadata, required top-level
+> document shape and provider neutrality - and per-field validation of a
+> normalized value now runs at the **coordination boundary**, on the detached
+> snapshot, before a payload can become a candidate. An adapter still
+> *normalizes* its own source; the coordinator now *verifies* the result, and a
+> failure is the existing `invalid-payload` contribution with bounded, redacted
+> issues. Registering a real adapter remains gated on that adapter's own
+> per-source normalization being correct, which needs recorded evidence rather
+> than more validation code. The normalized outcome remains an aliasing and
 > time-of-check/time-of-use guarantee, and the session-to-event and
-> classification-to-session relations are two declared identity rules; none of
-> them closes that gate, and none of them activates **G4**. The same is true of
+> classification-to-session relations remain declared identity rules - now
+> joined by `event-identity`, `constructor-entry-identity` and
+> `driver-entry-span`; none of them activates **G4**. The same is true of
 > the validated boundary for persisted version inventories
 > (`GridView_Backend_Publication.md`): it contains malformed stored data inside
 > the existing bounded publication vocabulary and asserts nothing about provider

@@ -67,6 +67,7 @@ import {
   type NormalizedTransportAttempt,
   type ProviderResourcePort,
 } from './port';
+import { validateCoordinatedPayload } from './payload-contract';
 import {
   jobCategoryForResource,
   payloadMatchesResource,
@@ -480,6 +481,23 @@ export class MultiSourceCoordinator {
     if (!payloadMatchesResource(operation.resource, candidate)) {
       // A structurally valid answer to a different question. Never selected.
       return contribution(operation, 'failed', true, 'malformed-outcome');
+    }
+    // **The answer is to the right question; is it contract-shaped?** Binding
+    // proves the payload describes this resource, not that its fields satisfy
+    // the public contract - a calendar for the right season can still carry a
+    // round of `0`, a raw upstream status token or an undeclared field that
+    // generation would publish verbatim. The same detached snapshot binding
+    // just accepted is what is validated, and what is stored if it passes, so
+    // nothing between the two is a different value.
+    if (validateCoordinatedPayload(candidate).length > 0) {
+      // The established reason for exactly this case: "the response was read
+      // but did not validate against the contract". The request happened and is
+      // already registered, so the contribution stays attempted and the run's
+      // accounting is unchanged. The issue list is deliberately not carried
+      // into the contribution or a log line - the failing paths are diagnostic
+      // detail about provider-controlled content, and the bounded reason is
+      // what an operator acts on.
+      return contribution(operation, 'failed', true, 'invalid-payload');
     }
     return contribution(operation, 'candidate', true, null, {
       payload: candidate,

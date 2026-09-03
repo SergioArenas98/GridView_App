@@ -82,6 +82,8 @@ export type {
   ProviderTransportAttempt,
 } from './port';
 
+export { validateCoordinatedPayload } from './payload-contract';
+
 export {
   classifiedSessionTypes,
   coordinatedResourceKinds,

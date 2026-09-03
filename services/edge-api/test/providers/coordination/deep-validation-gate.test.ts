@@ -1,19 +1,29 @@
 /**
- * What `SnapshotValidator` actually enforces, and what still gates a real
- * adapter.
+ * What `SnapshotValidator` actually enforces, where deep validation now lives,
+ * and what still gates a real adapter.
  *
  * It would be easy to read "snapshot-set contract validation" as deep
- * per-field validation against the published OpenAPI schema. It is not. The
- * runtime validator checks snapshot **metadata**, the required **top-level
- * shape** of each document, and **provider neutrality** of the body. That is
- * structural, and structural is all it claims.
+ * per-field validation against the published OpenAPI schema. It is not, and it
+ * is deliberately still not: the runtime validator checks snapshot
+ * **metadata**, the required **top-level shape** of each document, and
+ * **provider neutrality** of the body. That is structural, structural is all it
+ * claims, and Phase 9B-5 did not widen it - a document reaching publication has
+ * already been assembled from validated candidates, so re-deriving the contract
+ * at the last write would duplicate the rule in a second place it could drift
+ * from.
  *
- * Deep normalized-contract validation is an **adapter** responsibility: the
- * adapter is the component that turns provider data into the public contract
- * types, so it is the only place holding both. This file pins the real scope of
- * the validator so the claim cannot drift, and pins the dormancy the gate rests
- * on: no adapter exists, no provider port is registered in production wiring,
- * and `SynchronizationService` is not rewired for coordination.
+ * **Deep normalized-contract validation now runs at the coordination
+ * boundary** (`providers/coordination/payload-contract.ts`), against the
+ * detached snapshot that is the value later selected, assembled and published.
+ * An adapter is still the component that *normalizes* provider data; the
+ * coordinator is what independently *verifies* the result, exactly as it
+ * already refuses to trust an adapter's own outcome shape, attempt accounting
+ * or payload ownership.
+ *
+ * This file pins both scopes so neither claim can drift, and pins the dormancy
+ * the remaining gate rests on: no adapter exists, no provider port is
+ * registered in production wiring, and `SynchronizationService` is not rewired
+ * for coordination.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -21,6 +31,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { validateDriver } from '../../../src/contract/normalized';
 import { runtimeSnapshotValidator } from '../../../src/validation/snapshot-validator';
 import type { StoredSnapshot } from '../../../src/storage/types';
 import { SEASON } from './support';
@@ -84,14 +95,59 @@ describe('the runtime validator enforces structure, not the deep contract', () =
   it('does not validate a driver entry field by field', () => {
     // Every entry here is nonsense as a `SeasonDriverSummary`, and the runtime
     // validator accepts it: the top-level shape is an array and the body names
-    // no provider. This is the gap a real adapter has to close in its own
-    // normalization, and it is why registering one is gated on that.
+    // no provider. Its scope is unchanged by Phase 9B-5, deliberately.
     const nonsense = documentWith([
       { driverId: 42, fullName: null, raceNumber: 'one' },
       {},
     ]);
 
     expect(runtimeSnapshotValidator.validate(nonsense)).toEqual([]);
+  });
+});
+
+describe('deep validation runs at the coordination boundary instead', () => {
+  it('rejects the entity the publication validator accepts structurally', () => {
+    const nonsense = { id: 42, fullName: null };
+
+    expect(runtimeSnapshotValidator.validate(documentWith([nonsense]))).toEqual(
+      [],
+    );
+    expect(validateDriver(nonsense, 'data').length).toBeGreaterThan(0);
+  });
+
+  it('reports the exact fields, not merely that something was wrong', () => {
+    const issues = validateDriver({ id: 42, fullName: null }, 'data');
+
+    expect(
+      issues.filter((issue) => issue.path === 'data.id').map((i) => i.code),
+    ).toEqual(['type']);
+    expect(
+      issues
+        .filter((issue) => issue.path === 'data.fullName')
+        .map((i) => i.code),
+    ).toEqual(['null']);
+  });
+
+  it('still accepts a contract-valid entity, so the gate can actually open', () => {
+    expect(
+      validateDriver(
+        {
+          id: 'max-verstappen',
+          fullName: 'Max Verstappen',
+          givenName: 'Max',
+          familyName: 'Verstappen',
+          shortCode: 'VER',
+          permanentNumber: 1,
+          nationality: 'Dutch',
+          countryCode: 'NL',
+          dateOfBirth: '1997-09-30',
+          placeOfBirth: 'Hasselt',
+          biography: null,
+          media: null,
+        },
+        'data',
+      ),
+    ).toEqual([]);
   });
 });
 

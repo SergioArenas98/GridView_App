@@ -17,6 +17,38 @@
 import type { SessionType } from './enums';
 
 /**
+ * The canonical identity of one Grand Prix edition: `{season}-{eventSlug}`.
+ *
+ * Both components are fields on the event itself
+ * (GridView_Domain_Model.md §4.2, §6), so the identity is a strict function of
+ * the payload and a candidate can be checked against its own claim. The local
+ * database keys events by this `id`, so an arbitrary id and a later corrected
+ * one are two primary keys for one edition rather than one row updated.
+ */
+export function canonicalGrandPrixId(
+  season: number,
+  eventSlug: string,
+): string {
+  return `${season}-${eventSlug}`;
+}
+
+/**
+ * The canonical identity of one constructor season entry:
+ * `{season}-{constructorId}` (GridView_Domain_Model.md §4.2, §6.9).
+ *
+ * The **driver** season entry is deliberately not given a partner to this
+ * function: the model appends a start round for a split seat (§6.7), so its
+ * identity is not a strict function of the payload and nothing could compare a
+ * supplied value against a single derived one.
+ */
+export function canonicalConstructorSeasonEntryId(
+  season: number,
+  constructorId: string,
+): string {
+  return `${season}-${constructorId}`;
+}
+
+/**
  * The identity segment for one session type.
  *
  * The enum spells multi-word types with underscores (`sprint_qualifying`)

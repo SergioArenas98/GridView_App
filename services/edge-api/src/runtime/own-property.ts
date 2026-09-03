@@ -2,13 +2,18 @@
  * Reading one **own data property** of an untrusted object, without running
  * any code the object supplied.
  *
- * Every runtime boundary in this package - the plan, a resource identity, a
- * recorded provisional bound and an adapter outcome - decides what a value
- * *is* before deciding what it *means*, and all four need the same primitive:
- * take a declared field exactly once, in a way that cannot invoke a getter,
- * cannot walk a prototype chain and cannot answer differently on a second
- * call. One implementation, so the rule those boundaries document is the rule
- * they all actually apply.
+ * Every untrusted boundary in the Worker - a coordination plan, a resource
+ * identity, a recorded provisional bound, an adapter outcome and a normalized
+ * contract value - decides what a value *is* before deciding what it *means*,
+ * and all of them need the same primitive: take a declared field exactly once,
+ * in a way that cannot invoke a getter, cannot walk a prototype chain and
+ * cannot answer differently on a second call. One implementation, so the rule
+ * those boundaries document is the rule they all actually apply.
+ *
+ * It lives under `runtime/` rather than with any one of them precisely because
+ * more than one layer needs it: the contract validator must not depend on the
+ * provider-coordination package, and the coordination package must not depend
+ * on the contract validator, so the shared primitive belongs to neither.
  */
 
 /**

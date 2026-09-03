@@ -1466,6 +1466,84 @@ Checklist:
 25. Confirm the **STAGING** badge remains visible.
 26. Confirm **no "Sample data" banner** appears.
 
+## Deep normalized-contract validation (Phase 9B-5)
+
+**Edge tests** under `services/edge-api/test/contract/normalized-*.test.ts` and
+`services/edge-api/test/providers/coordination/`. None touches the network,
+needs a Cloudflare binding or contacts Jolpica or OpenF1: the ports are local
+fakes and there is no transport at all.
+
+The validation matrix is derived from two authorities, in that order:
+`src/contract/types.ts` for which properties exist, and
+`docs/api/gridview-api-v1.yaml` for what their values may be. Tests assert the
+exact **structural path and closed issue code**, never merely that something was
+reported.
+
+Coverage:
+
+- **Per entity** - every entity the seven `CoordinatedPayload` variants carry:
+  `GrandPrix`, `Session`, `Driver`, `Constructor`, `Circuit`, `LapRecord`,
+  `DriverSeasonEntry`, `ConstructorSeasonEntry`, `DriverStanding`,
+  `ConstructorStanding`, `RaceResult`, `RaceResultEntry`, `FastestLap` and
+  `MediaAsset`. Each declared property is dropped in turn; each is given the
+  wrong primitive type, an array for an object and an object for an array, a
+  `null` where the contract forbids one, an invalid enum member, an invalid
+  identifier, a malformed timestamp and date, `NaN` and `Infinity`, a
+  fractional value where an integer is required, an out-of-range value where a
+  bound exists, and a malformed nested entity.
+- **Constraints the contract does not state are pinned as accepted** - negative
+  wins, podiums, points, laps and grid positions, an out-of-range latitude and a
+  first Grand Prix year outside the season range. This is what stops the
+  validator drifting into inventing rules.
+- **Unknown-property policy** - an additive string key, a symbol key and a
+  non-enumerable key are each refused, on the entity, on the payload wrapper and
+  inside a nested object. The two **consumer-tolerance fixtures**
+  (`grand-prix/unknown-additive.json`, `grand-prix/unknown-enum-status.json`)
+  are asserted to be *refused* by the producing rule, and the normalized form
+  the adapter is required to emit instead is asserted to be accepted, so the
+  reading and producing directions are pinned as two rules rather than one.
+- **No coercion** - a numeric string, a boolean, an array and an object are all
+  refused where a scalar is declared; `null`, zero, `false` and the empty string
+  are preserved rather than substituted.
+- **Hostile values** - accessor-backed, inherited, prototype-polluted,
+  null-prototype, symbol-keyed, non-enumerable, sparse-array and throwing-proxy
+  cases. The accessor case asserts the getter is **never invoked**, and one case
+  asserts the validator mutates nothing it inspects.
+- **Bounded output** - a collection over the documented cap is refused and *not*
+  traversed; the issue budget is capped and ends with a terminal marker; a
+  passing value emits no marker.
+- **Coordination containment** - an invalid payload becomes the existing
+  `invalid-payload` attempted-failure contribution, stays `attempted`, counts
+  its transport exactly once, is never selected, assembled or published, lets a
+  healthy fallback carry the same resource, never lets a provisional candidate
+  displace a reconciled one, does not block an independent resource, does not
+  taint the run, introduces no new public reason, and never reaches a log line
+  with the offending value.
+- **Ordering** - resource binding decides before contract validation, so a
+  payload answering the wrong question keeps the established
+  `malformed-outcome` reason. The validated value is the **detached snapshot**:
+  a payload the adapter corrupts after answering does not change what was
+  selected.
+- **F3 / F4 / F5** - `driver-entry-span`, `event-identity` and
+  `constructor-entry-identity`, each with its own suite. Every identity suite
+  re-identifies its subject **consistently** (event id, its sessions and its
+  classifications together), because an inconsistent rewrite would be caught by
+  a neighbouring relation and would prove nothing. Each asserts independence
+  from `duplicate-identity` and from the neighbouring relations, and that each
+  broken relation is reported once in declared vocabulary order. The span suite
+  covers inverted spans, full, partial, nested and touching overlaps, overlaps
+  involving an open start or open end, order independence, and preserves one
+  full-season span, a real mid-season substitution, three non-overlapping spans,
+  a single-round span and two drivers sharing a round.
+- **Non-vacuity** - the curated mock season and every production public fixture
+  validate clean, and the season is asserted non-empty and to carry media, so
+  the control cannot pass by having nothing to check.
+- **Dormancy** - the existing assertions are unchanged and green: no class
+  implements `ProviderResourcePort`, no production module constructs
+  `MultiSourceCoordinator`, `SynchronizationService` stays on the
+  single-provider path, and no module outside `providers/coordination/`
+  references the coordination package.
+
 ## Provider outbound boundary and rate limiter (Phase 9B-2)
 
 75 Edge tests under `services/edge-api/test/providers/` and

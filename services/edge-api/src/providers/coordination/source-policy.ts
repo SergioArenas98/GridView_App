@@ -15,7 +15,7 @@
 
 import { realProviderSourceIds } from '../http/reservation-engine';
 import type { RealProviderSourceId } from '../http/reservation-engine';
-import { ownDataProperty } from './own-property';
+import { ownDataProperty } from '../../runtime/own-property';
 import type { CoordinatedResourceKind } from './resource';
 
 /**
