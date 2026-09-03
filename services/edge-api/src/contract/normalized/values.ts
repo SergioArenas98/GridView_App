@@ -35,13 +35,24 @@ const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
  * RFC 3339 `date-time`, with the numeric offset **captured** so it can be
  * bounded rather than merely shaped.
  *
+ * The lexical forms are exactly the ones RFC 3339 §5.6 defines, and no more.
+ * The time and zone designators are **case-insensitive** there, so `[Tt]` and
+ * `[Zz]` are both accepted; and `time-secfrac = "." 1*DIGIT` states one digit
+ * as the floor and **no ceiling**, so the fractional part is `\d+` rather than
+ * a precision cap this file would have invented. `format: date-time` in
+ * `docs/api/gridview-api-v1.yaml` is that grammar, so narrowing it here would
+ * refuse values the contract calls valid and turn a conforming adapter into an
+ * `invalid-payload` contribution.
+ *
  * Groups 7 and 8 are the offset hour and minute; both are `undefined` for `Z`.
- * Every quantifier is fixed-length or bounded (`\d{1,9}`), and the pattern is
- * fully anchored with no nested repetition, so it cannot backtrack
- * catastrophically on adversarial input.
+ * The pattern is fully anchored, every group is a single character class under
+ * one quantifier, and there is no alternation inside a repetition, so the only
+ * backtracking possible is one linear retreat along `\d+` - each step of which
+ * fails in constant time against the zone designator that must follow.
+ * Execution therefore stays linear on adversarial input.
  */
 const dateTimePattern =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|[+-](\d{2}):(\d{2}))$/;
 
 /**
  * The supported season range, taken from `Season.year` in the OpenAPI schema,
@@ -190,11 +201,45 @@ export const isoDateTime: Check = (value, path, collector) => {
 /** Media variant URLs. Bounded, absolute, and `http`/`https` only. */
 const maxUrlLength = 2048;
 
+/**
+ * Whether the **raw** string carries a character RFC 3986 has no place for.
+ *
+ * `new URL()` implements the WHATWG URL Standard, which is a *repair* parser
+ * rather than a grammar: for a special scheme it deletes every ASCII tab,
+ * newline and carriage return wherever they appear, strips leading and trailing
+ * C0 controls and spaces, rewrites `\` as `/`, and percent-encodes whatever
+ * forbidden characters are left. So a successful parse says the value *could be
+ * turned into* a URL, not that it *is* one - and since validation here is
+ * accept-or-reject, the string that gets published is the unrepaired original,
+ * not the parser's cleaned-up view of it.
+ *
+ * `MediaVariant.url` is declared `format: uri`, which JSON Schema defines as
+ * valid per RFC 3986, and none of C0, space, DEL or `\` is a URI character
+ * under that grammar. A URI carries them percent-encoded, which this scan
+ * leaves untouched: `%20` is three ordinary URI characters.
+ *
+ * The scan is a single pass over code units - linear, allocation-free, and
+ * decided before the parser is given a chance to launder anything. It is
+ * deliberately lexical and deliberately small: it is not a second URI
+ * implementation, and it is **not** the Flutter client's `MediaUrlPolicy`,
+ * whose HTTPS-only, host-required and no-userinfo rules are a *loading* policy
+ * rather than anything the wire contract states.
+ */
+function hasNonUriCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    // C0 controls and space (0x00-0x20), DEL (0x7F), and the backslash.
+    if (unit <= 0x20 || unit === 0x7f || unit === 0x5c) return true;
+  }
+  return false;
+}
+
 export const absoluteUrl: Check = (value, path, collector) => {
   if (value === null) return collector.add(path, 'null');
   if (typeof value !== 'string') return collector.add(path, 'type');
   if (value.length < 1 || value.length > maxUrlLength)
     return collector.add(path, 'uri');
+  if (hasNonUriCharacter(value)) return collector.add(path, 'uri');
   let parsed: URL;
   try {
     parsed = new URL(value);

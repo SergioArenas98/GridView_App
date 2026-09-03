@@ -118,6 +118,11 @@ describe('valid offsets stay accepted', () => {
 });
 
 describe('every unrelated rule is unchanged', () => {
+  // Two cases that stood here - a lowercase zone designator and a ten-digit
+  // fractional part - were wrong: RFC 3339 §5.6 makes the designators
+  // case-insensitive and puts no ceiling on `time-secfrac`. They are asserted
+  // as **accepted** in `normalized-timestamp-forms.test.ts`, which owns the
+  // lexical forms; this file owns the numeric offset bound only.
   it.each([
     ['a date where a date-time is required', '2026-07-19'],
     ['a non-calendar date', '2026-02-30T13:00:00Z'],
@@ -125,10 +130,8 @@ describe('every unrelated rule is unchanged', () => {
     ['an hour of 24', '2026-07-19T24:00:00Z'],
     ['a minute of 60', '2026-07-19T13:60:00Z'],
     ['a missing zone designator', '2026-07-19T13:00:00'],
-    ['a lowercase zone designator', '2026-07-19T13:00:00z'],
     ['a space instead of the date-time separator', '2026-07-19 13:00:00Z'],
     ['an empty fractional part', '2026-07-19T13:00:00.Z'],
-    ['an over-long fractional part', '2026-07-19T13:00:00.1234567890Z'],
     ['a one-digit offset hour', '2026-07-19T13:00:00+2:00'],
     ['an offset without a colon', '2026-07-19T13:00:00+0200'],
     ['whitespace padding', ' 2026-07-19T13:00:00Z'],

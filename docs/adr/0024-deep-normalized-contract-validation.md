@@ -209,7 +209,27 @@ provider was contacted.
 Registering a real adapter remains gated on that adapter's own normalization
 being correct for its source — this validator proves conformance of what an
 adapter produces, not that the adapter maps its provider's semantics correctly,
-which is per-source work and needs recorded evidence. **G1** (live provider
+which is per-source work and needs recorded evidence.
+
+**Media URLs must additionally satisfy the client loading policy before an
+adapter is activated.** The wire contract declares `MediaVariant.url` as
+`format: uri`, which is RFC 3986, and that is what this validator enforces: a
+raw string carrying whitespace, a C0 control, DEL or a backslash is refused
+before `new URL()` can repair it into something that parses, because the value
+retained and published is the unrepaired original. It is deliberately **not**
+narrowed to `MediaUrlPolicy.strict`, the Flutter loading rule
+(`lib/features/shared/domain/media/media_url_policy.dart`), which additionally
+requires HTTPS, requires a host and refuses `userinfo`. Those are stricter than
+anything an authoritative repository document states about the wire, and
+adopting them here would silently replace the producing contract with a
+consumer's policy. The gap is real all the same: a URI this gate accepts and
+that policy refuses is media no client will load. **Any future adapter that
+produces media must therefore demonstrate that its emitted URLs satisfy
+`MediaUrlPolicy.strict` before it is registered or enabled**, as part of the
+same per-source normalization evidence. Changing the wire requirement itself
+would need the OpenAPI contract to say so first.
+
+**G1** (live provider
 mode), **G3** (production cron), **G5** (event-aware scheduling), **G9**
 (persisted provenance and provisional/reconciled state) and **G-l** (mapping
 dataset coverage) remain open. Both real adapters remain unimplemented, OpenF1
