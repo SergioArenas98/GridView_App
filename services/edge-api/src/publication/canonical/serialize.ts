@@ -29,7 +29,7 @@
  * ```
  */
 
-import { compareUtf8, utf8ByteLength } from './ordering';
+import { canonicalizeString, compareUtf8, utf8ByteLength } from './ordering';
 
 /**
  * Why a value has no canonical form.
@@ -120,7 +120,19 @@ export function serializeCanonical(value: CanonicalValue): string {
   }
 }
 
-/** `<tag><utf-8 byte length>:<text>`. */
+/**
+ * `<tag><utf-8 byte length>:<canonicalized text>`.
+ *
+ * Every text carried by the format - string values, object keys, the
+ * canonical instant spelling, the canonical number spelling, an `invalid`
+ * reason - passes through `canonicalizeString` first, so a lone surrogate
+ * can never reach the digest as an ambiguous U+FFFD and the recorded length
+ * is always the length of the exact bytes that follow it. The rewrite is a
+ * no-op on the closed, ASCII-only vocabularies (numbers, reasons, canonical
+ * instants), so only genuinely untrusted string and key content is ever
+ * changed.
+ */
 function framed(tag: string, text: string): string {
-  return `${tag}${utf8ByteLength(text)}:${text}`;
+  const canonicalText = canonicalizeString(text);
+  return `${tag}${utf8ByteLength(canonicalText)}:${canonicalText}`;
 }
