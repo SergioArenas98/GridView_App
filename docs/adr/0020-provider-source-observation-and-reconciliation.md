@@ -466,6 +466,73 @@ Binding on Phase 9B, verified at its exit and in the release sweep:
 7. Keep the public contract provider-neutral: none of the internal provenance
    fields appears in a v1 DTO.
 
+## Implementation notes
+
+Added **2026-09-03** by Phase 9B-6 (PR 1). These record how obligation 1 is
+being implemented and what is still outstanding. **The decision above is
+unchanged**; nothing here revises it.
+
+### What is implemented
+
+`snapshotRevision` and its binding canonical input (D1.7), in
+`src/publication/canonical/` and `src/publication/snapshot-revision.ts`. The
+canonical input is **constructed** from a declared schema per snapshot key
+rather than filtered out of a serialized envelope, which is what makes the
+exclusion table hold by construction. The digest is SHA-256 over the UTF-8
+bytes of a length-framed canonical text prefixed `gv-canon/1`, rendered as
+`sha256:<64 hex digits>`. The full determinism rules and the per-key schemas are
+recorded in
+[`../technical/GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md).
+
+`HomeData.freshness` — and therefore `BootstrapData.home.freshness` — is the
+one place where excluded metadata lives inside `data`, but the exclusion is not
+wholesale: four of its five properties (`generatedAt`, `sourceUpdatedAt`,
+`staleAfter`, the server-`stale` flag) are exclusions in the table above, and
+`contentVersion` is read, because it carries the same curated, provider-supplied
+version `BootstrapData.contentVersion` already includes rather than a derived
+or time-varying signal.
+
+**It has no production caller.** Nothing yet assigns an observation time or
+changes `meta.sourceUpdatedAt`.
+
+### "Fixed precision" means one canonical spelling, not a digit cap
+
+The `Dates` row says "a fixed precision". Phase 9B-5 accepts
+`time-secfrac = "." 1*DIGIT` with no ceiling, exactly as RFC 3339 §5.6 writes
+it, so the wire contract carries unbounded fractional precision. Truncating to
+the millisecond the publication clock uses would make two distinct instants
+share one revision, which contradicts D1.7's own purpose.
+
+The row is therefore implemented as **one canonical spelling** — zone
+normalized to UTC, insignificant trailing zeros dropped, every significant digit
+preserved. This narrows nothing and loses nothing. `Date.parse` and `new Date`
+are not used anywhere in the canonicalization, because both silently roll a leap
+second into the following minute.
+
+### D1.9-D1.11 are not implemented, and D1.10 is blocked
+
+D1.9 and its failure properties are satisfiable by storing the
+revision/timestamp pair with the **immutable versioned document**, which the
+active pointer already makes atomic for readers.
+
+**D1.10 is not reachable with the current architecture.** The assignment must be
+computed pre-commit from the pair the active pointer names, and two publications
+for one season can both reach `SnapshotPublisher` — the staging cron and the
+protected `/internal/admin/sync/full`, which forces every job and always
+publishes. Both read the same pointer, neither observes the other, and the
+commit order is decided by interleaving. Two changed revisions can then receive
+equal timestamps (ADR 0005 rule 3 skips a genuinely changed snapshot) or a
+decreasing one (rule 1 rejects the active release). Workers KV offers no
+compare-and-set and no cross-isolate lock (ADR 0007, ADR 0010), and a
+read-before-write check, a last-write-wins race or an in-isolate mutex is not a
+serialization guarantee.
+
+D1.10 therefore needs a mechanism that genuinely serializes the assignment. That
+is an infrastructure decision this ADR does not take and Phase 9B-6 was not
+authorized to take. Until it is taken, `meta.sourceUpdatedAt` is unchanged, the
+clamp event of D1.11a has nothing to raise, and **G-i stays open in both
+halves**.
+
 ## Reopening conditions
 
 | Trigger | Consequence |
