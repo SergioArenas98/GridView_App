@@ -217,7 +217,12 @@ describe('canonical revision serialization', () => {
     expect(canonicalRevisionText(polluted)).toBe(canonicalRevisionText(base));
   });
 
-  it('excludes the freshness block carried inside the home payload', () => {
+  it('excludes the four volatile freshness fields carried inside the home payload, but includes the stable contentVersion', () => {
+    // Full coverage of this selective projection - every individual field,
+    // null vs non-null, absent vs null - lives in
+    // `home-freshness-projection.test.ts`. This test pins the general
+    // "envelope-shaped fields inside `data`" exclusion at the same site the
+    // wholesale-exclusion version of this test used to.
     const home = (freshness: unknown) => ({
       documentName: 'home' as const,
       schemaVersion: 1,
@@ -240,16 +245,31 @@ describe('canonical revision serialization', () => {
         stale: false,
       }),
     );
-    const second = canonicalRevisionText(
+    // The four derived/time-varying fields all change; contentVersion is
+    // held fixed - the revision must not move.
+    const volatileFieldsChanged = canonicalRevisionText(
       home({
         generatedAt: '2026-09-03T09:30:00.000Z',
         sourceUpdatedAt: '2026-09-03T09:00:00.000Z',
         staleAfter: '2026-09-03T09:45:00.000Z',
-        contentVersion: '2026.09.03.4',
+        contentVersion: '2026.07.18.1',
         stale: true,
       }),
     );
-    expect(second).toBe(first);
+    expect(volatileFieldsChanged).toBe(first);
+
+    // Only contentVersion changes - the revision must move, because it is
+    // stable curated public data, not freshness.
+    const contentVersionChanged = canonicalRevisionText(
+      home({
+        generatedAt: '2026-07-18T12:00:00.000Z',
+        sourceUpdatedAt: '2026-07-18T11:00:00.000Z',
+        staleAfter: '2026-07-18T12:15:00.000Z',
+        contentVersion: '2026.09.03.4',
+        stale: false,
+      }),
+    );
+    expect(contentVersionChanged).not.toBe(first);
   });
 
   it('makes a schemaVersion change a new revision', () => {

@@ -228,13 +228,41 @@ function asRecord(value: object): object | null | 'unreadable' {
   return prototype === Object.prototype || prototype === null ? value : null;
 }
 
+/**
+ * The outcome of classifying whether a value is an array, contained the same
+ * way every other reflective read in this module is: a revoked `Proxy` makes
+ * `Array.isArray` itself throw (`Cannot perform 'IsArray' on a proxy that has
+ * been revoked`), which is not a trap the proxy's handler controls but is
+ * still a throw a hostile or merely-torn-down value can produce. Centralized
+ * here so `projectObject` and `projectList` - the two callers that must tell
+ * an array from a record before doing anything else - apply the same
+ * containment instead of each guarding it independently.
+ */
+type ArrayClassification =
+  | { readonly kind: 'array'; readonly value: readonly unknown[] }
+  | { readonly kind: 'not-array' }
+  | { readonly kind: 'unreadable' };
+
+function classifyArray(value: unknown): ArrayClassification {
+  try {
+    if (Array.isArray(value)) return { kind: 'array', value };
+    return { kind: 'not-array' };
+  } catch {
+    return { kind: 'unreadable' };
+  }
+}
+
 function projectObject(
   fields: readonly CanonicalFieldSpec[],
   value: unknown,
 ): CanonicalValue {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (typeof value !== 'object' || value === null) {
     return canonicalInvalid('type');
   }
+  const classification = classifyArray(value);
+  if (classification.kind === 'unreadable')
+    return canonicalInvalid('unreadable');
+  if (classification.kind === 'array') return canonicalInvalid('type');
   const record = asRecord(value);
   if (record === 'unreadable') return canonicalInvalid('unreadable');
   if (record === null) return canonicalInvalid('type');
@@ -264,13 +292,15 @@ function projectList(
   spec: Extract<CanonicalSpec, { kind: 'list' }>,
   value: unknown,
 ): CanonicalValue {
-  // `Array.isArray` consults the internal class rather than a trap, so it
-  // answers for a proxy without running the proxy's code.
-  if (!Array.isArray(value)) return canonicalInvalid('type');
+  const classification = classifyArray(value);
+  if (classification.kind === 'unreadable')
+    return canonicalInvalid('unreadable');
+  if (classification.kind === 'not-array') return canonicalInvalid('type');
+  const sourceArray = classification.value;
 
   let length: { readonly value: unknown } | null;
   try {
-    length = ownDataProperty(value, 'length');
+    length = ownDataProperty(sourceArray, 'length');
   } catch {
     return canonicalInvalid('unreadable');
   }
@@ -282,7 +312,7 @@ function projectList(
   for (let index = 0; index < length.value; index += 1) {
     let element: { readonly value: unknown } | null;
     try {
-      element = ownDataProperty(value, String(index));
+      element = ownDataProperty(sourceArray, String(index));
     } catch {
       items.push(canonicalInvalid('unreadable'));
       continue;

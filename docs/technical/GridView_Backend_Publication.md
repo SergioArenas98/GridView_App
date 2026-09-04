@@ -382,9 +382,9 @@ So the input is **constructed** from a declared schema, one per snapshot key
 (`src/publication/canonical/snapshot-schemas.ts`). The projection reads the
 declared properties and nothing else, which makes every exclusion an exclusion
 by construction: `requestId`, `generatedAt`, `sourceUpdatedAt`,
-`snapshotObservedAt`, `staleAfter`, ETags, server-stale flags, provider
-identifiers, `fetchedAt`, `reconciledAt`, retry and reconciliation state and a
-payload-derived `contentVersion` are not declared, so none of them is read.
+`snapshotObservedAt`, `staleAfter`, `stale`, ETags, server-stale flags,
+provider identifiers, `fetchedAt`, `reconciledAt`, and retry and reconciliation
+state are not declared, so none of them is read.
 
 Exactly three things are hashed:
 
@@ -394,11 +394,18 @@ Exactly three things are hashed:
 | `schemaVersion` | D1.7: a schema change genuinely changes the public representation |
 | `documentName` | A **domain separator**, not content. Two keys with byte-identical payloads stay two keys. It cannot cause a false revision change, because a key's name is fixed for the life of the key |
 
-`freshness` is excluded **wholesale**: all five of its properties are D1.7
-exclusions, the `contentVersion` among them being freshness metadata rather than
-payload. `BootstrapData.contentVersion` / `mediaVersion` and the whole of
-`content:manifest` **are** declared — those are top-level payload fields the
-client reads, and a curated content bump is a genuine change to what is served.
+`freshness` is **selectively** projected, not excluded wholesale. Four of its
+five properties are D1.7 exclusions - `generatedAt`, `sourceUpdatedAt`,
+`staleAfter` and the server-`stale` flag - and stay unread. `contentVersion` is
+different: it carries the same curated, provider-supplied version as
+`BootstrapData.contentVersion`, not a derived or time-varying signal, so it is
+declared inside a nested `freshness` schema (one field: `contentVersion`) and
+read like any other stable payload field. Without it, a genuine curated content
+bump left the standalone `home` document's revision unchanged even though the
+identical bump moved `bootstrap`'s. `BootstrapData.contentVersion` /
+`mediaVersion` and the whole of `content:manifest` **are** declared at the top
+level too — those are top-level payload fields the client reads, and a curated
+content bump is a genuine change to what is served.
 
 ### Determinism rules
 
@@ -411,8 +418,8 @@ client reads, and a curated content bump is a genuine change to what is served.
 | Dates | RFC 3339 canonicalized to UTC: case-normalized designators, numeric offsets converted, insignificant trailing zeros dropped. **No truncation.** See the precision note below |
 | Numbers | One spelling per value: no exponent, no `-0`, no insignificant trailing zeros. Fractional championship points hash stably |
 | Encoding | UTF-8, from one shared `TextEncoder` — the same bytes the digest is taken over |
-| Framing | Length-prefixed rather than delimited, so no escaping rule exists to disagree about and no two distinct canonical values serialize to the same text |
-| Hostile values | Every property is taken once through the shared `ownDataProperty` discipline (an accessor is described, never invoked); records are classified by prototype rather than by `typeof`; every reflective trap that can throw is contained. The public boundary never throws, and a mismatch becomes a bounded marker carrying the *kind* of mismatch, never the value |
+| Framing | Length-prefixed rather than delimited: every string, key, canonical instant and canonical number is framed `<tag><UTF-8 byte length>:<text>`. Before framing, the raw text passes through `canonicalizeString`, which doubles a literal backslash and rewrites an unpaired UTF-16 surrogate to `\uXXXX` (its own code unit in hex); a valid surrogate pair is left untouched. String canonicalization always happens **before** byte-length framing, so the recorded length is the length of the bytes actually hashed. Together, length-prefixing and injective string encoding are what prevent both delimiter ambiguity and `TextEncoder`'s silent U+FFFD replacement from collapsing distinct inputs onto the same text |
+| Hostile values | Every property is taken once through the shared `ownDataProperty` discipline (an accessor is described, never invoked); records are classified by prototype rather than by `typeof`; array-vs-record classification is contained the same way - a revoked `Proxy` makes `Array.isArray` itself throw, and that throw is caught and mapped to the bounded `unreadable` marker rather than escaping; every other reflective trap that can throw is likewise contained. The public boundary never throws, and a mismatch becomes a bounded marker carrying the *kind* of mismatch, never the value |
 
 ### Format and algorithm
 

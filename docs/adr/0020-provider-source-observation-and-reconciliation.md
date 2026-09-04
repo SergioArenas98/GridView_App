@@ -484,9 +484,13 @@ bytes of a length-framed canonical text prefixed `gv-canon/1`, rendered as
 recorded in
 [`../technical/GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md).
 
-`HomeData.freshness` — and therefore `BootstrapData.home.freshness` — is
-excluded **wholesale**. It is the one place where excluded metadata lives inside
-`data`, and all five of its properties are exclusions in the table above.
+`HomeData.freshness` — and therefore `BootstrapData.home.freshness` — is the
+one place where excluded metadata lives inside `data`, but the exclusion is not
+wholesale: four of its five properties (`generatedAt`, `sourceUpdatedAt`,
+`staleAfter`, the server-`stale` flag) are exclusions in the table above, and
+`contentVersion` is read, because it carries the same curated, provider-supplied
+version `BootstrapData.contentVersion` already includes rather than a derived
+or time-varying signal.
 
 **It has no production caller.** Nothing yet assigns an observation time or
 changes `meta.sourceUpdatedAt`.

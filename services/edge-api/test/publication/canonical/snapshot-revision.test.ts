@@ -139,6 +139,36 @@ describe('snapshot revision identity', () => {
     }
   });
 
+  it('moves the home, bootstrap and manifest revisions when only the curated content version changes, and nothing else', async () => {
+    const base = await seasonSource({ contentVersion: '2026.07.18.1' });
+    const bumped = await seasonSource({ contentVersion: '2026.09.03.4' });
+    const before = await revisionsOf(
+      generateSnapshotSet(base, '2026-07-18T12:00:00.000Z', 'v1'),
+    );
+    const after = await revisionsOf(
+      generateSnapshotSet(bumped, '2026-07-18T12:00:00.000Z', 'v2'),
+    );
+
+    // `home` carries the curated version only inside `freshness`, which the
+    // mock's overrides thread through to `BootstrapData.home.freshness` too
+    // (the same generated `home` object), and `bootstrap`/`content:manifest`
+    // carry it at their own top level.
+    expect(after.get('home')).not.toBe(before.get('home'));
+    expect(after.get('bootstrap')).not.toBe(before.get('bootstrap'));
+    expect(after.get('content:manifest')).not.toBe(
+      before.get('content:manifest'),
+    );
+
+    const untouched = [...before.keys()].filter(
+      (name) =>
+        name !== 'home' && name !== 'bootstrap' && name !== 'content:manifest',
+    );
+    expect(untouched.length).toBeGreaterThan(0);
+    for (const name of untouched) {
+      expect(after.get(name)).toBe(before.get(name));
+    }
+  });
+
   it('moves for a removal, and only for the documents it touches', async () => {
     const source = await seasonSource();
     const reduced: ProviderSeasonSource = {

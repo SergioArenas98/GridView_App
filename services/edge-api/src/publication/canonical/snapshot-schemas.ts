@@ -14,20 +14,24 @@
  *   `contract/types.ts` without adding it here leaves it out of the revision,
  *   which the "every generated document" tests are there to catch.
  *
- * ## `freshness` is excluded wholesale
+ * ## `freshness` is selectively projected, not excluded wholesale
  *
  * `HomeData.freshness` - and therefore `BootstrapData.home.freshness` - is the
- * one place where excluded metadata lives *inside* `data`. All five of its
- * properties are ADR 0020 exclusions: `generatedAt`, `sourceUpdatedAt` (which
- * the revision derives, so including it would be circular), `staleAfter`, the
- * server-`stale` flag, and `contentVersion`, which is freshness metadata here
- * rather than payload. The block is therefore not declared at all.
+ * one place where excluded metadata lives *inside* `data`, but it is not a
+ * single exclude-or-include decision: `generatedAt`, `sourceUpdatedAt` (which
+ * the revision derives, so including it would be circular), `staleAfter` and
+ * the server-`stale` flag are ADR 0020 exclusions and stay unread. `contentVersion`
+ * is different - it carries the same curated, provider-supplied version as
+ * `BootstrapData.contentVersion`, not a derived or time-varying signal, so it is
+ * declared and read like any other stable payload field. A block that excluded
+ * `freshness` wholesale would let a genuine curated content bump leave the
+ * standalone `home` document's revision unchanged.
  *
  * `BootstrapData.contentVersion` and `BootstrapData.mediaVersion` **are**
- * declared. They are top-level payload fields the client reads, not a freshness
- * projection, and a curated content bump is a genuine change to what
- * `/v1/bootstrap` serves. `content:manifest` carries the same versions as its
- * own payload and keeps its own revision for the same reason.
+ * declared at the top level too. They are top-level payload fields the client
+ * reads, not a freshness projection, and a curated content bump is a genuine
+ * change to what `/v1/bootstrap` serves. `content:manifest` carries the same
+ * versions as its own payload and keeps its own revision for the same reason.
  *
  * ## Array policy
  *
@@ -332,8 +336,14 @@ const seasonConstructorSummary = object([
   { key: 'driverLineup', spec: nullableOrderedList(text()) },
 ]);
 
-/** `freshness` is deliberately absent - see the module note. */
+/**
+ * Only `contentVersion` is read - see the module note. The other four
+ * `DataFreshness` properties are derived or time-varying and stay excluded.
+ */
+const homeFreshness = object([{ key: 'contentVersion', spec: nullableText() }]);
+
 const home = object([
+  { key: 'freshness', spec: homeFreshness },
   { key: 'featuredEvent', spec: nullableObject(fieldsOf(grandPrixSummary)) },
   { key: 'featuredSession', spec: nullableObject(fieldsOf(session)) },
   {
