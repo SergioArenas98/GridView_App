@@ -182,9 +182,10 @@ source** for:
   `priorVersion`, `candidateVersion`, the candidate's per-key
   `snapshotRevision` values, the per-key `snapshotObservedAt` values assigned
   during `prepare`, the `sourceOrderingInput` supplied to `prepare`, the
-  expected completeness/manifest commitment `finalize` will be checked
-  against, `preparedAt` and `deadline` — see D4 for why every one of these
-  fields must survive a restart between `prepare` and `finalize`
+  `expectedManifestCommitment` supplied to `prepare` (against which
+  `finalize` will check the caller's later `completionAttestation`),
+  `preparedAt` and `deadline` — see D4 for why every one of these fields must
+  survive a restart between `prepare` and `finalize`
 - the operation epoch and the caller-facing operation token
 
 The authoritative active/previous transition — the moment a candidate version
@@ -211,22 +212,38 @@ operator rollback request) still:
 
 1. obtains normalized candidate data (from the provider path, or — for
    rollback — from a historical version, per §"Rollback Model 1");
-2. computes `snapshotRevision` per document;
-3. calls `prepare`;
+2. computes `snapshotRevision` per document, and — once document identities
+   are known from that same normalized data, before `prepare` is ever
+   called — deterministically enumerates the planned document manifest and
+   computes an `expectedManifestCommitment` from it (e.g. the sorted,
+   deduplicated document-name list, or a digest of it; the exact shape is a
+   Mechanism-PR detail);
+3. calls `prepare`, passing that `expectedManifestCommitment`;
 4. receives per-key `snapshotObservedAt` assignments back from the DO;
 5. finalizes, validates and writes the immutable versioned documents and
    inventory to KV, with the assigned timestamps baked into each document's
-   `meta.sourceUpdatedAt`;
-6. calls `finalize`.
+   `meta.sourceUpdatedAt`, recording which planned writes completed
+   successfully;
+6. **only once every planned write has succeeded**, produces a
+   `completionAttestation` carrying the manifest commitment for what was
+   actually written, and calls `finalize` with it. A document-writing phase
+   that fails or completes only partially must never produce a
+   `completionAttestation` and must never call `finalize` — an incomplete
+   write is not a candidate for commit.
 
 The Durable Object never generates provider data, never validates a document
-body and never stores a complete snapshot payload. It stores only the
-authoritative pointer/revision/operation state named in D2 — bounded per
-season, not proportional to document count or history depth.
+body and never stores a complete snapshot payload. Its own storage holds
+metadata proportional to the current committed release's document manifest
+and, while one is in progress, the prepared candidate's (D2) — never
+complete document bodies. This state does **not** grow with historical
+release count: superseded operation and per-key state are retired per the
+lifecycle D5/D9 define, so its size is bounded by the current release's
+inventory plus at most one prepared operation, never by all versions ever
+published.
 
 ### D4. Two-phase publication protocol
 
-#### `prepare(season, operationKind, candidateVersion, perKeyRevisions, sourceOrderingInput, expectedCompleteness)`
+#### `prepare(season, operationKind, candidateVersion, perKeyRevisions, sourceOrderingInput, expectedManifestCommitment)`
 
 `operationKind` is one of exactly two bounded values: `ordinary-publication`
 or `rollback-republication` (see D8 for what authorizes the second one). It
@@ -269,7 +286,7 @@ The Durable Object, in one atomic storage transaction:
   will need, and everything a restart between `prepare` and `finalize` must
   not lose**: `{epoch, token, operationKind, priorVersion, candidateVersion,
   perKeyRevisions, assignedTimestamps, sourceOrderingInput,
-  expectedCompleteness, preparedAt, deadline}`. Omitting any of these was the
+  expectedManifestCommitment, preparedAt, deadline}`. Omitting any of these was the
   review-confirmed defect this ADR corrects (see "Context: design-review
   corrections" below) — without them, a restart between `prepare` and
   `finalize` leaves the Durable Object durably remembering only *that*
@@ -292,15 +309,20 @@ The caller:
   ADR 0020 D1.7);
 - validates the final documents against the existing schema/inventory
   discipline ([`GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md));
-- writes every version-scoped document and its inventory to KV, and derives
-  the `expectedCompleteness` value it will present to `finalize` (e.g. the
-  sorted, deduplicated document-name manifest `prepare` recorded, or a digest
-  of it — the exact shape is a Mechanism-PR detail);
+- writes every version-scoped document and its inventory to KV, recording
+  which planned writes (from the manifest already fixed before `prepare`)
+  completed successfully;
+- **only once every planned write has succeeded**, derives a
+  `completionAttestation` — the manifest commitment for what was actually
+  written, computed the same deterministic way as `expectedManifestCommitment`
+  so the two are comparable — that it will present to `finalize`. A
+  document-writing phase that fails or completes only partially stops here:
+  it produces no `completionAttestation` and never calls `finalize`;
 - **never** touches `activeVersion`/`previousVersion` and gains **no**
   commit authority merely by holding a valid token — a token authorizes one
   `finalize` call, nothing else.
 
-#### `finalize(season, token, completenessAttestation)`
+#### `finalize(season, token, completionAttestation)`
 
 The Durable Object, in one atomic storage transaction:
 
@@ -308,18 +330,24 @@ The Durable Object, in one atomic storage transaction:
   caller's;
 - verifies the operation is still `prepared` (not cancelled, not superseded,
   not expired);
-- compares `completenessAttestation` against the `expectedCompleteness` value
-  `prepare` durably recorded for this exact epoch. **This proves the caller's
-  attestation is consistent with the candidate this Durable Object prepared —
-  it is a caller attestation check, not an independent inspection of Workers
-  KV.** The Durable Object never reads the versioned documents or their
-  inventory from KV; it has no way to independently verify global KV
-  visibility, and this ADR does not claim it does. A caller that attests
-  falsely produces an inconsistency the *document-level* validation and
-  inventory discipline ([`GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md))
-  is what remains responsible for catching — this DO-level check only rules
-  out committing a candidate whose caller never went through the recorded
-  `prepare` step for it;
+- compares the manifest commitment carried by `completionAttestation` against
+  the `expectedManifestCommitment` value `prepare` durably recorded for this
+  exact epoch — never against any other epoch's record. **This proves the
+  caller's post-write attestation is consistent with the manifest this
+  Durable Object was given before `prepare` admitted the candidate; it is a
+  caller-attestation consistency check, not an independent inspection of
+  Workers KV, and it is not a cryptographic proof of anything beyond that
+  internal consistency.** The Durable Object never reads the versioned
+  documents or their inventory from KV; it has no way to independently verify
+  global KV visibility, and this ADR does not claim it does. A caller that
+  attests falsely, or that attests to a manifest other than the one it was
+  prepared against, produces a mismatch this check rejects outright; the
+  *document-level* validation and inventory discipline
+  ([`GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md))
+  remains responsible for the actual completeness of the release — this
+  DO-level check only rules out committing a candidate whose caller never
+  went through the recorded `prepare` step for it, or whose write phase did
+  not finish;
 - if the attestation matches: performs the **one and only** authoritative
   state transition this design has, `prepared → committed`, in the same
   atomic write — recording the candidate as `activeVersion`, the version that
@@ -539,8 +567,12 @@ version. It is **republication**:
    `snapshotRevision` hash under ADR 0020 D1.7 — `requestId`, `generatedAt`,
    `staleAfter`, the server `stale` flag, ETag inputs — set fresh for this
    rollback's publication time. The exact per-version inventory is freshly
-   computed and re-verified for completeness against what this rollback
-   actually writes; it is never copied from the old version's inventory.
+   computed against what this rollback actually intends to write; it is
+   never copied from the old version's inventory. This freshly-computed
+   inventory is also what the caller deterministically enumerates into a
+   planned document manifest and turns into an `expectedManifestCommitment`
+   — exactly as D3/D4 describe for ordinary publication — before step 9's
+   `prepare` call, never after.
 5. Compute `snapshotRevision` for each restored key using the same canonical
    hashing already implemented for ordinary publication ([ADR 0020](0020-provider-source-observation-and-reconciliation.md)
    D1.7) — Model 1 introduces **no new revision-computation mechanism**.
@@ -555,13 +587,17 @@ version. It is **republication**:
    existing rule, applied through the same `prepare` mechanism as ordinary
    publication) for a key whose restored revision differs from the currently
    active one.
-9. Write a complete new immutable version and inventory to KV.
-10. Commit it through the same `prepare`/`finalize` protocol as any other
-    publication — rollback has **no separate commit path** and cannot flip
-    the authoritative pointer directly, calling `prepare` with
-    `operationKind: 'rollback-republication'` (D4).
+9. Call `prepare` with `operationKind: 'rollback-republication'` and the
+   `expectedManifestCommitment` from step 4, then write the complete new
+   immutable version and inventory to KV with the timestamps `prepare`
+   assigned baked in — the same order D3/D4 require for any publication.
+10. **Only once that write fully succeeds**, produce a `completionAttestation`
+    for what was actually written and call `finalize` — rollback has **no
+    separate commit path** and cannot flip the authoritative pointer
+    directly; a pre-commit failure here leaves the currently active release
+    untouched exactly as D4 already requires.
 
-**Rollback's admission authority, stated explicitly.** Step 10's `prepare`
+**Rollback's admission authority, stated explicitly.** Step 9's `prepare`
 call carries a historical `sourceOrderingInput` that is, by construction,
 never newer than what is currently committed — that is what makes it a
 rollback. D4's ordinary source-ordering staleness rejection is **not**
@@ -677,10 +713,26 @@ one indivisible multi-key storage write. The exact call
 (`ctx.storage.transaction(...)` or an equivalent single atomic write the
 SQLite-backed storage API provides) is a Mechanism-PR implementation detail;
 this ADR requires only that it be **one** atomic storage-level operation, with
-every read `finalize` needs (current epoch, token, phase, expected
-completeness) and every write it performs (activeVersion, previousVersion,
-per-key state, phase → committed) inside that **single** transaction, never a
-sequence of separately-awaited operations with a gap between them.
+every read `finalize` needs (current epoch, token, phase,
+`expectedManifestCommitment`) and every write it performs (activeVersion,
+previousVersion, per-key state, phase → committed) inside that **single**
+transaction, never a sequence of separately-awaited operations with a gap
+between them.
+
+**Capacity obligation, stated honestly rather than assumed away.** The
+per-key `snapshotRevision`/`snapshotObservedAt` maps this transaction writes
+grow with the release's document count (D2/D3); "one atomic write" is a
+requirement about transactional indivisibility, not a license to serialize
+an arbitrarily large per-key map into a single oversized value without
+proof it fits. The Mechanism PR must demonstrate the chosen SQLite-backed
+representation handles the largest supported release inventory without
+relying on one oversized serialized blob, by either: storing bounded
+per-key records in a SQLite-backed layout appropriate to that API and
+updating them atomically within the single transaction above; or
+establishing and enforcing a safe serialized-state size limit before any
+versioned KV document is written for that release. This ADR leaves the
+storage-layout choice to the Mechanism PR; it does not leave the capacity
+obligation itself optional.
 
 **No correctness-critical in-memory single-flight identity (a
 `commitPromise` or equivalent) is retained, and none is required.** An
@@ -871,7 +923,7 @@ purpose once the commit is one Durable-Object-storage-protected transaction.
 |---|---|---|
 | `operationToken` | One `prepare()` call | Caller-facing handle, presented back to `finalize`/`cancel` |
 | `operationEpoch` | Durable, monotonic, per season | The actual fencing value every transition checks; increments on every admitted `prepare` |
-| Durable operation record | Durable, until superseded | `{epoch, token, operationKind, phase, priorVersion, candidateVersion, perKeyRevisions, assignedTimestamps, sourceOrderingInput, expectedCompleteness, preparedAt, deadline}` — sole restart-recovery source of truth, and the only source `finalize` reads from (D4) |
+| Durable operation record | Durable, until superseded | `{epoch, token, operationKind, phase, priorVersion, candidateVersion, perKeyRevisions, assignedTimestamps, sourceOrderingInput, expectedManifestCommitment, preparedAt, deadline}` — sole restart-recovery source of truth, and the only source `finalize` reads from (D4) |
 
 ### State transition table
 
@@ -918,12 +970,41 @@ Deterministic, application-logic tests the Mechanism PR must include:
   `finalize(oldToken)` is rejected.
 - A stale `finalize` after a `prepared`-then-cancelled token is rejected, no
   version is deleted while its status is ambiguous.
+- **The `expectedManifestCommitment` is computed before `prepare` is ever
+  called**: given the same normalized candidate data and document identities,
+  the caller's deterministic manifest enumeration produces the same
+  commitment whether computed once or repeated, and `prepare` is shown to
+  accept it as an input rather than compute or derive it itself.
 - **A restart between `prepare` and `finalize` does not lose the ability to
   finalize correctly**: after simulating a restart, `finalize` for the
   surviving `prepared` record still commits the exact per-key
   `snapshotRevision`/`snapshotObservedAt` values `prepare` originally
-  assigned, read entirely from the durable record (D4) — no in-memory state
+  assigned, and still holds the exact `expectedManifestCommitment` `prepare`
+  recorded, read entirely from the durable record (D4) — no in-memory state
   is required.
+- **A `completionAttestation` carrying a manifest commitment that does not
+  match the durably-recorded `expectedManifestCommitment` for the current
+  epoch is rejected by `finalize`**, with no state transition — proving a
+  caller cannot commit a candidate other than the one it was prepared
+  against.
+- **An incomplete or failed document-writing phase cannot finalize**: a
+  simulated partial-write failure (fewer than every planned document
+  written) never produces a `completionAttestation` and never reaches
+  `finalize`; no test exercises `finalize` for a write phase that did not
+  fully succeed.
+- **A matching `completionAttestation` is never asserted, in a test or in
+  documentation, as independent proof of global Workers KV visibility** — the
+  test that proves the match only proves internal consistency between what
+  was prepared and what the caller attests to, and explicitly does not read
+  KV to confirm the documents are globally visible.
+- **The chosen SQLite-backed representation handles the largest supported
+  release inventory without relying on one oversized serialized value**: a
+  test using a release-sized document manifest (drivers, constructors,
+  circuits and Grand Prix routes at the largest count this codebase
+  currently supports) proves the per-key state either lives in bounded,
+  atomically-updated per-key records, or that a serialized-state size limit
+  is enforced before any versioned KV document is written, per D9's capacity
+  obligation.
 - **Ordinary publication's staleness rejection is unaffected by the rollback
   exemption**: a `prepare` call with `operationKind: 'ordinary-publication'`
   and an older `sourceOrderingInput` is still rejected exactly as before.

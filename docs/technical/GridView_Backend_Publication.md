@@ -377,27 +377,40 @@ by one `SeasonPublicationSequencer` Durable Object per season
 ```text
 obtain candidate data (provider fetch, or a historical version for rollback)
   -> compute snapshotRevision per document
+  -> enumerate the planned document manifest; compute expectedManifestCommitment
   -> DO.prepare(season, operationKind, candidateVersion, perKeyRevisions,
-                 orderingInput, expectedCompleteness)
+                 orderingInput, expectedManifestCommitment)
        <- assigned snapshotObservedAt per key, operation token
   -> bake assigned timestamps into each document; regenerate volatile fields
-  -> validate; write every versioned document + inventory to KV (unchanged)
-  -> DO.finalize(season, token, completenessAttestation)
+  -> validate; write every versioned document + inventory to KV (unchanged),
+     recording which planned writes completed successfully
+  -> only once every planned write has succeeded, produce completionAttestation
+  -> DO.finalize(season, token, completionAttestation)
        <- authoritative active/previous transition, one atomic DO-storage write
 ```
 
 `operationKind` is `ordinary-publication` or `rollback-republication` (see
 "Rollback republication" below for what the second one changes). The Durable
 Object never generates provider data, never validates a document and never
-stores a complete snapshot payload — it stores only the bounded per-season
-authority state ADR 0025 D2 names: `activeVersion`, `previousVersion`, the
-current `snapshotRevision`/`snapshotObservedAt` per key, and the **complete**
-current publication-operation record (`operationKind`, `phase`,
-`priorVersion`, `candidateVersion`, the candidate's per-key revisions and
-assigned timestamps, `sourceOrderingInput`, `expectedCompleteness`, epoch,
+stores a complete snapshot payload — its own storage holds metadata
+proportional to the current committed release's document manifest and,
+while one is in progress, the prepared candidate's (ADR 0025 D2/D3):
+`activeVersion`, `previousVersion`, the current
+`snapshotRevision`/`snapshotObservedAt` per key, and the **complete** current
+publication-operation record (`operationKind`, `phase`, `priorVersion`,
+`candidateVersion`, the candidate's per-key revisions and assigned
+timestamps, `sourceOrderingInput`, `expectedManifestCommitment`, epoch,
 token, `preparedAt`, `deadline`) — every value `finalize` needs, so a restart
 between `prepare` and `finalize` loses nothing it must later verify or
-commit (ADR 0025 D4).
+commit (ADR 0025 D4). This state does not grow with historical release
+count — superseded operation and per-key state are retired per ADR 0025
+D5/D9 — so its size is bounded by the current release's inventory plus at
+most one prepared operation, never by all versions ever published.
+Comparing the manifest commitment carried by `completionAttestation` against
+the durably-recorded `expectedManifestCommitment` proves the caller's
+post-write attestation is consistent with what was prepared; it is not, and
+is never claimed to be, independent proof that the written documents are
+globally visible across Workers KV (ADR 0025 D4).
 
 ### Per-key revision and timestamp assignment
 
