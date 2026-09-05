@@ -533,6 +533,50 @@ authorized to take. Until it is taken, `meta.sourceUpdatedAt` is unchanged, the
 clamp event of D1.11a has nothing to raise, and **G-i stays open in both
 halves**.
 
+### The serialization decision, taken (2026-09-05, Phase 9B-6b design)
+
+[ADR 0025](0025-season-publication-authority-and-rollback-republication.md)
+takes the infrastructure decision the paragraph above says this ADR does not:
+authority over each season's `activeVersion` (the pair D1.10's assignment must
+be computed against) moves to one atomic transaction in a per-season Durable
+Object's own storage, closing the two-unserialized-writers problem described
+above without relying on Workers KV to provide anything it does not.
+
+Two clarifications this makes necessary, **both documentation only — nothing
+below is implemented**:
+
+- **D1.9's comparison is, and remains, per snapshot key against the
+  currently active revision for that key** — never against a global,
+  cross-version historical revision identity, and never against a target
+  version's own previously-recorded revision when that target was itself
+  once active. This was always what D1.9 meant ("if a regenerated snapshot
+  has the *same* `snapshotRevision` as the published one, it keeps that
+  revision's existing `snapshotObservedAt`"); it is restated here because
+  ADR 0025's rollback design (Model 1) makes the distinction load-bearing:
+  a restored historical key is compared against **what is active now**, so
+  its `snapshotObservedAt` reflects **continuous active residence** of that
+  exact content — how long the currently-serving revision has been the
+  active one — not some notion of "when this content was first ever
+  observed across the season's whole history." A key that was active before,
+  was replaced, and is now restored by a rollback gets a **fresh** timestamp
+  if its neighbors changed the comparison outcome, by the same rule as any
+  other differing key.
+- **Rollback Model 1 (ADR 0025 D8) creates a new activation, with fresh
+  timestamps assigned only where restored content differs from what is
+  currently active**, through the same D1.10 monotonic assignment — computed
+  during the sequencer's `prepare` step, **before** the immutable document
+  carrying `meta.sourceUpdatedAt` is constructed, exactly as D1.9 already
+  requires for ordinary publication ("It is persisted with the revision in
+  the same publication transaction"). Rollback introduces no second
+  timestamp-assignment mechanism.
+
+**D1.9-D1.11 remain unimplemented.** ADR 0025 is a design decision, not
+implementation: no Durable Object class, binding or caller exists yet.
+`meta.sourceUpdatedAt` is unchanged today, the D1.11a clamp event has nothing
+to raise yet, and **G-i stays open in both halves** until the Mechanism,
+Integration and activation steps ADR 0025 separately gates are each
+authorized and completed.
+
 ## Reopening conditions
 
 | Trigger | Consequence |

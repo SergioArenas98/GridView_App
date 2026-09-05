@@ -358,6 +358,123 @@ validated and verified. During KV propagation, an edge location may briefly read
 an older active pointer. It must not observe an unpublished version unless that
 pointer has already changed.
 
+## Publication authority (design, Phase 9B-6b — not implemented)
+
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+records a design decision that replaces **which write is the commit point**
+for the algorithm above. Nothing in this section is implemented, provisioned
+or activated; the "Publication Algorithm" and "Rollback" sections above remain
+exactly how publication and rollback work **today**, and continue to work that
+way until the steps below are each separately authorized and completed.
+
+### The two-phase flow
+
+Once implemented, generation and validation stay exactly as described above,
+but the pointer transition moves behind a `prepare`/`finalize` protocol served
+by one `SeasonPublicationSequencer` Durable Object per season
+(`idFromName(String(season))`):
+
+```text
+obtain candidate data (provider fetch, or a historical version for rollback)
+  -> compute snapshotRevision per document
+  -> DO.prepare(season, candidateVersion, perKeyRevisions, orderingInput)
+       <- assigned snapshotObservedAt per key, operation token
+  -> bake assigned timestamps into each document; regenerate volatile fields
+  -> validate; write every versioned document + inventory to KV (unchanged)
+  -> DO.finalize(season, token, completenessProof)
+       <- authoritative active/previous transition, one atomic DO-storage write
+```
+
+The Durable Object never generates provider data, never validates a document
+and never stores a complete snapshot payload — it stores only the bounded
+per-season authority state ADR 0025 D2 names: `activeVersion`,
+`previousVersion`, the current `snapshotRevision`/`snapshotObservedAt` per
+key, and the current publication-operation record (`phase`, `priorVersion`,
+`candidateVersion`, epoch, token).
+
+### Per-key revision and timestamp assignment
+
+`prepare` assigns each key's `snapshotObservedAt` inside one atomic
+Durable Object storage transaction, against that same transaction's read of
+the DO's own currently-committed state — never against a Workers KV read
+raced against an unobserved second publication attempt, which is the
+specific gap [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+D1.10 identified as unclosable under the current architecture:
+
+- a key whose candidate `snapshotRevision` equals the currently active
+  revision for that key **keeps its current `snapshotObservedAt`** — no
+  manufactured churn for unchanged content;
+- a key whose candidate revision differs is assigned
+  `max(now, previous + 1 ms)` — D1.10's existing rule, now computable because
+  "previous" and the new value are read and written inside one transaction,
+  not two racing reads of an eventually-consistent store.
+
+Timestamps are assigned **before** final document construction, because
+`meta.sourceUpdatedAt` is baked into each immutable document.
+
+### The authoritative active/previous pair
+
+`finalize` performs the authoritative transition — from the prior
+`(activeVersion, previousVersion)` pair to the candidate pair — as **one
+atomic Durable Object storage transaction**. There is no external Workers KV
+pointer write inside this commit. This is the public commit point, replacing
+today's "write `active:{season}` last" step; see
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+§"Safety reasoning" for why an external KV write cannot provide the same
+guarantee.
+
+### Router resolution and previous-version fallback
+
+Once activated, the public router resolves `activeVersion` (and, where a
+rollback needs a default target, `previousVersion`) through a call to the
+per-season Durable Object, then reads the selected immutable document from
+KV exactly as today. If that document has not yet propagated to the serving
+edge location, the router may retry against the `previousVersion` the same
+authoritative lookup returned — a bounded, observable fallback that never
+reinterprets what the Durable Object itself reports as active, and preserves
+the existing stale/degraded response semantics. If the Durable Object binding
+or lookup itself is unavailable, the router returns the existing bounded
+fail-closed shape; it does not fall back to a legacy KV pointer, because after
+cutover nothing maintains one as a live value (see "Legacy pointer
+retirement" below).
+
+### Failure behavior
+
+Because the commit is one atomic local storage transaction, the failure table
+in "Pointer transitions" above collapses to two outcomes rather than the
+current four: **pre-commit** (any failure before `finalize`'s transaction
+completes leaves the prior active/previous pair untouched — no partial
+pointer state is possible, because there is only one write) and **committed**
+(the transaction succeeded, both the new active and previous values are in
+effect together, never one without the other). The "post-commit `previous`
+maintenance failed" outcome in today's table has no equivalent, because
+`previous` is no longer a second, separately-failable write.
+
+### Legacy pointer retirement
+
+`active:{season}` and `previous:{season}` become **migration-only** inputs
+after cutover: their last valid values seed the new Durable Object's state
+once, through an operator-controlled migration procedure, and after that no
+publication or rollback writes them and no router reads them for authority.
+They are not kept as a live best-effort projection — a second writer or a
+second thing anything still consults would recreate the ambiguity this design
+removes.
+
+### Rollback republication
+
+Rollback stops being a direct flip of `active:{season}`. It becomes
+republication of a selected historical version's stable, normalized public
+data as a **new** immutable version: volatile publication and freshness
+fields are regenerated, per-key `snapshotRevision`/`snapshotObservedAt` are
+recomputed against the **currently active** revision for each key (unchanged
+keys keep their current timestamp; changed keys get a fresh monotonic one),
+and the result is committed through the same `prepare`/`finalize` protocol as
+any other publication — never a direct pointer flip. It remains
+provider-independent. Full rationale, the exact copied-vs-regenerated field
+list and the operational trade-off are in
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D8.
+
 ## Snapshot revision (`snapshotRevision`)
 
 **Implemented as a mechanism in Phase 9B-6 (PR 1). It has no production caller,

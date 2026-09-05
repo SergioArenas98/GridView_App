@@ -1299,8 +1299,9 @@ architecture and product-risk decision, not as provider approval).
 | Phase 9B-3 (curated provider-identifier mapping registry) | **Implemented 2026-08-25** (§14.0.7). A season-qualified, exactly-matched, fail-closed identifier mapping registry with structural and semantic validation. **Dormant: no adapter consumes it.** No request, nothing deployed. |
 | Phase 9B-4 (multi-source provider coordination) | **Implemented 2026-08-26** (§14.0.8). A typed, deterministic, fail-closed coordination seam over independent per-source resource ports, superseding the whole-season provider call. **Dormant: no adapter consumes it and no port is registered.** No request, nothing deployed. |
 | Phase 9B-5 (deep normalized-contract validation) | **Implemented 2026-09-02** (§14.0.9). Field-by-field validation of every normalized value an adapter produces, at the coordination boundary. **Dormant: no adapter produces one.** No request, nothing deployed. |
-| Phase 9B-6 (snapshot revision identity) | **Partially implemented 2026-09-03** (§14.0.10). The canonical revision input and `snapshotRevision` hashing exist and are tested; **they have no production caller and no published value changed.** The observation clock is **blocked** on a serialization guarantee Workers KV cannot provide. |
-| Next action | **Take the publication-serialization decision that Phase 9B-6 is blocked on** (§14.0.10), then complete the observation clock; independently, **continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter, which the coordination seam is still missing. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
+| Phase 9B-6 (snapshot revision identity) | **Partially implemented 2026-09-03** (§14.0.10). The canonical revision input and `snapshotRevision` hashing exist and are tested; **they have no production caller and no published value changed.** The observation clock is **blocked** on a serialization guarantee Workers KV cannot provide. **Still open** — not closed by 9B-6b below. |
+| Phase 9B-6b (season publication authority and rollback republication) | **Design decision recorded 2026-09-05** (§14.0.11), [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md). **Documentation only.** No Durable Object class exists, nothing is bound or provisioned, `snapshotRevision` still has no production caller, and Phase 9B-6/G-i remain open. Names the mechanism that closes the D1.10 block: authority over each season's active/previous pair moves to one per-season Durable Object's own storage; rollback becomes provider-independent republication through the same protocol. |
+| Next action | **Implement the Phase 9B-6b Mechanism PR** (§14.0.11) — an inert Durable Object class, storage state machine and deterministic tests, no binding or caller — which is the dependency for closing Phase 9B-6's observation clock; independently, **continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter, which the coordination seam is still missing. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
 
 ### 14.0.1 Product constraints governing Phase 9
 
@@ -1629,6 +1630,42 @@ production module constructs `MultiSourceCoordinator`,
 namespace remains unbound, and `src/publication/snapshot-revision.ts` has **no
 production caller at all**. Nothing here authorizes a live provider mode, a cron
 trigger, a deployment, production synchronization or public release.
+
+### 14.0.11 Phase 9B-6b — Season publication authority and rollback republication (design)
+
+Recorded on **2026-09-05**, as a **documentation-only design decision**:
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md).
+No Worker code, test, binding, provisioning or deployment is created by this
+slice. **This does not close Phase 9B-6 or gap G-i** — see the row above.
+
+| Item | Status |
+|---|---|
+| Decision | **Recorded.** One `SeasonPublicationSequencer` Durable Object per season (`idFromName(String(season))`) becomes the sole authority for `activeVersion`/`previousVersion`, per-key `snapshotRevision`/`snapshotObservedAt`, and publication-operation state, via a `prepare`/`finalize` protocol. The authoritative commit is one atomic Durable Object storage transaction with **no** external Workers KV pointer write inside it. |
+| Why | A read-only design-safety pass, folded into ADR 0025's Context, found that layering a state machine on top of the existing two Workers KV pointer writes cannot prove either safety property a correct design needs (no two write-sequences in flight per season; no earlier write landing after a later commit) — Workers KV documents last-write-wins with no cross-instance ordering guarantee and no conditional write. Moving authority to Durable Object storage, which is documented as strongly consistent, closes both, backed by a documented shutdown guarantee that a request still touching a Durable Object's own storage is stopped and errors rather than allowed to land later. |
+| Rollback | **Model 1 authorized.** Rollback becomes republication of historical public data as a new immutable version, provider-independent, with per-key timestamps compared against the currently active revision and committed through the same `prepare`/`finalize` protocol — never a direct pointer flip. No public activation-epoch field. |
+| `snapshotRevision` / D1.9-D1.11 | **Unchanged.** Still no production caller ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)). ADR 0025 names the mechanism that will let D1.10's assignment be computed safely; it does not implement it. |
+| Provider state | **Unchanged.** `PROVIDER_MODE` still admits exactly `mock`/`none`; `recordedProvisionalSessionEndBound` is still `null`; no provider was contacted. |
+| Cloudflare resources | **None provisioned or activated.** No Durable Object class, binding, migration or deployment exists from this slice. |
+
+**Separated future work**, each requiring its own explicit authorization
+before starting:
+
+1. **Mechanism PR** — an inert `SeasonPublicationSequencer` class, its
+   storage state machine, a port/client interface and deterministic tests.
+   No production caller. No binding, no provisioning.
+2. **Integration PR** — two-phase snapshot construction wired into the
+   publisher and rollback paths, and public-router authority-lookup wiring,
+   with the sequencer authority mode **disabled by default**. No staging
+   activation.
+3. **Staging provisioning and cutover** — the Durable Object export/binding
+   declared through this repository's supported `exports` mechanism (the
+   pattern `ProviderRateLimiter` already uses, not the legacy
+   `[[migrations]]` block, which conflicts with it); explicit deployment
+   authorization; the one-time pointer-state import; the authority-mode
+   switch; bounded smoke tests.
+4. **Production activation** — a separate future decision, blocked behind
+   every Phase 9B exit gate and production-readiness requirement, exactly
+   like every other Phase 9B production step above.
 
 ## 14.1 Objective
 
