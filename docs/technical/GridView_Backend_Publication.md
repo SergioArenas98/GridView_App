@@ -407,10 +407,18 @@ count — superseded operation and per-key state are retired per ADR 0025
 D5/D9 — so its size is bounded by the current release's inventory plus at
 most one prepared operation, never by all versions ever published.
 Comparing the manifest commitment carried by `completionAttestation` against
-the durably-recorded `expectedManifestCommitment` proves the caller's
-post-write attestation is consistent with what was prepared; it is not, and
-is never claimed to be, independent proof that the written documents are
-globally visible across Workers KV (ADR 0025 D4).
+the durably-recorded `expectedManifestCommitment` proves only that the two
+values match; it is not, and is never claimed to be, independent proof that
+the written documents are globally visible across Workers KV, that every
+planned write actually completed, or that a matching attestation is
+truthful rather than falsely reported. The Durable Object cannot
+independently audit the caller — that responsibility belongs to
+`SnapshotPublisher` itself, which must produce `completionAttestation` only
+once every planned write has actually succeeded and must never call
+`finalize` after a failed, timed-out, cancelled or otherwise ambiguous one.
+See [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D4 "The guarantee's precise boundary" for the exact split between what the
+Durable Object proves and what remains a publisher obligation.
 
 ### Per-key revision and timestamp assignment
 

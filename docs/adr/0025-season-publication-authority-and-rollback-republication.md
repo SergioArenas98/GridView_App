@@ -332,22 +332,27 @@ The Durable Object, in one atomic storage transaction:
   not expired);
 - compares the manifest commitment carried by `completionAttestation` against
   the `expectedManifestCommitment` value `prepare` durably recorded for this
-  exact epoch — never against any other epoch's record. **This proves the
-  caller's post-write attestation is consistent with the manifest this
+  exact epoch — never against any other epoch's record. **This proves only
+  that the caller's post-write attestation names the same manifest this
   Durable Object was given before `prepare` admitted the candidate; it is a
   caller-attestation consistency check, not an independent inspection of
   Workers KV, and it is not a cryptographic proof of anything beyond that
   internal consistency.** The Durable Object never reads the versioned
   documents or their inventory from KV; it has no way to independently verify
   global KV visibility, and this ADR does not claim it does. A caller that
-  attests falsely, or that attests to a manifest other than the one it was
-  prepared against, produces a mismatch this check rejects outright; the
-  *document-level* validation and inventory discipline
-  ([`GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md))
-  remains responsible for the actual completeness of the release — this
-  DO-level check only rules out committing a candidate whose caller never
-  went through the recorded `prepare` step for it, or whose write phase did
-  not finish;
+  attests to a manifest *other than* the one it was prepared against produces
+  a mismatch this check rejects outright — that part of the guarantee holds
+  without qualification. **But a caller that attests to the *same* manifest
+  despite an incomplete, failed or falsified write phase produces no
+  detectable mismatch: the Durable Object has no independent way to observe
+  whether the writes actually happened, so a false-but-matching attestation
+  is indistinguishable to it from a true one.** This check therefore rules
+  out committing a candidate whose caller never went through the recorded
+  `prepare` step for it, or that attests to a manifest other than the one
+  prepared — it does **not**, and cannot, rule out a caller that falsely
+  reports success for a write phase that did not finish. See "The
+  guarantee's precise boundary" below for where that remaining gap is closed,
+  and why it cannot be closed here;
 - if the attestation matches: performs the **one and only** authoritative
   state transition this design has, `prepared → committed`, in the same
   atomic write — recording the candidate as `activeVersion`, the version that
@@ -362,6 +367,64 @@ or superseded token is rejected **before** any authoritative state change —
 never partially applied, never silently replayed. A retry for an
 already-`committed` token returns the recorded result rather than
 re-evaluating anything (D9).
+
+**The guarantee's precise boundary.** The comparison in `finalize` is a
+value comparison inside the Durable Object's own storage, nothing more. It
+proves only that:
+
+- the presented `operationEpoch` and `operationToken` identify the current
+  prepared operation for this season;
+- that operation remains eligible for finalization (`prepared`, not
+  cancelled, superseded or expired);
+- the manifest commitment carried by `completionAttestation` equals the
+  `expectedManifestCommitment` durably recorded for that epoch;
+- the per-key `snapshotRevision`/`snapshotObservedAt` values committed are
+  exactly those `prepare` assigned for that epoch — nothing recomputed and
+  nothing substituted.
+
+It cannot prove, and this ADR does not claim it proves, that:
+
+- every intended Workers KV write for that manifest actually completed;
+- a matching `completionAttestation` is truthful rather than falsely
+  reported by a buggy or malicious caller;
+- the stored inventory or document bodies match what the attestation
+  describes;
+- the written values are already globally visible to public readers;
+- an ambiguous Workers KV write (neither confirmed success nor confirmed
+  failure) actually succeeded or actually failed.
+
+**Where the remaining guarantee lives, and why it cannot live in the
+Durable Object.** `SnapshotPublisher` — the caller described in D3 — is a
+**trusted** internal protocol participant here, not an untrusted input this
+comparison can independently audit:
+
+- it must construct `completionAttestation` only from the exact planned
+  manifest, and only after every required document and inventory write for
+  that manifest has returned success;
+- a rejected, timed-out, cancelled or otherwise ambiguous write means no
+  attestation is produced and `finalize` is never called for that operation;
+- such a failure leaves the currently active version **untouched** — the
+  operation simply remains `prepared` until it expires, is cancelled, or is
+  superseded by a later `prepare` (D5);
+- whatever was successfully written before the failure remains unreachable
+  orphan data, exactly like any other abandoned `prepared` operation's
+  documents (D5) — nothing points to it, and it is handled by the same
+  cancellation/cleanup lifecycle, never by a special case introduced here;
+- a crash after every planned KV write completed but before `finalize` was
+  called leaves that same uncommitted `prepared` operation and that same
+  unreachable version; the existing retry, deadline-expiry and cancellation
+  rules (D5, D9) apply exactly as they would to any other incomplete
+  operation — there is no third outcome for this case to invent;
+- a programming defect that falsely emits a matching `completionAttestation`
+  for an incomplete write phase is, by construction, **outside what this
+  Durable Object comparison can detect.** Preventing it is a
+  `SnapshotPublisher` correctness obligation — its own validation, control
+  flow and tests — never something this ADR describes the Durable Object as
+  proving.
+
+A mismatched manifest commitment is, and remains, rejected unconditionally.
+Nothing above weakens that check; it narrows only what a *matching* value is
+honestly said to establish.
 
 ### D5. Prepared-operation cancellation
 
@@ -970,6 +1033,15 @@ Deterministic, application-logic tests the Mechanism PR must include:
   `finalize(oldToken)` is rejected.
 - A stale `finalize` after a `prepared`-then-cancelled token is rejected, no
   version is deleted while its status is ambiguous.
+
+The completion-attestation obligations below are split by what each test can
+actually prove: a **Durable Object** test proves this comparison behaves
+correctly given whatever attestation it is handed; a **`SnapshotPublisher`**
+test proves the publisher only ever hands it a truthful one. Neither
+substitutes for the other, and no single test may claim to cover both.
+
+**Durable Object tests:**
+
 - **The `expectedManifestCommitment` is computed before `prepare` is ever
   called**: given the same normalized candidate data and document identities,
   the caller's deterministic manifest enumeration produces the same
@@ -984,19 +1056,20 @@ Deterministic, application-logic tests the Mechanism PR must include:
   is required.
 - **A `completionAttestation` carrying a manifest commitment that does not
   match the durably-recorded `expectedManifestCommitment` for the current
-  epoch is rejected by `finalize`**, with no state transition — proving a
-  caller cannot commit a candidate other than the one it was prepared
-  against.
-- **An incomplete or failed document-writing phase cannot finalize**: a
-  simulated partial-write failure (fewer than every planned document
-  written) never produces a `completionAttestation` and never reaches
-  `finalize`; no test exercises `finalize` for a write phase that did not
-  fully succeed.
-- **A matching `completionAttestation` is never asserted, in a test or in
-  documentation, as independent proof of global Workers KV visibility** — the
-  test that proves the match only proves internal consistency between what
-  was prepared and what the caller attests to, and explicitly does not read
-  KV to confirm the documents are globally visible.
+  epoch is rejected by `finalize`**, with no state transition.
+- **A token or epoch belonging to a different operation is rejected** —
+  stale, superseded, cancelled, or simply never issued — `finalize` never
+  commits against a durable record other than the one its own epoch/token
+  identify.
+- **When the token and the manifest commitment both match, `finalize`
+  commits exactly the durable per-key `snapshotRevision`/`snapshotObservedAt`
+  assignments `prepare` recorded for that epoch** — nothing recomputed and
+  nothing read from the attestation's payload itself.
+- **None of the above is described, in the test or its assertions, as
+  proving Workers KV contents, document completeness or global visibility**
+  — each proves only a value comparison and a durable-storage transition
+  internal to the Durable Object, per "The guarantee's precise boundary" in
+  D4.
 - **The chosen SQLite-backed representation handles the largest supported
   release inventory without relying on one oversized serialized value**: a
   test using a release-sized document manifest (drivers, constructors,
@@ -1005,6 +1078,32 @@ Deterministic, application-logic tests the Mechanism PR must include:
   atomically-updated per-key records, or that a serialized-state size limit
   is enforced before any versioned KV document is written, per D9's capacity
   obligation.
+
+**`SnapshotPublisher` tests:**
+
+- **`completionAttestation` is produced only after every planned document
+  and inventory write for that manifest has returned success** — a
+  simulated partial-write failure (fewer than every planned document
+  written) never produces one.
+- **`finalize` is never called after any failed, timed-out, cancelled or
+  otherwise ambiguous write** — ambiguous outcomes are treated the same as
+  known failures, never optimistically as success.
+- **A pre-`finalize` failure of any kind leaves the currently active version
+  unchanged** — the season continues serving whatever it served immediately
+  before the attempt.
+- **Documents successfully written before such a failure are treated as
+  unreachable orphan data**, handled by the same cancellation/cleanup
+  lifecycle (D5) as any other abandoned `prepared` operation's documents —
+  never specially retried or specially adopted.
+- **A crash after every planned KV write completed but before `finalize` was
+  called is covered explicitly**: the operation remains `prepared` and
+  uncommitted, resolved only through the existing retry, deadline-expiry or
+  cancellation rules (D5, D9) — never through a recovery path invented for
+  this specific case.
+
+These are Mechanism/Integration-PR obligations; none of them is created by
+this documentation correction.
+
 - **Ordinary publication's staleness rejection is unaffected by the rollback
   exemption**: a `prepare` call with `operationKind: 'ordinary-publication'`
   and an older `sourceOrderingInput` is still rejected exactly as before.
