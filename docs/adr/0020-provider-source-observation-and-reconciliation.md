@@ -533,6 +533,82 @@ authorized to take. Until it is taken, `meta.sourceUpdatedAt` is unchanged, the
 clamp event of D1.11a has nothing to raise, and **G-i stays open in both
 halves**.
 
+### The serialization decision, taken (2026-09-05, Phase 9B-6b design)
+
+[ADR 0025](0025-season-publication-authority-and-rollback-republication.md)
+takes the infrastructure decision the paragraph above says this ADR does not:
+authority over each season's `activeVersion` (the pair D1.10's assignment must
+be computed against) moves to one atomic transaction in a per-season Durable
+Object's own storage, closing the two-unserialized-writers problem described
+above without relying on Workers KV to provide anything it does not.
+
+Four documentation-only clarifications follow; nothing below is implemented:
+
+- **D1.9's comparison is, and remains, per snapshot key against the
+  currently active revision for that key** — never against a global,
+  cross-version historical revision identity, and never against a target
+  version's own previously-recorded revision when that target was itself
+  once active. This was always what D1.9 meant ("if a regenerated snapshot
+  has the *same* `snapshotRevision` as the published one, it keeps that
+  revision's existing `snapshotObservedAt`"); it is restated here because
+  ADR 0025's rollback design (Model 1) makes the distinction load-bearing:
+  a restored historical key is compared against **what is active now**, so
+  its `snapshotObservedAt` reflects **continuous active residence** of that
+  exact content — how long the currently-serving revision has been the
+  active one — not some notion of "when this content was first ever
+  observed across the season's whole history." A key that was active before,
+  was replaced or withdrawn, and is now restored by a rollback gets a
+  **fresh** timestamp by the same rule as any other key with no currently
+  active revision to compare against — never by comparing it to its own,
+  no-longer-retained pre-withdrawal value (ADR 0025 D3 corrected this: a
+  withdrawn key's per-key state is not kept, precisely so it cannot be
+  mistaken for a comparison basis).
+- **Rollback Model 1 (ADR 0025 D8) creates a new activation for every
+  restored key whose revision differs from what is currently active, or
+  that has no currently active revision at all** (withdrawn and now
+  restored) — never only the "differs" case — through the same D1.10
+  monotonic assignment, floored by the season-wide
+  `seasonSnapshotObservedAtHighWaterMark` (ADR 0025 D2/D4), computed during
+  the sequencer's `prepare` step, **before** the immutable document carrying
+  `meta.sourceUpdatedAt` is constructed, exactly as D1.9 already requires for
+  ordinary publication ("It is persisted with the revision in the same
+  publication transaction"). Rollback introduces no second
+  timestamp-assignment mechanism.
+- **Post-cutover, a published `meta.sourceUpdatedAt` carries that key's own
+  assigned `snapshotObservedAt` (D1.8-D1.10) and is therefore *not* a
+  release-wide provenance value.** Today's generator happens to write one
+  release-wide `sourceUpdatedAt` uniformly into every document of a release,
+  which is why ADR 0025 D12's migration and D8's legacy rollback path can both
+  derive a legacy release's ordering input from those documents. Once the
+  observation clock is active, that uniformity is gone by design: each key's
+  value is its own activation timestamp. The release-wide `sourceOrderingInput`
+  a rollback needs therefore lives in ADR 0025 D3's internal per-version
+  `__publication_metadata` record — never in a public document, never in a
+  public contract field, and never inferred from `meta.sourceUpdatedAt` on a
+  post-cutover version. This changes nothing in D1.8: the wire shape, the
+  required field and the conflict semantics are all unchanged.
+- **A D1.11a clock-regression clamp can place a historical
+  `snapshotObservedAt` ahead of the wall-clock time it was actually
+  assigned.** This is the concrete mechanism by which
+  [ADR 0025](0025-season-publication-authority-and-rollback-republication.md)
+  D12's cutover migration seed is **not** guaranteed to dominate a timestamp
+  held only by a pre-cutover version outside a complete, audited set — one
+  whose KV keys were deleted, one temporarily omitted from the eventually
+  consistent `listVersions` prefix scan that repository already has, one
+  recorded only in an operator's external records, or a snapshot retained
+  only by an offline client. D1.11a's already-documented "appears newer"
+  direction becomes, for that migration, an explicit **activation
+  precondition**, not merely a bounded-excess note. See ADR 0025 D12, "The
+  pre-cutover historical-floor activation precondition" and "The completeness
+  limit."
+
+**D1.9-D1.11 remain unimplemented.** ADR 0025 is a design decision, not
+implementation: no Durable Object class, binding or caller exists yet.
+`meta.sourceUpdatedAt` is unchanged today, the D1.11a clamp event has nothing
+to raise yet, and **G-i stays open in both halves** until the Mechanism,
+Integration and activation steps ADR 0025 separately gates are each
+authorized and completed.
+
 ## Reopening conditions
 
 | Trigger | Consequence |

@@ -38,3 +38,4 @@ GridView reconstruction.
 | [0022](0022-curated-provider-identifier-mappings.md) | Curated provider-identifier mapping registry | Accepted |
 | [0023](0023-multi-source-provider-coordination.md) | Multi-source provider coordination | Accepted |
 | [0024](0024-deep-normalized-contract-validation.md) | Deep normalized-contract validation at the coordination boundary | Accepted |
+| [0025](0025-season-publication-authority-and-rollback-republication.md) | Season publication authority and rollback republication | Accepted |

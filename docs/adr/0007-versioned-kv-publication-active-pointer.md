@@ -3,6 +3,48 @@
 - Status: Accepted
 - Date: 2026-07-20
 
+> **Qualified (2026-09-05) by
+> [ADR 0025](0025-season-publication-authority-and-rollback-republication.md),
+> not superseded — and not yet implemented.** Versioned snapshot documents and
+> their per-version inventory **remain** immutable in Workers KV exactly as
+> below, and the inventory keeps its existing array-of-document-names shape —
+> ADR 0025 introduces no inventory migration. What ADR 0025 adds beside them,
+> under the same immutable per-version prefix, is one **internal** record,
+> `snapshot:{season}:{version}:__publication_metadata`, carrying that
+> release's own `sourceOrderingInput` so a later rollback can recover it (ADR
+> 0025 D3, D8). Like `__inventory`, its suffix is not a `SnapshotDocumentName`,
+> so it can never be requested as a document or mapped to a public URL; it is
+> not listed in `__inventory`, is excluded from `snapshotRevision`, is written
+> once before commit, and is deleted with its version. So that a later reader
+> can tell whether a given version was _required_ to carry that record — which
+> the key reading `null` can never establish, since KV propagation lag produces
+> the same read — every version created by that future protocol is allocated
+> by the sequencer inside `prepare`, never minted by the caller, in a reserved
+> `pm1-…` identifier namespace carrying an injective encoding of the allocating
+> `operationEpoch` (ADR 0025 D3, D4), so no two operations can ever be assigned
+> the same version. Versions published under
+> the scheme below are legacy-format by construction: today's generator emits
+> `<ISO-8601 stripped of "-:.TZ">-<8 hex>`, which always begins with a digit, so
+> no existing version can collide with the reserved prefix. The marker is
+> internal to the version identifier, is colon-free so it cannot disturb the
+> `snapshot:{season}:{version}:…` parsing boundary, and adds no public API
+> field. What ADR 0025 changes,
+> once its own Mechanism/Integration/cutover
+> steps are separately authorized and completed, is **which write is the
+> commit point**: authority over `active`/`previous` moves from the two
+> Workers KV pointer writes described below to one atomic transaction in a
+> per-season Durable Object's own storage. After that cutover,
+> `active:{season}`/`previous:{season}` become **migration-only** inputs, not
+> a live pointer any code writes or reads for authority (ADR 0025 D7).
+> Rollback also changes in kind: it becomes **republication** of historical
+> data through the same `prepare`/`finalize` protocol as ordinary publication,
+> never a direct flip of `active:{season}` (ADR 0025 D8) — so the "active-last"
+> KV pointer-write logic below is **not** part of the post-cutover
+> authoritative protocol; it is preserved here as the historical record of how
+> publication works **today**, and remains exactly how it works until cutover
+> is separately authorized and performed. Nothing in ADR 0025 has been
+> implemented, provisioned or activated.
+
 ## Context
 
 GridView public routes must serve only complete, validated snapshots. Workers KV

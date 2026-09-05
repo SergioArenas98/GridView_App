@@ -96,6 +96,21 @@ scheduled/manual trigger
   -> record sync/quota state
 ```
 
+> **Design note (Phase 9B-6b, not implemented).**
+> [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+> authorizes routing this flow's final publish step through one
+> `SeasonPublicationSequencer` Durable Object per season instead of writing
+> `active:{season}` directly. Both the cron-triggered `scheduled` handler and
+> the manual `/internal/admin/sync/full`/`/internal/admin/sync/resource` path
+> would call the **same** sequencer for the same season, which is what closes
+> the two-unserialized-callers gap recorded in
+> [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)'s
+> D1.10 note. Today, both paths still call `SnapshotPublisher.publish`
+> directly and write `active:{season}` as described below; nothing here is
+> activated until the steps gated by ADR 0025 D12 "Activation boundary" and
+> [`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md)
+> §14.0.11 are each separately authorized.
+
 Policy categories:
 
 - `season-calendar`
@@ -384,6 +399,79 @@ publication can no longer overwrite the one version a default rollback reaches.
 
 No storage or purge failure escapes rollback as an exception, and no raw storage
 message reaches a response or a log line.
+
+### Design change: rollback republication and authoritative lookup (Phase 9B-6b, not implemented)
+
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+authorizes replacing the direct pointer-flip rollback above with
+**republication**: rollback reads a selected historical version's stable
+public data, copies it into a **new** immutable version without contacting a
+provider, recomputes volatile publication/freshness fields and per-key
+timestamps against the currently active revision, and commits through the
+same `prepare`/`finalize` protocol as ordinary publication — never a direct
+write to `active:{season}`. Provider independence is unchanged: no rollback
+path, before or after this change, ever contacts a provider.
+
+This changes rollback's operational failure profile, not just its mechanism:
+today's rollback needs only one working KV pointer write; the republication
+design needs enough KV write availability to create a **complete new version
+and inventory** before any commit is attempted, so a partial KV-write outage
+that would have tolerated today's single pointer write may not tolerate the
+richer rollback. Any pre-commit failure still leaves the current release
+serving, unchanged in effect from today's table above.
+
+Once the sequencer is activated, an operator's rollback request resolves its
+default target from the Durable Object's own durable operation history rather
+than from an independent read of `previous:{season}`, and every rollback
+result additionally depends on the Durable Object being reachable: if the
+authoritative lookup fails, the request returns the existing bounded
+fail-closed shape rather than falling back to a legacy KV pointer, exactly as
+the public read path does (ADR 0025 D6).
+
+**One new operator-visible rejection exists in that design**: a rollback
+target must have **resolvable source-ordering provenance**, not merely a
+complete inventory and readable documents. That value comes from the target
+version's own internal `__publication_metadata` record, or — for a release
+predating it — from a single uniform `meta.sourceUpdatedAt` across every
+document its inventory names. **Which of the two applies is decided by the
+target's version identifier, not by whether the record happens to read back.**
+Versions created by the sidecar-aware protocol are allocated by the sequencer
+during `prepare`, never minted by the caller, in a reserved `pm1-…` namespace
+(ADR 0025 D3, D4); for one of those, a record that does not read back is
+treated as *not currently readable* rather than *never written*, and the
+document fallback is **not** available to it. A target whose record is absent
+in that namespace, or malformed or unreadable in either, or whose legacy
+timestamps are missing or inconsistent, is **rejected before the operation
+begins**, with a bounded reason (for example
+`rollback-source-ordering-unavailable`) and no raw storage key or stored value
+in the response or the log. A rejection of that kind on a `pm1-…` target may
+simply be propagation lag, so retrying the same target later is reasonable;
+it is never resolved by supplying a timestamp. The currently active release keeps serving,
+untouched, exactly as for any other pre-commit rejection. An operator is never
+asked to supply the missing ordering value by hand; the response is to select
+a different, complete target. **None of this is implemented.**
+Today's rollback table above remains accurate until the Mechanism, Integration
+and cutover steps ADR 0025 gates are each separately authorized.
+
+### Staging migration and recovery obligations (design, not implemented)
+
+Cutover (ADR 0025 D12) requires a one-time, operator-controlled migration that
+seeds each season's Durable Object state from the last valid
+`active:{season}`/`previous:{season}` KV values, verified against the
+imported version's own inventory before the authority mode switch. The two are
+verified to **different standards**, and the runbook must say so: the selected
+active version's inventory, documents and source-ordering provenance are
+mandatory and any failure aborts that season's cutover, while the optional
+previous version is best-effort — its failure never aborts the migration, and
+it is then seeded as `null` rather than committed as a rollback target the
+migration has just failed to validate. This is
+future runbook content: the step-by-step procedure belongs in
+`../operations/GridView_Staging_Edge_Runbook.md` and is written when the
+Mechanism and Integration PRs exist to run it against, not in this design
+pass. Recorded here only so the obligation is not lost: the runbook must
+cover the migration procedure itself, verification of the imported state,
+the authority-mode switch, and the rollback-of-the-deployment path (reverting
+to KV-pointer authority) if cutover verification fails.
 
 ## Cache Purge
 

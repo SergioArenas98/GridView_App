@@ -53,6 +53,59 @@ so the inventory can never be requested through `readVersionedDocument`, can
 never be mapped to a public URL, and is removed with the version by
 `deleteUnpublishedVersion`.
 
+**Designed, not implemented**, [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D3 adds one further **internal** key under the same per-version prefix, for
+the same two reasons the inventory sits there:
+
+```text
+snapshot:{season}:{version}:__publication_metadata
+```
+
+It records the release-wide `sourceOrderingInput` that admitted that version
+(`{ schemaVersion: 1, sourceOrderingInput }`), so a later rollback can recover
+the target release's own ordering input rather than an operator having to
+supply one — see "Rollback republication" below. It is **internal**: its
+suffix is likewise not a `SnapshotDocumentName`, it is never listed in
+`__inventory` (which remains exactly what it is today, a sorted list of public
+document names — no shape change and no reader migration), it is excluded from
+`snapshotRevision`, it has no public URL and therefore never appears in a cache
+invalidation set, it is written once before the commit and never mutated, and
+it is removed with its version by the same cleanup path. **Nothing writes or
+reads it today.**
+
+**Version identifiers gain a reserved namespace, so the record's absence is
+decidable.** Every version that future protocol creates — ordinary publication
+and rollback destination alike — is **allocated by the Durable Object inside
+`prepare`**, never minted by the caller, as:
+
+```text
+pm1-<operationEpoch, injectively encoded>-<opaque component>
+```
+
+Carrying an injective encoding of the allocating `operationEpoch` makes the
+identifier unique to exactly one epoch **by construction** — not by
+probability and not by an eventually consistent KV preflight — so no version a
+retired operation owned can ever be allocated again (ADR 0025 D3, D4). That is
+what makes orphan cleanup safe to authorize against a named, retired operation.
+
+A reader needs this because the sidecar key reading `null` cannot distinguish
+"this version predates the record" from "the record was written and has not yet
+propagated to this edge location": KV document storage stays eventually
+consistent ([ADR 0010](../adr/0010-workers-kv-consistency-limitation.md)).
+Uniform `meta.sourceUpdatedAt` cannot distinguish them either — once the
+observation clock is active, every key changed in one `prepare` call shares a
+timestamp, so a release in which everything changed is uniform, and that value
+is a per-key activation time rather than a release-wide ordering input. The
+identifier namespace answers the question the storage read cannot.
+
+Today's `releaseVersionFor` output (`<ISO-8601 stripped of "-:.TZ">-<8 hex>`)
+always begins with a digit, so every already-published version is legacy-format
+by construction and none can collide with the prefix. The marker is colon-free,
+so `parseVersionFromSnapshotKey` is unaffected; no version-format validator
+exists to relax; and release version identifiers are internal — they appear in
+internal results and structured logs, never as a public API field, and this
+adds none.
+
 ## Publication Algorithm
 
 1. Generate a unique immutable release version.
@@ -357,6 +410,390 @@ through `active:{season}` and by writing that pointer after the full version is
 validated and verified. During KV propagation, an edge location may briefly read
 an older active pointer. It must not observe an unpublished version unless that
 pointer has already changed.
+
+## Publication authority (design, Phase 9B-6b — not implemented)
+
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+records a design decision that replaces **which write is the commit point**
+for the algorithm above. Nothing in this section is implemented, provisioned
+or activated; the "Publication Algorithm" and "Rollback" sections above remain
+exactly how publication and rollback work **today**, and continue to work that
+way until the steps below are each separately authorized and completed.
+
+### The two-phase flow
+
+Once implemented, generation and validation stay exactly as described above,
+but the pointer transition moves behind a `prepare`/`finalize` protocol served
+by one `SeasonPublicationSequencer` Durable Object per season
+(`idFromName(String(season))`):
+
+```text
+obtain candidate data (provider fetch, or a historical version for rollback)
+  -> compute snapshotRevision per document
+  -> enumerate the planned document manifest; compute expectedManifestCommitment
+     (all version-independent: the manifest commits to document names)
+  -> DO.prepare(season, operationKind, perKeyRevisions,
+                 orderingInput, expectedManifestCommitment)
+       <- operationEpoch, operationToken, candidateVersion (allocated here,
+          as pm1-<epoch>-<...>), assigned snapshotObservedAt per key
+  -> bake assigned timestamps into each document; regenerate volatile fields
+  -> validate; write every versioned document + inventory to KV (unchanged),
+     under the version prepare allocated,
+     recording which planned writes completed successfully
+  -> write __publication_metadata for that same version (the same orderingInput)
+  -> only once every planned write has succeeded, produce completionAttestation
+  -> DO.finalize(season, operationEpoch, operationToken, completionAttestation)
+       <- authoritative active/previous transition, one atomic DO-storage write
+```
+
+The `__publication_metadata` write is part of the **required publication write
+set**, not an annotation beside it: a missing, failed, timed-out or ambiguous
+sidecar write has the same consequence as a failed document or inventory write
+— no `completionAttestation`, no `finalize`, active state unchanged, and
+whatever was written left as unreachable orphan data for the ordinary
+cancellation/cleanup path. The Durable Object does **not** read or verify it
+during `finalize`; writing it truthfully before attesting completion is a
+`SnapshotPublisher` obligation of exactly the same kind as writing the
+documents, enforced by that component's own tests (ADR 0025 D3, D4).
+
+`operationKind` is `ordinary-publication` or `rollback-republication` (see
+"Rollback republication" below for what the second one changes). The Durable
+Object never generates provider data, never validates a document and never
+stores a complete snapshot payload — its own storage holds metadata
+proportional to the current committed release's document manifest and,
+while one is in progress, the prepared candidate's (ADR 0025 D2/D3):
+`activeVersion`, `previousVersion`, `committedSourceOrderingInput` (the
+`sourceOrderingInput` belonging to the currently active release, distinct
+from the same-named field a *prepared*, uncommitted candidate carries — see
+"Source-ordering admission" below), `cutoverState` (one of
+`uninitialized`/`seeded`/`active` — see "Legacy pointer retirement" below),
+the current `snapshotRevision`/`snapshotObservedAt` per key **named in the
+current active inventory**, one durable constant-size scalar
+`seasonSnapshotObservedAtHighWaterMark` (a durable, monotonically
+non-decreasing **floor** — at least the greatest `snapshotObservedAt` ever
+committed for any key that season, and possibly higher after a conservative
+migration seed; never retired when a key leaves the inventory — see "Per-key
+revision and timestamp assignment" below), and the **complete** current
+publication-operation record (`operationKind`, `phase`,
+`priorVersion`, `candidateVersion` (**allocated by `prepare`**, never
+supplied by the caller), the candidate's per-key revisions and
+assigned timestamps, `sourceOrderingInput`, `expectedManifestCommitment`,
+epoch, token, `preparedAt`, `deadline`) — every value `finalize` needs, so a
+restart between `prepare` and `finalize` loses nothing it must later verify
+or commit (ADR 0025 D4). Only the **current** operation record is retained,
+which is why the recorded-result replay guarantee is bounded to while that
+record is current; past that, a retired epoch resolves to ADR 0025 D9's
+`superseded` outcome carrying current authoritative state, never the retired
+response. This per-key state does not grow with historical
+release count — superseded operation and per-key state for a key no longer
+in the current inventory are retired per ADR 0025 D5/D9 — so its size is
+bounded by the current release's inventory, plus at most one prepared
+operation, plus the one constant-size high-water mark, never by all versions
+ever published.
+Comparing the manifest commitment carried by `completionAttestation` against
+the durably-recorded `expectedManifestCommitment` proves only that the two
+values match; it is not, and is never claimed to be, independent proof that
+the written documents are globally visible across Workers KV, that every
+planned write actually completed, or that a matching attestation is
+truthful rather than falsely reported. The Durable Object cannot
+independently audit the caller — that responsibility belongs to
+`SnapshotPublisher` itself, which must produce `completionAttestation` only
+once every planned write has actually succeeded and must never call
+`finalize` after a failed, timed-out, cancelled or otherwise ambiguous one.
+See [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D4 "The guarantee's precise boundary" for the exact split between what the
+Durable Object proves and what remains a publisher obligation.
+
+### Per-key revision and timestamp assignment
+
+`prepare` assigns each key's `snapshotObservedAt` inside one atomic
+Durable Object storage transaction, against that same transaction's read of
+the DO's own currently-committed state — never against a Workers KV read
+raced against an unobserved second publication attempt, which is the
+specific gap [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+D1.10 identified as unclosable under the current architecture:
+
+- a key whose candidate `snapshotRevision` equals the currently active
+  revision **for that key** **keeps its current `snapshotObservedAt`** — no
+  manufactured churn for unchanged content, and no timestamp change merely
+  because some *other* key in the same candidate changed;
+- every other key — one whose candidate revision differs from the currently
+  active revision for that key, **or one with no currently active revision
+  at all** (never published this season, or previously withdrawn from the
+  active inventory and now restored) — is a **fresh activation**, assigned
+  `max(now, seasonSnapshotObservedAtHighWaterMark + 1 ms)`. This is D1.10's
+  existing rule, generalized from a per-key floor to a durable, per-season
+  floor: per-key state for a key not in the current active inventory is not
+  retained (below), so a restored key has no per-key "previous" value to
+  compare against; `seasonSnapshotObservedAtHighWaterMark` — a durable,
+  monotonically non-decreasing **assignment floor**, guaranteed at least
+  the greatest `snapshotObservedAt` the sequencer has itself committed for
+  any key that season, and possibly higher after a conservative migration
+  seed — is read and advanced inside the same transaction instead. This is
+  a **complete** floor against every offline client whose cached copy is
+  itself post-cutover sequencer-published content; its coverage of a client
+  holding a pre-cutover-era copy is bounded by what ADR 0025 D12's migration
+  seed imported and by whether D12's pre-cutover historical-floor
+  activation precondition has been established for that season. See
+  [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+  D2-D4, D12 for the full rule, the exact floor semantics, and why this
+  closes the withdrawn-key gap without unbounded per-key tombstone history.
+
+Timestamps are assigned **before** final document construction, because
+`meta.sourceUpdatedAt` is baked into each immutable document.
+
+### Source-ordering admission (`committedSourceOrderingInput`)
+
+`prepare`'s existing ADR 0007 staleness rule — evaluated only for
+`operationKind: 'ordinary-publication'` — compares a candidate's
+`sourceOrderingInput` against the durable `committedSourceOrderingInput` the
+DO holds for the currently active release, never against the (possibly
+stale, possibly cancelled) `sourceOrderingInput` carried by whatever
+operation is currently `prepared`. A candidate **strictly older** than
+`committedSourceOrderingInput` is rejected; one **equal** to it is
+**admitted** — exactly as strict as today's implementation, which rejects
+only `<` and has always admitted equality, since neither adopted provider
+source publishes an ordering signal finer than what this field carries
+([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+§1). `committedSourceOrderingInput` changes only on a successful `finalize`,
+atomically with the rest of the committed state, to the value `prepare`
+durably recorded for that operation — never advanced by a cancelled,
+expired or superseded `prepared` operation, and never recomputed on an
+idempotent retry. A successful rollback republication (see "Rollback
+republication" below) commits its own historical `sourceOrderingInput` as
+the new `committedSourceOrderingInput`, deliberately **not** a monotonic
+upstream-source high-water mark — see
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D2, D4 and D8 for the full rule and why turning this into a monotonic clock
+would be a different, separately-decided admission policy.
+
+Because this field describes only the **currently active** release, it is not
+a history and cannot be read back to recover a superseded release's ordering
+input. That value lives, per release, in that version's own immutable
+`__publication_metadata` record in KV ("Snapshot Key Model" above) — not in
+the Durable Object, whose per-season state stays bounded exactly as described
+above.
+
+### The authoritative active/previous pair
+
+`finalize` performs the authoritative transition — from the prior
+`(activeVersion, previousVersion)` pair to the candidate pair — as **one
+atomic Durable Object storage transaction**. There is no external Workers KV
+pointer write inside this commit. This is the public commit point, replacing
+today's "write `active:{season}` last" step; see
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+§"Safety reasoning" for why an external KV write cannot provide the same
+guarantee.
+
+### Router resolution and previous-version fallback
+
+Once activated, the public router resolves `activeVersion` (and, where a
+rollback needs a default target, `previousVersion`) through a call to the
+per-season Durable Object, then reads the active version's **inventory**
+before deciding anything about the document itself — because a missing
+document at the active version is not, by itself, evidence of propagation
+lag. This codebase's own publication model deliberately allows driver,
+constructor and circuit profiles and Grand Prix detail/results routes to be
+withdrawn from a version's inventory (see "Cache invalidation of withdrawn
+routes" above), so a route the active inventory does not name must return the
+intended not-found response and never fall back to `previousVersion` — doing
+so would serve a withdrawn route forever instead of the 404 the withdrawal
+intends. Only when the active inventory **names** the document but the
+document itself is not yet readable from KV does a bounded fallback apply,
+and then only if `previousVersion`'s own inventory also names that document.
+If the active inventory itself is unreadable or not yet visible, the router
+returns the bounded unavailable/degraded response rather than treating
+`previousVersion` as a substitute answer. This never reinterprets what the
+Durable Object itself reports as active, and preserves the existing
+stale/degraded response semantics — see
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D6 for the full rule and the narrow, bounded, per-document mixed-release
+trade-off it introduces. If the Durable Object binding or lookup itself is
+unavailable, the router returns the existing bounded fail-closed shape; it
+does not fall back to a legacy KV pointer, because after cutover nothing
+maintains one as a live value (see "Legacy pointer retirement" below).
+
+### Failure behavior
+
+Because the commit is one atomic local storage transaction, **only the
+"post-commit `previous` maintenance failed" row of today's four-row table
+disappears** — `previous` is no longer a second, separately-failable write,
+since it commits together with `active` in the same DO transaction. The
+other three collapse to two authoritative-pointer outcomes, plus one
+independent, still-applicable post-commit outcome for cache purge:
+
+- **Pre-commit failure**: any failure before `finalize`'s transaction
+  completes leaves the prior active/previous pair untouched — no partial
+  pointer state is possible, because there is only one write; cache purge
+  never runs.
+- **Committed, cache purge succeeded**: the transaction succeeded, both the
+  new active and previous values are in effect together, never one without
+  the other, and the purge reports success using the existing bounded
+  vocabulary.
+- **Committed, cache purge failed**: the authoritative commit is
+  **unaffected** — no authoritative state is reverted because a purge
+  failed, exactly as today. The result still reports `cachePurge: 'failed'`,
+  the existing `cache-purge-failed` disposition is unchanged, and a stale or
+  withdrawn cached route may persist until CDN TTL expiry, exactly as it can
+  today ("Cache purge" under "Staging Notes" below).
+
+Cache purge remains an external, post-commit, best-effort Cache API
+operation, entirely independent of whether the authoritative pointer commit
+itself is a Workers KV write (today) or a Durable Object storage transaction
+(once ADR 0025 is activated) — moving the pointer commit does not make the
+purge atomic with it, and this section does not claim otherwise. The
+Mechanism/Integration PRs must retain a regression test proving a purge
+failure never reverts the committed release and remains visible in the
+returned publication outcome, mirroring the existing rollback and ordinary
+publication purge-failure tests.
+
+### Legacy pointer retirement
+
+`active:{season}` and `previous:{season}` become **migration-only** inputs
+after cutover, read once by exact versioned key against an operator-approved
+cutover checkpoint — never by re-reading and trusting the live pointer keys
+as proof of currency (Workers KV documents no finite global-convergence
+barrier this design could rely on for that). The checkpoint's selected
+`activeVersion` and, best-effort, `previousVersion` documents seed the new
+Durable Object's complete authoritative state in one atomic commit:
+`activeVersion`, `previousVersion`, `committedSourceOrderingInput`, the
+per-key `snapshotRevision`/`snapshotObservedAt` state, the conservatively
+seeded `seasonSnapshotObservedAtHighWaterMark` floor, and the checkpoint's
+own migration identity/fingerprint — through an operator-controlled
+migration procedure that verifies every imported value and aborts that
+season's cutover, leaving legacy pointers authoritative, on any missing,
+malformed or inconsistent **required** input.
+
+**Required means the selected `activeVersion`.** Its inventory, its documents
+and its source-ordering provenance must all validate, or the cutover aborts.
+The optional `previousVersion` is **best-effort in both directions**:
+validating it is never mandatory and its failure never aborts the
+active-version migration, and a previous version that does not validate is
+omitted from the high-water-mark seed **and** committed as `null` rather than
+seeded as a known-invalid authoritative rollback target. The checkpoint itself
+never carries a `sourceOrderingInput`: it identifies the selected version, and
+that version's own `__publication_metadata` — or, for a **legacy-format**
+version that predates it, its own validated uniform document timestamps —
+supplies the provenance, under exactly the rules "Rollback republication" below
+applies, including that a `pm1-…` version with an absent record fails closed
+rather than falling back. A selected **active** version in that state aborts the
+cutover; a selected **previous** version in that state is omitted and seeded as
+`null` under the existing best-effort rule. Migration never creates or mutates a
+metadata record under an already-existing historical version.
+
+Committing that seed and switching authority are **two separate durable
+steps, not one atomic step**: committing the seed records a
+`cutoverState` of `seeded` — legacy pointers remain authoritative and this
+season's mutators stay paused — and only a later, separate, idempotent
+transition to `cutoverState: 'active'` switches public and administrative
+authority to the sequencer and resumes those mutators. That transition is
+gated on an authenticated operator confirmation bound to the exact seeded
+migration identity/fingerprint — a missing or mismatched fingerprint is
+rejected, and confirming does not claim the seed is the globally latest
+legacy state, only that the operator has chosen to activate it. Migration
+step 1 only **closes new legacy admission**; it is not a proven drain of
+whatever publication or rollback was already admitted before it closed.
+
+A legacy-path invocation admitted before admission closed may still
+complete late and write a legacy pointer. **Whether that write is inert
+depends on `cutoverState`, not on admission having closed:** while this
+season is `uninitialized` or still `seeded`, legacy pointers remain the
+authority for public/admin routing, so that late write can still change
+what those routes serve — it cannot, however, mutate anything already
+committed to the DO's seeded state. Only after the `seeded → active`
+transition is the write fully inert, because the sequencer's commit and
+every post-activation read path never consult the legacy pointers at all.
+No *newly admitted* publication or rollback writes the legacy pointers once
+admission is closed, in any of the three states. They are not kept as a
+live best-effort projection either way — a second writer or a second thing
+anything still consults would recreate the ambiguity this design removes.
+See
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D12, "Already-admitted legacy invocations, after the boundary" for the full
+treatment.
+
+Activating a season additionally requires resolving a **pre-cutover
+historical-floor precondition**: the seed is not guaranteed to dominate a
+timestamp held only by a pre-cutover version outside a complete, audited set
+— one whose keys were deleted, one temporarily omitted from the eventually
+consistent `listVersions` prefix scan, one recorded only in an operator's
+external records, or a snapshot retained only by an offline client (a
+clock-regression clamp under
+[ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+D1.11a can place such a timestamp ahead of migration wall time), so
+activation requires a historical index or audited bound, an audit
+disproving the exposure, no retained pre-cutover client state, or an
+authorized client-baseline reset. Full migration procedure, the complete
+seed contents, the `uninitialized`/`seeded`/`active` cutover lifecycle, and
+why coverage cannot be claimed beyond `activeVersion`/`previousVersion`, are
+in
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D12.
+
+### Rollback republication
+
+Rollback stops being a direct flip of `active:{season}`. It becomes
+republication of a selected historical version's stable, normalized public
+data as a **new** immutable version: volatile publication and freshness
+fields are regenerated, per-key `snapshotRevision`/`snapshotObservedAt` are
+recomputed against the **currently active** revision for each key (a key
+currently active and unchanged keeps its current timestamp; every other
+restored key — changed, or currently absent from the active inventory — is a
+fresh activation floored by `seasonSnapshotObservedAtHighWaterMark`, per
+"Per-key revision and timestamp assignment" above), and the result is
+committed through the same `prepare`/`finalize` protocol as
+any other publication — never a direct pointer flip — with `prepare` called
+as `operationKind: 'rollback-republication'`. That is what exempts a
+rollback's necessarily-older `sourceOrderingInput` from the staleness
+rejection ordinary publication still enforces unchanged; it changes nothing
+about the per-key revision/timestamp comparison, which applies to a rollback
+candidate exactly as to any other. It remains provider-independent. Full
+rationale, the exact copied-vs-regenerated field list and the operational
+trade-off are in
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D8.
+
+**Where the rollback's `sourceOrderingInput` comes from.** It is resolved from
+the **target version's own immutable record**, before `prepare` is called, and
+never from the Durable Object's current state (which holds only the active
+release's value), never from an operator-supplied timestamp, and never from
+`meta.sourceUpdatedAt` on a post-cutover document (which carries that key's
+per-key `snapshotObservedAt`, not a release-wide value). The resolution
+classifies the target's `__publication_metadata` exactly the way this codebase
+already classifies a stored inventory — `documents`/`absent`/`malformed`/
+`unreadable`, "One validated boundary for persisted inventories" above:
+
+- a **valid** record supplies the value directly, whichever namespace the
+  target identifier belongs to — a valid record is authoritative and the
+  namespace is not consulted;
+- an **absent** record on a **legacy-format** identifier means a release
+  predating this design, and permits one bounded fallback: read every document
+  the target's inventory names and require a single uniform, valid
+  `meta.sourceUpdatedAt` across all of them — the invariant today's generator
+  already produces, since one `sourceUpdatedAt` is written per release. That
+  uniform value becomes the target's legacy ordering input;
+- an **absent** record on a **`pm1-…`** identifier **fails closed**. Such a
+  version could not have been finalized without the record, so `null` means
+  "not readable right now", never "never written" — and the fallback is
+  unavailable to it even if its documents happen to be uniform;
+- a **malformed** record, an **unreadable** record, or non-uniform/missing
+  legacy timestamps all **fail closed**: the rollback target is rejected
+  before `prepare`, with a bounded internal reason (for example
+  `rollback-source-ordering-unavailable`) and never a raw storage key or
+  stored value in a response or log. An unreadable record is never treated as
+  an absent one.
+
+**Eligibility for the fallback comes from the version-format discriminator,
+never from the read returning `null`.**
+
+The resolved value is passed to `prepare`, written into the **new** rollback
+version's own `__publication_metadata`, and committed as the new
+`committedSourceOrderingInput` on success. The rollback's destination version is
+always allocated by `prepare` in the `pm1-…` namespace, through the identical
+allocation path an ordinary publication uses, even when its source is
+legacy-format —
+so a rollback of a legacy release produces new-format provenance going forward,
+and no existing historical version is ever mutated to backfill one.
 
 ## Snapshot revision (`snapshotRevision`)
 

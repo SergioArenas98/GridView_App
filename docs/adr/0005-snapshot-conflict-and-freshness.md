@@ -20,6 +20,22 @@
 > set changed. The prohibitions below are untouched: `generatedAt` and fetch
 > time still never substitute for source recency, and `contentVersion` is still
 > compared by equality only. See ADR 0020 §1.
+>
+> **Further qualified (2026-09-05) by
+> [ADR 0025](0025-season-publication-authority-and-rollback-republication.md),
+> also not superseded.** ADR 0025 D8 authorizes rollback as **republication**
+> of historical public data rather than a direct pointer flip. The freshness
+> comparison this rollback uses is still exactly rule 2/3 below, applied
+> per snapshot key: a restored key's `sourceUpdatedAt` is compared against the
+> **currently active** version's value for that key, never against the
+> historical version's own old value. A key whose restored content is
+> byte-identical to what is currently active keeps its current
+> `sourceUpdatedAt` unchanged (rule 3, no-op); a key whose restored content
+> differs receives a fresh, strictly later `sourceUpdatedAt` (rule 2, applies)
+> through the same monotonic assignment ADR 0020 D1.10 already defines. A
+> client therefore accepts a rollback's republished snapshots through the
+> **existing** rules below with no new client behavior. No activation-epoch or
+> other new field is added to the wire contract for this.
 
 ## Context
 
