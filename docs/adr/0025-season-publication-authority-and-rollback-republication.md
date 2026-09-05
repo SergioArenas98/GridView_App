@@ -12,8 +12,10 @@
 > keeps its **no production caller** status unchanged. `PROVIDER_MODE` remains
 > `mock | none`; `recordedProvisionalSessionEndBound` remains `null`. Phase
 > 9B-6 and gap **G-i** remain **open** after this ADR, exactly as before it.
-> Everything this ADR authorizes for *implementation* is scoped in §"Delivery
-> plan" below, and every step after the first requires its own separate,
+> Everything this ADR authorizes for *implementation* is scoped in
+> §"D12. Activation boundary" below and the separated-future-work list in
+> [`GridView_Implementation_Plan.md`](../technical/GridView_Implementation_Plan.md)
+> §14.0.11, and every step after the first requires its own separate,
 > explicit authorization.
 
 ## Context
@@ -149,6 +151,57 @@ atomicity between a Durable Object check and a Workers KV deletion that this
 ADR's own premise says does not exist across those two products (corrected —
 see D5).
 
+A second Codex review, against commit `25e4c3e`, found and this revision
+corrects three further defects, independently reproduced against this ADR,
+`GridView_Backend_Publication.md` and the edge-api source tree before being
+accepted:
+
+1. **D3's per-key state retirement removed the only floor a withdrawn key's
+   later restoration needed.** A key's per-key `snapshotObservedAt` state was
+   retired the moment it left the current active inventory (D3), but D4's
+   D1.10 assignment read "previous" from that same per-key state — leaving a
+   restored key with no floor to compare against and no guarantee its fresh
+   timestamp exceeds a value an offline client already holds from before
+   withdrawal (ADR 0005 rule 2). Corrected by adding one durable, constant-size
+   per-season scalar, `seasonSnapshotObservedAtHighWaterMark` (D2), and
+   restating D4's per-key assignment as two cases — unchanged-and-currently-active
+   retains its timestamp; everything else (changed, new, or restored) is a
+   fresh activation floored by the season-wide high-water mark, not a per-key
+   value that withdrawal already destroyed. Corrected in D2, D3, D4, D5, D8,
+   D9, the failure-state identity table and the testing obligations.
+2. **D12's migration imported only the two legacy pointers, not the per-key
+   state the first post-cutover `prepare` call needs.** `snapshotRevision`
+   has no production caller before cutover, so no per-key revision/timestamp
+   baseline exists anywhere until migration computes one; importing only
+   `activeVersion`/`previousVersion` would leave every key looking "new" on
+   the first post-cutover publication, manufacturing exactly the spurious
+   churn D1.9 exists to prevent. Corrected by expanding D12's migration into
+   an explicit per-season procedure that reads, validates and computes
+   revisions for every active (and, best-effort, previous) document,
+   seeds both the per-key state and the high-water mark, verifies before any
+   authority-mode switch, and aborts that season's cutover — leaving legacy
+   pointers authoritative — on any missing, malformed or inconsistent input.
+   The migration's coverage is explicitly bounded to the versions this
+   repository's storage design can already name (`activeVersion`,
+   `previousVersion`) — see D12, "the enumerability limit."
+3. **The future "Failure behavior" section overstated what the atomic commit
+   eliminates.** It collapsed today's four pointer-transition outcomes to two
+   without noting that only `pointerMaintenance: 'failed'` disappears —
+   `cachePurge: 'failed'` remains fully applicable, because cache purge is
+   still an external, post-commit, best-effort Cache API call independent of
+   the DO commit. Corrected in `GridView_Backend_Publication.md`'s "Failure
+   behavior" section to state three outcomes, not two.
+
+Two further self-found documentation gaps, unrelated to correctness, are also
+fixed without a separate review thread: this ADR referenced a `"Delivery
+plan"` section by name in three places without ever defining one (corrected
+by pointing each reference at D12 "Activation boundary" and/or
+`GridView_Implementation_Plan.md` §14.0.11, whichever it actually meant), and
+D6's cited single-location-latency sentence could not be found verbatim on
+the Cloudflare page it was attributed to (corrected by removing the direct
+quote and restating the latency dependency as an explicit, unmeasured
+performance risk rather than a documented platform guarantee — see D6).
+
 ## Decision
 
 ### D1. Serialization identity
@@ -176,8 +229,21 @@ source** for:
 
 - `activeVersion`
 - `previousVersion`
-- the current `snapshotRevision` per snapshot key
-- the current `snapshotObservedAt` per snapshot key
+- the current `snapshotRevision` per snapshot key **named in the current
+  active inventory**
+- the current `snapshotObservedAt` per snapshot key **named in the current
+  active inventory**
+- `seasonSnapshotObservedAtHighWaterMark` — one durable scalar per season: the
+  greatest `snapshotObservedAt` value ever authoritatively committed for
+  **any** document key in that season, past or present. It is
+  monotonically non-decreasing, is **never removed or lowered merely because
+  a document key leaves the current active inventory** (unlike the two
+  per-key maps above, which are scoped to the current manifest), and is
+  advanced only by a successful `prepared → committed` transition (D4, D9) —
+  never by a cancelled, expired or superseded `prepared` operation. See D3
+  for why this is a bounded, constant-size addition, and D4/D8 for the exact
+  assignment rule it exists to make safe across document withdrawal and
+  restoration.
 - the current publication-operation record in full — `operationKind`, `phase`,
   `priorVersion`, `candidateVersion`, the candidate's per-key
   `snapshotRevision` values, the per-key `snapshotObservedAt` values assigned
@@ -235,11 +301,25 @@ The Durable Object never generates provider data, never validates a document
 body and never stores a complete snapshot payload. Its own storage holds
 metadata proportional to the current committed release's document manifest
 and, while one is in progress, the prepared candidate's (D2) — never
-complete document bodies. This state does **not** grow with historical
-release count: superseded operation and per-key state are retired per the
+complete document bodies. This **per-key** state does **not** grow with
+historical release count: superseded operation and per-key state for a key
+no longer named in the current active inventory are retired per the
 lifecycle D5/D9 define, so its size is bounded by the current release's
 inventory plus at most one prepared operation, never by all versions ever
 published.
+
+**Retiring a key's per-key state on withdrawal does not, by itself, lose the
+monotonicity floor that key needs if it is later restored.** That floor lives
+in the one additional scalar D2 adds for exactly this reason —
+`seasonSnapshotObservedAtHighWaterMark` — which is **not** scoped to the
+current inventory and is never retired when a key leaves it. This keeps the
+capacity argument intact: the per-key maps stay bounded by the current
+manifest, and the season adds exactly one constant-size value on top,
+never a per-key tombstone history and never storage proportional to how many
+times a key has been withdrawn and restored. See D4 for how this scalar is
+used to assign a safe timestamp to a restored key, and "Rejected and
+superseded alternatives" for why an unbounded per-key tombstone history was
+not the chosen fix.
 
 ### D4. Two-phase publication protocol
 
@@ -270,16 +350,48 @@ The Durable Object, in one atomic storage transaction:
   verbatim for audit and idempotent-retry purposes; it is simply not
   evaluated as a rejection predicate for this operation kind;
 - **for both operation kinds, without exception**, assigns each key's
-  `snapshotObservedAt` by the same D1.9/D1.10 rule — the staleness exemption
-  above affects *admission* only, never the per-key revision/timestamp
-  assignment:
-  - **retains the current timestamp** where the candidate's
-    `snapshotRevision` for that key equals the currently active revision for
-    that key;
-  - **assigns `max(now, previous + 1 ms)`** where it differs — the exact
-    D1.10 rule, now computable, because "previous" is read from the DO's own
-    strongly consistent storage inside the same transaction that decides the
-    new value, not raced against a second, unobserved publication attempt;
+  `snapshotObservedAt` by the same D1.9/D1.10 rule, now stated in exactly two
+  cases — the staleness exemption above affects *admission* only, never the
+  per-key revision/timestamp assignment:
+  - **Currently active, unchanged key — retains its current timestamp.**
+    Where the candidate's `snapshotRevision` for that key equals the
+    currently active revision **for that key**, `prepare` keeps that key's
+    existing `snapshotObservedAt` unchanged. No timestamp changes merely
+    because some *other* key in the same candidate changed.
+  - **Changed, new, or restored key — a fresh activation.** Every other
+    case — the candidate's revision for that key differs from the currently
+    active revision for that key, **or the key has no currently active
+    revision at all** (never published this season, or published before but
+    currently absent from the active inventory because it was withdrawn) —
+    is treated identically, as a fresh activation, and assigned
+    `max(now, seasonSnapshotObservedAtHighWaterMark + 1 ms)`. A restored key
+    is never compared against its own old, pre-withdrawal value, and never
+    described as "unchanged" merely because its restored content happens to
+    match some earlier revision it once held — its only comparison base is
+    the revision **currently active** for that key, and a withdrawn key has
+    none, so restoration is unconditionally a fresh activation. This is
+    D1.10's existing rule, generalized from a per-key floor to a per-season
+    floor: "previous" is no longer that one key's own last value (which D3
+    explains is not retained once a key leaves the active inventory) but
+    `seasonSnapshotObservedAtHighWaterMark`, read from the same strongly
+    consistent DO storage inside the same transaction that decides the new
+    value — never raced against a second, unobserved publication attempt,
+    and never lower than any timestamp ever committed for any key this
+    season. Every changed, new, or restored key admitted in the **same**
+    `prepare` call receives this same freshly computed value; nothing in the
+    public contract requires distinct values across keys published together,
+    and the pre-existing rule already produced this outcome whenever several
+    keys changed at the same real-world instant.
+
+  This is **strictly stronger** than the minimum a per-key floor would give:
+  a restored key's fresh value is guaranteed greater than every timestamp
+  this season has ever committed for *any* key, not merely greater than that
+  one key's own (now-discarded) last value, so an offline client holding an
+  older cached copy of that key — from before it was withdrawn — can never
+  see the republished document rejected as stale (ADR 0005 rule 2). It adds
+  exactly one constant-size scalar to the state D3 already bounds; it
+  requires no per-key tombstone history and no change to which keys' state
+  D3 retires.
 - allocates a new, strictly-increasing `operationEpoch` for this season and a
   fresh caller-facing `operationToken`;
 - persists a `prepared` operation record containing **everything `finalize`
@@ -356,11 +468,17 @@ The Durable Object, in one atomic storage transaction:
 - if the attestation matches: performs the **one and only** authoritative
   state transition this design has, `prepared → committed`, in the same
   atomic write — recording the candidate as `activeVersion`, the version that
-  was active immediately before this operation as `previousVersion`, and
+  was active immediately before this operation as `previousVersion`,
   committing the per-key `snapshotRevision`/`snapshotObservedAt` state
-  `prepare` assigned. There is **no separate durable `committing` state** —
-  see D9 for why an earlier draft's claim of one was a contradiction, now
-  corrected.
+  `prepare` assigned, and advancing
+  `seasonSnapshotObservedAtHighWaterMark` to
+  `max(current high-water mark, every per-key snapshotObservedAt value just
+  committed)` — derived entirely from the `assignedTimestamps` already
+  persisted by `prepare` (D2, D4), never recomputed or read from the
+  attestation. If every key in this operation retained its existing
+  timestamp (no key changed), the high-water mark is left exactly as it was.
+  There is **no separate durable `committing` state** — see D9 for why an
+  earlier draft's claim of one was a contradiction, now corrected.
 
 **No Workers KV pointer write occurs during `finalize`.** A stale, cancelled
 or superseded token is rejected **before** any authoritative state change —
@@ -484,6 +602,17 @@ that happens to share the same phase name:
   auto-clear; a genuine invariant-violation state is not, and that asymmetry
   is intentional. There is no intermediate durable state between `prepared`
   and `committed` for this rule to need to cover (D9).
+- **`seasonSnapshotObservedAtHighWaterMark` is untouched by every outcome in
+  this section.** Cancellation (explicit or by replacement), deadline expiry,
+  and rejection of a stale or superseded token none of them read, advance or
+  lower the high-water mark — it is a **committed-state** value, and D4
+  advances it only inside a successful `prepared → committed` transition
+  (D9). A `prepared` operation's proposed per-key timestamps are visible only
+  in that operation's own durable record until `finalize` commits them; an
+  abandoned or cancelled `prepared` operation leaves the high-water mark
+  exactly as it was before that operation began, with the same "never
+  observed" property D5 already gives every other piece of state a
+  `prepared` operation touches before commit.
 
 **There is no lease over pointer mutation anywhere in this design.**
 
@@ -569,15 +698,23 @@ unavailable:**
   (existing behavior, [ADR 0005](0005-snapshot-conflict-and-freshness.md) is
   unaffected).
 
-**The latency and availability trade-off is stated honestly, not minimized:**
-every authoritative public version resolution now depends on a call to one
-per-season Durable Object, which — unlike Workers KV's global edge read —
-is coordinated from a single location
-([What are Durable Objects?](https://developers.cloudflare.com/durable-objects/concepts/what-are-durable-objects/):
-*"since transactions must be coordinated in a single location, clients on the
-opposite side of the world from that location will experience moderate
-latency"*, accessed 2026-09-05). This ADR does **not** hide that cost behind
-an unmeasured caching layer.
+**The latency and availability trade-off is stated as a risk to measure, not
+as a documented platform guarantee.** Every authoritative public version
+resolution now depends on a call to one per-season Durable Object. Cloudflare
+documents that a Durable Object's storage is *"fast, transactional, and
+strongly consistent"* and that each object instance runs at a single location
+the caller may optionally influence
+([What are Durable Objects?](https://developers.cloudflare.com/durable-objects/concepts/what-are-durable-objects/),
+accessed 2026-09-05) — unlike Workers KV's globally-replicated read path. No
+official Cloudflare documentation reviewed for this ADR quantifies the
+latency a client geographically distant from that single location should
+expect, so this ADR does **not** cite a specific latency figure or framing as
+a platform guarantee. The single-location dependency is real by construction;
+its magnitude is an **explicit, unmeasured performance risk**, to be measured
+against D6's stated trade-off during the Mechanism/Integration PRs' staging
+latency review (see "Reopening conditions" below), not assumed acceptable in
+advance. This ADR does **not** hide that cost behind an unmeasured caching
+layer.
 
 **No pointer caching is introduced by this ADR.** A cache in front of the DO
 lookup would reintroduce exactly the staleness/authority ambiguity this
@@ -585,7 +722,7 @@ design exists to remove, unless its own consistency model — invalidation
 trigger, staleness bound, and what a public reader is told when the cache and
 the DO disagree — is fully specified and reviewed on its own terms. That is
 deferred to a future ADR, only if measured latency from the Mechanism/
-Integration PRs (see "Delivery plan") shows it is needed.
+Integration PRs (see "Reopening conditions" below) shows it is needed.
 
 ### D7. Legacy KV pointers
 
@@ -641,15 +778,25 @@ version. It is **republication**:
    D1.7) — Model 1 introduces **no new revision-computation mechanism**.
 6. Compare each restored key's revision against the **currently active**
    version's revision for that same key (not against the historical
-   version's own old revision).
+   version's own old revision, and not against any revision that key held
+   the last time it happened to be active, if it is currently absent from
+   the active inventory) — exactly D4's two-case rule, applied here without
+   a third case for rollback:
 7. **Retain the current `snapshotObservedAt`** for a key whose restored
-   revision equals the currently active one — this key did not actually
-   change across whatever regression the rollback corrects, and must not
-   manufacture spurious churn.
-8. **Assign a fresh, strictly monotonic `snapshotObservedAt`** (D1.10's
-   existing rule, applied through the same `prepare` mechanism as ordinary
-   publication) for a key whose restored revision differs from the currently
-   active one.
+   revision equals the **currently active** revision for that same key —
+   this key did not actually change across whatever regression the rollback
+   corrects, and must not manufacture spurious churn.
+8. **Assign `max(now, seasonSnapshotObservedAtHighWaterMark + 1 ms)`** (D4's
+   fresh-activation rule, applied through the same `prepare` mechanism as
+   ordinary publication) for every other restored key: one whose revision
+   differs from the currently active revision for that key, **or one with no
+   currently active revision at all** — a key this rollback restores that is
+   currently withdrawn from the active inventory is, by D4's rule, always a
+   fresh activation, never a comparison against that key's own historical
+   value, however recently or long ago it was last observed. This is what
+   guarantees a rollback can never hand an offline client, holding an older
+   cached copy of a since-withdrawn key, a "restored" document timestamped
+   earlier than what that client already has.
 9. Call `prepare` with `operationKind: 'rollback-republication'` and the
    `expectedManifestCommitment` from step 4, then write the complete new
    immutable version and inventory to KV with the timestamps `prepare`
@@ -787,15 +934,18 @@ per-key `snapshotRevision`/`snapshotObservedAt` maps this transaction writes
 grow with the release's document count (D2/D3); "one atomic write" is a
 requirement about transactional indivisibility, not a license to serialize
 an arbitrarily large per-key map into a single oversized value without
-proof it fits. The Mechanism PR must demonstrate the chosen SQLite-backed
-representation handles the largest supported release inventory without
-relying on one oversized serialized blob, by either: storing bounded
-per-key records in a SQLite-backed layout appropriate to that API and
-updating them atomically within the single transaction above; or
-establishing and enforcing a safe serialized-state size limit before any
-versioned KV document is written for that release. This ADR leaves the
-storage-layout choice to the Mechanism PR; it does not leave the capacity
-obligation itself optional.
+proof it fits. `seasonSnapshotObservedAtHighWaterMark` (D2, D4) adds exactly
+**one** constant-size scalar to this same transaction, independent of
+document count and independent of how many times any key has been withdrawn
+and restored — it does not change this obligation's shape. The Mechanism PR
+must demonstrate the chosen SQLite-backed representation handles the largest
+supported release inventory without relying on one oversized serialized
+blob, by either: storing bounded per-key records in a SQLite-backed layout
+appropriate to that API and updating them atomically within the single
+transaction above; or establishing and enforcing a safe serialized-state
+size limit before any versioned KV document is written for that release.
+This ADR leaves the storage-layout choice to the Mechanism PR; it does not
+leave the capacity obligation itself optional.
 
 **No correctness-critical in-memory single-flight identity (a
 `commitPromise` or equivalent) is retained, and none is required.** An
@@ -886,25 +1036,148 @@ authorized here as a category list):
 
 **Nothing in this ADR, and nothing in this documentation PR, provisions or
 activates this design.** Future activation requires separate, explicit
-authorization at each step below (see "Delivery plan"). The expected staging
-cutover sequence, recorded here for planning only:
+authorization at each step below, and at each PR-scoped boundary in the
+separated-future-work list of
+[`GridView_Implementation_Plan.md`](../technical/GridView_Implementation_Plan.md)
+§14.0.11 (Mechanism PR, Integration PR, staging provisioning and cutover,
+production activation). The expected staging cutover sequence, recorded here
+for planning only:
 
 1. Mechanism code merged and unused (no binding, no caller).
 2. Staging `SeasonPublicationSequencer` class and binding provisioned.
-3. Publication mutators paused.
-4. Current valid KV `active`/`previous` state imported once, per season,
-   through the operator-controlled migration procedure (D7).
-5. Imported version and inventory verified against the DO's newly seeded
-   state.
-6. Public and administrative authority mode switched to the sequencer.
-7. Cron/admin mutators resumed.
-8. Concurrent publication, rollback and read-path smoke tests run.
-9. Latency, fallback and availability metrics reviewed against D6's stated
+3. **The per-season migration procedure below (which itself ends with that
+   season's authority-mode switch and mutator resumption) runs to
+   completion for that season, or its cutover aborts with legacy pointers
+   left authoritative.**
+4. Concurrent publication, rollback and read-path smoke tests run.
+5. Latency, fallback and availability metrics reviewed against D6's stated
    trade-off before any further step is considered.
 
 **Production remains untouched and continues in its current dormant state**
 (`PROVIDER_MODE = "none"`, no production Worker deployment implied or
 performed by this ADR).
+
+**The per-season migration procedure, for every season being activated:**
+
+1. Pause that season's publication and rollback mutators — no candidate may
+   be prepared or finalized for this season while migration runs.
+2. Read and validate the legacy `active:{season}` pointer and, if present,
+   `previous:{season}` (D7). A missing or malformed `activeVersion` aborts
+   this season's cutover before any DO state is written (step 10).
+3. Read and validate `activeVersion`'s own inventory. A missing, empty or
+   malformed active inventory aborts this season's cutover (step 10) — the
+   same "version carries no inventory fails closed" rule
+   [`GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md)
+   already applies to a rollback target applies here to the migration
+   source.
+4. Read every document the active inventory names.
+5. Compute each active document's `snapshotRevision` using the
+   already-implemented canonical serializer ([ADR 0020](0020-provider-source-observation-and-reconciliation.md)
+   D1.7) — the same mechanism ordinary publication and rollback both use;
+   the migration introduces no second revision computation.
+6. Import each active document's existing public `meta.sourceUpdatedAt` as
+   that key's initial `snapshotObservedAt`.
+7. Stage the per-key `snapshotRevision`/`snapshotObservedAt` state computed
+   in steps 5-6 as this season's initial current state (D2) — not yet
+   committed to the DO.
+8. **Seed `seasonSnapshotObservedAtHighWaterMark` conservatively, as the
+   maximum of:**
+   - every imported active-document `snapshotObservedAt` from step 6;
+   - every `snapshotObservedAt` importable the same way (steps 4-6, applied
+     to `previousVersion` instead of `activeVersion`) from `previousVersion`,
+     **only if `previousVersion` exists and its own inventory validates** —
+     an invalid or absent `previousVersion` is not a cutover-blocking
+     condition, exactly as it already is not one for an ordinary rollback
+     request (see "the enumerability limit" below for why `previousVersion`
+     is as far back as this step reaches);
+   - the migration's own observation clock at the moment this step runs.
+9. Verify the staged state from steps 7-8 against the source documents and
+   inventories re-read once more — the same documents must still describe
+   the same revisions and the same legacy pointers must be unchanged since
+   step 2, or this season's cutover aborts (step 10) rather than committing
+   against state that moved during migration.
+10. **Commit the staged per-key state and the seeded high-water mark to the
+    Durable Object in one operation, only if every prior step for this
+    season succeeded.** A missing, malformed or inconsistent input at any
+    earlier step aborts this season's cutover with no DO state written and
+    no authority-mode switch for that season; legacy KV pointers remain
+    authoritative for that season exactly as before migration was attempted,
+    and the season may be retried from step 1 once the underlying data
+    problem is fixed. Migration is only ever all-or-nothing per season — no
+    partially-seeded season is switched to sequencer authority.
+11. **Only once step 10 commits successfully**, switch that season's public
+    and administrative authority mode to the sequencer, then resume that
+    season's publication and rollback mutators. Switching authority and
+    resuming mutators both wait on step 10 alone — never on an assumption
+    that migration "probably" succeeded.
+
+**The enumerability limit, stated precisely rather than assumed away.** This
+migration seeds the high-water mark from exactly the versions this
+repository's storage design can already name and validate today —
+`activeVersion` and, best-effort, `previousVersion` (D7) — because those are
+the **only** versions any part of this system tracks. Workers KV offers no
+listing of a season's historical `snapshot:{season}:{version}:*` keys by
+version, this codebase maintains no separate version index, and — unchanged
+by this ADR — "public readers never enumerate snapshot versions"
+([ADR 0007](0007-versioned-kv-publication-active-pointer.md)); an operator
+rollback request may **name** an older version by an identifier it already
+knows from external records, but nothing in this system can **discover**
+that a version exists or **list** every version a season has ever had. This
+migration therefore does not, and cannot honestly, claim to import a floor
+derived from "every version ever published" — only from the two versions the
+existing design already tracks. This is not a new gap this ADR introduces:
+today's KV-pointer design has exactly the same blind spot for a rollback
+target older than `previousVersion`, resolved only by an operator's own
+external record-keeping, unchanged by this migration. If a future need
+arises to safely support rollback to a version this system cannot already
+name from `active`/`previous`, that requires a version-index capability this
+ADR does not create, and is out of scope here — not a defect in this
+migration's seed, but a pre-existing, explicitly acknowledged limit on what
+"the retained set" means in this repository's storage design today.
+
+**Why this seed is still safe for the enumerable set it covers.** Real
+publication history only moves forward in wall-clock time, and
+`activeVersion`/`previousVersion` are, by construction, the two most
+recently active states for the season — every earlier version's per-key
+timestamps were assigned no later than whichever of these two states last
+carried that key, under the monotonic-assignment discipline ADR 0020 D1.9
+already required before this ADR existed (even though its enforcement
+mechanism was blocked, not its intent). Seeding from the two most recent
+states and the migration's own clock therefore already dominates every
+older, unenumerable version's timestamps for the same key, without needing
+to read them.
+
+**What the migration does and does not activate.** Computing revisions and
+importing timestamps in steps 4-9 happens entirely within this
+separately-authorized, operator-controlled migration procedure — it is where
+`snapshotRevision` first becomes a real baseline for existing production
+data, not a claim that this documentation PR activates anything. `snapshotRevision`
+still has no production caller until this migration runs, and this migration
+does not run as part of merging this PR. No authority switch occurs on
+partial success (step 10 of the migration procedure); legacy pointers remain
+authoritative for a season until that season's migration procedure — through
+its own authority-mode switch, step 11 — completes in full (step 3 of the
+cutover sequence above).
+
+**Future migration tests, Mechanism/Integration-PR scope:**
+
+- The first post-cutover `prepare` for a season whose migration ran, given an
+  unchanged candidate, retains every seeded per-key timestamp.
+- The first post-cutover `prepare` for a season whose migration ran, given a
+  candidate with one changed key, assigns that key a timestamp strictly
+  greater than the seeded high-water mark, and leaves every unchanged key's
+  seeded timestamp untouched.
+- A key restored via ordinary publication or rollback after migration
+  receives a timestamp using the seeded high-water floor, never a value
+  derived from that key's pre-migration history.
+- A malformed, missing or empty active inventory aborts migration for that
+  season with no DO state written (step 10) and legacy pointers left
+  authoritative.
+- A season whose migration completes only partially (any step 1-9 failing)
+  never reaches an authority-mode switch for that season.
+- Migration retried after an aborted attempt is idempotent: re-running steps
+  1-9 from a season's unchanged legacy KV state produces the same staged
+  per-key state and the same seeded high-water mark as the first attempt.
 
 ## Safety reasoning: why KV cannot be the authority
 
@@ -972,6 +1245,7 @@ rather than by additional state-machine logic layered on the same KV write.
 | **An application-level in-memory single-flight guard (`commitPromise`) as a correctness-critical mechanism** | **Rejected — no longer needed, not merely unused.** It was necessary only while the critical section spanned an awaited external Workers KV write, which an ordinary input gate does not cover. D2 removed that external write; `finalize`'s entire critical section is now one Durable Object storage transaction, which an ordinary input gate already serializes (D9). Retaining the guard would be leftover machinery from the rejected KV-authoritative design. |
 | **An ordinary source-ordering staleness rejection applied unconditionally to every `prepare` call, including rollback** | **Rejected.** It would make the authorized Model 1 (D8) impossible to execute, since a rollback's historical ordering input is expected to be older than or equal to what is currently active. Replaced by the bounded `operationKind` exemption in D4, which narrows the exception to rollback admission only and leaves ordinary publication's rejection untouched. |
 | **Claiming atomicity between a Durable Object cancellation check and an external Workers KV deletion during orphan cleanup** | **Rejected — not implementable.** No cross-product atomicity between Durable Object storage and Workers KV exists (§"Safety reasoning" is this ADR's own premise). Replaced in D5 by a non-atomic two-step sequence relying on `cancelled` being a terminal state, with the external KV deletion remaining best-effort. |
+| **An unbounded per-key tombstone history** (retaining every withdrawn key's last `snapshotObservedAt` indefinitely, keyed by document identity, instead of one season-wide scalar) | **Rejected — unnecessary for the property needed.** A per-key floor only needs to be *at least as high* as every value ever committed for any key that season to keep a restored key's timestamp ahead of anything an offline client could hold; a single monotonic `seasonSnapshotObservedAtHighWaterMark` (D2, D4) already provides that floor for every key, current or withdrawn, without storage proportional to how many distinct keys have ever existed or been withdrawn and restored. Retaining a growing per-key tombstone map would reintroduce the unbounded-history growth D3's capacity argument exists to avoid, for a safety property one constant-size scalar already secures. |
 
 ## Failure-state model
 
@@ -987,6 +1261,7 @@ purpose once the commit is one Durable-Object-storage-protected transaction.
 | `operationToken` | One `prepare()` call | Caller-facing handle, presented back to `finalize`/`cancel` |
 | `operationEpoch` | Durable, monotonic, per season | The actual fencing value every transition checks; increments on every admitted `prepare` |
 | Durable operation record | Durable, until superseded | `{epoch, token, operationKind, phase, priorVersion, candidateVersion, perKeyRevisions, assignedTimestamps, sourceOrderingInput, expectedManifestCommitment, preparedAt, deadline}` — sole restart-recovery source of truth, and the only source `finalize` reads from (D4) |
+| `seasonSnapshotObservedAtHighWaterMark` | Durable, monotonic, per season — never scoped to a single key or a single operation | The per-season timestamp floor a fresh-activation assignment must exceed (D4); advanced only by a committed `prepared → committed` transition (D9), never by a `prepared`, `cancelled` or `recovery-required` state |
 
 ### State transition table
 
@@ -1000,7 +1275,7 @@ transition is atomic; see D9.
 |---|---|---|---|---|---|---|---|
 | `idle` | anyone | none | none | yes — any `prepare` | n/a | resumes `idle` | trivially |
 | `prepared` | holder of current epoch/token | writes the full operation record (D4) in one transaction | none | only as an atomic *replacement* of this record | not yet | resumes `prepared`, with every value D4 records intact; deadline re-evaluated | `prepare` retried is a fresh epoch; old one retired |
-| `committed` | n/a for this epoch | one atomic `prepared → committed` transition: activeVersion, previousVersion and per-key state all written together with the phase change | **none** | yes — next `prepare` | yes, for epoch(s) it superseded | resumes `committed` | trivially — a retry for a committed token returns the recorded result (D9) |
+| `committed` | n/a for this epoch | one atomic `prepared → committed` transition: activeVersion, previousVersion, per-key state and `seasonSnapshotObservedAtHighWaterMark` all written together with the phase change | **none** | yes — next `prepare` | yes, for epoch(s) it superseded | resumes `committed` | trivially — a retry for a committed token returns the recorded result (D9) |
 | `cancelled` | n/a | epoch marked cancelled; **terminal** — never transitions to `prepared` or `committed` (D5) | none | yes | yes, after a DO-authorized recheck (D5; non-atomic with the external KV deletion) | resumes `cancelled` | trivially |
 | `recovery-required` | admin only | none automatic | none automatic | **no** | no | resumes `recovery-required` until operator clears it | not applicable by design |
 
@@ -1078,6 +1353,33 @@ substitutes for the other, and no single test may claim to cover both.
   atomically-updated per-key records, or that a serialized-state size limit
   is enforced before any versioned KV document is written, per D9's capacity
   obligation.
+- **A key present in the currently active inventory, whose candidate revision
+  matches, retains its existing `snapshotObservedAt` even when other keys in
+  the same `prepare` call change** — retirement of a *different*, absent
+  key's per-key state (D3) never causes an unrelated, still-active,
+  unchanged key to be reassigned a timestamp.
+- **A key absent from the currently active inventory is always treated as a
+  fresh activation**, assigned `max(now, seasonSnapshotObservedAtHighWaterMark
+  + 1 ms)` — never rejected for lack of a per-key `previous` value, and never
+  compared against a stale value the key held before it was withdrawn (D3's
+  per-key retirement makes that old value unavailable by design).
+- **`seasonSnapshotObservedAtHighWaterMark` only advances on a successful
+  `prepared → committed` transition, to `max(prior high-water mark, every
+  per-key value just committed)`**: a cancelled, expired, or superseded
+  `prepared` operation's proposed timestamps never advance it (D5), and an
+  operation where every key retained its existing timestamp leaves it
+  unchanged.
+- **Restoring a withdrawn key never produces a timestamp less than or equal
+  to any timestamp ever committed for any key that season** — proven by
+  withdrawing a key, committing at least one unrelated intervening
+  publication that advances the high-water mark, then restoring the
+  withdrawn key and asserting its new timestamp exceeds the intervening
+  publication's own assigned value, not merely the withdrawn key's own last
+  value.
+- **The high-water mark adds exactly one scalar to the per-transaction write
+  cost**, independent of document count and independent of how many
+  withdraw/restore cycles a key has been through — proven together with the
+  release-sized-manifest capacity test above.
 
 **`SnapshotPublisher` tests:**
 
@@ -1115,8 +1417,17 @@ this documentation correction.
 - Rollback Model 1: no provider port is ever invoked.
 - Rollback Model 1: a key whose restored content hash matches the currently
   active version's hash keeps its currently recorded `snapshotObservedAt`
-  unchanged; a key that differs receives a new, strictly greater timestamp
-  for that key only.
+  unchanged; a key that differs, or that is absent from the currently active
+  inventory (a restored, previously-withdrawn key), receives
+  `max(now, seasonSnapshotObservedAtHighWaterMark + 1 ms)` — the same
+  fresh-activation value any other changed key in the same operation
+  receives, not a value scoped to that key alone.
+- A key withdrawn from the active inventory in one operation and later
+  restored by a subsequent ordinary publication or rollback receives a
+  timestamp strictly greater than every timestamp this season has ever
+  committed for any key — never a value that could be less than or equal to
+  a timestamp an offline client already holds for that key from before its
+  withdrawal (ADR 0005 rule 2).
 - Rollback Model 1: a pre-commit failure (mid new-version write) leaves the
   existing active release completely untouched and serving.
 - **Router: a document the active inventory positively excludes returns the
@@ -1174,6 +1485,18 @@ platform guarantee:
 - `active:{season}`/`previous:{season}` stop being anything code depends on,
   after cutover — a deliberate simplification of the KV Consistency Boundary
   ADR 0010 originally had to describe.
+- A single durable per-season scalar, `seasonSnapshotObservedAtHighWaterMark`
+  (D2, D3, D4), closes a withdrawn-then-restored-key monotonicity gap that
+  D3's per-key retirement rule would otherwise leave open, without
+  reintroducing unbounded per-key tombstone history — the capacity argument
+  (D3, D9) is unchanged in shape, plus exactly one constant-size value.
+- The cutover migration (D12) now seeds this per-season floor and the
+  current per-key revision/timestamp state from `activeVersion` and,
+  best-effort, `previousVersion` before any authority-mode switch — those
+  are the **only** versions this repository's storage design can already
+  name and validate; the migration does not, and cannot, claim to cover
+  every version ever published for a season (D12, "the enumerability
+  limit").
 - **Nothing here is implemented.** `snapshotRevision` still has no production
   caller; D1.9-D1.11 remain unimplemented; G-i remains open; Phase 9B-6 is
   not closed by this ADR.
@@ -1187,6 +1510,7 @@ platform guarantee:
 | The Mechanism PR's own tests cannot establish the D9 shutdown-guarantee assumption behaves as documented in this repository's actual Workers runtime version | Reopen D9 and D2 together before proceeding to the Integration PR |
 | An implementation discovers the SQLite-backed storage transaction API does not provide the single-atomic-write property D9 assumes | Reopen D9; do not proceed to Integration without an alternative atomic mechanism |
 | A future phase needs cross-season coordination (e.g. a shared content manifest spanning seasons) | Reopen D1; a single per-season identity may not be the right shape |
+| A future need arises to support rollback to a version this system cannot already name from `activeVersion`/`previousVersion` | Reopen D12; a version-index capability must be designed before such a rollback or migration seed can be honestly claimed safe |
 
 ## References
 

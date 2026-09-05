@@ -558,16 +558,22 @@ below is implemented**:
   exact content — how long the currently-serving revision has been the
   active one — not some notion of "when this content was first ever
   observed across the season's whole history." A key that was active before,
-  was replaced, and is now restored by a rollback gets a **fresh** timestamp
-  if its neighbors changed the comparison outcome, by the same rule as any
-  other differing key.
-- **Rollback Model 1 (ADR 0025 D8) creates a new activation, with fresh
-  timestamps assigned only where restored content differs from what is
-  currently active**, through the same D1.10 monotonic assignment — computed
-  during the sequencer's `prepare` step, **before** the immutable document
-  carrying `meta.sourceUpdatedAt` is constructed, exactly as D1.9 already
-  requires for ordinary publication ("It is persisted with the revision in
-  the same publication transaction"). Rollback introduces no second
+  was replaced or withdrawn, and is now restored by a rollback gets a
+  **fresh** timestamp by the same rule as any other key with no currently
+  active revision to compare against — never by comparing it to its own,
+  no-longer-retained pre-withdrawal value (ADR 0025 D3 corrected this: a
+  withdrawn key's per-key state is not kept, precisely so it cannot be
+  mistaken for a comparison basis).
+- **Rollback Model 1 (ADR 0025 D8) creates a new activation for every
+  restored key whose revision differs from what is currently active, or
+  that has no currently active revision at all** (withdrawn and now
+  restored) — never only the "differs" case — through the same D1.10
+  monotonic assignment, floored by the season-wide
+  `seasonSnapshotObservedAtHighWaterMark` (ADR 0025 D2/D4), computed during
+  the sequencer's `prepare` step, **before** the immutable document carrying
+  `meta.sourceUpdatedAt` is constructed, exactly as D1.9 already requires for
+  ordinary publication ("It is persisted with the revision in the same
+  publication transaction"). Rollback introduces no second
   timestamp-assignment mechanism.
 
 **D1.9-D1.11 remain unimplemented.** ADR 0025 is a design decision, not

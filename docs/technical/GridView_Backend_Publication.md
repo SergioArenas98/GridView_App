@@ -396,16 +396,22 @@ stores a complete snapshot payload — its own storage holds metadata
 proportional to the current committed release's document manifest and,
 while one is in progress, the prepared candidate's (ADR 0025 D2/D3):
 `activeVersion`, `previousVersion`, the current
-`snapshotRevision`/`snapshotObservedAt` per key, and the **complete** current
-publication-operation record (`operationKind`, `phase`, `priorVersion`,
-`candidateVersion`, the candidate's per-key revisions and assigned
-timestamps, `sourceOrderingInput`, `expectedManifestCommitment`, epoch,
-token, `preparedAt`, `deadline`) — every value `finalize` needs, so a restart
-between `prepare` and `finalize` loses nothing it must later verify or
-commit (ADR 0025 D4). This state does not grow with historical release
-count — superseded operation and per-key state are retired per ADR 0025
-D5/D9 — so its size is bounded by the current release's inventory plus at
-most one prepared operation, never by all versions ever published.
+`snapshotRevision`/`snapshotObservedAt` per key **named in the current active
+inventory**, one durable constant-size scalar
+`seasonSnapshotObservedAtHighWaterMark` (the greatest `snapshotObservedAt`
+ever committed for any key that season, never retired when a key leaves the
+inventory — see "Per-key revision and timestamp assignment" below), and the
+**complete** current publication-operation record (`operationKind`, `phase`,
+`priorVersion`, `candidateVersion`, the candidate's per-key revisions and
+assigned timestamps, `sourceOrderingInput`, `expectedManifestCommitment`,
+epoch, token, `preparedAt`, `deadline`) — every value `finalize` needs, so a
+restart between `prepare` and `finalize` loses nothing it must later verify
+or commit (ADR 0025 D4). This per-key state does not grow with historical
+release count — superseded operation and per-key state for a key no longer
+in the current inventory are retired per ADR 0025 D5/D9 — so its size is
+bounded by the current release's inventory, plus at most one prepared
+operation, plus the one constant-size high-water mark, never by all versions
+ever published.
 Comparing the manifest commitment carried by `completionAttestation` against
 the durably-recorded `expectedManifestCommitment` proves only that the two
 values match; it is not, and is never claimed to be, independent proof that
@@ -430,12 +436,25 @@ specific gap [ADR 0020](../adr/0020-provider-source-observation-and-reconciliati
 D1.10 identified as unclosable under the current architecture:
 
 - a key whose candidate `snapshotRevision` equals the currently active
-  revision for that key **keeps its current `snapshotObservedAt`** — no
-  manufactured churn for unchanged content;
-- a key whose candidate revision differs is assigned
-  `max(now, previous + 1 ms)` — D1.10's existing rule, now computable because
-  "previous" and the new value are read and written inside one transaction,
-  not two racing reads of an eventually-consistent store.
+  revision **for that key** **keeps its current `snapshotObservedAt`** — no
+  manufactured churn for unchanged content, and no timestamp change merely
+  because some *other* key in the same candidate changed;
+- every other key — one whose candidate revision differs from the currently
+  active revision for that key, **or one with no currently active revision
+  at all** (never published this season, or previously withdrawn from the
+  active inventory and now restored) — is a **fresh activation**, assigned
+  `max(now, seasonSnapshotObservedAtHighWaterMark + 1 ms)`. This is D1.10's
+  existing rule, generalized from a per-key floor to a durable, per-season
+  floor: per-key state for a key not in the current active inventory is not
+  retained (below), so a restored key has no per-key "previous" value to
+  compare against; `seasonSnapshotObservedAtHighWaterMark` — the greatest
+  `snapshotObservedAt` ever committed for **any** key that season — is read
+  and advanced inside the same transaction instead, guaranteeing a restored
+  key's fresh value exceeds every timestamp an offline client could already
+  hold for it. See
+  [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+  D2-D4 for the full rule and why this closes the withdrawn-key gap without
+  unbounded per-key tombstone history.
 
 Timestamps are assigned **before** final document construction, because
 `meta.sourceUpdatedAt` is baked into each immutable document.
@@ -481,25 +500,56 @@ maintains one as a live value (see "Legacy pointer retirement" below).
 
 ### Failure behavior
 
-Because the commit is one atomic local storage transaction, the failure table
-in "Pointer transitions" above collapses to two outcomes rather than the
-current four: **pre-commit** (any failure before `finalize`'s transaction
-completes leaves the prior active/previous pair untouched — no partial
-pointer state is possible, because there is only one write) and **committed**
-(the transaction succeeded, both the new active and previous values are in
-effect together, never one without the other). The "post-commit `previous`
-maintenance failed" outcome in today's table has no equivalent, because
-`previous` is no longer a second, separately-failable write.
+Because the commit is one atomic local storage transaction, **only the
+"post-commit `previous` maintenance failed" row of today's four-row table
+disappears** — `previous` is no longer a second, separately-failable write,
+since it commits together with `active` in the same DO transaction. The
+other three collapse to two authoritative-pointer outcomes, plus one
+independent, still-applicable post-commit outcome for cache purge:
+
+- **Pre-commit failure**: any failure before `finalize`'s transaction
+  completes leaves the prior active/previous pair untouched — no partial
+  pointer state is possible, because there is only one write; cache purge
+  never runs.
+- **Committed, cache purge succeeded**: the transaction succeeded, both the
+  new active and previous values are in effect together, never one without
+  the other, and the purge reports success using the existing bounded
+  vocabulary.
+- **Committed, cache purge failed**: the authoritative commit is
+  **unaffected** — no authoritative state is reverted because a purge
+  failed, exactly as today. The result still reports `cachePurge: 'failed'`,
+  the existing `cache-purge-failed` disposition is unchanged, and a stale or
+  withdrawn cached route may persist until CDN TTL expiry, exactly as it can
+  today ("Cache purge" under "Staging Notes" above).
+
+Cache purge remains an external, post-commit, best-effort Cache API
+operation, entirely independent of whether the authoritative pointer commit
+itself is a Workers KV write (today) or a Durable Object storage transaction
+(once ADR 0025 is activated) — moving the pointer commit does not make the
+purge atomic with it, and this section does not claim otherwise. The
+Mechanism/Integration PRs must retain a regression test proving a purge
+failure never reverts the committed release and remains visible in the
+returned publication outcome, mirroring the existing rollback and ordinary
+publication purge-failure tests.
 
 ### Legacy pointer retirement
 
 `active:{season}` and `previous:{season}` become **migration-only** inputs
-after cutover: their last valid values seed the new Durable Object's state
-once, through an operator-controlled migration procedure, and after that no
-publication or rollback writes them and no router reads them for authority.
-They are not kept as a live best-effort projection — a second writer or a
-second thing anything still consults would recreate the ambiguity this design
-removes.
+after cutover: their last valid values, together with the active (and
+best-effort previous) version's documents, seed the new Durable Object's
+per-key revision/timestamp state and its
+`seasonSnapshotObservedAtHighWaterMark` floor once, through an
+operator-controlled migration procedure that verifies the imported state
+before any authority-mode switch and aborts that season's cutover — leaving
+legacy pointers authoritative — on any missing, malformed or inconsistent
+input. After a successful switch, no publication or rollback writes them and
+no router reads them for authority. They are not kept as a live best-effort
+projection — a second writer or a second thing anything still consults would
+recreate the ambiguity this design removes. Full migration procedure,
+including why it cannot claim coverage beyond `activeVersion`/`previousVersion`,
+is in
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D12.
 
 ### Rollback republication
 
@@ -507,9 +557,12 @@ Rollback stops being a direct flip of `active:{season}`. It becomes
 republication of a selected historical version's stable, normalized public
 data as a **new** immutable version: volatile publication and freshness
 fields are regenerated, per-key `snapshotRevision`/`snapshotObservedAt` are
-recomputed against the **currently active** revision for each key (unchanged
-keys keep their current timestamp; changed keys get a fresh monotonic one),
-and the result is committed through the same `prepare`/`finalize` protocol as
+recomputed against the **currently active** revision for each key (a key
+currently active and unchanged keeps its current timestamp; every other
+restored key — changed, or currently absent from the active inventory — is a
+fresh activation floored by `seasonSnapshotObservedAtHighWaterMark`, per
+"Per-key revision and timestamp assignment" above), and the result is
+committed through the same `prepare`/`finalize` protocol as
 any other publication — never a direct pointer flip — with `prepare` called
 as `operationKind: 'rollback-republication'`. That is what exempts a
 rollback's necessarily-older `sourceOrderingInput` from the staleness

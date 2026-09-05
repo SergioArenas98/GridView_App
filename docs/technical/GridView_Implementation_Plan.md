@@ -1640,9 +1640,9 @@ slice. **This does not close Phase 9B-6 or gap G-i** — see the row above.
 
 | Item | Status |
 |---|---|
-| Decision | **Recorded.** One `SeasonPublicationSequencer` Durable Object per season (`idFromName(String(season))`) becomes the sole authority for `activeVersion`/`previousVersion`, per-key `snapshotRevision`/`snapshotObservedAt`, and publication-operation state, via a `prepare`/`finalize` protocol. The authoritative commit is one atomic Durable Object storage transaction with **no** external Workers KV pointer write inside it. |
+| Decision | **Recorded.** One `SeasonPublicationSequencer` Durable Object per season (`idFromName(String(season))`) becomes the sole authority for `activeVersion`/`previousVersion`, per-key `snapshotRevision`/`snapshotObservedAt`, one durable per-season `seasonSnapshotObservedAtHighWaterMark` floor, and publication-operation state, via a `prepare`/`finalize` protocol. The authoritative commit is one atomic Durable Object storage transaction with **no** external Workers KV pointer write inside it. |
 | Why | A read-only design-safety pass, folded into ADR 0025's Context, found that layering a state machine on top of the existing two Workers KV pointer writes cannot prove either safety property a correct design needs (no two write-sequences in flight per season; no earlier write landing after a later commit) — Workers KV documents last-write-wins with no cross-instance ordering guarantee and no conditional write. Moving authority to Durable Object storage, which is documented as strongly consistent, closes both, backed by a documented shutdown guarantee that a request still touching a Durable Object's own storage is stopped and errors rather than allowed to land later. |
-| Rollback | **Model 1 authorized.** Rollback becomes republication of historical public data as a new immutable version, provider-independent, with per-key timestamps compared against the currently active revision and committed through the same `prepare`/`finalize` protocol — never a direct pointer flip. No public activation-epoch field. |
+| Rollback | **Model 1 authorized.** Rollback becomes republication of historical public data as a new immutable version, provider-independent, with per-key timestamps compared against the currently active revision (a withdrawn-and-restored key floored by the season-wide high-water mark, never its own discarded pre-withdrawal value) and committed through the same `prepare`/`finalize` protocol — never a direct pointer flip. No public activation-epoch field. |
 | `snapshotRevision` / D1.9-D1.11 | **Unchanged.** Still no production caller ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)). ADR 0025 names the mechanism that will let D1.10's assignment be computed safely; it does not implement it. |
 | Provider state | **Unchanged.** `PROVIDER_MODE` still admits exactly `mock`/`none`; `recordedProvisionalSessionEndBound` is still `null`; no provider was contacted. |
 | Cloudflare resources | **None provisioned or activated.** No Durable Object class, binding, migration or deployment exists from this slice. |
@@ -1661,8 +1661,10 @@ before starting:
    declared through this repository's supported `exports` mechanism (the
    pattern `ProviderRateLimiter` already uses, not the legacy
    `[[migrations]]` block, which conflicts with it); explicit deployment
-   authorization; the one-time pointer-state import; the authority-mode
-   switch; bounded smoke tests.
+   authorization; the one-time per-season migration (pointer state, per-key
+   revision/timestamp state, and the high-water mark seed — ADR 0025 D12);
+   the authority-mode switch, only after that migration verifies; bounded
+   smoke tests.
 4. **Production activation** — a separate future decision, blocked behind
    every Phase 9B exit gate and production-readiness requirement, exactly
    like every other Phase 9B production step above.
