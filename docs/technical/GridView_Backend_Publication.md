@@ -590,18 +590,28 @@ steps, not one atomic step**: committing the seed records a
 `cutoverState` of `seeded` — legacy pointers remain authoritative and this
 season's mutators stay paused — and only a later, separate, idempotent
 transition to `cutoverState: 'active'` switches public and administrative
-authority to the sequencer and resumes those mutators. Migration step 1 only
-**closes new legacy admission**; it is not a proven drain of whatever
-publication or rollback was already admitted before it closed. After the
-switch, no *newly admitted* publication or rollback writes the legacy
-pointers, and no router or sequencer-authorized path ever reads them for
-authority again — a legacy-path invocation admitted before admission closed
-may still complete late and write a legacy pointer, but that write is inert
-for authority purposes, because the sequencer's commit and every
-post-activation read path never consult the legacy pointers at all. They
-are not kept as a live best-effort projection either way — a second writer
-or a second thing anything still consults would recreate the ambiguity this
-design removes. See
+authority to the sequencer and resumes those mutators. That transition is
+gated on an authenticated operator confirmation bound to the exact seeded
+migration identity/fingerprint — a missing or mismatched fingerprint is
+rejected, and confirming does not claim the seed is the globally latest
+legacy state, only that the operator has chosen to activate it. Migration
+step 1 only **closes new legacy admission**; it is not a proven drain of
+whatever publication or rollback was already admitted before it closed.
+
+A legacy-path invocation admitted before admission closed may still
+complete late and write a legacy pointer. **Whether that write is inert
+depends on `cutoverState`, not on admission having closed:** while this
+season is `uninitialized` or still `seeded`, legacy pointers remain the
+authority for public/admin routing, so that late write can still change
+what those routes serve — it cannot, however, mutate anything already
+committed to the DO's seeded state. Only after the `seeded → active`
+transition is the write fully inert, because the sequencer's commit and
+every post-activation read path never consult the legacy pointers at all.
+No *newly admitted* publication or rollback writes the legacy pointers once
+admission is closed, in any of the three states. They are not kept as a
+live best-effort projection either way — a second writer or a second thing
+anything still consults would recreate the ambiguity this design removes.
+See
 [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 D12, "Already-admitted legacy invocations, after the boundary" for the full
 treatment.

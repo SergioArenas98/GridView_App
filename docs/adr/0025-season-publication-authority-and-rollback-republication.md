@@ -1244,6 +1244,37 @@ This is the distinction between *explicitly selecting* a cutover version and
 *inferring* that a cached pointer read is globally current: the former is
 what the checkpoint is, and the latter is what this migration must not do.
 
+**Checkpoint timing, relative to admission closure and activation.** The
+per-season sequence below is not six independent, freely-orderable events —
+each step depends on the one before it:
+
+1. New legacy mutation admission is closed for this season (procedure
+   step 1) — before the checkpoint is approved, so the checkpoint reflects
+   pointer state as of a moment when no *new* legacy mutation can begin.
+2. The operator accounts for whatever already-admitted legacy invocations
+   are known to still be in flight, as far as the future Integration/Cutover
+   mechanism permits identifying them — the same operational care described
+   in "This is an operational caution, not a correctness gap" below. This
+   narrows operational risk; it does not, by itself, prove no unknown or
+   delayed invocation exists.
+3. Only then does the operator approve/select the cutover checkpoint
+   itself (naming `activeVersion`, optional `previousVersion`, and the
+   migration identity/fingerprint, above).
+4. Migration reads and validates the checkpoint's named immutable versioned
+   artifacts (procedure steps 2-3).
+5. Migration commits the complete `seeded` state (procedure step 10).
+6. A separate, later, authenticated operator confirmation — bound to that
+   same seeded migration identity/fingerprint — explicitly activates it
+   (procedure step 11, "Perform one idempotent durable transition").
+
+A checkpoint approved at step 3 above may be a **provisional selection**:
+the operator names an intended `activeVersion`/`previousVersion` pair and
+its fingerprint before migration runs. That provisional selection is not
+itself the activation confirmation. Step 6's confirmation is a separate,
+final, authenticated act, made after the seed already exists, that must name
+the same fingerprint the provisional selection produced — it is what
+authorizes activation, not the provisional selection by itself.
+
 **The per-season migration procedure, for every season being activated:**
 
 1. **Close new legacy mutation admission for this season.** No publication
@@ -1252,8 +1283,11 @@ what the checkpoint is, and the latter is what this migration must not do.
    quiescence guarantee**: it stops new legacy operations from starting; it
    does **not**, by itself, prove that a publication or rollback already
    admitted before this step completed has finished. See "Already-admitted
-   legacy invocations, after the boundary" below for why a late-completing
-   one is harmless to this design's authority regardless. If the repository
+   legacy invocations, after the boundary" below: such a late-completing
+   invocation can never affect the sequencer's own authority at any
+   `cutoverState`, though — while this season is still `uninitialized` or
+   `seeded` — it can still change what legacy pointers serve, exactly as it
+   always could before this migration began. If the repository
    cannot establish or confirm even this narrower admission-closure boundary
    (for example, a mutator path that cannot be paused, or a pause that
    cannot be verified), activation for that season **remains blocked** —
@@ -1334,13 +1368,51 @@ what the checkpoint is, and the latter is what this migration must not do.
     the underlying data problem is fixed. Migration is only ever
     all-or-nothing per season — no partially-seeded season reaches `seeded`.
 11. **Perform one idempotent durable transition from `seeded` to `active`,
-    only after step 10 has committed successfully**, then switch that
-    season's public and administrative authority mode to the sequencer and
-    resume that season's publication and rollback mutators. Switching
-    authority and resuming mutators both wait on this transition alone —
-    never on an assumption that migration "probably" succeeded, and never
-    on step 10 alone, since `seeded` is not yet `active` (see "The cutover
-    lifecycle").
+    only after step 10 has committed successfully and only once an operator
+    supplies an authenticated, explicit activation confirmation bound to the
+    exact seeded migration identity/fingerprint**, then switch that season's
+    public and administrative authority mode to the sequencer and resume
+    that season's publication and rollback mutators. This confirmation:
+    - names the season and confirms the seeded `activeVersion` (and, if
+      present, `previousVersion`), the committed ordering baseline, the
+      per-key state and the high-water mark as still the desired cutover
+      target — it is presented to this transition itself, never inferred
+      from the mere fact that a `seeded` state exists;
+    - is **rejected** if it is missing, or if its migration identity/
+      fingerprint does not exactly match the currently `seeded` season's own
+      fingerprint — the mismatched-fingerprint handling in "Required
+      invariants" below applies: the operator must explicitly abandon,
+      restart, or otherwise resolve the seeded attempt, never activate a
+      mismatch;
+    - authorizes an **operator cutover decision**, not proof that the seeded
+      checkpoint is the globally latest legacy state: this design does not
+      need, and does not claim, that proof (see "The cutover checkpoint,
+      established before migration reads anything" above). If legacy KV
+      moved after the checkpoint was selected, confirming and activating the
+      seed is an explicit switch to the checkpoint-selected version —
+      potentially replacing what legacy KV was serving immediately before
+      activation — not evidence that no later legacy write exists;
+    - must be **declined** by the operator if, having considered every known
+      already-admitted legacy invocation, the seeded checkpoint is no longer
+      the intended cutover target — the operator then uses the existing
+      different-fingerprint handling to abandon/restart or otherwise resolve
+      the seeded attempt, rather than activating a target that is no longer
+      wanted;
+    - does **not** require, and this design does not provide, a strict
+      zero-in-flight legacy-drain guarantee — that remains optional future
+      hardening (see "If a future implementation needs a strict
+      zero-in-flight drain guarantee" above), not a property this step
+      claims today;
+    - is itself idempotent: retrying the **same** confirmation against a
+      season already `active` under that fingerprint leaves the season
+      `active`, unchanged, exactly as a bare retry of the transition already
+      is (see "Required invariants" below).
+
+    Switching authority and resuming mutators both wait on this confirmed
+    transition alone — never on an assumption that migration "probably"
+    succeeded, never on step 10 alone, since `seeded` is not yet `active`,
+    and never on the seed's mere existence standing in for operator approval
+    (see "The cutover lifecycle").
 
 **Already-admitted legacy invocations, after the boundary.** Closing new
 admission (step 1) says nothing about a publication or rollback that was
@@ -1354,6 +1426,18 @@ an invocation has drained:
   pointers, execute its own existing cache purge, and return its own legacy
   result to its caller — none of that is fenced or prevented by this
   migration;
+- **while this season is `uninitialized` or `seeded`, such a late write is
+  not inert for authority.** Legacy KV pointers remain the sole authority in
+  `uninitialized` and the still-declared authority in `seeded` (D2, D7), so a
+  late pointer move can still change what public and administrative routing
+  serves during that interval — this is ordinary legacy behavior, unchanged
+  by this migration having started or even reached `seeded` for this season.
+  It cannot, however, mutate anything already committed to the DO's `seeded`
+  state — `activeVersion`, `previousVersion`, `committedSourceOrderingInput`,
+  the per-key `snapshotRevision`/`snapshotObservedAt` state, the seeded
+  `seasonSnapshotObservedAtHighWaterMark`, or the migration
+  identity/fingerprint are fixed the moment step 10 commits and are never
+  re-derived from a subsequent legacy pointer read;
 - **none of it can regain authority once `cutoverState: active`**, because:
   - the sequencer's `finalize` commit (D2, D4, D9) never reads or writes
     the legacy pointers at all — there is no code path by which a late
@@ -1426,8 +1510,12 @@ Required invariants:
 - A migration attempt carrying a **different** seed or fingerprint against a
   season already `seeded` or `active` is **rejected** and requires explicit
   operator handling — it is never silently applied over an existing seed.
-- A retry of the step-11 activation transition is idempotent: repeating it
-  against a season already `active` leaves the season `active`, unchanged.
+- A retry of the step-11 activation transition, carrying the **same**
+  operator confirmation and fingerprint, is idempotent: repeating it against
+  a season already `active` leaves the season `active`, unchanged. A step-11
+  confirmation missing, or naming a fingerprint that does not match the
+  currently `seeded` season's own fingerprint, is rejected rather than
+  applied.
 - No interval exists in which one code path treats legacy KV as
   authoritative for a season while another code path treats the Durable
   Object as authoritative for that same season — `cutoverState` is the
@@ -1439,13 +1527,20 @@ Required invariants:
   11 as "effectively atomic" — this two-state `seeded`/`active` split exists
   specifically because this ADR does not assume that single-write property
   holds.
-- **A late-completing, pre-boundary legacy invocation cannot change DO
-  authority in any `cutoverState`.** Its legacy pointer write, if any, is
-  never read by the sequencer's commit or by any post-activation reader —
-  see "Already-admitted legacy invocations, after the boundary" above. This
-  holds in `uninitialized`, `seeded` and `active` alike, because the
-  sequencer never reads the legacy pointers for authority in any of the
-  three states once it exists for that season.
+- **A late-completing, pre-boundary legacy invocation never changes the
+  sequencer's own authority, in `uninitialized`, `seeded` or `active` alike**
+  — its legacy pointer write, if any, is never read by the sequencer's
+  commit or by any post-activation reader (see "Already-admitted legacy
+  invocations, after the boundary" above). This is a narrower claim than
+  "harmless in every state," and the difference matters: in `uninitialized`,
+  legacy KV pointers remain the sole authority, so such a write changes what
+  is actually served, exactly as it always has; in `seeded`, legacy pointers
+  are still the declared live authority for public and administrative
+  routing, so such a write may still change what those routes serve during
+  the remaining pre-activation interval, even though it can never mutate the
+  DO's already-committed seed; only in `active` is the write fully inert —
+  never read by the sequencer's commit, by any post-activation reader, or by
+  anything else authoritative.
 
 **The pre-cutover historical-floor activation precondition.** An earlier
 draft claimed that `activeVersion`, `previousVersion` and the migration's
@@ -1627,7 +1722,15 @@ of the cutover sequence above).
     completes (writes its immutable documents and its legacy pointer) after
     this season reaches `seeded` — the DO's seeded state (`activeVersion`,
     `previousVersion`, `committedSourceOrderingInput`, per-key state, HWM) is
-    unchanged by that completion;
+    unchanged by that completion, **but** the legacy pointer it wrote does
+    change what public/admin routing serves during the remaining
+    pre-activation interval, because legacy pointers are still the declared
+    authority while `seeded` — this is the state-specific case that
+    distinguishes "DO state unchanged" from "authority unaffected";
+  - a late-completing legacy invocation in `uninitialized` (before this
+    season's migration has run at all) changes the legacy-authoritative
+    active/previous state exactly as it always has — ordinary legacy
+    behavior, not a special case this migration introduces or suppresses;
   - the same scenario, but the late completion lands after this season
     reaches `active` — the DO's active state and every subsequent public
     lookup are unaffected, and the router never observes the legacy pointer
@@ -1645,6 +1748,27 @@ of the cutover sequence above).
   - a new legacy publication or rollback attempted after step 1's admission
     closure is proven **rejected outright**, distinguishing "new admission
     rejected" from "already-admitted invocation still running."
+- **Operator activation-confirmation tests** (step 11):
+  - activation attempted with no confirmation, or a confirmation naming a
+    migration identity/fingerprint that does not match the currently
+    `seeded` season's own fingerprint, is **rejected** — the season stays
+    `seeded`, unchanged;
+  - activation attempted with a confirmation naming the exact seeded
+    fingerprint **commits the checkpoint-selected state** — including when a
+    simulated legacy pointer write has landed and changed the legacy
+    `active:{season}`/`previous:{season}` keys after step 10 seeded but
+    before step 11 confirmed — proving activation switches to the
+    checkpoint-selected version, not to whatever the legacy pointer most
+    recently read;
+  - an operator who declines to confirm (because, having reviewed known
+    already-admitted legacy invocations, the seeded checkpoint is no longer
+    the desired target) leaves the season `seeded` indefinitely, with no
+    forced or implicit activation — the season is only ever moved forward by
+    an explicit conflicting-fingerprint abandon/restart or by a later,
+    correctly-fingerprinted confirmation;
+  - retrying the **same** confirmation (identical fingerprint) against a
+    season already `active` is idempotent — the season remains `active`,
+    unchanged, and no re-effect occurs.
 - **Cutover refuses activation when the historical-floor precondition is
   unresolved**: a test asserting that step 11 (or an equivalent activation
   gate) requires one of "The pre-cutover historical-floor activation
