@@ -542,8 +542,7 @@ be computed against) moves to one atomic transaction in a per-season Durable
 Object's own storage, closing the two-unserialized-writers problem described
 above without relying on Workers KV to provide anything it does not.
 
-Two clarifications this makes necessary, **both documentation only — nothing
-below is implemented**:
+Four documentation-only clarifications follow; nothing below is implemented:
 
 - **D1.9's comparison is, and remains, per snapshot key against the
   currently active revision for that key** — never against a global,

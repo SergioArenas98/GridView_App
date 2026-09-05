@@ -1890,7 +1890,7 @@ authorizes activation, not the provisional selection by itself.
     - does **not** require, and this design does not provide, a strict
       zero-in-flight legacy-drain guarantee — that remains optional future
       hardening (see "If a future implementation needs a strict
-      zero-in-flight drain guarantee" above), not a property this step
+      zero-in-flight drain guarantee" below), not a property this step
       claims today;
     - is itself idempotent: retrying the **same** confirmation against a
       season already `active` under that fingerprint leaves the season
@@ -2386,12 +2386,15 @@ rather than by additional state-machine logic layered on the same KV write.
 
 ## Failure-state model
 
-Three distinct identities are used throughout this design, and conflating any
-two of them is how the duplicate-replay race in "Context" happens in the
-first place. A fourth — an application-level in-memory single-flight guard —
-appeared in an earlier draft and is deliberately **not** carried forward: see
-"Rejected and superseded alternatives" and D9 for why it no longer serves a
-purpose once the commit is one Durable-Object-storage-protected transaction.
+The table below distinguishes six identities or state values used throughout
+this design. Its **first three rows** are the operation identities whose
+conflation is how the duplicate-replay race in "Context" happens in the first
+place; the **remaining three rows** list additional durable per-season
+authority and coordination values that the same state model must keep
+distinct. An application-level in-memory single-flight guard appeared in an
+earlier draft and is deliberately **not** carried forward: see "Rejected and
+superseded alternatives" and D9 for why it no longer serves a purpose once the
+commit is one Durable-Object-storage-protected transaction.
 
 | Identity | Lifetime | Purpose |
 |---|---|---|
