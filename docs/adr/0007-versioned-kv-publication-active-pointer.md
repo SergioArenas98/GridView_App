@@ -7,7 +7,16 @@
 > [ADR 0025](0025-season-publication-authority-and-rollback-republication.md),
 > not superseded — and not yet implemented.** Versioned snapshot documents and
 > their per-version inventory **remain** immutable in Workers KV exactly as
-> below. What ADR 0025 changes, once its own Mechanism/Integration/cutover
+> below, and the inventory keeps its existing array-of-document-names shape —
+> ADR 0025 introduces no inventory migration. What ADR 0025 adds beside them,
+> under the same immutable per-version prefix, is one **internal** record,
+> `snapshot:{season}:{version}:__publication_metadata`, carrying that
+> release's own `sourceOrderingInput` so a later rollback can recover it (ADR
+> 0025 D3, D8). Like `__inventory`, its suffix is not a `SnapshotDocumentName`,
+> so it can never be requested as a document or mapped to a public URL; it is
+> not listed in `__inventory`, is excluded from `snapshotRevision`, is written
+> once before commit, and is deleted with its version. What ADR 0025 changes,
+> once its own Mechanism/Integration/cutover
 > steps are separately authorized and completed, is **which write is the
 > commit point**: authority over `active`/`previous` moves from the two
 > Workers KV pointer writes described below to one atomic transaction in a

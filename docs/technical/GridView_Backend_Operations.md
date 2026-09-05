@@ -426,7 +426,21 @@ than from an independent read of `previous:{season}`, and every rollback
 result additionally depends on the Durable Object being reachable: if the
 authoritative lookup fails, the request returns the existing bounded
 fail-closed shape rather than falling back to a legacy KV pointer, exactly as
-the public read path does (ADR 0025 D6). **None of this is implemented.**
+the public read path does (ADR 0025 D6).
+
+**One new operator-visible rejection exists in that design**: a rollback
+target must have **resolvable source-ordering provenance**, not merely a
+complete inventory and readable documents. That value comes from the target
+version's own internal `__publication_metadata` record, or — for a release
+predating it — from a single uniform `meta.sourceUpdatedAt` across every
+document its inventory names. A target whose record is malformed or
+unreadable, or whose legacy timestamps are missing or inconsistent, is
+**rejected before the operation begins**, with a bounded reason (for example
+`rollback-source-ordering-unavailable`) and no raw storage key or stored value
+in the response or the log. The currently active release keeps serving,
+untouched, exactly as for any other pre-commit rejection. An operator is never
+asked to supply the missing ordering value by hand; the response is to select
+a different, complete target. **None of this is implemented.**
 Today's rollback table above remains accurate until the Mechanism, Integration
 and cutover steps ADR 0025 gates are each separately authorized.
 
@@ -435,7 +449,13 @@ and cutover steps ADR 0025 gates are each separately authorized.
 Cutover (ADR 0025 D12) requires a one-time, operator-controlled migration that
 seeds each season's Durable Object state from the last valid
 `active:{season}`/`previous:{season}` KV values, verified against the
-imported version's own inventory before the authority mode switch. This is
+imported version's own inventory before the authority mode switch. The two are
+verified to **different standards**, and the runbook must say so: the selected
+active version's inventory, documents and source-ordering provenance are
+mandatory and any failure aborts that season's cutover, while the optional
+previous version is best-effort — its failure never aborts the migration, and
+it is then seeded as `null` rather than committed as a rollback target the
+migration has just failed to validate. This is
 future runbook content: the step-by-step procedure belongs in
 `../operations/GridView_Staging_Edge_Runbook.md` and is written when the
 Mechanism and Integration PRs exist to run it against, not in this design

@@ -575,6 +575,19 @@ below is implemented**:
   ordinary publication ("It is persisted with the revision in the same
   publication transaction"). Rollback introduces no second
   timestamp-assignment mechanism.
+- **Post-cutover, a published `meta.sourceUpdatedAt` carries that key's own
+  assigned `snapshotObservedAt` (D1.8-D1.10) and is therefore *not* a
+  release-wide provenance value.** Today's generator happens to write one
+  release-wide `sourceUpdatedAt` uniformly into every document of a release,
+  which is why ADR 0025 D12's migration and D8's legacy rollback path can both
+  derive a legacy release's ordering input from those documents. Once the
+  observation clock is active, that uniformity is gone by design: each key's
+  value is its own activation timestamp. The release-wide `sourceOrderingInput`
+  a rollback needs therefore lives in ADR 0025 D3's internal per-version
+  `__publication_metadata` record — never in a public document, never in a
+  public contract field, and never inferred from `meta.sourceUpdatedAt` on a
+  post-cutover version. This changes nothing in D1.8: the wire shape, the
+  required field and the conflict semantics are all unchanged.
 - **A D1.11a clock-regression clamp can place a historical
   `snapshotObservedAt` ahead of the wall-clock time it was actually
   assigned.** This is the concrete mechanism by which

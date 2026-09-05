@@ -215,6 +215,10 @@ accepted:
    (D2), updated only by a successful `prepared → committed` transition
    (D4, D9) and seeded by migration from the selected release's uniform
    legacy `sourceUpdatedAt` value, failing closed on inconsistency (D12).
+   *(That migration seed rule was generalized by the later review recorded
+   below — see D12 step 6: a valid per-version metadata record is preferred,
+   and the uniform-document rule is the fallback for a release that predates
+   one.)*
 2. **The staleness rejection was restated as "not newer than what is
    committed"**, a `<=` rejection, when the current implementation
    (`services/edge-api/src/publication/publisher.ts:347-350`) rejects only
@@ -247,6 +251,41 @@ clock-regression clamp, and reachable through ordinary publication restoring
 a pre-cutover key, not only through deep rollback. Corrected by adding an
 explicit pre-cutover historical-floor activation precondition to D12, and by
 narrowing `previousVersion`'s claimed role to best-effort only.
+
+A subsequent Codex review, against commit `0329e1c`, found and this revision
+corrects two further defects, independently reproduced against this ADR and
+the edge-api source tree before being accepted:
+
+1. **No immutable record retained a release's own `sourceOrderingInput`, so
+   rollback provenance was undefined after the first supersession.**
+   `committedSourceOrderingInput` (D2) holds only the **currently active**
+   release's value and is replaced by every successful `finalize`; the
+   prepared-operation record is replaced by every new `prepare`, cancellation,
+   expiry or supersession (D4, D5); post-cutover public documents carry each
+   key's assigned `snapshotObservedAt` in `meta.sourceUpdatedAt`, not a
+   release-wide ordering input; and `sourceUpdatedAt` is excluded from
+   `snapshotRevision` ([ADR 0020](0020-provider-source-observation-and-reconciliation.md)
+   D1.7). D8 nevertheless requires a rollback to carry the **target release's**
+   historical ordering input, which nothing retained. Corrected by adding an
+   immutable per-version sidecar,
+   `snapshot:{season}:{version}:__publication_metadata` (D3), written as part
+   of the required publication write set (D3, D4), read as rollback's
+   provenance source with a bounded legacy fallback and fail-closed
+   classification (D8), used identically by migration (D12 step 6), removed
+   with its version by cleanup (D5), and never publicly routed (D3, D6).
+2. **D12's migration required every checkpoint-named artifact to validate
+   while simultaneously declaring an invalid previous version non-blocking.**
+   Step 3 aborted the cutover when any checkpoint-named inventory or document
+   failed to validate — and the checkpoint may name an optional
+   `previousVersion` — while step 8 stated that an invalid or absent
+   `previousVersion` is not cutover-blocking. The two rules are opposite
+   migration outcomes for the same input. Corrected by scoping mandatory
+   validation to `activeVersion` alone (step 3), stating the best-effort
+   previous path and its outcome in one place (step 8), and defining the
+   resulting authoritative representation explicitly: a previous version that
+   validates is seeded as `previousVersion`, and one that is absent or fails
+   validation seeds `previousVersion` as `null` rather than committing a
+   known-invalid rollback target (steps 8, 10).
 
 ## Decision
 
@@ -295,7 +334,12 @@ source** for:
   already-`committed` `finalize` call returns the already-committed result
   without advancing or recomputing it. See D4 for the exact admission rule
   this field makes possible, and D8 for how a successful rollback
-  republication updates it.
+  republication updates it. **This field is deliberately not a history, and
+  is never a source a rollback can read its target's ordering input back
+  from:** it describes the currently active release only, so once a release is
+  superseded its ordering input is no longer in Durable Object state at all.
+  The value a rollback needs comes from the **target version's own immutable
+  `__publication_metadata` record** (D3, D8), never from here.
 - `cutoverState` — one of exactly three durable values, `uninitialized`,
   `seeded` or `active` (D12), plus the migration identity/fingerprint that
   produced the current `seeded`/`active` state. `uninitialized` is the state
@@ -359,12 +403,72 @@ this specifically closes the problem KV-only designs could not.
 
 Versioned snapshot documents and their per-version inventory remain immutable
 in Workers KV, unchanged from
-[ADR 0007](0007-versioned-kv-publication-active-pointer.md):
+[ADR 0007](0007-versioned-kv-publication-active-pointer.md), and this ADR adds
+exactly one internal per-version record alongside them:
 
 ```text
 snapshot:{season}:{version}:{document}
 snapshot:{season}:{version}:__inventory
+snapshot:{season}:{version}:__publication_metadata
 ```
+
+Their roles, stated precisely, because two of the three are internal and only
+one is public:
+
+- **`{document}`** — the immutable public snapshot documents, unchanged. These
+  are the only keys any public route ever resolves.
+- **`__inventory`** — unchanged from ADR 0007: the sorted, deduplicated list of
+  **public document names** belonging to that version, in its existing array
+  shape. This ADR does **not** change that shape, does not add a wrapper object
+  around it, and does not add the sidecar below to it — an inventory reader
+  written against today's contract keeps working, and no inventory migration is
+  created here.
+- **`__publication_metadata`** — an **internal immutable sidecar**, new in this
+  ADR, recording the **release-wide `sourceOrderingInput`** that admitted the
+  version this key belongs to. Minimum shape:
+
+  ```ts
+  {
+    schemaVersion: 1,
+    sourceOrderingInput: string
+  }
+  ```
+
+  Season and version are already carried by the immutable storage key itself
+  and are therefore not duplicated in the record; a future implementation may
+  add fields only if it needs them for validation, and any such addition is a
+  `schemaVersion` decision, not a silent shape change.
+
+**What the sidecar is, and is not:**
+
+- It is **never exposed through a public route.** Like `__inventory`, its
+  suffix is not, and cannot become, a `SnapshotDocumentName` — that union is
+  closed — so nothing can request it through `readVersionedDocument`, and no
+  public URL or alias maps to it (D6).
+- It is **never listed as a public document in `__inventory`.** The inventory
+  enumerates public documents only; adding an internal record to it would make
+  every inventory consumer — route mapping, purge expansion, completeness
+  assessment — responsible for filtering it out.
+- It is **excluded from `snapshotRevision`**, exactly as
+  `sourceUpdatedAt`/`snapshotObservedAt` already are
+  ([ADR 0020](0020-provider-source-observation-and-reconciliation.md) D1.7):
+  the canonical hash input is constructed from the public `data` payload, and
+  this record is not part of any payload.
+- It is **written once, before `finalize`, and never mutated.** It is
+  version-scoped, so it survives every later active/previous transition: a
+  version that is superseded keeps its own metadata for as long as the version
+  itself is retained.
+- It is **not a second authority.** Workers KV does not become authoritative
+  for active/previous selection because this record exists; the Durable Object
+  remains the sole pointer authority (D2), and nothing reads this record to
+  decide what is active.
+- **Eventual consistency is acceptable for it**, for the same reason it is
+  acceptable for the immutable documents and inventory beside it: a version
+  cannot be finalized until its complete planned write phase — documents,
+  inventory and this record — has succeeded (D4), and a later reader that
+  requires it and cannot yet read it **fails closed** rather than proceeding on
+  its absence (D8). It is never read as a live, mutable signal, so KV's
+  last-write-wins model has nothing to resolve for it.
 
 The caller (the publisher, driven by the synchronization service or an
 operator rollback request) still:
@@ -383,12 +487,16 @@ operator rollback request) still:
    inventory to KV, with the assigned timestamps baked into each document's
    `meta.sourceUpdatedAt`, recording which planned writes completed
    successfully;
-6. **only once every planned write has succeeded**, produces a
-   `completionAttestation` carrying the manifest commitment for what was
-   actually written, and calls `finalize` with it. A document-writing phase
-   that fails or completes only partially must never produce a
-   `completionAttestation` and must never call `finalize` — an incomplete
-   write is not a candidate for commit.
+6. writes the immutable `__publication_metadata` sidecar for this version,
+   carrying the **same** `sourceOrderingInput` it passed to `prepare` — this
+   write is part of the **required publication write set**, not an optional
+   annotation beside it (D4);
+7. **only once every planned write has succeeded** — every document, the
+   inventory **and** the sidecar — produces a `completionAttestation` carrying
+   the manifest commitment for what was actually written, and calls `finalize`
+   with it. A write phase that fails or completes only partially must never
+   produce a `completionAttestation` and must never call `finalize` — an
+   incomplete write is not a candidate for commit.
 
 The Durable Object never generates provider data, never validates a document
 body and never stores a complete snapshot payload. Its own storage holds
@@ -413,6 +521,41 @@ times a key has been withdrawn and restored. See D4 for how this scalar is
 used to assign a safe timestamp to a restored key, and "Rejected and
 superseded alternatives" for why an unbounded per-key tombstone history was
 not the chosen fix.
+
+**The sidecar does not participate in that bounded-DO-state argument, and is
+not claimed to.** `__publication_metadata` lives in Workers KV, not in the
+Durable Object, so it adds **nothing** to the per-season durable state D2/D3
+bound and nothing to `finalize`'s single atomic transaction (D9). What it does
+add is one small, constant-size KV record **per immutable release** — so total
+KV storage grows with the number of retained versions, exactly as versioned
+document storage already does, and is retired with its version by the same
+cleanup path (D5). That is a per-version cost of retaining history, honestly
+stated, not a claim that this record is free or that it is part of the DO's
+bounded per-season state.
+
+**Storage-layer obligations this creates, recorded so the Mechanism/
+Integration PRs inherit them explicitly:**
+
+- `SnapshotStorage` gains explicit **read**, **write** and **delete**
+  operations for the per-version metadata sidecar, alongside the existing
+  versioned-document and inventory operations. It is never reached through
+  `readVersionedDocument`, which is closed over `SnapshotDocumentName`.
+- The **memory** and **Workers KV** implementations must behave consistently
+  for all three, including how each reports absence versus a read failure —
+  the classification in D8 depends on that distinction being real, not on one
+  implementation collapsing it.
+- **Orphan cleanup removes the sidecar together with the candidate's
+  documents and inventory** (D5), and remains prohibited for any version that
+  is, or may become, active.
+- A version's **rollback completeness assessment** requires all three: a
+  complete, valid inventory; every public document it names; and **resolvable
+  source-ordering provenance** — a valid sidecar, or a valid legacy fallback
+  (D8). A version satisfying only the first two is not a usable rollback
+  target.
+- The sidecar carries **no provider payload, no secret and no personal data**
+  — one schema version and one ordering timestamp — and is subject to D11's
+  logging discipline: bounded classification outcomes only, never the raw
+  storage key and never the stored value.
 
 ### D4. Two-phase publication protocol
 
@@ -543,12 +686,24 @@ The caller:
 - writes every version-scoped document and its inventory to KV, recording
   which planned writes (from the manifest already fixed before `prepare`)
   completed successfully;
-- **only once every planned write has succeeded**, derives a
-  `completionAttestation` — the manifest commitment for what was actually
-  written, computed the same deterministic way as `expectedManifestCommitment`
-  so the two are comparable — that it will present to `finalize`. A
-  document-writing phase that fails or completes only partially stops here:
-  it produces no `completionAttestation` and never calls `finalize`;
+- writes this version's immutable `__publication_metadata` sidecar (D3),
+  carrying exactly the `sourceOrderingInput` it passed to `prepare`. **This is
+  part of the required publication write set**, and a missing, failed,
+  timed-out or otherwise ambiguous sidecar write has exactly the same
+  consequence as a failed document or inventory write: no
+  `completionAttestation`, no `finalize` call, the active state unchanged, and
+  whatever was already written left as unreachable orphan data for the same
+  cancellation/cleanup lifecycle (D5) — never a special case, never a
+  "publish anyway and backfill later" path;
+- **only once every planned write has succeeded** — documents, inventory and
+  sidecar alike — derives a `completionAttestation`: the manifest commitment
+  for what was actually written, computed the same deterministic way as
+  `expectedManifestCommitment` so the two are comparable, and covering the
+  same **public document manifest** `expectedManifestCommitment` describes (the
+  sidecar is a precondition for producing an attestation, not an entry in the
+  manifest it commits to — see D3 on why it is not an inventory member). A
+  write phase that fails or completes only partially stops here: it produces
+  no `completionAttestation` and never calls `finalize`;
 - **never** touches `activeVersion`/`previousVersion` and gains **no**
   commit authority merely by holding a valid token — a token authorizes one
   `finalize` call, nothing else.
@@ -639,8 +794,19 @@ Durable Object.** `SnapshotPublisher` — the caller described in D3 — is a
 comparison can independently audit:
 
 - it must construct `completionAttestation` only from the exact planned
-  manifest, and only after every required document and inventory write for
-  that manifest has returned success;
+  manifest, and only after every required document, inventory **and
+  `__publication_metadata`** write for that version has returned success;
+- **the Durable Object does not read the sidecar during `finalize`, and does
+  not independently verify that it exists or that its contents match the
+  prepared `sourceOrderingInput`.** It has no more ability to audit that KV
+  write than any other, and inventing a read here would contradict the
+  boundary this section exists to state. `finalize` proves only
+  prepared-record and attestation-value consistency (above); writing the
+  sidecar **truthfully**, before attesting completion, is a
+  `SnapshotPublisher` correctness obligation of exactly the same kind as
+  writing the documents themselves, enforced by its own tests ("Testing
+  obligations") and never described here as something the Durable Object
+  checks;
 - a rejected, timed-out, cancelled or otherwise ambiguous write means no
   attestation is produced and `finalize` is never called for that operation;
 - such a failure leaves the currently active version **untouched** — the
@@ -716,8 +882,16 @@ that happens to share the same phase name:
   itself remains **best-effort**, exactly like every other KV write in this
   design: if it fails, the orphaned version simply persists unreferenced
   (harmless, since nothing points to it) until a later cleanup attempt.
-  `deleteUnpublishedVersion` additionally continues to refuse the currently
-  authoritative active version, unchanged from ADR 0007.
+  **That deletion covers the whole version — its documents, its `__inventory`
+  and its `__publication_metadata` sidecar together** (D3), for the same
+  reason the inventory is already keyed under the version's own prefix: a
+  sidecar that outlived its documents would describe a version that no longer
+  exists. `deleteUnpublishedVersion` additionally continues to refuse the
+  currently authoritative active version, unchanged from ADR 0007 — and
+  cleanup remains **prohibited for any version that may be, or may become,
+  active**, sidecar included; nothing here authorizes deleting a retained
+  historical version's metadata while that version is still a possible
+  rollback target.
 - **A dead caller cannot block a season forever** — for `prepared` operations
   only, via deadline expiry. This explicitly does **not** extend to
   `recovery-required` (see D9): pre-commit abandonment is provably harmless to
@@ -786,6 +960,14 @@ document request in this order:
    the same shape as "Durable Object binding or lookup unavailable" below —
    rather than treating `previousVersion` as a stand-in decision for a
    question the active inventory alone can answer.
+
+**The `__publication_metadata` sidecar is outside this path entirely.** It is
+never resolved by step 2's inventory read (it is not an inventory member), is
+never a document step 3-5 can be asked for (its suffix is not a
+`SnapshotDocumentName`), has no public URL or alias, and therefore never
+participates in the previous-version fallback and never appears in a cache
+invalidation set — there is no cached public response for it to invalidate.
+Reading it is exclusively an internal publication/rollback concern (D3, D8).
 
 Steps 4-5's fallback remains **bounded** (a fixed, small retry/fallback
 budget, not an unbounded search) and **observable** (an operational event,
@@ -906,7 +1088,7 @@ version. It is **republication**:
    never copied from the old version's inventory. This freshly-computed
    inventory is also what the caller deterministically enumerates into a
    planned document manifest and turns into an `expectedManifestCommitment`
-   — exactly as D3/D4 describe for ordinary publication — before step 9's
+   — exactly as D3/D4 describe for ordinary publication — before step 10's
    `prepare` call, never after.
 5. Compute `snapshotRevision` for each restored key using the same canonical
    hashing already implemented for ordinary publication ([ADR 0020](0020-provider-source-observation-and-reconciliation.md)
@@ -936,20 +1118,112 @@ version. It is **republication**:
    pre-cutover-era copy depends additionally on D12's pre-cutover
    historical-floor activation precondition, not on this scalar alone
    (see D4).
-9. Call `prepare` with `operationKind: 'rollback-republication'` and the
-   `expectedManifestCommitment` from step 4, then write the complete new
-   immutable version and inventory to KV with the timestamps `prepare`
-   assigned baked in — the same order D3/D4 require for any publication.
-10. **Only once that write fully succeeds**, produce a `completionAttestation`
+9. **Resolve the target's historical `sourceOrderingInput` from the target
+   version's own immutable record** — never from the Durable Object's current
+   state, never from the operator, and never from a document's
+   `meta.sourceUpdatedAt` on a post-cutover version. See "Rollback's
+   source-ordering provenance" below for the exact resolution and rejection
+   rules; a target whose provenance cannot be resolved is rejected **before**
+   `prepare` is called.
+10. Call `prepare` with `operationKind: 'rollback-republication'`, the
+    `expectedManifestCommitment` from step 4, and the exact historical
+    `sourceOrderingInput` step 9 resolved, then write the complete new
+    immutable version — its documents, its inventory, and its **own**
+    `__publication_metadata` sidecar carrying that same resolved value — to KV
+    with the timestamps `prepare` assigned baked in, the same order and the
+    same required write set D3/D4 require for any publication.
+11. **Only once that write fully succeeds**, produce a `completionAttestation`
     for what was actually written and call `finalize` — rollback has **no
     separate commit path** and cannot flip the authoritative pointer
     directly; a pre-commit failure here leaves the currently active release
-    untouched exactly as D4 already requires.
+    untouched exactly as D4 already requires. On success, `finalize` commits
+    that same resolved value as the new `committedSourceOrderingInput` (D2,
+    D4), exactly as it does for any other operation kind.
 
-**Rollback's admission authority, stated explicitly.** Step 9's `prepare`
-call carries a historical `sourceOrderingInput` that is, by construction,
-never newer than what is currently committed — that is what makes it a
-rollback. D4's ordinary source-ordering staleness rejection is **not**
+**Rollback's source-ordering provenance, stated as the rule step 9 applies.**
+A rollback republishes a historical release, so it must carry that release's
+own release-wide ordering input — and the Durable Object cannot supply it:
+`committedSourceOrderingInput` describes only whatever release is **currently
+active**, and is replaced by every successful `finalize` (D2), so once a
+target has been superseded its value is gone from DO state. Post-cutover
+public documents cannot supply it either: their `meta.sourceUpdatedAt` carries
+that key's assigned `snapshotObservedAt` (D4), which is a per-key activation
+timestamp, not the release-wide ordering input. The immutable per-version
+sidecar (D3) exists precisely to close that gap, and the resolution is:
+
+1. Read and validate the target version's `__inventory`, and confirm every
+   public document it names is readable and valid — the existing
+   rollback-completeness requirement, unchanged.
+2. Read the target version's `__publication_metadata` and classify the result
+   using the **same four-valued discipline** the repository already applies to
+   stored inventories (`services/edge-api/src/publication/version-inventory.ts`):
+   - **valid new-format sidecar** — the key holds a record of the declared
+     shape with a valid `sourceOrderingInput`. Use that value verbatim.
+   - **absent sidecar** — the key holds `null`. This is a known historical
+     state, not corruption: it is what a version published **before** this
+     record existed looks like. Apply the legacy fallback below.
+   - **malformed sidecar** — the key holds something that is not a record of
+     the declared shape. **Fail closed**: reject the target.
+   - **unreadable sidecar** — the read itself failed, so nothing is known
+     about the version at all, *including whether it recorded a sidecar*.
+     **Fail closed**: reject the target.
+
+   The distinction between *absent* and *unreadable* is load-bearing and must
+   not be collapsed: an unreadable sidecar is **not** evidence of an absent
+   one, so a read failure must never silently select the legacy path and
+   publish a value derived from documents when an authoritative value may have
+   existed all along. Likewise a malformed sidecar is a version whose
+   provenance we cannot describe, not a version that never recorded one.
+3. **Legacy fallback, for a genuinely absent sidecar only.** Versions created
+   before this record existed still need a deterministic provenance rule, and
+   one already-relied-upon invariant supplies it — the same one D12's
+   migration uses: the current generator writes **one release-wide
+   `sourceUpdatedAt` value uniformly into every document of a release**
+   (`services/edge-api/src/publication/publisher.ts` applies a single
+   `set.sourceUpdatedAt` per publication). So: read **every** document the
+   target's inventory names, and verify that all of them carry the **same**
+   valid `meta.sourceUpdatedAt`. If they do, that value **is** the target's
+   legacy `sourceOrderingInput`. If any is missing, malformed, or differs from
+   the others, **reject the target** — a value is never picked from one
+   document arbitrarily, and the operator is never asked to invent or type the
+   missing value by hand. This fallback applies only when the complete target
+   inventory validates; it is never used to paper over an incomplete target.
+4. **Write the resolved value into the new rollback version's own sidecar**
+   (step 10), whether it came from a sidecar or from the legacy fallback. A
+   rollback of a legacy release therefore *creates* new-format provenance
+   going forward, and the migration never has to retrofit metadata onto an
+   already-existing historical version.
+
+**A target that fails any of the above is rejected before `prepare`**, with a
+bounded internal reason in the repository's established kebab-case
+publication vocabulary (`services/edge-api/src/publication/publisher.ts`),
+for example:
+
+```text
+rollback-source-ordering-unavailable
+```
+
+The exact final member name is a Mechanism/Integration-PR detail; what this
+ADR fixes is that the rejection is **bounded, internal and pre-`prepare`** —
+never an exception, never a raw storage key or stored value in a response or
+a log line (D11), and never a rollback admitted with an unresolved or
+operator-invented ordering input. A rejected target leaves the currently
+active release serving, untouched, exactly like every other pre-commit
+failure.
+
+This keeps rollback **provider-independent** (no provenance lookup contacts a
+provider), **deterministic** (the same target always resolves to the same
+value, or is always rejected), **tied to the actual selected historical
+version** rather than to whatever happens to be active now, **free of an
+unaudited operator-supplied timestamp**, and fully compatible with the
+compare-against-currently-active behavior below — the value a rollback
+commits is the target's own, which is exactly what a later ordinary candidate
+is then measured against.
+
+**Rollback's admission authority, stated explicitly.** Step 10's `prepare`
+call carries the historical `sourceOrderingInput` step 9 resolved from the
+target's own immutable record, a value that is, by construction, never newer
+than what is currently committed — that is what makes it a rollback. D4's ordinary source-ordering staleness rejection is **not**
 evaluated for `operationKind: 'rollback-republication'`; admission instead
 comes from the fact that the request itself reached `prepare` only through
 an authenticated operator rollback request, which is a different, and
@@ -1002,8 +1276,10 @@ in a published document or the public contract.
 
 - Today's rollback already requires one working KV pointer write.
 - This rollback additionally requires enough KV write availability to create
-  a **complete new immutable version and its inventory** before any
-  authoritative commit is attempted — strictly more pre-commit work than
+  a **complete new immutable version — its documents, its inventory and its
+  `__publication_metadata` sidecar** — before any authoritative commit is
+  attempted, and enough KV **read** availability to resolve the target's own
+  provenance first (step 9). This is strictly more pre-commit work than
   today's rollback, which reuses an already-existing version's documents
   verbatim.
 - It remains **provider-independent** — no rollback path ever contacts a
@@ -1178,6 +1454,14 @@ raises:
 secrets, or stack traces in a public-facing response — unchanged from the
 existing structured-logging discipline in
 [`GridView_Backend_Operations.md`](../technical/GridView_Backend_Operations.md).
+**This covers the `__publication_metadata` sidecar (D3) without exception:** a
+rollback provenance outcome is reported as a bounded classification — resolved
+from the version's own record, resolved through the legacy uniform-document
+fallback, or rejected with a bounded reason such as
+`rollback-source-ordering-unavailable` (D8) — never as the raw storage key and
+never as the stored ordering value. The record contains no provider payload,
+secret or personal data, so this is a key-and-value-hygiene rule of the same
+kind already applied everywhere else, not a new data-classification concern.
 
 **Operational events required** (mechanism-PR scope to define precisely;
 authorized here as a category list):
@@ -1189,6 +1473,8 @@ authorized here as a category list):
 - authoritative lookup unavailable (D6 fail-closed path)
 - active-document propagation fallback used (D6 bounded fallback)
 - rollback republication committed
+- rollback target rejected for unresolvable source-ordering provenance (D8),
+  carrying its bounded reason and its bounded provenance classification
 - migration/cutover result (D7/D12)
 
 ### D12. Activation boundary
@@ -1238,7 +1524,15 @@ before migration reads anything:
   operator explicitly approved this exact cutover state** — never because
   repeated KV reads are read as proof those pointers are "globally latest".
   No such proof is available from documented Workers KV behavior, and this
-  design does not claim one.
+  design does not claim one;
+- it **does not carry `sourceOrderingInput`, and no operator is asked to
+  supply one.** The checkpoint's job is to *identify* the selected version;
+  that version's own immutable `__publication_metadata` sidecar, or — for a
+  legacy version that predates it — its own validated uniform document
+  timestamps, supply the provenance (step 6). Asking an operator to type a
+  historical ordering timestamp by hand would put an unaudited,
+  unverifiable value into the field ordinary publication admission is decided
+  against, which is precisely what this design avoids.
 
 This is the distinction between *explicitly selecting* a cutover version and
 *inferring* that a cached pointer read is globally current: the former is
@@ -1300,45 +1594,105 @@ authorizes activation, not the provisional selection by itself.
    `active:{season}`/`previous:{season}` pointer keys. These versioned keys
    are immutable once written ([ADR 0007](0007-versioned-kv-publication-active-pointer.md)),
    so reading them by exact key reads a fixed artifact, not a moving
-   pointer.
-3. **Wait/retry, within a bounded budget, until every document and
-   inventory the checkpoint names is readable and validates.** A missing,
-   malformed, inconsistent or still-unavailable selected document or
-   inventory after that bounded budget aborts this season's cutover with no
-   DO state written (step 10); legacy pointers remain authoritative and
-   mutators resume exactly as before the attempt. A stale legacy pointer
-   read can never silently substitute a different version here, because
-   migration never reads the live pointer keys at all past step 1.
+   pointer. **The two reads carry different obligations, and steps 3 and 8
+   apply them separately:** the `activeVersion` read is **mandatory**, and the
+   `previousVersion` read is **best-effort** (see "`previousVersion`'s role in
+   this migration is limited and best-effort" below).
+3. **Wait/retry, within a bounded budget, until every document, inventory and
+   required provenance belonging to the checkpoint's selected `activeVersion`
+   is readable and validates.** A missing, malformed, inconsistent or
+   still-unavailable **active-version** document, inventory or provenance
+   (step 6) after that bounded budget aborts this season's cutover with no DO
+   state written (step 10); legacy pointers remain authoritative and mutators
+   resume exactly as before the attempt. A stale legacy pointer read can never
+   silently substitute a different version here, because migration never reads
+   the live pointer keys at all past step 1.
+
+   **This mandatory-validation rule is scoped to `activeVersion` and does not
+   extend to `previousVersion`.** An earlier draft of this step required
+   "every checkpoint-named inventory and document" to validate, which — since
+   the checkpoint may also name an optional `previousVersion` — made a
+   missing or malformed previous version abort the cutover, directly
+   contradicting step 8's rule that exactly that condition is **not**
+   cutover-blocking. An implementation cannot satisfy both, so the two are
+   reconciled here in the direction step 8 and "`previousVersion`'s role in
+   this migration is limited and best-effort" already state: **active
+   validation is mandatory and aborts on failure; previous validation is
+   optional, best-effort, and never aborts the active-version migration.**
+   Step 8 defines what a failed previous validation does instead, and step 10
+   defines what is then committed in its place.
 4. Compute each active document's `snapshotRevision` using the
    already-implemented canonical serializer ([ADR 0020](0020-provider-source-observation-and-reconciliation.md)
    D1.7) — the same mechanism ordinary publication and rollback both use;
    the migration introduces no second revision computation.
 5. Import each active document's existing public `meta.sourceUpdatedAt` as
    that key's initial `snapshotObservedAt`.
-6. **Validate that `meta.sourceUpdatedAt` is uniform across every document
-   in the selected `activeVersion`, and import that single value as
-   `committedSourceOrderingInput`.** The current generator writes one
-   release-wide `sourceUpdatedAt` value into every document of a release, so
-   a uniform value is expected. If the selected active release's documents
-   carry **inconsistent** `meta.sourceUpdatedAt` values, this step **fails
-   closed** — migration does not arbitrarily choose one of them — and this
-   season's cutover aborts (step 10) with no DO state written.
+6. **Resolve the selected `activeVersion`'s release-wide source-ordering
+   provenance, and import it as `committedSourceOrderingInput`.** This uses
+   **exactly the same rules and the same classification discipline as rollback
+   provenance** (D8, "Rollback's source-ordering provenance") — one rule, two
+   callers, never two rules that can drift apart:
+   - **A valid `__publication_metadata` sidecar** (D3) for the selected
+     version is used as-is. A season being cut over may already have one if
+     its selected version was itself published by a rollback or a publication
+     that ran after this record existed.
+   - **An absent sidecar** — the expected state for a legacy release
+     predating this record — permits the **legacy uniform-document fallback**:
+     validate that `meta.sourceUpdatedAt` is uniform across **every** document
+     in the selected `activeVersion` and import that single value. The current
+     generator writes one release-wide `sourceUpdatedAt` value into every
+     document of a release, so a uniform value is expected.
+   - **A malformed sidecar fails closed.** **An unreadable sidecar fails
+     closed** — an unreadable record is never treated as an absent one, so a
+     read failure can never silently divert migration onto the legacy
+     document-inference path.
+   - **Non-uniform, missing or malformed legacy document timestamps fail
+     closed** — migration does not arbitrarily choose one of them.
+
+   Any fail-closed outcome aborts this season's cutover (step 10) with no DO
+   state written. **The migration never creates or mutates a
+   `__publication_metadata` record under an already-existing historical
+   version**: those keys are immutable, a legacy version legitimately has
+   none, and backfilling one would write into an artifact this design treats
+   as fixed. Any rollback republication created **after** cutover writes its
+   own sidecar normally (D8), so new-format provenance accrues going forward
+   rather than being retrofitted backwards.
 7. Stage the per-key `snapshotRevision`/`snapshotObservedAt` state computed
    in steps 4-5, and the `committedSourceOrderingInput` computed in step 6,
    as this season's initial state (D2) — not yet committed to the DO.
-8. **Seed `seasonSnapshotObservedAtHighWaterMark` conservatively, as the
-   maximum of:**
+8. **Attempt `previousVersion` validation, best-effort, and seed
+   `seasonSnapshotObservedAtHighWaterMark` conservatively, as the maximum
+   of:**
    - every imported active-document `snapshotObservedAt` from step 5;
    - every `snapshotObservedAt` importable the same way (steps 2-5, applied
      to `previousVersion` instead of `activeVersion`) from `previousVersion`,
      **only if `previousVersion` was named in the checkpoint and its own
-     inventory validates** — an invalid or absent `previousVersion` is not a
-     cutover-blocking condition, exactly as it already is not one for an
-     ordinary rollback request (see "`previousVersion`'s role in this
-     migration is limited and best-effort" and "The pre-cutover
-     historical-floor activation precondition" below for why this is not,
-     by itself, sufficient to activate);
+     inventory, documents and importable timestamps all validate** — an
+     invalid or absent `previousVersion` is not a cutover-blocking condition,
+     exactly as it already is not one for an ordinary rollback request (see
+     "`previousVersion`'s role in this migration is limited and best-effort"
+     and "The pre-cutover historical-floor activation precondition" below for
+     why this is not, by itself, sufficient to activate);
    - the migration's own observation clock at the moment this step runs.
+
+   **What a failed previous validation does, stated as one coherent
+   representation rather than left to the implementation:**
+   - if previous validation **succeeds**, its observations contribute to the
+     high-water-mark seed above **and** its version identifier is what step 10
+     commits as the authoritative `previousVersion`;
+   - if previous validation **fails**, or the checkpoint named no previous
+     version at all, its observations are **omitted** from the seed and step
+     10 commits the authoritative `previousVersion` as **`null`** — the
+     active-version migration continues unaffected either way.
+
+   **A previous version that did not validate is never committed as an
+   authoritative rollback target.** Atomically seeding a known-invalid pointer
+   merely because the checkpoint named it would publish, as authoritative
+   recovery state, a version migration has just proven it cannot read or
+   validate — the operator would then discover the failure at the moment they
+   most need the rollback. Omitting it costs only the default-target
+   convenience: an operator may still roll back by explicitly naming a
+   version, subject to D8's own target-completeness and provenance rules.
 9. **Re-verify the staged state from steps 7-8 against the same exact
    versioned keys read in step 2** — the same immutable documents must still
    describe the same revisions, or this season's cutover aborts (step 10)
@@ -1350,8 +1704,10 @@ authorizes activation, not the provisional selection by itself.
     operation, only if every prior step for this season succeeded, and
     record the durable cutover-lifecycle state as `seeded`.** The seed
     written in this single operation is, at minimum: the validated
-    `activeVersion`; the validated optional `previousVersion`; the imported
-    `committedSourceOrderingInput`; the active per-key `snapshotRevision`;
+    `activeVersion`; the optional `previousVersion` — the validated version
+    identifier if step 8's best-effort validation succeeded, otherwise
+    **`null`**, never a checkpoint-named version that failed to validate; the
+    imported `committedSourceOrderingInput`; the active per-key `snapshotRevision`;
     the active per-key `snapshotObservedAt`; the conservatively seeded
     `seasonSnapshotObservedAtHighWaterMark`; the checkpoint's migration
     identity/fingerprint; and the `cutoverState` value `seeded` itself. After
@@ -1361,11 +1717,14 @@ authorizes activation, not the provisional selection by itself.
     below): legacy pointer state remains the declared authority, and
     publication/rollback mutators for this season remain paused, until the
     separate activation transition in step 11. A missing, malformed or
-    inconsistent input at any earlier step aborts this season's cutover with
-    no DO state written and no cutover-lifecycle transition; legacy KV
-    pointers remain authoritative for that season exactly as before
-    migration was attempted, and the season may be retried from step 1 once
-    the underlying data problem is fixed. Migration is only ever
+    inconsistent **required** input at any earlier step — the selected
+    `activeVersion`'s inventory, its documents, or its step-6 provenance —
+    aborts this season's cutover with no DO state written and no
+    cutover-lifecycle transition; legacy KV pointers remain authoritative for
+    that season exactly as before migration was attempted, and the season may
+    be retried from step 1 once the underlying data problem is fixed. **A
+    failed optional `previousVersion` validation is not such an input**: it
+    seeds `previousVersion` as `null` (step 8) and the migration proceeds. Migration is only ever
     all-or-nothing per season — no partially-seeded season reaches `seeded`.
 11. **Perform one idempotent durable transition from `seeded` to `active`,
     only after step 10 has committed successfully and only once an operator
@@ -1634,7 +1993,13 @@ retained set" means in this repository's storage design today.
 It is only: (a) an optional operator-selected cutover fallback, named in the
 checkpoint; (b) an additional conservative timestamp input folded into the
 seeded high-water mark when its own inventory and documents validate
-(step 8). It is **never** evidence, by itself, that this season's deeper
+(step 8). "Best-effort" is a statement about **both** halves, and both are
+now stated in one place rather than split across steps that disagreed:
+validating it is **never mandatory** and its failure **never aborts** the
+active-version migration (steps 3, 8, 10); and a previous version that did
+not validate is **omitted from the seed and committed as `null`**, never
+committed as an authoritative rollback target on the strength of the
+checkpoint having named it. It is **never** evidence, by itself, that this season's deeper
 history contains no timestamp higher than what `activeVersion`/
 `previousVersion` already cover — the existing race and rollback behavior
 mean it may not, which is exactly why the activation precondition above is
@@ -1680,18 +2045,46 @@ of the cutover sequence above).
   named version, never the pointer's new value, because migration reads only
   by exact versioned key past step 1.
 - **Incomplete payload propagation is bounded, not silently accepted**: a
-  test in which a checkpoint-named document remains unreadable for longer
-  than the bounded retry budget in step 3 proves migration aborts with no DO
-  state written, rather than proceeding on a partial read.
+  test in which a document of the checkpoint's selected **`activeVersion`**
+  remains unreadable for longer than the bounded retry budget in step 3
+  proves migration aborts with no DO state written, rather than proceeding on
+  a partial read. The companion test for the same condition on the optional
+  `previousVersion` proves the opposite outcome, per step 3's scoping rule
+  and step 8.
 - **A mismatched checkpoint fingerprint on retry is rejected**: a test
   presenting a different migration identity/fingerprint against a season
   already `seeded` or `active` proves the attempt is rejected rather than
   silently applied.
-- **The step-6 uniform-`sourceUpdatedAt` validation fails closed on
-  inconsistency**: a test whose selected active release carries documents
-  with two different legacy `meta.sourceUpdatedAt` values proves migration
-  aborts (no DO state written) rather than importing an arbitrarily-chosen
-  one as `committedSourceOrderingInput`.
+- **Step-6 provenance resolution, one case per classification**:
+  - a selected active version carrying a **valid** `__publication_metadata`
+    sidecar imports that value as `committedSourceOrderingInput`, without
+    inspecting document timestamps at all;
+  - a selected active version with an **absent** sidecar and **uniform**
+    legacy `meta.sourceUpdatedAt` across every inventory-named document
+    imports that single value;
+  - a selected active version with an absent sidecar and **two different**
+    legacy `meta.sourceUpdatedAt` values aborts migration (no DO state
+    written) rather than importing an arbitrarily-chosen one;
+  - a **malformed** sidecar aborts migration, and is proven **not** to fall
+    back to document inference;
+  - an **unreadable** sidecar aborts migration, and is likewise proven **not**
+    to fall back to document inference — the test distinguishes it from the
+    absent case explicitly;
+  - no case writes or mutates a `__publication_metadata` record under the
+    already-existing historical version being migrated.
+- **Active-version provenance is mandatory; a failure to resolve it aborts
+  migration**, proven with no DO state written and legacy pointers left
+  authoritative.
+- **A valid optional `previousVersion` contributes to the seeded high-water
+  mark and becomes the authoritative seeded `previousVersion`.**
+- **An invalid, unreadable or malformed optional `previousVersion` is omitted
+  from the seed, sets the authoritative seeded `previousVersion` to `null`,
+  and does **not** abort the active-version migration** — the season still
+  reaches `seeded` with its complete active state.
+- **Step 3's mandatory-validation rule is never applied to optional previous
+  data**: a test naming a `previousVersion` whose inventory or documents do
+  not validate proves the cutover proceeds, distinguishing this explicitly
+  from an active-version validation failure, which aborts.
 - **Cutover-lifecycle restart tests**, each proving the exact resulting
   `cutoverState`, whether legacy pointers or the Durable Object are
   authoritative, and whether mutators are paused or resumed:
@@ -1842,6 +2235,12 @@ rather than by additional state-machine logic layered on the same KV write.
 | **An application-level in-memory single-flight guard (`commitPromise`) as a correctness-critical mechanism** | **Rejected — no longer needed, not merely unused.** It was necessary only while the critical section spanned an awaited external Workers KV write, which an ordinary input gate does not cover. D2 removed that external write; `finalize`'s entire critical section is now one Durable Object storage transaction, which an ordinary input gate already serializes (D9). Retaining the guard would be leftover machinery from the rejected KV-authoritative design. |
 | **An ordinary source-ordering staleness rejection applied unconditionally to every `prepare` call, including rollback** | **Rejected.** It would make the authorized Model 1 (D8) impossible to execute, since a rollback's historical ordering input is expected to be older than or equal to what is currently active. Replaced by the bounded `operationKind` exemption in D4, which narrows the exception to rollback admission only and leaves ordinary publication's rejection untouched. |
 | **Claiming atomicity between a Durable Object cancellation check and an external Workers KV deletion during orphan cleanup** | **Rejected — not implementable.** No cross-product atomicity between Durable Object storage and Workers KV exists (§"Safety reasoning" is this ADR's own premise). Replaced in D5 by a non-atomic two-step sequence relying on `cancelled` being a terminal state, with the external KV deletion remaining best-effort. |
+| **Recovering a rollback target's historical `sourceOrderingInput` from Durable Object state alone** | **Rejected — the value is not there.** `committedSourceOrderingInput` describes only the currently active release and is replaced by every successful `finalize` (D2); the prepared-operation record is replaced by every new `prepare`, cancellation, expiry or supersession (D4/D5). Once a release is superseded, nothing in DO state retains its ordering input, so a rollback to it would have no value to record — which is exactly the gap D3's immutable per-version sidecar closes. |
+| **Requiring an operator to supply the historical `sourceOrderingInput` for a normal rollback** | **Rejected.** It would put an unaudited, unverifiable, hand-typed timestamp into the one field ordinary-publication admission is decided against (D4), make rollback non-deterministic for the same target, and turn a recoverable data question into a human-recall question at the moment of an incident. The value is recoverable from the target's own immutable record (D8); an operator is asked to select a version, never to invent its provenance. |
+| **Publishing `sourceOrderingInput` in the public snapshot documents, or overloading `meta.sourceUpdatedAt` to carry it** | **Rejected.** It would add a public contract field for an internal admission input (no client needs it), and `meta.sourceUpdatedAt`'s post-cutover meaning is already fixed as that key's per-key `snapshotObservedAt` (D4, [ADR 0020](0020-provider-source-observation-and-reconciliation.md) D1.8-D1.10) — overloading it would destroy the per-key activation semantics the whole observation clock depends on. |
+| **Adding the metadata record to `__inventory`, or reshaping `__inventory` into an object carrying it** | **Rejected.** `__inventory` is the list of **public document names**, consumed today by route mapping, purge expansion and completeness assessment; adding an internal record to it would make every one of those consumers responsible for filtering it out, and reshaping it would be a breaking migration for existing inventory readers for no gain. The sidecar is a sibling key under the same version prefix instead (D3). |
+| **Backfilling a `__publication_metadata` record onto an already-existing legacy version during migration** | **Rejected.** Those versioned keys are immutable by design (ADR 0007), a legacy version legitimately has no such record, and writing one would mutate a historical artifact this design treats as fixed. The legacy uniform-document fallback (D8, D12 step 6) resolves such a version's provenance without touching it, and any rollback of it writes new-format provenance into the **new** version it creates. |
+| **Treating an unreadable metadata record as an absent one** | **Rejected.** An unreadable read says nothing about the version — including whether it ever recorded a sidecar — so silently selecting the legacy document-inference path on a read failure could publish a document-derived value for a version that had an authoritative one. D8 keeps *absent*, *malformed* and *unreadable* as three distinct outcomes, exactly as `version-inventory.ts` already does for inventories. |
 | **An unbounded per-key tombstone history** (retaining every withdrawn key's last `snapshotObservedAt` indefinitely, keyed by document identity, instead of one season-wide scalar) | **Rejected — unnecessary for the property needed.** A per-key floor only needs to be *at least as high* as every value the sequencer has itself authoritatively committed for any key this season to keep a restored key's timestamp ahead of anything a client of **post-cutover** history could hold; a single monotonic `seasonSnapshotObservedAtHighWaterMark` (D2, D4) already provides that floor for every key, current or withdrawn, for that post-cutover history, without storage proportional to how many distinct keys have ever existed or been withdrawn and restored. Coverage of **pre-cutover, unenumerable** history is a separate question this scalar alone does not answer — that is D12's migration seed and its historical-floor activation precondition, not a larger in-DO tombstone structure; an unbounded per-key tombstone map would not close that gap either, and would only reintroduce the unbounded-history growth D3's capacity argument exists to avoid, for a property one constant-size scalar already secures for the history it does cover. |
 
 ## Failure-state model
@@ -2002,6 +2401,64 @@ substitutes for the other, and no single test may claim to cover both.
   cancellation rules (D5, D9) — never through a recovery path invented for
   this specific case.
 
+**Per-version publication-metadata tests (D3, D8):**
+
+*Ordinary publication:*
+
+- The `__publication_metadata` sidecar is written **before** any
+  `completionAttestation` is produced.
+- The sidecar contains **exactly** the `sourceOrderingInput` passed to
+  `prepare` for that operation — not a recomputed, re-read or substituted
+  value.
+- A **failed** sidecar write prevents `finalize`: no attestation is produced,
+  the active version is unchanged.
+- A **timed-out or otherwise ambiguous** sidecar write has the identical
+  outcome, treated as a failure rather than optimistically as success.
+- A successful `finalize` commits that same value as
+  `committedSourceOrderingInput`.
+- Orphan cleanup for an abandoned candidate deletes its sidecar together with
+  its inventory and documents.
+
+*Post-cutover rollback:*
+
+- Rollback reads the historical `sourceOrderingInput` from the **target
+  version's** sidecar, and passes exactly that value to `prepare`.
+- Rollback republishes that same value into the **new** version's own sidecar.
+- A **missing** sidecar on a version known to require the new format rejects
+  the target before `prepare`, with the bounded reason.
+- A **malformed** sidecar rejects the target.
+- An **unreadable** sidecar fails closed — proven **not** to be treated as
+  absent, and proven **not** to fall through to document inference.
+- No provider port is invoked on any of these paths.
+
+*Legacy rollback:*
+
+- An **absent** sidecar plus **uniform** `meta.sourceUpdatedAt` across every
+  inventory-named document resolves successfully to that value.
+- The derived legacy value is written into the **new** rollback version's
+  sidecar, so the rollback's own output carries new-format provenance.
+- **Non-uniform** document timestamps reject the target; no document is
+  chosen arbitrarily.
+- A **missing** `meta.sourceUpdatedAt` on any inventory-named document
+  rejects the target.
+- An **unreadable** sidecar does **not** fall back to document inference.
+- A **malformed** sidecar does **not** fall back to document inference.
+
+*Restart and concurrency:*
+
+- A restart **after `prepare`** retains the prepared `sourceOrderingInput`
+  from the durable operation record (D4), so the sidecar written after the
+  restart still carries the prepared value.
+- A restart **after the sidecar write but before `finalize`** can safely
+  retry without mutating the immutable record — a byte-equivalent rewrite is
+  accepted as idempotent.
+- A **conflicting** sidecar write for the same immutable version — different
+  content under the same version identifier — is rejected or surfaced as an
+  invariant violation, never silently accepted as an overwrite.
+- Two concurrent candidates cannot write **different** metadata under the same
+  version identifier; version identities are per-candidate, and a test proves
+  the design does not permit two prepared operations to share one.
+
 These are Mechanism/Integration-PR obligations; none of them is created by
 this documentation correction.
 
@@ -2102,6 +2559,32 @@ platform guarantee:
 - `active:{season}`/`previous:{season}` stop being anything code depends on,
   after cutover — a deliberate simplification of the KV Consistency Boundary
   ADR 0010 originally had to describe.
+- **Each immutable release gains one small internal sidecar,
+  `snapshot:{season}:{version}:__publication_metadata` (D3), recording that
+  release's own `sourceOrderingInput`.** Without it, a rollback to a release
+  that has since been superseded would have no way to recover the ordering
+  input D8 requires: DO state keeps only the currently active release's value,
+  and post-cutover documents carry per-key `snapshotObservedAt`, not a
+  release-wide ordering input. It is internal, never publicly routed, never an
+  `__inventory` member, excluded from `snapshotRevision`, written once as part
+  of the required publication write set, and deleted with its version. Its
+  cost is one constant-size KV record per retained version — KV history grows
+  with retained versions exactly as document storage already does — and it
+  adds nothing to the Durable Object's bounded per-season state.
+- **Versions predating the sidecar remain rollback-able** through a bounded
+  legacy fallback (D8): a genuinely absent record permits deriving the value
+  from the target's own uniformly-written document timestamps, while a
+  malformed or unreadable record fails closed. Migration uses the identical
+  rule (D12 step 6), and never backfills metadata onto an existing historical
+  version.
+- **D12's migration now distinguishes mandatory from best-effort validation
+  explicitly.** The selected `activeVersion`'s inventory, documents and
+  provenance must all validate or cutover aborts; the optional
+  `previousVersion` is validated best-effort, and on failure is omitted from
+  the high-water-mark seed and committed as `null` rather than seeded as a
+  known-invalid authoritative rollback target. An earlier draft's step 3
+  required every checkpoint-named artifact to validate, which contradicted
+  step 8's own non-blocking rule for exactly that case.
 - A single durable per-season scalar, `seasonSnapshotObservedAtHighWaterMark`
   (D2, D3, D4), closes a withdrawn-then-restored-key monotonicity gap that
   D3's per-key retirement rule would otherwise leave open, without

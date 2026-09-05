@@ -53,6 +53,26 @@ so the inventory can never be requested through `readVersionedDocument`, can
 never be mapped to a public URL, and is removed with the version by
 `deleteUnpublishedVersion`.
 
+**Designed, not implemented**, [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D3 adds one further **internal** key under the same per-version prefix, for
+the same two reasons the inventory sits there:
+
+```text
+snapshot:{season}:{version}:__publication_metadata
+```
+
+It records the release-wide `sourceOrderingInput` that admitted that version
+(`{ schemaVersion: 1, sourceOrderingInput }`), so a later rollback can recover
+the target release's own ordering input rather than an operator having to
+supply one — see "Rollback republication" below. It is **internal**: its
+suffix is likewise not a `SnapshotDocumentName`, it is never listed in
+`__inventory` (which remains exactly what it is today, a sorted list of public
+document names — no shape change and no reader migration), it is excluded from
+`snapshotRevision`, it has no public URL and therefore never appears in a cache
+invalidation set, it is written once before the commit and never mutated, and
+it is removed with its version by the same cleanup path. **Nothing writes or
+reads it today.**
+
 ## Publication Algorithm
 
 1. Generate a unique immutable release version.
@@ -384,10 +404,21 @@ obtain candidate data (provider fetch, or a historical version for rollback)
   -> bake assigned timestamps into each document; regenerate volatile fields
   -> validate; write every versioned document + inventory to KV (unchanged),
      recording which planned writes completed successfully
+  -> write __publication_metadata for this version (the same orderingInput)
   -> only once every planned write has succeeded, produce completionAttestation
   -> DO.finalize(season, token, completionAttestation)
        <- authoritative active/previous transition, one atomic DO-storage write
 ```
+
+The `__publication_metadata` write is part of the **required publication write
+set**, not an annotation beside it: a missing, failed, timed-out or ambiguous
+sidecar write has the same consequence as a failed document or inventory write
+— no `completionAttestation`, no `finalize`, active state unchanged, and
+whatever was written left as unreachable orphan data for the ordinary
+cancellation/cleanup path. The Durable Object does **not** read or verify it
+during `finalize`; writing it truthfully before attesting completion is a
+`SnapshotPublisher` obligation of exactly the same kind as writing the
+documents, enforced by that component's own tests (ADR 0025 D3, D4).
 
 `operationKind` is `ordinary-publication` or `rollback-republication` (see
 "Rollback republication" below for what the second one changes). The Durable
@@ -495,6 +526,13 @@ upstream-source high-water mark — see
 D2, D4 and D8 for the full rule and why turning this into a monotonic clock
 would be a different, separately-decided admission policy.
 
+Because this field describes only the **currently active** release, it is not
+a history and cannot be read back to recover a superseded release's ordering
+input. That value lives, per release, in that version's own immutable
+`__publication_metadata` record in KV ("Snapshot Key Model" above) — not in
+the Durable Object, whose per-season state stays bounded exactly as described
+above.
+
 ### The authoritative active/previous pair
 
 `finalize` performs the authoritative transition — from the prior
@@ -583,7 +621,21 @@ seeded `seasonSnapshotObservedAtHighWaterMark` floor, and the checkpoint's
 own migration identity/fingerprint — through an operator-controlled
 migration procedure that verifies every imported value and aborts that
 season's cutover, leaving legacy pointers authoritative, on any missing,
-malformed or inconsistent input.
+malformed or inconsistent **required** input.
+
+**Required means the selected `activeVersion`.** Its inventory, its documents
+and its source-ordering provenance must all validate, or the cutover aborts.
+The optional `previousVersion` is **best-effort in both directions**:
+validating it is never mandatory and its failure never aborts the
+active-version migration, and a previous version that does not validate is
+omitted from the high-water-mark seed **and** committed as `null` rather than
+seeded as a known-invalid authoritative rollback target. The checkpoint itself
+never carries a `sourceOrderingInput`: it identifies the selected version, and
+that version's own `__publication_metadata` — or, for a legacy version that
+predates it, its own validated uniform document timestamps — supplies the
+provenance, under exactly the rules "Rollback republication" below applies.
+Migration never creates or mutates a metadata record under an already-existing
+historical version.
 
 Committing that seed and switching authority are **two separate durable
 steps, not one atomic step**: committing the seed records a
@@ -653,6 +705,36 @@ rationale, the exact copied-vs-regenerated field list and the operational
 trade-off are in
 [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 D8.
+
+**Where the rollback's `sourceOrderingInput` comes from.** It is resolved from
+the **target version's own immutable record**, before `prepare` is called, and
+never from the Durable Object's current state (which holds only the active
+release's value), never from an operator-supplied timestamp, and never from
+`meta.sourceUpdatedAt` on a post-cutover document (which carries that key's
+per-key `snapshotObservedAt`, not a release-wide value). The resolution
+classifies the target's `__publication_metadata` exactly the way this codebase
+already classifies a stored inventory — `documents`/`absent`/`malformed`/
+`unreadable`, "One validated boundary for persisted inventories" above:
+
+- a **valid** record supplies the value directly;
+- an **absent** record means a legacy release predating this design, and
+  permits one bounded fallback: read every document the target's inventory
+  names and require a single uniform, valid `meta.sourceUpdatedAt` across all
+  of them — the invariant today's generator already produces, since one
+  `sourceUpdatedAt` is written per release. That uniform value becomes the
+  target's legacy ordering input;
+- a **malformed** record, an **unreadable** record, or non-uniform/missing
+  legacy timestamps all **fail closed**: the rollback target is rejected
+  before `prepare`, with a bounded internal reason (for example
+  `rollback-source-ordering-unavailable`) and never a raw storage key or
+  stored value in a response or log. An unreadable record is never treated as
+  an absent one.
+
+The resolved value is passed to `prepare`, written into the **new** rollback
+version's own `__publication_metadata`, and committed as the new
+`committedSourceOrderingInput` on success — so a rollback of a legacy release
+produces new-format provenance going forward, and no existing historical
+version is ever mutated to backfill one.
 
 ## Snapshot revision (`snapshotRevision`)
 
