@@ -621,7 +621,7 @@ independent, still-applicable post-commit outcome for cache purge:
   failed, exactly as today. The result still reports `cachePurge: 'failed'`,
   the existing `cache-purge-failed` disposition is unchanged, and a stale or
   withdrawn cached route may persist until CDN TTL expiry, exactly as it can
-  today ("Cache purge" under "Staging Notes" above).
+  today ("Cache purge" under "Staging Notes" below).
 
 Cache purge remains an external, post-commit, best-effort Cache API
 operation, entirely independent of whether the authoritative pointer commit

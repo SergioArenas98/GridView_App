@@ -753,7 +753,7 @@ The Durable Object, in one atomic storage transaction:
   perKeyRevisions, assignedTimestamps, sourceOrderingInput,
   expectedManifestCommitment, preparedAt, deadline}`. Omitting any of these was the
   review-confirmed defect this ADR corrects (see "Context: design-review
-  corrections" below) — without them, a restart between `prepare` and
+  corrections" above) — without them, a restart between `prepare` and
   `finalize` leaves the Durable Object durably remembering only *that*
   something was prepared, not *what*, which is insufficient to finalize
   correctly or to resolve a same-token retry deterministically;
