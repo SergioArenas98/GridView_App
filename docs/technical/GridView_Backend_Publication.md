@@ -377,20 +377,27 @@ by one `SeasonPublicationSequencer` Durable Object per season
 ```text
 obtain candidate data (provider fetch, or a historical version for rollback)
   -> compute snapshotRevision per document
-  -> DO.prepare(season, candidateVersion, perKeyRevisions, orderingInput)
+  -> DO.prepare(season, operationKind, candidateVersion, perKeyRevisions,
+                 orderingInput, expectedCompleteness)
        <- assigned snapshotObservedAt per key, operation token
   -> bake assigned timestamps into each document; regenerate volatile fields
   -> validate; write every versioned document + inventory to KV (unchanged)
-  -> DO.finalize(season, token, completenessProof)
+  -> DO.finalize(season, token, completenessAttestation)
        <- authoritative active/previous transition, one atomic DO-storage write
 ```
 
-The Durable Object never generates provider data, never validates a document
-and never stores a complete snapshot payload — it stores only the bounded
-per-season authority state ADR 0025 D2 names: `activeVersion`,
-`previousVersion`, the current `snapshotRevision`/`snapshotObservedAt` per
-key, and the current publication-operation record (`phase`, `priorVersion`,
-`candidateVersion`, epoch, token).
+`operationKind` is `ordinary-publication` or `rollback-republication` (see
+"Rollback republication" below for what the second one changes). The Durable
+Object never generates provider data, never validates a document and never
+stores a complete snapshot payload — it stores only the bounded per-season
+authority state ADR 0025 D2 names: `activeVersion`, `previousVersion`, the
+current `snapshotRevision`/`snapshotObservedAt` per key, and the **complete**
+current publication-operation record (`operationKind`, `phase`,
+`priorVersion`, `candidateVersion`, the candidate's per-key revisions and
+assigned timestamps, `sourceOrderingInput`, `expectedCompleteness`, epoch,
+token, `preparedAt`, `deadline`) — every value `finalize` needs, so a restart
+between `prepare` and `finalize` loses nothing it must later verify or
+commit (ADR 0025 D4).
 
 ### Per-key revision and timestamp assignment
 
@@ -427,16 +434,29 @@ guarantee.
 
 Once activated, the public router resolves `activeVersion` (and, where a
 rollback needs a default target, `previousVersion`) through a call to the
-per-season Durable Object, then reads the selected immutable document from
-KV exactly as today. If that document has not yet propagated to the serving
-edge location, the router may retry against the `previousVersion` the same
-authoritative lookup returned — a bounded, observable fallback that never
-reinterprets what the Durable Object itself reports as active, and preserves
-the existing stale/degraded response semantics. If the Durable Object binding
-or lookup itself is unavailable, the router returns the existing bounded
-fail-closed shape; it does not fall back to a legacy KV pointer, because after
-cutover nothing maintains one as a live value (see "Legacy pointer
-retirement" below).
+per-season Durable Object, then reads the active version's **inventory**
+before deciding anything about the document itself — because a missing
+document at the active version is not, by itself, evidence of propagation
+lag. This codebase's own publication model deliberately allows driver,
+constructor and circuit profiles and Grand Prix detail/results routes to be
+withdrawn from a version's inventory (see "Cache invalidation of withdrawn
+routes" above), so a route the active inventory does not name must return the
+intended not-found response and never fall back to `previousVersion` — doing
+so would serve a withdrawn route forever instead of the 404 the withdrawal
+intends. Only when the active inventory **names** the document but the
+document itself is not yet readable from KV does a bounded fallback apply,
+and then only if `previousVersion`'s own inventory also names that document.
+If the active inventory itself is unreadable or not yet visible, the router
+returns the bounded unavailable/degraded response rather than treating
+`previousVersion` as a substitute answer. This never reinterprets what the
+Durable Object itself reports as active, and preserves the existing
+stale/degraded response semantics — see
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D6 for the full rule and the narrow, bounded, per-document mixed-release
+trade-off it introduces. If the Durable Object binding or lookup itself is
+unavailable, the router returns the existing bounded fail-closed shape; it
+does not fall back to a legacy KV pointer, because after cutover nothing
+maintains one as a live value (see "Legacy pointer retirement" below).
 
 ### Failure behavior
 
@@ -469,9 +489,14 @@ fields are regenerated, per-key `snapshotRevision`/`snapshotObservedAt` are
 recomputed against the **currently active** revision for each key (unchanged
 keys keep their current timestamp; changed keys get a fresh monotonic one),
 and the result is committed through the same `prepare`/`finalize` protocol as
-any other publication — never a direct pointer flip. It remains
-provider-independent. Full rationale, the exact copied-vs-regenerated field
-list and the operational trade-off are in
+any other publication — never a direct pointer flip — with `prepare` called
+as `operationKind: 'rollback-republication'`. That is what exempts a
+rollback's necessarily-older `sourceOrderingInput` from the staleness
+rejection ordinary publication still enforces unchanged; it changes nothing
+about the per-key revision/timestamp comparison, which applies to a rollback
+candidate exactly as to any other. It remains provider-independent. Full
+rationale, the exact copied-vs-regenerated field list and the operational
+trade-off are in
 [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 D8.
 

@@ -86,12 +86,18 @@ safety properties this design needs.**
 A Durable Object's own storage is documented as *"fast, transactional, and
 strongly consistent"*
 ([What are Durable Objects?](https://developers.cloudflare.com/durable-objects/concepts/what-are-durable-objects/),
-accessed 2026-09-05), and one is already provisioned in this repository —
+accessed 2026-09-05). This repository's code and `wrangler.toml` already
+**declare** one Durable Object class following this pattern —
 `ProviderRateLimiter`
-([ADR 0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
-This ADR authorizes a **second, unrelated** Durable Object identity that makes
-its own storage — not Workers KV — the authoritative decision point for what
-is active, per season.
+([ADR 0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md))
+— but ADR 0021 itself records that class as *"declared and validated but not
+provisioned"*: no namespace has been bound into any live environment, and
+this ADR changes nothing about that. The precedent this ADR relies on is the
+**pattern being present in code and configuration**, not a live, provisioned
+namespace. This ADR authorizes a **second, unrelated** Durable Object identity
+that makes its own storage — not Workers KV — the authoritative decision
+point for what is active, per season; it provisions nothing, exactly as
+ADR 0021 did not.
 
 ### Product authorization for rollback
 
@@ -104,6 +110,44 @@ publication, and never contact a provider. This is **Model 1** in
 §"Rollback Model 1: exact application" below. Models that keep rollback as a
 direct pointer flip, or that introduce a public activation-epoch field, are
 rejected for this phase (see §"Rejected and superseded alternatives").
+
+### Context: design-review corrections
+
+A Codex review of the first version of this ADR (commit `524815c`, review
+`PRR_kwDOTb8J4M8AAAABMTsY2w`) found and this revision corrects three defects,
+independently reproduced against this ADR and the merged publication
+documentation before being accepted:
+
+1. **The D6 read-path fallback lacked positive evidence that a missing
+   document meant propagation lag rather than intentional withdrawal.**
+   [`GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md)
+   already documents that driver, constructor and circuit profiles and Grand
+   Prix detail/results routes can be legitimately absent from a version's
+   inventory — "the withdrawable families are exactly the driver, constructor
+   and circuit profiles and the Grand Prix detail and results routes." A
+   fallback that does not check inventory membership first would serve a
+   withdrawn document from `previousVersion` forever instead of the intended
+   not-found response. Corrected in D6.
+2. **The prepared operation record omitted the values `finalize` claims to
+   verify and commit.** The original D4 persisted only
+   `{epoch, token, priorVersion, candidateVersion, preparedAt, deadline}` —
+   no candidate per-key revisions, no assigned timestamps, no completeness
+   material — so a restart between `prepare` and `finalize` left nothing for
+   `finalize` to commit or verify against. Corrected in D4.
+3. **The ordinary source-ordering staleness rejection, as originally
+   written, applied unconditionally — including to rollback.** Since a
+   rollback's historical `sourceOrderingInput` is expected to be older than
+   or equal to what is currently active, the rule as drafted would reject
+   every rollback attempt before Model 1 (D8) could ever execute. Corrected
+   in D4 with an explicit, bounded `operationKind`, and in D8.
+
+Two further self-inconsistencies, found during the same corrective pass, are
+also fixed below without a separate review thread: D9's atomic-commit claim
+contradicted the state table's durable `committing` row (corrected — see D9
+and the state transition table), and D5's cleanup guarantee claimed
+atomicity between a Durable Object check and a Workers KV deletion that this
+ADR's own premise says does not exist across those two products (corrected —
+see D5).
 
 ## Decision
 
@@ -134,8 +178,13 @@ source** for:
 - `previousVersion`
 - the current `snapshotRevision` per snapshot key
 - the current `snapshotObservedAt` per snapshot key
-- publication-operation state (`phase`, `priorVersion`, `candidateVersion`,
-  `preparedAt`, `deadline`)
+- the current publication-operation record in full — `operationKind`, `phase`,
+  `priorVersion`, `candidateVersion`, the candidate's per-key
+  `snapshotRevision` values, the per-key `snapshotObservedAt` values assigned
+  during `prepare`, the `sourceOrderingInput` supplied to `prepare`, the
+  expected completeness/manifest commitment `finalize` will be checked
+  against, `preparedAt` and `deadline` — see D4 for why every one of these
+  fields must survive a restart between `prepare` and `finalize`
 - the operation epoch and the caller-facing operation token
 
 The authoritative active/previous transition — the moment a candidate version
@@ -177,17 +226,36 @@ season, not proportional to document count or history depth.
 
 ### D4. Two-phase publication protocol
 
-#### `prepare(season, candidateVersion, perKeyRevisions, sourceOrderingInput)`
+#### `prepare(season, operationKind, candidateVersion, perKeyRevisions, sourceOrderingInput, expectedCompleteness)`
+
+`operationKind` is one of exactly two bounded values: `ordinary-publication`
+or `rollback-republication` (see D8 for what authorizes the second one). It
+is durable, logged (D11) and never inferred after the fact from other fields.
 
 The Durable Object, in one atomic storage transaction:
 
 - examines its own currently committed state (`activeVersion`, and the
   current `snapshotRevision`/`snapshotObservedAt` per key);
-- evaluates candidate staleness against that state (the existing ADR 0007
+- evaluates candidate staleness against that state, **only for
+  `operationKind === 'ordinary-publication'`**: the existing ADR 0007
   rejection rule — a candidate whose ordering input is not newer than what is
-  committed is rejected — is preserved, now decided against durable DO state
-  rather than a KV read);
-- assigns each key's `snapshotObservedAt`:
+  committed is rejected — is preserved **exactly as strict as it is today**,
+  now decided against durable DO state rather than a KV read. This rejection
+  is **never weakened, bypassed or made conditional for ordinary
+  publication** — the exemption below applies to rollback and nothing else;
+- for `operationKind === 'rollback-republication'`, **the source-ordering
+  staleness rejection above does not run at all.** Admission authority for a
+  rollback operation comes from the authenticated operator rollback request
+  itself, not from `sourceOrderingInput` — a historical release's ordering
+  input is expected to be older than or equal to what is currently committed,
+  and rejecting it on that basis would make the already-authorized Model 1
+  (D8) impossible to execute. `sourceOrderingInput` is still recorded
+  verbatim for audit and idempotent-retry purposes; it is simply not
+  evaluated as a rejection predicate for this operation kind;
+- **for both operation kinds, without exception**, assigns each key's
+  `snapshotObservedAt` by the same D1.9/D1.10 rule — the staleness exemption
+  above affects *admission* only, never the per-key revision/timestamp
+  assignment:
   - **retains the current timestamp** where the candidate's
     `snapshotRevision` for that key equals the currently active revision for
     that key;
@@ -197,8 +265,16 @@ The Durable Object, in one atomic storage transaction:
     new value, not raced against a second, unobserved publication attempt;
 - allocates a new, strictly-increasing `operationEpoch` for this season and a
   fresh caller-facing `operationToken`;
-- persists a `prepared` operation record: `{epoch, token, priorVersion,
-  candidateVersion, preparedAt, deadline}`;
+- persists a `prepared` operation record containing **everything `finalize`
+  will need, and everything a restart between `prepare` and `finalize` must
+  not lose**: `{epoch, token, operationKind, priorVersion, candidateVersion,
+  perKeyRevisions, assignedTimestamps, sourceOrderingInput,
+  expectedCompleteness, preparedAt, deadline}`. Omitting any of these was the
+  review-confirmed defect this ADR corrects (see "Context: design-review
+  corrections" below) — without them, a restart between `prepare` and
+  `finalize` leaves the Durable Object durably remembering only *that*
+  something was prepared, not *what*, which is insufficient to finalize
+  correctly or to resolve a same-token retry deterministically;
 - returns the token and the assigned per-key timestamps to the caller.
 
 Timestamp assignment happens **before** final document construction, because
@@ -216,12 +292,15 @@ The caller:
   ADR 0020 D1.7);
 - validates the final documents against the existing schema/inventory
   discipline ([`GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md));
-- writes every version-scoped document and its inventory to KV;
+- writes every version-scoped document and its inventory to KV, and derives
+  the `expectedCompleteness` value it will present to `finalize` (e.g. the
+  sorted, deduplicated document-name manifest `prepare` recorded, or a digest
+  of it — the exact shape is a Mechanism-PR detail);
 - **never** touches `activeVersion`/`previousVersion` and gains **no**
   commit authority merely by holding a valid token — a token authorizes one
   `finalize` call, nothing else.
 
-#### `finalize(season, token, inventoryDigestOrCompletenessProof)`
+#### `finalize(season, token, completenessAttestation)`
 
 The Durable Object, in one atomic storage transaction:
 
@@ -229,16 +308,32 @@ The Durable Object, in one atomic storage transaction:
   caller's;
 - verifies the operation is still `prepared` (not cancelled, not superseded,
   not expired);
-- verifies the supplied completeness proof against what `prepare` recorded;
-- records the candidate as `activeVersion` and the version that was active
-  immediately before this operation as `previousVersion`;
-- commits the per-key `snapshotRevision`/`snapshotObservedAt` state assigned
-  during `prepare`;
-- marks the operation `committed`.
+- compares `completenessAttestation` against the `expectedCompleteness` value
+  `prepare` durably recorded for this exact epoch. **This proves the caller's
+  attestation is consistent with the candidate this Durable Object prepared —
+  it is a caller attestation check, not an independent inspection of Workers
+  KV.** The Durable Object never reads the versioned documents or their
+  inventory from KV; it has no way to independently verify global KV
+  visibility, and this ADR does not claim it does. A caller that attests
+  falsely produces an inconsistency the *document-level* validation and
+  inventory discipline ([`GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md))
+  is what remains responsible for catching — this DO-level check only rules
+  out committing a candidate whose caller never went through the recorded
+  `prepare` step for it;
+- if the attestation matches: performs the **one and only** authoritative
+  state transition this design has, `prepared → committed`, in the same
+  atomic write — recording the candidate as `activeVersion`, the version that
+  was active immediately before this operation as `previousVersion`, and
+  committing the per-key `snapshotRevision`/`snapshotObservedAt` state
+  `prepare` assigned. There is **no separate durable `committing` state** —
+  see D9 for why an earlier draft's claim of one was a contradiction, now
+  corrected.
 
 **No Workers KV pointer write occurs during `finalize`.** A stale, cancelled
 or superseded token is rejected **before** any authoritative state change —
-never partially applied, never silently replayed.
+never partially applied, never silently replayed. A retry for an
+already-`committed` token returns the recorded result rather than
+re-evaluating anything (D9).
 
 ### D5. Prepared-operation cancellation
 
@@ -273,18 +368,31 @@ that happens to share the same phase name:
   through the authoritative `activeVersion`/`previousVersion` the DO reports
   — never by enumerating versions. An abandoned `prepared` operation's
   documents are simply never pointed to.
-- **Orphan cleanup is allowed only from `cancelled`,** and must independently
-  re-verify, atomically, at the moment of deletion, that the operation's
-  epoch is still `cancelled` — not `committing` or `committed` — as a second,
-  defense-in-depth guard rather than relying solely on the cancellation path
-  above. This extends the existing `deleteUnpublishedVersion` guard (which
-  already refuses the active version) to also refuse any version whose
-  durable phase is not `cancelled`.
+- **Orphan cleanup is allowed only from `cancelled`,** and `cancelled` is
+  **terminal** for that epoch: no cancelled epoch ever transitions to
+  `prepared` or `committed` (D9's state table). The safety argument does
+  **not** claim atomicity between the Durable Object and Workers KV — that
+  claim would contradict this ADR's own premise that no such cross-product
+  atomicity exists (§"Safety reasoning"). Instead, cleanup is a two-step,
+  non-atomic sequence with a one-directional safety property: a
+  **DO-authorized cleanup decision** first calls the Durable Object, which
+  rechecks the current epoch and confirms it is still `cancelled` inside its
+  own transaction and returns that decision; only **then**, outside any DO
+  transaction, does the caller issue the external KV deletion. Because
+  `cancelled` is terminal, a "yes, still cancelled" answer can never be
+  invalidated by anything that happens afterward — there is no transition out
+  of `cancelled` for that epoch to race against. The external KV deletion
+  itself remains **best-effort**, exactly like every other KV write in this
+  design: if it fails, the orphaned version simply persists unreferenced
+  (harmless, since nothing points to it) until a later cleanup attempt.
+  `deleteUnpublishedVersion` additionally continues to refuse the currently
+  authoritative active version, unchanged from ADR 0007.
 - **A dead caller cannot block a season forever** — for `prepared` operations
   only, via deadline expiry. This explicitly does **not** extend to
-  `committing` or `recovery-required` (see D9): pre-commit abandonment is
-  provably harmless to auto-clear; post-ambiguity abandonment is not, and
-  that asymmetry is intentional.
+  `recovery-required` (see D9): pre-commit abandonment is provably harmless to
+  auto-clear; a genuine invariant-violation state is not, and that asymmetry
+  is intentional. There is no intermediate durable state between `prepared`
+  and `committed` for this rule to need to cover (D9).
 
 **There is no lease over pointer mutation anywhere in this design.**
 
@@ -295,23 +403,68 @@ default-target resolution) `previousVersion` through a call to the
 per-season Durable Object — never through an independent Workers KV read of
 a pointer key.
 
-It then reads the selected immutable versioned document from KV, as today.
+**A previous-version fallback requires positive evidence, never absence
+alone.** A missing document at the active version cannot, by itself,
+distinguish two different facts: the document has not yet propagated through
+KV, or the document was **never part of this version at all** — GridView's
+own publication model deliberately allows driver, constructor and circuit
+profiles and Grand Prix detail/results routes to be withdrawn from a version
+([`GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md)
+"Cache invalidation of withdrawn routes"). Treating a missing document as
+"not yet propagated" and falling back to `previousVersion` would serve a
+withdrawn route from the previous release **forever**, never returning the
+not-found response the withdrawal intends. The router therefore resolves a
+document request in this order:
 
-**If the active version's requested document is not yet visible** because KV
-propagation of that *document* (not the pointer — there is no separate
-pointer to propagate) is incomplete:
+1. Resolve `activeVersion` (and `previousVersion`) from the authoritative
+   Durable Object.
+2. Read and validate the active version's inventory.
+3. **If the active inventory is readable and does not name the requested
+   document, return the intended not-found response.** `previousVersion` is
+   never consulted for this case — a validly excluded document is not a
+   propagation problem to route around.
+4. **If the active inventory names the document but the document itself is
+   not yet readable from KV**, a bounded fallback may be considered.
+5. **A `previousVersion` response may be served only if the previous
+   version's own inventory also names that document.** `previousVersion` is
+   never used as a *negative* oracle (its absence never implies the document
+   should 404) and never as a blind substitute (its presence is checked, not
+   assumed).
+6. **If the active inventory itself is missing, unreadable or not yet
+   visible**, the router does not guess whether the route exists in either
+   direction. It uses the documented bounded unavailable/degraded response —
+   the same shape as "Durable Object binding or lookup unavailable" below —
+   rather than treating `previousVersion` as a stand-in decision for a
+   question the active inventory alone can answer.
 
-- the router **may** retry against the `previousVersion` the same
-  authoritative DO lookup returned;
-- the fallback is **bounded** (a fixed, small retry/fallback budget, not an
-  unbounded search) and **observable** (an operational event, per D11);
-- it **never** rewrites or reinterprets the authoritative pointer — the DO's
-  answer to "what is active" is not questioned or second-guessed by this
-  fallback, only which document is *servable right now* is affected;
-- the response **retains the repository's existing stale/degraded semantics**
-  (ADR 0010's existing "an edge location may briefly serve the older active
-  version during propagation" trade-off, now scoped to the document, not the
-  pointer).
+Steps 4-5's fallback remains **bounded** (a fixed, small retry/fallback
+budget, not an unbounded search) and **observable** (an operational event,
+per D11). It never rewrites or reinterprets what the Durable Object reports
+as active — only which document is *servable right now* is affected — and it
+retains the repository's existing stale/degraded response semantics (ADR
+0010's "an edge location may briefly serve the older active version during
+propagation" trade-off, now scoped to the document, not the pointer).
+
+**This introduces a genuinely new, narrow, accepted trade-off, stated
+precisely rather than left implicit.** Before this design, an edge location
+that had not yet observed a pointer change served an *entire* release
+consistently — every document it returned belonged to the same version,
+because the pointer and the documents propagated through the same
+eventually-consistent KV mechanism together. Under this design the
+authoritative pointer is resolved instantly and strongly consistently
+through the Durable Object, so a client's requests within one short window
+can observe document A from the **new** active version (already propagated)
+and document B from the **previous** version (steps 4-5's fallback, not yet
+propagated) — a per-document mixed view across two *adjacent* versions that
+the pre-cutover architecture did not need to describe, because pointer lag
+and document lag were previously correlated. This ADR does **not** invent a
+cross-request atomicity guarantee to hide this: it is accepted, bounded to
+exactly one version boundary, restricted to documents both versions'
+inventories positively confirm, time-limited to ordinary KV propagation
+(ADR 0010), and consistent with the existing "stale data is preferable to no
+data" philosophy for a product that is not live timing (ADR 0010). It is a
+narrower, more precisely-scoped version of a trade-off this codebase already
+accepted, not a new kind of risk.
 
 **If the Durable Object binding or the authoritative lookup call itself is
 unavailable:**
@@ -405,7 +558,38 @@ version. It is **republication**:
 9. Write a complete new immutable version and inventory to KV.
 10. Commit it through the same `prepare`/`finalize` protocol as any other
     publication — rollback has **no separate commit path** and cannot flip
-    the authoritative pointer directly.
+    the authoritative pointer directly, calling `prepare` with
+    `operationKind: 'rollback-republication'` (D4).
+
+**Rollback's admission authority, stated explicitly.** Step 10's `prepare`
+call carries a historical `sourceOrderingInput` that is, by construction,
+never newer than what is currently committed — that is what makes it a
+rollback. D4's ordinary source-ordering staleness rejection is **not**
+evaluated for `operationKind: 'rollback-republication'`; admission instead
+comes from the fact that the request itself reached `prepare` only through
+an authenticated operator rollback request, which is a different, and
+already-existing, authorization boundary from source-ordering freshness. This
+exemption:
+
+- is **unavailable to `operationKind: 'ordinary-publication'`** — D4's
+  staleness rejection for ordinary publication is not touched, weakened or
+  made conditional by this ADR in any way;
+- changes **only** admission — step 6's per-key comparison against the
+  currently active revision, and steps 7-8's D1.9/D1.10 timestamp assignment,
+  apply to a rollback candidate exactly as they apply to any other candidate;
+- remains **provider-independent** (step 2);
+- uses the **same** `prepare`/`finalize` commit authority as ordinary
+  publication — no separate rollback commit path exists;
+- is **logged with its bounded `operationKind` and outcome** (D11), so a
+  rollback admission is distinguishable in operational events from an
+  ordinary one;
+- introduces **no public activation-epoch field** (below).
+
+Without this exemption, Model 1 as authorized in principle — republishing
+historical data through `prepare`/`finalize` — would be **unexecutable**: the
+unconditional staleness rule would reject the very rollback attempt this ADR
+exists to authorize. This is a clarification that makes the already-accepted
+Model 1 constructible, not a new product decision.
 
 **No public activation-epoch field is introduced.** The `operationEpoch` in
 D2/D4/D5/D9 is internal Durable Object coordination state; it never appears
@@ -431,6 +615,20 @@ in a published document or the public contract.
   accepted cost of Model 1, not an oversight.
 
 ### D9. Failure and recovery model
+
+**The durable model has exactly two operation-carrying states: `prepared` and
+`committed`.** An earlier draft of this ADR additionally described a durable
+`committing` state that a restart could "resume into," while also claiming
+the whole transition happened in one atomic transaction — those two claims
+contradict each other: a genuinely atomic, single-write transition has no
+externally observable intermediate state for a restart to resume into.
+Corrected: `finalize` performs exactly **one** atomic `prepared → committed`
+transition (D4). There is no durable `committing` state anywhere in this
+design. A restart between `prepare` and `finalize` resumes into `prepared`
+(with everything D4 now records) and is either finalized from there or
+cancelled/superseded/expired (D5) — never into a state describing a
+transition that was "in progress," because the transition is not observable
+as separate from its own completion.
 
 Because the authoritative commit is a single atomic **local** Durable Object
 storage transaction:
@@ -478,14 +676,29 @@ ADR 0021), with the active/previous/epoch/token/phase transition performed as
 one indivisible multi-key storage write. The exact call
 (`ctx.storage.transaction(...)` or an equivalent single atomic write the
 SQLite-backed storage API provides) is a Mechanism-PR implementation detail;
-this ADR requires only that it be **one** atomic storage-level operation,
-never a sequence of separately-awaited writes with a gap between them where
-another caller's synchronous check-and-install (D5, D9) could observe a
-half-transitioned state. Ordinary input gates are not claimed to provide this
-on their own — they are documented to protect the object's storage calls
-from interleaving with each other, not to make a multi-statement sequence of
-application logic atomic by themselves; the atomicity must come from the
-storage transaction API itself.
+this ADR requires only that it be **one** atomic storage-level operation, with
+every read `finalize` needs (current epoch, token, phase, expected
+completeness) and every write it performs (activeVersion, previousVersion,
+per-key state, phase → committed) inside that **single** transaction, never a
+sequence of separately-awaited operations with a gap between them.
+
+**No correctness-critical in-memory single-flight identity (a
+`commitPromise` or equivalent) is retained, and none is required.** An
+earlier design needed one because its critical section spanned an *awaited
+external Workers KV write*, which an ordinary input gate does not cover
+(§"Context"). That external write no longer exists: `finalize`'s entire
+critical section — validation and the state transition together — is now one
+call into the Durable Object's own storage. Durable Object storage
+operations **are** exactly what an ordinary input gate is documented to
+protect from interleaving with other events. So two concurrent `finalize`
+calls for the same season cannot both enter their storage transaction at
+once; the second is simply delivered after the first's transaction (and the
+synchronous code around it) has completed, by which point it reads
+`committed` and returns the idempotent result (below) rather than racing
+anything. Retaining an application-level single-flight guard on top of that
+would be leftover machinery from the rejected KV-authoritative design,
+carried forward for a purpose it no longer serves — removed here rather than
+kept "just in case" (see "Rejected and superseded alternatives").
 
 ### D10. Lifecycle and `blockConcurrencyWhile` — corrected against current documentation
 
@@ -638,52 +851,66 @@ rather than by additional state-machine logic layered on the same KV write.
 | **Timestamp allocation without commit authority** (assigning `snapshotObservedAt` from a component that does not also hold pointer-commit authority) | **Rejected.** D1.9 requires the revision/timestamp pair to be assigned atomically with the same operation that could commit it; splitting the two reintroduces exactly the interleaving ADR 0020 identified as the D1.10 blocker. |
 | **Blind replay of an ambiguous Workers KV pointer write on recovery** | **Rejected.** Proven unsafe by the reproduced duplicate-replay race in "Context"; a recovering instance cannot know whether a prior instance's external write already landed, and KV gives it no way to find out safely. |
 | **Silent KV-pointer fallback when the Durable Object is unavailable** | **Rejected.** D6 requires a bounded, fail-closed response instead. A silent fallback to a legacy pointer that nothing else writes or verifies would let a stale, unmaintained value quietly become load-bearing again. |
-| **`blockConcurrencyWhile` around document generation or an external pointer write** | **Rejected for that scope**, for two independent reasons: it blocks every other caller of the DO id for the duration of work that can be slow (throughput anti-pattern), and it carries a 30-second reset with no documented guarantee about an external write in flight at the moment it fires — seef D10, D9. |
+| **`blockConcurrencyWhile` around document generation or an external pointer write** | **Rejected for that scope**, for two independent reasons: it blocks every other caller of the DO id for the duration of work that can be slow (throughput anti-pattern), and it carries a 30-second reset with no documented guarantee about an external write in flight at the moment it fires — see D10, D9. |
 | **A public activation-epoch field** | **Rejected for this phase.** `operationEpoch` is internal Durable Object coordination state (D2, D9) and must not appear in any published document or the public contract (D8). |
 | **Direct pointer-flip rollback** (the pre-existing rollback design) | **Superseded by Model 1** (D8). Rollback now republishes historical data as a new immutable version through the same `prepare`/`finalize` protocol as ordinary publication; it never flips `activeVersion` directly. |
+| **An application-level in-memory single-flight guard (`commitPromise`) as a correctness-critical mechanism** | **Rejected — no longer needed, not merely unused.** It was necessary only while the critical section spanned an awaited external Workers KV write, which an ordinary input gate does not cover. D2 removed that external write; `finalize`'s entire critical section is now one Durable Object storage transaction, which an ordinary input gate already serializes (D9). Retaining the guard would be leftover machinery from the rejected KV-authoritative design. |
+| **An ordinary source-ordering staleness rejection applied unconditionally to every `prepare` call, including rollback** | **Rejected.** It would make the authorized Model 1 (D8) impossible to execute, since a rollback's historical ordering input is expected to be older than or equal to what is currently active. Replaced by the bounded `operationKind` exemption in D4, which narrows the exception to rollback admission only and leaves ordinary publication's rejection untouched. |
+| **Claiming atomicity between a Durable Object cancellation check and an external Workers KV deletion during orphan cleanup** | **Rejected — not implementable.** No cross-product atomicity between Durable Object storage and Workers KV exists (§"Safety reasoning" is this ADR's own premise). Replaced in D5 by a non-atomic two-step sequence relying on `cancelled` being a terminal state, with the external KV deletion remaining best-effort. |
 
 ## Failure-state model
 
-Four distinct identities are used throughout this design, and conflating any
+Three distinct identities are used throughout this design, and conflating any
 two of them is how the duplicate-replay race in "Context" happens in the
-first place:
+first place. A fourth — an application-level in-memory single-flight guard —
+appeared in an earlier draft and is deliberately **not** carried forward: see
+"Rejected and superseded alternatives" and D9 for why it no longer serves a
+purpose once the commit is one Durable-Object-storage-protected transaction.
 
 | Identity | Lifetime | Purpose |
 |---|---|---|
 | `operationToken` | One `prepare()` call | Caller-facing handle, presented back to `finalize`/`cancel` |
 | `operationEpoch` | Durable, monotonic, per season | The actual fencing value every transition checks; increments on every admitted `prepare` |
-| In-memory single-flight guard | One live Durable Object instance | Prevents duplicate concurrent *in-instance* callers from racing each other during one call; never durable, never trusted for recovery |
-| Durable operation record | Durable, until superseded | `{epoch, token, phase, priorVersion, candidateVersion, preparedAt, deadline}` — sole restart-recovery source of truth |
+| Durable operation record | Durable, until superseded | `{epoch, token, operationKind, phase, priorVersion, candidateVersion, perKeyRevisions, assignedTimestamps, sourceOrderingInput, expectedCompleteness, preparedAt, deadline}` — sole restart-recovery source of truth, and the only source `finalize` reads from (D4) |
 
 ### State transition table
+
+There are exactly two operation-carrying durable states, `prepared` and
+`committed`, plus the non-operation state `idle` and the two terminal states
+`cancelled` and `recovery-required`. **There is no durable `committing`
+state** — an earlier draft's claim of one contradicted its own claim that the
+transition is atomic; see D9.
 
 | State | Permitted caller | Durable mutation | External KV action | New candidate admitted? | Cleanup allowed? | Restart behavior | Idempotent retry? |
 |---|---|---|---|---|---|---|---|
 | `idle` | anyone | none | none | yes — any `prepare` | n/a | resumes `idle` | trivially |
-| `prepared` | holder of current epoch/token | writes epoch/token/prior/candidate/deadline in one transaction | none | only as an atomic *replacement* of this record | not yet | resumes `prepared`; deadline re-evaluated | `prepare` retried is a fresh epoch; old one retired |
-| `committing` | holder of current epoch only | phase → `committing`, then → `committed`, in the same atomic transaction as the pointer change | **none** | no | no | resumes `committing`; per D9, either the transaction already completed or the platform stopped it and errored — never both ambiguous | idempotent by construction (D9) |
-| `committed` | n/a for this epoch | epoch marked committed | none | yes — next `prepare` | yes, for epoch(s) it superseded | resumes `committed` | trivially |
-| `cancelled` | n/a | epoch marked cancelled | none | yes | yes, re-verified at deletion time | resumes `cancelled` | trivially |
+| `prepared` | holder of current epoch/token | writes the full operation record (D4) in one transaction | none | only as an atomic *replacement* of this record | not yet | resumes `prepared`, with every value D4 records intact; deadline re-evaluated | `prepare` retried is a fresh epoch; old one retired |
+| `committed` | n/a for this epoch | one atomic `prepared → committed` transition: activeVersion, previousVersion and per-key state all written together with the phase change | **none** | yes — next `prepare` | yes, for epoch(s) it superseded | resumes `committed` | trivially — a retry for a committed token returns the recorded result (D9) |
+| `cancelled` | n/a | epoch marked cancelled; **terminal** — never transitions to `prepared` or `committed` (D5) | none | yes | yes, after a DO-authorized recheck (D5; non-atomic with the external KV deletion) | resumes `cancelled` | trivially |
 | `recovery-required` | admin only | none automatic | none automatic | **no** | no | resumes `recovery-required` until operator clears it | not applicable by design |
 
 `recovery-required` is retained in the vocabulary as a defensive terminal
-state for an operation-level invariant violation detected by the Mechanism
-PR's own tests (for example, a durable record the code cannot reconcile with
-any defined transition) — **not** because an ambiguous external write is
-expected under this design. Under D2, the class of failure that previously
-motivated `recovery-required` (an ambiguous KV write) no longer exists,
-because there is no external write in the commit path to be ambiguous about.
+state for a genuine operation-level invariant violation the Mechanism PR's
+own tests can define (for example, a durable record the code cannot
+reconcile with any defined transition) — **not** as an intermediate state an
+atomic commit supposedly leaves behind, and **not** because an ambiguous
+external write is expected under this design. Under D2, the class of failure
+that previously motivated `recovery-required` (an ambiguous KV write) no
+longer exists, because there is no external write in the commit path to be
+ambiguous about.
 
 ## Testing obligations
 
 Deterministic, application-logic tests the Mechanism PR must include:
 
 - Two simultaneous same-token `finalize` calls resolve to one committed
-  result, never two writes.
-- A same-token retry arriving while the original operation's transaction is
-  in progress joins/no-ops rather than starting a second transition.
+  result, never two writes — the second observes `committed` and returns the
+  recorded result rather than re-entering the transaction (D9).
+- A same-token retry arriving after the original `finalize` call's storage
+  transaction has already completed observes `committed` and returns the
+  recorded result deterministically, never re-evaluating the operation.
 - A `prepare` for a new candidate is rejected while an operation for the same
-  season is `committing`.
+  season is `prepared` and not yet superseded, cancelled or expired.
 - A stale (superseded) epoch's `finalize` is rejected before any storage
   mutation.
 - A `prepared` operation replaced by a later `prepare` durably retires the
@@ -691,6 +918,20 @@ Deterministic, application-logic tests the Mechanism PR must include:
   `finalize(oldToken)` is rejected.
 - A stale `finalize` after a `prepared`-then-cancelled token is rejected, no
   version is deleted while its status is ambiguous.
+- **A restart between `prepare` and `finalize` does not lose the ability to
+  finalize correctly**: after simulating a restart, `finalize` for the
+  surviving `prepared` record still commits the exact per-key
+  `snapshotRevision`/`snapshotObservedAt` values `prepare` originally
+  assigned, read entirely from the durable record (D4) — no in-memory state
+  is required.
+- **Ordinary publication's staleness rejection is unaffected by the rollback
+  exemption**: a `prepare` call with `operationKind: 'ordinary-publication'`
+  and an older `sourceOrderingInput` is still rejected exactly as before.
+- **Rollback admission**: a `prepare` call with `operationKind:
+  'rollback-republication'` and an older `sourceOrderingInput` is admitted,
+  while an otherwise-identical call with `operationKind:
+  'ordinary-publication'` is rejected — proving the exemption is scoped to
+  the operation kind, not to the ordering value.
 - Rollback Model 1: no provider port is ever invoked.
 - Rollback Model 1: a key whose restored content hash matches the currently
   active version's hash keeps its currently recorded `snapshotObservedAt`
@@ -698,11 +939,23 @@ Deterministic, application-logic tests the Mechanism PR must include:
   for that key only.
 - Rollback Model 1: a pre-commit failure (mid new-version write) leaves the
   existing active release completely untouched and serving.
+- **Router: a document the active inventory positively excludes returns the
+  intended not-found response and never consults `previousVersion`**, even
+  when `previousVersion`'s own inventory happens to contain that document.
+- **Router: a document the active inventory names, but that is not yet
+  readable, falls back to `previousVersion` only when the previous
+  version's inventory also names it**; if the previous inventory does not
+  name it, the fallback does not serve it.
+- **Router: an unreadable or not-yet-visible active inventory returns the
+  bounded unavailable/degraded response** rather than consulting
+  `previousVersion` as a substitute decision.
 - Router: authoritative-lookup-unavailable path returns the existing bounded
   fail-closed shape and never reads a legacy KV pointer as a substitute.
-- Router: bounded, observable fallback to `previousVersion` when a document
-  has not yet propagated, and that this never changes what `finalize`
-  considers active.
+- Router: the bounded, observable fallback to `previousVersion` never changes
+  what the Durable Object itself reports as active.
+- **Cleanup**: a DO-authorized recheck that finds the epoch still `cancelled`
+  is followed by a best-effort external KV deletion, and the deletion's
+  success or failure never changes the durable `cancelled` state.
 
 **Tests that cannot prove Cloudflare platform behavior** — must be labeled as
 demonstrating application logic only, never as proof of the underlying
@@ -723,14 +976,21 @@ platform guarantee:
 - Phase 9B-6's D1.9-D1.11 block (ADR 0020) has a **named, platform-grounded
   path to closure** that does not require an undiscovered Cloudflare
   guarantee: moving authority to Durable Object storage, which is already
-  documented as strongly consistent and already provisioned elsewhere in this
-  repository as a pattern (`ProviderRateLimiter`).
+  documented as strongly consistent and already follows an existing pattern
+  declared elsewhere in this repository's code (`ProviderRateLimiter`,
+  ADR 0021) — a pattern present in code and configuration, not a live,
+  provisioned namespace (ADR 0021 itself records that class as declared but
+  not provisioned).
 - The public read path gains a new dependency (a per-season Durable Object
-  call) and a new, honestly-stated latency/availability trade-off (D6).
-  Nothing in this ADR pretends that cost away.
+  call) and a new, honestly-stated latency/availability trade-off (D6),
+  including a narrow, bounded, newly-possible per-document mixed-release view
+  during ordinary KV propagation that is stated precisely rather than
+  papered over. Nothing in this ADR pretends any of that cost away.
 - Rollback becomes materially more expensive pre-commit (a full new version
   write, not a single pointer flip) in exchange for provider-independence and
-  freshness-rule consistency with ordinary publication (D8).
+  freshness-rule consistency with ordinary publication (D8), and requires an
+  explicit, bounded `operationKind` exemption from ordinary staleness
+  admission to be constructible at all (D4).
 - `active:{season}`/`previous:{season}` stop being anything code depends on,
   after cutover — a deliberate simplification of the KV Consistency Boundary
   ADR 0010 originally had to describe.
