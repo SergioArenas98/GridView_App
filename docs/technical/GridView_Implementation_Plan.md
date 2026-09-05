@@ -1661,9 +1661,13 @@ before starting:
    declared through this repository's supported `exports` mechanism (the
    pattern `ProviderRateLimiter` already uses, not the legacy
    `[[migrations]]` block, which conflicts with it); explicit deployment
-   authorization; the one-time per-season migration (pointer state, per-key
-   revision/timestamp state, and the high-water mark seed — ADR 0025 D12);
-   the authority-mode switch, only after that migration verifies; bounded
+   authorization; the one-time per-season migration against an
+   operator-approved cutover checkpoint (validated pointers,
+   `committedSourceOrderingInput`, per-key revision/timestamp state, and the
+   conservatively seeded high-water mark — ADR 0025 D12), committed as a
+   durable `seeded` state; resolution of D12's pre-cutover historical-floor
+   activation precondition; only then the separate, idempotent `seeded →
+   active` transition that switches authority and resumes mutators; bounded
    smoke tests.
 4. **Production activation** — a separate future decision, blocked behind
    every Phase 9B exit gate and production-readiness requirement, exactly

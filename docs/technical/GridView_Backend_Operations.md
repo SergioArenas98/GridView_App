@@ -107,8 +107,9 @@ scheduled/manual trigger
 > [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)'s
 > D1.10 note. Today, both paths still call `SnapshotPublisher.publish`
 > directly and write `active:{season}` as described below; nothing here is
-> activated until the steps ADR 0025 §"Delivery plan" gates are each
-> separately authorized.
+> activated until the steps gated by ADR 0025 D12 "Activation boundary" and
+> [`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md)
+> §14.0.11 are each separately authorized.
 
 Policy categories:
 

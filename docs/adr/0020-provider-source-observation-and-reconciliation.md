@@ -575,6 +575,16 @@ below is implemented**:
   ordinary publication ("It is persisted with the revision in the same
   publication transaction"). Rollback introduces no second
   timestamp-assignment mechanism.
+- **A D1.11a clock-regression clamp can place a historical
+  `snapshotObservedAt` ahead of the wall-clock time it was actually
+  assigned.** This is the concrete mechanism by which
+  [ADR 0025](0025-season-publication-authority-and-rollback-republication.md)
+  D12's cutover migration seed is **not** guaranteed to dominate a timestamp
+  held only by an unenumerable pre-cutover version — D1.11a's already-
+  documented "appears newer" direction becomes, for that migration, an
+  explicit **activation precondition**, not merely a bounded-excess note.
+  See ADR 0025 D12, "The pre-cutover historical-floor activation
+  precondition."
 
 **D1.9-D1.11 remain unimplemented.** ADR 0025 is a design decision, not
 implementation: no Durable Object class, binding or caller exists yet.

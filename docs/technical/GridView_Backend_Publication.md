@@ -395,13 +395,19 @@ Object never generates provider data, never validates a document and never
 stores a complete snapshot payload — its own storage holds metadata
 proportional to the current committed release's document manifest and,
 while one is in progress, the prepared candidate's (ADR 0025 D2/D3):
-`activeVersion`, `previousVersion`, the current
-`snapshotRevision`/`snapshotObservedAt` per key **named in the current active
-inventory**, one durable constant-size scalar
-`seasonSnapshotObservedAtHighWaterMark` (the greatest `snapshotObservedAt`
-ever committed for any key that season, never retired when a key leaves the
-inventory — see "Per-key revision and timestamp assignment" below), and the
-**complete** current publication-operation record (`operationKind`, `phase`,
+`activeVersion`, `previousVersion`, `committedSourceOrderingInput` (the
+`sourceOrderingInput` belonging to the currently active release, distinct
+from the same-named field a *prepared*, uncommitted candidate carries — see
+"Source-ordering admission" below), `cutoverState` (one of
+`uninitialized`/`seeded`/`active` — see "Legacy pointer retirement" below),
+the current `snapshotRevision`/`snapshotObservedAt` per key **named in the
+current active inventory**, one durable constant-size scalar
+`seasonSnapshotObservedAtHighWaterMark` (a durable, monotonically
+non-decreasing **floor** — at least the greatest `snapshotObservedAt` ever
+committed for any key that season, and possibly higher after a conservative
+migration seed; never retired when a key leaves the inventory — see "Per-key
+revision and timestamp assignment" below), and the **complete** current
+publication-operation record (`operationKind`, `phase`,
 `priorVersion`, `candidateVersion`, the candidate's per-key revisions and
 assigned timestamps, `sourceOrderingInput`, `expectedManifestCommitment`,
 epoch, token, `preparedAt`, `deadline`) — every value `finalize` needs, so a
@@ -458,6 +464,31 @@ D1.10 identified as unclosable under the current architecture:
 
 Timestamps are assigned **before** final document construction, because
 `meta.sourceUpdatedAt` is baked into each immutable document.
+
+### Source-ordering admission (`committedSourceOrderingInput`)
+
+`prepare`'s existing ADR 0007 staleness rule — evaluated only for
+`operationKind: 'ordinary-publication'` — compares a candidate's
+`sourceOrderingInput` against the durable `committedSourceOrderingInput` the
+DO holds for the currently active release, never against the (possibly
+stale, possibly cancelled) `sourceOrderingInput` carried by whatever
+operation is currently `prepared`. A candidate **strictly older** than
+`committedSourceOrderingInput` is rejected; one **equal** to it is
+**admitted** — exactly as strict as today's implementation, which rejects
+only `<` and has always admitted equality, since neither adopted provider
+source publishes an ordering signal finer than what this field carries
+([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+§1). `committedSourceOrderingInput` changes only on a successful `finalize`,
+atomically with the rest of the committed state, to the value `prepare`
+durably recorded for that operation — never advanced by a cancelled,
+expired or superseded `prepared` operation, and never recomputed on an
+idempotent retry. A successful rollback republication (see "Rollback
+republication" below) commits its own historical `sourceOrderingInput` as
+the new `committedSourceOrderingInput`, deliberately **not** a monotonic
+upstream-source high-water mark — see
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D2, D4 and D8 for the full rule and why turning this into a monotonic clock
+would be a different, separately-decided admission policy.
 
 ### The authoritative active/previous pair
 
@@ -535,19 +566,43 @@ publication purge-failure tests.
 ### Legacy pointer retirement
 
 `active:{season}` and `previous:{season}` become **migration-only** inputs
-after cutover: their last valid values, together with the active (and
-best-effort previous) version's documents, seed the new Durable Object's
-per-key revision/timestamp state and its
-`seasonSnapshotObservedAtHighWaterMark` floor once, through an
-operator-controlled migration procedure that verifies the imported state
-before any authority-mode switch and aborts that season's cutover — leaving
-legacy pointers authoritative — on any missing, malformed or inconsistent
-input. After a successful switch, no publication or rollback writes them and
-no router reads them for authority. They are not kept as a live best-effort
-projection — a second writer or a second thing anything still consults would
-recreate the ambiguity this design removes. Full migration procedure,
-including why it cannot claim coverage beyond `activeVersion`/`previousVersion`,
-is in
+after cutover, read once by exact versioned key against an operator-approved
+cutover checkpoint — never by re-reading and trusting the live pointer keys
+as proof of currency (Workers KV documents no finite global-convergence
+barrier this design could rely on for that). The checkpoint's selected
+`activeVersion` and, best-effort, `previousVersion` documents seed the new
+Durable Object's complete authoritative state in one atomic commit:
+`activeVersion`, `previousVersion`, `committedSourceOrderingInput`, the
+per-key `snapshotRevision`/`snapshotObservedAt` state, the conservatively
+seeded `seasonSnapshotObservedAtHighWaterMark` floor, and the checkpoint's
+own migration identity/fingerprint — through an operator-controlled
+migration procedure that verifies every imported value and aborts that
+season's cutover, leaving legacy pointers authoritative, on any missing,
+malformed or inconsistent input.
+
+Committing that seed and switching authority are **two separate durable
+steps, not one atomic step**: committing the seed records a
+`cutoverState` of `seeded` — legacy pointers remain authoritative and this
+season's mutators stay paused — and only a later, separate, idempotent
+transition to `cutoverState: 'active'` switches public and administrative
+authority to the sequencer and resumes those mutators. After that switch, no
+publication or rollback writes the legacy pointers and no router reads them
+for authority; they are not kept as a live best-effort projection, since a
+second writer or a second thing anything still consults would recreate the
+ambiguity this design removes.
+
+Activating a season additionally requires resolving a **pre-cutover
+historical-floor precondition**: the seed is not guaranteed to dominate a
+timestamp held only by an unenumerable version predating the cutover (a
+clock-regression clamp under
+[ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
+D1.11a can place such a timestamp ahead of migration wall time), so
+activation requires a historical index or audited bound, an audit
+disproving the exposure, no retained pre-cutover client state, or an
+authorized client-baseline reset. Full migration procedure, the complete
+seed contents, the `uninitialized`/`seeded`/`active` cutover lifecycle, and
+why coverage cannot be claimed beyond `activeVersion`/`previousVersion`, are
+in
 [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 D12.
 
