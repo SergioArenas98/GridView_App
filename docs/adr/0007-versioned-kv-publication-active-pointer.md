@@ -15,7 +15,17 @@
 > 0025 D3, D8). Like `__inventory`, its suffix is not a `SnapshotDocumentName`,
 > so it can never be requested as a document or mapped to a public URL; it is
 > not listed in `__inventory`, is excluded from `snapshotRevision`, is written
-> once before commit, and is deleted with its version. What ADR 0025 changes,
+> once before commit, and is deleted with its version. So that a later reader
+> can tell whether a given version was _required_ to carry that record — which
+> the key reading `null` can never establish, since KV propagation lag produces
+> the same read — every version created by that future protocol is minted in a
+> reserved `pm1-…` identifier namespace (ADR 0025 D3). Versions published under
+> the scheme below are legacy-format by construction: today's generator emits
+> `<ISO-8601 stripped of "-:.TZ">-<8 hex>`, which always begins with a digit, so
+> no existing version can collide with the reserved prefix. The marker is
+> internal to the version identifier, is colon-free so it cannot disturb the
+> `snapshot:{season}:{version}:…` parsing boundary, and adds no public API
+> field. What ADR 0025 changes,
 > once its own Mechanism/Integration/cutover
 > steps are separately authorized and completed, is **which write is the
 > commit point**: authority over `active`/`previous` moves from the two

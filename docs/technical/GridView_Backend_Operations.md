@@ -433,11 +433,19 @@ target must have **resolvable source-ordering provenance**, not merely a
 complete inventory and readable documents. That value comes from the target
 version's own internal `__publication_metadata` record, or — for a release
 predating it — from a single uniform `meta.sourceUpdatedAt` across every
-document its inventory names. A target whose record is malformed or
-unreadable, or whose legacy timestamps are missing or inconsistent, is
-**rejected before the operation begins**, with a bounded reason (for example
+document its inventory names. **Which of the two applies is decided by the
+target's version identifier, not by whether the record happens to read back.**
+Versions created by the sidecar-aware protocol are minted in a reserved
+`pm1-…` namespace; for one of those, a record that does not read back is
+treated as *not currently readable* rather than *never written*, and the
+document fallback is **not** available to it. A target whose record is absent
+in that namespace, or malformed or unreadable in either, or whose legacy
+timestamps are missing or inconsistent, is **rejected before the operation
+begins**, with a bounded reason (for example
 `rollback-source-ordering-unavailable`) and no raw storage key or stored value
-in the response or the log. The currently active release keeps serving,
+in the response or the log. A rejection of that kind on a `pm1-…` target may
+simply be propagation lag, so retrying the same target later is reasonable;
+it is never resolved by supplying a timestamp. The currently active release keeps serving,
 untouched, exactly as for any other pre-commit rejection. An operator is never
 asked to supply the missing ordering value by hand; the response is to select
 a different, complete target. **None of this is implemented.**

@@ -287,6 +287,27 @@ the edge-api source tree before being accepted:
    validation seeds `previousVersion` as `null` rather than committing a
    known-invalid rollback target (steps 8, 10).
 
+A self-found defect in that same correction, fixed here without a separate
+review thread: **the legacy provenance fallback was not decidable.** D8 and
+D12 both classified an absent `__publication_metadata` key as "a version
+predating the sidecar" and permitted the uniform-document fallback, while the
+testing obligations separately required a missing sidecar on "a version known
+to require the new format" to be rejected — and nothing anywhere defined how a
+reader could *know* which case it was in. Absence cannot supply that answer:
+Workers KV document storage remains eventually consistent
+([ADR 0010](0010-workers-kv-consistency-limitation.md)), so a written record
+that has not yet propagated reads identically to one that was never written;
+and uniformity of `meta.sourceUpdatedAt` cannot supply it either, because D4
+gives every changed, new or restored key in one `prepare` call the same
+timestamp, so a post-cutover release whose keys all changed is uniform — and
+treating that per-key activation timestamp as a release-wide
+`sourceOrderingInput` would install a wrong committed ordering baseline.
+Corrected by minting every version this protocol creates in an explicit,
+reserved `pm1-…` namespace (D3) that records *whether a sidecar was required*,
+making eligibility for the fallback a property of the immutable identifier
+rather than an inference from a KV read (D3, D8, D12 steps 3, 6 and 8, the
+testing obligations and the rejected-alternatives table).
+
 ## Decision
 
 ### D1. Serialization identity
@@ -470,9 +491,79 @@ one is public:
   its absence (D8). It is never read as a live, mutable signal, so KV's
   last-write-wins model has nothing to resolve for it.
 
+#### The sidecar-required version namespace
+
+**A reader must be able to decide whether a version was *supposed* to have a
+sidecar, and absence of the key can never answer that question.** Two facts make
+this a correctness requirement rather than a nicety:
+
+- **A `null` KV read is not proof that no write occurred.** Workers KV document
+  storage remains eventually consistent
+  ([ADR 0010](0010-workers-kv-consistency-limitation.md), permanent for
+  documents whatever this ADR does to pointer authority), and D6 already treats
+  "the document is named but not yet readable" as a real, expected state. A
+  sidecar that was written and has not yet propagated to the reading edge
+  location reads exactly like a sidecar that was never written.
+- **Uniformity of `meta.sourceUpdatedAt` cannot stand in for the answer
+  either.** D4 assigns *every* changed, new or restored key admitted in the same
+  `prepare` call the **same** freshly computed timestamp, so a post-cutover
+  release in which every key changed carries a uniform `meta.sourceUpdatedAt`
+  across all of its documents. That uniform value is a **per-key activation
+  timestamp**, not a release-wide `sourceOrderingInput`. Inferring "legacy" from
+  uniformity would install that activation timestamp as the committed ordering
+  baseline — a silently wrong admission baseline for every subsequent ordinary
+  publication.
+
+Therefore **the version identifier itself carries the discriminator.** Every
+version created by the sidecar-aware publication protocol is minted in a
+reserved, self-identifying namespace:
+
+```text
+pm1-<opaque existing version component>
+```
+
+`pm1` is "publication metadata, record schema generation 1". The invariant:
+
+- **Every** ordinary publication and **every** rollback republication created
+  after this mechanism activates uses this namespace. A new-format publisher may
+  **never** emit an unmarked version.
+- The marker is part of the **internal version identifier only**. It is not a
+  public document field, not part of `snapshotRevision`, not an `__inventory`
+  member, and adds no public API field — release version identifiers are not
+  part of the public contract today (they appear in internal results and
+  structured logs), and this ADR does not make them so.
+- **Existing historical versions are legacy-format by construction.** Today's
+  generator (`services/edge-api/src/sync/sync-service.ts`,
+  `releaseVersionFor`) produces `<ISO-8601 stripped of "-:.TZ">-<8 hex>`, which
+  always begins with a digit, so no already-published version can collide with a
+  `pm1-` prefix.
+- **The prefix is colon-free, deliberately.** `parseVersionFromSnapshotKey`
+  (`services/edge-api/src/storage/keys.ts`) reads a version as everything
+  between `snapshot:{season}:` and the next `:`, so a marker containing `:`
+  would break key parsing. A `-`-delimited prefix does not. No version-format
+  validator exists anywhere in the codebase today, so nothing needs relaxing to
+  admit the new shape.
+- **A historical identifier that accidentally resembles the reserved format is
+  rejected conservatively** if its sidecar is absent — for example one supplied
+  through the internal `forceVersion` override, which is test-only today but is
+  not format-validated. Safety takes precedence over rollback availability: the
+  operator selects a different target rather than the system guessing an
+  ordering baseline.
+
+The discriminator answers exactly one question — *was this version required to
+have a sidecar?* — and nothing else. It never decides what is active, never
+appears in a public response, and is never consulted when a valid sidecar is
+present, since a valid record is authoritative regardless of the era its
+version identifier belongs to (D8).
+
 The caller (the publisher, driven by the synchronization service or an
 operator rollback request) still:
 
+0. mints the candidate version identifier in the **sidecar-required namespace**
+   (`pm1-…`, above). This happens for every candidate this protocol creates —
+   ordinary publication and rollback republication alike — so that any later
+   reader of this version can tell, from the identifier alone, that a sidecar
+   was required;
 1. obtains normalized candidate data (from the provider path, or — for
    rollback — from a historical version, per §"Rollback Model 1");
 2. computes `snapshotRevision` per document, and — once document identities
@@ -1079,7 +1170,9 @@ version. It is **republication**:
    version, never regenerated from a live provider fetch and never
    regenerated from present-day generation logic (which may not be able to
    reproduce a historical season's exact prior state).
-3. Create a new candidate version identity.
+3. Create a new candidate version identity, **minted in the sidecar-required
+   `pm1-…` namespace** (D3) regardless of which namespace the rollback source
+   belongs to.
 4. **Regenerate, never copy:** everything already excluded from the
    `snapshotRevision` hash under ADR 0020 D1.7 — `requestId`, `generatedAt`,
    `staleAfter`, the server `stale` flag, ETag inputs — set fresh for this
@@ -1156,25 +1249,42 @@ sidecar (D3) exists precisely to close that gap, and the resolution is:
    rollback-completeness requirement, unchanged.
 2. Read the target version's `__publication_metadata` and classify the result
    using the **same four-valued discipline** the repository already applies to
-   stored inventories (`services/edge-api/src/publication/version-inventory.ts`):
-   - **valid new-format sidecar** — the key holds a record of the declared
-     shape with a valid `sourceOrderingInput`. Use that value verbatim.
-   - **absent sidecar** — the key holds `null`. This is a known historical
-     state, not corruption: it is what a version published **before** this
-     record existed looks like. Apply the legacy fallback below.
+   stored inventories (`services/edge-api/src/publication/version-inventory.ts`).
+   **The KV result alone never decides the outcome for an absent key** — it says
+   only whether the expected key is *currently readable as a valid value*, and
+   the version identifier's namespace (D3) says whether the key was *required*:
+   - **valid sidecar** — the key holds a record of the declared shape with a
+     valid `sourceOrderingInput`. Use that value verbatim, **regardless of which
+     namespace the version identifier belongs to**. A valid record is
+     authoritative; the discriminator is not consulted in this case at all.
+   - **absent sidecar on a sidecar-required (`pm1-…`) version** — the version
+     was minted by a protocol that must have written this record before it
+     could finalize (D3, D4), so `null` here means *not readable right now*, not
+     *never written*. **Fail closed**: reject the target. **Never** fall through
+     to document inference.
+   - **absent sidecar on a legacy-format version** — the version predates this
+     record entirely, which is a known historical state rather than corruption.
+     Apply the legacy fallback below.
    - **malformed sidecar** — the key holds something that is not a record of
-     the declared shape. **Fail closed**: reject the target.
+     the declared shape. **Fail closed**: reject the target, in either
+     namespace.
    - **unreadable sidecar** — the read itself failed, so nothing is known
      about the version at all, *including whether it recorded a sidecar*.
-     **Fail closed**: reject the target.
+     **Fail closed**: reject the target, in either namespace.
 
-   The distinction between *absent* and *unreadable* is load-bearing and must
-   not be collapsed: an unreadable sidecar is **not** evidence of an absent
-   one, so a read failure must never silently select the legacy path and
-   publish a value derived from documents when an authoritative value may have
-   existed all along. Likewise a malformed sidecar is a version whose
-   provenance we cannot describe, not a version that never recorded one.
-3. **Legacy fallback, for a genuinely absent sidecar only.** Versions created
+   Three distinctions here are load-bearing and must not be collapsed. An
+   **unreadable** sidecar is not evidence of an absent one, so a read failure
+   must never silently select the legacy path. A **malformed** sidecar is a
+   version whose provenance we cannot describe, not one that never recorded
+   provenance. And **`null` alone never proves legacy status**: eligibility for
+   the fallback comes from the version-format discriminator, never from the
+   absence of the key, because Workers KV propagation lag produces the identical
+   read (ADR 0010) and because a post-cutover release whose keys all changed in
+   one `prepare` call carries a *uniform* `meta.sourceUpdatedAt` that would make
+   the fallback appear to succeed while installing a per-key activation
+   timestamp as the release-wide ordering baseline (D3, D4).
+3. **Legacy fallback, for an absent sidecar on a legacy-format version only.**
+   Versions created
    before this record existed still need a deterministic provenance rule, and
    one already-relied-upon invariant supplies it — the same one D12's
    migration uses: the current generator writes **one release-wide
@@ -1189,10 +1299,13 @@ sidecar (D3) exists precisely to close that gap, and the resolution is:
    missing value by hand. This fallback applies only when the complete target
    inventory validates; it is never used to paper over an incomplete target.
 4. **Write the resolved value into the new rollback version's own sidecar**
-   (step 10), whether it came from a sidecar or from the legacy fallback. A
-   rollback of a legacy release therefore *creates* new-format provenance
-   going forward, and the migration never has to retrofit metadata onto an
-   already-existing historical version.
+   (step 10), whether it came from a sidecar or from the legacy fallback. **The
+   rollback's destination version is always minted in the sidecar-required
+   namespace (D3), even when its source is a legacy-format version** — a
+   rollback never inherits or reuses the target's identifier, so rolling back a
+   legacy release produces a `pm1-…` version carrying new-format provenance,
+   and the migration never has to retrofit metadata onto an already-existing
+   historical version.
 
 **A target that fails any of the above is rejected before `prepare`**, with a
 bounded internal reason in the repository's established kebab-case
@@ -1604,7 +1717,10 @@ authorizes activation, not the provisional selection by itself.
    still-unavailable **active-version** document, inventory or provenance
    (step 6) after that bounded budget aborts this season's cutover with no DO
    state written (step 10); legacy pointers remain authoritative and mutators
-   resume exactly as before the attempt. A stale legacy pointer read can never
+   resume exactly as before the attempt. **A selected `activeVersion` in the
+   sidecar-required namespace whose sidecar is absent after that budget aborts
+   the cutover**, exactly like any other unresolvable active provenance — it is
+   never diverted onto the legacy fallback (step 6). A stale legacy pointer read can never
    silently substitute a different version here, because migration never reads
    the live pointer keys at all past step 1.
 
@@ -1633,21 +1749,31 @@ authorizes activation, not the provisional selection by itself.
    provenance** (D8, "Rollback's source-ordering provenance") — one rule, two
    callers, never two rules that can drift apart:
    - **A valid `__publication_metadata` sidecar** (D3) for the selected
-     version is used as-is. A season being cut over may already have one if
-     its selected version was itself published by a rollback or a publication
-     that ran after this record existed.
-   - **An absent sidecar** — the expected state for a legacy release
-     predating this record — permits the **legacy uniform-document fallback**:
-     validate that `meta.sourceUpdatedAt` is uniform across **every** document
-     in the selected `activeVersion` and import that single value. The current
-     generator writes one release-wide `sourceUpdatedAt` value into every
-     document of a release, so a uniform value is expected.
+     version is used as-is, **whichever namespace its identifier belongs to**.
+     A season being cut over may already have one if its selected version was
+     itself published by a rollback or a publication that ran after this record
+     existed.
+   - **An absent sidecar on a legacy-format version** — the expected state for
+     a release predating this record — permits the **legacy uniform-document
+     fallback**: validate that `meta.sourceUpdatedAt` is uniform across
+     **every** document in the selected version and import that single value.
+     The current generator writes one release-wide `sourceUpdatedAt` value into
+     every document of a release, so a uniform value is expected.
+   - **An absent sidecar on a sidecar-required (`pm1-…`) version fails
+     closed.** Such a version could not have finalized without the record, so
+     `null` means not-currently-readable, never never-written; the fallback is
+     **not** available to it, even if its documents happen to carry a uniform
+     `meta.sourceUpdatedAt` (which, post-cutover, is a per-key activation
+     timestamp — D3, D4).
    - **A malformed sidecar fails closed.** **An unreadable sidecar fails
      closed** — an unreadable record is never treated as an absent one, so a
      read failure can never silently divert migration onto the legacy
      document-inference path.
    - **Non-uniform, missing or malformed legacy document timestamps fail
      closed** — migration does not arbitrarily choose one of them.
+
+   **Eligibility for the fallback is decided by the version-format
+   discriminator (D3), never by the KV read returning `null`.**
 
    Any fail-closed outcome aborts this season's cutover (step 10) with no DO
    state written. **The migration never creates or mutates a
@@ -1683,7 +1809,11 @@ authorizes activation, not the provisional selection by itself.
    - if previous validation **fails**, or the checkpoint named no previous
      version at all, its observations are **omitted** from the seed and step
      10 commits the authoritative `previousVersion` as **`null`** — the
-     active-version migration continues unaffected either way.
+     active-version migration continues unaffected either way. **A selected
+     `previousVersion` in the sidecar-required namespace whose sidecar is
+     absent is one such failure**: it is omitted and seeded as `null` under
+     this same best-effort rule, never rescued by the legacy fallback and never
+     escalated into a cutover abort.
 
    **A previous version that did not validate is never committed as an
    authoritative rollback target.** Atomically seeding a known-invalid pointer
@@ -2059,12 +2189,20 @@ of the cutover sequence above).
   - a selected active version carrying a **valid** `__publication_metadata`
     sidecar imports that value as `committedSourceOrderingInput`, without
     inspecting document timestamps at all;
-  - a selected active version with an **absent** sidecar and **uniform**
-    legacy `meta.sourceUpdatedAt` across every inventory-named document
-    imports that single value;
-  - a selected active version with an absent sidecar and **two different**
-    legacy `meta.sourceUpdatedAt` values aborts migration (no DO state
-    written) rather than importing an arbitrarily-chosen one;
+  - a selected **legacy-format** active version with an **absent** sidecar and
+    **uniform** legacy `meta.sourceUpdatedAt` across every inventory-named
+    document imports that single value;
+  - a selected **legacy-format** active version with an absent sidecar and
+    **two different** legacy `meta.sourceUpdatedAt` values aborts migration (no
+    DO state written) rather than importing an arbitrarily-chosen one;
+  - a selected active version in the **`pm1-…` namespace** with an **absent**
+    sidecar aborts migration, proven to still abort when its documents carry a
+    uniform `meta.sourceUpdatedAt` — the discriminator, not the KV `null`,
+    decides fallback eligibility;
+  - a selected **`pm1-…`** `previousVersion` with an absent sidecar is
+    **omitted and seeded as `null`**, and does not abort the active-version
+    migration — the same best-effort rule as any other previous-validation
+    failure;
   - a **malformed** sidecar aborts migration, and is proven **not** to fall
     back to document inference;
   - an **unreadable** sidecar aborts migration, and is likewise proven **not**
@@ -2240,6 +2378,9 @@ rather than by additional state-machine logic layered on the same KV write.
 | **Publishing `sourceOrderingInput` in the public snapshot documents, or overloading `meta.sourceUpdatedAt` to carry it** | **Rejected.** It would add a public contract field for an internal admission input (no client needs it), and `meta.sourceUpdatedAt`'s post-cutover meaning is already fixed as that key's per-key `snapshotObservedAt` (D4, [ADR 0020](0020-provider-source-observation-and-reconciliation.md) D1.8-D1.10) — overloading it would destroy the per-key activation semantics the whole observation clock depends on. |
 | **Adding the metadata record to `__inventory`, or reshaping `__inventory` into an object carrying it** | **Rejected.** `__inventory` is the list of **public document names**, consumed today by route mapping, purge expansion and completeness assessment; adding an internal record to it would make every one of those consumers responsible for filtering it out, and reshaping it would be a breaking migration for existing inventory readers for no gain. The sidecar is a sibling key under the same version prefix instead (D3). |
 | **Backfilling a `__publication_metadata` record onto an already-existing legacy version during migration** | **Rejected.** Those versioned keys are immutable by design (ADR 0007), a legacy version legitimately has no such record, and writing one would mutate a historical artifact this design treats as fixed. The legacy uniform-document fallback (D8, D12 step 6) resolves such a version's provenance without touching it, and any rollback of it writes new-format provenance into the **new** version it creates. |
+| **Inferring "this version predates the sidecar" from the sidecar key reading `null`** | **Rejected — undecidable, and unsafe in both directions.** Workers KV document storage stays eventually consistent (ADR 0010), so a written-but-not-yet-propagated record reads exactly like one that was never written; D6 already treats "named but not yet readable" as a real state. Absence therefore cannot distinguish a legacy version from a new-format version whose record has not arrived, and guessing "legacy" would run document inference against a release that has an authoritative value. Replaced by the explicit `pm1-…` version namespace (D3): the identifier says whether a record was required, and the KV read says only whether it is currently readable. |
+| **Using uniformity of `meta.sourceUpdatedAt` as the legacy discriminator** | **Rejected — it is not a discriminator at all.** D4 assigns every changed, new or restored key admitted in the same `prepare` call the same freshly computed timestamp, so a post-cutover release in which every key changed is *uniform* across its documents. That uniform value is a per-key activation timestamp, not a release-wide `sourceOrderingInput`; accepting it would install a silently wrong committed ordering baseline for every subsequent ordinary publication. Uniformity is a validity check *within* the legacy fallback, never the test for entering it. |
+| **A durable per-season "sidecar era began at" record, or a cutover-time flag, as the discriminator** | **Rejected for this decision.** It would put the answer in mutable per-season state that a rollback to a version older than the flag still could not interpret, add a value migration must seed correctly for the discriminator itself to be trustworthy, and make provenance depend on reading two things instead of one. The version identifier already travels with every artifact that needs classifying — including in an operator's external records — and is immutable by construction. |
 | **Treating an unreadable metadata record as an absent one** | **Rejected.** An unreadable read says nothing about the version — including whether it ever recorded a sidecar — so silently selecting the legacy document-inference path on a read failure could publish a document-derived value for a version that had an authoritative one. D8 keeps *absent*, *malformed* and *unreadable* as three distinct outcomes, exactly as `version-inventory.ts` already does for inventories. |
 | **An unbounded per-key tombstone history** (retaining every withdrawn key's last `snapshotObservedAt` indefinitely, keyed by document identity, instead of one season-wide scalar) | **Rejected — unnecessary for the property needed.** A per-key floor only needs to be *at least as high* as every value the sequencer has itself authoritatively committed for any key this season to keep a restored key's timestamp ahead of anything a client of **post-cutover** history could hold; a single monotonic `seasonSnapshotObservedAtHighWaterMark` (D2, D4) already provides that floor for every key, current or withdrawn, for that post-cutover history, without storage proportional to how many distinct keys have ever existed or been withdrawn and restored. Coverage of **pre-cutover, unenumerable** history is a separate question this scalar alone does not answer — that is D12's migration seed and its historical-floor activation precondition, not a larger in-DO tombstone structure; an unbounded per-key tombstone map would not close that gap either, and would only reintroduce the unbounded-history growth D3's capacity argument exists to avoid, for a property one constant-size scalar already secures for the history it does cover. |
 
@@ -2403,6 +2544,17 @@ substitutes for the other, and no single test may claim to cover both.
 
 **Per-version publication-metadata tests (D3, D8):**
 
+*Version namespace (D3):*
+
+- **Every** sidecar-aware ordinary publication mints its candidate in the
+  `pm1-…` namespace; no code path in the new protocol can emit an unmarked
+  version.
+- **Every** rollback republication mints its **destination** version in that
+  namespace, including when its source is a legacy-format version.
+- The marker never reaches a public document body, never enters the
+  `snapshotRevision` canonical input, never becomes an `__inventory` member,
+  and never expands into a public route or cache-invalidation URL.
+
 *Ordinary publication:*
 
 - The `__publication_metadata` sidecar is written **before** any
@@ -2424,19 +2576,33 @@ substitutes for the other, and no single test may claim to cover both.
 - Rollback reads the historical `sourceOrderingInput` from the **target
   version's** sidecar, and passes exactly that value to `prepare`.
 - Rollback republishes that same value into the **new** version's own sidecar.
-- A **missing** sidecar on a version known to require the new format rejects
-  the target before `prepare`, with the bounded reason.
-- A **malformed** sidecar rejects the target.
-- An **unreadable** sidecar fails closed — proven **not** to be treated as
-  absent, and proven **not** to fall through to document inference.
+- A `pm1-…` target with a **valid** sidecar succeeds.
+- A `pm1-…` target with an **absent** sidecar rejects before `prepare`, with
+  the bounded reason — **proven to still reject when every one of its documents
+  carries a uniform, valid `meta.sourceUpdatedAt`**, which is precisely the
+  case document inference would otherwise have accepted.
+- A **transient `null`** read for a `pm1-…` sidecar (a simulated
+  not-yet-propagated read, followed by a readable one) never selects the legacy
+  fallback — the first read rejects rather than inferring from documents.
+- A **valid** sidecar on a **legacy-format** identifier is used as-is; the
+  discriminator is not consulted when a valid record exists.
+- A **malformed** sidecar rejects the target, in either namespace.
+- An **unreadable** sidecar fails closed in either namespace — proven **not**
+  to be treated as absent, and proven **not** to fall through to document
+  inference.
 - No provider port is invoked on any of these paths.
 
 *Legacy rollback:*
 
-- An **absent** sidecar plus **uniform** `meta.sourceUpdatedAt` across every
-  inventory-named document resolves successfully to that value.
+- A **legacy-format** identifier with an **absent** sidecar plus **uniform**
+  `meta.sourceUpdatedAt` across every inventory-named document resolves
+  successfully to that value.
 - The derived legacy value is written into the **new** rollback version's
-  sidecar, so the rollback's own output carries new-format provenance.
+  sidecar, and that destination version is itself `pm1-…`, so the rollback's
+  own output carries new-format provenance and is decidable from then on.
+- A **legacy-format** identifier whose sidecar is **malformed** or
+  **unreadable** fails closed — the legacy namespace does not weaken the
+  malformed/unreadable rules, it only makes the *absent* case eligible.
 - **Non-uniform** document timestamps reject the target; no document is
   chosen arbitrarily.
 - A **missing** `meta.sourceUpdatedAt` on any inventory-named document
@@ -2572,11 +2738,23 @@ platform guarantee:
   with retained versions exactly as document storage already does — and it
   adds nothing to the Durable Object's bounded per-season state.
 - **Versions predating the sidecar remain rollback-able** through a bounded
-  legacy fallback (D8): a genuinely absent record permits deriving the value
-  from the target's own uniformly-written document timestamps, while a
-  malformed or unreadable record fails closed. Migration uses the identical
-  rule (D12 step 6), and never backfills metadata onto an existing historical
-  version.
+  legacy fallback (D8): an absent record **on a legacy-format identifier**
+  permits deriving the value from the target's own uniformly-written document
+  timestamps, while a malformed or unreadable record fails closed. Migration
+  uses the identical rule (D12 step 6), and never backfills metadata onto an
+  existing historical version.
+- **Every version this protocol creates is minted in a reserved `pm1-…`
+  namespace** (D3), so a reader can tell from the immutable identifier alone
+  whether a sidecar was required. This is what makes the legacy fallback
+  *decidable*: absence of the key can never establish legacy status, because
+  KV propagation lag produces the same read, and because a post-cutover release
+  whose keys all changed carries a uniform `meta.sourceUpdatedAt` that would
+  make document inference appear to succeed while installing a per-key
+  activation timestamp as the release-wide ordering baseline. An absent sidecar
+  on a `pm1-…` version fails closed everywhere — rollback rejects the target,
+  migration aborts for a selected active version, and a selected previous
+  version is omitted and seeded as `null`. The marker is internal: no public
+  contract field, no `snapshotRevision` input, no inventory member, no route.
 - **D12's migration now distinguishes mandatory from best-effort validation
   explicitly.** The selected `activeVersion`'s inventory, documents and
   provenance must all validate or cutover aborts; the optional

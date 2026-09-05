@@ -73,6 +73,32 @@ invalidation set, it is written once before the commit and never mutated, and
 it is removed with its version by the same cleanup path. **Nothing writes or
 reads it today.**
 
+**Version identifiers gain a reserved namespace, so the record's absence is
+decidable.** Every version that future protocol creates — ordinary publication
+and rollback destination alike — is minted as:
+
+```text
+pm1-<opaque existing version component>
+```
+
+A reader needs this because the sidecar key reading `null` cannot distinguish
+"this version predates the record" from "the record was written and has not yet
+propagated to this edge location": KV document storage stays eventually
+consistent ([ADR 0010](../adr/0010-workers-kv-consistency-limitation.md)).
+Uniform `meta.sourceUpdatedAt` cannot distinguish them either — once the
+observation clock is active, every key changed in one `prepare` call shares a
+timestamp, so a release in which everything changed is uniform, and that value
+is a per-key activation time rather than a release-wide ordering input. The
+identifier namespace answers the question the storage read cannot.
+
+Today's `releaseVersionFor` output (`<ISO-8601 stripped of "-:.TZ">-<8 hex>`)
+always begins with a digit, so every already-published version is legacy-format
+by construction and none can collide with the prefix. The marker is colon-free,
+so `parseVersionFromSnapshotKey` is unaffected; no version-format validator
+exists to relax; and release version identifiers are internal — they appear in
+internal results and structured logs, never as a public API field, and this
+adds none.
+
 ## Publication Algorithm
 
 1. Generate a unique immutable release version.
@@ -405,6 +431,7 @@ obtain candidate data (provider fetch, or a historical version for rollback)
   -> validate; write every versioned document + inventory to KV (unchanged),
      recording which planned writes completed successfully
   -> write __publication_metadata for this version (the same orderingInput)
+     (candidate version was minted as pm1-<...>, the sidecar-required namespace)
   -> only once every planned write has succeeded, produce completionAttestation
   -> DO.finalize(season, token, completionAttestation)
        <- authoritative active/previous transition, one atomic DO-storage write
@@ -631,11 +658,14 @@ active-version migration, and a previous version that does not validate is
 omitted from the high-water-mark seed **and** committed as `null` rather than
 seeded as a known-invalid authoritative rollback target. The checkpoint itself
 never carries a `sourceOrderingInput`: it identifies the selected version, and
-that version's own `__publication_metadata` — or, for a legacy version that
-predates it, its own validated uniform document timestamps — supplies the
-provenance, under exactly the rules "Rollback republication" below applies.
-Migration never creates or mutates a metadata record under an already-existing
-historical version.
+that version's own `__publication_metadata` — or, for a **legacy-format**
+version that predates it, its own validated uniform document timestamps —
+supplies the provenance, under exactly the rules "Rollback republication" below
+applies, including that a `pm1-…` version with an absent record fails closed
+rather than falling back. A selected **active** version in that state aborts the
+cutover; a selected **previous** version in that state is omitted and seeded as
+`null` under the existing best-effort rule. Migration never creates or mutates a
+metadata record under an already-existing historical version.
 
 Committing that seed and switching authority are **two separate durable
 steps, not one atomic step**: committing the seed records a
@@ -716,13 +746,19 @@ classifies the target's `__publication_metadata` exactly the way this codebase
 already classifies a stored inventory — `documents`/`absent`/`malformed`/
 `unreadable`, "One validated boundary for persisted inventories" above:
 
-- a **valid** record supplies the value directly;
-- an **absent** record means a legacy release predating this design, and
-  permits one bounded fallback: read every document the target's inventory
-  names and require a single uniform, valid `meta.sourceUpdatedAt` across all
-  of them — the invariant today's generator already produces, since one
-  `sourceUpdatedAt` is written per release. That uniform value becomes the
-  target's legacy ordering input;
+- a **valid** record supplies the value directly, whichever namespace the
+  target identifier belongs to — a valid record is authoritative and the
+  namespace is not consulted;
+- an **absent** record on a **legacy-format** identifier means a release
+  predating this design, and permits one bounded fallback: read every document
+  the target's inventory names and require a single uniform, valid
+  `meta.sourceUpdatedAt` across all of them — the invariant today's generator
+  already produces, since one `sourceUpdatedAt` is written per release. That
+  uniform value becomes the target's legacy ordering input;
+- an **absent** record on a **`pm1-…`** identifier **fails closed**. Such a
+  version could not have been finalized without the record, so `null` means
+  "not readable right now", never "never written" — and the fallback is
+  unavailable to it even if its documents happen to be uniform;
 - a **malformed** record, an **unreadable** record, or non-uniform/missing
   legacy timestamps all **fail closed**: the rollback target is rejected
   before `prepare`, with a bounded internal reason (for example
@@ -730,11 +766,15 @@ already classifies a stored inventory — `documents`/`absent`/`malformed`/
   stored value in a response or log. An unreadable record is never treated as
   an absent one.
 
+**Eligibility for the fallback comes from the version-format discriminator,
+never from the read returning `null`.**
+
 The resolved value is passed to `prepare`, written into the **new** rollback
 version's own `__publication_metadata`, and committed as the new
-`committedSourceOrderingInput` on success — so a rollback of a legacy release
-produces new-format provenance going forward, and no existing historical
-version is ever mutated to backfill one.
+`committedSourceOrderingInput` on success. The rollback's destination version is
+always minted in the `pm1-…` namespace, even when its source is legacy-format —
+so a rollback of a legacy release produces new-format provenance going forward,
+and no existing historical version is ever mutated to backfill one.
 
 ## Snapshot revision (`snapshotRevision`)
 
