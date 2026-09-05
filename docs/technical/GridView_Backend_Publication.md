@@ -453,14 +453,19 @@ D1.10 identified as unclosable under the current architecture:
   existing rule, generalized from a per-key floor to a durable, per-season
   floor: per-key state for a key not in the current active inventory is not
   retained (below), so a restored key has no per-key "previous" value to
-  compare against; `seasonSnapshotObservedAtHighWaterMark` — the greatest
-  `snapshotObservedAt` ever committed for **any** key that season — is read
-  and advanced inside the same transaction instead, guaranteeing a restored
-  key's fresh value exceeds every timestamp an offline client could already
-  hold for it. See
+  compare against; `seasonSnapshotObservedAtHighWaterMark` — a durable,
+  monotonically non-decreasing **assignment floor**, guaranteed at least
+  the greatest `snapshotObservedAt` the sequencer has itself committed for
+  any key that season, and possibly higher after a conservative migration
+  seed — is read and advanced inside the same transaction instead. This is
+  a **complete** floor against every offline client whose cached copy is
+  itself post-cutover sequencer-published content; its coverage of a client
+  holding a pre-cutover-era copy is bounded by what ADR 0025 D12's migration
+  seed imported and by whether D12's pre-cutover historical-floor
+  activation precondition has been established for that season. See
   [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
-  D2-D4 for the full rule and why this closes the withdrawn-key gap without
-  unbounded per-key tombstone history.
+  D2-D4, D12 for the full rule, the exact floor semantics, and why this
+  closes the withdrawn-key gap without unbounded per-key tombstone history.
 
 Timestamps are assigned **before** final document construction, because
 `meta.sourceUpdatedAt` is baked into each immutable document.
@@ -585,11 +590,21 @@ steps, not one atomic step**: committing the seed records a
 `cutoverState` of `seeded` — legacy pointers remain authoritative and this
 season's mutators stay paused — and only a later, separate, idempotent
 transition to `cutoverState: 'active'` switches public and administrative
-authority to the sequencer and resumes those mutators. After that switch, no
-publication or rollback writes the legacy pointers and no router reads them
-for authority; they are not kept as a live best-effort projection, since a
-second writer or a second thing anything still consults would recreate the
-ambiguity this design removes.
+authority to the sequencer and resumes those mutators. Migration step 1 only
+**closes new legacy admission**; it is not a proven drain of whatever
+publication or rollback was already admitted before it closed. After the
+switch, no *newly admitted* publication or rollback writes the legacy
+pointers, and no router or sequencer-authorized path ever reads them for
+authority again — a legacy-path invocation admitted before admission closed
+may still complete late and write a legacy pointer, but that write is inert
+for authority purposes, because the sequencer's commit and every
+post-activation read path never consult the legacy pointers at all. They
+are not kept as a live best-effort projection either way — a second writer
+or a second thing anything still consults would recreate the ambiguity this
+design removes. See
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D12, "Already-admitted legacy invocations, after the boundary" for the full
+treatment.
 
 Activating a season additionally requires resolving a **pre-cutover
 historical-floor precondition**: the seed is not guaranteed to dominate a

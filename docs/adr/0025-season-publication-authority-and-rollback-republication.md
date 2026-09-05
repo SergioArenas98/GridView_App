@@ -304,17 +304,39 @@ source** for:
   switch away from legacy Workers KV pointers — `seeded` is a distinct,
   pre-activation state in which legacy pointers remain authoritative by
   design (see D12, "The cutover lifecycle").
-- `seasonSnapshotObservedAtHighWaterMark` — one durable scalar per season: the
-  greatest `snapshotObservedAt` value ever authoritatively committed for
-  **any** document key in that season, past or present. It is
-  monotonically non-decreasing, is **never removed or lowered merely because
-  a document key leaves the current active inventory** (unlike the two
-  per-key maps above, which are scoped to the current manifest), and is
-  advanced only by a successful `prepared → committed` transition (D4, D9) —
-  never by a cancelled, expired or superseded `prepared` operation. See D3
-  for why this is a bounded, constant-size addition, and D4/D8 for the exact
-  assignment rule it exists to make safe across document withdrawal and
-  restoration.
+- `seasonSnapshotObservedAtHighWaterMark` — one durable scalar per season: a
+  durable, monotonically non-decreasing **assignment floor**, not
+  necessarily an exact equality with any single committed value. It is
+  guaranteed to be **at least** the greatest `snapshotObservedAt` value the
+  sequencer has itself authoritatively committed for any document key in
+  that season, past or present (unlike the two per-key maps above, which
+  are scoped to the current manifest, this scalar is **never removed or
+  lowered merely because a document key leaves the current active
+  inventory**). It **may be greater** than every value actually committed to
+  a document, because D12's migration may seed it conservatively — from the
+  migration clock or an audited upper bound — rather than only from
+  imported document timestamps. After activation, every successful
+  `prepared → committed` transition (D4, D9) atomically advances it to
+  `max(prior floor, every per-key snapshotObservedAt value just committed)`
+  — never by a `prepare` call, a cancellation, an expiry, a supersession or
+  a failed publication.
+
+  **What this floor actually guarantees, stated precisely:**
+  - it provides a **complete** floor for all **post-cutover** history this
+    sequencer has itself committed — an offline client that only ever holds
+    a snapshot the sequencer itself published is always safe against it
+    (D4, D8);
+  - its protection over **pre-cutover, unenumerable** history is bounded by
+    whatever D12's migration seed actually imported or conservatively
+    assumed for that season, and is only as complete as D12's **pre-cutover
+    historical-floor activation precondition** establishes — this scalar
+    does not, by itself, prove coverage that precondition has not yet
+    established.
+
+  See D3 for why this is a bounded, constant-size addition, D4/D8 for the
+  exact assignment rule it exists to make safe across document withdrawal
+  and restoration, and D12 for the activation precondition that scopes its
+  pre-cutover guarantee.
 - the current publication-operation record in full — `operationKind`, `phase`,
   `priorVersion`, `candidateVersion`, the candidate's per-key
   `snapshotRevision` values, the per-key `snapshotObservedAt` values assigned
@@ -474,13 +496,21 @@ The Durable Object, in one atomic storage transaction:
 
   This is **strictly stronger** than the minimum a per-key floor would give:
   a restored key's fresh value is guaranteed greater than every timestamp
-  this season has ever committed for *any* key, not merely greater than that
-  one key's own (now-discarded) last value, so an offline client holding an
-  older cached copy of that key — from before it was withdrawn — can never
-  see the republished document rejected as stale (ADR 0005 rule 2). It adds
-  exactly one constant-size scalar to the state D3 already bounds; it
-  requires no per-key tombstone history and no change to which keys' state
-  D3 retires.
+  the sequencer has itself authoritatively committed for *any* key this
+  season, not merely greater than that one key's own (now-discarded) last
+  value. For a season fully activated post-cutover, this alone is
+  sufficient: an offline client can only ever have cached a snapshot the
+  sequencer itself published, so a restored key can never be rejected as
+  stale by such a client (ADR 0005 rule 2). Extending that same guarantee to
+  a client holding a snapshot from **before this season's cutover** —
+  content the sequencer never itself committed — additionally depends on
+  D12's migration seed dominating that pre-cutover timestamp, which is
+  exactly what D12's pre-cutover historical-floor activation precondition
+  exists to establish before activation is permitted; this scalar does not,
+  by itself, prove that for a season whose precondition remains unresolved.
+  It adds exactly one constant-size scalar to the state D3 already bounds;
+  it requires no per-key tombstone history and no change to which keys'
+  state D3 retires.
 - allocates a new, strictly-increasing `operationEpoch` for this season and a
   fresh caller-facing `operationToken`;
 - persists a `prepared` operation record containing **everything `finalize`
@@ -832,10 +862,15 @@ inputs only, after cutover**:
 - At staging activation (a separate future authorization — see "Activation
   boundary"), their last valid values seed the new Durable Object's state
   through a **one-time, operator-controlled migration procedure**.
-- **After successful cutover:** no publication or rollback operation writes
-  these keys; public routing does not read them; they are **not** a fallback
-  authority under any circumstance, including Durable Object unavailability
-  (D6).
+- **After successful cutover:** no *newly admitted* publication or rollback
+  operation writes these keys — new legacy admission is closed at D12
+  migration step 1, before cutover — and public routing does not read them;
+  they are **not** a fallback authority under any circumstance, including
+  Durable Object unavailability (D6). A legacy-path invocation admitted
+  before that admission closure may still complete late and write one of
+  these keys; that write is inert precisely because nothing authoritative
+  reads it any longer (see D12, "Already-admitted legacy invocations, after
+  the boundary").
 - They **may** be retained temporarily, unwritten, for audit or for rolling
   back *the deployment of this mechanism itself*, then retired under an
   explicit future cleanup decision.
@@ -893,10 +928,14 @@ version. It is **republication**:
    currently active revision at all** — a key this rollback restores that is
    currently withdrawn from the active inventory is, by D4's rule, always a
    fresh activation, never a comparison against that key's own historical
-   value, however recently or long ago it was last observed. This is what
-   guarantees a rollback can never hand an offline client, holding an older
-   cached copy of a since-withdrawn key, a "restored" document timestamped
-   earlier than what that client already has.
+   value, however recently or long ago it was last observed. For a
+   since-withdrawn key whose withdrawal, and every client's cached copy of
+   it, are themselves post-cutover, this guarantees the rollback can never
+   hand an offline client a "restored" document timestamped earlier than
+   what that client already has; the same guarantee for a client holding a
+   pre-cutover-era copy depends additionally on D12's pre-cutover
+   historical-floor activation precondition, not on this scalar alone
+   (see D4).
 9. Call `prepare` with `operationKind: 'rollback-republication'` and the
    `expectedManifestCommitment` from step 4, then write the complete new
    immutable version and inventory to KV with the timestamps `prepare`
@@ -1207,14 +1246,20 @@ what the checkpoint is, and the latter is what this migration must not do.
 
 **The per-season migration procedure, for every season being activated:**
 
-1. **Disable new legacy mutation admission for this season and confirm the
-   mutation-quiescence boundary** — no publication or rollback mutator may
-   admit a new candidate against the legacy pointers once this step
-   completes. If the repository cannot establish or confirm this boundary
+1. **Close new legacy mutation admission for this season.** No publication
+   or rollback mutator may be *admitted* against the legacy pointers once
+   this step completes. This is an **admission-closure boundary, not a
+   quiescence guarantee**: it stops new legacy operations from starting; it
+   does **not**, by itself, prove that a publication or rollback already
+   admitted before this step completed has finished. See "Already-admitted
+   legacy invocations, after the boundary" below for why a late-completing
+   one is harmless to this design's authority regardless. If the repository
+   cannot establish or confirm even this narrower admission-closure boundary
    (for example, a mutator path that cannot be paused, or a pause that
    cannot be verified), activation for that season **remains blocked** —
-   this is never satisfied by a fixed sleep presented as proof of
-   quiescence.
+   this is never satisfied by a fixed sleep presented as proof that
+   admission has closed, and this boundary is never described as proving
+   that every already-admitted invocation has drained.
 2. **Read the checkpoint's selected `activeVersion` (and, if named,
    `previousVersion`) by exact versioned key** —
    `snapshot:{season}:{version}:*` — never through the live
@@ -1297,6 +1342,53 @@ what the checkpoint is, and the latter is what this migration must not do.
     on step 10 alone, since `seeded` is not yet `active` (see "The cutover
     lifecycle").
 
+**Already-admitted legacy invocations, after the boundary.** Closing new
+admission (step 1) says nothing about a publication or rollback that was
+admitted through the legacy path *before* the boundary closed and is still
+executing. This design does not claim, and does not need, a proof that such
+an invocation has drained:
+
+- it may still, after the boundary closes and even after this season
+  reaches `seeded` or `active`, write one or more immutable versioned
+  documents, write the legacy `active:{season}`/`previous:{season}`
+  pointers, execute its own existing cache purge, and return its own legacy
+  result to its caller — none of that is fenced or prevented by this
+  migration;
+- **none of it can regain authority once `cutoverState: active`**, because:
+  - the sequencer's `finalize` commit (D2, D4, D9) never reads or writes
+    the legacy pointers at all — there is no code path by which a late
+    legacy write could be observed by the transition that decides
+    authority;
+  - a post-activation public or administrative router never consults the
+    legacy pointers for authority (D6, D7) — a late legacy pointer write is
+    simply never read by anything authoritative again;
+  - a late-written immutable versioned document remains **unreachable**
+    unless it is later explicitly selected by name (an operator rollback
+    target, or a future migration checkpoint) — ordinary readers only ever
+    resolve through the sequencer once `active`;
+  - a late cache purge changes nothing about authority: it only causes a
+    future public request to be served fresh, which then resolves through
+    the authoritative sequencer-backed router exactly like any other
+    request;
+- this is precisely **why** the design does not need to infer Workers KV
+  convergence, or fence a late legacy pointer write, to be safe — safety
+  here rests on the sequencer and every post-activation reader never
+  consulting the legacy pointers at all, not on legacy activity having
+  provably stopped.
+
+**This is an operational caution, not a correctness gap.** An operator
+should still wait for, or otherwise account for, known in-flight legacy
+operations before approving a cutover checkpoint — a late legacy write that
+lands after cutover is harmless to authority, but it can still produce a
+misleading operational picture (a legacy pointer that appears to move after
+migration) and unreferenced orphan data, both avoidable by ordinary
+operational care rather than by a stronger guarantee this ADR does not make.
+
+**If a future implementation needs a strict zero-in-flight drain guarantee
+instead of this admission-closure model, that guarantee and its supporting
+proof must be supplied by the Integration/Cutover PR that builds it — this
+ADR does not assume one exists today.**
+
 **The cutover lifecycle, stated explicitly rather than assumed atomic.**
 Steps 10 and 11 are two separate durable transitions, not one, and this ADR
 does not claim they are effectively atomic: a crash between them is a real,
@@ -1347,6 +1439,13 @@ Required invariants:
   11 as "effectively atomic" — this two-state `seeded`/`active` split exists
   specifically because this ADR does not assume that single-write property
   holds.
+- **A late-completing, pre-boundary legacy invocation cannot change DO
+  authority in any `cutoverState`.** Its legacy pointer write, if any, is
+  never read by the sequencer's commit or by any post-activation reader —
+  see "Already-admitted legacy invocations, after the boundary" above. This
+  holds in `uninitialized`, `seeded` and `active` alike, because the
+  sequencer never reads the legacy pointers for authority in any of the
+  three states once it exists for that season.
 
 **The pre-cutover historical-floor activation precondition.** An earlier
 draft claimed that `activeVersion`, `previousVersion` and the migration's
@@ -1522,6 +1621,30 @@ of the cutover sequence above).
     pointers remain authoritative and this season's mutators stay paused in
     `seeded`, and the Durable Object is authoritative with mutators resumed
     only in `active`.
+- **Already-admitted legacy invocation tests**, each proving a pre-boundary
+  legacy invocation's late completion never regains or affects DO authority:
+  - a legacy invocation admitted before step 1's admission closure that only
+    completes (writes its immutable documents and its legacy pointer) after
+    this season reaches `seeded` — the DO's seeded state (`activeVersion`,
+    `previousVersion`, `committedSourceOrderingInput`, per-key state, HWM) is
+    unchanged by that completion;
+  - the same scenario, but the late completion lands after this season
+    reaches `active` — the DO's active state and every subsequent public
+    lookup are unaffected, and the router never observes the legacy pointer
+    change;
+  - the late legacy pointer write itself is proven **never read** by any
+    sequencer-authorized code path in either case;
+  - the late invocation's immutable versioned documents are proven
+    **unreachable** through ordinary public/admin resolution after
+    activation, remaining reachable only if later explicitly selected by
+    name;
+  - the late invocation's own cache purge is proven to leave the
+    sequencer-authoritative DO state untouched, only affecting which cached
+    response a future request receives before it re-resolves through the
+    authoritative router;
+  - a new legacy publication or rollback attempted after step 1's admission
+    closure is proven **rejected outright**, distinguishing "new admission
+    rejected" from "already-admitted invocation still running."
 - **Cutover refuses activation when the historical-floor precondition is
   unresolved**: a test asserting that step 11 (or an equivalent activation
   gate) requires one of "The pre-cutover historical-floor activation
@@ -1595,7 +1718,7 @@ rather than by additional state-machine logic layered on the same KV write.
 | **An application-level in-memory single-flight guard (`commitPromise`) as a correctness-critical mechanism** | **Rejected — no longer needed, not merely unused.** It was necessary only while the critical section spanned an awaited external Workers KV write, which an ordinary input gate does not cover. D2 removed that external write; `finalize`'s entire critical section is now one Durable Object storage transaction, which an ordinary input gate already serializes (D9). Retaining the guard would be leftover machinery from the rejected KV-authoritative design. |
 | **An ordinary source-ordering staleness rejection applied unconditionally to every `prepare` call, including rollback** | **Rejected.** It would make the authorized Model 1 (D8) impossible to execute, since a rollback's historical ordering input is expected to be older than or equal to what is currently active. Replaced by the bounded `operationKind` exemption in D4, which narrows the exception to rollback admission only and leaves ordinary publication's rejection untouched. |
 | **Claiming atomicity between a Durable Object cancellation check and an external Workers KV deletion during orphan cleanup** | **Rejected — not implementable.** No cross-product atomicity between Durable Object storage and Workers KV exists (§"Safety reasoning" is this ADR's own premise). Replaced in D5 by a non-atomic two-step sequence relying on `cancelled` being a terminal state, with the external KV deletion remaining best-effort. |
-| **An unbounded per-key tombstone history** (retaining every withdrawn key's last `snapshotObservedAt` indefinitely, keyed by document identity, instead of one season-wide scalar) | **Rejected — unnecessary for the property needed.** A per-key floor only needs to be *at least as high* as every value ever committed for any key that season to keep a restored key's timestamp ahead of anything an offline client could hold; a single monotonic `seasonSnapshotObservedAtHighWaterMark` (D2, D4) already provides that floor for every key, current or withdrawn, without storage proportional to how many distinct keys have ever existed or been withdrawn and restored. Retaining a growing per-key tombstone map would reintroduce the unbounded-history growth D3's capacity argument exists to avoid, for a safety property one constant-size scalar already secures. |
+| **An unbounded per-key tombstone history** (retaining every withdrawn key's last `snapshotObservedAt` indefinitely, keyed by document identity, instead of one season-wide scalar) | **Rejected — unnecessary for the property needed.** A per-key floor only needs to be *at least as high* as every value the sequencer has itself authoritatively committed for any key this season to keep a restored key's timestamp ahead of anything a client of **post-cutover** history could hold; a single monotonic `seasonSnapshotObservedAtHighWaterMark` (D2, D4) already provides that floor for every key, current or withdrawn, for that post-cutover history, without storage proportional to how many distinct keys have ever existed or been withdrawn and restored. Coverage of **pre-cutover, unenumerable** history is a separate question this scalar alone does not answer — that is D12's migration seed and its historical-floor activation precondition, not a larger in-DO tombstone structure; an unbounded per-key tombstone map would not close that gap either, and would only reintroduce the unbounded-history growth D3's capacity argument exists to avoid, for a property one constant-size scalar already secures for the history it does cover. |
 
 ## Failure-state model
 
@@ -1900,7 +2023,8 @@ platform guarantee:
 | A future phase needs cross-season coordination (e.g. a shared content manifest spanning seasons) | Reopen D1; a single per-season identity may not be the right shape |
 | A future need arises to support rollback to a version this system cannot already name from `activeVersion`/`previousVersion` | Reopen D12; a version-index capability must be designed before such a rollback or migration seed can be honestly claimed safe |
 | A season's pre-cutover historical-floor activation precondition (D12) cannot be established — no historical index/audited bound, no audit disproving the exposure, retained pre-cutover client state exists, and no authorized baseline reset is available | Activation for that season remains blocked; do not activate on an assumption that the seed "probably" dominates unenumerable history |
-| The repository cannot establish or confirm a trustworthy cutover checkpoint, or cannot confirm the mutation-quiescence boundary D12's migration step 1 requires | Activation for that season remains blocked; never substitute a fixed sleep or an unverified legacy-pointer reread for either |
+| The repository cannot establish or confirm a trustworthy cutover checkpoint, or cannot confirm the legacy mutation-admission closure D12's migration step 1 requires | Activation for that season remains blocked; never substitute a fixed sleep or an unverified legacy-pointer reread for either |
+| A future implementation needs a strict zero-in-flight legacy-drain guarantee rather than this admission-closure model | That guarantee and its proof must be supplied by the Integration/Cutover PR that builds it; this ADR does not assume one exists today |
 | A future need arises to turn `committedSourceOrderingInput` into a monotonic upstream-source high-water mark rather than "whatever release is currently active" | Reopen D4/D8; this is a different admission policy requiring its own architectural decision, not assumed by this ADR |
 
 ## References
