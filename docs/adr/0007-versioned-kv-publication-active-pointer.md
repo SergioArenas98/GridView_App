@@ -18,8 +18,11 @@
 > once before commit, and is deleted with its version. So that a later reader
 > can tell whether a given version was _required_ to carry that record — which
 > the key reading `null` can never establish, since KV propagation lag produces
-> the same read — every version created by that future protocol is minted in a
-> reserved `pm1-…` identifier namespace (ADR 0025 D3). Versions published under
+> the same read — every version created by that future protocol is allocated
+> by the sequencer inside `prepare`, never minted by the caller, in a reserved
+> `pm1-…` identifier namespace carrying an injective encoding of the allocating
+> `operationEpoch` (ADR 0025 D3, D4), so no two operations can ever be assigned
+> the same version. Versions published under
 > the scheme below are legacy-format by construction: today's generator emits
 > `<ISO-8601 stripped of "-:.TZ">-<8 hex>`, which always begins with a digit, so
 > no existing version can collide with the reserved prefix. The marker is

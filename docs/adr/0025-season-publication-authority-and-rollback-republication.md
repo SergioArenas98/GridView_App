@@ -181,9 +181,9 @@ accepted:
    seeds both the per-key state and the high-water mark, verifies before any
    authority-mode switch, and aborts that season's cutover — leaving legacy
    pointers authoritative — on any missing, malformed or inconsistent input.
-   The migration's coverage is explicitly bounded to the versions this
-   repository's storage design can already name (`activeVersion`,
-   `previousVersion`) — see D12, "the enumerability limit."
+   The migration's coverage is explicitly bounded to the operator-approved
+   checkpoint inputs (`activeVersion`, `previousVersion`) — see D12, "the
+   completeness limit."
 3. **The future "Failure behavior" section overstated what the atomic commit
    eliminates.** It collapsed today's four pointer-transition outcomes to two
    without noting that only `pointerMaintenance: 'failed'` disappears —
@@ -352,8 +352,12 @@ source** for:
   changes it. It is updated **only** by a successful `finalize`, atomically
   with `activeVersion`, `previousVersion`, the committed per-key state and
   `seasonSnapshotObservedAtHighWaterMark` (D4, D9). An idempotent retry of an
-  already-`committed` `finalize` call returns the already-committed result
-  without advancing or recomputing it. See D4 for the exact admission rule
+  already-`committed` `finalize` call — presented while that operation is
+  still the current durable record — returns the already-committed result
+  without advancing or recomputing it; a retry arriving after a newer
+  `prepare` has superseded that record resolves to D9's bounded `superseded`
+  outcome instead, which likewise never advances or recomputes this field.
+  See D4 for the exact admission rule
   this field makes possible, and D8 for how a successful rollback
   republication updates it. **This field is deliberately not a history, and
   is never a source a rollback can read its target's ordering input back
@@ -515,11 +519,11 @@ this a correctness requirement rather than a nicety:
   publication.
 
 Therefore **the version identifier itself carries the discriminator.** Every
-version created by the sidecar-aware publication protocol is minted in a
-reserved, self-identifying namespace:
+version created by the sidecar-aware publication protocol is allocated by the
+Durable Object inside `prepare` (D4) in a reserved, self-identifying namespace:
 
 ```text
-pm1-<opaque existing version component>
+pm1-<operationEpoch, injectively encoded>-<opaque component>
 ```
 
 `pm1` is "publication metadata, record schema generation 1". The invariant:
@@ -527,6 +531,28 @@ pm1-<opaque existing version component>
 - **Every** ordinary publication and **every** rollback republication created
   after this mechanism activates uses this namespace. A new-format publisher may
   **never** emit an unmarked version.
+- **The candidate version is allocated by the sequencer, never minted by the
+  caller.** `prepare` allocates it in the same atomic transaction that
+  allocates the new `operationEpoch`, and returns it to the caller (D4). No
+  caller supplies, chooses or pre-computes a destination version, and no
+  version exists before an epoch owns it.
+- **Uniqueness is structural, not probabilistic.** The suffix carries an
+  **injective encoding of the newly allocated `operationEpoch`** — distinct
+  epochs therefore always produce distinct version identifiers, by
+  construction. `operationEpoch` is durable and strictly increasing per season
+  (D2), so no two epochs for a season can ever be assigned the same candidate
+  version, and **no version is ever reusable by a later epoch.** Any further
+  opaque material is a Mechanism-PR implementation detail; it may add entropy
+  but the no-reuse property must **never** rest on it, and must **never** rest
+  on an eventually consistent Workers KV preflight read (a `null` list or read
+  is not proof of absence — ADR 0010, D3 above). The encoding must be
+  colon-free for the reason the next-but-one bullet gives.
+- **A retry of the same live operation identity allocates nothing.** A caller
+  replaying `finalize`/`cancel` for the operation that is still the current
+  durable record works against the version that epoch already owns. A
+  genuinely new `prepare` allocates a new epoch and therefore, necessarily, a
+  different version — which is what makes D5's orphan cleanup safe to
+  authorize against a named, retired epoch.
 - The marker is part of the **internal version identifier only**. It is not a
   public document field, not part of `snapshotRevision`, not an `__inventory`
   member, and adds no public API field — release version identifiers are not
@@ -559,11 +585,6 @@ version identifier belongs to (D8).
 The caller (the publisher, driven by the synchronization service or an
 operator rollback request) still:
 
-0. mints the candidate version identifier in the **sidecar-required namespace**
-   (`pm1-…`, above). This happens for every candidate this protocol creates —
-   ordinary publication and rollback republication alike — so that any later
-   reader of this version can tell, from the identifier alone, that a sidecar
-   was required;
 1. obtains normalized candidate data (from the provider path, or — for
    rollback — from a historical version, per §"Rollback Model 1");
 2. computes `snapshotRevision` per document, and — once document identities
@@ -571,23 +592,33 @@ operator rollback request) still:
    called — deterministically enumerates the planned document manifest and
    computes an `expectedManifestCommitment` from it (e.g. the sorted,
    deduplicated document-name list, or a digest of it; the exact shape is a
-   Mechanism-PR detail);
-3. calls `prepare`, passing that `expectedManifestCommitment`;
-4. receives per-key `snapshotObservedAt` assignments back from the DO;
-5. finalizes, validates and writes the immutable versioned documents and
-   inventory to KV, with the assigned timestamps baked into each document's
-   `meta.sourceUpdatedAt`, recording which planned writes completed
-   successfully;
-6. writes the immutable `__publication_metadata` sidecar for this version,
-   carrying the **same** `sourceOrderingInput` it passed to `prepare` — this
-   write is part of the **required publication write set**, not an optional
-   annotation beside it (D4);
+   Mechanism-PR detail). **Every step up to here is version-independent**:
+   the manifest commits to document *names*, not to a destination version,
+   which is exactly why it can be computed before one exists;
+3. calls `prepare`, passing that `expectedManifestCommitment` — and **not** a
+   candidate version, which it neither mints nor chooses;
+4. receives back, from the DO, the allocated `operationEpoch`, the
+   `operationToken`, the **allocated `candidateVersion`** in the
+   sidecar-required namespace (`pm1-…`, above), and the per-key
+   `snapshotObservedAt` assignments. This is the first point at which a
+   destination version exists at all — so that any later reader of this
+   version can tell, from the identifier alone, that a sidecar was required,
+   and so that no version can ever be shared by two epochs;
+5. only now finalizes, validates and writes the immutable versioned documents
+   and inventory to KV **under the version `prepare` allocated**, with the
+   assigned timestamps baked into each document's `meta.sourceUpdatedAt`,
+   recording which planned writes completed successfully;
+6. writes the immutable `__publication_metadata` sidecar for that same
+   allocated version, carrying the **same** `sourceOrderingInput` it passed to
+   `prepare` — this write is part of the **required publication write set**,
+   not an optional annotation beside it (D4);
 7. **only once every planned write has succeeded** — every document, the
    inventory **and** the sidecar — produces a `completionAttestation` carrying
    the manifest commitment for what was actually written, and calls `finalize`
-   with it. A write phase that fails or completes only partially must never
-   produce a `completionAttestation` and must never call `finalize` — an
-   incomplete write is not a candidate for commit.
+   with it, presenting **both** the `operationEpoch` and the `operationToken`
+   it received in step 4 (D9). A write phase that fails or completes only
+   partially must never produce a `completionAttestation` and must never call
+   `finalize` — an incomplete write is not a candidate for commit.
 
 The Durable Object never generates provider data, never validates a document
 body and never stores a complete snapshot payload. Its own storage holds
@@ -650,11 +681,18 @@ Integration PRs inherit them explicitly:**
 
 ### D4. Two-phase publication protocol
 
-#### `prepare(season, operationKind, candidateVersion, perKeyRevisions, sourceOrderingInput, expectedManifestCommitment)`
+#### `prepare(season, operationKind, perKeyRevisions, sourceOrderingInput, expectedManifestCommitment)`
 
 `operationKind` is one of exactly two bounded values: `ordinary-publication`
 or `rollback-republication` (see D8 for what authorizes the second one). It
 is durable, logged (D11) and never inferred after the fact from other fields.
+
+**`candidateVersion` is not a parameter.** The destination version is
+*allocated by this call*, not supplied to it — for both operation kinds,
+through the identical allocation path (D3). A caller that could name its own
+destination could name one a retired epoch already owns, which is exactly the
+reuse D5's orphan cleanup must be able to rule out structurally rather than by
+convention.
 
 The Durable Object, in one atomic storage transaction:
 
@@ -747,6 +785,15 @@ The Durable Object, in one atomic storage transaction:
   state D3 retires.
 - allocates a new, strictly-increasing `operationEpoch` for this season and a
   fresh caller-facing `operationToken`;
+- **allocates this operation's `candidateVersion`, in the same transaction,
+  immediately after the epoch it is derived from** — in the sidecar-required
+  `pm1-…` namespace, carrying an injective encoding of that newly allocated
+  epoch (D3). Because `operationEpoch` is durable and strictly increasing per
+  season, and the encoding is injective, **two distinct epochs for a season
+  can never be assigned the same candidate version**: no version a retired
+  epoch owned is ever reachable again through a later `prepare`. This holds
+  for `ordinary-publication` and `rollback-republication` alike, and does not
+  depend on any Workers KV read, existence check or list;
 - persists a `prepared` operation record containing **everything `finalize`
   will need, and everything a restart between `prepare` and `finalize` must
   not lose**: `{epoch, token, operationKind, priorVersion, candidateVersion,
@@ -757,11 +804,18 @@ The Durable Object, in one atomic storage transaction:
   `finalize` leaves the Durable Object durably remembering only *that*
   something was prepared, not *what*, which is insufficient to finalize
   correctly or to resolve a same-token retry deterministically;
-- returns the token and the assigned per-key timestamps to the caller.
+- returns, to the caller, the allocated `operationEpoch`, the `operationToken`,
+  the allocated `candidateVersion` and the assigned per-key timestamps.
+  **`operationEpoch` is part of the caller-visible operation identity**, not an
+  internal-only fencing value: `finalize` and `cancel` present epoch *and*
+  token together, which is what lets D9 distinguish a superseded operation
+  from an invalid one.
 
-Timestamp assignment happens **before** final document construction, because
-`meta.sourceUpdatedAt` is baked into each immutable document and the document
-cannot be finalized without it.
+Timestamp assignment and version allocation both happen **before** final
+document construction, because `meta.sourceUpdatedAt` is baked into each
+immutable document, and because the versioned KV keys the caller writes are
+keyed under the version `prepare` allocated — neither the documents nor their
+destination exists before this call returns.
 
 #### Caller document phase (no Durable Object involvement)
 
@@ -849,10 +903,12 @@ The Durable Object, in one atomic storage transaction:
   earlier draft's claim of one was a contradiction, now corrected.
 
 **No Workers KV pointer write occurs during `finalize`.** A stale, cancelled
-or superseded token is rejected **before** any authoritative state change —
-never partially applied, never silently replayed. A retry for an
-already-`committed` token returns the recorded result rather than
-re-evaluating anything (D9).
+or superseded identity never reaches an authoritative state change — never
+partially applied, never silently replayed. A retry presenting the
+epoch+token of the **current** `committed` record returns the recorded result
+rather than re-evaluating anything; one presenting a lower epoch resolves to
+the bounded `superseded` outcome, and one presenting the current epoch with a
+non-matching token is rejected as an invalid identity (D9).
 
 **The guarantee's precise boundary.** The comparison in `finalize` is a
 value comparison inside the Durable Object's own storage, nothing more. It
@@ -962,14 +1018,37 @@ that happens to share the same phase name:
   **not** claim atomicity between the Durable Object and Workers KV — that
   claim would contradict this ADR's own premise that no such cross-product
   atomicity exists (§"Safety reasoning"). Instead, cleanup is a two-step,
-  non-atomic sequence with a one-directional safety property: a
-  **DO-authorized cleanup decision** first calls the Durable Object, which
-  rechecks the current epoch and confirms it is still `cancelled` inside its
-  own transaction and returns that decision; only **then**, outside any DO
-  transaction, does the caller issue the external KV deletion. Because
-  `cancelled` is terminal, a "yes, still cancelled" answer can never be
-  invalidated by anything that happens afterward — there is no transition out
-  of `cancelled` for that epoch to race against. The external KV deletion
+  non-atomic sequence with a one-directional safety property.
+
+  **The cleanup request names the operation it wants to clean up, and the
+  Durable Object authorizes only that one.** The request carries the
+  `operationEpoch`, the `operationToken` **and** the `candidateVersion` of the
+  cancelled operation. Inside its own transaction the DO authorizes the
+  deletion **only if all of the following hold**:
+
+  - its **current durable operation record is exactly that record** —
+    the same epoch and the same token — and that record's state is
+    `cancelled`. **"Recheck the current epoch" means checking the
+    specifically named epoch against the current durable record, never
+    accepting whichever epoch happens to be current**: if a later `prepare`
+    has already superseded the named record, authorization is **refused**,
+    not granted on the strength of some other epoch also being terminal;
+  - the supplied `candidateVersion` is the version **that named record owns**
+    (a mismatched triple is refused outright, never partially honoured);
+  - that version is **not** `activeVersion`, **not** `previousVersion`,
+    **not** the candidate of the current `prepared` operation, and **not**
+    the candidate of the current `committed` operation record.
+
+  Only **then**, outside any DO transaction, does the caller issue the
+  external KV deletion. What makes an authorization safe to act on afterwards
+  is no longer terminality of the epoch alone — terminality of epoch A never made
+  *version V* terminal — but D3/D4's structural guarantee that **a candidate
+  version is owned by exactly one epoch for its whole existence**: the named
+  epoch is cancelled and terminal, and no later `prepare` can ever allocate
+  that version again, so once authorization is returned there is no future
+  operation that could make the version reachable and no writer that could
+  legitimately recreate it. A delayed deletion can therefore only ever remove
+  artifacts of the one dead operation that owned them. The external KV deletion
   itself remains **best-effort**, exactly like every other KV write in this
   design: if it fails, the orphaned version simply persists unreferenced
   (harmless, since nothing points to it) until a later cleanup attempt.
@@ -1170,9 +1249,13 @@ version. It is **republication**:
    version, never regenerated from a live provider fetch and never
    regenerated from present-day generation logic (which may not be able to
    reproduce a historical season's exact prior state).
-3. Create a new candidate version identity, **minted in the sidecar-required
-   `pm1-…` namespace** (D3) regardless of which namespace the rollback source
-   belongs to.
+3. Receive a new candidate version identity **allocated by `prepare`, in the
+   sidecar-required `pm1-…` namespace and bound to that call's newly allocated
+   `operationEpoch`** (D3, D4) — regardless of which namespace the rollback
+   source belongs to, and through the identical allocation path an ordinary
+   publication uses. Rollback mints no version of its own, so a rollback
+   candidate can no more collide with a retired epoch's version than an
+   ordinary publication can.
 4. **Regenerate, never copy:** everything already excluded from the
    `snapshotRevision` hash under ADR 0020 D1.7 — `requestId`, `generatedAt`,
    `staleAfter`, the server `stale` flag, ETag inputs — set fresh for this
@@ -1300,9 +1383,10 @@ sidecar (D3) exists precisely to close that gap, and the resolution is:
    inventory validates; it is never used to paper over an incomplete target.
 4. **Write the resolved value into the new rollback version's own sidecar**
    (step 10), whether it came from a sidecar or from the legacy fallback. **The
-   rollback's destination version is always minted in the sidecar-required
-   namespace (D3), even when its source is a legacy-format version** — a
-   rollback never inherits or reuses the target's identifier, so rolling back a
+   rollback's destination version is always the one `prepare` allocated in the
+   sidecar-required namespace (D3, D4), even when its source is a legacy-format
+   version** — a rollback mints no identifier of its own and never inherits or
+   reuses the target's, so rolling back a
    legacy release produces a `pm1-…` version carrying new-format provenance,
    and the migration never has to retrofit metadata onto an already-existing
    historical version.
@@ -1442,14 +1526,66 @@ storage transaction:
   before a shutdown boundary or is stopped and reported as an error — it
   cannot half-commit and it cannot land after the fact;
 - duplicate `finalize` calls resolve from the durable operation identity
-  (epoch + token), never from a phase string alone;
-- the operation token is idempotent: a call for an already-`committed` token
-  returns the recorded result rather than re-executing anything;
-- a cancelled or superseded token is rejected before any state change;
+  (epoch **and** token), never from a token or a phase string alone;
+- the operation identity is idempotent **while its record is still the current
+  durable operation record**: a call for an already-`committed` epoch+token
+  returns the recorded result rather than re-executing anything. This
+  guarantee is deliberately bounded — see "Delayed retries and the superseded
+  outcome" below for what a retry gets once a newer `prepare` has replaced
+  that record, and why an unbounded history of retired results is not the
+  answer;
+- a cancelled or superseded identity is never re-executed and never
+  re-committed; a superseded one resolves to the bounded `superseded` outcome
+  below rather than to an ambiguous rejection;
 - **no `blockConcurrencyWhile` call needs to enclose the commit**, because
   the commit is a single fast local storage transaction with no outbound
   network call inside it — see D10 for why `blockConcurrencyWhile` is neither
   necessary nor appropriate here.
+
+**Delayed retries and the superseded outcome.** A `finalize` response can be
+lost in flight while its transaction has already committed. If the caller's
+retry arrives after a *newer* `prepare` has been admitted, the committed
+record it is asking about is no longer the current durable record — D3 bounds
+the sequencer's state to the current release plus at most one operation, and
+this ADR does **not** relax that bound. An earlier draft nonetheless promised,
+without qualification, that a committed token always "returns the recorded
+result"; that promise and the record's stated lifetime cannot both hold, and
+this is the review-confirmed defect corrected here. The answer is **not** an
+unbounded map of retired committed results — that would reintroduce
+unbounded, historical per-operation state exactly where D3 refuses it, and it
+would still not tell the caller anything it can act on. Instead the identity
+is widened and the outcome made total.
+
+**The caller-visible operation identity is `{operationEpoch, operationToken}`.**
+`prepare` returns both (D4); `finalize` and `cancel` present both. Every
+presented identity resolves to exactly one of these outcomes, decided inside
+the Durable Object's own transaction against its current durable record:
+
+| Presented identity | Outcome |
+|---|---|
+| epoch **and** token match the current **`committed`** record | the **recorded committed result**, replayed verbatim, nothing re-executed |
+| epoch **and** token match the current **`prepared`** record | ordinary `finalize`/`cancel` evaluation for that operation |
+| epoch is **lower** than the current durable epoch | **`superseded`** — a distinct, terminal outcome, returned together with the current authoritative `activeVersion` (or an equivalent bounded projection of committed state) |
+| epoch **equals** the current epoch but the token does not match | **rejected as an invalid/stale identity** — not `superseded`; the current operation exists and this caller is not its holder |
+| epoch is **higher** than the current durable epoch, or the identity is malformed | **fails closed** — an epoch this season never allocated is never treated as prior state |
+
+**What `superseded` does and does not say.** It does **not** reproduce the
+retired response, and it does **not** claim to prove whether that old
+candidate committed before the later epoch was admitted — the record that
+would have answered that is gone, and inventing an answer would be worse than
+declining to. What it resolves is the only question the caller can still act
+on: **that operation is obsolete, and must not be republished, replayed or
+retried.** The caller's correct response is to stop, read the returned
+authoritative state, and — if a publication is still wanted — start a fresh
+`prepare`, which will allocate its own epoch and its own version. A
+`superseded` outcome is therefore never a licence to re-drive the old
+candidate, and never indistinguishable from "your operation failed".
+
+**The replay guarantee is explicitly bounded** to the period during which that
+committed operation remains the **current** durable operation record. Once a
+newer `prepare` supersedes it, the guaranteed answer is `superseded` plus
+current authoritative state — never the retired recorded response. Nothing in
+this design promises indefinite replay of retired results.
 
 **Stated limitation, not glossed over:** the guarantee above covers the
 Durable Object's **own storage**. It says nothing about, and this design
@@ -1707,10 +1843,12 @@ authorizes activation, not the provisional selection by itself.
    `active:{season}`/`previous:{season}` pointer keys. These versioned keys
    are immutable once written ([ADR 0007](0007-versioned-kv-publication-active-pointer.md)),
    so reading them by exact key reads a fixed artifact, not a moving
-   pointer. **The two reads carry different obligations, and steps 3 and 8
-   apply them separately:** the `activeVersion` read is **mandatory**, and the
-   `previousVersion` read is **best-effort** (see "`previousVersion`'s role in
-   this migration is limited and best-effort" below).
+   pointer. **The two reads carry different obligations, and steps 3, 8, 9
+   and 10 apply them separately:** the `activeVersion` read is **mandatory**,
+   and the `previousVersion` read is **best-effort** — including on step 9's
+   re-verification, which is not an exception to this asymmetry (see
+   "`previousVersion`'s role in this migration is limited and best-effort"
+   below).
 3. **Wait/retry, within a bounded budget, until every document, inventory and
    required provenance belonging to the checkpoint's selected `activeVersion`
    is readable and validates.** A missing, malformed, inconsistent or
@@ -1823,20 +1961,42 @@ authorizes activation, not the provisional selection by itself.
    most need the rollback. Omitting it costs only the default-target
    convenience: an operator may still roll back by explicitly naming a
    version, subject to D8's own target-completeness and provenance rules.
-9. **Re-verify the staged state from steps 7-8 against the same exact
-   versioned keys read in step 2** — the same immutable documents must still
-   describe the same revisions, or this season's cutover aborts (step 10)
-   rather than committing against a local read that failed or changed.
-   Because step 2 reads immutable, versioned artifacts rather than a live
-   pointer, this re-verification guards against a local read failure; it is
-   not, and is not needed as, a wait for external KV convergence.
+9. **Re-verify the staged state against the same exact versioned keys read in
+   step 2 — mandatorily for the selected `activeVersion`, best-effort for the
+   optional `previousVersion`.** Because step 2 reads immutable, versioned
+   artifacts rather than a live pointer, this re-verification guards against a
+   local read failure; it is not, and is not needed as, a wait for external KV
+   convergence. The two halves carry the **same asymmetric obligations steps 3
+   and 8 already apply**, and this step is not an exception to them:
+   - **Active version — mandatory.** The `activeVersion` documents, inventory
+     and required provenance staged in step 7 must still be readable and must
+     still describe the same revisions, or this season's cutover **aborts**
+     (step 10) rather than committing against a local read that failed or
+     changed.
+   - **Previous version — best-effort, never cutover-blocking.** If a
+     `previousVersion` that validated in step 8 fails its step-9 reread,
+     becomes unreadable, or no longer validates, **the migration continues**.
+     Its observations are **removed** from the staged
+     `seasonSnapshotObservedAtHighWaterMark` contribution, and the seed
+     commits `previousVersion` as **`null`** — the identical outcome step 8
+     already defines for a previous version that never validated. A failed
+     previous-version recheck is **never** permitted to fail the
+     active-version migration. Treating it as cutover-blocking would
+     contradict steps 3, 8 and 10 and the standing best-effort rule; that
+     contradiction was a review-confirmed defect, corrected here.
+
+   **Step 10 commits the post-recheck result, never step 8's optimistic
+   one** — so a previous version that validated in step 8 and failed in
+   step 9 is seeded as `null`, and its timestamps are absent from the
+   high-water-mark seed, exactly as if it had never validated.
 10. **Commit the complete seed to the Durable Object in one atomic
     operation, only if every prior step for this season succeeded, and
     record the durable cutover-lifecycle state as `seeded`.** The seed
     written in this single operation is, at minimum: the validated
     `activeVersion`; the optional `previousVersion` — the validated version
-    identifier if step 8's best-effort validation succeeded, otherwise
-    **`null`**, never a checkpoint-named version that failed to validate; the
+    identifier only if step 8's best-effort validation succeeded **and step
+    9's best-effort recheck still held**, otherwise **`null`**, never a
+    checkpoint-named version that failed to validate at either point; the
     imported `committedSourceOrderingInput`; the active per-key `snapshotRevision`;
     the active per-key `snapshotObservedAt`; the conservatively seeded
     `seasonSnapshotObservedAtHighWaterMark`; the checkpoint's migration
@@ -2060,18 +2220,27 @@ The real guarantee this migration provides, stated precisely:
   D9), so the guarantee is **complete** for all post-cutover history — no gap
   exists for anything committed after activation.
 - The migration **cannot prove** that its seed exceeds a timestamp held only
-  by an unenumerable pre-cutover version, because nothing in this system can
-  enumerate or bound "every version ever published" (see "The enumerability
-  limit" below), and because a D1.11a clock-regression clamp may have placed
-  such a historical timestamp ahead of migration wall time.
+  by a pre-cutover version outside any complete, audited set — a version whose
+  KV keys were deleted, one temporarily omitted from an eventually consistent
+  prefix scan, one recorded only externally by an operator, or a snapshot
+  retained only by an offline client. The repository's `listVersions` prefix
+  scan can name retained version keys and is useful audit evidence, but it
+  cannot prove that set complete (see "The completeness limit" below), and a
+  D1.11a clock-regression clamp may in any case have placed such a historical
+  timestamp ahead of migration wall time.
 
 **Activating this authority for a season therefore requires establishing one
 of the following, as an explicit precondition — never a vague "reopening"
 note to revisit later:**
 
 - a trustworthy historical index or an audited upper bound over every
-  timestamp this season's unenumerable pre-cutover history could contain is
-  imported into the seed; or
+  timestamp this season's pre-cutover history could contain is imported into
+  the seed. **The existing `listVersions`/`retainedVersions` prefix scan is
+  not, by itself, such an index** — it is eventually consistent, cannot prove
+  no key was omitted, and cannot see deleted, externally recorded or
+  client-retained history (see "The completeness limit" below). It may serve
+  as an *input* to such an audit; satisfying this alternative requires the
+  completeness argument, not merely running the scan; or
 - an audit specifically proves no uncovered future-clock/clamp value exists
   for this season's pre-cutover history; or
 - the target environment has **no** retained pre-cutover client state for
@@ -2094,40 +2263,75 @@ If satisfying this precondition requires a new public client contract or a
 data reset, that is separate future authorization this documentation
 correction does not itself grant.
 
-**The enumerability limit, stated precisely rather than assumed away.** This
-migration seeds its floor from exactly the versions this repository's
-storage design can already name and validate today — `activeVersion` and,
-best-effort, `previousVersion` (D7) — because those are the **only**
-versions any part of this system tracks. Workers KV offers no listing of a
-season's historical `snapshot:{season}:{version}:*` keys by version, this
-codebase maintains no separate version index, and — unchanged by this ADR —
-"public readers never enumerate snapshot versions"
-([ADR 0007](0007-versioned-kv-publication-active-pointer.md)); an operator
-rollback request may **name** an older version by an identifier it already
-knows from external records, but nothing in this system can **discover**
-that a version exists or **list** every version a season has ever had. This
-migration therefore does not, and cannot honestly, claim to import a floor
-derived from "every version ever published" — only from the two versions the
-existing design already tracks, subject to the activation precondition
-above. This is not a new gap this ADR introduces: today's KV-pointer design
-has exactly the same blind spot for a rollback target older than
-`previousVersion`, resolved only by an operator's own external
-record-keeping, unchanged by this migration. If a future need arises to
-safely support rollback to a version this system cannot already name from
-`active`/`previous`, that requires a version-index capability this ADR does
-not create, and is out of scope here — not a defect in this migration's
-seed, but a pre-existing, explicitly acknowledged limit on what "the
-retained set" means in this repository's storage design today.
+**The completeness limit, stated precisely rather than assumed away.** An
+earlier draft justified this seed's scope by claiming that nothing in this
+system can list or discover a season's versions at all. **That claim was
+false, and is corrected here** — a listing capability exists today:
+
+- `SnapshotStorage.listVersions(season)` is part of the storage interface
+  (`services/edge-api/src/storage/types.ts`).
+- `WorkersKvSnapshotStorage` implements it with a **paginated `kv.list` over
+  the `snapshot:{season}:` prefix** (`services/edge-api/src/storage/kv.ts`),
+  deriving each version through `parseVersionFromSnapshotKey`.
+- The admin status route exposes the result as `retainedVersions`
+  (`services/edge-api/src/admin/router.ts`).
+
+So this system **can** discover versions represented by keys visible to that
+prefix scan at the time it runs, and that set is legitimate **audit
+evidence**. What it is **not** is an authoritative, completeness-proving
+historical index:
+
+- the scan is **eventually consistent** — it cannot prove that no key is
+  temporarily omitted from the result it returned
+  ([ADR 0010](0010-workers-kv-consistency-limitation.md));
+- it cannot recover versions whose KV keys were **deleted** (D5's orphan
+  cleanup, and any operator-performed deletion, remove them permanently);
+- it cannot enumerate versions that exist only in an **operator's external
+  records**, nor bound a timestamp held only in a **snapshot retained by an
+  offline client**, neither of which is represented by any KV key at all.
+
+**Terminology.** Where this ADR and its mirrors call pre-cutover history
+"unenumerable", that means precisely **history outside a complete, audited
+set** — the deleted, temporarily omitted, externally recorded and
+client-retained cases just listed. It has never meant, and must not be read
+as meaning, that Workers KV or this repository lacks a version-listing
+capability. It does not.
+
+**Therefore `listVersions`/`retainedVersions` cannot, by itself, establish the
+historical timestamp upper bound the activation precondition requires** — it
+answers "which version keys are visible to this scan now", not "no
+pre-cutover timestamp exceeds this floor". It is available as supporting
+evidence for such an audit, never as a substitute for one.
+
+The migration seed is therefore limited to the selected `activeVersion` plus
+a validated best-effort `previousVersion` (D7) for the honest reason: those
+are the **bounded, authoritative checkpoint inputs** an operator has approved
+and this procedure can read by exact immutable key and fully validate — not
+because no listing exists. Anything beyond that bound is covered by the
+separately enforced activation precondition above, not by widening the seed
+to a set the scan cannot prove complete. This is not a new gap this ADR
+introduces: today's KV-pointer design has exactly the same blind spot for a
+rollback target older than `previousVersion`, resolved only by an operator's
+own external record-keeping, unchanged by this migration. Making
+`listVersions` an authoritative historical index — rather than the
+eventually consistent, operator-facing audit listing it is — would require
+its own decision about completeness guarantees and retention, which this ADR
+does not take. Nothing here changes the public read path: **public readers
+still never enumerate snapshot versions**
+([ADR 0007](0007-versioned-kv-publication-active-pointer.md)), and
+`listVersions` remains an internal/admin capability only.
 
 **`previousVersion`'s role in this migration is limited and best-effort.**
 It is only: (a) an optional operator-selected cutover fallback, named in the
 checkpoint; (b) an additional conservative timestamp input folded into the
 seeded high-water mark when its own inventory and documents validate
-(step 8). "Best-effort" is a statement about **both** halves, and both are
-now stated in one place rather than split across steps that disagreed:
-validating it is **never mandatory** and its failure **never aborts** the
-active-version migration (steps 3, 8, 10); and a previous version that did
-not validate is **omitted from the seed and committed as `null`**, never
+(step 8, re-verified best-effort in step 9). "Best-effort" is a statement
+about **both** halves, and both are now stated in one place rather than split
+across steps that disagreed: validating it is **never mandatory** and its
+failure **never aborts** the active-version migration **at any step that
+touches it — steps 3, 8, 9 and 10 alike**; and a previous version that did
+not validate, **or that validated in step 8 and then failed step 9's
+recheck**, is **omitted from the seed and committed as `null`**, never
 committed as an authoritative rollback target on the strength of the
 checkpoint having named it. It is **never** evidence, by itself, that this season's deeper
 history contains no timestamp higher than what `activeVersion`/
@@ -2223,6 +2427,19 @@ of the cutover sequence above).
   data**: a test naming a `previousVersion` whose inventory or documents do
   not validate proves the cutover proceeds, distinguishing this explicitly
   from an active-version validation failure, which aborts.
+- **A `previousVersion` that validates in step 8 but fails step 9's recheck
+  does not abort the cutover.** With the active version re-verifying cleanly
+  and the previous version's step-9 reread failing (unreadable, or no longer
+  describing the same revisions), the test proves the season still reaches
+  `seeded`; that step 10 commits `previousVersion` as **`null`**, not the
+  optimistic step-8 identifier; and that the previous version's timestamps are
+  **absent** from the committed `seasonSnapshotObservedAtHighWaterMark` — the
+  seed being byte-identical to the one produced when that previous version had
+  never validated at all.
+- **Step 9's abort path is scoped to the active version**: a test failing the
+  active version's step-9 re-verification proves the cutover aborts with no DO
+  state written, while the same failure injected only on the previous version
+  proves it does not.
 - **Cutover-lifecycle restart tests**, each proving the exact resulting
   `cutoverState`, whether legacy pointers or the Durable Object are
   authoritative, and whether mutators are paused or resumed:
@@ -2372,7 +2589,9 @@ rather than by additional state-machine logic layered on the same KV write.
 | **Direct pointer-flip rollback** (the pre-existing rollback design) | **Superseded by Model 1** (D8). Rollback now republishes historical data as a new immutable version through the same `prepare`/`finalize` protocol as ordinary publication; it never flips `activeVersion` directly. |
 | **An application-level in-memory single-flight guard (`commitPromise`) as a correctness-critical mechanism** | **Rejected — no longer needed, not merely unused.** It was necessary only while the critical section spanned an awaited external Workers KV write, which an ordinary input gate does not cover. D2 removed that external write; `finalize`'s entire critical section is now one Durable Object storage transaction, which an ordinary input gate already serializes (D9). Retaining the guard would be leftover machinery from the rejected KV-authoritative design. |
 | **An ordinary source-ordering staleness rejection applied unconditionally to every `prepare` call, including rollback** | **Rejected.** It would make the authorized Model 1 (D8) impossible to execute, since a rollback's historical ordering input is expected to be older than or equal to what is currently active. Replaced by the bounded `operationKind` exemption in D4, which narrows the exception to rollback admission only and leaves ordinary publication's rejection untouched. |
-| **Claiming atomicity between a Durable Object cancellation check and an external Workers KV deletion during orphan cleanup** | **Rejected — not implementable.** No cross-product atomicity between Durable Object storage and Workers KV exists (§"Safety reasoning" is this ADR's own premise). Replaced in D5 by a non-atomic two-step sequence relying on `cancelled` being a terminal state, with the external KV deletion remaining best-effort. |
+| **Claiming atomicity between a Durable Object cancellation check and an external Workers KV deletion during orphan cleanup** | **Rejected — not implementable.** No cross-product atomicity between Durable Object storage and Workers KV exists (§"Safety reasoning" is this ADR's own premise). Replaced in D5 by a non-atomic two-step sequence whose safety rests on the named cancelled epoch being terminal **and** on D3/D4's structural guarantee that a candidate version belongs to exactly one epoch, with the external KV deletion remaining best-effort. |
+| **Authorizing orphan cleanup from epoch terminality alone** (a "yes, some epoch is cancelled" answer, with a caller-minted candidate version) | **Rejected — a review-confirmed race.** Terminality of epoch A never made *version V* terminal. With a caller-minted version, a later epoch B could re-use V, and A's delayed cleanup could delete artifacts B had already written but not yet finalized. Replaced by DO-allocated, epoch-bound candidate versions (D3, D4) plus a cleanup authorization that names the exact cancelled epoch, token and version and refuses a superseded record or an authoritative version (D5). |
+| **An unbounded map of retired committed results, retained so any delayed `finalize` retry can always replay its original response** | **Rejected — unbounded history in the one place D3 refuses it, for an answer the caller cannot use.** It would grow per-operation state without limit, and would still not tell a caller whose epoch is retired anything actionable. Replaced by D9's total outcome table: the recorded result is replayed only while that committed operation is the **current** durable record; a lower epoch resolves to a distinct terminal `superseded` outcome carrying current authoritative state, which resolves what the caller must do now without claiming to reproduce the retired response. |
 | **Recovering a rollback target's historical `sourceOrderingInput` from Durable Object state alone** | **Rejected — the value is not there.** `committedSourceOrderingInput` describes only the currently active release and is replaced by every successful `finalize` (D2); the prepared-operation record is replaced by every new `prepare`, cancellation, expiry or supersession (D4/D5). Once a release is superseded, nothing in DO state retains its ordering input, so a rollback to it would have no value to record — which is exactly the gap D3's immutable per-version sidecar closes. |
 | **Requiring an operator to supply the historical `sourceOrderingInput` for a normal rollback** | **Rejected.** It would put an unaudited, unverifiable, hand-typed timestamp into the one field ordinary-publication admission is decided against (D4), make rollback non-deterministic for the same target, and turn a recoverable data question into a human-recall question at the moment of an incident. The value is recoverable from the target's own immutable record (D8); an operator is asked to select a version, never to invent its provenance. |
 | **Publishing `sourceOrderingInput` in the public snapshot documents, or overloading `meta.sourceUpdatedAt` to carry it** | **Rejected.** It would add a public contract field for an internal admission input (no client needs it), and `meta.sourceUpdatedAt`'s post-cutover meaning is already fixed as that key's per-key `snapshotObservedAt` (D4, [ADR 0020](0020-provider-source-observation-and-reconciliation.md) D1.8-D1.10) — overloading it would destroy the per-key activation semantics the whole observation clock depends on. |
@@ -2398,9 +2617,9 @@ commit is one Durable-Object-storage-protected transaction.
 
 | Identity | Lifetime | Purpose |
 |---|---|---|
-| `operationToken` | One `prepare()` call | Caller-facing handle, presented back to `finalize`/`cancel` |
-| `operationEpoch` | Durable, monotonic, per season | The actual fencing value every transition checks; increments on every admitted `prepare` |
-| Durable operation record | Durable, until superseded | `{epoch, token, operationKind, phase, priorVersion, candidateVersion, perKeyRevisions, assignedTimestamps, sourceOrderingInput, expectedManifestCommitment, preparedAt, deadline}` — sole restart-recovery source of truth, and the only source `finalize` reads from (D4) |
+| `operationToken` | One `prepare()` call | Caller-facing handle; presented back to `finalize`/`cancel` **together with `operationEpoch`** — the two form the caller-visible operation identity (D9) |
+| `operationEpoch` | Durable, monotonic, per season | The actual fencing value every transition checks; increments on every admitted `prepare`. Also **caller-visible** (half of the operation identity) and the value whose injective encoding makes each `candidateVersion` unique to exactly one epoch (D3, D4) |
+| Durable operation record | Durable, until superseded | `{epoch, token, operationKind, phase, priorVersion, candidateVersion, perKeyRevisions, assignedTimestamps, sourceOrderingInput, expectedManifestCommitment, preparedAt, deadline}` — sole restart-recovery source of truth, and the only source `finalize` reads from (D4). `candidateVersion` is **allocated by `prepare`**, never supplied by the caller. Because only the current record is retained, the recorded-result replay guarantee is bounded to while it is current; past that, D9's `superseded` outcome applies |
 | `seasonSnapshotObservedAtHighWaterMark` | Durable, monotonic, per season — never scoped to a single key or a single operation | The per-season timestamp floor a fresh-activation assignment must exceed (D4); advanced only by a committed `prepared → committed` transition (D9), never by a `prepared`, `cancelled` or `recovery-required` state |
 | `committedSourceOrderingInput` | Durable, per season — describes the currently committed release only, not a monotonic history | The value ordinary-publication staleness admission (D4) compares a new candidate's `sourceOrderingInput` against (strictly older rejected, equal or newer admitted); replaced only by a committed `prepared → committed` transition (D4, D9, D8), never by a `prepared`, `cancelled` or `recovery-required` state |
 | `cutoverState` | Durable, per season, exactly `uninitialized` \| `seeded` \| `active` (D12) | Which authority — legacy KV pointers or this Durable Object — is currently declared authoritative for the season; transitions `uninitialized → seeded` (migration step 10) then `seeded → active` (migration step 11), each an idempotent, independently-recorded transition |
@@ -2417,8 +2636,8 @@ transition is atomic; see D9.
 |---|---|---|---|---|---|---|---|
 | `idle` | anyone | none | none | yes — any `prepare` | n/a | resumes `idle` | trivially |
 | `prepared` | holder of current epoch/token | writes the full operation record (D4) in one transaction | none | only as an atomic *replacement* of this record | not yet | resumes `prepared`, with every value D4 records intact; deadline re-evaluated | `prepare` retried is a fresh epoch; old one retired |
-| `committed` | n/a for this epoch | one atomic `prepared → committed` transition: activeVersion, previousVersion, `committedSourceOrderingInput`, per-key state and `seasonSnapshotObservedAtHighWaterMark` all written together with the phase change | **none** | yes — next `prepare` | yes, for epoch(s) it superseded | resumes `committed` | trivially — a retry for a committed token returns the recorded result (D9) |
-| `cancelled` | n/a | epoch marked cancelled; **terminal** — never transitions to `prepared` or `committed` (D5) | none | yes | yes, after a DO-authorized recheck (D5; non-atomic with the external KV deletion) | resumes `cancelled` | trivially |
+| `committed` | n/a for this epoch | one atomic `prepared → committed` transition: activeVersion, previousVersion, `committedSourceOrderingInput`, per-key state and `seasonSnapshotObservedAtHighWaterMark` all written together with the phase change | **none** | yes — next `prepare` | yes, for epoch(s) it superseded | resumes `committed` | **while this record is current**: a retry of its epoch+token returns the recorded result. **Once a newer `prepare` supersedes it**: the lower epoch resolves to `superseded` plus current authoritative state, never the retired response (D9) |
+| `cancelled` | n/a | epoch marked cancelled; **terminal** — never transitions to `prepared` or `committed` (D5) | none | yes | yes, but only against the **named** cancelled epoch+token+version while that record is still current, and never for a version that is or may become authoritative (D5; non-atomic with the external KV deletion) | resumes `cancelled` | trivially |
 | `recovery-required` | admin only | none automatic | none automatic | **no** | no | resumes `recovery-required` until operator clears it | not applicable by design |
 
 `recovery-required` is retained in the vocabulary as a defensive terminal
@@ -2435,21 +2654,75 @@ ambiguous about.
 
 Deterministic, application-logic tests the Mechanism PR must include:
 
-- Two simultaneous same-token `finalize` calls resolve to one committed
+- Two simultaneous same-identity `finalize` calls resolve to one committed
   result, never two writes — the second observes `committed` and returns the
   recorded result rather than re-entering the transaction (D9).
-- A same-token retry arriving after the original `finalize` call's storage
-  transaction has already completed observes `committed` and returns the
-  recorded result deterministically, never re-evaluating the operation.
+- A same-identity retry arriving after the original `finalize` call's storage
+  transaction has already completed, **while that record is still the current
+  durable record**, observes `committed` and returns the recorded result
+  deterministically, never re-evaluating the operation.
 - A `prepare` for a new candidate is rejected while an operation for the same
   season is `prepared` and not yet superseded, cancelled or expired.
-- A stale (superseded) epoch's `finalize` is rejected before any storage
-  mutation.
+- A stale (superseded) epoch's `finalize` performs no storage mutation.
 - A `prepared` operation replaced by a later `prepare` durably retires the
   old epoch atomically with installing the new one; a subsequent
-  `finalize(oldToken)` is rejected.
-- A stale `finalize` after a `prepared`-then-cancelled token is rejected, no
-  version is deleted while its status is ambiguous.
+  `finalize(oldEpoch, oldToken)` never commits.
+- A stale `finalize` after a `prepared`-then-cancelled identity is rejected,
+  no version is deleted while its status is ambiguous.
+
+**Candidate-version ownership and cleanup safety (D3, D4, D5):**
+
+- **`prepare` allocates the candidate version; the caller cannot supply one.**
+  The API accepts no `candidateVersion` argument, and the returned version is
+  in the `pm1-…` namespace.
+- **Distinct epochs never receive the same candidate version.** Across a
+  sequence of `prepare` calls for one season — including cancelled, expired
+  and superseded ones — every allocated version is distinct, and each decodes
+  to the epoch that allocated it (injective encoding, D3). The property is
+  asserted without any Workers KV read, list or existence check.
+- **A retry of the same live operation identity allocates no new version**;
+  a genuinely new `prepare` allocates a new epoch and therefore a different
+  version.
+- **The exact review race is proven impossible.** Epoch A is prepared for
+  version V and then cancelled; epoch B is admitted afterward; B writes its
+  artifacts and has not yet finalized; A's cleanup authorization is only now
+  requested and acted on. The test asserts that B's version is **not** V, that
+  A's cleanup authorization is **refused** because A's record is no longer the
+  current durable record, and — even if a stale authorization obtained earlier
+  is replayed — that acting on it can only delete V, never any artifact B
+  wrote. B's subsequent `finalize` commits onto documents that still exist.
+- **Cleanup authorization requires the full triple.** A request naming the
+  right epoch but the wrong token, the right identity but the wrong
+  `candidateVersion`, or an epoch that has since been superseded, is refused.
+- **Cleanup is refused for an authoritative version**: `activeVersion`,
+  `previousVersion`, the current prepared candidate and the current committed
+  operation's candidate are each refused.
+- The external KV deletion remains best-effort and is **never** asserted to be
+  atomic with the DO decision; a failed deletion leaves an unreferenced
+  version and no authoritative state change.
+
+**Delayed retries and the superseded outcome (D9):**
+
+- **Duplicate `finalize` while the committed record is current** returns the
+  recorded result, once, with no second write.
+- **A lost `finalize` response followed by a newer `prepare`**: the original
+  caller's retry no longer returns the retired recorded result, and returns
+  the `superseded` outcome instead.
+- **Delayed retry after the newer operation is `prepared` but not committed**
+  resolves to `superseded` plus the current authoritative state.
+- **Delayed retry after the newer operation commits** likewise resolves to
+  `superseded` plus the then-current authoritative state.
+- **Classification is exact**: a *lower* epoch yields `superseded`; the
+  *current* epoch with a non-matching token yields an invalid/stale-identity
+  rejection, never `superseded`; a *higher* epoch or a malformed identity
+  fails closed.
+- **`superseded` initiates no duplicate publication**: the publisher-side test
+  proves a caller receiving `superseded` does not re-drive, replay or
+  republish the old candidate, and that any new publication goes through a
+  fresh `prepare` with its own epoch and its own version.
+- **No unbounded result history is retained**: after N successive committed
+  operations for a season, the sequencer holds at most the current operation
+  record — retired results are not accumulated.
 
 The completion-attestation obligations below are split by what each test can
 actually prove: a **Durable Object** test proves this comparison behaves
@@ -2650,9 +2923,11 @@ this documentation correction.
   the operation kind, not to the ordering value.
 - **`committedSourceOrderingInput` only changes on a successful `prepared →
   committed` transition**: a cancelled, expired or superseded `prepared`
-  operation's `sourceOrderingInput` never becomes the committed value, and an
-  idempotent retry of an already-`committed` `finalize` call returns the
-  recorded result without recomputing it.
+  operation's `sourceOrderingInput` never becomes the committed value; an
+  idempotent retry of an already-`committed` `finalize` call, while that
+  record is still current, returns the recorded result without recomputing
+  it; and a `superseded` outcome for a retired epoch likewise leaves the
+  field untouched.
 - **A successful rollback commits its own historical `sourceOrderingInput` as
   the new `committedSourceOrderingInput`**, and a subsequent ordinary
   candidate's staleness is proven to be evaluated against the rollback's
@@ -2746,9 +3021,11 @@ platform guarantee:
   timestamps, while a malformed or unreadable record fails closed. Migration
   uses the identical rule (D12 step 6), and never backfills metadata onto an
   existing historical version.
-- **Every version this protocol creates is minted in a reserved `pm1-…`
-  namespace** (D3), so a reader can tell from the immutable identifier alone
-  whether a sidecar was required. This is what makes the legacy fallback
+- **Every version this protocol creates is allocated by the sequencer inside
+  `prepare`, in a reserved `pm1-…` namespace carrying an injective encoding of
+  the allocating `operationEpoch`** (D3, D4), so a reader can tell from the
+  immutable identifier alone whether a sidecar was required, and so no two
+  operations for a season can ever be assigned the same version. This is what makes the legacy fallback
   *decidable*: absence of the key can never establish legacy status, because
   KV propagation lag produces the same read, and because a post-cutover release
   whose keys all changed carries a uniform `meta.sourceUpdatedAt` that would
@@ -2776,10 +3053,13 @@ platform guarantee:
   and the conservatively seeded high-water mark — from an operator-approved
   cutover checkpoint naming exactly `activeVersion` and, best-effort,
   `previousVersion`, read by exact versioned key rather than inferred from a
-  repeated legacy-pointer read. Those are the **only** versions this
-  repository's storage design can already name and validate; the migration
-  does not, and cannot, claim to cover every version ever published for a
-  season (D12, "The enumerability limit").
+  repeated legacy-pointer read. Those are the **bounded, operator-approved
+  checkpoint inputs** this procedure can read by exact immutable key and fully
+  validate. The repository's `listVersions`/`retainedVersions` prefix scan can
+  additionally name retained version keys and is useful audit evidence, but it
+  is eventually consistent and proves no completeness, so the migration does
+  not, and cannot, claim to cover every version ever published for a season
+  (D12, "The completeness limit").
 - **Activation is now explicitly gated on a pre-cutover historical-floor
   precondition** (D12): this design does not claim its seed necessarily
   dominates a timestamp held only by an unenumerable pre-cutover version,
@@ -2809,7 +3089,7 @@ platform guarantee:
 | The Mechanism PR's own tests cannot establish the D9 shutdown-guarantee assumption behaves as documented in this repository's actual Workers runtime version | Reopen D9 and D2 together before proceeding to the Integration PR |
 | An implementation discovers the SQLite-backed storage transaction API does not provide the single-atomic-write property D9 assumes | Reopen D9; do not proceed to Integration without an alternative atomic mechanism |
 | A future phase needs cross-season coordination (e.g. a shared content manifest spanning seasons) | Reopen D1; a single per-season identity may not be the right shape |
-| A future need arises to support rollback to a version this system cannot already name from `activeVersion`/`previousVersion` | Reopen D12; a version-index capability must be designed before such a rollback or migration seed can be honestly claimed safe |
+| A future need arises to support rollback to a version outside the operator-approved checkpoint inputs, or to treat `listVersions`/`retainedVersions` as an authoritative historical index | Reopen D12; the existing prefix scan is eventually consistent and proves no completeness, so an index with explicit completeness and retention guarantees must be designed before such a rollback or migration seed can be honestly claimed safe |
 | A season's pre-cutover historical-floor activation precondition (D12) cannot be established — no historical index/audited bound, no audit disproving the exposure, retained pre-cutover client state exists, and no authorized baseline reset is available | Activation for that season remains blocked; do not activate on an assumption that the seed "probably" dominates unenumerable history |
 | The repository cannot establish or confirm a trustworthy cutover checkpoint, or cannot confirm the legacy mutation-admission closure D12's migration step 1 requires | Activation for that season remains blocked; never substitute a fixed sleep or an unverified legacy-pointer reread for either |
 | A future implementation needs a strict zero-in-flight legacy-drain guarantee rather than this admission-closure model | That guarantee and its proof must be supplied by the Integration/Cutover PR that builds it; this ADR does not assume one exists today |

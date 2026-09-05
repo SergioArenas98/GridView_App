@@ -592,11 +592,15 @@ Four documentation-only clarifications follow; nothing below is implemented:
   assigned.** This is the concrete mechanism by which
   [ADR 0025](0025-season-publication-authority-and-rollback-republication.md)
   D12's cutover migration seed is **not** guaranteed to dominate a timestamp
-  held only by an unenumerable pre-cutover version — D1.11a's already-
-  documented "appears newer" direction becomes, for that migration, an
-  explicit **activation precondition**, not merely a bounded-excess note.
-  See ADR 0025 D12, "The pre-cutover historical-floor activation
-  precondition."
+  held only by a pre-cutover version outside a complete, audited set — one
+  whose KV keys were deleted, one temporarily omitted from the eventually
+  consistent `listVersions` prefix scan that repository already has, one
+  recorded only in an operator's external records, or a snapshot retained
+  only by an offline client. D1.11a's already-documented "appears newer"
+  direction becomes, for that migration, an explicit **activation
+  precondition**, not merely a bounded-excess note. See ADR 0025 D12, "The
+  pre-cutover historical-floor activation precondition" and "The completeness
+  limit."
 
 **D1.9-D1.11 remain unimplemented.** ADR 0025 is a design decision, not
 implementation: no Durable Object class, binding or caller exists yet.

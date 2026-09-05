@@ -75,11 +75,18 @@ reads it today.**
 
 **Version identifiers gain a reserved namespace, so the record's absence is
 decidable.** Every version that future protocol creates — ordinary publication
-and rollback destination alike — is minted as:
+and rollback destination alike — is **allocated by the Durable Object inside
+`prepare`**, never minted by the caller, as:
 
 ```text
-pm1-<opaque existing version component>
+pm1-<operationEpoch, injectively encoded>-<opaque component>
 ```
+
+Carrying an injective encoding of the allocating `operationEpoch` makes the
+identifier unique to exactly one epoch **by construction** — not by
+probability and not by an eventually consistent KV preflight — so no version a
+retired operation owned can ever be allocated again (ADR 0025 D3, D4). That is
+what makes orphan cleanup safe to authorize against a named, retired operation.
 
 A reader needs this because the sidecar key reading `null` cannot distinguish
 "this version predates the record" from "the record was written and has not yet
@@ -424,16 +431,18 @@ by one `SeasonPublicationSequencer` Durable Object per season
 obtain candidate data (provider fetch, or a historical version for rollback)
   -> compute snapshotRevision per document
   -> enumerate the planned document manifest; compute expectedManifestCommitment
-  -> DO.prepare(season, operationKind, candidateVersion, perKeyRevisions,
+     (all version-independent: the manifest commits to document names)
+  -> DO.prepare(season, operationKind, perKeyRevisions,
                  orderingInput, expectedManifestCommitment)
-       <- assigned snapshotObservedAt per key, operation token
+       <- operationEpoch, operationToken, candidateVersion (allocated here,
+          as pm1-<epoch>-<...>), assigned snapshotObservedAt per key
   -> bake assigned timestamps into each document; regenerate volatile fields
   -> validate; write every versioned document + inventory to KV (unchanged),
+     under the version prepare allocated,
      recording which planned writes completed successfully
-  -> write __publication_metadata for this version (the same orderingInput)
-     (candidate version was minted as pm1-<...>, the sidecar-required namespace)
+  -> write __publication_metadata for that same version (the same orderingInput)
   -> only once every planned write has succeeded, produce completionAttestation
-  -> DO.finalize(season, token, completionAttestation)
+  -> DO.finalize(season, operationEpoch, operationToken, completionAttestation)
        <- authoritative active/previous transition, one atomic DO-storage write
 ```
 
@@ -466,11 +475,16 @@ committed for any key that season, and possibly higher after a conservative
 migration seed; never retired when a key leaves the inventory — see "Per-key
 revision and timestamp assignment" below), and the **complete** current
 publication-operation record (`operationKind`, `phase`,
-`priorVersion`, `candidateVersion`, the candidate's per-key revisions and
+`priorVersion`, `candidateVersion` (**allocated by `prepare`**, never
+supplied by the caller), the candidate's per-key revisions and
 assigned timestamps, `sourceOrderingInput`, `expectedManifestCommitment`,
 epoch, token, `preparedAt`, `deadline`) — every value `finalize` needs, so a
 restart between `prepare` and `finalize` loses nothing it must later verify
-or commit (ADR 0025 D4). This per-key state does not grow with historical
+or commit (ADR 0025 D4). Only the **current** operation record is retained,
+which is why the recorded-result replay guarantee is bounded to while that
+record is current; past that, a retired epoch resolves to ADR 0025 D9's
+`superseded` outcome carrying current authoritative state, never the retired
+response. This per-key state does not grow with historical
 release count — superseded operation and per-key state for a key no longer
 in the current inventory are retired per ADR 0025 D5/D9 — so its size is
 bounded by the current release's inventory, plus at most one prepared
@@ -700,7 +714,10 @@ treatment.
 
 Activating a season additionally requires resolving a **pre-cutover
 historical-floor precondition**: the seed is not guaranteed to dominate a
-timestamp held only by an unenumerable version predating the cutover (a
+timestamp held only by a pre-cutover version outside a complete, audited set
+— one whose keys were deleted, one temporarily omitted from the eventually
+consistent `listVersions` prefix scan, one recorded only in an operator's
+external records, or a snapshot retained only by an offline client (a
 clock-regression clamp under
 [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)
 D1.11a can place such a timestamp ahead of migration wall time), so
@@ -772,7 +789,9 @@ never from the read returning `null`.**
 The resolved value is passed to `prepare`, written into the **new** rollback
 version's own `__publication_metadata`, and committed as the new
 `committedSourceOrderingInput` on success. The rollback's destination version is
-always minted in the `pm1-…` namespace, even when its source is legacy-format —
+always allocated by `prepare` in the `pm1-…` namespace, through the identical
+allocation path an ordinary publication uses, even when its source is
+legacy-format —
 so a rollback of a legacy release produces new-format provenance going forward,
 and no existing historical version is ever mutated to backfill one.
 

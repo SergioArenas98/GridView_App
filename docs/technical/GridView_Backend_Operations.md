@@ -435,8 +435,9 @@ version's own internal `__publication_metadata` record, or — for a release
 predating it — from a single uniform `meta.sourceUpdatedAt` across every
 document its inventory names. **Which of the two applies is decided by the
 target's version identifier, not by whether the record happens to read back.**
-Versions created by the sidecar-aware protocol are minted in a reserved
-`pm1-…` namespace; for one of those, a record that does not read back is
+Versions created by the sidecar-aware protocol are allocated by the sequencer
+during `prepare`, never minted by the caller, in a reserved `pm1-…` namespace
+(ADR 0025 D3, D4); for one of those, a record that does not read back is
 treated as *not currently readable* rather than *never written*, and the
 document fallback is **not** available to it. A target whose record is absent
 in that namespace, or malformed or unreadable in either, or whose legacy
