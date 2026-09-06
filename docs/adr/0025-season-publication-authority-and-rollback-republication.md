@@ -4,10 +4,22 @@
 - Date: 2026-09-05
 
 > **What "Accepted" means here.** This ADR records **architecture and product
-> decisions for a mechanism that does not exist yet**. It authorizes a design,
-> not an implementation. It provisions no Cloudflare resource, creates no
-> Durable Object class, binds nothing, deploys nothing, activates no authority
-> mode and contacts no provider. `snapshotRevision`
+> decisions**, and authorizes a design rather than performing an
+> implementation. It provisions no Cloudflare resource, binds nothing, deploys
+> nothing, activates no authority mode and contacts no provider.
+>
+> **Implementation status (updated 2026-09-06).** The **Mechanism slice** of
+> the separated future work below now exists in code: an inert
+> `SeasonPublicationSequencer` Durable Object class, its bounded SQLite-backed
+> durable state machine, an internal port/client interface, the inert cutover
+> transitions, the `SnapshotStorage` operations for the
+> `__publication_metadata` sidecar, and their deterministic tests
+> ([`GridView_Implementation_Plan.md`](../technical/GridView_Implementation_Plan.md)
+> §14.0.11). **Nothing else changed:** no `wrangler.toml` binding, migration or
+> `[exports]` entry declares the class, it is not a named export of the Worker
+> entry point and therefore cannot be instantiated by the runtime, no
+> production caller reaches it, and no integration, provisioning, migration,
+> cutover or activation has occurred. `snapshotRevision`
 > ([`../publication/snapshot-revision.ts`](../../services/edge-api/src/publication/snapshot-revision.ts))
 > keeps its **no production caller** status unchanged. `PROVIDER_MODE` remains
 > `mock | none`; `recordedProvisionalSessionEndBound` remains `null`. Phase
@@ -853,7 +865,7 @@ The caller:
   commit authority merely by holding a valid token — a token authorizes one
   `finalize` call, nothing else.
 
-#### `finalize(season, token, completionAttestation)`
+#### `finalize(season, operationEpoch, operationToken, completionAttestation)`
 
 The Durable Object, in one atomic storage transaction:
 
