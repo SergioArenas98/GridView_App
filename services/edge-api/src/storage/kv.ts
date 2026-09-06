@@ -5,6 +5,7 @@ import {
   parseVersionFromSnapshotKey,
   legacyGlobalQuotaKey,
   previousKey,
+  publicationMetadataKey,
   quotaKey,
   snapshotKey,
   snapshotPrefix,
@@ -19,6 +20,7 @@ import {
 } from './quota-records';
 import type {
   ContentMetadata,
+  PublicationMetadataRecord,
   QuotaState,
   SnapshotDocumentName,
   SnapshotStorage,
@@ -63,6 +65,31 @@ export class KvSnapshotStorage implements SnapshotStorage {
     documentNames: readonly SnapshotDocumentName[],
   ): Promise<void> {
     await this.put(versionInventoryKey(season, version), [...documentNames]);
+  }
+
+  async readPublicationMetadata(
+    season: number,
+    version: string,
+  ): Promise<unknown> {
+    // A failed read throws out of here, exactly as it does for every other
+    // read on this adapter. That is what keeps *absent* and *unreadable*
+    // distinguishable for ADR 0025 D8's classification.
+    return this.get<unknown>(publicationMetadataKey(season, version));
+  }
+
+  async writePublicationMetadata(
+    season: number,
+    version: string,
+    record: PublicationMetadataRecord,
+  ): Promise<void> {
+    await this.put(publicationMetadataKey(season, version), record);
+  }
+
+  async deletePublicationMetadata(
+    season: number,
+    version: string,
+  ): Promise<void> {
+    await this.kv.delete(publicationMetadataKey(season, version));
   }
 
   async getActiveVersion(season: number): Promise<string | null> {

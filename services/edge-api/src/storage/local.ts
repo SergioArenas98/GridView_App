@@ -5,6 +5,7 @@ import {
   parseVersionFromSnapshotKey,
   legacyGlobalQuotaKey,
   previousKey,
+  publicationMetadataKey,
   quotaKey,
   snapshotKey,
   snapshotPrefix,
@@ -19,6 +20,7 @@ import {
 } from './quota-records';
 import type {
   ContentMetadata,
+  PublicationMetadataRecord,
   QuotaState,
   SnapshotDocumentName,
   SnapshotStorage,
@@ -77,6 +79,31 @@ export class MemorySnapshotStorage implements SnapshotStorage {
     documentNames: readonly SnapshotDocumentName[],
   ): Promise<void> {
     await this.put(versionInventoryKey(season, version), [...documentNames]);
+  }
+
+  async readPublicationMetadata(
+    season: number,
+    version: string,
+  ): Promise<unknown> {
+    // Reads here cannot fail, so this adapter only ever produces *absent* or a
+    // value. It never reports a failure as `null`, which is what keeps its
+    // classification identical to the Workers KV adapter's.
+    return this.get<unknown>(publicationMetadataKey(season, version));
+  }
+
+  async writePublicationMetadata(
+    season: number,
+    version: string,
+    record: PublicationMetadataRecord,
+  ): Promise<void> {
+    await this.put(publicationMetadataKey(season, version), record);
+  }
+
+  async deletePublicationMetadata(
+    season: number,
+    version: string,
+  ): Promise<void> {
+    this.values.delete(publicationMetadataKey(season, version));
   }
 
   async getActiveVersion(season: number): Promise<string | null> {

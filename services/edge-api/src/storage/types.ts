@@ -104,6 +104,21 @@ export interface SyncState {
   lastPublicationStatus: string | null;
 }
 
+/**
+ * The internal per-version publication-metadata sidecar record (ADR 0025 D3).
+ *
+ * Season and version are carried by the immutable storage key itself and are
+ * deliberately not duplicated here. Adding a field is a `schemaVersion`
+ * decision, never a silent shape change.
+ *
+ * It carries no provider payload, no secret and no personal data: one schema
+ * version and one release-wide ordering timestamp.
+ */
+export interface PublicationMetadataRecord {
+  readonly schemaVersion: 1;
+  readonly sourceOrderingInput: string;
+}
+
 export interface ContentMetadata {
   schemaVersion: number;
   contentVersion: string;
@@ -148,6 +163,44 @@ export interface SnapshotStorage {
     version: string,
     documentNames: readonly SnapshotDocumentName[],
   ): Promise<void>;
+  /**
+   * The raw stored publication-metadata sidecar for one version, or `null`
+   * when the key holds nothing (ADR 0025 D3).
+   *
+   * Deliberately typed `unknown` rather than `PublicationMetadataRecord`: the
+   * value comes back as whatever JSON the key holds, and a truncated write or
+   * a hand-edited entry deserializes to something that is not a record while
+   * still being valid JSON. Every reader goes through
+   * `readStoredPublicationMetadata`, which classifies it. Declaring the
+   * validated type here would be a claim about a read that no implementation
+   * can make.
+   *
+   * An implementation must let a read failure **throw** rather than report it
+   * as `null`: *absent* and *unreadable* are different facts about a version,
+   * and ADR 0025 D8's fail-closed classification depends on the distinction
+   * being real rather than collapsed by one adapter.
+   */
+  readPublicationMetadata(season: number, version: string): Promise<unknown>;
+  /**
+   * Writes one version's publication-metadata sidecar.
+   *
+   * The record is immutable once written. This operation is the raw store; the
+   * conflicting-rewrite guard lives above it in
+   * `writePublicationMetadataOnce`, so both adapters share one rule.
+   */
+  writePublicationMetadata(
+    season: number,
+    version: string,
+    record: PublicationMetadataRecord,
+  ): Promise<void>;
+  /**
+   * Removes one version's publication-metadata sidecar.
+   *
+   * `deleteUnpublishedVersion` already removes it with the rest of the version
+   * through the shared snapshot prefix; this exists so a cleanup path that
+   * addresses the sidecar explicitly does not have to reconstruct its key.
+   */
+  deletePublicationMetadata(season: number, version: string): Promise<void>;
   getActiveVersion(season: number): Promise<string | null>;
   setActiveVersion(season: number, version: string): Promise<void>;
   getPreviousVersion(season: number): Promise<string | null>;
