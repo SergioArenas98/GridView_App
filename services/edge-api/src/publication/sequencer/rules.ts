@@ -32,6 +32,25 @@ import {
   isVersionIdentifier,
   maximumManifestSize,
 } from './store';
+import {
+  canonicalInstant,
+  compareInstants,
+  instantPlusMillisecond,
+} from '../canonical/instant';
+
+/**
+ * Raised inside a transaction when the injected clock yields a value no
+ * instant arithmetic can use. `transactionSync` rolls the transaction back, so
+ * the coordinator's caller sees a bounded fail-closed outcome and no durable
+ * write - the coordinator also guards `clock.now()` before this can be hit on
+ * any committed path.
+ */
+export class NonFiniteClockError extends Error {
+  constructor() {
+    super('sequencer clock produced a non-finite instant');
+    this.name = 'NonFiniteClockError';
+  }
+}
 
 /**
  * The two-case per-key assignment rule.
@@ -59,10 +78,27 @@ export function assignObservationTimestamps(
   const active = new Map(
     committed.map((state) => [state.documentName as string, state]),
   );
-  const floor = highWaterMark === null ? null : Date.parse(highWaterMark);
-  const freshMillis =
-    floor === null ? now.getTime() : Math.max(now.getTime(), floor + 1);
-  const fresh = new Date(freshMillis).toISOString();
+  const nowMillis = now.getTime();
+  if (!Number.isFinite(nowMillis)) throw new NonFiniteClockError();
+  const nowInstant = new Date(nowMillis).toISOString();
+  // `max(now, highWaterMark + 1 ms)`, computed without `Date.parse`: when `now`
+  // is already strictly past the floor it is the answer unchanged (identical to
+  // the previous `Date`-only behaviour); otherwise the floor is advanced by
+  // exactly one millisecond through the total, leap-second-aware helper, so a
+  // leap-second or sub-millisecond floor can never wedge the assignment.
+  let fresh: string;
+  if (highWaterMark === null) {
+    fresh = nowInstant;
+  } else {
+    const order = compareInstants(nowInstant, highWaterMark);
+    if (order === 1) {
+      fresh = nowInstant;
+    } else {
+      const bumped = instantPlusMillisecond(highWaterMark);
+      if (bumped === null) throw new NonFiniteClockError();
+      fresh = bumped;
+    }
+  }
   return candidate.map((entry) => {
     const current = active.get(entry.documentName);
     const unchanged =
@@ -79,21 +115,30 @@ export function highestInstant(
   values: readonly (string | null)[],
 ): string | null {
   let best: string | null = null;
-  let bestMillis = Number.NEGATIVE_INFINITY;
   for (const value of values) {
     if (value === null) continue;
-    const millis = Date.parse(value);
-    if (!Number.isFinite(millis)) continue;
-    if (millis > bestMillis) {
-      bestMillis = millis;
+    // Ordered by canonical comparison, not `Date.parse`: a leap-second value is
+    // a real instant here, not a `NaN` that gets silently skipped.
+    if (canonicalInstant(value) === null) continue;
+    if (best === null) {
       best = value;
+      continue;
     }
+    if (compareInstants(value, best) === 1) best = value;
   }
   return best;
 }
 
 export function isExpired(record: OperationRecord, now: Date): boolean {
-  return now.getTime() > Date.parse(record.deadline);
+  const nowMillis = now.getTime();
+  if (!Number.isFinite(nowMillis)) return true;
+  const order = compareInstants(
+    new Date(nowMillis).toISOString(),
+    record.deadline,
+  );
+  // An unparseable deadline (only reachable through a corrupt durable record)
+  // counts as expired: fail closed, never let `finalize` proceed on it.
+  return order === null ? true : order === 1;
 }
 
 export function isOperationIdentity(value: {

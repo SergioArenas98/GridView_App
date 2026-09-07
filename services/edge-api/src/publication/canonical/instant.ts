@@ -148,3 +148,108 @@ export function canonicalInstant(value: string): string | null {
     `:${pad(second, 2)}${secfrac}Z`
   );
 }
+
+/** The fixed `YYYY-MM-DDTHH:MM:SS(.frac)?` shape a canonical value always has. */
+const canonicalPattern =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z$/;
+
+/**
+ * A total order over the RFC 3339 `date-time` domain `canonicalInstant`
+ * accepts: `-1`, `0` or `1` when both values canonicalize, `null` when either
+ * does not.
+ *
+ * `Date.parse` is deliberately not used - it returns `NaN` for a leap second
+ * and truncates sub-millisecond precision, so it can neither order nor
+ * distinguish two values this contract calls valid. Comparison is done on the
+ * canonical UTC spelling instead: the 19-character `YYYY-MM-DDTHH:MM:SS` head
+ * is fixed-width with constant separators, so a lexical comparison of it is a
+ * chronological one (and `:60` sorts correctly after `:59`); the fraction is
+ * then compared digit-for-digit with the shorter side zero-extended, so every
+ * significant digit past the millisecond still separates two instants.
+ * Equivalent spellings (`Z`/`+00:00`, `.100`/`.1`, a numeric offset and its
+ * UTC reading) share a canonical form and therefore compare equal.
+ */
+export function compareInstants(a: string, b: string): -1 | 0 | 1 | null {
+  const ca = canonicalInstant(a);
+  const cb = canonicalInstant(b);
+  if (ca === null || cb === null) return null;
+  if (ca === cb) return 0;
+  const [headA, fractionA = ''] = ca.slice(0, -1).split('.');
+  const [headB, fractionB = ''] = cb.slice(0, -1).split('.');
+  if (headA !== headB) return headA! < headB! ? -1 : 1;
+  const width = Math.max(fractionA.length, fractionB.length);
+  const paddedA = fractionA.padEnd(width, '0');
+  const paddedB = fractionB.padEnd(width, '0');
+  if (paddedA === paddedB) return 0;
+  return paddedA < paddedB ? -1 : 1;
+}
+
+/**
+ * The canonical spelling of one RFC 3339 `date-time` plus exactly one
+ * millisecond, or `null` when the value is not one this module accepts or the
+ * result would leave the representable year range.
+ *
+ * Total across every case the sequencer's assignment floor can reach: an
+ * ordinary second, a fraction (the millisecond digit advances and any
+ * sub-millisecond tail is carried untouched), a leap second (`:60` is the last
+ * second of its minute, so a carry out of it rolls to `:00` of the next
+ * minute, never to a synthesized `:61`), and an end-of-minute / hour / day /
+ * month / year rollover (carried through the same integer civil-date
+ * arithmetic `canonicalInstant` uses, so no `Date` is involved and no leap
+ * second is collapsed).
+ */
+export function instantPlusMillisecond(value: string): string | null {
+  const canonical = canonicalInstant(value);
+  if (canonical === null) return null;
+  const parts = canonicalPattern.exec(canonical);
+  if (parts === null) return null;
+
+  let year = Number(parts[1]);
+  let month = Number(parts[2]);
+  let day = Number(parts[3]);
+  let hour = Number(parts[4]);
+  let minute = Number(parts[5]);
+  let second = Number(parts[6]);
+  const fraction = parts[7] ?? '';
+
+  const milli = Number((fraction + '000').slice(0, 3));
+  const subMilli = fraction.length > 3 ? fraction.slice(3) : '';
+  let newMilli = milli + 1;
+  let carrySecond = 0;
+  if (newMilli === 1000) {
+    newMilli = 0;
+    carrySecond = 1;
+  }
+
+  if (carrySecond === 1) {
+    // 0..59 for an ordinary minute, plus 60 for a leap second - either way the
+    // second after the last one is `:00` of the next minute.
+    if (second >= 59) {
+      second = 0;
+      minute += 1;
+      if (minute === 60) {
+        minute = 0;
+        hour += 1;
+        if (hour === 24) {
+          hour = 0;
+          const civil = civilFromDays(daysFromCivil(year, month, day) + 1);
+          year = civil.year;
+          month = civil.month;
+          day = civil.day;
+        }
+      }
+    } else {
+      second += 1;
+    }
+  }
+
+  if (year < 0 || year > 9999) return null;
+
+  const rebuiltFraction =
+    `${String(newMilli).padStart(3, '0')}${subMilli}`.replace(/0+$/, '');
+  const secfrac = rebuiltFraction === '' ? '' : `.${rebuiltFraction}`;
+  return (
+    `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}` +
+    `T${pad(hour, 2)}:${pad(minute, 2)}:${pad(second, 2)}${secfrac}Z`
+  );
+}

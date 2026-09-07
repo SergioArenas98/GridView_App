@@ -85,6 +85,7 @@ import {
   seedMatchesCommittedState,
 } from './rules';
 import { systemClock, type Clock } from '../../runtime/clock';
+import { compareInstants } from '../canonical/instant';
 
 /**
  * How long a prepared operation stays finalizable.
@@ -209,6 +210,11 @@ export class SeasonPublicationCoordinator {
         return { outcome: 'rejected', reason: 'state-corrupt' };
       }
       const now = this.clock.now();
+      if (!Number.isFinite(now.getTime())) {
+        // An injected clock that cannot produce an instant fails closed here,
+        // before any durable write, rather than throwing deeper in assignment.
+        return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
       if (operation.kind === 'value') {
         const live = operation.value;
         if (live.phase === 'recovery-required') {
@@ -229,11 +235,16 @@ export class SeasonPublicationCoordinator {
       if (
         request.operationKind === 'ordinary-publication' &&
         current.committedSourceOrderingInput !== null &&
-        Date.parse(request.sourceOrderingInput) <
-          Date.parse(current.committedSourceOrderingInput)
+        compareInstants(
+          request.sourceOrderingInput,
+          current.committedSourceOrderingInput,
+        ) === -1
       ) {
         // Exactly as strict as the pre-sequencer implementation: only strictly
-        // older is rejected. Equality has always been admissible, because two
+        // older is rejected, now by canonical comparison rather than
+        // `Date.parse` so a leap-second or high-precision ordering value is
+        // ordered rather than turned into `NaN`. Equality has always been
+        // admissible, because two
         // consecutive genuinely-changed candidates may legitimately share one
         // ordering value - neither adopted source publishes a recency signal
         // finer than this field carries - and per-key revision comparison is
@@ -367,6 +378,9 @@ export class SeasonPublicationCoordinator {
         return { outcome: 'rejected', reason: 'operation-not-prepared' };
       }
       const now = this.clock.now();
+      if (!Number.isFinite(now.getTime())) {
+        return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
       if (isExpired(record, now)) {
         return { outcome: 'rejected', reason: 'preparation-expired' };
       }
