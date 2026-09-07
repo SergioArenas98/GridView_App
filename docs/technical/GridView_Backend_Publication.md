@@ -504,8 +504,10 @@ response. This per-key state does not grow with historical
 release count — superseded operation and per-key state for a key no longer
 in the current inventory are retired per ADR 0025 D5/D9 — so its size is
 bounded by the current release's inventory, plus at most one prepared
-operation, plus the one constant-size high-water mark, never by all versions
-ever published.
+operation, plus the one constant-size high-water mark, plus at most one
+constant-size pending-cleanup record (the retired identity of a displaced
+`cancelled`/expired operation, kept so its orphan stays collectable — ADR
+0025 D5), never by all versions ever published.
 Comparing the manifest commitment carried by `completionAttestation` against
 the durably-recorded `expectedManifestCommitment` proves only that the two
 values match; it is not, and is never claimed to be, independent proof that
