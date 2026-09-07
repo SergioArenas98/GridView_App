@@ -250,19 +250,41 @@ describe('cleanup authorization', () => {
     }
   });
 
-  it('refuses once a later prepare has superseded the named record', () => {
-    // "Recheck the current epoch" means checking the *named* epoch against the
-    // current durable record, never accepting whichever epoch happens to be
-    // current.
+  it('authorizes the displaced record from the pending-cleanup slot, exactly', () => {
+    // A later prepare that displaces a cancelled record moves its identity into
+    // the single pending-cleanup slot, so its orphaned candidate stays
+    // collectable - but only that exact retired identity, never whichever epoch
+    // happens to be current.
     const harness = activeSequencer();
     const cancelled = cancelledOperation(harness);
     const later = prepared(harness, {
       perKeyRevisions: [keyRevision('calendar', rev('calendar-2'))],
     });
     expect(later.operationEpoch).toBeGreaterThan(cancelled.operationEpoch);
+    // The retired identity is authorized from the pending slot.
     expect(
       harness.sequencer.authorizeCleanup({
         ...identityOf(cancelled),
+        candidateVersion: cancelled.candidateVersion,
+      }),
+    ).toEqual({
+      outcome: 'authorized',
+      candidateVersion: cancelled.candidateVersion,
+    });
+    // The current (prepared) epoch cannot borrow the pending slot's version:
+    // it is matched as the current record, which is not cancelled.
+    expect(
+      harness.sequencer.authorizeCleanup({
+        ...identityOf(later),
+        candidateVersion: cancelled.candidateVersion,
+      }),
+    ).toEqual({ outcome: 'refused', reason: 'operation-not-cancelled' });
+    // An epoch that was never retired is refused outright.
+    expect(
+      harness.sequencer.authorizeCleanup({
+        season: SEASON,
+        operationEpoch: cancelled.operationEpoch + 99,
+        operationToken: cancelled.operationToken,
         candidateVersion: cancelled.candidateVersion,
       }),
     ).toEqual({ outcome: 'refused', reason: 'identity-not-current' });
@@ -301,13 +323,15 @@ describe('cleanup authorization', () => {
       }),
     ).toMatchObject({ outcome: 'committed' });
 
-    // And a fresh request for the same, now-superseded, identity is refused.
+    // And a fresh request for the same retired identity is still authorized -
+    // from the pending-cleanup slot it was moved to - so A's orphan stays
+    // collectable; it can still only ever delete A's version.
     expect(
       harness.sequencer.authorizeCleanup({
         ...identityOf(a),
         candidateVersion: a.candidateVersion,
       }),
-    ).toEqual({ outcome: 'refused', reason: 'identity-not-current' });
+    ).toEqual({ outcome: 'authorized', candidateVersion: a.candidateVersion });
   });
 
   it('never mutates durable state, whatever the external deletion does', () => {

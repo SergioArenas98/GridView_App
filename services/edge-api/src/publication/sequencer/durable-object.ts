@@ -41,6 +41,7 @@ import {
 } from './coordinator';
 import type {
   CancelOutcome,
+  CleanupAcknowledgement,
   CleanupAuthorization,
   CleanupRequest,
   CutoverActivationOutcome,
@@ -57,6 +58,7 @@ import type {
 import type { SeasonPublicationSequencerPort } from './port';
 import {
   decodeCancelOutcome,
+  decodeCleanupAcknowledgement,
   decodeCleanupAuthorization,
   decodeCutoverActivationOutcome,
   decodeCutoverSeedOutcome,
@@ -75,6 +77,7 @@ export const sequencerCommands = [
   'finalize',
   'cancel',
   'authorize-cleanup',
+  'acknowledge-cleanup',
   'seed-cutover',
   'activate-cutover',
 ] as const;
@@ -139,6 +142,10 @@ export class SeasonPublicationSequencer {
         return this.coordinator.cancel(request as unknown as OperationIdentity);
       case 'authorize-cleanup':
         return this.coordinator.authorizeCleanup(
+          request as unknown as CleanupRequest,
+        );
+      case 'acknowledge-cleanup':
+        return this.coordinator.acknowledgeCleanup(
           request as unknown as CleanupRequest,
         );
       case 'seed-cutover':
@@ -232,6 +239,22 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
     return (
       decodeCleanupAuthorization(value) ?? {
         outcome: 'refused',
+        reason: 'state-corrupt',
+      }
+    );
+  }
+
+  async acknowledgeCleanup(
+    request: CleanupRequest,
+  ): Promise<CleanupAcknowledgement> {
+    const value = await this.call(
+      request.season,
+      'acknowledge-cleanup',
+      request,
+    );
+    return (
+      decodeCleanupAcknowledgement(value) ?? {
+        outcome: 'rejected',
         reason: 'state-corrupt',
       }
     );

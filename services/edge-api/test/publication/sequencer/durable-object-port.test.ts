@@ -197,6 +197,7 @@ describe('SeasonPublicationSequencer durable object', () => {
       'finalize',
       'cancel',
       'authorize-cleanup',
+      'acknowledge-cleanup',
       'seed-cutover',
       'activate-cutover',
     ]);

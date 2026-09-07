@@ -30,7 +30,9 @@ export {
   committedKeyPrefix,
   maximumManifestSize,
   operationStorageKey,
+  pendingCleanupStorageKey,
   preparedKeyPrefix,
+  readPendingCleanupRecord,
   type SequencerHost,
   type SequencerRecordStore,
 } from './store';
@@ -65,6 +67,7 @@ export {
 } from './durable-object';
 export {
   decodeCancelOutcome,
+  decodeCleanupAcknowledgement,
   decodeCleanupAuthorization,
   decodeCutoverActivationOutcome,
   decodeCutoverSeedOutcome,

@@ -43,6 +43,7 @@ import { isManifestCommitment } from './manifest-commitment';
 import {
   type AuthorityRecord,
   type CancelOutcome,
+  type CleanupAcknowledgement,
   type CleanupAuthorization,
   type CleanupRequest,
   type CommittedResult,
@@ -54,11 +55,14 @@ import {
   type FinalizeRequest,
   type OperationIdentity,
   type OperationRecord,
+  type PendingCleanupRecord,
   type PrepareOutcome,
   type PrepareRequest,
   type SeasonAuthority,
 } from './model';
 import {
+  clearOperationRecord,
+  clearPendingCleanupRecord,
   clearPerKeyState,
   committedKeyPrefix,
   isOpaqueIdentifier,
@@ -68,9 +72,11 @@ import {
   putPerKeyState,
   readAuthorityRecord,
   readOperationRecord,
+  readPendingCleanupRecord,
   readPerKeyState,
   writeAuthorityRecord,
   writeOperationRecord,
+  writePendingCleanupRecord,
   type DurableRead,
   type SequencerHost,
   type SequencerRecordStore,
@@ -215,6 +221,7 @@ export class SeasonPublicationCoordinator {
         // before any durable write, rather than throwing deeper in assignment.
         return { outcome: 'rejected', reason: 'state-corrupt' };
       }
+      let stagedRetirement: PendingCleanupRecord | null = null;
       if (operation.kind === 'value') {
         const live = operation.value;
         if (live.phase === 'recovery-required') {
@@ -228,6 +235,41 @@ export class SeasonPublicationCoordinator {
               operationEpoch: live.epoch,
               candidateVersion: live.candidateVersion,
             },
+          };
+        }
+        // The outgoing record is about to be displaced. If it is cancelled, or
+        // a prepared record that has expired, its candidate may already carry
+        // partial Workers KV writes and must stay collectable - so its identity
+        // is moved into the single pending-cleanup slot in the same atomic
+        // write, never silently overwritten (D5).
+        const retirable =
+          live.phase === 'cancelled' ||
+          (live.phase === 'prepared' && isExpired(live, now));
+        const orphaned =
+          retirable &&
+          live.candidateVersion !== current.activeVersion &&
+          live.candidateVersion !== current.previousVersion;
+        if (orphaned) {
+          const pending = readPendingCleanupRecord(store);
+          if (pending.kind === 'corrupt') {
+            return { outcome: 'rejected', reason: 'state-corrupt' };
+          }
+          if (pending.kind === 'value') {
+            // The slot already holds an earlier orphan. Backpressure, rather
+            // than overwrite it or leak a second uncollectable version.
+            return {
+              outcome: 'rejected',
+              reason: 'pending-cleanup-required',
+              pendingCleanup: {
+                operationEpoch: pending.value.operationEpoch,
+                candidateVersion: pending.value.candidateVersion,
+              },
+            };
+          }
+          stagedRetirement = {
+            operationEpoch: live.epoch,
+            candidateVersion: live.candidateVersion,
+            retiredAt: now.toISOString(),
           };
         }
       }
@@ -293,6 +335,9 @@ export class SeasonPublicationCoordinator {
       for (const state of assignedTimestamps) {
         putPerKeyState(store, preparedKeyPrefix, state);
       }
+      if (stagedRetirement !== null) {
+        writePendingCleanupRecord(store, stagedRetirement);
+      }
       writeOperationRecord(store, record);
       writeAuthorityRecord(store, { ...current, lastOperationEpoch: epoch });
 
@@ -303,6 +348,14 @@ export class SeasonPublicationCoordinator {
         candidateVersion,
         assignedTimestamps,
         deadline: record.deadline,
+        ...(stagedRetirement !== null
+          ? {
+              retiredCleanup: {
+                operationEpoch: stagedRetirement.operationEpoch,
+                candidateVersion: stagedRetirement.candidateVersion,
+              },
+            }
+          : {}),
       };
     });
   }
@@ -493,14 +546,19 @@ export class SeasonPublicationCoordinator {
   }
 
   /**
-   * Authorizes deletion of one cancelled operation's orphaned version.
+   * Authorizes deletion of one retired operation's orphaned version.
    *
    * The request **names** the operation it wants cleaned up, and only that one
-   * is authorized. "Recheck the current epoch" means comparing the *named*
-   * epoch and token against the current durable record - never accepting
-   * whichever epoch happens to be current. A later `prepare` that superseded
-   * the named record therefore causes a refusal, not an authorization on the
-   * strength of some other epoch also being terminal.
+   * is authorized - against exactly one of two bounded places its identity can
+   * live: the **current** durable operation record while it is still
+   * `cancelled` and current, or the single **pending-cleanup slot** it was
+   * moved to when a later `prepare` displaced it (D5). "Recheck the epoch"
+   * still means checking the *named* epoch and version, never whichever epoch
+   * happens to be current - the pending slot holds exactly one retired
+   * identity, not "some terminal epoch".
+   *
+   * Cleanup is **always refused** for `activeVersion`, `previousVersion`, and
+   * the candidate of the current prepared or committed operation.
    *
    * **This never deletes anything.** The external Workers KV deletion happens
    * outside any transaction and remains best-effort, and this design does not
@@ -531,34 +589,139 @@ export class SeasonPublicationCoordinator {
       if (operation.kind === 'corrupt') {
         return { outcome: 'refused', reason: 'state-corrupt' };
       }
-      if (operation.kind === 'missing') {
+      const pending = readPendingCleanupRecord(store);
+      if (pending.kind === 'corrupt') {
+        return { outcome: 'refused', reason: 'state-corrupt' };
+      }
+
+      const isAuthoritativeVersion = (version: string): boolean =>
+        version === authority.value.activeVersion ||
+        version === authority.value.previousVersion ||
+        (operation.kind === 'value' &&
+          operation.value.phase !== 'cancelled' &&
+          operation.value.candidateVersion === version);
+
+      // Path 1: the named operation is still the current durable record.
+      if (
+        operation.kind === 'value' &&
+        operation.value.epoch === request.operationEpoch &&
+        operation.value.token === request.operationToken
+      ) {
+        const record = operation.value;
+        if (record.phase !== 'cancelled') {
+          return { outcome: 'refused', reason: 'operation-not-cancelled' };
+        }
+        if (record.candidateVersion !== request.candidateVersion) {
+          return { outcome: 'refused', reason: 'candidate-version-mismatch' };
+        }
+        if (isAuthoritativeVersion(request.candidateVersion)) {
+          return { outcome: 'refused', reason: 'version-is-authoritative' };
+        }
+        return {
+          outcome: 'authorized',
+          candidateVersion: record.candidateVersion,
+        };
+      }
+
+      // Path 2: the named operation was displaced and now sits in the single
+      // pending-cleanup slot. Epoch plus candidate version is an exact scope -
+      // the version belongs to exactly that epoch for its whole existence, and
+      // the epoch is retired and terminal (D3, D5).
+      if (
+        pending.kind === 'value' &&
+        pending.value.operationEpoch === request.operationEpoch &&
+        pending.value.candidateVersion === request.candidateVersion
+      ) {
+        if (isAuthoritativeVersion(request.candidateVersion)) {
+          return { outcome: 'refused', reason: 'version-is-authoritative' };
+        }
+        return {
+          outcome: 'authorized',
+          candidateVersion: pending.value.candidateVersion,
+        };
+      }
+
+      if (operation.kind === 'missing' && pending.kind === 'missing') {
         return { outcome: 'refused', reason: 'no-current-operation' };
+      }
+      return { outcome: 'refused', reason: 'identity-not-current' };
+    });
+  }
+
+  /**
+   * The idempotent transition a caller drives once its external Workers KV
+   * deletion of an authorized cleanup has succeeded, or once it has confirmed
+   * the version is already absent (D5).
+   *
+   * It retires the named identity from whichever bounded place holds it - the
+   * current `cancelled` operation record, or the single pending-cleanup slot -
+   * freeing that capacity for the next retirement. Acknowledging the same
+   * identity twice, or one an earlier cycle already cleared, is `acknowledged`,
+   * not an error. A different identity than the one currently retired is
+   * refused, so a stale acknowledgement cannot free the slot for the wrong
+   * orphan. It performs no Workers KV I/O.
+   */
+  acknowledgeCleanup(request: CleanupRequest): CleanupAcknowledgement {
+    if (
+      !isOperationIdentity(request) ||
+      !isVersionIdentifier(request.candidateVersion)
+    ) {
+      return { outcome: 'rejected', reason: 'malformed-request' };
+    }
+    return this.host.transactionSync((store): CleanupAcknowledgement => {
+      const authority = readAuthorityRecord(store);
+      if (authority.kind === 'corrupt') {
+        return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
+      if (authority.kind === 'missing') {
+        return { outcome: 'rejected', reason: 'identity-not-current' };
+      }
+      if (authority.value.season !== request.season) {
+        return { outcome: 'rejected', reason: 'season-mismatch' };
+      }
+
+      const pending = readPendingCleanupRecord(store);
+      if (pending.kind === 'corrupt') {
+        return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
+      if (pending.kind === 'value') {
+        if (
+          pending.value.operationEpoch === request.operationEpoch &&
+          pending.value.candidateVersion === request.candidateVersion
+        ) {
+          clearPendingCleanupRecord(store);
+          return { outcome: 'acknowledged' };
+        }
+        // An older identity than the one now staged was already cleared.
+        if (request.operationEpoch < pending.value.operationEpoch) {
+          return { outcome: 'acknowledged' };
+        }
+        return { outcome: 'rejected', reason: 'identity-not-current' };
+      }
+
+      const operation = readOperationRecord(store);
+      if (operation.kind === 'corrupt') {
+        return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
+      if (operation.kind === 'missing') {
+        // Nothing staged anywhere: an earlier cycle cleared it.
+        return { outcome: 'acknowledged' };
       }
       const record = operation.value;
       if (
-        record.epoch !== request.operationEpoch ||
-        record.token !== request.operationToken
+        record.epoch === request.operationEpoch &&
+        record.token === request.operationToken &&
+        record.candidateVersion === request.candidateVersion &&
+        record.phase === 'cancelled'
       ) {
-        return { outcome: 'refused', reason: 'identity-not-current' };
+        clearOperationRecord(store);
+        return { outcome: 'acknowledged' };
       }
-      if (record.phase !== 'cancelled') {
-        // A prepared or committed record's candidate is not orphaned, and a
-        // record in recovery is not something cleanup may act on.
-        return { outcome: 'refused', reason: 'operation-not-cancelled' };
+      if (record.epoch > request.operationEpoch) {
+        // The named epoch is already retired past the current record.
+        return { outcome: 'acknowledged' };
       }
-      if (record.candidateVersion !== request.candidateVersion) {
-        return { outcome: 'refused', reason: 'candidate-version-mismatch' };
-      }
-      if (
-        request.candidateVersion === authority.value.activeVersion ||
-        request.candidateVersion === authority.value.previousVersion
-      ) {
-        return { outcome: 'refused', reason: 'version-is-authoritative' };
-      }
-      return {
-        outcome: 'authorized',
-        candidateVersion: record.candidateVersion,
-      };
+      return { outcome: 'rejected', reason: 'identity-not-current' };
     });
   }
 

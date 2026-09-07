@@ -137,7 +137,8 @@ export interface AuthorityRecord {
  * `prepare` and `finalize` must not leave the sequencer remembering only *that*
  * something was prepared rather than *what*.
  *
- * Only the **current** record is retained. That is why the recorded-result
+ * Only the **current** record is retained, plus - separately - at most one
+ * constant-size {@link PendingCleanupRecord}. That is why the recorded-result
  * replay guarantee is bounded to while this record is current: past that, a
  * retired epoch resolves to the `superseded` outcome instead. An unbounded map
  * of retired results would reintroduce exactly the unbounded per-operation
@@ -157,6 +158,34 @@ export interface OperationRecord {
   readonly deadline: string;
   /** Present only while `phase === 'committed'`. Replayed verbatim. */
   readonly committedResult: CommittedResult | null;
+}
+
+/**
+ * The one bounded, constant-size record that keeps a retired operation's
+ * orphaned candidate collectable after a later `prepare` has displaced it
+ * ([ADR 0025](../../../../../docs/adr/0025-season-publication-authority-and-rollback-republication.md)
+ * D5).
+ *
+ * A `prepare` that replaces an expired or cancelled operation would otherwise
+ * overwrite the sole durable fact its (possibly partially written) candidate
+ * needs for cleanup authorization. Instead the retiring operation's identity is
+ * moved here, in the same atomic transaction that installs the new operation,
+ * so `authorizeCleanup` can still name it and `acknowledgeCleanup` can retire
+ * it once the external deletion has succeeded or its absence is confirmed.
+ *
+ * There is **at most one** of these. If the slot is occupied when another
+ * operation would need retiring, `prepare` applies explicit backpressure
+ * (`pending-cleanup-required`) rather than overwriting it or leaking a second
+ * orphan - so a repeated crash/expiry cycle can never grow this state. No
+ * operation token is stored here: the epoch is retired and terminal, the
+ * candidate version belongs to exactly that epoch for its whole existence
+ * (D3), and a retired epoch's token can no longer authorize `finalize`.
+ */
+export interface PendingCleanupRecord {
+  readonly operationEpoch: number;
+  readonly candidateVersion: string;
+  /** RFC 3339 `date-time`, the clock reading when the operation was retired. */
+  readonly retiredAt: string;
 }
 
 /** The bounded result a committed operation replays for its own identity. */
@@ -180,6 +209,12 @@ export const prepareRejectionReasons = [
   'operation-in-progress',
   'older-source-ordering-input',
   'epoch-space-exhausted',
+  /**
+   * The single pending-cleanup slot is occupied, so another operation cannot
+   * be retired until that orphan's cleanup is acknowledged. Carries
+   * `pendingCleanup`.
+   */
+  'pending-cleanup-required',
   'state-corrupt',
 ] as const;
 
@@ -260,6 +295,16 @@ export interface PrepareRequest {
   readonly expectedManifestCommitment: string;
 }
 
+/**
+ * The bounded identity of a retired operation whose orphaned candidate still
+ * needs cleanup: enough for a caller to drive `authorizeCleanup` and
+ * `acknowledgeCleanup`, and never the operation token.
+ */
+export interface RetiredCleanupHandle {
+  readonly operationEpoch: number;
+  readonly candidateVersion: string;
+}
+
 export type PrepareOutcome =
   | {
       readonly outcome: 'prepared';
@@ -268,6 +313,13 @@ export type PrepareOutcome =
       readonly candidateVersion: string;
       readonly assignedTimestamps: readonly PerKeyState[];
       readonly deadline: string;
+      /**
+       * Present only when this `prepare` displaced an expired or cancelled
+       * operation whose candidate must still be cleaned up: its identity was
+       * moved into the pending-cleanup slot, and this is the replayable handle
+       * for it. Absent on the ordinary path.
+       */
+      readonly retiredCleanup?: RetiredCleanupHandle;
     }
   | {
       readonly outcome: 'rejected';
@@ -283,6 +335,12 @@ export type PrepareOutcome =
         readonly operationEpoch: number;
         readonly candidateVersion: string;
       };
+      /**
+       * Present only for `pending-cleanup-required`: the retired candidate
+       * occupying the single pending-cleanup slot, which must be cleaned up and
+       * acknowledged before another operation can be retired.
+       */
+      readonly pendingCleanup?: RetiredCleanupHandle;
     };
 
 /** The identity `finalize` and `cancel` present: epoch **and** token. */
@@ -341,6 +399,32 @@ export type CleanupRequest = OperationIdentity & {
 export type CleanupAuthorization =
   | { readonly outcome: 'authorized'; readonly candidateVersion: string }
   | { readonly outcome: 'refused'; readonly reason: CleanupRefusalReason };
+
+/** Why the sequencer refused to acknowledge a completed cleanup. */
+export const cleanupAckRejectionReasons = [
+  'malformed-request',
+  'season-mismatch',
+  /** The named epoch/token/version is neither the current retired record nor
+   *  the pending-cleanup slot's, and is not an already-cleared older one. */
+  'identity-not-current',
+  'state-corrupt',
+] as const;
+
+export type CleanupAckRejectionReason =
+  (typeof cleanupAckRejectionReasons)[number];
+
+/**
+ * The idempotent transition a caller drives after its external Workers KV
+ * deletion has succeeded, or after it has confirmed the version is already
+ * absent. Retiring the same identity twice, or one already cleared by a later
+ * cycle, is `acknowledged`, not an error.
+ */
+export type CleanupAcknowledgement =
+  | { readonly outcome: 'acknowledged' }
+  | {
+      readonly outcome: 'rejected';
+      readonly reason: CleanupAckRejectionReason;
+    };
 
 /**
  * A complete, already validated cutover seed, supplied by a future migration

@@ -36,6 +36,7 @@ import type {
   OperationKind,
   OperationPhase,
   OperationRecord,
+  PendingCleanupRecord,
   PerKeyState,
 } from './model';
 import { cutoverStates, operationPhases, isOperationKind } from './model';
@@ -65,6 +66,12 @@ export interface SequencerHost {
 export const authorityStorageKey = 'authority';
 /** The current operation record. Only ever one. */
 export const operationStorageKey = 'operation';
+/**
+ * The single pending-cleanup record (D5). Present only while a retired
+ * operation's orphaned candidate is still awaiting external deletion and its
+ * acknowledgement; at most one exists at any time.
+ */
+export const pendingCleanupStorageKey = 'pending-cleanup';
 /** Prefix for the committed per-key revision/observation records. */
 export const committedKeyPrefix = 'committed/';
 /** Prefix for the prepared candidate's per-key records. */
@@ -260,6 +267,48 @@ export function writeOperationRecord(
   record: OperationRecord,
 ): void {
   store.put(operationStorageKey, record);
+}
+
+/** Retires the current operation record entirely. Used only by an acknowledged
+ *  cleanup of a cancelled operation that is still the current record (D5). */
+export function clearOperationRecord(store: SequencerRecordStore): void {
+  store.delete(operationStorageKey);
+}
+
+export function readPendingCleanupRecord(
+  store: SequencerRecordStore,
+): DurableRead<PendingCleanupRecord> {
+  const raw = store.get(pendingCleanupStorageKey);
+  if (raw === undefined) return { kind: 'missing' };
+  if (!isRecordValue(raw)) return { kind: 'corrupt' };
+  if (
+    typeof raw.operationEpoch !== 'number' ||
+    !Number.isSafeInteger(raw.operationEpoch) ||
+    raw.operationEpoch < 1
+  ) {
+    return { kind: 'corrupt' };
+  }
+  if (!isVersionIdentifier(raw.candidateVersion)) return { kind: 'corrupt' };
+  if (!isInstant(raw.retiredAt)) return { kind: 'corrupt' };
+  return {
+    kind: 'value',
+    value: {
+      operationEpoch: raw.operationEpoch,
+      candidateVersion: raw.candidateVersion,
+      retiredAt: raw.retiredAt,
+    },
+  };
+}
+
+export function writePendingCleanupRecord(
+  store: SequencerRecordStore,
+  record: PendingCleanupRecord,
+): void {
+  store.put(pendingCleanupStorageKey, record);
+}
+
+export function clearPendingCleanupRecord(store: SequencerRecordStore): void {
+  store.delete(pendingCleanupStorageKey);
 }
 
 function readCommittedResult(

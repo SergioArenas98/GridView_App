@@ -23,12 +23,14 @@
 import { maximumOperationEpoch } from './candidate-version';
 import {
   cancelRejectionReasons,
+  cleanupAckRejectionReasons,
   cleanupRefusalReasons,
   cutoverRejectionReasons,
   finalizeRejectionReasons,
   isOperationKind,
   prepareRejectionReasons,
   type CancelOutcome,
+  type CleanupAcknowledgement,
   type CleanupAuthorization,
   type CommittedResult,
   type CutoverActivationOutcome,
@@ -36,6 +38,7 @@ import {
   type FinalizeOutcome,
   type PerKeyState,
   type PrepareOutcome,
+  type RetiredCleanupHandle,
   type SeasonAuthority,
 } from './model';
 import {
@@ -89,6 +92,18 @@ function decodePerKeyStateArray(value: unknown): PerKeyState[] | null {
     });
   }
   return states;
+}
+
+function decodeRetiredCleanupHandle(
+  value: unknown,
+): RetiredCleanupHandle | null {
+  if (!isRecord(value)) return null;
+  if (!isOperationEpoch(value.operationEpoch)) return null;
+  if (!isVersionIdentifier(value.candidateVersion)) return null;
+  return {
+    operationEpoch: value.operationEpoch,
+    candidateVersion: value.candidateVersion,
+  };
 }
 
 function decodeCommittedResult(value: unknown): CommittedResult | null {
@@ -156,14 +171,20 @@ export function decodePrepareOutcome(value: unknown): PrepareOutcome | null {
     const assignedTimestamps = decodePerKeyStateArray(value.assignedTimestamps);
     if (assignedTimestamps === null) return null;
     if (!isInstant(value.deadline)) return null;
-    return {
+    const base = {
       outcome: 'prepared',
       operationEpoch: value.operationEpoch,
       operationToken: value.operationToken,
       candidateVersion: value.candidateVersion,
       assignedTimestamps,
       deadline: value.deadline,
-    };
+    } as const;
+    if (value.retiredCleanup === undefined) return base;
+    // Present only when this prepare displaced a retired operation; it must be
+    // fully valid if it is there at all.
+    const retiredCleanup = decodeRetiredCleanupHandle(value.retiredCleanup);
+    if (retiredCleanup === null) return null;
+    return { ...base, retiredCleanup };
   }
   if (value.outcome === 'rejected') {
     if (!inClosedSet(value.reason, prepareRejectionReasons)) return null;
@@ -183,8 +204,17 @@ export function decodePrepareOutcome(value: unknown): PrepareOutcome | null {
         },
       };
     }
-    // `liveOperation` is not meaningful for any other rejection reason, so it
-    // is dropped rather than carried through unvalidated.
+    if (value.reason === 'pending-cleanup-required') {
+      const pendingCleanup = decodeRetiredCleanupHandle(value.pendingCleanup);
+      if (pendingCleanup === null) return null;
+      return {
+        outcome: 'rejected',
+        reason: 'pending-cleanup-required',
+        pendingCleanup,
+      };
+    }
+    // `liveOperation` / `pendingCleanup` are not meaningful for any other
+    // rejection reason, so they are dropped rather than carried unvalidated.
     return { outcome: 'rejected', reason: value.reason };
   }
   return null;
@@ -255,6 +285,19 @@ export function decodeCleanupAuthorization(
   if (value.outcome === 'refused') {
     return inClosedSet(value.reason, cleanupRefusalReasons)
       ? { outcome: 'refused', reason: value.reason }
+      : null;
+  }
+  return null;
+}
+
+export function decodeCleanupAcknowledgement(
+  value: unknown,
+): CleanupAcknowledgement | null {
+  if (!isRecord(value)) return null;
+  if (value.outcome === 'acknowledged') return { outcome: 'acknowledged' };
+  if (value.outcome === 'rejected') {
+    return inClosedSet(value.reason, cleanupAckRejectionReasons)
+      ? { outcome: 'rejected', reason: value.reason }
       : null;
   }
   return null;

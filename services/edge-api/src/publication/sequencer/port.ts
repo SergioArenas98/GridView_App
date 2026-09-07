@@ -14,6 +14,7 @@
 
 import type {
   CancelOutcome,
+  CleanupAcknowledgement,
   CleanupAuthorization,
   CleanupRequest,
   CutoverActivationOutcome,
@@ -43,11 +44,19 @@ export interface SeasonPublicationSequencerPort {
   finalize(request: FinalizeRequest): Promise<FinalizeOutcome>;
   cancel(request: OperationIdentity): Promise<CancelOutcome>;
   /**
-   * Authorizes deletion of one named cancelled operation's orphaned version.
-   * The caller performs the external, best-effort Workers KV deletion itself;
-   * the sequencer never touches Workers KV.
+   * Authorizes deletion of one named retired operation's orphaned version -
+   * whether it is still the current `cancelled` record or has been moved to the
+   * single pending-cleanup slot by a later `prepare`. The caller performs the
+   * external, best-effort Workers KV deletion itself; the sequencer never
+   * touches Workers KV.
    */
   authorizeCleanup(request: CleanupRequest): Promise<CleanupAuthorization>;
+  /**
+   * Idempotently retires a cleaned-up identity from whichever bounded slot
+   * holds it, once the external deletion has succeeded or the version's absence
+   * is confirmed.
+   */
+  acknowledgeCleanup(request: CleanupRequest): Promise<CleanupAcknowledgement>;
   seedCutover(seed: CutoverSeed): Promise<CutoverSeedOutcome>;
   activateCutover(
     request: CutoverActivationRequest,
@@ -85,6 +94,12 @@ export class LocalSeasonPublicationSequencer implements SeasonPublicationSequenc
     request: CleanupRequest,
   ): Promise<CleanupAuthorization> {
     return this.coordinator.authorizeCleanup(request);
+  }
+
+  async acknowledgeCleanup(
+    request: CleanupRequest,
+  ): Promise<CleanupAcknowledgement> {
+    return this.coordinator.acknowledgeCleanup(request);
   }
 
   async seedCutover(seed: CutoverSeed): Promise<CutoverSeedOutcome> {

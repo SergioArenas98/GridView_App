@@ -73,13 +73,19 @@ describe('prepare: allocation and identity', () => {
       epochs.push(prepared.operationEpoch);
       expect(versions.has(prepared.candidateVersion)).toBe(false);
       versions.add(prepared.candidateVersion);
-      // Retire the operation so the next one is admissible. Cancelled epochs
-      // are included deliberately: a retired epoch's version must never be
-      // reachable again.
-      sequencer.cancel({
+      // Retire the operation so the next one is admissible, then acknowledge
+      // its cleanup so the single pending-cleanup slot is free for the next
+      // cycle. Cancelled epochs are included deliberately: a retired epoch's
+      // version must never be reachable again.
+      const identity = {
         season: SEASON,
         operationEpoch: prepared.operationEpoch,
         operationToken: prepared.operationToken,
+      };
+      sequencer.cancel(identity);
+      sequencer.acknowledgeCleanup({
+        ...identity,
+        candidateVersion: prepared.candidateVersion,
       });
     }
     expect(epochs).toEqual([1, 2, 3, 4, 5]);
