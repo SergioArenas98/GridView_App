@@ -55,6 +55,15 @@ import type {
   SeasonAuthority,
 } from './model';
 import type { SeasonPublicationSequencerPort } from './port';
+import {
+  decodeCancelOutcome,
+  decodeCleanupAuthorization,
+  decodeCutoverActivationOutcome,
+  decodeCutoverSeedOutcome,
+  decodeFinalizeOutcome,
+  decodePrepareOutcome,
+  decodeSeasonAuthority,
+} from './wire-decoders';
 
 /** Internal URL used to address the object. Never logged, never external. */
 export const sequencerRequestUrl = 'https://season-publication-sequencer/call';
@@ -178,41 +187,41 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
 
   async readAuthority(season: number): Promise<SeasonAuthority> {
     const value = await this.call(season, 'read-authority', { season });
-    return isRecord(value) &&
-      (value.cutoverState === 'uninitialized' ||
-        value.cutoverState === 'seeded' ||
-        value.cutoverState === 'active' ||
-        value.cutoverState === 'unavailable')
-      ? (value as unknown as SeasonAuthority)
-      : { cutoverState: 'unavailable', authoritative: false };
+    return (
+      decodeSeasonAuthority(value) ?? {
+        cutoverState: 'unavailable',
+        authoritative: false,
+      }
+    );
   }
 
   async prepare(request: PrepareRequest): Promise<PrepareOutcome> {
     const value = await this.call(request.season, 'prepare', request);
-    return outcomeOr<PrepareOutcome>(value, ['prepared', 'rejected'], {
-      outcome: 'rejected',
-      reason: 'state-corrupt',
-    });
+    return (
+      decodePrepareOutcome(value) ?? {
+        outcome: 'rejected',
+        reason: 'state-corrupt',
+      }
+    );
   }
 
   async finalize(request: FinalizeRequest): Promise<FinalizeOutcome> {
     const value = await this.call(request.season, 'finalize', request);
-    return outcomeOr<FinalizeOutcome>(
-      value,
-      ['committed', 'superseded', 'rejected'],
-      {
+    return (
+      decodeFinalizeOutcome(value) ?? {
         outcome: 'rejected',
         reason: 'state-corrupt',
-      },
+      }
     );
   }
 
   async cancel(request: OperationIdentity): Promise<CancelOutcome> {
     const value = await this.call(request.season, 'cancel', request);
-    return outcomeOr<CancelOutcome>(
-      value,
-      ['cancelled', 'already-cancelled', 'superseded', 'rejected'],
-      { outcome: 'rejected', reason: 'state-corrupt' },
+    return (
+      decodeCancelOutcome(value) ?? {
+        outcome: 'rejected',
+        reason: 'state-corrupt',
+      }
     );
   }
 
@@ -220,18 +229,21 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
     request: CleanupRequest,
   ): Promise<CleanupAuthorization> {
     const value = await this.call(request.season, 'authorize-cleanup', request);
-    return outcomeOr<CleanupAuthorization>(value, ['authorized', 'refused'], {
-      outcome: 'refused',
-      reason: 'state-corrupt',
-    });
+    return (
+      decodeCleanupAuthorization(value) ?? {
+        outcome: 'refused',
+        reason: 'state-corrupt',
+      }
+    );
   }
 
   async seedCutover(seed: CutoverSeed): Promise<CutoverSeedOutcome> {
     const value = await this.call(seed.season, 'seed-cutover', seed);
-    return outcomeOr<CutoverSeedOutcome>(
-      value,
-      ['seeded', 'already-seeded', 'already-active', 'rejected'],
-      { outcome: 'rejected', reason: 'state-corrupt' },
+    return (
+      decodeCutoverSeedOutcome(value) ?? {
+        outcome: 'rejected',
+        reason: 'state-corrupt',
+      }
     );
   }
 
@@ -239,13 +251,11 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
     request: CutoverActivationRequest,
   ): Promise<CutoverActivationOutcome> {
     const value = await this.call(request.season, 'activate-cutover', request);
-    return outcomeOr<CutoverActivationOutcome>(
-      value,
-      ['activated', 'already-active', 'rejected'],
-      {
+    return (
+      decodeCutoverActivationOutcome(value) ?? {
         outcome: 'rejected',
         reason: 'state-corrupt',
-      },
+      }
     );
   }
 
@@ -271,26 +281,4 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
       return null;
     }
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * Accepts a response only when its discriminant is one this operation defines.
- *
- * Anything else - a partial body, a version-skewed object, an unknown outcome,
- * a transport failure that produced `null` - becomes the supplied fail-closed
- * value rather than being partially believed.
- */
-function outcomeOr<T extends { readonly outcome: string }>(
-  value: unknown,
-  permitted: readonly T['outcome'][],
-  fallback: T,
-): T {
-  if (!isRecord(value)) return fallback;
-  return permitted.includes(value.outcome as T['outcome'])
-    ? (value as unknown as T)
-    : fallback;
 }

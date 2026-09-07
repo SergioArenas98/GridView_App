@@ -63,3 +63,12 @@ export {
   type SequencerCommand,
   type SequencerNamespace,
 } from './durable-object';
+export {
+  decodeCancelOutcome,
+  decodeCleanupAuthorization,
+  decodeCutoverActivationOutcome,
+  decodeCutoverSeedOutcome,
+  decodeFinalizeOutcome,
+  decodePrepareOutcome,
+  decodeSeasonAuthority,
+} from './wire-decoders';
