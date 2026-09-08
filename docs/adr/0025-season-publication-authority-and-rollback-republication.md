@@ -48,6 +48,27 @@
 > leap-second-aware `+ 1 ms` step (D4, updated below). No binding, migration,
 > export, production caller, provisioning, deployment or activation resulted;
 > Phase 9B-6 and both halves of gap **G-i** remain **open**.
+>
+> **Residual corrections (2026-09-08).** A targeted follow-up review of the
+> same slice found three residuals of the corrections above, again each
+> reproduced before it was fixed, again with no design decision changed:
+> (R1) the per-variant decoders validated field shapes but not the
+> safety-critical relationships between them, so a `prepared` response whose
+> `candidateVersion` belonged to a different epoch, an empty assignment set, an
+> assignment set for a different manifest, or a `seeded`/`active` authority with
+> no active version could still be believed — every such cross-field invariant
+> is now checked, the request-binding one on the client where the request
+> lives (D9); (R2) the pending-cleanup handle was not directly usable, because
+> both cleanup methods required an `operationToken` the tokenless handle does
+> not carry — split into two explicit request forms, a token-bearing
+> **current-record** form and a tokenless **pending-slot** form, the latter
+> being exactly what a restarted replacement caller can construct (D5, updated
+> below); (R3) instant handling was still not total at the accepted upper
+> boundary — an assignment floor or deadline that would leave the four-digit
+> RFC 3339 year range now returns a bounded `timestamp-space-exhausted`
+> rejection with no write and no exception, through one bounded conversion
+> helper both the coordinator and the local port route through (D4, updated
+> below).
 
 ## Context
 
@@ -750,8 +771,17 @@ The Durable Object, in one atomic storage transaction:
   operation, so an accepted `sourceOrderingInput` or high-water mark can never
   become `NaN`, throw at `toISOString()`, or lose ordering precision. The
   `+ 1 ms` assignment floor below is likewise an exact, leap-second- and
-  rollover-aware step, and an injected clock that cannot produce an instant
-  fails closed with no durable write. Equality is deliberately
+  rollover-aware step. Every clock reading the sequencer takes, and every
+  deadline it derives, is routed through **one bounded conversion helper**:
+  a value with no finite, four-digit-year RFC 3339 spelling fails closed with
+  no durable write, and both direct coordinator use and the in-process local
+  port produce that bounded outcome rather than an exception — the Durable
+  Object HTTP catch converting a throw into a 500 is not relied on. An unusable
+  clock reading resolves to `state-corrupt`; an otherwise-valid clock whose
+  assignment floor (`seasonSnapshotObservedAtHighWaterMark + 1 ms`) or derived
+  deadline would leave the representable year range resolves to the distinct
+  `timestamp-space-exhausted` — a valid-but-exhausted boundary, not a corrupt
+  one — again with nothing written. Equality is deliberately
   admissible, not an oversight: consecutive genuinely-changed candidates may
   legitimately carry the same `sourceOrderingInput`, because neither adopted
   source publishes a recency signal finer than what this field already
@@ -1079,21 +1109,45 @@ that happens to share the same phase name:
   state.
 
   **The cleanup request names the operation it wants to clean up, and the
-  Durable Object authorizes only that one.** The request carries the
-  `operationEpoch`, the `operationToken` **and** the `candidateVersion`.
+  Durable Object authorizes only that one.** It arrives in exactly one of
+  **two forms**, matching the two bounded places a retired identity can live,
+  and the two are distinguished structurally by whether an `operationToken` is
+  present:
+
+  - a **current-record cleanup request** carries `{operationEpoch,
+    operationToken, candidateVersion}` and is the only form that can authorize
+    or acknowledge cleanup of an operation that is **still the current durable
+    record** (`cancelled`, not yet displaced): that path requires the token to
+    match the current record, so a request without one, or with the wrong one,
+    never reaches it;
+  - a **pending-slot cleanup request** carries `{operationEpoch,
+    candidateVersion}` and **no token** — which is exactly what a caller
+    holding only the `RetiredCleanupHandle` a later `prepare` returned (or the
+    `pendingCleanup` identity a `pending-cleanup-required` rejection returned)
+    can always construct truthfully, including a restarted replacement caller
+    that never saw the retired operation's token. It can reach **only** the
+    single pending-cleanup record, never a still-current `cancelled` record.
+
+  The stored pending-cleanup record has never carried a token (D9's
+  failure-state table), so the token was never load-bearing for that path;
+  making the tokenless request form explicit removes the earlier contradiction
+  between "every cleanup request carries epoch, token and version" and "the
+  pending record is tokenless".
+
   Inside its own transaction the DO authorizes the deletion **only if all of
   the following hold**:
 
   - the named identity is **exactly** either the current durable operation
-    record (same epoch and token, state `cancelled`) **or** the pending-cleanup
-    record (same epoch and candidate version — the version belongs to exactly
-    that one epoch for its whole existence, D3, and the epoch is retired and
-    terminal, so epoch plus version is an exact scope). **"Recheck the epoch"
-    still means checking the specifically named epoch, never accepting
-    whichever epoch happens to be current** — the pending slot holds one exact
-    retired identity, not "some terminal epoch";
+    record (same epoch and **matching token**, state `cancelled` — reachable
+    only by a current-record request) **or** the pending-cleanup record (same
+    epoch and candidate version — the version belongs to exactly that one epoch
+    for its whole existence, D3, and the epoch is retired and terminal, so
+    epoch plus version is an exact scope, and no token is stored or consulted).
+    **"Recheck the epoch" still means checking the specifically named epoch,
+    never accepting whichever epoch happens to be current** — the pending slot
+    holds one exact retired identity, not "some terminal epoch";
   - the supplied `candidateVersion` is the version **that named record owns**
-    (a mismatched triple is refused outright, never partially honoured);
+    (a mismatched identity is refused outright, never partially honoured);
   - that version is **not** `activeVersion`, **not** `previousVersion`,
     **not** the candidate of the current `prepared` operation, and **not**
     the candidate of the current `committed` operation record.
@@ -2667,7 +2721,7 @@ rather than by additional state-machine logic layered on the same KV write.
 | **An application-level in-memory single-flight guard (`commitPromise`) as a correctness-critical mechanism** | **Rejected — no longer needed, not merely unused.** It was necessary only while the critical section spanned an awaited external Workers KV write, which an ordinary input gate does not cover. D2 removed that external write; `finalize`'s entire critical section is now one Durable Object storage transaction, which an ordinary input gate already serializes (D9). Retaining the guard would be leftover machinery from the rejected KV-authoritative design. |
 | **An ordinary source-ordering staleness rejection applied unconditionally to every `prepare` call, including rollback** | **Rejected.** It would make the authorized Model 1 (D8) impossible to execute, since a rollback's historical ordering input is expected to be older than or equal to what is currently active. Replaced by the bounded `operationKind` exemption in D4, which narrows the exception to rollback admission only and leaves ordinary publication's rejection untouched. |
 | **Claiming atomicity between a Durable Object cancellation check and an external Workers KV deletion during orphan cleanup** | **Rejected — not implementable.** No cross-product atomicity between Durable Object storage and Workers KV exists (§"Safety reasoning" is this ADR's own premise). Replaced in D5 by a non-atomic two-step sequence whose safety rests on the named cancelled epoch being terminal **and** on D3/D4's structural guarantee that a candidate version belongs to exactly one epoch, with the external KV deletion remaining best-effort. |
-| **Authorizing orphan cleanup from epoch terminality alone** (a "yes, some epoch is cancelled" answer, with a caller-minted candidate version) | **Rejected — a review-confirmed race.** Terminality of epoch A never made *version V* terminal. With a caller-minted version, a later epoch B could re-use V, and A's delayed cleanup could delete artifacts B had already written but not yet finalized. Replaced by DO-allocated, epoch-bound candidate versions (D3, D4) plus a cleanup authorization that names the exact cancelled epoch, token and version and refuses a superseded record or an authoritative version (D5). |
+| **Authorizing orphan cleanup from epoch terminality alone** (a "yes, some epoch is cancelled" answer, with a caller-minted candidate version) | **Rejected — a review-confirmed race.** Terminality of epoch A never made *version V* terminal. With a caller-minted version, a later epoch B could re-use V, and A's delayed cleanup could delete artifacts B had already written but not yet finalized. Replaced by DO-allocated, epoch-bound candidate versions (D3, D4) plus a cleanup authorization that names the exact retired epoch and version (plus the token, for a still-current `cancelled` record) and refuses a superseded record or an authoritative version (D5). |
 | **An unbounded map of retired committed results, retained so any delayed `finalize` retry can always replay its original response** | **Rejected — unbounded history in the one place D3 refuses it, for an answer the caller cannot use.** It would grow per-operation state without limit, and would still not tell a caller whose epoch is retired anything actionable. Replaced by D9's total outcome table: the recorded result is replayed only while that committed operation is the **current** durable record; a lower epoch resolves to a distinct terminal `superseded` outcome carrying current authoritative state, which resolves what the caller must do now without claiming to reproduce the retired response. |
 | **Recovering a rollback target's historical `sourceOrderingInput` from Durable Object state alone** | **Rejected — the value is not there.** `committedSourceOrderingInput` describes only the currently active release and is replaced by every successful `finalize` (D2); the prepared-operation record is replaced by every new `prepare`, cancellation, expiry or supersession (D4/D5). Once a release is superseded, nothing in DO state retains its ordering input, so a rollback to it would have no value to record — which is exactly the gap D3's immutable per-version sidecar closes. |
 | **Requiring an operator to supply the historical `sourceOrderingInput` for a normal rollback** | **Rejected.** It would put an unaudited, unverifiable, hand-typed timestamp into the one field ordinary-publication admission is decided against (D4), make rollback non-deterministic for the same target, and turn a recoverable data question into a human-recall question at the moment of an incident. The value is recoverable from the target's own immutable record (D8); an operator is asked to select a version, never to invent its provenance. |
@@ -2747,6 +2801,20 @@ Deterministic, application-logic tests the Mechanism PR must include:
 - A stale `finalize` after a `prepared`-then-cancelled identity is rejected,
   no version is deleted while its status is ambiguous.
 
+**Instant handling is total over the accepted domain (D4):**
+
+- Ordinary, leap-second and sub-millisecond ordering inputs and assignment
+  floors are ordered and advanced correctly, never through `Date.parse`.
+- The maximum accepted high-water mark plus a changed key returns a bounded
+  `timestamp-space-exhausted` rejection — never a throw — and leaves storage
+  byte-for-byte unchanged; the same holds for a derived deadline that would
+  cross year 9999.
+- A finite clock whose ISO spelling is an extended year (outside 0000–9999)
+  fails closed before any write.
+- The same cases reached through the in-process local port resolve to bounded
+  outcomes, not rejected promises — the mechanism does not rely on the Durable
+  Object's HTTP catch turning an exception into a 500.
+
 **Candidate-version ownership and cleanup safety (D3, D4, D5):**
 
 - **`prepare` allocates the candidate version; the caller cannot supply one.**
@@ -2775,10 +2843,18 @@ Deterministic, application-logic tests the Mechanism PR must include:
   the occupying identity; repeated crash/expiry cycles never grow durable
   state or lose an orphan; a restart preserves the pending-cleanup record; and
   `acknowledge-cleanup` is idempotent while refusing a wrong identity.
+- **The pending-slot form is usable without the retired token.** A restarted
+  replacement caller holding only the `RetiredCleanupHandle` a later `prepare`
+  returned (or the `pendingCleanup` identity from a `pending-cleanup-required`
+  rejection) plus the season completes both `authorize-cleanup` and
+  `acknowledge-cleanup` with a **tokenless** pending-slot request. No test
+  fabricates a token to satisfy a type. A tokenless request can never authorize
+  or acknowledge cleanup of a **still-current** `cancelled` record, and a
+  mismatched pending epoch or version never clears the slot.
 - **Cleanup authorization requires an exact identity.** A request naming the
-  right epoch but the wrong token (for the current-record path), the right
-  identity but the wrong `candidateVersion`, or an epoch that was never
-  retired, is refused.
+  right epoch but the wrong (or, for the current-record path, a missing) token,
+  the right identity but the wrong `candidateVersion`, or an epoch that was
+  never retired, is refused.
 - **Cleanup is refused for an authoritative version**: `activeVersion`,
   `previousVersion`, the current prepared candidate and the current committed
   operation's candidate are each refused, whether named through the current
@@ -3051,6 +3127,17 @@ this documentation correction.
 - **Cleanup**: a DO-authorized recheck that finds the epoch still `cancelled`
   is followed by a best-effort external KV deletion, and the deletion's
   success or failure never changes the durable `cancelled` state.
+- **Transport decoding**: the client rejects a transport response that is
+  individually well-typed but describes a state the protocol cannot produce —
+  a `prepared` outcome whose `candidateVersion` belongs to a different epoch
+  than `operationEpoch` (and the same check on every returned
+  `retiredCleanup` / `pendingCleanup` / `liveOperation` handle), an empty or
+  duplicate-bearing assignment set, an assignment set that does not correspond
+  to the request's document names and revisions, a `committed` / `cancelled` /
+  `authorized` result whose version is not the one the request's epoch owns,
+  and a `seeded`/`active` authority with a null active version or fingerprint.
+  Each maps to the same bounded fail-closed outcome a `null` decode already
+  maps to; forward-compatible extra fields are ignored, not rejected.
 
 **Tests that cannot prove Cloudflare platform behavior** — must be labeled as
 demonstrating application logic only, never as proof of the underlying
