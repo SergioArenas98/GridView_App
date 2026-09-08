@@ -1,10 +1,8 @@
 import type { Logger } from '../logging/logger';
 import type { Clock } from '../runtime/clock';
 import { generateSnapshotSet } from '../snapshots/generator';
-import type {
-  PublicationReason,
-  SnapshotPublisher,
-} from '../publication/publisher';
+import type { PublicationReason } from '../publication/publisher';
+import type { PublicationCommands } from '../publication/commands';
 import type {
   QuotaState,
   SnapshotStorage,
@@ -135,6 +133,10 @@ export function consequenceForRejectedPublication(
     case 'rollback-target-incomplete':
     case 'missing-version-inventory':
     case 'no-active-version':
+    case 'rollback-source-ordering-unavailable':
+    case 'sequencer-authority-unavailable':
+    case 'sequencer-prepare-rejected':
+    case 'sequencer-operation-superseded':
       return 'failed';
   }
 }
@@ -143,7 +145,7 @@ export class SynchronizationService {
   constructor(
     private readonly storage: SnapshotStorage,
     private readonly provider: FormulaOneProvider | null,
-    private readonly publisher: SnapshotPublisher,
+    private readonly publisher: PublicationCommands,
     private readonly clock: Clock,
     private readonly logger: Logger,
   ) {}

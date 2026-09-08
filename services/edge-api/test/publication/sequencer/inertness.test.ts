@@ -1,11 +1,24 @@
 /**
- * Proof that this slice added a mechanism and **nothing else**.
+ * Proof that the Integration slice wired the sequencer into the publisher,
+ * rollback and public-read paths **behind a disabled gate and nothing more**.
  *
- * ADR 0025 D12 gates provisioning, activation and every caller behind separate
- * authorizations. These assertions are what make "no binding, no caller, no
- * deployment" a checked property rather than a claim in a pull request body:
- * they fail the moment someone binds the class, registers it in the Worker
- * entry point, or wires a production caller to the port.
+ * The Mechanism slice's version of this file asserted the sequencer had *no*
+ * production caller. Phase 9B-6b Integration deliberately adds those callers -
+ * `SequencedPublicationService`, the composition root and the public router -
+ * so those assertions are replaced here by the boundary that still holds:
+ *
+ * - `SEASON_PUBLICATION_AUTHORITY` is absent from every environment, so the
+ *   composition builds the exact legacy `SnapshotPublisher` and the router
+ *   never performs a Durable Object lookup (see `default-off.test.ts` for the
+ *   behavioural proof);
+ * - no `wrangler.toml` binding, `[exports]` entry, `[[migrations]]` block or
+ *   Durable Object namespace declares the class, so the runtime still cannot
+ *   instantiate it;
+ * - `PROVIDER_MODE`, the public API and the closed document-name union are
+ *   untouched.
+ *
+ * These fail the moment someone provisions, activates or configures the mode in
+ * a deployed environment.
  */
 
 import { readFileSync } from 'node:fs';
@@ -21,16 +34,14 @@ function source(relative: string): string {
   return readFileSync(join(edgeApiRoot, ...relative.split('/')), 'utf8');
 }
 
-describe('no Durable Object binding or migration was added', () => {
+describe('no Durable Object binding, export or migration was added', () => {
   it('declares no SeasonPublicationSequencer binding in any environment', () => {
     expect(wranglerConfig).not.toContain('SeasonPublicationSequencer');
     expect(wranglerConfig).not.toContain('SEASON_PUBLICATION_SEQUENCER');
+    expect(wranglerConfig).not.toContain('SEASON_PUBLICATION_AUTHORITY');
   });
 
   it('adds no [[migrations]] block', () => {
-    // ADR 0025's staging step would use the `exports` mechanism
-    // `ProviderRateLimiter` already uses, not the legacy migrations block -
-    // and neither is added here.
     expect(wranglerConfig).not.toContain('[[migrations]]');
   });
 
@@ -55,50 +66,44 @@ describe('no Durable Object binding or migration was added', () => {
   });
 });
 
-describe('no runtime registration or production caller exists', () => {
-  const entryPoint = source('src/index.ts');
-
-  it('does not export the class from the Worker entry point', () => {
+describe('the runtime still cannot instantiate the class', () => {
+  it('does not export the Durable Object class from the Worker entry point', () => {
     // Wrangler resolves a Durable Object class through a named export of the
-    // Worker's main module. Without one, the class cannot be instantiated by
-    // the runtime, whatever a binding might say.
+    // Worker's main module. The Integration path reaches the sequencer through
+    // the in-process port or a future namespace, never by exporting the class.
+    const entryPoint = source('src/index.ts');
     expect(entryPoint).toContain(
       "export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';",
     );
-    expect(entryPoint).not.toContain('SeasonPublicationSequencer');
-    expect(entryPoint).not.toContain('sequencer');
+    expect(entryPoint).not.toContain('export { SeasonPublicationSequencer');
+    expect(entryPoint).not.toContain('DurableObjectSeasonPublicationSequencer');
+  });
+});
+
+describe('the authority mode is disabled by default', () => {
+  it('resolves to legacy for an absent or unrecognised value', async () => {
+    const { resolvePublicationAuthorityMode } =
+      await import('../../../src/config/environment');
+    expect(resolvePublicationAuthorityMode(undefined)).toBe('legacy');
+    expect(resolvePublicationAuthorityMode('')).toBe('legacy');
+    expect(resolvePublicationAuthorityMode('SEQUENCER')).toBe('legacy');
+    expect(resolvePublicationAuthorityMode('sequencer ')).toBe('legacy');
+    expect(resolvePublicationAuthorityMode('sequencer')).toBe('sequencer');
   });
 
-  it('is reachable from no production module', () => {
-    // Every importer of the mechanism is a test. The publisher, the routers,
-    // the sync service and the admin surface are untouched.
-    for (const module of [
-      'src/index.ts',
-      'src/publication/publisher.ts',
-      'src/public/router.ts',
-      'src/admin/router.ts',
-      'src/sync/sync-service.ts',
-      'src/storage/factory.ts',
-      'src/config/environment.ts',
-      'src/cache/purge.ts',
-    ]) {
-      expect(source(module)).not.toContain('sequencer/');
-      expect(source(module)).not.toContain('SeasonPublicationSequencer');
-    }
-  });
-
-  it('leaves snapshotRevision without a production caller', () => {
-    // The mechanism accepts revisions as an input; it does not compute them,
-    // and nothing in the production path computes them either.
-    for (const module of ['src/index.ts', 'src/publication/publisher.ts']) {
-      expect(source(module)).not.toContain('snapshot-revision');
-    }
-  });
-
-  it('adds no publisher or rollback caller for the sidecar', () => {
-    const publisher = source('src/publication/publisher.ts');
-    expect(publisher).not.toContain('publication-metadata');
-    expect(publisher).not.toContain('PublicationMetadata');
+  it('falls back to the legacy authority when the mode is set with no port', async () => {
+    const { resolvePublicationAuthority } =
+      await import('../../../src/publication/authority');
+    const authority = resolvePublicationAuthority(
+      { SEASON_PUBLICATION_AUTHORITY: 'sequencer' },
+      {
+        environment: 'development',
+        providerMode: 'mock',
+        publicationAuthorityMode: 'sequencer',
+        publicBaseUrl: null,
+      },
+    );
+    expect(authority.mode).toBe('legacy');
   });
 });
 
@@ -130,7 +135,7 @@ describe('no public surface changed', () => {
     }
   });
 
-  it('leaves public routing and cache behaviour untouched', () => {
+  it('never routes or purges an internal sidecar key', () => {
     expect(source('src/public/router.ts')).not.toContain(
       'publication_metadata',
     );

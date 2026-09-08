@@ -13,6 +13,7 @@ import type { SnapshotDocumentName } from '../storage/types';
 import { readStoredInventory, validatedInventory } from './version-inventory';
 import type { SnapshotValidator } from '../validation/snapshot-validator';
 import type { GeneratedSnapshotSet } from '../snapshots/generator';
+import type { PublicationCommands } from './commands';
 
 export type PublicationStatus = 'applied' | 'skipped' | 'rejected' | 'failed';
 
@@ -53,6 +54,34 @@ export const publicationReasons = [
   'missing-version-inventory',
   /** The season has no active version at all. */
   'no-active-version',
+  /**
+   * Sequencer authority mode only (ADR 0025 D8). A rollback target's own
+   * release-wide `sourceOrderingInput` could not be resolved - an absent
+   * sidecar on a `pm1-…` version, a malformed or unreadable sidecar in either
+   * namespace, or non-uniform/missing legacy document timestamps. The target
+   * is rejected before `prepare`; the currently active release keeps serving.
+   */
+  'rollback-source-ordering-unavailable',
+  /**
+   * Sequencer authority mode only. The per-season sequencer's authoritative
+   * lookup was unavailable, or the season's authority has not been activated,
+   * so no `prepare`/`finalize` could be attempted. Fail-closed: nothing is
+   * published and the current release is untouched.
+   */
+  'sequencer-authority-unavailable',
+  /**
+   * Sequencer authority mode only. `prepare` refused the candidate for a
+   * bounded internal reason (an operation already in progress, backpressure on
+   * the single pending-cleanup slot, an exhausted epoch or timestamp space).
+   * The bounded sub-reason reaches structured logs, never a response body.
+   */
+  'sequencer-prepare-rejected',
+  /**
+   * Sequencer authority mode only (ADR 0025 D9). `finalize` resolved to
+   * `superseded`: a newer `prepare` has replaced this operation. The caller
+   * must never re-drive it; a fresh publication goes through a new `prepare`.
+   */
+  'sequencer-operation-superseded',
 ] as const;
 
 export type PublicationReason = (typeof publicationReasons)[number];
@@ -251,7 +280,7 @@ async function attempt<T>(
  */
 type VersionAssessment = 'complete' | 'incomplete' | 'empty' | 'no-inventory';
 
-export class SnapshotPublisher {
+export class SnapshotPublisher implements PublicationCommands {
   constructor(
     private readonly storage: SnapshotStorage,
     private readonly validator: SnapshotValidator,

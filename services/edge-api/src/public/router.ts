@@ -5,7 +5,14 @@ import type {
 } from '../contract/types';
 import { errorResponse, successResponse } from '../http/envelope';
 import { ifNoneMatchMatches, snapshotCacheHeaders } from '../http/cache';
-import type { SnapshotStorage, StoredSnapshot } from '../storage/types';
+import type { PublicationAuthority } from '../publication/authority';
+import type { SeasonAuthority } from '../publication/sequencer/model';
+import { readStoredInventory } from '../publication/version-inventory';
+import type {
+  SnapshotDocumentName,
+  SnapshotStorage,
+  StoredSnapshot,
+} from '../storage/types';
 import { resolvePublicRoute, type PublicRouteMatch } from './params';
 
 export interface PublicRouteResult {
@@ -18,6 +25,7 @@ export async function handlePublicRequest(
   request: Request,
   storage: SnapshotStorage,
   requestId: string,
+  authority: PublicationAuthority = { mode: 'legacy' },
 ): Promise<PublicRouteResult> {
   const url = new URL(request.url);
   const resolution = resolvePublicRoute(url);
@@ -37,73 +45,234 @@ export async function handlePublicRequest(
       cacheOutcome: 'error',
     };
   }
+  const match = resolution.match;
 
-  const season = await resolveSeason(storage, resolution.match);
+  const season = await resolveSeason(storage, match);
   if (season === null) {
-    return {
-      response: publicError(503, 'SNAPSHOT_NOT_READY', requestId, true),
-      routeTemplate: resolution.match.routeTemplate,
-      cacheOutcome: 'error',
-    };
+    return result(
+      publicError(503, 'SNAPSHOT_NOT_READY', requestId, true),
+      match.routeTemplate,
+      'error',
+    );
   }
 
-  const activeVersion = await storage.getActiveVersion(season);
-  if (!activeVersion) {
-    return {
-      response: publicError(404, 'SEASON_NOT_FOUND', requestId),
-      routeTemplate: resolution.match.routeTemplate,
-      cacheOutcome: 'error',
-    };
+  // The active/previous versions this request resolves against. In the default
+  // (legacy) authority mode, and for any season the sequencer has not switched
+  // to `cutoverState: 'active'`, this is the existing Workers KV pointer read
+  // and nothing about the flow below changes.
+  const versions = await resolveVersions(storage, authority, season, requestId);
+  if (versions.kind === 'response') return versions.value;
+  const { activeVersion, previousVersion, sequencerAuthoritative } =
+    versions.value;
+
+  if (activeVersion === null) {
+    return result(
+      publicError(404, 'SEASON_NOT_FOUND', requestId),
+      match.routeTemplate,
+      'error',
+    );
+  }
+
+  if (sequencerAuthoritative) {
+    // ADR 0025 D6: the active version's inventory is consulted before anything
+    // is decided about the document, because a missing document is not, by
+    // itself, evidence of propagation lag.
+    const activeInventory = await readStoredInventory(
+      storage,
+      season,
+      activeVersion,
+    );
+    if (activeInventory.kind !== 'documents') {
+      // Missing, malformed or not-yet-visible: the bounded unavailable/degraded
+      // response, never `previousVersion` as a substitute decision.
+      return result(
+        publicError(503, 'SNAPSHOT_NOT_READY', requestId, true),
+        match.routeTemplate,
+        'error',
+      );
+    }
+    if (!activeInventory.documents.includes(match.documentName)) {
+      // Validly excluded: the intended not-found response. `previousVersion` is
+      // never consulted - a withdrawn route is not a propagation problem.
+      return result(
+        missingResponse(match, requestId),
+        match.routeTemplate,
+        'error',
+      );
+    }
   }
 
   const snapshot = await storage.readVersionedDocument(
     season,
     activeVersion,
-    resolution.match.documentName,
+    match.documentName,
   );
-  if (!snapshot) {
-    const code = detailDocument(resolution.match.documentName)
-      ? 'RESOURCE_NOT_FOUND'
-      : 'SNAPSHOT_NOT_READY';
-    return {
-      response: publicError(
-        code === 'RESOURCE_NOT_FOUND' ? 404 : 503,
-        code,
-        requestId,
-        code !== 'RESOURCE_NOT_FOUND',
-      ),
-      routeTemplate: resolution.match.routeTemplate,
-      cacheOutcome: 'error',
-    };
+  if (snapshot) {
+    return serveSnapshot(request, snapshot, match, requestId);
   }
 
+  if (sequencerAuthoritative && previousVersion !== null) {
+    // The active inventory names the document but it is not yet readable: the
+    // single bounded, adjacent-version fallback ADR 0025 D6 permits - and only
+    // when the previous version's own inventory also names it.
+    const fallback = await servePropagationFallback(
+      request,
+      storage,
+      season,
+      previousVersion,
+      match,
+      requestId,
+    );
+    if (fallback) return fallback;
+  }
+
+  return result(
+    missingResponse(match, requestId),
+    match.routeTemplate,
+    'error',
+  );
+}
+
+type ResolvedVersions = {
+  activeVersion: string | null;
+  previousVersion: string | null;
+  sequencerAuthoritative: boolean;
+};
+
+async function resolveVersions(
+  storage: SnapshotStorage,
+  authority: PublicationAuthority,
+  season: number,
+  requestId: string,
+): Promise<
+  | { kind: 'ok'; value: ResolvedVersions }
+  | { kind: 'response'; value: PublicRouteResult }
+> {
+  if (authority.mode === 'sequencer') {
+    let read: SeasonAuthority;
+    try {
+      read = await authority.port.readAuthority(season);
+    } catch {
+      // The lookup itself failed. Fail closed - never a legacy KV pointer read.
+      return {
+        kind: 'response',
+        value: result(
+          publicError(503, 'SNAPSHOT_NOT_READY', requestId, true),
+          'unknown',
+          'error',
+        ),
+      };
+    }
+    if (read.cutoverState === 'unavailable') {
+      return {
+        kind: 'response',
+        value: result(
+          publicError(503, 'SNAPSHOT_NOT_READY', requestId, true),
+          'unknown',
+          'error',
+        ),
+      };
+    }
+    if (read.cutoverState === 'active') {
+      return {
+        kind: 'ok',
+        value: {
+          activeVersion: read.activeVersion,
+          previousVersion: read.previousVersion,
+          sequencerAuthoritative: true,
+        },
+      };
+    }
+    // `uninitialized` / `seeded`: legacy pointers remain authoritative (D12).
+  }
+
+  return {
+    kind: 'ok',
+    value: {
+      activeVersion: await storage.getActiveVersion(season),
+      previousVersion: null,
+      sequencerAuthoritative: false,
+    },
+  };
+}
+
+async function servePropagationFallback(
+  request: Request,
+  storage: SnapshotStorage,
+  season: number,
+  previousVersion: string,
+  match: PublicRouteMatch,
+  requestId: string,
+): Promise<PublicRouteResult | null> {
+  const previousInventory = await readStoredInventory(
+    storage,
+    season,
+    previousVersion,
+  );
+  if (
+    previousInventory.kind !== 'documents' ||
+    !previousInventory.documents.includes(match.documentName)
+  ) {
+    return null;
+  }
+  const snapshot = await storage.readVersionedDocument(
+    season,
+    previousVersion,
+    match.documentName,
+  );
+  if (!snapshot) return null;
+  return serveSnapshot(request, snapshot, match, requestId);
+}
+
+function serveSnapshot(
+  request: Request,
+  snapshot: StoredSnapshot,
+  match: PublicRouteMatch,
+  requestId: string,
+): PublicRouteResult {
   const headers = snapshotCacheHeaders(
     snapshot,
     snapshot.resourceIdentity,
-    resolution.match.cacheCategory,
+    match.cacheCategory,
   );
   const etag = headers['ETag'] ?? '';
   if (ifNoneMatchMatches(request.headers.get('If-None-Match'), etag)) {
     return {
       response: new Response(null, {
         status: 304,
-        headers: {
-          ...headers,
-          'X-Request-ID': requestId,
-        },
+        headers: { ...headers, 'X-Request-ID': requestId },
       }),
-      routeTemplate: resolution.match.routeTemplate,
+      routeTemplate: match.routeTemplate,
       cacheOutcome: 'not-modified',
     };
   }
-
   const meta = withRequestId(snapshot.meta, requestId);
   const response = successResponse(snapshot.data, meta, headers);
   return {
     response: responseForMethod(request, response),
-    routeTemplate: resolution.match.routeTemplate,
+    routeTemplate: match.routeTemplate,
     cacheOutcome: 'hit',
   };
+}
+
+function missingResponse(match: PublicRouteMatch, requestId: string): Response {
+  const code = detailDocument(match.documentName)
+    ? 'RESOURCE_NOT_FOUND'
+    : 'SNAPSHOT_NOT_READY';
+  return publicError(
+    code === 'RESOURCE_NOT_FOUND' ? 404 : 503,
+    code,
+    requestId,
+    code !== 'RESOURCE_NOT_FOUND',
+  );
+}
+
+function result(
+  response: Response,
+  routeTemplate: string,
+  cacheOutcome: PublicRouteResult['cacheOutcome'],
+): PublicRouteResult {
+  return { response, routeTemplate, cacheOutcome };
 }
 
 function responseForMethod(request: Request, response: Response): Response {
@@ -150,7 +319,7 @@ function publicError(
   return errorResponse(status, code, messages[code], retryable, requestId);
 }
 
-function detailDocument(documentName: string): boolean {
+function detailDocument(documentName: SnapshotDocumentName): boolean {
   return (
     documentName.startsWith('grand-prix:') ||
     documentName.startsWith('driver:') ||
