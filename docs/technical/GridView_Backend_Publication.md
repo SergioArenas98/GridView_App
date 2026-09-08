@@ -53,7 +53,8 @@ so the inventory can never be requested through `readVersionedDocument`, can
 never be mapped to a public URL, and is removed with the version by
 `deleteUnpublishedVersion`.
 
-**Storage operations implemented, no caller**, [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+**Storage operations implemented; a caller exists but is gated off by default**,
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 D3 adds one further **internal** key under the same per-version prefix, for
 the same two reasons the inventory sits there:
 
@@ -76,8 +77,13 @@ and delete operations, consistently across the memory and Workers KV
 adapters, behind one validated boundary that keeps *valid*, *absent*,
 *malformed* and *unreadable* distinct
 ([`../../services/edge-api/src/publication/publication-metadata.ts`](../../services/edge-api/src/publication/publication-metadata.ts)).
-**No publisher or rollback path writes or reads it today**, and resolving
-rollback provenance from it remains Integration-PR work.
+The Integration slice (2026-09-08) adds `SequencedPublicationService`, which
+writes this record as part of the required publication write set and resolves
+rollback provenance from it
+([`../../services/edge-api/src/publication/sequenced/`](../../services/edge-api/src/publication/sequenced/)) —
+but **only when `SEASON_PUBLICATION_AUTHORITY=sequencer` selects the sequencer
+authority, which no deployed environment does.** In the default legacy mode no
+publisher or rollback path writes or reads it.
 
 **Version identifiers gain a reserved namespace, so the record's absence is
 decidable.** Every version that future protocol creates — ordinary publication
@@ -417,29 +423,42 @@ validated and verified. During KV propagation, an edge location may briefly read
 an older active pointer. It must not observe an unpublished version unless that
 pointer has already changed.
 
-## Publication authority (Phase 9B-6b — mechanism only, no caller)
+## Publication authority (Phase 9B-6b — integrated in code, disabled by default)
 
 [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 records a design decision that replaces **which write is the commit point**
 for the algorithm above.
 
-**What exists as of 2026-09-06**: the **Mechanism slice** only — an inert
-`SeasonPublicationSequencer` Durable Object class, its bounded SQLite-backed
-state machine, an internal port/client interface, the inert
+**What exists as of 2026-09-08**: the **Mechanism slice** (2026-09-06) — the
+inert `SeasonPublicationSequencer` Durable Object class, its bounded
+SQLite-backed state machine, an internal port/client interface, the inert
 `uninitialized`/`seeded`/`active` cutover transitions, and the sidecar storage
-operations above. **Nothing is wired, bound, provisioned or activated**: no
-`wrangler.toml` binding or migration declares the class, it is not a named
-export of the Worker entry point, and no publisher, rollback command, router,
-migration runner or admin route calls it. The "Publication Algorithm" and
-"Rollback" sections above therefore remain exactly how publication and rollback
-work **today**, and continue to work that way until the Integration,
-provisioning and cutover steps below are each separately authorized and
-completed.
+operations above — **and the Integration slice** (2026-09-08):
+`SequencedPublicationService`
+([`../../services/edge-api/src/publication/sequenced/`](../../services/edge-api/src/publication/sequenced/))
+wires the two-phase flow below into ordinary publication, rollback and the
+public read path, selected by a `PublicationAuthorityMode` composition boundary
+resolved from `SEASON_PUBLICATION_AUTHORITY`.
+
+**The mode is `legacy` by default, and no deployed environment sets it
+otherwise.** In `legacy` mode the composition builds the exact
+`SnapshotPublisher` it builds today, the public router performs no Durable
+Object lookup, and the "Publication Algorithm" and "Rollback" sections above
+describe publication and rollback exactly as they run in every environment.
+Even when `sequencer` mode is selected, `SequencedPublicationService` delegates
+to the legacy publisher for any season that is not `cutoverState: 'active'`
+(ADR 0025 D12), so the two-phase flow runs only under a test that has seeded
+and activated a season. **Nothing is bound, provisioned, seeded, cut over or
+activated**: no `wrangler.toml` binding, `[exports]` entry, migration or
+Durable Object namespace declares the class, and it is not a named export of
+the Worker entry point. Legacy KV pointers remain authoritative everywhere
+until the separately authorized staging provisioning + cutover step completes.
 
 ### The two-phase flow
 
-Once implemented, generation and validation stay exactly as described above,
-but the pointer transition moves behind a `prepare`/`finalize` protocol served
+When `sequencer` mode is selected and the season is `active`, generation and
+validation stay exactly as described above, but the pointer transition moves
+behind a `prepare`/`finalize` protocol served
 by one `SeasonPublicationSequencer` Durable Object per season
 (`idFromName(String(season))`):
 
@@ -816,12 +835,16 @@ and no existing historical version is ever mutated to backfill one.
 ## Snapshot revision (`snapshotRevision`)
 
 **Implemented as a mechanism in Phase 9B-6 (PR 1). It has no production caller,
-and no published value changes because of it.** What it computes is the
+and no published value changes because of it.** Phase 9B-6b's Integration slice
+(2026-09-08) does call it from `SequencedPublicationService`, but only in the
+`sequencer` authority mode that no deployed environment selects — the legacy
+publication path never computes a revision. What it computes is the
 equality-and-identity signal
 [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1
 D1.7 defines. Binding it to a `snapshotObservedAt` and publishing that under
-`meta.sourceUpdatedAt` is the second half of Phase 9B-6 and is **blocked** — see
-*Why the observation clock is not implemented yet* below.
+`meta.sourceUpdatedAt` on a production path is still **blocked** on the
+separately authorized staging provisioning + cutover — see *Why the observation
+clock is not implemented yet* below.
 
 ### The canonical input is constructed, never filtered
 

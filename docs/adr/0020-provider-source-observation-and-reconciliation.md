@@ -602,14 +602,23 @@ Four documentation-only clarifications follow; nothing below is implemented:
   pre-cutover historical-floor activation precondition" and "The completeness
   limit."
 
-**D1.9-D1.11 remain unimplemented.** ADR 0025's **Mechanism slice** exists in
-code as of 2026-09-06 - an inert Durable Object class, its durable state
-machine, an internal port and the per-version metadata sidecar's storage
-operations - but **no binding, no production caller, no provisioning and no
-activation**: nothing computes a `snapshotObservedAt` on any publication path.
-`meta.sourceUpdatedAt` is unchanged today, the D1.11a clamp event has nothing
-to raise yet, and **G-i stays open in both halves** until the Integration and
-activation steps ADR 0025 separately gates are each authorized and completed.
+**D1.9-D1.11 remain unimplemented in every deployed environment.** ADR 0025's
+**Mechanism slice** (2026-09-06) and **Integration slice** (2026-09-08) both
+exist in code: the inert Durable Object class and its durable state machine,
+the per-version metadata sidecar's storage operations, and now
+`SequencedPublicationService` wiring the two-phase protocol into ordinary
+publication, rollback and the public read path behind a
+`PublicationAuthorityMode` composition boundary. **That boundary is disabled by
+default** - no environment sets `SEASON_PUBLICATION_AUTHORITY`, no
+`wrangler.toml` binding, `[exports]` entry, migration or Durable Object
+namespace declares the class, and no provisioning, deployment, seeding, cutover
+or activation has occurred. So nothing computes a `snapshotObservedAt` on any
+production publication path: `meta.sourceUpdatedAt` is unchanged today (the
+sequenced path that assigns per-key values runs only under a test that has
+seeded and activated a season), the D1.11a clamp event has nothing to raise
+yet, the **resource-level `sourceObservedAt` half of G-i is untouched**, and
+**G-i stays open in both halves** until the staging provisioning + cutover step
+ADR 0025 separately gates is authorized and completed.
 
 ## Reopening conditions
 

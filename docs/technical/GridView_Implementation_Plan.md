@@ -1299,9 +1299,9 @@ architecture and product-risk decision, not as provider approval).
 | Phase 9B-3 (curated provider-identifier mapping registry) | **Implemented 2026-08-25** (§14.0.7). A season-qualified, exactly-matched, fail-closed identifier mapping registry with structural and semantic validation. **Dormant: no adapter consumes it.** No request, nothing deployed. |
 | Phase 9B-4 (multi-source provider coordination) | **Implemented 2026-08-26** (§14.0.8). A typed, deterministic, fail-closed coordination seam over independent per-source resource ports, superseding the whole-season provider call. **Dormant: no adapter consumes it and no port is registered.** No request, nothing deployed. |
 | Phase 9B-5 (deep normalized-contract validation) | **Implemented 2026-09-02** (§14.0.9). Field-by-field validation of every normalized value an adapter produces, at the coordination boundary. **Dormant: no adapter produces one.** No request, nothing deployed. |
-| Phase 9B-6 (snapshot revision identity) | **Partially implemented 2026-09-03** (§14.0.10). The canonical revision input and `snapshotRevision` hashing exist and are tested; **they have no production caller and no published value changed.** The observation clock is **blocked** on a serialization guarantee Workers KV cannot provide. **Still open** — not closed by 9B-6b below. |
-| Phase 9B-6b (season publication authority and rollback republication) | **Design decision recorded 2026-09-05**; **Mechanism slice implemented 2026-09-06** (§14.0.11), [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md). The inert `SeasonPublicationSequencer` class, its bounded SQLite-backed durable state machine, an internal port/client interface, the inert `uninitialized`/`seeded`/`active` cutover transitions and the `__publication_metadata` sidecar's storage operations exist and are tested. **Dormant: no `wrangler.toml` binding or migration declares the class, it is not a named export of the Worker entry point, and no publisher, rollback, router, migration-runner or admin caller reaches it.** Nothing is provisioned, deployed, migrated or activated; `snapshotRevision` still has no production caller; **Integration remains pending and Phase 9B-6/G-i remain open.** |
-| Next action | **Implement the Phase 9B-6b Integration PR** (§14.0.11) — two-phase snapshot construction wired into the publisher and rollback paths and public-router authority lookup, with the sequencer authority mode disabled by default and no staging activation — which is the remaining dependency for closing Phase 9B-6's observation clock; independently, **continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter, which the coordination seam is still missing. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
+| Phase 9B-6 (snapshot revision identity) | **Partially implemented 2026-09-03** (§14.0.10). The canonical revision input and `snapshotRevision` hashing exist and are tested; **they have no production caller and no published value changed.** The observation clock is **blocked** on a serialization guarantee Workers KV cannot provide; 9B-6b's Mechanism and Integration slices build the mechanism that would provide it but leave it disabled and unprovisioned. **Still open** — not closed by 9B-6b below. |
+| Phase 9B-6b (season publication authority and rollback republication) | **Design decision recorded 2026-09-05**; **Mechanism slice implemented 2026-09-06**; **Integration slice implemented 2026-09-08** (§14.0.11), [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md). The two-phase protocol is now wired into the publisher, rollback and public-read paths through `SequencedPublicationService` and a `PublicationAuthorityMode` composition boundary — **disabled by default**: no environment sets `SEASON_PUBLICATION_AUTHORITY`, the composition builds the exact legacy `SnapshotPublisher`, and no path performs a Durable Object lookup. **Still dormant for deployment: no `wrangler.toml` binding, `[exports]` entry, migration or Durable Object namespace declares the class; nothing is provisioned, deployed, seeded, cut over or activated;** legacy KV pointers remain authoritative in every deployed environment. `snapshotRevision` still has **no production caller** (the integrated path that would compute one is gated off), the resource-level `sourceObservedAt` half of G-i is unimplemented, and **Phase 9B-6 and gap G-i remain operationally open** — closing them requires the separately authorized staging provisioning + cutover. |
+| Next action | **Staging provisioning and cutover for Phase 9B-6b** (§14.0.11 item 3) — the Durable Object export/binding, deployment authorization, the one-time per-season migration against an operator-approved checkpoint committed as `seeded`, resolution of D12's pre-cutover historical-floor activation precondition, then the separate `seeded → active` transition — is the remaining dependency for closing Phase 9B-6's observation clock. It is **not** production activation and **not** a provider adapter. Independently, **continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter, which the coordination seam is still missing. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
 
 ### 14.0.1 Product constraints governing Phase 9
 
@@ -1631,7 +1631,7 @@ namespace remains unbound, and `src/publication/snapshot-revision.ts` has **no
 production caller at all**. Nothing here authorizes a live provider mode, a cron
 trigger, a deployment, production synchronization or public release.
 
-### 14.0.11 Phase 9B-6b — Season publication authority and rollback republication (design; Mechanism slice implemented)
+### 14.0.11 Phase 9B-6b — Season publication authority and rollback republication (design; Mechanism + Integration slices implemented)
 
 Recorded on **2026-09-05** as a design decision:
 [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md).
@@ -1640,8 +1640,23 @@ The **Mechanism slice** of the separated future work below was implemented on
 residual-corrected on **2026-09-08** (R1 decoder cross-field invariants and
 request binding, R2 tokenless pending-slot cleanup request form, R3 total
 instant handling at the accepted upper boundary — all code-level, no design
-decision changed). **None of this closes Phase 9B-6 or gap G-i** — see the row
-above.
+decision changed). The **Integration slice** was implemented on **2026-09-08**:
+the two-phase protocol is now wired into the publisher, rollback and
+public-read paths through `SequencedPublicationService` and a
+`PublicationAuthorityMode` composition boundary that is **disabled by default**.
+**None of this closes Phase 9B-6 or gap G-i, and none of it provisions,
+deploys, seeds, cuts over or activates anything** — see the row above.
+
+**What the Integration slice added, and its boundary:**
+
+| Item | Status |
+|---|---|
+| Authority-mode boundary | **Implemented.** `RuntimeConfig.publicationAuthorityMode` (from `SEASON_PUBLICATION_AUTHORITY`; only the exact string `sequencer` opts in, missing/malformed resolves to `legacy`, never throws), a test-only `__SEASON_PUBLICATION_SEQUENCER` port binding and an optional `SEASON_PUBLICATION_SEQUENCER` namespace type for future constructibility. `resolvePublicationAuthority` returns `legacy` unless the mode is set **and** a port is reachable. `PROVIDER_MODE` is untouched and still admits exactly `mock`/`none`. |
+| Ordinary publication | **Implemented behind the gate.** `SequencedPublicationService.publish` runs the exact ADR 0025 D3/D4 lifecycle: version-independent manifest + per-key `snapshotRevision` + `expectedManifestCommitment` before `prepare`; the caller never mints a version; each key's assigned `snapshotObservedAt` is baked into `meta.sourceUpdatedAt`; the `__publication_metadata` sidecar is part of the required write set; `completionAttestation` only after every write succeeds; cache invalidation after `finalize`, preserving the visible purge-failure semantics. Any pre-`finalize` failure cancels and bounded-cleans the candidate and leaves the active release untouched. No legacy `active`/`previous` KV pointer write in the sequencer commit path. |
+| Rollback republication | **Implemented behind the gate.** ADR 0025 D8 Model 1: read and validate the target's inventory and every named document, copy the stable normalized `data` verbatim, regenerate volatile fields, resolve the target's own `sourceOrderingInput` (valid sidecar either namespace; absent-on-`pm1-` fails closed; absent-on-legacy uniform-document fallback; malformed/unreadable fail closed) **before** `prepare`, then `prepare` with `operationKind: 'rollback-republication'` and the same `finalize`/cleanup path. Provider-independent; never a direct pointer flip. |
+| Public router | **Implemented behind the gate.** ADR 0025 D6: in sequencer-authority mode the router resolves `activeVersion`/`previousVersion` from the per-season sequencer, validates the active inventory before deciding anything about the document, returns the intended not-found for a validly excluded route with no previous lookup, allows one bounded adjacent-version fallback only when the previous inventory also names the document, returns a bounded degraded response for an unreadable active inventory, and fails closed on an unavailable authoritative lookup — never a legacy KV pointer. `uninitialized`/`seeded` seasons keep the legacy path. |
+| Binding, provisioning, activation | **None.** No `wrangler.toml` binding, `[exports]` entry, `[[migrations]]` block or Durable Object namespace. No deployment, provisioning, seeding, cutover or activation. Legacy pointers remain authoritative in every deployed environment. |
+| Phase 9B-6 / G-i | **Both still open.** `snapshotRevision` still has no production caller (the integrated path that computes one is gated off), and the resource-level `sourceObservedAt` half of G-i is unimplemented. Closing them requires item 3 below. |
 
 **What the Mechanism slice implemented, and what it deliberately did not:**
 
@@ -1685,16 +1700,17 @@ before starting:
    and Workers KV implementations — including the absent-versus-unreadable
    distinction D8's classification depends on — plus the Durable Object tests
    listed under ADR 0025 "Testing obligations".
-2. **Integration PR** — two-phase snapshot construction wired into the
-   publisher and rollback paths, and public-router authority-lookup wiring,
-   with the sequencer authority mode **disabled by default**. No staging
-   activation. This PR owns the publisher-side obligations: minting every
-   candidate — ordinary and rollback destination — in the `pm1-…`
-   sidecar-required namespace, writing the per-version metadata record as part
-   of the required publication write set, resolving rollback provenance (valid
+2. **Integration PR — DONE (2026-09-08; see the table above).** Two-phase
+   snapshot construction wired into the publisher and rollback paths, and
+   public-router authority-lookup wiring, with the sequencer authority mode
+   **disabled by default**. No staging activation. This PR delivered the
+   publisher-side obligations: every candidate — ordinary and rollback
+   destination — is minted by `prepare` in the `pm1-…` sidecar-required
+   namespace, the per-version metadata record is written as part of the
+   required publication write set, rollback provenance is resolved (valid
    record in either namespace, absent-on-legacy fallback, fail-closed on
-   absent-on-`pm1-`, malformed or unreadable), the bounded rejection reason, and
-   cleanup removing the record with its version.
+   absent-on-`pm1-`, malformed or unreadable) with a bounded rejection reason,
+   and cleanup removes the record with its version.
 3. **Staging provisioning and cutover** — the Durable Object export/binding
    declared through this repository's supported `exports` mechanism (the
    pattern `ProviderRateLimiter` already uses, not the legacy

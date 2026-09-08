@@ -8,26 +8,43 @@
 > implementation. It provisions no Cloudflare resource, binds nothing, deploys
 > nothing, activates no authority mode and contacts no provider.
 >
-> **Implementation status (updated 2026-09-06).** The **Mechanism slice** of
-> the separated future work below now exists in code: an inert
-> `SeasonPublicationSequencer` Durable Object class, its bounded SQLite-backed
-> durable state machine, an internal port/client interface, the inert cutover
-> transitions, the `SnapshotStorage` operations for the
-> `__publication_metadata` sidecar, and their deterministic tests
-> ([`GridView_Implementation_Plan.md`](../technical/GridView_Implementation_Plan.md)
-> §14.0.11). **Nothing else changed:** no `wrangler.toml` binding, migration or
-> `[exports]` entry declares the class, it is not a named export of the Worker
-> entry point and therefore cannot be instantiated by the runtime, no
-> production caller reaches it, and no integration, provisioning, migration,
-> cutover or activation has occurred. `snapshotRevision`
+> **Implementation status (updated 2026-09-08 for the Integration slice).**
+> Both the **Mechanism slice** and the **Integration slice** of the separated
+> future work below now exist in code.
+>
+> The Mechanism slice: an inert `SeasonPublicationSequencer` Durable Object
+> class, its bounded SQLite-backed durable state machine, an internal
+> port/client interface, the inert cutover transitions, and the
+> `SnapshotStorage` operations for the `__publication_metadata` sidecar.
+>
+> The Integration slice: `SequencedPublicationService` wires the two-phase
+> protocol into ordinary publication, rollback (D8 Model 1) and the public read
+> path (D6), and a `PublicationAuthorityMode` composition boundary selects
+> between the legacy Workers KV pointer authority and the sequencer. **The mode
+> is disabled by default** — no environment sets `SEASON_PUBLICATION_AUTHORITY`,
+> the composition builds the exact legacy `SnapshotPublisher`, and no code path
+> performs a Durable Object lookup. Even when the mode is selected, the service
+> delegates to the legacy publisher for any season that is not
+> `cutoverState: 'active'` (D12), so the two-phase protocol runs only under a
+> test that has explicitly seeded and activated a season.
+>
+> **Still true, and load-bearing:** no `wrangler.toml` binding, migration,
+> `[exports]` entry or Durable Object namespace declares the class; it is not a
+> named export of the Worker entry point and therefore cannot be instantiated
+> by the runtime; **no provisioning, deployment, seeding, cutover or activation
+> has occurred**, and legacy KV pointers remain authoritative in every deployed
+> environment. `snapshotRevision`
 > ([`../publication/snapshot-revision.ts`](../../services/edge-api/src/publication/snapshot-revision.ts))
-> keeps its **no production caller** status unchanged. `PROVIDER_MODE` remains
-> `mock | none`; `recordedProvisionalSessionEndBound` remains `null`. Phase
-> 9B-6 and gap **G-i** remain **open** after this ADR, exactly as before it.
-> Everything this ADR authorizes for *implementation* is scoped in
+> keeps its **no production caller** status unchanged, because the integrated
+> path that would compute one is gated off. The resource-level `sourceObservedAt`
+> half of gap **G-i** is unimplemented. `PROVIDER_MODE` remains `mock | none`;
+> `recordedProvisionalSessionEndBound` remains `null`. **Phase 9B-6 and gap
+> G-i remain operationally open** — closing them requires the separately
+> authorized staging provisioning + cutover, not merged here. No provider was
+> contacted. Everything this ADR authorizes for *implementation* is scoped in
 > §"D12. Activation boundary" below and the separated-future-work list in
 > [`GridView_Implementation_Plan.md`](../technical/GridView_Implementation_Plan.md)
-> §14.0.11, and every step after the first requires its own separate,
+> §14.0.11, and every step after the second requires its own separate,
 > explicit authorization.
 >
 > **Mechanism review corrections (2026-09-07).** A Codex review of the
