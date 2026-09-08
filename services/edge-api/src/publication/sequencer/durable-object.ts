@@ -266,7 +266,15 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
     }
     if (
       decoded.outcome === 'authorized' &&
-      !candidateVersionOwnedBy(decoded.candidateVersion, request.operationEpoch)
+      // The cleanup request names the exact deletion target. An `authorized`
+      // response must return that same version byte-for-byte (not merely
+      // another version that happens to encode the same epoch), and that
+      // version must be structurally owned by the request's epoch.
+      (decoded.candidateVersion !== request.candidateVersion ||
+        !candidateVersionOwnedBy(
+          decoded.candidateVersion,
+          request.operationEpoch,
+        ))
     ) {
       return { outcome: 'refused', reason: 'state-corrupt' };
     }

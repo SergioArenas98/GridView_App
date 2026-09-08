@@ -41,8 +41,8 @@ import {
 import { SEASON, commitment, prepareRequest, rev } from './support';
 
 /** The reserved-namespace version the epoch encoding binds to `epoch`. */
-const versionForEpoch = (epoch: number): string =>
-  `pm1-${epoch.toString(16).padStart(13, '0')}-00000001`;
+const versionForEpoch = (epoch: number, opaque = '00000001'): string =>
+  `pm1-${epoch.toString(16).padStart(13, '0')}-${opaque}`;
 
 const VERSION = versionForEpoch(1);
 const INSTANT = '2026-09-02T00:00:00.000Z';
@@ -778,5 +778,76 @@ describe('the client maps an undecodable response to its bounded fallback', () =
         candidateVersion: versionForEpoch(5),
       }),
     ).toEqual({ outcome: 'refused', reason: 'state-corrupt' });
+  });
+
+  // An `authorized` response must name the exact deletion target the request
+  // named - not merely another version that encodes the same epoch. Bound
+  // through the one shared client method for both request forms.
+  describe('cleanup authorization is bound to the exact requested version', () => {
+    const requestedA = versionForEpoch(5, 'aaaaaaaa');
+    const responseB = versionForEpoch(5, 'bbbbbbbb'); // same epoch, different opaque
+    const currentRecordRequest = {
+      season: SEASON,
+      operationEpoch: 5,
+      operationToken: 'token-5',
+      candidateVersion: requestedA,
+    };
+    const pendingSlotRequest = {
+      season: SEASON,
+      operationEpoch: 5,
+      candidateVersion: requestedA,
+    };
+
+    it('rejects a same-epoch different-version authorized response for a current-record request', async () => {
+      const client = new DurableObjectSeasonPublicationSequencer(
+        responding({ outcome: 'authorized', candidateVersion: responseB }),
+      );
+      expect(await client.authorizeCleanup(currentRecordRequest)).toEqual({
+        outcome: 'refused',
+        reason: 'state-corrupt',
+      });
+    });
+
+    it('rejects a same-epoch different-version authorized response for a pending-slot request', async () => {
+      const client = new DurableObjectSeasonPublicationSequencer(
+        responding({ outcome: 'authorized', candidateVersion: responseB }),
+      );
+      expect(await client.authorizeCleanup(pendingSlotRequest)).toEqual({
+        outcome: 'refused',
+        reason: 'state-corrupt',
+      });
+    });
+
+    it('accepts an authorized response naming the exact requested version', async () => {
+      const client = new DurableObjectSeasonPublicationSequencer(
+        responding({ outcome: 'authorized', candidateVersion: requestedA }),
+      );
+      expect(await client.authorizeCleanup(currentRecordRequest)).toEqual({
+        outcome: 'authorized',
+        candidateVersion: requestedA,
+      });
+      const pendingClient = new DurableObjectSeasonPublicationSequencer(
+        responding({ outcome: 'authorized', candidateVersion: requestedA }),
+      );
+      expect(await pendingClient.authorizeCleanup(pendingSlotRequest)).toEqual({
+        outcome: 'authorized',
+        candidateVersion: requestedA,
+      });
+    });
+
+    it('fails closed when the exact version is returned but the request epoch is incompatible', async () => {
+      // requestedA encodes epoch 5; the request claims epoch 6.
+      const client = new DurableObjectSeasonPublicationSequencer(
+        responding({ outcome: 'authorized', candidateVersion: requestedA }),
+      );
+      expect(
+        await client.authorizeCleanup({
+          season: SEASON,
+          operationEpoch: 6,
+          operationToken: 'token-6',
+          candidateVersion: requestedA,
+        }),
+      ).toEqual({ outcome: 'refused', reason: 'state-corrupt' });
+    });
   });
 });
