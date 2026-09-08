@@ -31,6 +31,29 @@ export function versionInventoryKey(season: number, version: string): string {
   return `${snapshotPrefix(season, version)}__inventory`;
 }
 
+/**
+ * The internal per-version publication-metadata sidecar (ADR 0025 D3).
+ *
+ * Keyed under the version's own snapshot prefix for the same two reasons the
+ * inventory is:
+ *
+ * - it belongs to the version, so `deleteUnpublishedVersion`'s prefix sweep
+ *   removes it with the documents it describes. A sidecar that outlived its
+ *   documents would describe a version that no longer exists.
+ * - its suffix is not, and cannot become, a `SnapshotDocumentName`: that union
+ *   is closed, so nothing can ask for this key through `readVersionedDocument`,
+ *   and `invalidationUrlsForDocuments` can never map it to a public route.
+ *
+ * It is additionally **not** a member of `__inventory`, which stays exactly
+ * what it is today - a sorted list of public document names.
+ */
+export function publicationMetadataKey(
+  season: number,
+  version: string,
+): string {
+  return `${snapshotPrefix(season, version)}__publication_metadata`;
+}
+
 export function activeKey(season: number): string {
   return `active:${season}`;
 }

@@ -602,12 +602,14 @@ Four documentation-only clarifications follow; nothing below is implemented:
   pre-cutover historical-floor activation precondition" and "The completeness
   limit."
 
-**D1.9-D1.11 remain unimplemented.** ADR 0025 is a design decision, not
-implementation: no Durable Object class, binding or caller exists yet.
+**D1.9-D1.11 remain unimplemented.** ADR 0025's **Mechanism slice** exists in
+code as of 2026-09-06 - an inert Durable Object class, its durable state
+machine, an internal port and the per-version metadata sidecar's storage
+operations - but **no binding, no production caller, no provisioning and no
+activation**: nothing computes a `snapshotObservedAt` on any publication path.
 `meta.sourceUpdatedAt` is unchanged today, the D1.11a clamp event has nothing
-to raise yet, and **G-i stays open in both halves** until the Mechanism,
-Integration and activation steps ADR 0025 separately gates are each
-authorized and completed.
+to raise yet, and **G-i stays open in both halves** until the Integration and
+activation steps ADR 0025 separately gates are each authorized and completed.
 
 ## Reopening conditions
 

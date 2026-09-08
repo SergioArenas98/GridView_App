@@ -39,6 +39,7 @@ import {
 } from '../../src/publication/publisher';
 import { MemorySnapshotStorage } from '../../src/storage/local';
 import type {
+  PublicationMetadataRecord,
   SnapshotDocumentName,
   SnapshotStorage,
   StoredSnapshot,
@@ -128,6 +129,28 @@ class ArmableStorage implements SnapshotStorage {
   ): Promise<SnapshotDocumentName[] | null> {
     await this.guard('readVersionInventory');
     return this.inner.readVersionInventory(season, version);
+  }
+  // The publication-metadata sidecar (ADR 0025 D3) has no publisher caller
+  // yet. These delegate so this fake keeps satisfying `SnapshotStorage`; the
+  // sidecar's own failure classification is covered by its own tests.
+  async readPublicationMetadata(
+    season: number,
+    version: string,
+  ): Promise<unknown> {
+    return this.inner.readPublicationMetadata(season, version);
+  }
+  async writePublicationMetadata(
+    season: number,
+    version: string,
+    record: PublicationMetadataRecord,
+  ): Promise<void> {
+    return this.inner.writePublicationMetadata(season, version, record);
+  }
+  async deletePublicationMetadata(
+    season: number,
+    version: string,
+  ): Promise<void> {
+    return this.inner.deletePublicationMetadata(season, version);
   }
   async writeVersionInventory(
     season: number,

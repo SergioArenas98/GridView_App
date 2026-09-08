@@ -1300,8 +1300,8 @@ architecture and product-risk decision, not as provider approval).
 | Phase 9B-4 (multi-source provider coordination) | **Implemented 2026-08-26** (§14.0.8). A typed, deterministic, fail-closed coordination seam over independent per-source resource ports, superseding the whole-season provider call. **Dormant: no adapter consumes it and no port is registered.** No request, nothing deployed. |
 | Phase 9B-5 (deep normalized-contract validation) | **Implemented 2026-09-02** (§14.0.9). Field-by-field validation of every normalized value an adapter produces, at the coordination boundary. **Dormant: no adapter produces one.** No request, nothing deployed. |
 | Phase 9B-6 (snapshot revision identity) | **Partially implemented 2026-09-03** (§14.0.10). The canonical revision input and `snapshotRevision` hashing exist and are tested; **they have no production caller and no published value changed.** The observation clock is **blocked** on a serialization guarantee Workers KV cannot provide. **Still open** — not closed by 9B-6b below. |
-| Phase 9B-6b (season publication authority and rollback republication) | **Design decision recorded 2026-09-05** (§14.0.11), [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md). **Documentation only.** No Durable Object class exists, nothing is bound or provisioned, `snapshotRevision` still has no production caller, and Phase 9B-6/G-i remain open. Names the mechanism that closes the D1.10 block: authority over each season's active/previous pair moves to one per-season Durable Object's own storage; rollback becomes provider-independent republication through the same protocol. |
-| Next action | **Implement the Phase 9B-6b Mechanism PR** (§14.0.11) — an inert Durable Object class, storage state machine and deterministic tests, no binding or caller — which is the dependency for closing Phase 9B-6's observation clock; independently, **continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter, which the coordination seam is still missing. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
+| Phase 9B-6b (season publication authority and rollback republication) | **Design decision recorded 2026-09-05**; **Mechanism slice implemented 2026-09-06** (§14.0.11), [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md). The inert `SeasonPublicationSequencer` class, its bounded SQLite-backed durable state machine, an internal port/client interface, the inert `uninitialized`/`seeded`/`active` cutover transitions and the `__publication_metadata` sidecar's storage operations exist and are tested. **Dormant: no `wrangler.toml` binding or migration declares the class, it is not a named export of the Worker entry point, and no publisher, rollback, router, migration-runner or admin caller reaches it.** Nothing is provisioned, deployed, migrated or activated; `snapshotRevision` still has no production caller; **Integration remains pending and Phase 9B-6/G-i remain open.** |
+| Next action | **Implement the Phase 9B-6b Integration PR** (§14.0.11) — two-phase snapshot construction wired into the publisher and rollback paths and public-router authority lookup, with the sequencer authority mode disabled by default and no staging activation — which is the remaining dependency for closing Phase 9B-6's observation clock; independently, **continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter, which the coordination seam is still missing. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. |
 
 ### 14.0.1 Product constraints governing Phase 9
 
@@ -1631,12 +1631,35 @@ namespace remains unbound, and `src/publication/snapshot-revision.ts` has **no
 production caller at all**. Nothing here authorizes a live provider mode, a cron
 trigger, a deployment, production synchronization or public release.
 
-### 14.0.11 Phase 9B-6b — Season publication authority and rollback republication (design)
+### 14.0.11 Phase 9B-6b — Season publication authority and rollback republication (design; Mechanism slice implemented)
 
-Recorded on **2026-09-05**, as a **documentation-only design decision**:
+Recorded on **2026-09-05** as a design decision:
 [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md).
-No Worker code, test, binding, provisioning or deployment is created by this
-slice. **This does not close Phase 9B-6 or gap G-i** — see the row above.
+The **Mechanism slice** of the separated future work below was implemented on
+**2026-09-06**, review-corrected on **2026-09-07** (three P2 findings) and
+residual-corrected on **2026-09-08** (R1 decoder cross-field invariants and
+request binding, R2 tokenless pending-slot cleanup request form, R3 total
+instant handling at the accepted upper boundary — all code-level, no design
+decision changed). **None of this closes Phase 9B-6 or gap G-i** — see the row
+above.
+
+**What the Mechanism slice implemented, and what it deliberately did not:**
+
+| Item | Status |
+|---|---|
+| `SeasonPublicationSequencer` Durable Object class | **Implemented, inert.** Classic `(state)` + `fetch` interface, so it needs no `cloudflare:workers` import and stays loadable in the plain-Node test runner. |
+| Durable state representation | **Implemented.** One constant-size per-season authority record (`cutoverState`, `activeVersion`, `previousVersion`, `committedSourceOrderingInput`, `seasonSnapshotObservedAtHighWaterMark`, the last allocated `operationEpoch`, the cutover fingerprint), one current operation record carrying everything `finalize` verifies or commits, at most one constant-size pending-cleanup record (a displaced retired operation's cleanup identity), and **one bounded record per document key** under a committed and a prepared prefix — never one oversized serialized value and never a retired-operation history. Atomicity comes from SQLite-backed `transactionSync` over the synchronous `ctx.storage.kv` API, which is the ADR 0025 D9 capacity obligation satisfied by its first permitted route. |
+| `prepare` / `finalize` / `cancel` | **Implemented (instant handling made total 2026-09-08).** `prepare` allocates the epoch, the token and the `pm1-<epoch>-<opaque>` candidate version itself and assigns the two-case per-key timestamps; `finalize(season, operationEpoch, operationToken, completionAttestation)` performs the single atomic `prepared → committed` transition. No Workers KV I/O occurs anywhere in the component. Every clock reading and derived deadline is routed through one bounded conversion helper: an unusable clock reading fails closed as `state-corrupt`, and an assignment floor or deadline that would leave the four-digit RFC 3339 year range fails closed as the distinct `timestamp-space-exhausted` — both with no write and no exception, through both the coordinator and the in-process local port. |
+| Cleanup authorization | **Implemented (corrected 2026-09-07; request forms split 2026-09-08).** Authorizes deletion of exactly one named retired identity — from the current `cancelled` operation record, or from a single constant-size **pending-cleanup record** it is moved to when a later `prepare` displaces it — never for an authoritative version. The request comes in two explicit forms: a token-bearing **current-record** form (the only one that can touch a still-current `cancelled` record) and a tokenless **pending-slot** form built straight from the `RetiredCleanupHandle` a displacing `prepare` returns, which is what lets a restarted replacement caller drain the slot without ever seeing the retired token. A second retirement while that one slot is occupied meets `pending-cleanup-required` backpressure; an idempotent `acknowledge-cleanup` transition retires the identity once the external deletion succeeds. No unbounded operation history, and the external best-effort Workers KV deletion is **not** performed here with no atomicity claimed between the two. |
+| Cutover transitions | **Implemented, inert.** Atomic complete-seed commit, idempotent retry, fail-closed conflicting seed, fingerprint-bound idempotent activation, and state-specific authority across `uninitialized`/`seeded`/`active`. The migration runner, operator authentication, KV convergence checks and the production cutover are **not** implemented. |
+| `__publication_metadata` sidecar | **Storage operations implemented.** Exact key construction, validated four-valued read (*valid* / *absent* / *malformed* / *unreadable*), immutable write refusing a conflicting rewrite, and explicit delete — consistent across the memory and Workers KV adapters. It is **not** in `__inventory`, not a `SnapshotDocumentName`, not in `snapshotRevision`, and not publicly routed. |
+| Internal port/client | **Implemented (hardened 2026-09-07; cross-field invariants 2026-09-08).** A `SeasonPublicationSequencerPort` interface plus an in-process adapter and a namespace-backed client. The client fully decodes every transport response — every required and nested field of the selected variant, every array member, bounded reason codes, authority-flag consistency — before acting on it, and additionally rejects a well-typed response that describes a state the protocol cannot produce: an epoch/candidate-version pair that disagree (on the outcome and on every returned cleanup/live-operation handle), an empty or duplicate-bearing assignment set, an assignment set that does not correspond to the request the client sent, a result whose version is not the one the request's epoch owns, and a `seeded`/`active` authority with no active version or fingerprint. Any undecodable, request-incoherent or transport-failure response maps to the method's bounded fail-closed outcome; forward-compatible extra fields are ignored. |
+| Binding, registration, caller | **None.** No `wrangler.toml` binding, `[exports]` entry or `[[migrations]]` block; not a named export of the Worker entry point, so the runtime cannot instantiate it; no publisher, rollback command, router, migration runner or admin route calls it. Asserted by tests, not only stated here. |
+| Public surface | **Unchanged.** No public API or OpenAPI field, no snapshot inventory shape change, no routing or cache-behaviour change. |
+| Provisioning, deployment, activation | **None.** Nothing provisioned, deployed, migrated, cut over or activated; `PROVIDER_MODE` unchanged; no provider contacted. |
+| Phase 9B-6 / G-i | **Both still open.** `snapshotRevision` still has no production caller and no `snapshotObservedAt` is computed on any publication path. |
+
+**The design decision the Mechanism slice implements:**
 
 | Item | Status |
 |---|---|
@@ -1648,12 +1671,13 @@ slice. **This does not close Phase 9B-6 or gap G-i** — see the row above.
 | Cutover validation scope | **Corrected (ADR 0025 D12).** The selected `activeVersion`'s inventory, documents and provenance are **mandatory** — any failure aborts that season's cutover. The optional `previousVersion` is **best-effort**: its failure never aborts the active-version migration, and an invalid or absent previous version is omitted from the high-water-mark seed and committed as `null` rather than seeded as a known-invalid authoritative rollback target. |
 | `snapshotRevision` / D1.9-D1.11 | **Unchanged.** Still no production caller ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)). ADR 0025 names the mechanism that will let D1.10's assignment be computed safely; it does not implement it. |
 | Provider state | **Unchanged.** `PROVIDER_MODE` still admits exactly `mock`/`none`; `recordedProvisionalSessionEndBound` is still `null`; no provider was contacted. |
-| Cloudflare resources | **None provisioned or activated.** No Durable Object class, binding, migration or deployment exists from this slice. |
+| Cloudflare resources | **None provisioned or activated.** The Mechanism slice added a Durable Object *class* in code; no binding, `[exports]` entry, migration, namespace or deployment exists, and the runtime cannot instantiate the class because it is not a named export of the Worker entry point. |
 
 **Separated future work**, each requiring its own explicit authorization
 before starting:
 
-1. **Mechanism PR** — an inert `SeasonPublicationSequencer` class, its
+1. **Mechanism PR — DONE (2026-09-06; see the table above).** An inert
+   `SeasonPublicationSequencer` class, its
    storage state machine, a port/client interface and deterministic tests.
    No production caller. No binding, no provisioning. This PR also owns the
    `SnapshotStorage` read/write/delete operations for the per-version

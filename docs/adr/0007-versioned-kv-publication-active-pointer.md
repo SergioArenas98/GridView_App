@@ -42,8 +42,11 @@
 > KV pointer-write logic below is **not** part of the post-cutover
 > authoritative protocol; it is preserved here as the historical record of how
 > publication works **today**, and remains exactly how it works until cutover
-> is separately authorized and performed. Nothing in ADR 0025 has been
-> implemented, provisioned or activated.
+> is separately authorized and performed. As of 2026-09-06, ADR 0025's
+> **Mechanism slice** exists in code as an inert Durable Object class, state
+> machine, port and sidecar storage operations, with **no binding, no
+> production caller, no provisioning and no activation**; the commit point
+> described below is therefore still exactly how publication works today.
 
 ## Context
 

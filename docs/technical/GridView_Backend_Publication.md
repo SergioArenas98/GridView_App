@@ -53,7 +53,7 @@ so the inventory can never be requested through `readVersionedDocument`, can
 never be mapped to a public URL, and is removed with the version by
 `deleteUnpublishedVersion`.
 
-**Designed, not implemented**, [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+**Storage operations implemented, no caller**, [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 D3 adds one further **internal** key under the same per-version prefix, for
 the same two reasons the inventory sits there:
 
@@ -70,8 +70,14 @@ suffix is likewise not a `SnapshotDocumentName`, it is never listed in
 document names — no shape change and no reader migration), it is excluded from
 `snapshotRevision`, it has no public URL and therefore never appears in a cache
 invalidation set, it is written once before the commit and never mutated, and
-it is removed with its version by the same cleanup path. **Nothing writes or
-reads it today.**
+it is removed with its version by the same cleanup path - the version's own
+prefix sweep already covers it. The Mechanism slice implements its read, write
+and delete operations, consistently across the memory and Workers KV
+adapters, behind one validated boundary that keeps *valid*, *absent*,
+*malformed* and *unreadable* distinct
+([`../../services/edge-api/src/publication/publication-metadata.ts`](../../services/edge-api/src/publication/publication-metadata.ts)).
+**No publisher or rollback path writes or reads it today**, and resolving
+rollback provenance from it remains Integration-PR work.
 
 **Version identifiers gain a reserved namespace, so the record's absence is
 decidable.** Every version that future protocol creates — ordinary publication
@@ -411,14 +417,24 @@ validated and verified. During KV propagation, an edge location may briefly read
 an older active pointer. It must not observe an unpublished version unless that
 pointer has already changed.
 
-## Publication authority (design, Phase 9B-6b — not implemented)
+## Publication authority (Phase 9B-6b — mechanism only, no caller)
 
 [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 records a design decision that replaces **which write is the commit point**
-for the algorithm above. Nothing in this section is implemented, provisioned
-or activated; the "Publication Algorithm" and "Rollback" sections above remain
-exactly how publication and rollback work **today**, and continue to work that
-way until the steps below are each separately authorized and completed.
+for the algorithm above.
+
+**What exists as of 2026-09-06**: the **Mechanism slice** only — an inert
+`SeasonPublicationSequencer` Durable Object class, its bounded SQLite-backed
+state machine, an internal port/client interface, the inert
+`uninitialized`/`seeded`/`active` cutover transitions, and the sidecar storage
+operations above. **Nothing is wired, bound, provisioned or activated**: no
+`wrangler.toml` binding or migration declares the class, it is not a named
+export of the Worker entry point, and no publisher, rollback command, router,
+migration runner or admin route calls it. The "Publication Algorithm" and
+"Rollback" sections above therefore remain exactly how publication and rollback
+work **today**, and continue to work that way until the Integration,
+provisioning and cutover steps below are each separately authorized and
+completed.
 
 ### The two-phase flow
 
@@ -488,8 +504,10 @@ response. This per-key state does not grow with historical
 release count — superseded operation and per-key state for a key no longer
 in the current inventory are retired per ADR 0025 D5/D9 — so its size is
 bounded by the current release's inventory, plus at most one prepared
-operation, plus the one constant-size high-water mark, never by all versions
-ever published.
+operation, plus the one constant-size high-water mark, plus at most one
+constant-size pending-cleanup record (the retired identity of a displaced
+`cancelled`/expired operation, kept so its orphan stays collectable — ADR
+0025 D5), never by all versions ever published.
 Comparing the manifest commitment carried by `completionAttestation` against
 the durably-recorded `expectedManifestCommitment` proves only that the two
 values match; it is not, and is never claimed to be, independent proof that
