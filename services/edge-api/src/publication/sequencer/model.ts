@@ -210,6 +210,14 @@ export const prepareRejectionReasons = [
   'older-source-ordering-input',
   'epoch-space-exhausted',
   /**
+   * The assignment floor (`seasonSnapshotObservedAtHighWaterMark + 1 ms`) or a
+   * derived deadline would leave the four-digit RFC 3339 year range. The clock
+   * is valid; the representable timestamp space is exhausted. Nothing is
+   * written. Distinct from `state-corrupt`, which describes an unusable clock or
+   * an unreconcilable durable record, not a valid-but-exhausted boundary.
+   */
+  'timestamp-space-exhausted',
+  /**
    * The single pending-cleanup slot is occupied, so another operation cannot
    * be retired until that orphan's cleanup is acknowledged. Carries
    * `pendingCleanup`.
@@ -392,9 +400,39 @@ export type CancelOutcome =
     }
   | { readonly outcome: 'rejected'; readonly reason: CancelRejectionReason };
 
-export type CleanupRequest = OperationIdentity & {
+/**
+ * Cleanup of an operation that is **still the current durable record** - it is
+ * `cancelled` and has not been displaced. It is authorized by its full
+ * operation identity: epoch, **token** and version. A token that does not match
+ * the current record never authorizes anything.
+ */
+export type CurrentCleanupRequest = OperationIdentity & {
   readonly candidateVersion: string;
 };
+
+/**
+ * Cleanup of a displaced orphan sitting in the single pending-cleanup slot. A
+ * later `prepare` moved it there and dropped its token in that same atomic
+ * write (D5, {@link PendingCleanupRecord}), so it is authorized from
+ * `{season, operationEpoch, candidateVersion}` **alone** - exactly what a
+ * caller holding only a {@link RetiredCleanupHandle} plus the season can
+ * always construct truthfully, including a restarted replacement caller that
+ * never saw the retired operation's token.
+ *
+ * This form can **never** authorize or acknowledge cleanup of a still-current
+ * `cancelled` record: that path requires a matching token, which this form
+ * does not carry.
+ */
+export type RetiredCleanupRequest = RetiredCleanupHandle & {
+  readonly season: number;
+};
+
+/**
+ * The two cleanup request forms. They are distinguished structurally by the
+ * presence of `operationToken`: a current-record cleanup carries it, a
+ * pending-slot cleanup never does.
+ */
+export type CleanupRequest = CurrentCleanupRequest | RetiredCleanupRequest;
 
 export type CleanupAuthorization =
   | { readonly outcome: 'authorized'; readonly candidateVersion: string }
@@ -488,11 +526,16 @@ export type SeasonAuthority =
       readonly authoritative: false;
     }
   | {
+      /**
+       * A `seeded` or `active` season always carries both an `activeVersion`
+       * and the `cutoverFingerprint` that produced it - neither state is
+       * reachable without them. Only `previousVersion` is genuinely nullable.
+       */
       readonly cutoverState: 'seeded' | 'active';
       readonly authoritative: boolean;
-      readonly activeVersion: string | null;
+      readonly activeVersion: string;
       readonly previousVersion: string | null;
-      readonly cutoverFingerprint: string | null;
+      readonly cutoverFingerprint: string;
     }
   | {
       /**

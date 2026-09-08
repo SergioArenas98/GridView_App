@@ -18,9 +18,23 @@
  * method's existing bounded fail-closed outcome, so a malformed response can
  * never read as `committed`, `prepared`, `authorized`, `activated` or
  * authoritative.
+ *
+ * Shape alone is not enough: a response can be individually well-typed yet
+ * describe a state the protocol cannot produce - a `prepared` outcome whose
+ * `candidateVersion` belongs to a different epoch than `operationEpoch`, an
+ * empty assignment set, a `seeded`/`active` authority with no active version.
+ * Every such **safety-critical cross-field invariant** is checked here too. The
+ * one relationship a decoder cannot see - whether the returned assignments
+ * correspond to the request that was actually sent - is bound on the client
+ * side ({@link prepareAssignmentsMatchRequest}, {@link candidateVersionOwnedBy}),
+ * because only the caller holds the originating request. Forward-compatible
+ * extra fields are ignored, never rejected.
  */
 
-import { maximumOperationEpoch } from './candidate-version';
+import {
+  epochOfCandidateVersion,
+  maximumOperationEpoch,
+} from './candidate-version';
 import {
   cancelRejectionReasons,
   cleanupAckRejectionReasons,
@@ -38,6 +52,7 @@ import {
   type FinalizeOutcome,
   type PerKeyState,
   type PrepareOutcome,
+  type PrepareRequest,
   type RetiredCleanupHandle,
   type SeasonAuthority,
 } from './model';
@@ -77,12 +92,26 @@ function inClosedSet<T extends string>(
   );
 }
 
+/**
+ * A successful prepare's assignment set: never empty, bounded, and with a
+ * unique document name per entry. An empty or duplicate-bearing set is a
+ * response the protocol cannot produce.
+ */
 function decodePerKeyStateArray(value: unknown): PerKeyState[] | null {
-  if (!Array.isArray(value) || value.length > maximumManifestSize) return null;
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > maximumManifestSize
+  ) {
+    return null;
+  }
   const states: PerKeyState[] = [];
+  const seen = new Set<string>();
   for (const entry of value) {
     if (!isRecord(entry)) return null;
     if (!isDocumentName(entry.documentName)) return null;
+    if (seen.has(entry.documentName)) return null;
+    seen.add(entry.documentName);
     if (!isSnapshotRevision(entry.revision)) return null;
     if (!isInstant(entry.observedAt)) return null;
     states.push({
@@ -94,12 +123,32 @@ function decodePerKeyStateArray(value: unknown): PerKeyState[] | null {
   return states;
 }
 
+/**
+ * Whether a candidate version is the one the reserved namespace binds to a
+ * given epoch. Exported for the client's request-binding checks, where the
+ * originating request supplies the epoch a returned version must belong to.
+ */
+export function candidateVersionOwnedBy(
+  version: string,
+  operationEpoch: number,
+): boolean {
+  return epochOfCandidateVersion(version) === operationEpoch;
+}
+
+/**
+ * A retired operation's cleanup handle. The candidate version is required, and
+ * its encoded epoch must be exactly `operationEpoch` - the two always agree for
+ * a genuine handle (D3), so a disagreement is a skewed response.
+ */
 function decodeRetiredCleanupHandle(
   value: unknown,
 ): RetiredCleanupHandle | null {
   if (!isRecord(value)) return null;
   if (!isOperationEpoch(value.operationEpoch)) return null;
   if (!isVersionIdentifier(value.candidateVersion)) return null;
+  if (!candidateVersionOwnedBy(value.candidateVersion, value.operationEpoch)) {
+    return null;
+  }
   return {
     operationEpoch: value.operationEpoch,
     candidateVersion: value.candidateVersion,
@@ -141,14 +190,13 @@ export function decodeSeasonAuthority(value: unknown): SeasonAuthority | null {
     case 'active': {
       const authoritative = value.cutoverState === 'active';
       if (value.authoritative !== authoritative) return null;
-      if (!isNullableVersion(value.activeVersion)) return null;
+      // A `seeded` or `active` season cannot legitimately exist without both an
+      // active version and the fingerprint that produced it - only
+      // `previousVersion` is genuinely nullable. A response missing either is
+      // an impossible authority record and fails closed.
+      if (!isVersionIdentifier(value.activeVersion)) return null;
       if (!isNullableVersion(value.previousVersion)) return null;
-      if (
-        value.cutoverFingerprint !== null &&
-        !isOpaqueIdentifier(value.cutoverFingerprint)
-      ) {
-        return null;
-      }
+      if (!isOpaqueIdentifier(value.cutoverFingerprint)) return null;
       return {
         cutoverState: value.cutoverState,
         authoritative,
@@ -168,6 +216,15 @@ export function decodePrepareOutcome(value: unknown): PrepareOutcome | null {
     if (!isOperationEpoch(value.operationEpoch)) return null;
     if (!isOpaqueIdentifier(value.operationToken)) return null;
     if (!isVersionIdentifier(value.candidateVersion)) return null;
+    // The allocated version is bound to the allocating epoch by construction
+    // (D3); a `prepared` response whose two disagree is version-skewed and
+    // could steer a caller to write artifacts under an epoch that does not own
+    // that version.
+    if (
+      !candidateVersionOwnedBy(value.candidateVersion, value.operationEpoch)
+    ) {
+      return null;
+    }
     const assignedTimestamps = decodePerKeyStateArray(value.assignedTimestamps);
     if (assignedTimestamps === null) return null;
     if (!isInstant(value.deadline)) return null;
@@ -195,6 +252,11 @@ export function decodePrepareOutcome(value: unknown): PrepareOutcome | null {
       if (!isRecord(live)) return null;
       if (!isOperationEpoch(live.operationEpoch)) return null;
       if (!isVersionIdentifier(live.candidateVersion)) return null;
+      if (
+        !candidateVersionOwnedBy(live.candidateVersion, live.operationEpoch)
+      ) {
+        return null;
+      }
       return {
         outcome: 'rejected',
         reason: 'operation-in-progress',
@@ -218,6 +280,31 @@ export function decodePrepareOutcome(value: unknown): PrepareOutcome | null {
     return { outcome: 'rejected', reason: value.reason };
   }
   return null;
+}
+
+/**
+ * Whether a decoded `prepared` response's assignment set corresponds
+ * one-to-one to the request that was sent: the same document names, each with
+ * the revision the request asked for. A validly shaped assignment set for a
+ * *different* manifest is rejected here rather than acted on. The observation
+ * timestamps are the sequencer's to assign, so they are not compared.
+ */
+export function prepareAssignmentsMatchRequest(
+  assignments: readonly PerKeyState[],
+  request: PrepareRequest,
+): boolean {
+  if (assignments.length !== request.perKeyRevisions.length) return false;
+  const requested = new Map(
+    request.perKeyRevisions.map((entry) => [
+      entry.documentName as string,
+      entry.revision,
+    ]),
+  );
+  if (requested.size !== request.perKeyRevisions.length) return false;
+  for (const state of assignments) {
+    if (requested.get(state.documentName) !== state.revision) return false;
+  }
+  return true;
 }
 
 export function decodeFinalizeOutcome(value: unknown): FinalizeOutcome | null {

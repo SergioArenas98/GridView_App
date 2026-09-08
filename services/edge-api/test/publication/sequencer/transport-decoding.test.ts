@@ -1,17 +1,27 @@
 /**
  * The client fully decodes every Durable Object transport response before
- * acting on it (ADR 0025 D1, D9; review finding on `durable-object.ts`).
+ * acting on it (ADR 0025 D1, D9; review findings on `durable-object.ts` and
+ * `wire-decoders.ts`).
  *
  * Reproduced defect: the old `outcomeOr` helper accepted any object whose
  * `outcome` was a permitted discriminant, so `{ outcome: 'committed' }` with no
  * `result` and no `replayed` became a successful `FinalizeOutcome`, and partial
  * `prepared` / `authorized` / authority responses were believed the same way.
  *
+ * Residual defect (R1): shape validation alone still admitted responses the
+ * protocol cannot produce - a `prepared` outcome whose `candidateVersion`
+ * belongs to a different epoch than `operationEpoch`, an empty or
+ * duplicate-bearing assignment set, an assignment set for a manifest other than
+ * the one requested, and a `seeded`/`active` authority with no active version
+ * or fingerprint. Every safety-critical cross-field invariant is checked here
+ * now; the request-binding one is checked on the client, where the request
+ * lives.
+ *
  * Each decoder is exercised directly with its every successful variant and
  * representative malformed forms: a permitted discriminant with missing
  * required fields, a wrong nested field type, an unknown/unbounded reason
- * string, an invalid epoch, an invalid version/identifier and an inconsistent
- * authority.
+ * string, an invalid epoch, an invalid version/identifier, an inconsistent
+ * authority, and an epoch/version pair that disagree.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -30,7 +40,11 @@ import {
 } from '../../../src/publication/sequencer';
 import { SEASON, commitment, prepareRequest, rev } from './support';
 
-const VERSION = 'pm1-0000000000001-00000001';
+/** The reserved-namespace version the epoch encoding binds to `epoch`. */
+const versionForEpoch = (epoch: number): string =>
+  `pm1-${epoch.toString(16).padStart(13, '0')}-00000001`;
+
+const VERSION = versionForEpoch(1);
 const INSTANT = '2026-09-02T00:00:00.000Z';
 const REVISION = rev('k');
 const COMMITTED = {
@@ -138,6 +152,39 @@ describe('decodeSeasonAuthority', () => {
       accepted: false,
     },
     {
+      name: 'rejects seeded with a null activeVersion',
+      input: {
+        cutoverState: 'seeded',
+        authoritative: false,
+        activeVersion: null,
+        previousVersion: null,
+        cutoverFingerprint: 'cutover-2026-a1',
+      },
+      accepted: false,
+    },
+    {
+      name: 'rejects seeded with a null cutoverFingerprint',
+      input: {
+        cutoverState: 'seeded',
+        authoritative: false,
+        activeVersion: VERSION,
+        previousVersion: null,
+        cutoverFingerprint: null,
+      },
+      accepted: false,
+    },
+    {
+      name: 'rejects active with a null activeVersion',
+      input: {
+        cutoverState: 'active',
+        authoritative: true,
+        activeVersion: null,
+        previousVersion: null,
+        cutoverFingerprint: 'cutover-2026-a1',
+      },
+      accepted: false,
+    },
+    {
       name: 'rejects an unknown cutover state',
       input: { cutoverState: 'frozen', authoritative: false },
       accepted: false,
@@ -153,11 +200,88 @@ describe('decodePrepareOutcome', () => {
         outcome: 'prepared',
         operationEpoch: 3,
         operationToken: 'token-3',
-        candidateVersion: VERSION,
+        candidateVersion: versionForEpoch(3),
         assignedTimestamps: [
           { documentName: 'calendar', revision: REVISION, observedAt: INSTANT },
         ],
         deadline: INSTANT,
+      },
+      accepted: true,
+    },
+    {
+      name: 'rejects prepared whose candidateVersion belongs to another epoch',
+      input: {
+        outcome: 'prepared',
+        operationEpoch: 3,
+        operationToken: 'token-3',
+        candidateVersion: versionForEpoch(1),
+        assignedTimestamps: [
+          { documentName: 'calendar', revision: REVISION, observedAt: INSTANT },
+        ],
+        deadline: INSTANT,
+      },
+      accepted: false,
+    },
+    {
+      name: 'rejects prepared with an empty assignedTimestamps set',
+      input: {
+        outcome: 'prepared',
+        operationEpoch: 3,
+        operationToken: 'token-3',
+        candidateVersion: versionForEpoch(3),
+        assignedTimestamps: [],
+        deadline: INSTANT,
+      },
+      accepted: false,
+    },
+    {
+      name: 'rejects prepared with duplicate assignedTimestamps document names',
+      input: {
+        outcome: 'prepared',
+        operationEpoch: 3,
+        operationToken: 'token-3',
+        candidateVersion: versionForEpoch(3),
+        assignedTimestamps: [
+          { documentName: 'calendar', revision: REVISION, observedAt: INSTANT },
+          { documentName: 'calendar', revision: REVISION, observedAt: INSTANT },
+        ],
+        deadline: INSTANT,
+      },
+      accepted: false,
+    },
+    {
+      name: 'rejects prepared whose retiredCleanup epoch/version disagree',
+      input: {
+        outcome: 'prepared',
+        operationEpoch: 3,
+        operationToken: 'token-3',
+        candidateVersion: versionForEpoch(3),
+        assignedTimestamps: [
+          { documentName: 'calendar', revision: REVISION, observedAt: INSTANT },
+        ],
+        deadline: INSTANT,
+        retiredCleanup: {
+          operationEpoch: 2,
+          candidateVersion: versionForEpoch(1),
+        },
+      },
+      accepted: false,
+    },
+    {
+      name: 'accepts prepared with a consistent retiredCleanup handle',
+      input: {
+        outcome: 'prepared',
+        operationEpoch: 3,
+        operationToken: 'token-3',
+        candidateVersion: versionForEpoch(3),
+        assignedTimestamps: [
+          { documentName: 'calendar', revision: REVISION, observedAt: INSTANT },
+        ],
+        deadline: INSTANT,
+        retiredCleanup: {
+          operationEpoch: 2,
+          candidateVersion: versionForEpoch(2),
+        },
       },
       accepted: true,
     },
@@ -229,7 +353,10 @@ describe('decodePrepareOutcome', () => {
       input: {
         outcome: 'rejected',
         reason: 'operation-in-progress',
-        liveOperation: { operationEpoch: 2, candidateVersion: VERSION },
+        liveOperation: {
+          operationEpoch: 2,
+          candidateVersion: versionForEpoch(2),
+        },
       },
       accepted: true,
     },
@@ -239,11 +366,55 @@ describe('decodePrepareOutcome', () => {
       accepted: false,
     },
     {
+      name: 'rejects operation-in-progress whose liveOperation epoch/version disagree',
+      input: {
+        outcome: 'rejected',
+        reason: 'operation-in-progress',
+        liveOperation: {
+          operationEpoch: 2,
+          candidateVersion: versionForEpoch(1),
+        },
+      },
+      accepted: false,
+    },
+    {
+      name: 'accepts pending-cleanup-required with a consistent pendingCleanup',
+      input: {
+        outcome: 'rejected',
+        reason: 'pending-cleanup-required',
+        pendingCleanup: {
+          operationEpoch: 2,
+          candidateVersion: versionForEpoch(2),
+        },
+      },
+      accepted: true,
+    },
+    {
+      name: 'rejects pending-cleanup-required whose pendingCleanup epoch/version disagree',
+      input: {
+        outcome: 'rejected',
+        reason: 'pending-cleanup-required',
+        pendingCleanup: {
+          operationEpoch: 2,
+          candidateVersion: versionForEpoch(9),
+        },
+      },
+      accepted: false,
+    },
+    {
+      name: 'accepts rejected with timestamp-space-exhausted',
+      input: { outcome: 'rejected', reason: 'timestamp-space-exhausted' },
+      accepted: true,
+    },
+    {
       name: 'drops liveOperation carried on an unrelated reason',
       input: {
         outcome: 'rejected',
         reason: 'season-mismatch',
-        liveOperation: { operationEpoch: 2, candidateVersion: VERSION },
+        liveOperation: {
+          operationEpoch: 2,
+          candidateVersion: versionForEpoch(2),
+        },
       },
       accepted: false,
     },
@@ -485,5 +656,127 @@ describe('the client maps an undecodable response to its bounded fallback', () =
       outcome: 'rejected',
       reason: 'state-corrupt',
     });
+  });
+
+  // R1: a response can be individually well-formed yet not correspond to the
+  // request the client sent, or name a version another epoch owns. The client
+  // holds the request, so it binds these and maps every failure to the same
+  // bounded fallback the decoders' `null` already maps to.
+  const request = prepareRequest();
+  const wellFormedPreparedFor = (
+    epoch: number,
+    assignedTimestamps: unknown,
+  ) => ({
+    outcome: 'prepared' as const,
+    operationEpoch: epoch,
+    operationToken: `token-${epoch}`,
+    candidateVersion: versionForEpoch(epoch),
+    assignedTimestamps,
+    deadline: INSTANT,
+  });
+
+  it('rejects a prepared response whose assignments are for another manifest', async () => {
+    const client = new DurableObjectSeasonPublicationSequencer(
+      responding(
+        wellFormedPreparedFor(1, [
+          {
+            documentName: 'not-in-request',
+            revision: REVISION,
+            observedAt: INSTANT,
+          },
+          { documentName: 'also-not', revision: REVISION, observedAt: INSTANT },
+        ]),
+      ),
+    );
+    expect(await client.prepare(request)).toEqual({
+      outcome: 'rejected',
+      reason: 'state-corrupt',
+    });
+  });
+
+  it('rejects a prepared response whose assignment revisions do not match the request', async () => {
+    const client = new DurableObjectSeasonPublicationSequencer(
+      responding(
+        wellFormedPreparedFor(
+          1,
+          request.perKeyRevisions.map((entry) => ({
+            documentName: entry.documentName,
+            revision: rev('a-different-revision'),
+            observedAt: INSTANT,
+          })),
+        ),
+      ),
+    );
+    expect(await client.prepare(request)).toEqual({
+      outcome: 'rejected',
+      reason: 'state-corrupt',
+    });
+  });
+
+  it('accepts a prepared response whose assignments match the request', async () => {
+    const client = new DurableObjectSeasonPublicationSequencer(
+      responding(
+        wellFormedPreparedFor(
+          1,
+          request.perKeyRevisions.map((entry) => ({
+            documentName: entry.documentName,
+            revision: entry.revision,
+            observedAt: INSTANT,
+          })),
+        ),
+      ),
+    );
+    expect((await client.prepare(request)).outcome).toBe('prepared');
+  });
+
+  it('rejects a cancelled response whose candidateVersion belongs to another epoch', async () => {
+    const client = new DurableObjectSeasonPublicationSequencer(
+      responding({
+        outcome: 'cancelled',
+        candidateVersion: versionForEpoch(2),
+      }),
+    );
+    expect(
+      await client.cancel({
+        season: SEASON,
+        operationEpoch: 5,
+        operationToken: 'token-5',
+      }),
+    ).toEqual({ outcome: 'rejected', reason: 'state-corrupt' });
+  });
+
+  it('rejects a committed response whose activeVersion belongs to another epoch', async () => {
+    const client = new DurableObjectSeasonPublicationSequencer(
+      responding({
+        outcome: 'committed',
+        result: { ...COMMITTED, activeVersion: versionForEpoch(2) },
+        replayed: false,
+      }),
+    );
+    expect(
+      await client.finalize({
+        season: SEASON,
+        operationEpoch: 5,
+        operationToken: 'token-5',
+        completionAttestation: { manifestCommitment: commitment('m') },
+      }),
+    ).toEqual({ outcome: 'rejected', reason: 'state-corrupt' });
+  });
+
+  it('rejects an authorized cleanup whose version belongs to another epoch', async () => {
+    const client = new DurableObjectSeasonPublicationSequencer(
+      responding({
+        outcome: 'authorized',
+        candidateVersion: versionForEpoch(2),
+      }),
+    );
+    expect(
+      await client.authorizeCleanup({
+        season: SEASON,
+        operationEpoch: 5,
+        operationToken: 'token-5',
+        candidateVersion: versionForEpoch(5),
+      }),
+    ).toEqual({ outcome: 'refused', reason: 'state-corrupt' });
   });
 });

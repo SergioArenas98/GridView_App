@@ -57,6 +57,7 @@ import type {
 } from './model';
 import type { SeasonPublicationSequencerPort } from './port';
 import {
+  candidateVersionOwnedBy,
   decodeCancelOutcome,
   decodeCleanupAcknowledgement,
   decodeCleanupAuthorization,
@@ -65,6 +66,7 @@ import {
   decodeFinalizeOutcome,
   decodePrepareOutcome,
   decodeSeasonAuthority,
+  prepareAssignmentsMatchRequest,
 } from './wire-decoders';
 
 /** Internal URL used to address the object. Never logged, never external. */
@@ -204,44 +206,71 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
 
   async prepare(request: PrepareRequest): Promise<PrepareOutcome> {
     const value = await this.call(request.season, 'prepare', request);
-    return (
-      decodePrepareOutcome(value) ?? {
-        outcome: 'rejected',
-        reason: 'state-corrupt',
-      }
-    );
+    const decoded = decodePrepareOutcome(value);
+    if (decoded === null) {
+      return { outcome: 'rejected', reason: 'state-corrupt' };
+    }
+    if (
+      decoded.outcome === 'prepared' &&
+      !prepareAssignmentsMatchRequest(decoded.assignedTimestamps, request)
+    ) {
+      // Validly shaped, but the assignment set does not correspond to the
+      // manifest this call sent. Never acted on.
+      return { outcome: 'rejected', reason: 'state-corrupt' };
+    }
+    return decoded;
   }
 
   async finalize(request: FinalizeRequest): Promise<FinalizeOutcome> {
     const value = await this.call(request.season, 'finalize', request);
-    return (
-      decodeFinalizeOutcome(value) ?? {
-        outcome: 'rejected',
-        reason: 'state-corrupt',
-      }
-    );
+    const decoded = decodeFinalizeOutcome(value);
+    if (decoded === null) {
+      return { outcome: 'rejected', reason: 'state-corrupt' };
+    }
+    if (
+      decoded.outcome === 'committed' &&
+      !candidateVersionOwnedBy(
+        decoded.result.activeVersion,
+        request.operationEpoch,
+      )
+    ) {
+      // A committed result must name the version this epoch owns.
+      return { outcome: 'rejected', reason: 'state-corrupt' };
+    }
+    return decoded;
   }
 
   async cancel(request: OperationIdentity): Promise<CancelOutcome> {
     const value = await this.call(request.season, 'cancel', request);
-    return (
-      decodeCancelOutcome(value) ?? {
-        outcome: 'rejected',
-        reason: 'state-corrupt',
-      }
-    );
+    const decoded = decodeCancelOutcome(value);
+    if (decoded === null) {
+      return { outcome: 'rejected', reason: 'state-corrupt' };
+    }
+    if (
+      (decoded.outcome === 'cancelled' ||
+        decoded.outcome === 'already-cancelled') &&
+      !candidateVersionOwnedBy(decoded.candidateVersion, request.operationEpoch)
+    ) {
+      return { outcome: 'rejected', reason: 'state-corrupt' };
+    }
+    return decoded;
   }
 
   async authorizeCleanup(
     request: CleanupRequest,
   ): Promise<CleanupAuthorization> {
     const value = await this.call(request.season, 'authorize-cleanup', request);
-    return (
-      decodeCleanupAuthorization(value) ?? {
-        outcome: 'refused',
-        reason: 'state-corrupt',
-      }
-    );
+    const decoded = decodeCleanupAuthorization(value);
+    if (decoded === null) {
+      return { outcome: 'refused', reason: 'state-corrupt' };
+    }
+    if (
+      decoded.outcome === 'authorized' &&
+      !candidateVersionOwnedBy(decoded.candidateVersion, request.operationEpoch)
+    ) {
+      return { outcome: 'refused', reason: 'state-corrupt' };
+    }
+    return decoded;
   }
 
   async acknowledgeCleanup(

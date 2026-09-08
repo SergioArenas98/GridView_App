@@ -66,6 +66,7 @@ export {
   type SequencerNamespace,
 } from './durable-object';
 export {
+  candidateVersionOwnedBy,
   decodeCancelOutcome,
   decodeCleanupAcknowledgement,
   decodeCleanupAuthorization,
@@ -74,4 +75,5 @@ export {
   decodeFinalizeOutcome,
   decodePrepareOutcome,
   decodeSeasonAuthority,
+  prepareAssignmentsMatchRequest,
 } from './wire-decoders';

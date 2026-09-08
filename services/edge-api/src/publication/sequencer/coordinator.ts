@@ -67,7 +67,6 @@ import {
   committedKeyPrefix,
   isOpaqueIdentifier,
   isSeason,
-  isVersionIdentifier,
   preparedKeyPrefix,
   putPerKeyState,
   readAuthorityRecord,
@@ -86,12 +85,13 @@ import {
   highestInstant,
   isExpired,
   isOperationIdentity,
+  parseCleanupRequest,
   validateCutoverSeed,
   validatePrepareRequest,
   seedMatchesCommittedState,
 } from './rules';
 import { systemClock, type Clock } from '../../runtime/clock';
-import { compareInstants } from '../canonical/instant';
+import { boundedInstant, compareInstants } from '../canonical/instant';
 
 /**
  * How long a prepared operation stays finalizable.
@@ -161,12 +161,19 @@ export class SeasonPublicationCoordinator {
         // One object owns one season. It never answers for another.
         return { cutoverState: 'unavailable', authoritative: false } as const;
       }
+      const { activeVersion, cutoverFingerprint } = record;
+      if (activeVersion === null || cutoverFingerprint === null) {
+        // A seeded/active record must carry both. The durable codec already
+        // rejects one that lost either as corrupt; this is the fail-closed
+        // path if that ever slips through, never a partial authority answer.
+        return { cutoverState: 'unavailable', authoritative: false } as const;
+      }
       return {
         cutoverState: record.cutoverState as 'seeded' | 'active',
         authoritative: record.cutoverState === 'active',
-        activeVersion: record.activeVersion,
+        activeVersion,
         previousVersion: record.previousVersion,
-        cutoverFingerprint: record.cutoverFingerprint,
+        cutoverFingerprint,
       } as const;
     });
   }
@@ -216,10 +223,20 @@ export class SeasonPublicationCoordinator {
         return { outcome: 'rejected', reason: 'state-corrupt' };
       }
       const now = this.clock.now();
-      if (!Number.isFinite(now.getTime())) {
-        // An injected clock that cannot produce an instant fails closed here,
-        // before any durable write, rather than throwing deeper in assignment.
+      const nowInstant = boundedInstant(now);
+      if (nowInstant === null) {
+        // A clock with no usable four-digit RFC 3339 spelling fails closed
+        // here, before any durable write, rather than throwing deeper in
+        // assignment or writing an extended-year timestamp into storage.
         return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
+      const deadlineInstant = boundedInstant(
+        new Date(now.getTime() + this.preparationTtlMs),
+      );
+      if (deadlineInstant === null) {
+        // The clock is valid, but `now + ttl` leaves the representable year
+        // range. Nothing is written.
+        return { outcome: 'rejected', reason: 'timestamp-space-exhausted' };
       }
       let stagedRetirement: PendingCleanupRecord | null = null;
       if (operation.kind === 'value') {
@@ -269,7 +286,7 @@ export class SeasonPublicationCoordinator {
           stagedRetirement = {
             operationEpoch: live.epoch,
             candidateVersion: live.candidateVersion,
-            retiredAt: now.toISOString(),
+            retiredAt: nowInstant,
           };
         }
       }
@@ -303,12 +320,19 @@ export class SeasonPublicationCoordinator {
       if (committed.kind === 'corrupt') {
         return { outcome: 'rejected', reason: 'state-corrupt' };
       }
-      const assignedTimestamps = assignObservationTimestamps(
+      const assignment = assignObservationTimestamps(
         request.perKeyRevisions,
         committed.kind === 'value' ? committed.value : [],
         current.seasonSnapshotObservedAtHighWaterMark,
         now,
       );
+      if (assignment.kind === 'rejected') {
+        // A non-finite/extended-year clock (`state-corrupt`) or an exhausted
+        // assignment floor (`timestamp-space-exhausted`), returned - never
+        // thrown - with no durable write.
+        return { outcome: 'rejected', reason: assignment.reason };
+      }
+      const assignedTimestamps = assignment.states;
 
       const candidateVersion = candidateVersionForEpoch(
         epoch,
@@ -323,8 +347,8 @@ export class SeasonPublicationCoordinator {
         candidateVersion,
         sourceOrderingInput: request.sourceOrderingInput,
         expectedManifestCommitment: request.expectedManifestCommitment,
-        preparedAt: now.toISOString(),
-        deadline: new Date(now.getTime() + this.preparationTtlMs).toISOString(),
+        preparedAt: nowInstant,
+        deadline: deadlineInstant,
         committedResult: null,
       };
 
@@ -431,7 +455,10 @@ export class SeasonPublicationCoordinator {
         return { outcome: 'rejected', reason: 'operation-not-prepared' };
       }
       const now = this.clock.now();
-      if (!Number.isFinite(now.getTime())) {
+      const nowInstant = boundedInstant(now);
+      if (nowInstant === null) {
+        // A clock with no usable four-digit RFC 3339 spelling: fail closed with
+        // no transition, exactly as a non-finite one already did.
         return { outcome: 'rejected', reason: 'state-corrupt' };
       }
       if (isExpired(record, now)) {
@@ -453,7 +480,7 @@ export class SeasonPublicationCoordinator {
         activeVersion: record.candidateVersion,
         previousVersion: authority.activeVersion,
         operationKind: record.operationKind,
-        committedAt: now.toISOString(),
+        committedAt: nowInstant,
       };
 
       // Per-key state for a key no longer named in the incoming manifest is
@@ -566,12 +593,17 @@ export class SeasonPublicationCoordinator {
    * What makes a delayed deletion safe to act on is structural: a candidate
    * version is owned by exactly one epoch for its whole existence, so no later
    * operation can ever make the named version reachable again.
+   *
+   * The request arrives in one of two forms (D5). A {@link CurrentCleanupRequest}
+   * carries the operation token and is the only form that can authorize cleanup
+   * of a **still-current** `cancelled` record. A {@link RetiredCleanupRequest}
+   * carries no token and can only ever reach the pending-cleanup slot - which
+   * is exactly what a restarted replacement caller, holding only the
+   * `RetiredCleanupHandle` a later `prepare` returned, is able to build.
    */
   authorizeCleanup(request: CleanupRequest): CleanupAuthorization {
-    if (
-      !isOperationIdentity(request) ||
-      !isVersionIdentifier(request.candidateVersion)
-    ) {
+    const parsed = parseCleanupRequest(request);
+    if (parsed === null) {
       return { outcome: 'refused', reason: 'malformed-request' };
     }
     return this.host.transactionSync((store): CleanupAuthorization => {
@@ -582,7 +614,7 @@ export class SeasonPublicationCoordinator {
       if (authority.kind === 'missing') {
         return { outcome: 'refused', reason: 'no-current-operation' };
       }
-      if (authority.value.season !== request.season) {
+      if (authority.value.season !== parsed.season) {
         return { outcome: 'refused', reason: 'season-mismatch' };
       }
       const operation = readOperationRecord(store);
@@ -601,20 +633,23 @@ export class SeasonPublicationCoordinator {
           operation.value.phase !== 'cancelled' &&
           operation.value.candidateVersion === version);
 
-      // Path 1: the named operation is still the current durable record.
+      // Path 1: the named operation is still the current durable record. This
+      // path requires a matching **token**, so a tokenless
+      // `RetiredCleanupRequest` can never reach it.
       if (
+        parsed.operationToken !== null &&
         operation.kind === 'value' &&
-        operation.value.epoch === request.operationEpoch &&
-        operation.value.token === request.operationToken
+        operation.value.epoch === parsed.operationEpoch &&
+        operation.value.token === parsed.operationToken
       ) {
         const record = operation.value;
         if (record.phase !== 'cancelled') {
           return { outcome: 'refused', reason: 'operation-not-cancelled' };
         }
-        if (record.candidateVersion !== request.candidateVersion) {
+        if (record.candidateVersion !== parsed.candidateVersion) {
           return { outcome: 'refused', reason: 'candidate-version-mismatch' };
         }
-        if (isAuthoritativeVersion(request.candidateVersion)) {
+        if (isAuthoritativeVersion(parsed.candidateVersion)) {
           return { outcome: 'refused', reason: 'version-is-authoritative' };
         }
         return {
@@ -626,13 +661,14 @@ export class SeasonPublicationCoordinator {
       // Path 2: the named operation was displaced and now sits in the single
       // pending-cleanup slot. Epoch plus candidate version is an exact scope -
       // the version belongs to exactly that epoch for its whole existence, and
-      // the epoch is retired and terminal (D3, D5).
+      // the epoch is retired and terminal (D3, D5) - and no token is needed or
+      // consulted, because none was stored for it.
       if (
         pending.kind === 'value' &&
-        pending.value.operationEpoch === request.operationEpoch &&
-        pending.value.candidateVersion === request.candidateVersion
+        pending.value.operationEpoch === parsed.operationEpoch &&
+        pending.value.candidateVersion === parsed.candidateVersion
       ) {
-        if (isAuthoritativeVersion(request.candidateVersion)) {
+        if (isAuthoritativeVersion(parsed.candidateVersion)) {
           return { outcome: 'refused', reason: 'version-is-authoritative' };
         }
         return {
@@ -654,7 +690,8 @@ export class SeasonPublicationCoordinator {
    * the version is already absent (D5).
    *
    * It retires the named identity from whichever bounded place holds it - the
-   * current `cancelled` operation record, or the single pending-cleanup slot -
+   * current `cancelled` operation record (via a {@link CurrentCleanupRequest},
+   * token required), or the single pending-cleanup slot (via either form) -
    * freeing that capacity for the next retirement. Acknowledging the same
    * identity twice, or one an earlier cycle already cleared, is `acknowledged`,
    * not an error. A different identity than the one currently retired is
@@ -662,10 +699,8 @@ export class SeasonPublicationCoordinator {
    * orphan. It performs no Workers KV I/O.
    */
   acknowledgeCleanup(request: CleanupRequest): CleanupAcknowledgement {
-    if (
-      !isOperationIdentity(request) ||
-      !isVersionIdentifier(request.candidateVersion)
-    ) {
+    const parsed = parseCleanupRequest(request);
+    if (parsed === null) {
       return { outcome: 'rejected', reason: 'malformed-request' };
     }
     return this.host.transactionSync((store): CleanupAcknowledgement => {
@@ -676,7 +711,7 @@ export class SeasonPublicationCoordinator {
       if (authority.kind === 'missing') {
         return { outcome: 'rejected', reason: 'identity-not-current' };
       }
-      if (authority.value.season !== request.season) {
+      if (authority.value.season !== parsed.season) {
         return { outcome: 'rejected', reason: 'season-mismatch' };
       }
 
@@ -686,14 +721,14 @@ export class SeasonPublicationCoordinator {
       }
       if (pending.kind === 'value') {
         if (
-          pending.value.operationEpoch === request.operationEpoch &&
-          pending.value.candidateVersion === request.candidateVersion
+          pending.value.operationEpoch === parsed.operationEpoch &&
+          pending.value.candidateVersion === parsed.candidateVersion
         ) {
           clearPendingCleanupRecord(store);
           return { outcome: 'acknowledged' };
         }
         // An older identity than the one now staged was already cleared.
-        if (request.operationEpoch < pending.value.operationEpoch) {
+        if (parsed.operationEpoch < pending.value.operationEpoch) {
           return { outcome: 'acknowledged' };
         }
         return { outcome: 'rejected', reason: 'identity-not-current' };
@@ -708,16 +743,20 @@ export class SeasonPublicationCoordinator {
         return { outcome: 'acknowledged' };
       }
       const record = operation.value;
+      // The current-record path requires a matching token, so a tokenless
+      // `RetiredCleanupRequest` can never retire a still-current cancelled
+      // record - only a genuinely displaced orphan from the pending slot above.
       if (
-        record.epoch === request.operationEpoch &&
-        record.token === request.operationToken &&
-        record.candidateVersion === request.candidateVersion &&
+        parsed.operationToken !== null &&
+        record.epoch === parsed.operationEpoch &&
+        record.token === parsed.operationToken &&
+        record.candidateVersion === parsed.candidateVersion &&
         record.phase === 'cancelled'
       ) {
         clearOperationRecord(store);
         return { outcome: 'acknowledged' };
       }
-      if (record.epoch > request.operationEpoch) {
+      if (record.epoch > parsed.operationEpoch) {
         // The named epoch is already retired past the current record.
         return { outcome: 'acknowledged' };
       }

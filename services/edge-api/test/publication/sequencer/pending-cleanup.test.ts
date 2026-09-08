@@ -21,6 +21,8 @@ import {
   SEED_ACTIVE_VERSION,
   activeSequencer,
   commitment,
+  counterSource,
+  hexCounterSource,
   keyRevision,
   prepareRequest,
   rev,
@@ -29,7 +31,28 @@ import {
 import {
   pendingCleanupStorageKey,
   readPendingCleanupRecord,
+  SeasonPublicationCoordinator,
 } from '../../../src/publication/sequencer';
+
+/** A fresh coordinator over the same committed bytes, as a restart would see. */
+function restarted(harness: Harness): SeasonPublicationCoordinator {
+  return new SeasonPublicationCoordinator(harness.host.restart(), {
+    token: counterSource('restarted-'),
+    opaqueVersionComponent: hexCounterSource(),
+  });
+}
+
+/** The tokenless pending-slot cleanup request a `RetiredCleanupHandle` yields. */
+function retiredRequestFor(handle: {
+  operationEpoch: number;
+  candidateVersion: string;
+}) {
+  return {
+    season: SEASON,
+    operationEpoch: handle.operationEpoch,
+    candidateVersion: handle.candidateVersion,
+  };
+}
 
 const MANIFEST = commitment('manifest-1');
 
@@ -208,12 +231,9 @@ describe('backpressure', () => {
         if (p.outcome === 'rejected') {
           expect(p.reason).toBe('pending-cleanup-required');
           if (p.pendingCleanup) {
-            const req = {
-              season: SEASON,
-              operationEpoch: p.pendingCleanup.operationEpoch,
-              operationToken: 'token-x',
-              candidateVersion: p.pendingCleanup.candidateVersion,
-            };
+            // The pending slot is drained with a tokenless request built
+            // straight from the handle - no fabricated token.
+            const req = retiredRequestFor(p.pendingCleanup);
             harness.sequencer.authorizeCleanup(req);
             harness.sequencer.acknowledgeCleanup(req);
           }
@@ -320,6 +340,124 @@ describe('durability', () => {
     expect(
       harness.host.committedKeys().map((key) => [key, harness.host.peek(key)]),
     ).toEqual(before);
+  });
+});
+
+describe('a restarted replacement caller drains the pending slot without a token (R2)', () => {
+  it('recovers from the retiredCleanup handle a displacing prepare returned', () => {
+    const harness = activeSequencer();
+    const a = prepared(harness);
+    harness.sequencer.cancel(cleanupRequestFor(a));
+    const b = prepared(harness, changedCalendar('b'));
+    if (b.retiredCleanup === undefined)
+      throw new Error('expected retiredCleanup');
+
+    // Everything about A - including its token - is gone; the process restarts.
+    const coordinator = restarted(harness);
+    const request = retiredRequestFor(b.retiredCleanup);
+    expect('operationToken' in request).toBe(false);
+
+    expect(coordinator.authorizeCleanup(request)).toEqual({
+      outcome: 'authorized',
+      candidateVersion: a.candidateVersion,
+    });
+    expect(coordinator.acknowledgeCleanup(request)).toEqual({
+      outcome: 'acknowledged',
+    });
+    // The slot is drained.
+    expect(coordinator.authorizeCleanup(request)).toEqual({
+      outcome: 'refused',
+      reason: 'identity-not-current',
+    });
+  });
+
+  it('recovers from a pending-cleanup-required result the same way', () => {
+    const harness = activeSequencer({ preparationTtlMs: 60_000 });
+    const a = prepared(harness);
+    harness.clock.advance(60_001);
+    prepared(harness, changedCalendar('b')); // retires a -> pending slot
+    harness.clock.advance(60_001);
+    const blocked = harness.sequencer.prepare(
+      prepareRequest(changedCalendar('c')),
+    );
+    if (
+      blocked.outcome !== 'rejected' ||
+      blocked.pendingCleanup === undefined
+    ) {
+      throw new Error(
+        `expected pending-cleanup-required, got ${JSON.stringify(blocked)}`,
+      );
+    }
+
+    const coordinator = restarted(harness);
+    const request = retiredRequestFor(blocked.pendingCleanup);
+    expect(coordinator.authorizeCleanup(request)).toEqual({
+      outcome: 'authorized',
+      candidateVersion: a.candidateVersion,
+    });
+    expect(coordinator.acknowledgeCleanup(request)).toEqual({
+      outcome: 'acknowledged',
+    });
+  });
+
+  it('a tokenless request cannot authorize the still-current cancelled operation', () => {
+    const harness = activeSequencer();
+    const a = prepared(harness);
+    harness.sequencer.cancel(cleanupRequestFor(a));
+    // `a` is still the current record - not displaced into the pending slot.
+    const tokenless = retiredRequestFor(a);
+    expect(harness.sequencer.authorizeCleanup(tokenless)).toEqual({
+      outcome: 'refused',
+      reason: 'identity-not-current',
+    });
+    expect(harness.sequencer.acknowledgeCleanup(tokenless)).toEqual({
+      outcome: 'rejected',
+      reason: 'identity-not-current',
+    });
+    // The full-triple request still works - the record is untouched.
+    expect(harness.sequencer.authorizeCleanup(cleanupRequestFor(a))).toEqual({
+      outcome: 'authorized',
+      candidateVersion: a.candidateVersion,
+    });
+  });
+
+  it('a wrong token cannot authorize the current cancelled operation', () => {
+    const harness = activeSequencer();
+    const a = prepared(harness);
+    harness.sequencer.cancel(cleanupRequestFor(a));
+    expect(
+      harness.sequencer.authorizeCleanup({
+        ...cleanupRequestFor(a),
+        operationToken: 'not-the-holder',
+      }),
+    ).toEqual({ outcome: 'refused', reason: 'identity-not-current' });
+  });
+
+  it('a mismatched pending epoch or version cannot clear the slot', () => {
+    const harness = activeSequencer();
+    const a = prepared(harness);
+    harness.sequencer.cancel(cleanupRequestFor(a));
+    const b = prepared(harness, changedCalendar('b'));
+    if (b.retiredCleanup === undefined)
+      throw new Error('expected retiredCleanup');
+    const handle = b.retiredCleanup;
+
+    expect(
+      harness.sequencer.acknowledgeCleanup({
+        ...retiredRequestFor(handle),
+        operationEpoch: handle.operationEpoch + 5,
+      }),
+    ).toEqual({ outcome: 'rejected', reason: 'identity-not-current' });
+    expect(
+      harness.sequencer.acknowledgeCleanup({
+        ...retiredRequestFor(handle),
+        candidateVersion: 'pm1-0000000000099-abcdef01',
+      }),
+    ).toEqual({ outcome: 'rejected', reason: 'identity-not-current' });
+    // The slot is still occupied by the real orphan.
+    expect(harness.host.peek(pendingCleanupStorageKey)).toMatchObject({
+      operationEpoch: a.operationEpoch,
+    });
   });
 });
 

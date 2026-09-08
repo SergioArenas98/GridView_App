@@ -14,18 +14,36 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  FINGERPRINT,
   SEASON,
   activeSequencer,
   commitment,
+  counterSource,
+  hexCounterSource,
   keyRevision,
   makeSequencer,
+  MutableClock,
   prepareRequest,
   rev,
   seedFor,
 } from './support';
 import { compareInstants } from '../../../src/publication/canonical/instant';
+import {
+  LocalSeasonPublicationSequencer,
+  MemorySequencerHost,
+  SeasonPublicationCoordinator,
+} from '../../../src/publication/sequencer';
 
 const MANIFEST = commitment('manifest-1');
+
+/** The greatest instant the canonical module accepts; `+ 1 ms` leaves range. */
+const MAX_INSTANT = '9999-12-31T23:59:59.999Z';
+/** A finite `Date` whose ISO spelling is an extended year, outside RFC 3339. */
+const EXTENDED_YEAR = '+275760-09-13T00:00:00.000Z';
+
+function snapshot(host: MemorySequencerHost): [string, unknown][] {
+  return host.committedKeys().map((key) => [key, host.peek(key)]);
+}
 
 describe('leap-second and high-precision instants', () => {
   it('assigns a fresh timestamp above a leap-second high-water mark without throwing', () => {
@@ -165,5 +183,104 @@ describe('invalid injected clock', () => {
     harness.clock.set('nonsense');
     const outcome = harness.sequencer.prepare(prepareRequest());
     expect(outcome).toEqual({ outcome: 'rejected', reason: 'state-corrupt' });
+  });
+});
+
+describe('the accepted upper boundary is total (R3)', () => {
+  it('returns a bounded rejection - never throws - at the assignment-floor ceiling', () => {
+    const harness = activeSequencer(
+      {},
+      seedFor({ seasonSnapshotObservedAtHighWaterMark: MAX_INSTANT }),
+    );
+    const before = snapshot(harness.host);
+    const run = () =>
+      harness.sequencer.prepare(
+        prepareRequest({
+          perKeyRevisions: [keyRevision('calendar', rev('calendar-CHANGED'))],
+        }),
+      );
+    expect(run).not.toThrow();
+    expect(run()).toEqual({
+      outcome: 'rejected',
+      reason: 'timestamp-space-exhausted',
+    });
+    // Nothing was written.
+    expect(snapshot(harness.host)).toEqual(before);
+  });
+
+  it('fails closed before writing when the clock spells an extended year', () => {
+    const harness = activeSequencer();
+    const before = snapshot(harness.host);
+    harness.clock.set(EXTENDED_YEAR);
+    expect(harness.sequencer.prepare(prepareRequest())).toEqual({
+      outcome: 'rejected',
+      reason: 'state-corrupt',
+    });
+    expect(snapshot(harness.host)).toEqual(before);
+  });
+
+  it('fails closed with no partial state when the deadline overflows year 9999', () => {
+    const harness = activeSequencer({ now: '9999-12-31T23:59:00.000Z' });
+    const before = snapshot(harness.host);
+    expect(
+      harness.sequencer.prepare(
+        prepareRequest({ sourceOrderingInput: '9999-12-31T23:59:00.000Z' }),
+      ),
+    ).toEqual({ outcome: 'rejected', reason: 'timestamp-space-exhausted' });
+    expect(snapshot(harness.host)).toEqual(before);
+  });
+
+  it('finalize fails closed - not by throwing - when the clock spells an extended year', () => {
+    const harness = activeSequencer();
+    const prepared = harness.sequencer.prepare(prepareRequest());
+    if (prepared.outcome !== 'prepared') throw new Error('expected prepared');
+    const before = snapshot(harness.host);
+    harness.clock.set(EXTENDED_YEAR);
+    expect(
+      harness.sequencer.finalize({
+        season: SEASON,
+        operationEpoch: prepared.operationEpoch,
+        operationToken: prepared.operationToken,
+        completionAttestation: { manifestCommitment: MANIFEST },
+      }),
+    ).toEqual({ outcome: 'rejected', reason: 'state-corrupt' });
+    expect(snapshot(harness.host)).toEqual(before);
+  });
+
+  it('the local port resolves these to bounded outcomes, never rejected promises', async () => {
+    const host = new MemorySequencerHost();
+    const clock = new MutableClock(new Date('2026-09-02T00:00:00.000Z'));
+    const coordinator = new SeasonPublicationCoordinator(host, {
+      clock,
+      token: counterSource('token-'),
+      opaqueVersionComponent: hexCounterSource(),
+    });
+    const port = new LocalSeasonPublicationSequencer(coordinator);
+    coordinator.seedCutover(
+      seedFor({ seasonSnapshotObservedAtHighWaterMark: MAX_INSTANT }),
+    );
+    coordinator.activateCutover({
+      season: SEASON,
+      cutoverFingerprint: FINGERPRINT,
+    });
+
+    // Assignment-floor ceiling.
+    await expect(
+      port.prepare(
+        prepareRequest({
+          perKeyRevisions: [keyRevision('calendar', rev('calendar-CHANGED'))],
+        }),
+      ),
+    ).resolves.toEqual({
+      outcome: 'rejected',
+      reason: 'timestamp-space-exhausted',
+    });
+
+    // Extended-year clock.
+    clock.set(EXTENDED_YEAR);
+    await expect(port.prepare(prepareRequest())).resolves.toEqual({
+      outcome: 'rejected',
+      reason: 'state-corrupt',
+    });
   });
 });

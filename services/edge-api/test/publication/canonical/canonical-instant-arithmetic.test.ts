@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  boundedInstant,
   compareInstants,
   instantPlusMillisecond,
 } from '../../../src/publication/canonical/instant';
@@ -120,5 +121,32 @@ describe('instantPlusMillisecond', () => {
       expect(bumped).not.toBeNull();
       expect(compareInstants(bumped as string, value)).toBe(1);
     }
+  });
+});
+
+describe('boundedInstant', () => {
+  it('returns the raw ISO spelling for a Date in the four-digit year range', () => {
+    expect(boundedInstant(new Date('2026-09-02T00:00:00.000Z'))).toBe(
+      '2026-09-02T00:00:00.000Z',
+    );
+    // The trailing `.000` is kept, not canonicalized away.
+    expect(boundedInstant(new Date('9999-12-31T23:59:59.999Z'))).toBe(
+      '9999-12-31T23:59:59.999Z',
+    );
+  });
+
+  it('returns null for a non-finite Date rather than throwing', () => {
+    expect(boundedInstant(new Date('not a date'))).toBeNull();
+    expect(boundedInstant(new Date(Number.NaN))).toBeNull();
+  });
+
+  it('returns null for a finite Date whose ISO spelling is an extended year', () => {
+    // `new Date(8.64e15)` is the maximum valid Date - year 275760.
+    const farFuture = new Date(8.64e15);
+    expect(Number.isFinite(farFuture.getTime())).toBe(true);
+    expect(farFuture.toISOString()).toMatch(/^\+\d{6}-/);
+    expect(boundedInstant(farFuture)).toBeNull();
+    // And one just past year 9999.
+    expect(boundedInstant(new Date('+010000-01-01T00:00:00.000Z'))).toBeNull();
   });
 });

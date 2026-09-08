@@ -149,6 +149,28 @@ export function canonicalInstant(value: string): string | null {
   );
 }
 
+/**
+ * The `Date`'s ISO spelling, but only when it lands inside the four-digit
+ * RFC 3339 domain this module accepts - `null` for anything else.
+ *
+ * `Date#toISOString` throws for a non-finite `Date` and emits an extended-year
+ * spelling (`+010000-01-01T…`) for a year outside `0000`-`9999`; either would
+ * put an unusable value into durable state. This is the one bounded conversion
+ * the sequencer routes every clock reading and every deadline through, so a
+ * value that reaches storage is always one every later operation can order.
+ * The raw `toISOString` text is returned unchanged (its trailing `.000` and
+ * all) when it is in range - `canonicalInstant` only validates it here.
+ */
+export function boundedInstant(value: Date): string | null {
+  let iso: string;
+  try {
+    iso = value.toISOString();
+  } catch {
+    return null;
+  }
+  return canonicalInstant(iso) === null ? null : iso;
+}
+
 /** The fixed `YYYY-MM-DDTHH:MM:SS(.frac)?` shape a canonical value always has. */
 const canonicalPattern =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z$/;

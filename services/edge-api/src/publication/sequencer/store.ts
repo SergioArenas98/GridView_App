@@ -183,6 +183,14 @@ export function readAuthorityRecord(
   if (!isNullOr(raw.cutoverFingerprint, isOpaqueIdentifier)) {
     return { kind: 'corrupt' };
   }
+  // A `seeded` or `active` season is never reachable without an active version
+  // and the fingerprint that produced it (D12). A durable record in one of
+  // those states missing either cannot be reconciled with any defined
+  // transition, so it fails closed rather than becoming a partial authority.
+  if (raw.cutoverState !== 'uninitialized') {
+    if (!isVersionIdentifier(raw.activeVersion)) return { kind: 'corrupt' };
+    if (!isOpaqueIdentifier(raw.cutoverFingerprint)) return { kind: 'corrupt' };
+  }
   return {
     kind: 'value',
     value: {
