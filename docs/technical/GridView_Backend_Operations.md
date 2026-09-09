@@ -111,7 +111,14 @@ scheduled/manual trigger
 > [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)'s
 > D1.10 note. **The mode is `legacy` by default and no deployed environment
 > sets it otherwise**, so today both paths still call `SnapshotPublisher.publish`
-> and write `active:{season}` as described below. Nothing is activated until
+> and write `active:{season}` as described below. If an operator does set the
+> mode to `sequencer` and no sequencer binding is reachable, the composition
+> **fails closed** rather than reverting to `SnapshotPublisher`: publication,
+> rollback and the operator cache purge each return their bounded
+> `sequencer-authority-unavailable` outcome, public reads return the bounded
+> `503`, and no legacy pointer is read or written on any path — scheduled,
+> admin or public. An absent or unrecognised value is a different case and
+> keeps the default-off legacy behaviour exactly. Nothing is activated until
 > the staging provisioning + cutover gated by ADR 0025 D12 "Activation
 > boundary" and
 > [`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md)
@@ -439,6 +446,14 @@ and inventory** before any commit is attempted, so a partial KV-write outage
 that would have tolerated today's single pointer write may not tolerate the
 richer rollback. Any pre-commit failure still leaves the current release
 serving, unchanged in effect from today's table above.
+
+Rollback moves **no** global pointer: it does not change `meta:current-season`
+and does not rewrite the content-metadata sidecar, so its result reports
+`pointerMaintenance: 'not-required'`. It does allocate a fresh immutable
+version, and the republished representation therefore carries a **different
+`ETag`** from the historical target it restores — a client holding the old
+validator gets a `200` with the freshly assigned `meta.sourceUpdatedAt` rather
+than a `304` that would keep the superseded body.
 
 Once the sequencer is activated, an operator's rollback request resolves its
 default target from the Durable Object's own durable operation history rather

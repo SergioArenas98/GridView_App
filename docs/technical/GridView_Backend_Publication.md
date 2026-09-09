@@ -356,6 +356,17 @@ enumerable, and the purge reports `cachePurge: 'failed'` rather than claiming a
 success that leaves a withdrawn profile serving. That remains post-commit and
 never reverts the pointer.
 
+**The sequenced authority applies the same rule**, with two differences that
+follow from where its commit point is. The outgoing current season is captured
+*before* `finalize`, because the post-commit maintenance that moves the pointer
+overwrites the value the outgoing season is derived from; and the outgoing
+season's active version is resolved through **that season's own authority**, so
+a season the sequencer owns is read from the sequencer and only a season it does
+not own falls back to its legacy pointer - reading `active:{season}` for a
+cut-over season would be the post-activation legacy read ADR 0025 D6/D7 forbid,
+even for a cache decision. A same-season publication has no outgoing season and
+invents none, and every URL set is deduplicated and deterministically sorted.
+
 ### Cache invalidation of withdrawn routes
 
 Replacing a version in the same season purges the **union** of the incoming
@@ -648,7 +659,36 @@ D6 for the full rule and the narrow, bounded, per-document mixed-release
 trade-off it introduces. If the Durable Object binding or lookup itself is
 unavailable, the router returns the existing bounded fail-closed shape; it
 does not fall back to a legacy KV pointer, because after cutover nothing
-maintains one as a live value (see "Legacy pointer retirement" below).
+maintains one as a live value (see "Legacy pointer retirement" below). **That
+includes the binding being absent entirely**: once
+`SEASON_PUBLICATION_AUTHORITY=sequencer` has been selected, a missing or
+renamed namespace resolves to an explicit unavailable authority rather than
+back to `legacy`, so no public request reads `active:{season}` and no
+publication, rollback or operator purge writes a legacy pointer. An absent or
+unrecognised value of that variable is a different fact and keeps the
+default-off legacy behaviour exactly.
+
+**A propagation fallback response is not cached as an ordinary snapshot.** The
+steps above serve the *previous* version's document only for the window before
+the active version's document becomes readable — a window the publication's
+single post-commit purge has already passed through — so a fallback response
+carries `Cache-Control: no-store`, no `CDN-Cache-Control` and no `ETag` at all.
+Emitting a reusable validator would let a client's `If-None-Match` turn the
+next request into a `304` that keeps the historical body current well past that
+window, which for a profile route is an hour. Body, envelope, request id and
+`HEAD` semantics are unchanged, and a normal active-version response keeps its
+existing cache policy and conditional-GET behaviour.
+
+**A snapshot's `ETag` identifies the representation, not only its content.**
+The validator's material is the resource identity, `meta.contentVersion` **and**
+the immutable publication version the document was read from. The third
+component exists because a rollback republication preserves the first two while
+regenerating `meta.sourceUpdatedAt`, `generatedAt` and `staleAfter`: without it
+a client holding the historical target's `ETag` would receive a `304` after the
+rollback and keep the superseded body. The version stays internal — it appears
+only through the hash, and no public DTO or OpenAPI field carries it — the
+validator is stable for repeated requests to the same immutable version, and
+status-route validators are unchanged.
 
 ### Failure behavior
 
@@ -662,7 +702,18 @@ independent, still-applicable post-commit outcome for cache purge:
 - **Pre-commit failure**: any failure before `finalize`'s transaction
   completes leaves the prior active/previous pair untouched — no partial
   pointer state is possible, because there is only one write; cache purge
-  never runs.
+  never runs. It also leaves `meta:current-season` and the content-metadata
+  sidecar untouched: the candidate write phase writes only the candidate's own
+  immutable, version-scoped artifacts (documents, inventory, sidecar), and both
+  global values are post-commit maintenance instead. A rejected, superseded or
+  unreachable `finalize` therefore cannot change which season
+  `/v1/seasons/current` resolves to.
+- **Committed, post-commit global maintenance failed**: an ordinary
+  publication's `meta:current-season` and content-metadata writes run after the
+  commit and cannot un-publish it. The result is `applied` with the existing
+  bounded pointer-maintenance disposition `failed` and the bounded
+  `current-season-maintenance-failed` reason. Rollback moves no global pointer,
+  so its disposition is `not-required`.
 - **Committed, cache purge succeeded**: the transaction succeeded, both the
   new active and previous values are in effect together, never one without
   the other, and the purge reports success using the existing bounded

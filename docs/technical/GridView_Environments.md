@@ -271,10 +271,14 @@ outbound provider request can be issued at all. No provider adapter exists
 either, so nothing calls it.
 
 `SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **unset in every
-environment**. It resolves to `legacy` unless the exact string `sequencer` is
-supplied together with a reachable sequencer port, so the composition builds
-the existing `SnapshotPublisher` and the public router performs no Durable
-Object lookup. No `wrangler.toml` declares a `SeasonPublicationSequencer`
+environment**. An absent, empty or unrecognised value resolves to `legacy` and
+never throws, so the composition builds the existing `SnapshotPublisher` and the
+public router performs no Durable Object lookup. The exact string `sequencer`
+selects the two-phase path when a sequencer port is reachable, and **fails
+closed when one is not**: that combination resolves to an explicit
+sequencer-unavailable authority, never back to `legacy`, so a deployment that
+lost the binding after a cutover cannot resume reading or mutating legacy KV
+pointers. No `wrangler.toml` declares a `SeasonPublicationSequencer`
 binding, `[exports]` entry, migration or namespace; the two-phase publication
 path exists in code but is inert until the separately authorized staging
 provisioning + cutover.

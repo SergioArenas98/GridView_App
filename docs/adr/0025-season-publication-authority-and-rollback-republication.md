@@ -377,6 +377,39 @@ making eligibility for the fallback a property of the immutable identifier
 rather than an inference from a KV read (D3, D8, D12 steps 3, 6 and 8, the
 testing obligations and the rejected-alternatives table).
 
+### Context: Integration review corrections
+
+A Codex review of the Integration slice (PR #18, head `d682613`) found six
+defects in how this ADR's decisions had been implemented. Each was
+independently reproduced against that head before being accepted, and each is
+corrected in the implementation and recorded here. **None of them is a new
+design decision**: every correction restores a behaviour this ADR or the
+existing publication contract already required.
+
+1. **An explicit sequencer selection was not fail-closed.**
+   `SEASON_PUBLICATION_AUTHORITY=sequencer` with no reachable port resolved to
+   the *legacy* authority, so a deployment that renamed or dropped the binding
+   after a cutover would have resumed reading and mutating the legacy KV
+   pointers D6/D7 forbid. The authority is now a three-value domain and that
+   state resolves to `sequencer-unavailable`. An **absent or unrecognised**
+   configuration is a different fact and still resolves to `legacy`,
+   unchanged — the default-off boundary of D12 is not affected. Recorded in
+   D6 and D12.
+2. **Global current-season state moved before the authoritative commit.** The
+   candidate write phase wrote `meta:current-season` (and the content-metadata
+   sidecar) before `finalize`, so a rejected, superseded or unreachable commit
+   left `/v1/seasons/current` redirected to a season whose publication had not
+   happened. Both are now post-commit maintenance. Recorded in D4 and D9.
+3. **A cross-season publication did not purge the outgoing season's aliases.**
+   Recorded in D9.
+4. **A propagation fallback was cached as an ordinary snapshot.** Recorded in
+   D6.
+5. **A rollback republication could reuse its historical target's ETag.**
+   Recorded in D6 and D8.
+6. **A strictly older ordinary candidate was reported `failed` rather than
+   `rejected`,** contradicting the existing publication contract that treats
+   exactly that reason as a benign completed no-op. Recorded in D4.
+
 ## Decision
 
 ### D1. Serialization identity
@@ -938,7 +971,27 @@ The caller:
   no `completionAttestation` and never calls `finalize`;
 - **never** touches `activeVersion`/`previousVersion` and gains **no**
   commit authority merely by holding a valid token — a token authorizes one
-  `finalize` call, nothing else.
+  `finalize` call, nothing else;
+- **writes no global state.** This phase writes only the candidate's own
+  immutable, version-scoped artifacts: its public documents, its inventory and
+  its `__publication_metadata` sidecar. `meta:current-season` and the
+  content-metadata sidecar are **global** — a live public response reads them,
+  and `/v1/seasons/current` resolves through the first — so moving either here
+  would make a *pre-commit* failure user-visible while the prior release is
+  still the one serving. Both are post-commit maintenance instead (D9).
+
+**Not every `prepare` refusal is an operational failure.** `prepare`'s
+`older-source-ordering-input` means the candidate was examined and declined
+because what is already committed is newer: the pacing system working, not an
+outage. The caller reports it with the publication contract's existing
+`rejected` / `older-source-updated-at` pair, which the synchronization service
+already treats as a **completed no-op**, exactly as the legacy publisher
+reports the same candidate. Equality remains admitted, a newer ordering input
+remains admitted, and rollback remains exempt from the predicate entirely.
+Every other refusal — pending-cleanup backpressure, corrupt state, an
+inactive or unavailable authority, epoch exhaustion, timestamp-space
+exhaustion — stays an operational `failed` result; they must never be
+collapsed into the benign stale-candidate case.
 
 #### `finalize(season, operationEpoch, operationToken, completionAttestation)`
 
@@ -1279,6 +1332,35 @@ document request in this order:
    rather than treating `previousVersion` as a stand-in decision for a
    question the active inventory alone can answer.
 
+**A steps 4-5 fallback response is not cacheable.** It is the *previous*
+version's document, served only for the window in which the active version's
+document has not become readable — a window the publication's single
+post-commit cache purge has already passed through. Giving it the route's
+ordinary category lifetime would let an edge hold the superseded body for up to
+that category's full TTL (an hour for a profile) after the active document
+appears, which is precisely the bound this fallback exists to keep. A fallback
+response therefore carries `Cache-Control: no-store`, no `CDN-Cache-Control`,
+and **no validator at all**: emitting a reusable `ETag` would let a client's
+`If-None-Match` turn the following request into a `304` that keeps the
+historical body current beyond this response. Its body, public envelope,
+request id and `HEAD` semantics are exactly the normal path's; a normal
+active-version response keeps its existing cache policy and conditional-GET
+behaviour unchanged.
+
+**A snapshot's cache validator identifies the representation, not only its
+content.** Resource identity and `meta.contentVersion` alone are not sufficient
+under this ADR, because a rollback republication (D8) deliberately preserves
+both while regenerating `meta.sourceUpdatedAt`, `generatedAt` and `staleAfter`.
+A client holding the historical target's `ETag` would then receive a `304`
+after the rollback and keep the superseded body and its superseded
+`sourceUpdatedAt`, breaking the rollback observation semantics D8 relies on.
+The snapshot `ETag` therefore also takes the **immutable publication version**
+the document was read from as validator material. That version stays internal:
+it appears only through the hash, and **no public DTO or OpenAPI field carries
+it.** The validator remains stable for repeated requests to the same immutable
+version, so a same-version conditional GET still returns `304`. Status-route
+validators are unaffected.
+
 **The `__publication_metadata` sidecar is outside this path entirely.** It is
 never resolved by step 2's inventory read (it is not an inventory member), is
 never a document step 3-5 can be asked for (its suffix is not a
@@ -1321,6 +1403,20 @@ unavailable:**
 
 - the router does **not** silently fall back to trusting a legacy KV active
   pointer — there is no live legacy pointer to trust after cutover (D7);
+- **this includes the binding being absent entirely.** Once
+  `SEASON_PUBLICATION_AUTHORITY=sequencer` has been selected, a missing or
+  renamed namespace is an *unavailable authority*, not a return to legacy
+  mode: the resolution is `sequencer-unavailable`, no `SnapshotPublisher` is
+  constructed for a mutating command, no `active:{season}` or
+  `previous:{season}` key is read for a public request, and publication,
+  rollback and the operator purge each answer with their existing bounded
+  `sequencer-authority-unavailable` outcome rather than an escaping exception
+  or a legacy write. An **absent or unrecognised** configuration is a
+  different fact and keeps D12's default-off legacy behaviour exactly;
+- a `finalize` call that does not resolve is treated the same way, with one
+  addition: whether the candidate committed is genuinely unknown, so the
+  caller cleans nothing up (deleting it could destroy a release that did
+  commit) and leaves the orphan to the D5 pending-cleanup slot;
 - it returns the repository's existing bounded fail-closed/service-unavailable
   response shape, unchanged in kind from how an unreadable storage
   dependency is already handled elsewhere in this codebase;
@@ -1413,7 +1509,14 @@ version. It is **republication**:
    inventory is also what the caller deterministically enumerates into a
    planned document manifest and turns into an `expectedManifestCommitment`
    — exactly as D3/D4 describe for ordinary publication — before step 10's
-   `prepare` call, never after.
+   `prepare` call, never after. "ETag inputs" here is a real obligation and
+   not merely a copy of the field list: a rollback deliberately preserves
+   `meta.contentVersion` and the resource identity, so those two alone cannot
+   distinguish the republication from its historical source. The republished
+   representation is identified by the **new immutable version** the rollback
+   commits to, which D6 makes part of the snapshot validator material. Stable
+   historical data is never mutated to force a fresh validator, and no public
+   DTO or OpenAPI field is added to carry it.
 5. Compute `snapshotRevision` for each restored key using the same canonical
    hashing already implemented for ordinary publication ([ADR 0020](0020-provider-source-observation-and-reconciliation.md)
    D1.7) — Model 1 introduces **no new revision-computation mechanism**.
@@ -1690,6 +1793,44 @@ storage transaction:
   network call inside it — see D10 for why `blockConcurrencyWhile` is neither
   necessary nor appropriate here.
 
+**Post-commit global maintenance is best-effort and cannot un-publish.** An
+ordinary publication owes two writes that are not part of the authoritative
+per-season commit: `meta:current-season`, which decides the season the public
+`current` aliases resolve to, and the content-metadata sidecar. Both are
+**global** state, so both run strictly *after* a committed `finalize` — before
+it, a rejected, superseded or unreachable commit would leave
+`/v1/seasons/current` pointing at a season whose publication never happened.
+Their failure never turns the committed publication into `failed`: the result
+is `status: 'applied'` carrying the existing bounded pointer-maintenance
+disposition (`failed`) and the bounded
+`current-season-maintenance-failed` reason. The distinction between the
+authoritative per-season commit and best-effort global maintenance is the
+point: the season's own release **is** serving either way, and what degraded is
+which season the aliases resolve to. Rollback moves no global pointer at all,
+so for it the disposition is `not-required`.
+
+**Post-commit cache invalidation covers the outgoing season's aliases.** When
+an ordinary publication changes the current season, the purge set is the union
+of the incoming season's routes (canonical URLs plus, now that it is current,
+its aliases), the same-season routes this release withdrew, and the **alias**
+URLs the outgoing season was being served through. That last set is not
+implied by the others: a profile only the outgoing season carried has an alias
+URL no incoming document names, and it would otherwise keep serving the prior
+season from a CDN for its whole profile TTL. Only aliases are taken from it —
+the outgoing season's canonical numeric routes still serve correct content and
+evicting them would be over-invalidation. The outgoing season's active version
+is resolved through **that season's own authority**: a season the sequencer
+owns is read from the sequencer, and only a season it does not own falls back
+to its legacy pointer, because reading `active:{season}` for a cut-over season
+would be exactly the post-activation legacy read D6/D7 forbid, even for a cache
+decision. The outgoing current season is captured **before** the pointer moves,
+since the post-commit maintenance overwrites the very value it is derived from.
+If that surface cannot be enumerated, the purge is reported as failed rather
+than claimed successful; the committed release is untouched either way. A
+same-season publication has no outgoing season and invents none. Every URL set
+is deduplicated and deterministically sorted, and no unbounded retained-version
+search is introduced.
+
 **Delayed retries and the superseded outcome.** A `finalize` response can be
 lost in flight while its transaction has already committed. If the caller's
 retry arrives after a *newer* `prepare` has been admitted, the committed
@@ -1900,6 +2041,20 @@ for planning only:
 **Production remains untouched and continues in its current dormant state**
 (`PROVIDER_MODE = "none"`, no production Worker deployment implied or
 performed by this ADR).
+
+**Default-off and fail-closed are different rules, and both hold.** The
+authority mode is a composition-boundary value read from
+`SEASON_PUBLICATION_AUTHORITY`. Only the exact string `sequencer` opts in;
+**absent, empty or misspelled values resolve to `legacy` and never throw**, so
+every deployed environment gets the exact `SnapshotPublisher` it gets today and
+performs no sequencer lookup anywhere. That is the default-off rule, and this
+correction does not touch it. Once an operator *has* opted in, a missing
+sequencer port is no longer a configuration question but an unavailable
+authority: it resolves to `sequencer-unavailable` and takes D6's fail-closed
+path, never legacy. Positive non-authoritative sequencer answers are unaffected
+— a season reporting `uninitialized` or `seeded` keeps using the legacy
+authority before cutover, exactly as this decision requires, and neither is
+ever confused with a transport or lookup failure.
 
 **The cutover checkpoint, established before migration reads anything.**
 Migration does not begin by re-reading the legacy `active:{season}`/
