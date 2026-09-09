@@ -530,9 +530,14 @@ export class SequencedPublicationService implements PublicationCommands {
       plan.documentNames,
       withdrawn.documents,
       withdrawn.enumerable,
-      // Only a maintenance write that actually succeeded moved the pointer, so
-      // only then did another season lose the `current` aliases.
-      maintenance === 'succeeded' ? outgoing : noOutgoingCurrentSeason,
+      // A rejected maintenance write is not proof the pointer stayed put: the
+      // write can land and still be reported as a failure, in which case the
+      // outgoing season silently lost the `current` aliases. Invalidating them
+      // whenever the outcome is uncertain costs a re-fetch of URLs that still
+      // resolve correctly; skipping them would serve the prior season for a
+      // whole profile TTL. Operations that move no global pointer - a rollback,
+      // a same-season publication - already carry `noOutgoingCurrentSeason`.
+      outgoing,
     );
     this.logger.info({
       operation: 'publication.sequencer.committed',
@@ -903,7 +908,7 @@ export class SequencedPublicationService implements PublicationCommands {
    *
    * Three surfaces go in: the incoming season's own documents (canonical URLs
    * plus, while it is current, its aliases), the same-season routes this release
-   * withdrew, and - when this publication actually changed the current season -
+   * withdrew, and - when this publication may have changed the current season -
    * the alias URLs the **outgoing** season was being served through. That last
    * one is not covered by the others: a profile only the outgoing season carried
    * has an alias URL no incoming document names, and it would keep serving the

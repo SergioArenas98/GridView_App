@@ -493,6 +493,53 @@ describe('F3: cross-season publication purges the outgoing aliases', () => {
     expect(ctx.purger.purgedUrls).toContain(outgoingAlias);
     expect(storage.activeReads).not.toContain(2025);
   });
+
+  it('purges the outgoing aliases when the current-season maintenance fails after the pointer already moved', async () => {
+    const storage = new LateFailingCurrentSeasonStorage();
+    const ctx = await sequencedContext({ storage });
+    await seedOutgoingSeason(storage);
+    storage.failAfterWrite = true;
+    const service = serviceWithPort(ctx, multiSeasonPort(ctx.port));
+    ctx.purger.purgedUrls.length = 0;
+
+    const result = await service.publish(
+      await changed(ctx.clock, '2026-07-20T00:00:00.000Z', '2026.07.20.2'),
+    );
+
+    // The release committed and the maintenance disposition stays truthful.
+    expect(result.status).toBe('applied');
+    expect(result.pointerMaintenance).toBe('failed');
+    expect(result.reason).toBe('current-season-maintenance-failed');
+    // The rejected write nevertheless landed: `failed` does not mean "the
+    // pointer did not move", so 2025 really did lose the `current` aliases.
+    expect(await storage.getCurrentSeason()).toBe(SEASON);
+    expect(ctx.purger.purgedUrls).toContain(outgoingAlias);
+    expect(ctx.purger.purgedUrls).toContain(`${outgoingAlias}?season=current`);
+  });
+
+  it('purges the outgoing aliases when the current-season write fails before it applies', async () => {
+    const storage = new MemorySnapshotStorage();
+    const ctx = await sequencedContext({ storage });
+    await seedOutgoingSeason(storage);
+    storage.setWriteFailure((key) => key === currentSeasonKey);
+    const service = serviceWithPort(ctx, multiSeasonPort(ctx.port));
+    ctx.purger.purgedUrls.length = 0;
+
+    const result = await service.publish(
+      await changed(ctx.clock, '2026-07-20T00:00:00.000Z', '2026.07.20.2'),
+    );
+
+    expect(result.status).toBe('applied');
+    expect(result.pointerMaintenance).toBe('failed');
+    expect(await storage.getCurrentSeason()).toBe(2025);
+    // Conservative over-invalidation: 2025 kept the aliases, and dropping them
+    // only costs a re-fetch of URLs that still resolve to 2025 content. Only
+    // aliases are taken - the outgoing season's canonical routes still serve.
+    expect(ctx.purger.purgedUrls).toContain(outgoingAlias);
+    expect(ctx.purger.purgedUrls).not.toContain(
+      'https://api.gridview.local/v1/drivers/only-2025?season=2025',
+    );
+  });
 });
 
 // --- F4: propagation fallbacks are never cached as ordinary snapshots -------
@@ -837,6 +884,23 @@ class ActiveReadRecordingStorage extends MemorySnapshotStorage {
   override async getActiveVersion(season: number): Promise<string | null> {
     this.activeReads.push(season);
     return super.getActiveVersion(season);
+  }
+}
+
+/**
+ * `setCurrentSeason` writes through and *then* rejects.
+ *
+ * A real storage failure can be reported after the value already landed, so a
+ * rejected promise is never evidence that the global pointer stayed put.
+ */
+class LateFailingCurrentSeasonStorage extends MemorySnapshotStorage {
+  failAfterWrite = false;
+
+  override async setCurrentSeason(season: number): Promise<void> {
+    await super.setCurrentSeason(season);
+    if (this.failAfterWrite) {
+      throw new Error('simulated post-write current-season failure');
+    }
   }
 }
 
