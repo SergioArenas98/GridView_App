@@ -199,6 +199,7 @@ describe('operation-scoped accounting rests on ledger isolation', () => {
     const config: RuntimeConfig = {
       environment: 'development',
       providerMode: 'mock',
+      publicationAuthorityMode: 'legacy',
       publicBaseUrl: null,
     };
     const clock = new FixedClock(new Date('2026-07-20T12:00:00.000Z'));

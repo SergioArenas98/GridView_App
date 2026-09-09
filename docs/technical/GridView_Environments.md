@@ -270,6 +270,19 @@ reservation resolves to `unavailable` - the fail-closed default, under which no
 outbound provider request can be issued at all. No provider adapter exists
 either, so nothing calls it.
 
+`SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **unset in every
+environment**. An absent, empty or unrecognised value resolves to `legacy` and
+never throws, so the composition builds the existing `SnapshotPublisher` and the
+public router performs no Durable Object lookup. The exact string `sequencer`
+selects the two-phase path when a sequencer port is reachable, and **fails
+closed when one is not**: that combination resolves to an explicit
+sequencer-unavailable authority, never back to `legacy`, so a deployment that
+lost the binding after a cutover cannot resume reading or mutating legacy KV
+pointers. No `wrangler.toml` declares a `SeasonPublicationSequencer`
+binding, `[exports]` entry, migration or namespace; the two-phase publication
+path exists in code but is inert until the separately authorized staging
+provisioning + cutover.
+
 **No media bucket exists in any environment**, so no image has ever been published and no
 production CDN host appears anywhere in this repository — fabricating one would
 put URLs into a manifest that nothing serves.

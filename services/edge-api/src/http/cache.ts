@@ -61,11 +61,30 @@ export function cachePolicy(category: CacheCategory): CachePolicy {
   return policies[category];
 }
 
+/**
+ * The weak validator for one representation.
+ *
+ * `representation` is an optional third material component identifying *which*
+ * stored representation is being served. A snapshot passes the immutable
+ * publication version it was read from: resource identity and `contentVersion`
+ * alone are not enough, because a rollback republication deliberately preserves
+ * both while regenerating `sourceUpdatedAt`, `generatedAt` and `staleAfter` -
+ * so without it a client holding the historical target's validator would get a
+ * `304` and keep the superseded body. The value never leaves this hash: no
+ * public DTO or OpenAPI field carries it.
+ *
+ * Callers with a single fixed representation (the status route) omit it, and
+ * their validators are byte-identical to what they have always produced.
+ */
 export function weakEtag(
   resourceIdentity: string,
   contentVersion: string,
+  representation?: string,
 ): string {
-  const material = `v1|${resourceIdentity}|${contentVersion}`;
+  const material =
+    representation === undefined
+      ? `v1|${resourceIdentity}|${contentVersion}`
+      : `v1|${resourceIdentity}|${contentVersion}|${representation}`;
   return `W/"gv1-${fnv1a(material)}"`;
 }
 
@@ -73,10 +92,15 @@ export function snapshotCacheHeaders(
   snapshot: StoredSnapshot,
   resourceIdentity: string,
   category: CacheCategory,
+  publicationVersion: string,
 ): Record<string, string> {
   const policy = cachePolicy(category);
   const headers: Record<string, string> = {
-    ETag: weakEtag(resourceIdentity, snapshot.meta.contentVersion),
+    ETag: weakEtag(
+      resourceIdentity,
+      snapshot.meta.contentVersion,
+      publicationVersion,
+    ),
     'Cache-Control': policy.cacheControl,
     'Last-Modified': new Date(snapshot.meta.sourceUpdatedAt).toUTCString(),
   };

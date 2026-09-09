@@ -96,20 +96,40 @@ scheduled/manual trigger
   -> record sync/quota state
 ```
 
-> **Design note (Phase 9B-6b, not implemented).**
+> **Design note (Phase 9B-6b, integrated in code, disabled by default).**
 > [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 > authorizes routing this flow's final publish step through one
 > `SeasonPublicationSequencer` Durable Object per season instead of writing
-> `active:{season}` directly. Both the cron-triggered `scheduled` handler and
-> the manual `/internal/admin/sync/full`/`/internal/admin/sync/resource` path
-> would call the **same** sequencer for the same season, which is what closes
-> the two-unserialized-callers gap recorded in
+> `active:{season}` directly. As of 2026-09-08 that path exists in code
+> (`SequencedPublicationService`), selected by a `PublicationAuthorityMode`
+> composition boundary read from `SEASON_PUBLICATION_AUTHORITY`. Both the
+> cron-triggered `scheduled` handler and the manual
+> `/internal/admin/sync/full`/`/internal/admin/sync/resource` path call the
+> **same** composed publisher, so when the mode is `sequencer` they call the
+> same sequencer for the same season — which is what closes the
+> two-unserialized-callers gap recorded in
 > [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md)'s
-> D1.10 note. Today, both paths still call `SnapshotPublisher.publish`
-> directly and write `active:{season}` as described below; nothing here is
-> activated until the steps gated by ADR 0025 D12 "Activation boundary" and
+> D1.10 note. **The mode is `legacy` by default and no deployed environment
+> sets it otherwise**, so today both paths still call `SnapshotPublisher.publish`
+> and write `active:{season}` as described below. If an operator does set the
+> mode to `sequencer` and no sequencer binding is reachable, the composition
+> **fails closed** rather than reverting to `SnapshotPublisher`: publication,
+> rollback and the operator cache purge each return their bounded
+> `sequencer-authority-unavailable` outcome, public reads return the bounded
+> `503`, and no legacy pointer is read or written on any path — scheduled,
+> admin or public. An absent or unrecognised value is a different case and
+> keeps the default-off legacy behaviour exactly. Nothing is activated until
+> the staging provisioning + cutover gated by ADR 0025 D12 "Activation
+> boundary" and
 > [`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md)
-> §14.0.11 are each separately authorized.
+> §14.0.11 is separately authorized. When the mode *is* selected, the
+> Integration slice raises these bounded operational events (ADR 0025 D11):
+> `publication.sequencer.committed` / `.rejected` / `.superseded`,
+> `publication.sequencer.candidate_cleanup`, `rollback.sequencer.provenance`
+> (a bounded provenance classification) and `rollback.sequencer.rejected`.
+> Each carries only `season`, the candidate `releaseVersion`, a bounded
+> outcome/reason and a bounded classification — never a stored ordering value,
+> a document body or a storage key.
 
 Policy categories:
 
@@ -400,11 +420,18 @@ publication can no longer overwrite the one version a default rollback reaches.
 No storage or purge failure escapes rollback as an exception, and no raw storage
 message reaches a response or a log line.
 
-### Design change: rollback republication and authoritative lookup (Phase 9B-6b, not implemented)
+### Design change: rollback republication and authoritative lookup (Phase 9B-6b, integrated in code, disabled by default)
 
 [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
-authorizes replacing the direct pointer-flip rollback above with
-**republication**: rollback reads a selected historical version's stable
+replaces the direct pointer-flip rollback above with **republication**. As of
+2026-09-08 this exists in `SequencedPublicationService.rollback`, but the
+`PublicationAuthorityMode` boundary is `legacy` in every deployed environment,
+so **the table above is exactly how `/internal/admin/rollback` behaves today**.
+The republication path runs only when `SEASON_PUBLICATION_AUTHORITY=sequencer`
+is set and the season has been seeded and activated — neither of which any
+environment has done.
+
+The republication design: rollback reads a selected historical version's stable
 public data, copies it into a **new** immutable version without contacting a
 provider, recomputes volatile publication/freshness fields and per-key
 timestamps against the currently active revision, and commits through the
@@ -419,6 +446,14 @@ and inventory** before any commit is attempted, so a partial KV-write outage
 that would have tolerated today's single pointer write may not tolerate the
 richer rollback. Any pre-commit failure still leaves the current release
 serving, unchanged in effect from today's table above.
+
+Rollback moves **no** global pointer: it does not change `meta:current-season`
+and does not rewrite the content-metadata sidecar, so its result reports
+`pointerMaintenance: 'not-required'`. It does allocate a fresh immutable
+version, and the republished representation therefore carries a **different
+`ETag`** from the historical target it restores — a client holding the old
+validator gets a `200` with the freshly assigned `meta.sourceUpdatedAt` rather
+than a `304` that would keep the superseded body.
 
 Once the sequencer is activated, an operator's rollback request resolves its
 default target from the Durable Object's own durable operation history rather

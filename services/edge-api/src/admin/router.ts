@@ -2,7 +2,7 @@ import type { CachePurgeAdapter } from '../cache/purge';
 import type { Env } from '../config/environment';
 import { jsonResponse } from '../http/envelope';
 import type { Logger } from '../logging/logger';
-import type { SnapshotPublisher } from '../publication/publisher';
+import type { PublicationCommands } from '../publication/commands';
 import type { SynchronizationService } from '../sync/sync-service';
 import { emptySyncState } from '../sync/sync-service';
 import {
@@ -20,7 +20,7 @@ interface AdminContext {
   env: Env;
   storage: SnapshotStorage;
   sync: SynchronizationService;
-  publisher: SnapshotPublisher;
+  publisher: PublicationCommands;
   purger: CachePurgeAdapter;
   logger: Logger;
   requestId: string;

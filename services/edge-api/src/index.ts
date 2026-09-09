@@ -13,7 +13,16 @@ import {
 } from './config/environment';
 import { errorResponse } from './http/envelope';
 import { consoleLogger } from './logging/logger';
+import {
+  resolvePublicationAuthority,
+  type PublicationAuthority,
+} from './publication/authority';
+import {
+  UnavailableSequencerPublicationCommands,
+  type PublicationCommands,
+} from './publication/commands';
 import { SnapshotPublisher } from './publication/publisher';
+import { SequencedPublicationService } from './publication/sequenced/service';
 import { handlePublicRequest } from './public/router';
 import { resolveProvider } from './providers/factory';
 import { systemClock } from './runtime/clock';
@@ -53,11 +62,14 @@ export default {
       const storage = resolveStorage(env);
       const purger = resolveCachePurger(env, config);
       const provider = resolveProvider(env, config, clock);
-      const publisher = new SnapshotPublisher(
+      const authority = resolvePublicationAuthority(env, config);
+      const publisher = buildPublicationCommands(
+        authority,
         storage,
         env.__SNAPSHOT_VALIDATOR ?? runtimeSnapshotValidator,
         purger,
         logger,
+        clock,
         url.origin,
       );
       const sync = new SynchronizationService(
@@ -97,7 +109,12 @@ export default {
         routeTemplate = '/v1/status';
         cacheOutcome = response.status === 304 ? 'not-modified' : 'hit';
       } else {
-        const result = await handlePublicRequest(request, storage, requestId);
+        const result = await handlePublicRequest(
+          request,
+          storage,
+          requestId,
+          authority,
+        );
         response = result.response;
         routeTemplate = result.routeTemplate;
         cacheOutcome = result.cacheOutcome;
@@ -162,11 +179,13 @@ async function runScheduled(env: Env): Promise<void> {
     const storage = resolveStorage(env);
     const purger = resolveCachePurger(env, config);
     const provider = resolveProvider(env, config, clock);
-    const publisher = new SnapshotPublisher(
+    const publisher = buildPublicationCommands(
+      resolvePublicationAuthority(env, config),
       storage,
       env.__SNAPSHOT_VALIDATOR ?? runtimeSnapshotValidator,
       purger,
       logger,
+      clock,
       scheduledPurgeOrigin(config),
     );
     const sync = new SynchronizationService(
@@ -184,6 +203,54 @@ async function runScheduled(env: Env): Promise<void> {
       failureCategory: 'scheduled-handler',
     });
   }
+}
+
+/**
+ * The publication command surface for this request.
+ *
+ * The default (`authority.mode === 'legacy'`) returns the exact
+ * `SnapshotPublisher` this Worker has always constructed, with no sequencer
+ * port and no Durable Object lookup anywhere in its paths. Only an explicit
+ * `SEASON_PUBLICATION_AUTHORITY=sequencer` with a reachable port wraps it in the
+ * two-phase service, which itself still delegates back to this same
+ * `SnapshotPublisher` for any season that is not `cutoverState: 'active'`
+ * (ADR 0025 D12).
+ *
+ * That same explicit selection **without** a reachable port gets the bounded
+ * unavailable surface instead. The legacy publisher is never constructed there:
+ * an operator who selected the sequencer must not have their KV pointers
+ * mutated by a deployment that lost the binding.
+ */
+function buildPublicationCommands(
+  authority: PublicationAuthority,
+  storage: import('./storage/types').SnapshotStorage,
+  validator: import('./validation/snapshot-validator').SnapshotValidator,
+  purger: CachePurgeAdapter,
+  logger: import('./logging/logger').Logger,
+  clock: import('./runtime/clock').Clock,
+  purgeOrigin: string,
+): PublicationCommands {
+  if (authority.mode === 'sequencer-unavailable') {
+    return new UnavailableSequencerPublicationCommands();
+  }
+  const legacy = new SnapshotPublisher(
+    storage,
+    validator,
+    purger,
+    logger,
+    purgeOrigin,
+  );
+  if (authority.mode !== 'sequencer') return legacy;
+  return new SequencedPublicationService({
+    port: authority.port,
+    fallback: legacy,
+    storage,
+    validator,
+    purger,
+    logger,
+    clock,
+    purgeOrigin,
+  });
 }
 
 function resolveCachePurger(

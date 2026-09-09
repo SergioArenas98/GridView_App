@@ -53,7 +53,8 @@ so the inventory can never be requested through `readVersionedDocument`, can
 never be mapped to a public URL, and is removed with the version by
 `deleteUnpublishedVersion`.
 
-**Storage operations implemented, no caller**, [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+**Storage operations implemented; a caller exists but is gated off by default**,
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 D3 adds one further **internal** key under the same per-version prefix, for
 the same two reasons the inventory sits there:
 
@@ -76,8 +77,13 @@ and delete operations, consistently across the memory and Workers KV
 adapters, behind one validated boundary that keeps *valid*, *absent*,
 *malformed* and *unreadable* distinct
 ([`../../services/edge-api/src/publication/publication-metadata.ts`](../../services/edge-api/src/publication/publication-metadata.ts)).
-**No publisher or rollback path writes or reads it today**, and resolving
-rollback provenance from it remains Integration-PR work.
+The Integration slice (2026-09-08) adds `SequencedPublicationService`, which
+writes this record as part of the required publication write set and resolves
+rollback provenance from it
+([`../../services/edge-api/src/publication/sequenced/`](../../services/edge-api/src/publication/sequenced/)) —
+but **only when `SEASON_PUBLICATION_AUTHORITY=sequencer` selects the sequencer
+authority, which no deployed environment does.** In the default legacy mode no
+publisher or rollback path writes or reads it.
 
 **Version identifiers gain a reserved namespace, so the record's absence is
 decidable.** Every version that future protocol creates — ordinary publication
@@ -350,6 +356,22 @@ enumerable, and the purge reports `cachePurge: 'failed'` rather than claiming a
 success that leaves a withdrawn profile serving. That remains post-commit and
 never reverts the pointer.
 
+**The sequenced authority applies the same rule**, with two differences that
+follow from where its commit point is. The outgoing current season is captured
+*before* `finalize`, because the post-commit maintenance that moves the pointer
+overwrites the value the outgoing season is derived from; and the outgoing
+season's active version is resolved through **that season's own authority**, so
+a season the sequencer owns is read from the sequencer and only a season it does
+not own falls back to its legacy pointer - reading `active:{season}` for a
+cut-over season would be the post-activation legacy read ADR 0025 D6/D7 forbid,
+even for a cache decision. Because that capture happens before the commit, the
+outgoing aliases are invalidated whether the post-commit current-season
+maintenance reports `succeeded` or `failed`: a rejected write can still have
+landed, so a failed disposition does not prove the pointer stayed put, and the
+safe direction is the one that costs a re-fetch rather than a stale season. A
+same-season publication has no outgoing season and invents none, and every URL
+set is deduplicated and deterministically sorted.
+
 ### Cache invalidation of withdrawn routes
 
 Replacing a version in the same season purges the **union** of the incoming
@@ -417,29 +439,42 @@ validated and verified. During KV propagation, an edge location may briefly read
 an older active pointer. It must not observe an unpublished version unless that
 pointer has already changed.
 
-## Publication authority (Phase 9B-6b — mechanism only, no caller)
+## Publication authority (Phase 9B-6b — integrated in code, disabled by default)
 
 [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
 records a design decision that replaces **which write is the commit point**
 for the algorithm above.
 
-**What exists as of 2026-09-06**: the **Mechanism slice** only — an inert
-`SeasonPublicationSequencer` Durable Object class, its bounded SQLite-backed
-state machine, an internal port/client interface, the inert
+**What exists as of 2026-09-08**: the **Mechanism slice** (2026-09-06) — the
+inert `SeasonPublicationSequencer` Durable Object class, its bounded
+SQLite-backed state machine, an internal port/client interface, the inert
 `uninitialized`/`seeded`/`active` cutover transitions, and the sidecar storage
-operations above. **Nothing is wired, bound, provisioned or activated**: no
-`wrangler.toml` binding or migration declares the class, it is not a named
-export of the Worker entry point, and no publisher, rollback command, router,
-migration runner or admin route calls it. The "Publication Algorithm" and
-"Rollback" sections above therefore remain exactly how publication and rollback
-work **today**, and continue to work that way until the Integration,
-provisioning and cutover steps below are each separately authorized and
-completed.
+operations above — **and the Integration slice** (2026-09-08):
+`SequencedPublicationService`
+([`../../services/edge-api/src/publication/sequenced/`](../../services/edge-api/src/publication/sequenced/))
+wires the two-phase flow below into ordinary publication, rollback and the
+public read path, selected by a `PublicationAuthorityMode` composition boundary
+resolved from `SEASON_PUBLICATION_AUTHORITY`.
+
+**The mode is `legacy` by default, and no deployed environment sets it
+otherwise.** In `legacy` mode the composition builds the exact
+`SnapshotPublisher` it builds today, the public router performs no Durable
+Object lookup, and the "Publication Algorithm" and "Rollback" sections above
+describe publication and rollback exactly as they run in every environment.
+Even when `sequencer` mode is selected, `SequencedPublicationService` delegates
+to the legacy publisher for any season that is not `cutoverState: 'active'`
+(ADR 0025 D12), so the two-phase flow runs only under a test that has seeded
+and activated a season. **Nothing is bound, provisioned, seeded, cut over or
+activated**: no `wrangler.toml` binding, `[exports]` entry, migration or
+Durable Object namespace declares the class, and it is not a named export of
+the Worker entry point. Legacy KV pointers remain authoritative everywhere
+until the separately authorized staging provisioning + cutover step completes.
 
 ### The two-phase flow
 
-Once implemented, generation and validation stay exactly as described above,
-but the pointer transition moves behind a `prepare`/`finalize` protocol served
+When `sequencer` mode is selected and the season is `active`, generation and
+validation stay exactly as described above, but the pointer transition moves
+behind a `prepare`/`finalize` protocol served
 by one `SeasonPublicationSequencer` Durable Object per season
 (`idFromName(String(season))`):
 
@@ -629,7 +664,36 @@ D6 for the full rule and the narrow, bounded, per-document mixed-release
 trade-off it introduces. If the Durable Object binding or lookup itself is
 unavailable, the router returns the existing bounded fail-closed shape; it
 does not fall back to a legacy KV pointer, because after cutover nothing
-maintains one as a live value (see "Legacy pointer retirement" below).
+maintains one as a live value (see "Legacy pointer retirement" below). **That
+includes the binding being absent entirely**: once
+`SEASON_PUBLICATION_AUTHORITY=sequencer` has been selected, a missing or
+renamed namespace resolves to an explicit unavailable authority rather than
+back to `legacy`, so no public request reads `active:{season}` and no
+publication, rollback or operator purge writes a legacy pointer. An absent or
+unrecognised value of that variable is a different fact and keeps the
+default-off legacy behaviour exactly.
+
+**A propagation fallback response is not cached as an ordinary snapshot.** The
+steps above serve the *previous* version's document only for the window before
+the active version's document becomes readable — a window the publication's
+single post-commit purge has already passed through — so a fallback response
+carries `Cache-Control: no-store`, no `CDN-Cache-Control` and no `ETag` at all.
+Emitting a reusable validator would let a client's `If-None-Match` turn the
+next request into a `304` that keeps the historical body current well past that
+window, which for a profile route is an hour. Body, envelope, request id and
+`HEAD` semantics are unchanged, and a normal active-version response keeps its
+existing cache policy and conditional-GET behaviour.
+
+**A snapshot's `ETag` identifies the representation, not only its content.**
+The validator's material is the resource identity, `meta.contentVersion` **and**
+the immutable publication version the document was read from. The third
+component exists because a rollback republication preserves the first two while
+regenerating `meta.sourceUpdatedAt`, `generatedAt` and `staleAfter`: without it
+a client holding the historical target's `ETag` would receive a `304` after the
+rollback and keep the superseded body. The version stays internal — it appears
+only through the hash, and no public DTO or OpenAPI field carries it — the
+validator is stable for repeated requests to the same immutable version, and
+status-route validators are unchanged.
 
 ### Failure behavior
 
@@ -643,7 +707,18 @@ independent, still-applicable post-commit outcome for cache purge:
 - **Pre-commit failure**: any failure before `finalize`'s transaction
   completes leaves the prior active/previous pair untouched — no partial
   pointer state is possible, because there is only one write; cache purge
-  never runs.
+  never runs. It also leaves `meta:current-season` and the content-metadata
+  sidecar untouched: the candidate write phase writes only the candidate's own
+  immutable, version-scoped artifacts (documents, inventory, sidecar), and both
+  global values are post-commit maintenance instead. A rejected, superseded or
+  unreachable `finalize` therefore cannot change which season
+  `/v1/seasons/current` resolves to.
+- **Committed, post-commit global maintenance failed**: an ordinary
+  publication's `meta:current-season` and content-metadata writes run after the
+  commit and cannot un-publish it. The result is `applied` with the existing
+  bounded pointer-maintenance disposition `failed` and the bounded
+  `current-season-maintenance-failed` reason. Rollback moves no global pointer,
+  so its disposition is `not-required`.
 - **Committed, cache purge succeeded**: the transaction succeeded, both the
   new active and previous values are in effect together, never one without
   the other, and the purge reports success using the existing bounded
@@ -816,12 +891,16 @@ and no existing historical version is ever mutated to backfill one.
 ## Snapshot revision (`snapshotRevision`)
 
 **Implemented as a mechanism in Phase 9B-6 (PR 1). It has no production caller,
-and no published value changes because of it.** What it computes is the
+and no published value changes because of it.** Phase 9B-6b's Integration slice
+(2026-09-08) does call it from `SequencedPublicationService`, but only in the
+`sequencer` authority mode that no deployed environment selects — the legacy
+publication path never computes a revision. What it computes is the
 equality-and-identity signal
 [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1
 D1.7 defines. Binding it to a `snapshotObservedAt` and publishing that under
-`meta.sourceUpdatedAt` is the second half of Phase 9B-6 and is **blocked** — see
-*Why the observation clock is not implemented yet* below.
+`meta.sourceUpdatedAt` on a production path is still **blocked** on the
+separately authorized staging provisioning + cutover — see *Why the observation
+clock is not implemented yet* below.
 
 ### The canonical input is constructed, never filtered
 

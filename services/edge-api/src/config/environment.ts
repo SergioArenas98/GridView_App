@@ -1,8 +1,23 @@
 const validEnvironments = ['development', 'staging', 'production'] as const;
 const validProviderModes = ['mock', 'none'] as const;
 
+/**
+ * Which authority decides `activeVersion`/`previousVersion` for a season
+ * (ADR 0025 D6, D12).
+ *
+ * `legacy` - the existing Workers KV `active:{season}`/`previous:{season}`
+ * pointers, written by `SnapshotPublisher` and read by the public router. This
+ * is the default and the only value any deployed environment uses.
+ *
+ * `sequencer` - the two-phase `SeasonPublicationSequencer` protocol
+ * (ADR 0025). Selecting it only makes the integrated path *constructible*; the
+ * sequencer itself still refuses every mutator until a season's cutover has
+ * reached `cutoverState: 'active'`, which no environment has performed. It
+ * exists so the Integration path can be exercised end to end in tests.
+ */
 export type EnvironmentName = (typeof validEnvironments)[number];
 export type ProviderMode = (typeof validProviderModes)[number];
+export type PublicationAuthorityMode = 'legacy' | 'sequencer';
 
 interface TestOnlyBindings {
   __LOCAL_STORAGE?: import('../storage/types').SnapshotStorage;
@@ -12,12 +27,37 @@ interface TestOnlyBindings {
   __PROVIDER?: import('../providers/formula-one-provider').FormulaOneProvider;
   __CACHE_PURGER?: import('../cache/purge').CachePurgeAdapter;
   __SNAPSHOT_VALIDATOR?: import('../validation/snapshot-validator').SnapshotValidator;
+  /**
+   * An in-process season publication sequencer port (ADR 0025). Test-only: the
+   * Integration path is disabled by default and no environment provisions the
+   * Durable Object, so this is how a test drives the two-phase protocol.
+   */
+  __SEASON_PUBLICATION_SEQUENCER?: import('../publication/sequencer/port').SeasonPublicationSequencerPort;
 }
 
 /** Bindings and variables available to the Worker. */
 export interface Env extends TestOnlyBindings {
   ENVIRONMENT?: string;
   PROVIDER_MODE?: string;
+  /**
+   * Selects the season publication authority (ADR 0025). Only the exact string
+   * `sequencer` selects the two-phase protocol; anything else - including an
+   * absent, empty or misspelled value - resolves to `legacy`, and the resolver
+   * never throws on it. No `wrangler.toml` variable sets this in any
+   * environment; it exists for the Integration path's own tests.
+   */
+  SEASON_PUBLICATION_AUTHORITY?: string;
+  /**
+   * Durable Object namespace backing the per-season publication sequencer
+   * (ADR 0025 D1). Optional in the type because no environment has it
+   * provisioned - no binding, `[exports]` entry or migration declares the
+   * class. Its absence is only reached when `SEASON_PUBLICATION_AUTHORITY` was
+   * explicitly set to `sequencer`, and the resolver then fails closed to
+   * `sequencer-unavailable` rather than falling back to the legacy authority.
+   * Present only so the integrated path is constructible without a test-only
+   * binding once a future, separately authorized provisioning step adds it.
+   */
+  SEASON_PUBLICATION_SEQUENCER?: DurableObjectNamespace;
   PUBLIC_BASE_URL?: string;
   ADMIN_TOKEN?: string;
   MOCK_PROVIDER_FAILURE?: string;
@@ -53,6 +93,7 @@ export function resolveEnvironment(value: string | undefined): EnvironmentName {
 export interface RuntimeConfig {
   environment: EnvironmentName;
   providerMode: ProviderMode;
+  publicationAuthorityMode: PublicationAuthorityMode;
   publicBaseUrl: string | null;
 }
 
@@ -86,11 +127,29 @@ export function resolveProviderMode(
   return mode as ProviderMode;
 }
 
+/**
+ * Resolves the publication authority mode.
+ *
+ * Fails safe rather than closed: only the exact string `sequencer` opts in, and
+ * every other value - absent, empty, misspelled, wrong case - resolves to
+ * `legacy` with no exception. A misconfiguration therefore keeps the existing
+ * behaviour rather than breaking the Worker, which is the right direction for a
+ * mode no deployed environment is meant to set.
+ */
+export function resolvePublicationAuthorityMode(
+  value: string | undefined,
+): PublicationAuthorityMode {
+  return value === 'sequencer' ? 'sequencer' : 'legacy';
+}
+
 export function resolveRuntimeConfig(env: Env): RuntimeConfig {
   const environment = resolveEnvironment(env.ENVIRONMENT);
   return {
     environment,
     providerMode: resolveProviderMode(env.PROVIDER_MODE, environment),
+    publicationAuthorityMode: resolvePublicationAuthorityMode(
+      env.SEASON_PUBLICATION_AUTHORITY,
+    ),
     publicBaseUrl: resolvePublicBaseUrl(env.PUBLIC_BASE_URL, environment),
   };
 }

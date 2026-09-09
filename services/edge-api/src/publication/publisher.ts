@@ -13,6 +13,7 @@ import type { SnapshotDocumentName } from '../storage/types';
 import { readStoredInventory, validatedInventory } from './version-inventory';
 import type { SnapshotValidator } from '../validation/snapshot-validator';
 import type { GeneratedSnapshotSet } from '../snapshots/generator';
+import type { PublicationCommands } from './commands';
 
 export type PublicationStatus = 'applied' | 'skipped' | 'rejected' | 'failed';
 
@@ -43,6 +44,16 @@ export const publicationReasons = [
    * not. The release **is** serving; what degraded is the recovery path.
    */
   'previous-pointer-maintenance-failed',
+  /**
+   * Sequencer authority mode only (ADR 0025 D9). The release committed inside
+   * the Durable Object transaction, but the post-commit global maintenance -
+   * `meta:current-season` and the content-metadata sidecar - did not complete.
+   * The season's own release **is** serving; what degraded is which season the
+   * public `current` aliases resolve to. Deliberately distinct from
+   * `previous-pointer-maintenance-failed`, which is about the recovery pointer
+   * of one season, not about global state.
+   */
+  'current-season-maintenance-failed',
   /** Rollback was asked for with no previous version recorded. */
   'missing-previous-version',
   /** The rollback target has no documents. */
@@ -53,6 +64,38 @@ export const publicationReasons = [
   'missing-version-inventory',
   /** The season has no active version at all. */
   'no-active-version',
+  /**
+   * Sequencer authority mode only (ADR 0025 D8). A rollback target's own
+   * release-wide `sourceOrderingInput` could not be resolved - an absent
+   * sidecar on a `pm1-…` version, a malformed or unreadable sidecar in either
+   * namespace, or non-uniform/missing legacy document timestamps. The target
+   * is rejected before `prepare`; the currently active release keeps serving.
+   */
+  'rollback-source-ordering-unavailable',
+  /**
+   * Sequencer authority mode only. The per-season sequencer could not be
+   * reached or could not answer: its authoritative lookup was unavailable, the
+   * season's authority has not been activated, the configured sequencer has no
+   * reachable port at all, or the `finalize` call itself did not resolve.
+   * Fail-closed in every case - no global state is written and the release that
+   * was serving keeps serving. When it is the commit call that did not resolve,
+   * whether the candidate committed is genuinely unknown, so nothing is
+   * cleaned up and the sequencer's own orphan slot settles it (D5).
+   */
+  'sequencer-authority-unavailable',
+  /**
+   * Sequencer authority mode only. `prepare` refused the candidate for a
+   * bounded internal reason (an operation already in progress, backpressure on
+   * the single pending-cleanup slot, an exhausted epoch or timestamp space).
+   * The bounded sub-reason reaches structured logs, never a response body.
+   */
+  'sequencer-prepare-rejected',
+  /**
+   * Sequencer authority mode only (ADR 0025 D9). `finalize` resolved to
+   * `superseded`: a newer `prepare` has replaced this operation. The caller
+   * must never re-drive it; a fresh publication goes through a new `prepare`.
+   */
+  'sequencer-operation-superseded',
 ] as const;
 
 export type PublicationReason = (typeof publicationReasons)[number];
@@ -74,13 +117,20 @@ export const cachePurgeDispositions = [
 export type CachePurgeDisposition = (typeof cachePurgeDispositions)[number];
 
 /**
- * What happened to the post-commit `previous` pointer maintenance write.
+ * What happened to the post-commit pointer maintenance write.
+ *
+ * Which pointer that is depends on the authority. Under the legacy authority it
+ * is the `previous` recovery pointer; under the sequencer authority `previous`
+ * commits atomically with `active`, so what is maintained after the commit is
+ * the **global** `meta:current-season` and content-metadata state that an
+ * ordinary publication moves.
  *
  * `not-required` covers both "the commit point was never crossed" and "there
- * was no outgoing active version to record". `failed` alongside
+ * was nothing to maintain" - no outgoing active version, or an operation such
+ * as rollback that moves no global pointer. `failed` alongside
  * `status: 'applied'` is the truthful shape of a committed transition whose
- * recovery pointer could not be updated: the new version **is** serving, and
- * the stale `previous` is a separate, recoverable operational fact.
+ * follow-up write could not be made: the new version **is** serving, and the
+ * stale pointer is a separate, recoverable operational fact.
  */
 export const pointerMaintenanceDispositions = [
   'not-required',
@@ -251,7 +301,7 @@ async function attempt<T>(
  */
 type VersionAssessment = 'complete' | 'incomplete' | 'empty' | 'no-inventory';
 
-export class SnapshotPublisher {
+export class SnapshotPublisher implements PublicationCommands {
   constructor(
     private readonly storage: SnapshotStorage,
     private readonly validator: SnapshotValidator,
