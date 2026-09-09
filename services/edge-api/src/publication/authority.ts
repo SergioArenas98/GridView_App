@@ -11,11 +11,20 @@
  * `sequencer` is selected only by `SEASON_PUBLICATION_AUTHORITY=sequencer`
  * together with a way to reach the sequencer - the test-only
  * `__SEASON_PUBLICATION_SEQUENCER` port, or a future `SEASON_PUBLICATION_SEQUENCER`
- * Durable Object namespace that no `wrangler.toml` declares yet. If the mode is
- * requested but neither is available, this **falls back to `legacy`**: an
- * unreachable mechanism is not a runtime lookup failure to fail closed on, it
- * is simply not being in sequencer mode at all. (The forbidden fallback in
- * ADR 0025 D6/D7 is a *post-activation* legacy KV read, which this never does.)
+ * Durable Object namespace that no `wrangler.toml` declares yet.
+ *
+ * If that exact mode is selected and **neither** is available, the resolution is
+ * `sequencer-unavailable`, never `legacy`. Silently falling back would discard
+ * the operator's explicit authority selection: after a season has been cut over,
+ * a deployment that renamed or dropped the binding would resume reading and
+ * mutating stale KV pointers, which ADR 0025 D6/D7 forbid outright. The
+ * unavailable state instead produces the same bounded failures a failed
+ * authority lookup does - no `SnapshotPublisher` for a mutating command, no
+ * `active:{season}` or `previous:{season}` read for a public request.
+ *
+ * An **absent** or unrecognised configuration is a different fact and keeps the
+ * documented default-off behaviour: legacy mode, unchanged, with no sequencer
+ * lookup anywhere.
  */
 
 import type { Env, RuntimeConfig } from '../config/environment';
@@ -27,10 +36,16 @@ export type PublicationAuthority =
   | {
       readonly mode: 'sequencer';
       readonly port: SeasonPublicationSequencerPort;
-    };
+    }
+  /** Sequencer mode was explicitly selected and no port is reachable. */
+  | { readonly mode: 'sequencer-unavailable' };
 
 export const legacyPublicationAuthority: PublicationAuthority = {
   mode: 'legacy',
+};
+
+export const unavailableSequencerAuthority: PublicationAuthority = {
+  mode: 'sequencer-unavailable',
 };
 
 export function resolvePublicationAuthority(
@@ -51,5 +66,5 @@ export function resolvePublicationAuthority(
       ),
     };
   }
-  return legacyPublicationAuthority;
+  return unavailableSequencerAuthority;
 }

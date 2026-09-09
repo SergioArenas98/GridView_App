@@ -42,6 +42,7 @@ import type { ContentManifest } from '../../contract/types';
 import type { PublicationCommands } from '../commands';
 import type {
   ManualCachePurgeResult,
+  PointerMaintenanceDisposition,
   PublicationReason,
   PublicationResult,
 } from '../publisher';
@@ -88,6 +89,34 @@ async function attempt<T>(op: () => Promise<T> | T): Promise<Attempt<T>> {
   } catch {
     return { ok: false };
   }
+}
+
+/**
+ * The season the public `current` aliases pointed at before this operation
+ * moved the current-season pointer, when that is not the season being written.
+ *
+ * The same closed domain `SnapshotPublisher` uses, and for the same reason:
+ * "nothing else was current" and "we could not find out what was current" are
+ * different facts, and only the first means there is nothing left to
+ * invalidate. It is read **before** `finalize`, because after the commit the
+ * pointer this derives from is the one the post-commit maintenance overwrites.
+ */
+type OutgoingCurrentSeason =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'season'; readonly season: number }
+  | { readonly kind: 'unresolved' };
+
+const noOutgoingCurrentSeason: OutgoingCurrentSeason = { kind: 'none' };
+
+function outgoingCurrentSeason(
+  read: Attempt<number | null>,
+  season: number,
+): OutgoingCurrentSeason {
+  if (!read.ok) return { kind: 'unresolved' };
+  if (read.value === null || read.value === season) {
+    return noOutgoingCurrentSeason;
+  }
+  return { kind: 'season', season: read.value };
 }
 
 export interface SequencedPublicationDeps {
@@ -355,9 +384,24 @@ export class SequencedPublicationService implements PublicationCommands {
   private async runTwoPhase(input: TwoPhaseInput): Promise<PublicationResult> {
     const plan = await buildPublicationPlan(input.documents);
 
+    // Read before anything commits. `meta:current-season` is global state that
+    // the post-commit maintenance below overwrites, so afterwards there is no
+    // way left to tell which season's aliases this publication took over.
+    const outgoing = input.publishesSeasonPointer
+      ? outgoingCurrentSeason(
+          await attempt(() => this.storage.getCurrentSeason()),
+          input.season,
+        )
+      : noOutgoingCurrentSeason;
+
     const prepared = await this.prepareWithCleanup(input, plan);
     if (prepared.kind !== 'prepared') {
-      return failed(
+      // A prepare refusal is not automatically an operational failure: a
+      // strictly older ordinary candidate is the pacing system working, and
+      // the publication contract treats it as a benign completed no-op only
+      // when its status is `rejected`.
+      const outcome = prepared.status === 'rejected' ? rejection : failed;
+      return outcome(
         input.season,
         '',
         input.authority.activeVersion,
@@ -401,12 +445,34 @@ export class SequencedPublicationService implements PublicationCommands {
     const completionAttestation = {
       manifestCommitment: await manifestCommitment(plan.documentNames),
     };
-    const finalized = await this.port.finalize({
-      season: input.season,
-      operationEpoch,
-      operationToken,
-      completionAttestation,
-    });
+    const call = await attempt(() =>
+      this.port.finalize({
+        season: input.season,
+        operationEpoch,
+        operationToken,
+        completionAttestation,
+      }),
+    );
+    if (!call.ok) {
+      // The commit call itself did not resolve, so whether it committed is
+      // genuinely unknown. Nothing is cleaned up here: deleting the candidate
+      // could destroy a release that did commit, and the sequencer's own
+      // pending-cleanup slot collects it if it did not (ADR 0025 D5). No global
+      // state was touched, so the prior release keeps serving either way.
+      this.logger.warn({
+        operation: 'publication.sequencer.finalize_unavailable',
+        season: input.season,
+        releaseVersion: candidateVersion,
+        failureCategory: 'sequencer-authority-unavailable',
+      });
+      return failed(
+        input.season,
+        candidateVersion,
+        input.authority.activeVersion,
+        'sequencer-authority-unavailable',
+      );
+    }
+    const finalized = call.value;
 
     if (finalized.outcome === 'superseded') {
       this.logger.warn({
@@ -444,6 +510,16 @@ export class SequencedPublicationService implements PublicationCommands {
 
     // Committed. Everything below is post-commit and best-effort; none of it
     // can un-publish (ADR 0025 D9 "Failure behavior").
+    //
+    // The global current-season and content-metadata writes belong here rather
+    // than in the candidate write phase: they decide which season
+    // `/v1/seasons/current` resolves to, so performing them before the
+    // authoritative `finalize` would make a *pre-commit* failure - an expired
+    // lease, a supersession, a corrupt-state rejection - user-visible while the
+    // prior release is still the one serving.
+    const maintenance = input.publishesSeasonPointer
+      ? await this.maintainGlobalMetadata(input.season, baked)
+      : 'not-required';
     const withdrawn = await this.withdrawnRoutes(
       input.season,
       input.authority.activeVersion,
@@ -454,6 +530,9 @@ export class SequencedPublicationService implements PublicationCommands {
       plan.documentNames,
       withdrawn.documents,
       withdrawn.enumerable,
+      // Only a maintenance write that actually succeeded moved the pointer, so
+      // only then did another season lose the `current` aliases.
+      maintenance === 'succeeded' ? outgoing : noOutgoingCurrentSeason,
     );
     this.logger.info({
       operation: 'publication.sequencer.committed',
@@ -461,20 +540,58 @@ export class SequencedPublicationService implements PublicationCommands {
       releaseVersion: candidateVersion,
       publicationStatus: input.operationKind,
       cacheOutcome: purge.ok ? 'purged' : 'purge-failed',
+      pointerMaintenance: maintenance,
     });
     return {
       status: 'applied',
       season: input.season,
       version: candidateVersion,
       previousVersion: input.authority.activeVersion,
-      reason: purge.ok ? null : 'cache-purge-failed',
+      reason: appliedReason(maintenance, purge.ok),
       cachePurgeOk: purge.ok,
       cachePurge: purge.ok ? 'succeeded' : 'failed',
       // `previous` commits atomically with `active` inside the Durable Object
-      // transaction, so there is no separate, separately-failable write.
-      pointerMaintenance: 'not-required',
+      // transaction, so this disposition carries the *global* maintenance
+      // instead: `not-required` whenever the operation moves no global pointer.
+      pointerMaintenance: maintenance,
       purgedUrls: purge.urls,
     };
+  }
+
+  /**
+   * The post-commit global maintenance an ordinary publication owes.
+   *
+   * Runs only after `finalize` has committed, and its failure never un-publishes
+   * the release: the season's own documents and authority record are already
+   * correct, and what degraded is which season the public `current` aliases
+   * resolve to. Reported as a bounded disposition rather than escaping or
+   * turning a committed publication into `failed`.
+   */
+  private async maintainGlobalMetadata(
+    season: number,
+    baked: readonly StoredSnapshot[],
+  ): Promise<PointerMaintenanceDisposition> {
+    const manifest = baked.find(
+      (document) => document.documentName === 'content:manifest',
+    );
+    const written = await attempt(async () => {
+      if (manifest) {
+        await this.storage.setContentMetadata(
+          contentMetadataFromManifest(
+            manifest.data as ContentManifest,
+            manifest.meta.generatedAt,
+          ),
+        );
+      }
+      await this.storage.setCurrentSeason(season);
+    });
+    if (written.ok) return 'succeeded';
+    this.logger.warn({
+      operation: 'publication.sequencer.current_season_maintenance_failed',
+      season,
+      failureCategory: 'current-season-maintenance-failed',
+    });
+    return 'failed';
   }
 
   private async prepareWithCleanup(
@@ -489,7 +606,17 @@ export class SequencedPublicationService implements PublicationCommands {
         candidateVersion: string;
         assignedTimestamps: readonly PerKeyState[];
       }
-    | { kind: 'rejected'; reason: PublicationReason }
+    | {
+        kind: 'rejected';
+        /**
+         * How the *publication* ends, not how the sequencer refused. Only the
+         * strictly-older ordinary candidate is a benign `rejected` no-op;
+         * backpressure, corrupt state, an unavailable authority and both
+         * exhaustion reasons stay operational failures.
+         */
+        status: 'failed' | 'rejected';
+        reason: PublicationReason;
+      }
   > {
     const outcome: PrepareOutcome = await this.port.prepare({
       season: input.season,
@@ -535,12 +662,26 @@ export class SequencedPublicationService implements PublicationCommands {
       publicationStatus: input.operationKind,
     });
     if (outcome.reason === 'older-source-ordering-input') {
-      return { kind: 'rejected', reason: 'older-source-updated-at' };
+      // The one benign refusal: nothing needed publishing, and the legacy
+      // publisher reports exactly this pair for the same candidate.
+      return {
+        kind: 'rejected',
+        status: 'rejected',
+        reason: 'older-source-updated-at',
+      };
     }
     if (outcome.reason === 'authority-not-active') {
-      return { kind: 'rejected', reason: 'sequencer-authority-unavailable' };
+      return {
+        kind: 'rejected',
+        status: 'failed',
+        reason: 'sequencer-authority-unavailable',
+      };
     }
-    return { kind: 'rejected', reason: 'sequencer-prepare-rejected' };
+    return {
+      kind: 'rejected',
+      status: 'failed',
+      reason: 'sequencer-prepare-rejected',
+    };
   }
 
   private async validateDocuments(
@@ -616,24 +757,11 @@ export class SequencedPublicationService implements PublicationCommands {
     if (!complete.ok) return 'storage-read';
     if (!complete.value) return 'incomplete-version';
 
-    if (input.publishesSeasonPointer) {
-      const manifest = baked.find(
-        (document) => document.documentName === 'content:manifest',
-      );
-      const pointer = await attempt(async () => {
-        if (manifest) {
-          await this.storage.setContentMetadata(
-            contentMetadataFromManifest(
-              manifest.data as ContentManifest,
-              manifest.meta.generatedAt,
-            ),
-          );
-        }
-        await this.storage.setCurrentSeason(input.season);
-      });
-      if (!pointer.ok) return 'storage-write';
-    }
-
+    // Deliberately nothing global here. This phase writes only the candidate's
+    // own immutable, versioned artifacts - the documents, the inventory and the
+    // `__publication_metadata` sidecar the attestation requires. `meta:content-schema`
+    // and `meta:current-season` are global state that a live response reads, so
+    // they belong strictly after `finalize` (see `maintainGlobalMetadata`).
     return null;
   }
 
@@ -769,11 +897,26 @@ export class SequencedPublicationService implements PublicationCommands {
     };
   }
 
+  /**
+   * The post-commit invalidation set, over the same shared route expansion the
+   * legacy publisher uses so the two can never disagree about a document's URLs.
+   *
+   * Three surfaces go in: the incoming season's own documents (canonical URLs
+   * plus, while it is current, its aliases), the same-season routes this release
+   * withdrew, and - when this publication actually changed the current season -
+   * the alias URLs the **outgoing** season was being served through. That last
+   * one is not covered by the others: a profile only the outgoing season carried
+   * has an alias URL no incoming document names, and it would keep serving the
+   * prior season from a CDN for its whole profile TTL. Only aliases are taken
+   * from it; the outgoing season's canonical numeric routes still serve correct
+   * content and evicting them would be over-invalidation.
+   */
   private async purgeDocuments(
     season: number,
     documents: readonly SnapshotDocumentName[],
     withdrawn: readonly SnapshotDocumentName[],
     enumerable = true,
+    outgoing: OutgoingCurrentSeason = noOutgoingCurrentSeason,
   ): Promise<{ ok: boolean; urls: string[] }> {
     const aliasing = await this.seasonAliasing(season);
     const invalidated = new Set(
@@ -784,22 +927,61 @@ export class SequencedPublicationService implements PublicationCommands {
         aliasing,
       ),
     );
-    // A withdrawn profile that only the season being *un-currented* carried is
-    // covered by the alias expansion above once this season is current; the
-    // sequencer path never moves the current pointer away from another season,
-    // so no cross-season outgoing-alias set is needed here.
     for (const url of currentAliasUrlsForDocuments(
       this.purgeOrigin,
       withdrawn,
     )) {
       invalidated.add(url);
     }
+    const outgoingAliases = await this.outgoingAliasUrls(outgoing);
+    for (const url of outgoingAliases ?? []) invalidated.add(url);
+
     const urls = [...invalidated].sort();
     const purged = await attempt(() => this.purger.purgePublicUrls(urls));
     return {
-      ok: enumerable && purged.ok && purged.value.ok,
+      ok:
+        enumerable && outgoingAliases !== null && purged.ok && purged.value.ok,
       urls: purged.ok ? purged.value.urls : [],
     };
+  }
+
+  /**
+   * The alias URLs the outgoing current season was being served through, or
+   * `null` when that surface cannot be enumerated at all.
+   *
+   * The outgoing season's active version is resolved through **its own**
+   * authority: a season the sequencer owns is read from the sequencer, and only
+   * a season it does not own falls back to the legacy pointer. Reading
+   * `active:{season}` for a cut-over season would be exactly the post-activation
+   * legacy read ADR 0025 D6/D7 forbid, even for a cache decision.
+   */
+  private async outgoingAliasUrls(
+    outgoing: OutgoingCurrentSeason,
+  ): Promise<string[] | null> {
+    if (outgoing.kind === 'none') return [];
+    if (outgoing.kind === 'unresolved') return null;
+
+    const version = await this.outgoingActiveVersion(outgoing.season);
+    if (version === 'unresolved') return null;
+    if (version === null) return [];
+
+    const inventory = await readStoredInventory(
+      this.storage,
+      outgoing.season,
+      version,
+    );
+    if (inventory.kind !== 'documents') return null;
+    return currentAliasUrlsForDocuments(this.purgeOrigin, inventory.documents);
+  }
+
+  private async outgoingActiveVersion(
+    season: number,
+  ): Promise<string | null | 'unresolved'> {
+    const authority = await this.activeAuthority(season);
+    if (authority === 'unavailable') return 'unresolved';
+    if (authority !== null) return authority.activeVersion;
+    const legacy = await attempt(() => this.storage.getActiveVersion(season));
+    return legacy.ok ? legacy.value : 'unresolved';
   }
 
   private async seasonAliasing(season: number): Promise<SeasonAliasing> {
@@ -809,6 +991,21 @@ export class SequencedPublicationService implements PublicationCommands {
       ? 'season-is-current'
       : 'season-is-historical';
   }
+}
+
+/**
+ * The single bounded reason a committed release carries.
+ *
+ * Same precedence as the legacy publisher's: the degradation an operator has to
+ * act on first wins, and a wrong current season silently misroutes every
+ * `current` alias while a stale cache is visible and self-correcting.
+ */
+function appliedReason(
+  maintenance: PointerMaintenanceDisposition,
+  purgeOk: boolean,
+): PublicationReason | null {
+  if (maintenance === 'failed') return 'current-season-maintenance-failed';
+  return purgeOk ? null : 'cache-purge-failed';
 }
 
 function failed(

@@ -108,7 +108,7 @@ export async function handlePublicRequest(
     match.documentName,
   );
   if (snapshot) {
-    return serveSnapshot(request, snapshot, match, requestId);
+    return serveSnapshot(request, snapshot, match, requestId, activeVersion);
   }
 
   if (sequencerAuthoritative && previousVersion !== null) {
@@ -148,6 +148,21 @@ async function resolveVersions(
   | { kind: 'ok'; value: ResolvedVersions }
   | { kind: 'response'; value: PublicRouteResult }
 > {
+  if (authority.mode === 'sequencer-unavailable') {
+    // Sequencer mode was explicitly selected and no port is reachable. That is
+    // an unavailable authority, not a licence to read `active:{season}` - so
+    // this returns the same bounded response a failed lookup does, without
+    // touching storage.
+    return {
+      kind: 'response',
+      value: result(
+        publicError(503, 'SNAPSHOT_NOT_READY', requestId, true),
+        'unknown',
+        'error',
+      ),
+    };
+  }
+
   if (authority.mode === 'sequencer') {
     let read: SeasonAuthority;
     try {
@@ -221,7 +236,40 @@ async function servePropagationFallback(
     match.documentName,
   );
   if (!snapshot) return null;
-  return serveSnapshot(request, snapshot, match, requestId);
+  return serveFallbackSnapshot(request, snapshot, match, requestId);
+}
+
+/**
+ * Serves a propagation fallback, and never as an ordinary snapshot.
+ *
+ * The document is the *previous* version's, served only because the active
+ * one has not become readable yet - a window the publication's single cache
+ * purge has already passed through. Giving it the category's normal lifetime
+ * would let an edge hold the superseded body for up to an hour after the active
+ * document appears, which is exactly the bound this fallback exists to keep.
+ *
+ * So it carries `Cache-Control: no-store` and no `CDN-Cache-Control`, and it
+ * emits no validator at all: a reusable `ETag` here would let a client's
+ * `If-None-Match` turn the next request into a `304` that keeps the historical
+ * body current beyond this response. The body, the public envelope, the request
+ * id and HEAD semantics are exactly the normal path's.
+ */
+function serveFallbackSnapshot(
+  request: Request,
+  snapshot: StoredSnapshot,
+  match: PublicRouteMatch,
+  requestId: string,
+): PublicRouteResult {
+  const meta = withRequestId(snapshot.meta, requestId);
+  const response = successResponse(snapshot.data, meta, {
+    'Cache-Control': 'no-store',
+    'Last-Modified': new Date(snapshot.meta.sourceUpdatedAt).toUTCString(),
+  });
+  return {
+    response: responseForMethod(request, response),
+    routeTemplate: match.routeTemplate,
+    cacheOutcome: 'miss',
+  };
 }
 
 function serveSnapshot(
@@ -229,11 +277,13 @@ function serveSnapshot(
   snapshot: StoredSnapshot,
   match: PublicRouteMatch,
   requestId: string,
+  publicationVersion: string,
 ): PublicRouteResult {
   const headers = snapshotCacheHeaders(
     snapshot,
     snapshot.resourceIdentity,
     match.cacheCategory,
+    publicationVersion,
   );
   const etag = headers['ETag'] ?? '';
   if (ifNoneMatchMatches(request.headers.get('If-None-Match'), etag)) {

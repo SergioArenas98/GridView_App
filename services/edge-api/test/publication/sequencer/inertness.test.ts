@@ -91,7 +91,7 @@ describe('the authority mode is disabled by default', () => {
     expect(resolvePublicationAuthorityMode('sequencer')).toBe('sequencer');
   });
 
-  it('falls back to the legacy authority when the mode is set with no port', async () => {
+  it('fails closed rather than falling back when the mode is set with no port', async () => {
     const { resolvePublicationAuthority } =
       await import('../../../src/publication/authority');
     const authority = resolvePublicationAuthority(
@@ -103,7 +103,9 @@ describe('the authority mode is disabled by default', () => {
         publicBaseUrl: null,
       },
     );
-    expect(authority.mode).toBe('legacy');
+    // Still inert - nothing publishes and nothing is served - but the operator's
+    // explicit selection is preserved instead of silently becoming legacy.
+    expect(authority.mode).toBe('sequencer-unavailable');
   });
 });
 

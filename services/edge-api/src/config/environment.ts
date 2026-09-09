@@ -51,10 +51,11 @@ export interface Env extends TestOnlyBindings {
    * Durable Object namespace backing the per-season publication sequencer
    * (ADR 0025 D1). Optional in the type because no environment has it
    * provisioned - no binding, `[exports]` entry or migration declares the
-   * class - and the resolver falls back to the legacy authority when it is
-   * absent. Present only so the integrated path is constructible without a
-   * test-only binding once a future, separately authorized provisioning step
-   * adds it.
+   * class. Its absence is only reached when `SEASON_PUBLICATION_AUTHORITY` was
+   * explicitly set to `sequencer`, and the resolver then fails closed to
+   * `sequencer-unavailable` rather than falling back to the legacy authority.
+   * Present only so the integrated path is constructible without a test-only
+   * binding once a future, separately authorized provisioning step adds it.
    */
   SEASON_PUBLICATION_SEQUENCER?: DurableObjectNamespace;
   PUBLIC_BASE_URL?: string;

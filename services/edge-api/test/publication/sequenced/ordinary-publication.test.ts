@@ -58,7 +58,9 @@ describe('the committed release', () => {
     expect(result.version).not.toBe(SEED_VERSION);
     expect(versionNamespace(result.version)).toBe('sidecar-required');
     expect(result.previousVersion).toBe(SEED_VERSION);
-    expect(result.pointerMaintenance).toBe('not-required');
+    // `previous` commits atomically inside the sequencer, so this disposition
+    // reports the post-commit global current-season maintenance instead.
+    expect(result.pointerMaintenance).toBe('succeeded');
 
     const authority = await ctx.port.readAuthority(SEASON);
     expect(authority).toMatchObject({
@@ -198,7 +200,10 @@ describe('ordinary staleness admission is unchanged', () => {
         contentVersion: '2026.07.01.9',
       }),
     );
-    expect(older.status).toBe('failed');
+    // `rejected`, exactly as the legacy publisher reports it: the candidate was
+    // examined and declined, which the synchronization contract treats as a
+    // completed no-op rather than an operational failure.
+    expect(older.status).toBe('rejected');
     expect(older.reason).toBe('older-source-updated-at');
   });
 });

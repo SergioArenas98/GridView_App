@@ -128,6 +128,7 @@ export function consequenceForRejectedPublication(
     case 'incomplete-version':
     case 'cache-purge-failed':
     case 'previous-pointer-maintenance-failed':
+    case 'current-season-maintenance-failed':
     case 'missing-previous-version':
     case 'rollback-target-missing':
     case 'rollback-target-incomplete':

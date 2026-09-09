@@ -49,12 +49,14 @@ describe('authority mode resolution', () => {
     );
   });
 
-  it('falls back to legacy when the mode is requested but no port is reachable', () => {
+  it('stays fail-closed when the mode is requested but no port is reachable', () => {
+    // Never legacy: an explicit sequencer selection whose binding is missing is
+    // an unavailable authority, not permission to mutate legacy KV pointers.
     const authority = resolvePublicationAuthority(
       { SEASON_PUBLICATION_AUTHORITY: 'sequencer' },
       { ...legacyConfig, publicationAuthorityMode: 'sequencer' },
     );
-    expect(authority.mode).toBe('legacy');
+    expect(authority.mode).toBe('sequencer-unavailable');
   });
 
   it('selects the sequencer only with the mode set and a test port present', () => {

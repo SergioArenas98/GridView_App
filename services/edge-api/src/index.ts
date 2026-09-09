@@ -17,7 +17,10 @@ import {
   resolvePublicationAuthority,
   type PublicationAuthority,
 } from './publication/authority';
-import type { PublicationCommands } from './publication/commands';
+import {
+  UnavailableSequencerPublicationCommands,
+  type PublicationCommands,
+} from './publication/commands';
 import { SnapshotPublisher } from './publication/publisher';
 import { SequencedPublicationService } from './publication/sequenced/service';
 import { handlePublicRequest } from './public/router';
@@ -212,6 +215,11 @@ async function runScheduled(env: Env): Promise<void> {
  * two-phase service, which itself still delegates back to this same
  * `SnapshotPublisher` for any season that is not `cutoverState: 'active'`
  * (ADR 0025 D12).
+ *
+ * That same explicit selection **without** a reachable port gets the bounded
+ * unavailable surface instead. The legacy publisher is never constructed there:
+ * an operator who selected the sequencer must not have their KV pointers
+ * mutated by a deployment that lost the binding.
  */
 function buildPublicationCommands(
   authority: PublicationAuthority,
@@ -222,6 +230,9 @@ function buildPublicationCommands(
   clock: import('./runtime/clock').Clock,
   purgeOrigin: string,
 ): PublicationCommands {
+  if (authority.mode === 'sequencer-unavailable') {
+    return new UnavailableSequencerPublicationCommands();
+  }
   const legacy = new SnapshotPublisher(
     storage,
     validator,
