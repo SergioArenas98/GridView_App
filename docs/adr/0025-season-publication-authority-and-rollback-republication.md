@@ -1825,6 +1825,13 @@ to its legacy pointer, because reading `active:{season}` for a cut-over season
 would be exactly the post-activation legacy read D6/D7 forbid, even for a cache
 decision. The outgoing current season is captured **before** the pointer moves,
 since the post-commit maintenance overwrites the very value it is derived from.
+A maintenance write that reports failure is not evidence that the pointer stayed
+put — the write can land and still be reported as failed — so the captured
+outgoing aliases are invalidated whenever an ordinary publication attempted to
+move the pointer, whether the maintenance succeeded or failed. That is the same
+conservative direction the rest of this rule takes: over-invalidating an alias
+costs one re-fetch of a URL that still resolves correctly, while skipping one
+leaves the prior season served from a CDN for a whole profile TTL.
 If that surface cannot be enumerated, the purge is reported as failed rather
 than claimed successful; the committed release is untouched either way. A
 same-season publication has no outgoing season and invents none. Every URL set

@@ -364,8 +364,13 @@ season's active version is resolved through **that season's own authority**, so
 a season the sequencer owns is read from the sequencer and only a season it does
 not own falls back to its legacy pointer - reading `active:{season}` for a
 cut-over season would be the post-activation legacy read ADR 0025 D6/D7 forbid,
-even for a cache decision. A same-season publication has no outgoing season and
-invents none, and every URL set is deduplicated and deterministically sorted.
+even for a cache decision. Because that capture happens before the commit, the
+outgoing aliases are invalidated whether the post-commit current-season
+maintenance reports `succeeded` or `failed`: a rejected write can still have
+landed, so a failed disposition does not prove the pointer stayed put, and the
+safe direction is the one that costs a re-fetch rather than a stale season. A
+same-season publication has no outgoing season and invents none, and every URL
+set is deduplicated and deterministically sorted.
 
 ### Cache invalidation of withdrawn routes
 
