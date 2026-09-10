@@ -86,6 +86,11 @@ export interface LogEvent {
   pointerMaintenance?: string;
   /** Bounded publication status: applied, skipped, rejected or failed. */
   publicationStatus?: string;
+  /**
+   * Bounded season cutover lifecycle value (ADR 0025 D12): `uninitialized`,
+   * `seeded` or `active`. Never a fingerprint, a receipt or an operator input.
+   */
+  cutoverState?: string;
 }
 
 export interface Logger {

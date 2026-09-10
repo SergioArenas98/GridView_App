@@ -22,6 +22,7 @@ import {
   type PublicationCommands,
 } from './publication/commands';
 import { CutoverPausedPublicationCommands } from './publication/cutover/admission';
+import { CutoverPreparationService } from './publication/cutover/service';
 import { SnapshotPublisher } from './publication/publisher';
 import { SequencedPublicationService } from './publication/sequenced/service';
 import { handlePublicRequest } from './public/router';
@@ -109,6 +110,16 @@ export default {
           logger,
           requestId,
           purgeOrigin: url.origin,
+          // Always constructed, and disabled by its own gate: with no cutover
+          // control set it refuses every operation before reading anything.
+          cutover: new CutoverPreparationService({
+            config,
+            authority,
+            storage,
+            validator,
+            logger,
+            clock,
+          }),
         });
         routeTemplate = url.pathname;
       } else if (request.method !== 'GET' && !isHead) {
