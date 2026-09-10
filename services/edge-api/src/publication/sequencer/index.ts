@@ -72,6 +72,7 @@ export {
   decodeCleanupAuthorization,
   decodeCutoverActivationOutcome,
   decodeCutoverSeedOutcome,
+  decodeCutoverSeedRecovery,
   decodeFinalizeOutcome,
   decodePrepareOutcome,
   decodeSeasonAuthority,

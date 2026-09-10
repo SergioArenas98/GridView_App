@@ -48,7 +48,9 @@ import {
   type CleanupAuthorization,
   type CommittedResult,
   type CutoverActivationOutcome,
+  type CutoverSeed,
   type CutoverSeedOutcome,
+  type CutoverSeedRecovery,
   type FinalizeOutcome,
   type PerKeyState,
   type PrepareOutcome,
@@ -60,10 +62,12 @@ import {
   isDocumentName,
   isInstant,
   isOpaqueIdentifier,
+  isSeason,
   isSnapshotRevision,
   isVersionIdentifier,
   maximumManifestSize,
 } from './store';
+import { seedFloorCoversPerKeyState } from './rules';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -407,6 +411,64 @@ export function decodeCutoverSeedOutcome(
       : null;
   }
   return null;
+}
+
+/**
+ * A complete recovered seed: every field `validateCutoverSeed` requires, plus
+ * the cross-field invariant every committed seed holds - its floor is at or
+ * above each per-key timestamp it carries.
+ */
+function decodeCutoverSeed(value: unknown): CutoverSeed | null {
+  if (!isRecord(value)) return null;
+  if (!isSeason(value.season)) return null;
+  if (!isOpaqueIdentifier(value.cutoverFingerprint)) return null;
+  if (!isVersionIdentifier(value.activeVersion)) return null;
+  if (!isNullableVersion(value.previousVersion)) return null;
+  if (!isInstant(value.committedSourceOrderingInput)) return null;
+  if (!isInstant(value.seasonSnapshotObservedAtHighWaterMark)) return null;
+  const perKeyState = decodePerKeyStateArray(value.perKeyState);
+  if (perKeyState === null) return null;
+  const seed: CutoverSeed = {
+    season: value.season,
+    cutoverFingerprint: value.cutoverFingerprint,
+    activeVersion: value.activeVersion,
+    previousVersion: value.previousVersion,
+    committedSourceOrderingInput: value.committedSourceOrderingInput,
+    perKeyState,
+    seasonSnapshotObservedAtHighWaterMark:
+      value.seasonSnapshotObservedAtHighWaterMark,
+  };
+  return seedFloorCoversPerKeyState(seed) ? seed : null;
+}
+
+/**
+ * A recovered seed is only ever `seeded` or `active`; `uninitialized` is its
+ * own outcome and carries no seed. Binding the seed to the request's season and
+ * fingerprint is the client's check, because only the client holds the request.
+ */
+export function decodeCutoverSeedRecovery(
+  value: unknown,
+): CutoverSeedRecovery | null {
+  if (!isRecord(value)) return null;
+  switch (value.outcome) {
+    case 'uninitialized':
+      return { outcome: 'uninitialized' };
+    case 'committed': {
+      if (value.cutoverState !== 'seeded' && value.cutoverState !== 'active') {
+        return null;
+      }
+      const seed = decodeCutoverSeed(value.seed);
+      return seed === null
+        ? null
+        : { outcome: 'committed', cutoverState: value.cutoverState, seed };
+    }
+    case 'rejected':
+      return inClosedSet(value.reason, cutoverRejectionReasons)
+        ? { outcome: 'rejected', reason: value.reason }
+        : null;
+    default:
+      return null;
+  }
 }
 
 export function decodeCutoverActivationOutcome(

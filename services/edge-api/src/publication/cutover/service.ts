@@ -48,13 +48,14 @@ import type { SnapshotValidator } from '../../validation/snapshot-validator';
 import type { EnvironmentName, RuntimeConfig } from '../../config/environment';
 import { boundedInstant } from '../canonical/instant';
 import type { PublicationAuthority } from '../authority';
-import type { CutoverSeed, PerKeyState } from '../sequencer/model';
+import type { CutoverSeed } from '../sequencer/model';
 import type { SeasonPublicationSequencerPort } from '../sequencer/port';
 import { highestInstant } from '../sequencer/rules';
 import type { CutoverControl, CutoverPhase } from './control';
 import {
   auditedUpperBoundOf,
   cutoverFingerprint,
+  seedDescribesCheckpoint,
   type CutoverCheckpoint,
 } from './checkpoint';
 import {
@@ -106,6 +107,13 @@ export const cutoverSeedFailures = [
   'high-water-mark-unresolved',
   /** A different seed or fingerprint already exists for this season. */
   'conflicting-cutover-seed',
+  /**
+   * A seed is committed under this exact fingerprint, but the sequencer did not
+   * return one that is complete, internally consistent and one this checkpoint
+   * could have produced (over the Durable Object transport this includes an
+   * answer that could not be decoded). Nothing was written or repaired.
+   */
+  'committed-seed-incoherent',
   /** The sequencer refused the seed for another bounded reason. */
   'seed-rejected',
   /** The sequencer's post-seed authority did not describe the seed committed. */
@@ -145,7 +153,13 @@ export interface CutoverSeedReceipt {
     /** Whether the checkpoint's previous version validated and was committed. */
     readonly previousVersionCommitted: boolean;
     readonly committedSourceOrderingInput: string;
-    readonly activeProvenance: 'sidecar' | 'legacy-uniform-documents';
+    /**
+     * How the ordering input was derived, for the audit trail. A retry that
+     * reused the committed seed reports `committed-seed`: it re-derived nothing,
+     * and the original derivation is not part of durable authority state.
+     */
+    readonly activeProvenance:
+      'sidecar' | 'legacy-uniform-documents' | 'committed-seed';
     readonly seasonSnapshotObservedAtHighWaterMark: string;
     readonly documentCount: number;
   };
@@ -289,6 +303,15 @@ export class CutoverPreparationService {
    *
    * It never activates, and it never writes a legacy pointer, a historical
    * sidecar, or partial Durable Object state.
+   *
+   * ## An identical retry reuses the committed seed
+   *
+   * The seed already committed under this checkpoint's fingerprint is recovered
+   * **first** - before the migration clock is read and before any legacy read -
+   * so a retry after a lost or ambiguous response re-presents exactly the
+   * committed seed, high-water mark included, and a later wall clock cannot turn
+   * it into a conflict. Only a season with no committed seed runs the fresh
+   * migration, whose single clock reading is then part of the floor.
    */
   async seed(checkpoint: CutoverCheckpoint): Promise<CutoverSeedResult> {
     const gate = this.reachablePort(checkpoint.season, 'seed');
@@ -297,104 +320,24 @@ export class CutoverPreparationService {
     }
     const port = gate.port;
     const season = checkpoint.season;
-
-    // The migration's own observation clock, read once, before anything else.
-    const migrationNow = boundedInstant(this.clock.now());
-    if (migrationNow === null) {
-      return this.failedSeed(season, 'migration-clock-unusable');
-    }
-
-    // Step 2-6, mandatory: the selected active version, by exact versioned key.
-    const active = await importRelease(
-      this.deps(),
-      season,
-      checkpoint.activeVersion,
-    );
-    if (!active.ok) {
-      return this.failedSeed(season, activeFailure(active.refusal));
-    }
-
-    // Step 8, best-effort: an invalid or absent previous version is never a
-    // cutover-blocking condition and is never committed as an authoritative
-    // rollback target.
-    let previous: ImportedRelease | null = null;
-    if (checkpoint.previousVersion !== null) {
-      const read = await importRelease(
-        this.deps(),
-        season,
-        checkpoint.previousVersion,
-      );
-      if (read.ok) {
-        previous = read.release;
-      } else {
-        this.logger.warn({
-          operation: 'publication.cutover.previous_omitted',
-          season,
-          releaseVersion: checkpoint.previousVersion,
-          failureCategory: read.refusal,
-        });
-      }
-    }
-
-    // Step 9: the active recheck is mandatory, the previous recheck best-effort.
-    const activeRecheck = await importRelease(
-      this.deps(),
-      season,
-      checkpoint.activeVersion,
-    );
-    if (
-      !activeRecheck.ok ||
-      !releasesMatch(active.release, activeRecheck.release)
-    ) {
-      return this.failedSeed(season, 'active-recheck-failed');
-    }
-    if (previous !== null) {
-      const recheck = await importRelease(
-        this.deps(),
-        season,
-        previous.version,
-      );
-      if (!recheck.ok || !releasesMatch(previous, recheck.release)) {
-        // Step 10 commits the post-recheck result, never step 8's optimistic
-        // one: both the pointer and its timestamp contribution are dropped.
-        this.logger.warn({
-          operation: 'publication.cutover.previous_omitted',
-          season,
-          releaseVersion: previous.version,
-          failureCategory: 'previous-recheck-failed',
-        });
-        previous = null;
-      }
-    }
-
-    // The conservative high-water-mark seed: every active timestamp, every
-    // timestamp of a previous version that survived its recheck, the migration
-    // clock, and any audited upper bound the evidence supplied.
-    const auditedUpperBound = auditedUpperBoundOf(
-      checkpoint.historicalFloorEvidence,
-    );
-    const highWaterMark = highestInstant([
-      ...observedTimestamps(active.release),
-      ...(previous === null ? [] : observedTimestamps(previous)),
-      migrationNow,
-      auditedUpperBound,
-    ]);
-    if (highWaterMark === null) {
-      return this.failedSeed(season, 'high-water-mark-unresolved');
-    }
-
     const fingerprint = await cutoverFingerprint(checkpoint);
-    const perKeyState: readonly PerKeyState[] = active.release.perKeyState;
-    const seed: CutoverSeed = {
-      season,
-      cutoverFingerprint: fingerprint,
-      activeVersion: active.release.version,
-      previousVersion: previous === null ? null : previous.version,
-      committedSourceOrderingInput: active.release.sourceOrderingInput,
-      perKeyState,
-      seasonSnapshotObservedAtHighWaterMark: highWaterMark,
-    };
 
+    const recovered = await this.recoverCommittedSeed(
+      port,
+      checkpoint,
+      fingerprint,
+    );
+    const staged =
+      recovered.kind === 'uninitialized'
+        ? await this.stageFreshSeed(checkpoint, fingerprint)
+        : recovered;
+    if (staged.kind === 'failed') {
+      return this.failedSeed(season, staged.failure);
+    }
+    const seed = staged.seed;
+
+    // A recovered seed takes this same path: `seedCutover`'s committed-state
+    // comparison, not the recovery, decides `already-seeded`/`already-active`.
     let outcome;
     try {
       outcome = await port.seedCutover(seed);
@@ -445,10 +388,10 @@ export class CutoverPreparationService {
           previousVersion: seed.previousVersion,
           previousVersionCommitted: seed.previousVersion !== null,
           committedSourceOrderingInput: seed.committedSourceOrderingInput,
-          activeProvenance: active.release.provenance,
+          activeProvenance: staged.provenance,
           seasonSnapshotObservedAtHighWaterMark:
             seed.seasonSnapshotObservedAtHighWaterMark,
-          documentCount: perKeyState.length,
+          documentCount: seed.perKeyState.length,
         },
       },
     };
@@ -575,6 +518,159 @@ export class CutoverPreparationService {
     return { kind: 'ok', port: this.authority.port };
   }
 
+  /**
+   * Retrieves the seed already committed under this fingerprint, if any.
+   *
+   * `uninitialized` is the only answer that lets a fresh migration run. A seed
+   * under another fingerprint is a conflict, decided here without reading a
+   * legacy artifact. A matching seed is reused only if it is one this exact
+   * checkpoint could have produced; a fingerprint match is never permission to
+   * accept durable fields that disagree with the checkpoint, and nothing here
+   * repairs, rewrites or replaces them.
+   */
+  private async recoverCommittedSeed(
+    port: SeasonPublicationSequencerPort,
+    checkpoint: CutoverCheckpoint,
+    fingerprint: string,
+  ): Promise<{ readonly kind: 'uninitialized' } | StagedSeed> {
+    let recovery;
+    try {
+      recovery = await port.recoverCutoverSeed({
+        season: checkpoint.season,
+        cutoverFingerprint: fingerprint,
+      });
+    } catch {
+      // No answer about existing state: stage nothing, write nothing.
+      return { kind: 'failed', failure: 'seed-unconfirmed' };
+    }
+    switch (recovery.outcome) {
+      case 'uninitialized':
+        return { kind: 'uninitialized' };
+      case 'rejected':
+        return {
+          kind: 'failed',
+          failure:
+            recovery.reason === 'conflicting-cutover-seed'
+              ? 'conflicting-cutover-seed'
+              : recovery.reason === 'state-corrupt'
+                ? 'committed-seed-incoherent'
+                : 'seed-rejected',
+        };
+      case 'committed':
+        return seedDescribesCheckpoint(recovery.seed, checkpoint, fingerprint)
+          ? {
+              kind: 'staged',
+              seed: recovery.seed,
+              provenance: 'committed-seed',
+            }
+          : { kind: 'failed', failure: 'committed-seed-incoherent' };
+    }
+  }
+
+  /** D12 steps 2-9 and the conservative floor, for a season with no seed. */
+  private async stageFreshSeed(
+    checkpoint: CutoverCheckpoint,
+    fingerprint: string,
+  ): Promise<StagedSeed> {
+    const season = checkpoint.season;
+
+    // The migration's own observation clock, read once, before anything else.
+    const migrationNow = boundedInstant(this.clock.now());
+    if (migrationNow === null) {
+      return { kind: 'failed', failure: 'migration-clock-unusable' };
+    }
+
+    // Step 2-6, mandatory: the selected active version, by exact versioned key.
+    const active = await importRelease(
+      this.deps(),
+      season,
+      checkpoint.activeVersion,
+    );
+    if (!active.ok) {
+      return { kind: 'failed', failure: activeFailure(active.refusal) };
+    }
+
+    // Step 8, best-effort: an invalid or absent previous version is never a
+    // cutover-blocking condition and is never committed as an authoritative
+    // rollback target.
+    let previous: ImportedRelease | null = null;
+    if (checkpoint.previousVersion !== null) {
+      const read = await importRelease(
+        this.deps(),
+        season,
+        checkpoint.previousVersion,
+      );
+      if (read.ok) {
+        previous = read.release;
+      } else {
+        this.logger.warn({
+          operation: 'publication.cutover.previous_omitted',
+          season,
+          releaseVersion: checkpoint.previousVersion,
+          failureCategory: read.refusal,
+        });
+      }
+    }
+
+    // Step 9: the active recheck is mandatory, the previous recheck best-effort.
+    const activeRecheck = await importRelease(
+      this.deps(),
+      season,
+      checkpoint.activeVersion,
+    );
+    if (
+      !activeRecheck.ok ||
+      !releasesMatch(active.release, activeRecheck.release)
+    ) {
+      return { kind: 'failed', failure: 'active-recheck-failed' };
+    }
+    if (previous !== null) {
+      const recheck = await importRelease(
+        this.deps(),
+        season,
+        previous.version,
+      );
+      if (!recheck.ok || !releasesMatch(previous, recheck.release)) {
+        // Step 10 commits the post-recheck result, never step 8's optimistic
+        // one: both the pointer and its timestamp contribution are dropped.
+        this.logger.warn({
+          operation: 'publication.cutover.previous_omitted',
+          season,
+          releaseVersion: previous.version,
+          failureCategory: 'previous-recheck-failed',
+        });
+        previous = null;
+      }
+    }
+
+    // The conservative high-water-mark seed: every active timestamp, every
+    // timestamp of a previous version that survived its recheck, the migration
+    // clock, and any audited upper bound the evidence supplied.
+    const highWaterMark = highestInstant([
+      ...observedTimestamps(active.release),
+      ...(previous === null ? [] : observedTimestamps(previous)),
+      migrationNow,
+      auditedUpperBoundOf(checkpoint.historicalFloorEvidence),
+    ]);
+    if (highWaterMark === null) {
+      return { kind: 'failed', failure: 'high-water-mark-unresolved' };
+    }
+
+    return {
+      kind: 'staged',
+      provenance: active.release.provenance,
+      seed: {
+        season,
+        cutoverFingerprint: fingerprint,
+        activeVersion: active.release.version,
+        previousVersion: previous === null ? null : previous.version,
+        committedSourceOrderingInput: active.release.sourceOrderingInput,
+        perKeyState: active.release.perKeyState,
+        seasonSnapshotObservedAtHighWaterMark: highWaterMark,
+      },
+    };
+  }
+
   private async confirmSeededAuthority(
     port: SeasonPublicationSequencerPort,
     season: number,
@@ -654,6 +750,15 @@ export class CutoverPreparationService {
     return { kind: 'failed', failure };
   }
 }
+
+/** A complete seed ready for `seedCutover`, or why none could be staged. */
+type StagedSeed =
+  | {
+      readonly kind: 'staged';
+      readonly seed: CutoverSeed;
+      readonly provenance: CutoverSeedReceipt['seeded']['activeProvenance'];
+    }
+  | { readonly kind: 'failed'; readonly failure: CutoverSeedFailure };
 
 /** The active half's obligations are mandatory, so every refusal is a failure. */
 function activeFailure(refusal: ReleaseImportRefusal): CutoverSeedFailure {

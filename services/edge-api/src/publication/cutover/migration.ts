@@ -27,16 +27,19 @@
  *
  * The retry budget is bounded and injectable, so exhaustion is a decision this
  * code takes rather than a wait that never ends, and a test drives both the
- * success and the exhaustion path without a real delay.
+ * success and the exhaustion path without a real delay. It covers every storage
+ * read here - inventory, documents and the provenance sidecar - each with its
+ * own budget, one after another, never nested inside another.
  *
  * ## Provenance is not re-derived here
  *
  * `resolveRollbackSourceOrdering` is called verbatim - the exact shared D8/D12
  * step 6 rules: a valid sidecar in either namespace is used as-is, an absent
  * sidecar on a `pm1-…` version fails closed, an absent sidecar on a
- * legacy-format version permits the bounded uniform-document fallback, and a
- * malformed, unreadable or non-uniform value fails closed. Eligibility comes
- * from the version-format discriminator, never from a `null` read.
+ * legacy-format version permits the bounded uniform-document fallback, a
+ * malformed or non-uniform value fails closed at once, and an unreadable one
+ * fails closed once the retry budget is spent. Eligibility comes from the
+ * version-format discriminator, never from a `null` read.
  *
  * **No sidecar is ever created or backfilled here.** Those keys are immutable,
  * a legacy version legitimately has none, and writing one would mutate a
@@ -181,13 +184,24 @@ export async function importRelease(
     });
   }
 
-  const provenance = await resolveRollbackSourceOrdering(
-    deps.storage,
-    season,
-    version,
-    documents,
-  );
-  if (provenance.kind === 'rejected') {
+  // Inside the same bounded budget as every other read here (D12 step 3). Only
+  // an *unreadable* sidecar is transient and retried; a malformed one, an
+  // absent one on a `pm1-…` version and a missing or non-uniform legacy
+  // timestamp are permanent facts about an immutable artifact, so the attempt
+  // that produced one ends the loop. The shared resolver itself is unchanged.
+  const provenance = await withRetry(deps.retry, async () => {
+    const resolved = await resolveRollbackSourceOrdering(
+      deps.storage,
+      season,
+      version,
+      documents,
+    );
+    return resolved.kind === 'rejected' &&
+      resolved.classification === 'unreadable-sidecar'
+      ? null
+      : resolved;
+  });
+  if (provenance === null || provenance.kind === 'rejected') {
     return refuse('provenance-unavailable');
   }
 

@@ -47,6 +47,8 @@
 import { encodeUtf8, utf8ByteLength } from '../canonical/ordering';
 import { canonicalInstant } from '../canonical/instant';
 import { isSeason, isVersionIdentifier } from '../sequencer/store';
+import type { CutoverSeed } from '../sequencer/model';
+import { highestInstant } from '../sequencer/rules';
 
 /** The canonical rendering format the fingerprint digest is taken over. */
 export const cutoverFingerprintFormatVersion = 'gv-cutover/1';
@@ -230,6 +232,34 @@ export function auditedUpperBoundOf(
   return evidence.kind === 'audited-historical-upper-bound'
     ? evidence.auditedUpperBound
     : null;
+}
+
+/**
+ * Whether a recovered seed is one this exact checkpoint could have produced.
+ *
+ * Checked from the checkpoint alone, so recovery never depends on the legacy
+ * artifacts still being readable: the same season and fingerprint, the named
+ * active version, the named previous version or none (step 8 may omit it), and
+ * a floor no lower than any audited upper bound the checkpoint supplied. The
+ * sequencer has already checked the floor against the per-key state.
+ */
+export function seedDescribesCheckpoint(
+  seed: CutoverSeed,
+  checkpoint: CutoverCheckpoint,
+  fingerprint: string,
+): boolean {
+  if (seed.season !== checkpoint.season) return false;
+  if (seed.cutoverFingerprint !== fingerprint) return false;
+  if (seed.activeVersion !== checkpoint.activeVersion) return false;
+  if (
+    seed.previousVersion !== null &&
+    seed.previousVersion !== checkpoint.previousVersion
+  ) {
+    return false;
+  }
+  const bound = auditedUpperBoundOf(checkpoint.historicalFloorEvidence);
+  const floor = seed.seasonSnapshotObservedAtHighWaterMark;
+  return bound === null || highestInstant([floor, bound]) === floor;
 }
 
 /**

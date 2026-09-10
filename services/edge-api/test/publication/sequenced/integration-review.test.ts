@@ -949,6 +949,7 @@ function portWith(
     authorizeCleanup: (r) => base.authorizeCleanup(r),
     acknowledgeCleanup: (r) => base.acknowledgeCleanup(r),
     seedCutover: (r) => base.seedCutover(r),
+    recoverCutoverSeed: (r) => base.recoverCutoverSeed(r),
     activateCutover: (r) => base.activateCutover(r),
     ...overrides,
   };

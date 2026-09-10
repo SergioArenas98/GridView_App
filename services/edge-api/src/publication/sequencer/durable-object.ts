@@ -48,6 +48,8 @@ import type {
   CutoverActivationRequest,
   CutoverSeed,
   CutoverSeedOutcome,
+  CutoverSeedRecovery,
+  CutoverSeedRecoveryRequest,
   FinalizeOutcome,
   FinalizeRequest,
   OperationIdentity,
@@ -63,6 +65,7 @@ import {
   decodeCleanupAuthorization,
   decodeCutoverActivationOutcome,
   decodeCutoverSeedOutcome,
+  decodeCutoverSeedRecovery,
   decodeFinalizeOutcome,
   decodePrepareOutcome,
   decodeSeasonAuthority,
@@ -81,6 +84,7 @@ export const sequencerCommands = [
   'authorize-cleanup',
   'acknowledge-cleanup',
   'seed-cutover',
+  'recover-cutover-seed',
   'activate-cutover',
 ] as const;
 
@@ -152,6 +156,10 @@ export class SeasonPublicationSequencer {
         );
       case 'seed-cutover':
         return this.coordinator.seedCutover(request as unknown as CutoverSeed);
+      case 'recover-cutover-seed':
+        return this.coordinator.recoverCutoverSeed(
+          request as unknown as CutoverSeedRecoveryRequest,
+        );
       case 'activate-cutover':
         return this.coordinator.activateCutover(
           request as unknown as CutoverActivationRequest,
@@ -305,6 +313,30 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
         reason: 'state-corrupt',
       }
     );
+  }
+
+  async recoverCutoverSeed(
+    request: CutoverSeedRecoveryRequest,
+  ): Promise<CutoverSeedRecovery> {
+    const value = await this.call(
+      request.season,
+      'recover-cutover-seed',
+      request,
+    );
+    const decoded = decodeCutoverSeedRecovery(value);
+    if (decoded === null) {
+      return { outcome: 'rejected', reason: 'state-corrupt' };
+    }
+    if (
+      decoded.outcome === 'committed' &&
+      (decoded.seed.season !== request.season ||
+        decoded.seed.cutoverFingerprint !== request.cutoverFingerprint)
+    ) {
+      // A recovered seed must be the one this request named. Any other seed -
+      // even a valid one - is a skewed response and is never acted on.
+      return { outcome: 'rejected', reason: 'state-corrupt' };
+    }
+    return decoded;
   }
 
   async activateCutover(
