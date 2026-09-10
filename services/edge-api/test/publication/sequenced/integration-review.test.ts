@@ -66,6 +66,7 @@ const sequencerConfig = {
   environment: 'development' as const,
   providerMode: 'mock' as const,
   publicationAuthorityMode: 'sequencer' as const,
+  publicationCutoverControl: { kind: 'disabled' as const },
   publicBaseUrl: null,
 };
 

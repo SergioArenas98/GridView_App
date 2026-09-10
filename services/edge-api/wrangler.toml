@@ -29,6 +29,27 @@ class_name = "ProviderRateLimiter"
 type = "durable-object"
 storage = "sqlite"
 
+# Season publication authority (ADR 0025 D1, D12). One Durable Object identity
+# per season becomes that season's sole authority for `activeVersion` /
+# `previousVersion` and per-key snapshot state, once - and only once - a season
+# has been seeded and activated.
+#
+# DECLARED IN THIS REPOSITORY, NOT PROVISIONED OR DEPLOYED. This entry and the
+# `env.staging` binding below make the class deployable by a future, separately
+# authorized staging deployment; they do not create a namespace, deploy a
+# Worker, seed a season or activate one. Nothing has been deployed, no namespace
+# exists, `SEASON_PUBLICATION_AUTHORITY` is unset in every environment here, and
+# `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset too - so the class is
+# unreachable and legacy KV pointers remain authoritative everywhere.
+#
+# `storage = "sqlite"` is required: the coordinator commits through
+# `ctx.storage.transactionSync`, which only SQLite-backed Durable Objects
+# provide. The legacy `[[migrations]]` form is deliberately not used - it
+# conflicts with `exports`, which is what `ProviderRateLimiter` already uses.
+[exports.SeasonPublicationSequencer]
+type = "durable-object"
+storage = "sqlite"
+
 [env.staging]
 name = "gridview-api-staging"
 workers_dev = true
@@ -43,6 +64,17 @@ PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
 [[env.staging.durable_objects.bindings]]
 name = "PROVIDER_RATE_LIMITER"
 class_name = "ProviderRateLimiter"
+
+# Staging only, and staging is the only environment ADR 0025 D12's cutover
+# sequence is authorized to target. Production deliberately declares no
+# season-publication binding at all, so a production deployment cannot reach the
+# class even by accident. Declaring the binding does not provision the
+# namespace, and an unset `SEASON_PUBLICATION_AUTHORITY` means nothing looks it
+# up: the composition builds the exact legacy `SnapshotPublisher` it builds
+# today.
+[[env.staging.durable_objects.bindings]]
+name = "SEASON_PUBLICATION_SEQUENCER"
+class_name = "SeasonPublicationSequencer"
 
 [env.staging.secrets]
 required = ["ADMIN_TOKEN"]

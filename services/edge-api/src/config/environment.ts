@@ -1,3 +1,8 @@
+import {
+  parseCutoverControl,
+  type CutoverControl,
+} from '../publication/cutover/control';
+
 const validEnvironments = ['development', 'staging', 'production'] as const;
 const validProviderModes = ['mock', 'none'] as const;
 
@@ -48,14 +53,25 @@ export interface Env extends TestOnlyBindings {
    */
   SEASON_PUBLICATION_AUTHORITY?: string;
   /**
+   * The one cutover control (ADR 0025 D12 step 1). **Unset in every committed
+   * environment**, which disables every cutover operation and pauses no season.
+   *
+   * `seed:<season>` and `activate:<season>` each close that one season's legacy
+   * mutation admission and permit exactly one of the two cutover operations. A
+   * malformed non-empty value is a bounded `ConfigurationError`, never a silent
+   * disable - see `publication/cutover/control.ts`.
+   */
+  SEASON_PUBLICATION_CUTOVER_CONTROL?: string;
+  /**
    * Durable Object namespace backing the per-season publication sequencer
-   * (ADR 0025 D1). Optional in the type because no environment has it
-   * provisioned - no binding, `[exports]` entry or migration declares the
-   * class. Its absence is only reached when `SEASON_PUBLICATION_AUTHORITY` was
+   * (ADR 0025 D1). Optional in the type because **no environment has one
+   * provisioned**: `wrangler.toml` now *declares* the class export and a
+   * `SEASON_PUBLICATION_SEQUENCER` binding for `env.staging` so a future,
+   * separately authorized deployment can create it, but nothing has been
+   * deployed and no namespace exists. Production declares no such binding at
+   * all. Its absence is only reached when `SEASON_PUBLICATION_AUTHORITY` was
    * explicitly set to `sequencer`, and the resolver then fails closed to
    * `sequencer-unavailable` rather than falling back to the legacy authority.
-   * Present only so the integrated path is constructible without a test-only
-   * binding once a future, separately authorized provisioning step adds it.
    */
   SEASON_PUBLICATION_SEQUENCER?: DurableObjectNamespace;
   PUBLIC_BASE_URL?: string;
@@ -94,6 +110,12 @@ export interface RuntimeConfig {
   environment: EnvironmentName;
   providerMode: ProviderMode;
   publicationAuthorityMode: PublicationAuthorityMode;
+  /**
+   * Which season, if any, is closed to new legacy mutation admission while it
+   * is being cut over, and which single cutover operation is permitted
+   * (ADR 0025 D12). `disabled` in every committed environment.
+   */
+  publicationCutoverControl: CutoverControl;
   publicBaseUrl: string | null;
 }
 
@@ -142,6 +164,28 @@ export function resolvePublicationAuthorityMode(
   return value === 'sequencer' ? 'sequencer' : 'legacy';
 }
 
+/**
+ * Resolves the cutover control, failing closed on a malformed non-empty value.
+ *
+ * An operator who mistyped the control believes a season is paused. Resolving
+ * that to `disabled` would leave the season openly mutable underneath them, so
+ * it is a configuration failure instead - the same bounded one an unknown
+ * `PROVIDER_MODE` produces, which the Worker maps to a 500 carrying no raw
+ * value in either the response or the log line. The supplied value is
+ * deliberately not echoed.
+ */
+export function resolvePublicationCutoverControl(
+  value: string | undefined,
+): CutoverControl {
+  const control = parseCutoverControl(value);
+  if (control === null) {
+    throw new ConfigurationError(
+      'SEASON_PUBLICATION_CUTOVER_CONTROL must be "seed:<supported season>" or "activate:<supported season>".',
+    );
+  }
+  return control;
+}
+
 export function resolveRuntimeConfig(env: Env): RuntimeConfig {
   const environment = resolveEnvironment(env.ENVIRONMENT);
   return {
@@ -149,6 +193,9 @@ export function resolveRuntimeConfig(env: Env): RuntimeConfig {
     providerMode: resolveProviderMode(env.PROVIDER_MODE, environment),
     publicationAuthorityMode: resolvePublicationAuthorityMode(
       env.SEASON_PUBLICATION_AUTHORITY,
+    ),
+    publicationCutoverControl: resolvePublicationCutoverControl(
+      env.SEASON_PUBLICATION_CUTOVER_CONTROL,
     ),
     publicBaseUrl: resolvePublicBaseUrl(env.PUBLIC_BASE_URL, environment),
   };

@@ -1,24 +1,32 @@
 /**
- * Proof that the Integration slice wired the sequencer into the publisher,
- * rollback and public-read paths **behind a disabled gate and nothing more**.
+ * Proof that the staging cutover preparation slice **declared** the sequencer's
+ * deployment surface and **nothing more**.
  *
- * The Mechanism slice's version of this file asserted the sequencer had *no*
- * production caller. Phase 9B-6b Integration deliberately adds those callers -
- * `SequencedPublicationService`, the composition root and the public router -
- * so those assertions are replaced here by the boundary that still holds:
+ * Each earlier slice narrowed what this file can still assert, and each
+ * narrowing was deliberate. The Mechanism slice asserted the sequencer had no
+ * production caller; Integration added those callers behind a disabled gate;
+ * this slice adds the named Worker export and an `env.staging` binding so a
+ * future, separately authorized deployment can create the namespace.
  *
- * - `SEASON_PUBLICATION_AUTHORITY` is absent from every environment, so the
- *   composition builds the exact legacy `SnapshotPublisher` and the router
- *   never performs a Durable Object lookup (see `default-off.test.ts` for the
- *   behavioural proof);
- * - no `wrangler.toml` binding, `[exports]` entry, `[[migrations]]` block or
- *   Durable Object namespace declares the class, so the runtime still cannot
- *   instantiate it;
- * - `PROVIDER_MODE`, the public API and the closed document-name union are
- *   untouched.
+ * The distinction this file now enforces is **declared in the repository**
+ * versus **actually provisioned or deployed**:
  *
- * These fail the moment someone provisions, activates or configures the mode in
- * a deployed environment.
+ * - the class *is* a named Worker export and *is* declared as an
+ *   `[exports.SeasonPublicationSequencer]` SQLite Durable Object bound to
+ *   `SEASON_PUBLICATION_SEQUENCER` in `env.staging` - and nowhere else;
+ * - **production declares no season-publication binding at all**;
+ * - no committed environment sets `SEASON_PUBLICATION_AUTHORITY`, so the
+ *   composition still builds the exact legacy `SnapshotPublisher` and the
+ *   router still performs no Durable Object lookup (see `default-off.test.ts`
+ *   for the behavioural proof);
+ * - no committed environment sets `SEASON_PUBLICATION_CUTOVER_CONTROL`, so no
+ *   season is paused and no cutover operation is permitted;
+ * - the legacy `[[migrations]]` form is still absent, and `PROVIDER_MODE`, the
+ *   public API and the closed document-name union are untouched.
+ *
+ * Nothing here provisions a namespace, deploys a Worker, seeds a season or
+ * activates one. These assertions fail the moment someone commits an authority
+ * mode, a cutover control, or a production binding.
  */
 
 import { readFileSync } from 'node:fs';
@@ -34,49 +42,95 @@ function source(relative: string): string {
   return readFileSync(join(edgeApiRoot, ...relative.split('/')), 'utf8');
 }
 
-describe('no Durable Object binding, export or migration was added', () => {
-  it('declares no SeasonPublicationSequencer binding in any environment', () => {
-    expect(wranglerConfig).not.toContain('SeasonPublicationSequencer');
-    expect(wranglerConfig).not.toContain('SEASON_PUBLICATION_SEQUENCER');
-    expect(wranglerConfig).not.toContain('SEASON_PUBLICATION_AUTHORITY');
+/**
+ * The TOML with every comment line removed.
+ *
+ * These assertions are about what the file **configures**, not about what its
+ * prose mentions. This slice's comments deliberately name
+ * `SEASON_PUBLICATION_AUTHORITY`, `SEASON_PUBLICATION_CUTOVER_CONTROL` and
+ * `[[migrations]]` in order to record that none of them is set or used, and a
+ * raw substring search cannot tell that apart from actually setting one.
+ */
+const declaredConfig = wranglerConfig
+  .split('\n')
+  .filter((line) => !line.trimStart().startsWith('#'))
+  .join('\n');
+
+/**
+ * The `[env.<name>]` slice of the declared TOML, so a binding can never be
+ * attributed to the wrong environment by a whole-file substring match.
+ *
+ * The slice ends at the next **top-level** `[env.<name>]` header; a nested
+ * `[env.<name>.vars]` or `[[env.<name>.durable_objects.bindings]]` table
+ * belongs to the environment being read.
+ */
+function environmentSection(name: string): string {
+  const start = declaredConfig.indexOf(`[env.${name}]`);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const rest = declaredConfig.slice(start + 1);
+  const next = rest.search(/^\[env\.[a-z]+\]\s*$/m);
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
+describe('the sequencer deployment surface is declared, not provisioned', () => {
+  it('declares the SQLite export in the supported exports form', () => {
+    expect(declaredConfig).toContain('[exports.ProviderRateLimiter]');
+    expect(declaredConfig).toMatch(
+      /\[exports\.SeasonPublicationSequencer\]\r?\ntype = "durable-object"\r?\nstorage = "sqlite"/,
+    );
   });
 
-  it('adds no [[migrations]] block', () => {
-    expect(wranglerConfig).not.toContain('[[migrations]]');
+  it('still adds no legacy [[migrations]] block', () => {
+    // `[[migrations]]` conflicts with the `exports` form `ProviderRateLimiter`
+    // already uses, and ADR 0025 D12 names `exports` as the supported route.
+    expect(declaredConfig).not.toContain('[[migrations]]');
   });
 
-  it('leaves the only declared Durable Object exactly as it was', () => {
-    const bindings = wranglerConfig.match(/class_name = "(\w+)"/g) ?? [];
-    expect(new Set(bindings)).toEqual(
-      new Set(['class_name = "ProviderRateLimiter"']),
-    );
-    expect(wranglerConfig).toContain('[exports.ProviderRateLimiter]');
-    expect(wranglerConfig).not.toContain(
-      '[exports.SeasonPublicationSequencer]',
-    );
+  it('binds the sequencer in staging only, and leaves ProviderRateLimiter alone', () => {
+    const staging = environmentSection('staging');
+    const production = environmentSection('production');
+
+    expect(staging).toContain('name = "SEASON_PUBLICATION_SEQUENCER"');
+    expect(staging).toContain('class_name = "SeasonPublicationSequencer"');
+    expect(staging).toContain('name = "PROVIDER_RATE_LIMITER"');
+
+    // Production declares no season-publication binding at all, so a production
+    // deployment cannot reach the class even by accident.
+    expect(production).not.toContain('SEASON_PUBLICATION_SEQUENCER');
+    expect(production).not.toContain('SeasonPublicationSequencer');
+    expect(production).toContain('class_name = "ProviderRateLimiter"');
+  });
+
+  it('sets neither the authority mode nor the cutover control anywhere', () => {
+    // Declaring a binding enables nothing: no path looks the namespace up while
+    // the authority mode is unset, and no season is paused and no cutover
+    // operation is permitted while the cutover control is unset.
+    expect(declaredConfig).not.toContain('SEASON_PUBLICATION_AUTHORITY');
+    expect(declaredConfig).not.toContain('SEASON_PUBLICATION_CUTOVER_CONTROL');
   });
 
   it('changes no provider mode or deployment setting', () => {
-    expect(wranglerConfig).toMatch(
+    expect(declaredConfig).toMatch(
       /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
     );
-    expect(wranglerConfig).toMatch(
+    expect(declaredConfig).toMatch(
       /\[env\.staging\.vars\][\s\S]*PROVIDER_MODE = "mock"/,
     );
   });
 });
 
-describe('the runtime still cannot instantiate the class', () => {
-  it('does not export the Durable Object class from the Worker entry point', () => {
+describe('the class is exported so a future deployment can resolve it', () => {
+  it('exports both Durable Object classes from the Worker entry point', () => {
     // Wrangler resolves a Durable Object class through a named export of the
-    // Worker's main module. The Integration path reaches the sequencer through
-    // the in-process port or a future namespace, never by exporting the class.
+    // Worker's main module, so the export is what makes the staging binding
+    // deployable at all. It provisions nothing by itself.
     const entryPoint = source('src/index.ts');
     expect(entryPoint).toContain(
       "export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';",
     );
-    expect(entryPoint).not.toContain('export { SeasonPublicationSequencer');
-    expect(entryPoint).not.toContain('DurableObjectSeasonPublicationSequencer');
+    expect(entryPoint).toContain(
+      "export { SeasonPublicationSequencer } from './publication/sequencer/durable-object';",
+    );
   });
 });
 
@@ -100,6 +154,7 @@ describe('the authority mode is disabled by default', () => {
         environment: 'development',
         providerMode: 'mock',
         publicationAuthorityMode: 'sequencer',
+        publicationCutoverControl: { kind: 'disabled' as const },
         publicBaseUrl: null,
       },
     );
@@ -132,6 +187,7 @@ describe('no public surface changed', () => {
       'candidateVersion',
       'snapshotObservedAt',
       'cutoverState',
+      'cutoverFingerprint',
     ]) {
       expect(openapi).not.toContain(internal);
     }

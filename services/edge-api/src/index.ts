@@ -21,6 +21,7 @@ import {
   UnavailableSequencerPublicationCommands,
   type PublicationCommands,
 } from './publication/commands';
+import { CutoverPausedPublicationCommands } from './publication/cutover/admission';
 import { SnapshotPublisher } from './publication/publisher';
 import { SequencedPublicationService } from './publication/sequenced/service';
 import { handlePublicRequest } from './public/router';
@@ -44,6 +45,21 @@ export type { Env };
  */
 export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';
 
+/**
+ * Durable Object class registered as the `SEASON_PUBLICATION_SEQUENCER` binding
+ * for `env.staging` only (ADR 0025 D1, D12). Wrangler resolves a Durable Object
+ * class through a named export of the Worker's main module, so a future,
+ * separately authorized staging deployment needs this export to exist.
+ *
+ * **Declared, not provisioned.** Exporting it creates no namespace, deploys
+ * nothing, seeds no season and activates none. Production declares no such
+ * binding at all, `SEASON_PUBLICATION_AUTHORITY` is unset in every committed
+ * environment - so `resolvePublicationAuthority` returns `legacy` and no code
+ * path performs the lookup - and `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset
+ * too, so no season is paused and no cutover operation is permitted.
+ */
+export { SeasonPublicationSequencer } from './publication/sequencer/durable-object';
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const startedAt = Date.now();
@@ -63,10 +79,12 @@ export default {
       const purger = resolveCachePurger(env, config);
       const provider = resolveProvider(env, config, clock);
       const authority = resolvePublicationAuthority(env, config);
+      const validator = env.__SNAPSHOT_VALIDATOR ?? runtimeSnapshotValidator;
       const publisher = buildPublicationCommands(
         authority,
+        config,
         storage,
-        env.__SNAPSHOT_VALIDATOR ?? runtimeSnapshotValidator,
+        validator,
         purger,
         logger,
         clock,
@@ -181,6 +199,7 @@ async function runScheduled(env: Env): Promise<void> {
     const provider = resolveProvider(env, config, clock);
     const publisher = buildPublicationCommands(
       resolvePublicationAuthority(env, config),
+      config,
       storage,
       env.__SNAPSHOT_VALIDATOR ?? runtimeSnapshotValidator,
       purger,
@@ -220,8 +239,57 @@ async function runScheduled(env: Env): Promise<void> {
  * unavailable surface instead. The legacy publisher is never constructed there:
  * an operator who selected the sequencer must not have their KV pointers
  * mutated by a deployment that lost the binding.
+ *
+ * Whatever surface results is finally wrapped by the **cutover admission
+ * boundary** when `SEASON_PUBLICATION_CUTOVER_CONTROL` names a season
+ * (ADR 0025 D12 step 1), so that season's publication and rollback are refused
+ * before any publisher is reached. No committed environment sets it, so the
+ * default build returns exactly what it returns today.
  */
 function buildPublicationCommands(
+  authority: PublicationAuthority,
+  config: RuntimeConfig,
+  storage: import('./storage/types').SnapshotStorage,
+  validator: import('./validation/snapshot-validator').SnapshotValidator,
+  purger: CachePurgeAdapter,
+  logger: import('./logging/logger').Logger,
+  clock: import('./runtime/clock').Clock,
+  purgeOrigin: string,
+): PublicationCommands {
+  return closedForCutover(
+    config,
+    buildAuthorityCommands(
+      authority,
+      storage,
+      validator,
+      purger,
+      logger,
+      clock,
+      purgeOrigin,
+    ),
+  );
+}
+
+/**
+ * Closes new legacy mutation admission for the one season the cutover control
+ * names, and for no other (ADR 0025 D12 step 1).
+ *
+ * The boundary is applied whenever a season is named - it never depends on the
+ * authority mode or on a reachable sequencer port. A refusal mutates nothing,
+ * and the unsafe direction here is the other one: an operator who believes a
+ * season is paused must not find it openly mutable because some *other* setting
+ * was also wrong.
+ */
+function closedForCutover(
+  config: RuntimeConfig,
+  commands: PublicationCommands,
+): PublicationCommands {
+  const control = config.publicationCutoverControl;
+  if (control.kind === 'disabled') return commands;
+  return new CutoverPausedPublicationCommands(commands, control.season);
+}
+
+function buildAuthorityCommands(
   authority: PublicationAuthority,
   storage: import('./storage/types').SnapshotStorage,
   validator: import('./validation/snapshot-validator').SnapshotValidator,
