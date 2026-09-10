@@ -278,10 +278,43 @@ selects the two-phase path when a sequencer port is reachable, and **fails
 closed when one is not**: that combination resolves to an explicit
 sequencer-unavailable authority, never back to `legacy`, so a deployment that
 lost the binding after a cutover cannot resume reading or mutating legacy KV
-pointers. No `wrangler.toml` declares a `SeasonPublicationSequencer`
-binding, `[exports]` entry, migration or namespace; the two-phase publication
-path exists in code but is inert until the separately authorized staging
-provisioning + cutover.
+pointers.
+
+**The `SeasonPublicationSequencer` Durable Object is declared, not
+provisioned** (staging cutover preparation slice, 2026-09-10). `wrangler.toml`
+declares `[exports.SeasonPublicationSequencer]` with SQLite storage and binds
+`SEASON_PUBLICATION_SEQUENCER` for **`env.staging` only**; the class is a named
+export of the Worker entry point, which is how Wrangler resolves it. There is
+still **no `[[migrations]]` block and no production binding**. Nothing has been
+deployed, no namespace exists, no season has been seeded or activated, and
+because `SEASON_PUBLICATION_AUTHORITY` is unset the lookup is never performed:
+**staging still uses legacy pointers, and production is untouched.**
+
+| Season publication sequencer | development | staging | production |
+|---|---|---|---|
+| `[exports]` entry declared | shared, once | shared, once | shared, once |
+| Binding declared | none | `SEASON_PUBLICATION_SEQUENCER` | **none** |
+| Namespace provisioned | none | **none** | none |
+| Authority mode set | no | no | no |
+| Cutover control set | no | no | no |
+
+`SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is likewise **unset in
+every environment**. It accepts exactly `seed:<supported season>` or
+`activate:<supported season>`; an absent or empty value is disabled and
+preserves today's behaviour exactly. A **malformed non-empty value is a bounded
+`ConfigurationError`** — the same failure an unknown `PROVIDER_MODE` produces,
+surfacing as a 500 that carries no raw value in either the response or the log
+line — because an operator who mistyped the control believes a season is paused,
+and resolving that to "disabled" would leave the season openly mutable
+underneath them.
+
+When it *is* set, it closes **that one season's** legacy publication and
+rollback admission before `SnapshotPublisher` is reached (bounded reason
+`season-paused-for-cutover`), leaves every other season working, keeps the
+operator cache purge available, and leaves public reads resolving through the
+legacy authority. It is an admission-closure boundary, **not** a quiescence
+guarantee: it stops new mutators from starting and claims nothing about an
+invocation admitted before it was deployed.
 
 **No media bucket exists in any environment**, so no image has ever been published and no
 production CDN host appears anywhere in this repository — fabricating one would
