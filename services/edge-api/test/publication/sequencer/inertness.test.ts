@@ -164,6 +164,43 @@ describe('the authority mode is disabled by default', () => {
   });
 });
 
+describe('nothing here can provision or contact Cloudflare', () => {
+  it('defines no deploy or provisioning script', () => {
+    const packageJson = JSON.parse(source('package.json')) as {
+      scripts: Record<string, string>;
+    };
+    for (const [name, script] of Object.entries(packageJson.scripts)) {
+      expect(`${name}: ${script}`).not.toContain('wrangler deploy');
+      expect(`${name}: ${script}`).not.toContain('wrangler kv');
+      expect(`${name}: ${script}`).not.toContain('wrangler secret');
+      expect(`${name}: ${script}`).not.toContain('wrangler publish');
+    }
+    // `validate:worker-config` only generates local types; it uploads nothing.
+    expect(packageJson.scripts['validate:worker-config']).toContain(
+      'wrangler types',
+    );
+  });
+
+  it('never reaches a Cloudflare API or a deployed endpoint from cutover code', () => {
+    for (const relative of [
+      'src/publication/cutover/control.ts',
+      'src/publication/cutover/admission.ts',
+      'src/publication/cutover/checkpoint.ts',
+      'src/publication/cutover/migration.ts',
+      'src/publication/cutover/service.ts',
+      'src/admin/cutover-routes.ts',
+    ]) {
+      const code = source(relative);
+      expect(code).not.toContain('api.cloudflare.com');
+      expect(code).not.toContain('workers.dev');
+      // The only network primitive any of these could reach for is `fetch`,
+      // and none of them calls one: every read goes through `SnapshotStorage`
+      // and every sequencer call through the injected port.
+      expect(code).not.toMatch(/(^|[^.\w])fetch\s*\(/m);
+    }
+  });
+});
+
 describe('no public surface changed', () => {
   it('leaves the closed public document-name union untouched', () => {
     const types = source('src/storage/types.ts');

@@ -38,6 +38,12 @@ interface TestOnlyBindings {
    * Durable Object, so this is how a test drives the two-phase protocol.
    */
   __SEASON_PUBLICATION_SEQUENCER?: import('../publication/sequencer/port').SeasonPublicationSequencerPort;
+  /**
+   * The bounded retry budget the cutover preparation service reads a
+   * checkpoint-named release with. Test-only, so a test drives the exhaustion
+   * path deterministically instead of waiting on the real backoff.
+   */
+  __CUTOVER_RETRY?: import('../publication/cutover/migration').CutoverRetryPolicy;
 }
 
 /** Bindings and variables available to the Worker. */

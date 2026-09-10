@@ -119,6 +119,7 @@ export default {
             validator,
             logger,
             clock,
+            retry: env.__CUTOVER_RETRY,
           }),
         });
         routeTemplate = url.pathname;
