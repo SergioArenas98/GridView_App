@@ -2086,6 +2086,25 @@ else does. Precisely:
 | Three authenticated internal routes under `/internal/admin/publication/cutover/`, `no-store`, absent from the public OpenAPI document. | Any public contract change, and any call to a deployed endpoint. |
 | The historical-floor activation precondition **represented**: a closed union of the four alternatives below, each carrying a required opaque audit reference, with an audited upper bound folded into the high-water-mark seed before the fingerprint-bound seed commits. | The precondition **satisfied** for any real environment. It remains an operator obligation, established against that environment's own state at the time, and no `listVersions` result is ever accepted as evidence of it. |
 
+**Cutover preparation review corrections (2026-09-10).** Two independently
+reproduced review findings on the slice, both bounded to it and neither a new
+design decision:
+
+- **An identical seed retry depended on wall time.** The high-water mark was
+  recomputed from the migration clock on every attempt and compared as part of
+  the committed seed, so retrying the same checkpoint after a lost or
+  ambiguous response reported `conflicting-cutover-seed`. The service now
+  retrieves the seed committed under the checkpoint's fingerprint first,
+  through a read-only, request-bound `recover-cutover-seed` sequencer command
+  (decoded, cross-checked and bound to its request like every other transport
+  response), and re-presents it unchanged — step 10's retry rule above. The
+  committed-state comparison, the fingerprint rule and the authority rules are
+  unchanged.
+- **Provenance reads bypassed the retry budget.** Inventory and document reads
+  were retried; the sidecar read was not, so one transient failure aborted a
+  valid cutover. Provenance resolution now runs inside the same budget,
+  retrying only an unreadable sidecar — step 3's provenance rule above.
+
 **Phase 9B-6 and both halves of gap G-i remain operationally open.** Steps 2-5
 of the sequence above each still require their own separate authorization:
 staging provisioning and deployment with admission closed; the operator
@@ -2216,6 +2235,18 @@ authorizes activation, not the provisional selection by itself.
    silently substitute a different version here, because migration never reads
    the live pointer keys at all past step 1.
 
+   **Provenance reads are inside this same budget, and only unreadability is
+   retried.** A sidecar read that fails (step 6's *unreadable* classification)
+   is transient: it is retried within the one common bounded budget, exactly
+   like an unreadable inventory or document, and aborts only once that budget
+   is spent. A **malformed** sidecar, an **absent** sidecar on a
+   sidecar-required version, and a **missing or non-uniform** legacy document
+   timestamp are permanent facts about an immutable artifact: each fails
+   closed at the attempt that produced it and is never retried. The same
+   bounded reads apply to the optional `previousVersion` before it is omitted
+   (step 8) and to both halves of step 9's recheck; no budget is nested inside
+   another, and none is unbounded.
+
    **This mandatory-validation rule is scoped to `activeVersion` and does not
    extend to `previousVersion`.** An earlier draft of this step required
    "every checkpoint-named inventory and document" to validate, which — since
@@ -2258,9 +2289,9 @@ authorizes activation, not the provisional selection by itself.
      `meta.sourceUpdatedAt` (which, post-cutover, is a per-key activation
      timestamp — D3, D4).
    - **A malformed sidecar fails closed.** **An unreadable sidecar fails
-     closed** — an unreadable record is never treated as an absent one, so a
-     read failure can never silently divert migration onto the legacy
-     document-inference path.
+     closed** once step 3's bounded retry budget is spent — an unreadable
+     record is never treated as an absent one, so a read failure can never
+     silently divert migration onto the legacy document-inference path.
    - **Non-uniform, missing or malformed legacy document timestamps fail
      closed** — migration does not arbitrarily choose one of them.
 
@@ -2370,6 +2401,25 @@ authorizes activation, not the provisional selection by itself.
     failed optional `previousVersion` validation is not such an input**: it
     seeds `previousVersion` as `null` (step 8) and the migration proceeds. Migration is only ever
     all-or-nothing per season — no partially-seeded season reaches `seeded`.
+
+    **Retrying an identical checkpoint reuses the already committed seed.**
+    The seed committed under the checkpoint's fingerprint is retrieved
+    **before** the migration clock is read and before any legacy read, and a
+    retry re-presents exactly that seed — its high-water mark included — so
+    it resolves to the existing `already-seeded` or `already-active` result.
+    Retry-time wall-clock advancement therefore cannot turn an identical retry
+    into a conflict, and the retry neither lowers nor advances the committed
+    high-water mark, rewrites per-key state, nor activates. Only a season with
+    no committed seed runs steps 2-9, whose single clock reading is then part
+    of the floor. The retrieval is read-only and request-bound — it answers
+    only for the exact season and fingerprint asked about — and is not a
+    second authority: the reused seed is still decided by the same
+    committed-state comparison as any other identical seed. A committed seed
+    under a different fingerprint remains a conflict; one under the same
+    fingerprint that is corrupt, incomplete, or not one this checkpoint could
+    have produced (a different active version, a previous version the
+    checkpoint never named, or a floor below its own per-key state or below an
+    audited upper bound) fails closed with nothing written or repaired.
 11. **Perform one idempotent durable transition from `seeded` to `active`,
     only after step 10 has committed successfully and only once an operator
     supplies an authenticated, explicit activation confirmation bound to the
@@ -2823,7 +2873,10 @@ of the cutover sequence above).
     authoritative, mutators still paused);
   - a repeated identical seed attempt (same migration identity/fingerprint)
     against an already-`seeded` or already-`active` season (idempotent,
-    returns the existing result, no re-seed and no re-transition);
+    returns the existing result, no re-seed and no re-transition) — proven with
+    a clock that has advanced since the first attempt, including after a lost
+    or unavailable first response, with the committed high-water mark
+    byte-identical before and after;
   - a conflicting seed attempt (different identity/fingerprint) against an
     already-`seeded` or already-`active` season (rejected, requires explicit
     operator handling);

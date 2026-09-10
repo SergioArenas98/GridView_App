@@ -580,9 +580,10 @@ literal `true`; no truthy stand-in is accepted.
 | Not staging | Every operation returns `refused`/`environment-not-staging`. Production can never run one. |
 | Wrong phase | `seed` under `activate:` and `activate` under `seed:` both return `refused`/`phase-not-permitted`. |
 | Malformed control | HTTP `500`, "The service is not correctly configured.", `failureCategory: configuration`. Fix the variable. |
-| Active artifact unreadable, invalid or without resolvable provenance | `failed` with a bounded reason, **no** Durable Object state written, legacy pointers untouched, and the season retryable from the start once the data problem is fixed. |
+| Active artifact unreadable, invalid or without resolvable provenance | `failed` with a bounded reason, **no** Durable Object state written, legacy pointers untouched, and the season retryable from the start once the data problem is fixed. An unreadable inventory, document or provenance sidecar is retried within the bounded budget first; a malformed sidecar, an absent one on a `pm1-…` version, or missing/non-uniform legacy timestamps fail at once. |
 | Previous artifact unreadable or invalid | The seed still succeeds, with `previousVersion: null` and that version's timestamps omitted from the high-water mark. Roll back by naming a version explicitly until a later transition repairs the default target. |
-| Seed retried with the identical checkpoint | `already-seeded` (or `already-active`), with nothing rewritten. |
+| Seed retried with the identical checkpoint | `already-seeded` (or `already-active`), with nothing rewritten. The retry reuses the committed seed and its high-water mark — however much later it runs, and even if the first response was lost — without re-reading the legacy artifacts; the receipt reports `activeProvenance: committed-seed`. |
+| Committed seed for this checkpoint cannot be reconciled | `failed` / `committed-seed-incoherent`: the durable state under this fingerprint is corrupt, incomplete, or not one this checkpoint could have produced. Nothing is written or repaired; investigate before any further act. |
 | Seed retried with a different checkpoint | `failed` / `conflicting-cutover-seed`. Resolving it is an explicit operator decision — abandon or restart the seeded attempt; it is never applied over. |
 | Activation with an altered receipt | `failed` / `cutover-fingerprint-mismatch`, seeded attempt untouched. |
 | Activation retried identically | `already-active`, unchanged. |
