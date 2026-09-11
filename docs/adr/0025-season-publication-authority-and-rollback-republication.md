@@ -2097,9 +2097,14 @@ design decision:
   retrieves the seed committed under the checkpoint's fingerprint first,
   through a read-only, request-bound `recover-cutover-seed` sequencer command
   (decoded, cross-checked and bound to its request like every other transport
-  response), and re-presents it unchanged — step 10's retry rule above. The
-  committed-state comparison, the fingerprint rule and the authority rules are
-  unchanged.
+  response), and re-presents it unchanged — step 10's retry rule above. That
+  covers a retry made after the first seed committed. It also covers two
+  overlapping identical attempts that both found the season uninitialized and
+  staged different floors: the one told `conflicting-cutover-seed` recovers
+  exactly once more and re-presents the committed seed unchanged exactly once,
+  with no clock or legacy re-read and no loop. The committed-state comparison,
+  the fingerprint rule and the authority rules are unchanged, and a different
+  fingerprint still fails closed.
 - **Provenance reads bypassed the retry budget.** Inventory and document reads
   were retried; the sidecar read was not, so one transient failure aborted a
   valid cutover. Provenance resolution now runs inside the same budget,
@@ -2411,7 +2416,18 @@ authorizes activation, not the provisional selection by itself.
     into a conflict, and the retry neither lowers nor advances the committed
     high-water mark, rewrites per-key state, nor activates. Only a season with
     no committed seed runs steps 2-9, whose single clock reading is then part
-    of the floor. The retrieval is read-only and request-bound — it answers
+    of the floor. Two overlapping identical attempts can both find the season
+    uninitialized and stage different floors, and the second to commit is told
+    `conflicting-cutover-seed`. That attempt alone performs **one** further
+    retrieval and, if it returns a seed this checkpoint could have produced,
+    re-presents it unchanged **once**, so the pair resolves to `seeded` and
+    `already-seeded` around the first attempt's floor. It never re-reads the
+    clock or a legacy artifact, never loops, and fails closed on every
+    inconsistent answer: a different fingerprint remains a conflict, a corrupt
+    or checkpoint-incoherent seed is `committed-seed-incoherent`, and no answer,
+    an `uninitialized` answer after the conflict, or a failed re-presentation
+    is a bounded failure that never restarts the migration. The retrieval is
+    read-only and request-bound — it answers
     only for the exact season and fingerprint asked about — and is not a
     second authority: the reused seed is still decided by the same
     committed-state comparison as any other identical seed. A committed seed
