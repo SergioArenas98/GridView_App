@@ -48,7 +48,7 @@ import type { SnapshotValidator } from '../../validation/snapshot-validator';
 import type { EnvironmentName, RuntimeConfig } from '../../config/environment';
 import { boundedInstant } from '../canonical/instant';
 import type { PublicationAuthority } from '../authority';
-import type { CutoverSeed } from '../sequencer/model';
+import type { CutoverSeed, CutoverSeedOutcome } from '../sequencer/model';
 import type { SeasonPublicationSequencerPort } from '../sequencer/port';
 import { highestInstant } from '../sequencer/rules';
 import type { CutoverControl, CutoverPhase } from './control';
@@ -312,6 +312,12 @@ export class CutoverPreparationService {
    * committed seed, high-water mark included, and a later wall clock cannot turn
    * it into a conflict. Only a season with no committed seed runs the fresh
    * migration, whose single clock reading is then part of the floor.
+   *
+   * Two overlapping identical attempts can both find the season uninitialized
+   * and stage different floors; the one that commits second is told
+   * `conflicting-cutover-seed`. That invocation alone recovers once more and
+   * re-presents the committed seed unchanged, once - no clock or legacy
+   * re-read, no loop - and every inconsistent answer on that path fails closed.
    */
   async seed(checkpoint: CutoverCheckpoint): Promise<CutoverSeedResult> {
     const gate = this.reachablePort(checkpoint.season, 'seed');
@@ -334,16 +340,37 @@ export class CutoverPreparationService {
     if (staged.kind === 'failed') {
       return this.failedSeed(season, staged.failure);
     }
-    const seed = staged.seed;
+    let { seed, provenance } = staged;
 
     // A recovered seed takes this same path: `seedCutover`'s committed-state
     // comparison, not the recovery, decides `already-seeded`/`already-active`.
-    let outcome;
-    try {
-      outcome = await port.seedCutover(seed);
-    } catch {
-      return this.failedSeed(season, 'seed-unconfirmed');
+    let outcome = await presentSeed(port, seed);
+    if (
+      recovered.kind === 'uninitialized' &&
+      outcome?.outcome === 'rejected' &&
+      outcome.reason === 'conflicting-cutover-seed'
+    ) {
+      // An overlapping identical attempt may have committed between this
+      // invocation's recovery and its seed, with its own clock reading. Recover
+      // once more and re-present what is committed, unchanged, once: the same
+      // comparison then decides, and a different fingerprint still conflicts.
+      const settled = await this.recoverCommittedSeed(
+        port,
+        checkpoint,
+        fingerprint,
+      );
+      if (settled.kind !== 'staged') {
+        // `uninitialized` right after a conflict is a contradiction, never
+        // permission to migrate again.
+        return this.failedSeed(
+          season,
+          settled.kind === 'failed' ? settled.failure : 'seed-unconfirmed',
+        );
+      }
+      ({ seed, provenance } = settled);
+      outcome = await presentSeed(port, seed);
     }
+    if (outcome === null) return this.failedSeed(season, 'seed-unconfirmed');
     if (outcome.outcome === 'rejected') {
       return this.failedSeed(
         season,
@@ -388,7 +415,7 @@ export class CutoverPreparationService {
           previousVersion: seed.previousVersion,
           previousVersionCommitted: seed.previousVersion !== null,
           committedSourceOrderingInput: seed.committedSourceOrderingInput,
-          activeProvenance: staged.provenance,
+          activeProvenance: provenance,
           seasonSnapshotObservedAtHighWaterMark:
             seed.seasonSnapshotObservedAtHighWaterMark,
           documentCount: seed.perKeyState.length,
@@ -759,6 +786,18 @@ type StagedSeed =
       readonly provenance: CutoverSeedReceipt['seeded']['activeProvenance'];
     }
   | { readonly kind: 'failed'; readonly failure: CutoverSeedFailure };
+
+/** `null` when no answer arrived: the seed may or may not have committed. */
+async function presentSeed(
+  port: SeasonPublicationSequencerPort,
+  seed: CutoverSeed,
+): Promise<CutoverSeedOutcome | null> {
+  try {
+    return await port.seedCutover(seed);
+  } catch {
+    return null;
+  }
+}
 
 /** The active half's obligations are mandatory, so every refusal is a failure. */
 function activeFailure(refusal: ReleaseImportRefusal): CutoverSeedFailure {
