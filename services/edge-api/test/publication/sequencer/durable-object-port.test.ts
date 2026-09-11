@@ -199,6 +199,7 @@ describe('SeasonPublicationSequencer durable object', () => {
       'authorize-cleanup',
       'acknowledge-cleanup',
       'seed-cutover',
+      'recover-cutover-seed',
       'activate-cutover',
     ]);
   });

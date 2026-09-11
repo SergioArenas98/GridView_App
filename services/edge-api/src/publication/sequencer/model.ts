@@ -513,6 +513,39 @@ export type CutoverActivationOutcome =
     };
 
 /**
+ * Asks for the seed already committed under one exact fingerprint, so a caller
+ * can retry an identical checkpoint without recomputing its high-water mark
+ * from a later clock (D12 step 10).
+ */
+export interface CutoverSeedRecoveryRequest {
+  readonly season: number;
+  readonly cutoverFingerprint: string;
+}
+
+/**
+ * What a seed recovery found.
+ *
+ * `committed` is returned **only** for the requested season and fingerprint,
+ * and only when the durable state reconstructs a complete, valid seed. It is
+ * not a second authority: the operation writes nothing, and a caller that wants
+ * the committed outcome still presents the seed to `seedCutover`, whose own
+ * committed-state comparison decides it. A different fingerprint is
+ * `conflicting-cutover-seed`, and state that cannot be reconciled is
+ * `state-corrupt` - never a partial seed.
+ */
+export type CutoverSeedRecovery =
+  | { readonly outcome: 'uninitialized' }
+  | {
+      readonly outcome: 'committed';
+      readonly cutoverState: 'seeded' | 'active';
+      readonly seed: CutoverSeed;
+    }
+  | {
+      readonly outcome: 'rejected';
+      readonly reason: CutoverRejectionReason;
+    };
+
+/**
  * What the sequencer reports about a season's authority.
  *
  * The three cutover states produce three genuinely different answers, and the

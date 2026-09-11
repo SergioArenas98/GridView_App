@@ -138,6 +138,7 @@ export function consequenceForRejectedPublication(
     case 'sequencer-authority-unavailable':
     case 'sequencer-prepare-rejected':
     case 'sequencer-operation-superseded':
+    case 'season-paused-for-cutover':
       return 'failed';
   }
 }

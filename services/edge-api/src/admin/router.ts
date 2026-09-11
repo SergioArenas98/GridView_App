@@ -3,6 +3,7 @@ import type { Env } from '../config/environment';
 import { jsonResponse } from '../http/envelope';
 import type { Logger } from '../logging/logger';
 import type { PublicationCommands } from '../publication/commands';
+import type { CutoverPreparationService } from '../publication/cutover/service';
 import type { SynchronizationService } from '../sync/sync-service';
 import { emptySyncState } from '../sync/sync-service';
 import {
@@ -15,6 +16,7 @@ import type {
   SyncJobCategory,
 } from '../storage/types';
 import { adminAuthOk, unauthorized } from './auth';
+import { handleCutoverRequest, isCutoverPath } from './cutover-routes';
 
 interface AdminContext {
   env: Env;
@@ -25,6 +27,12 @@ interface AdminContext {
   logger: Logger;
   requestId: string;
   purgeOrigin: string;
+  /**
+   * The staging cutover preparation surface (ADR 0025 D12). Always constructed;
+   * it refuses every operation itself while the cutover control is unset, which
+   * is what every committed environment leaves it as.
+   */
+  cutover: CutoverPreparationService;
 }
 
 export async function handleAdminRequest(
@@ -36,6 +44,16 @@ export async function handleAdminRequest(
   }
 
   const url = new URL(request.url);
+  // Dispatched before the shared season resolution below: a cutover names its
+  // season explicitly, and must never inherit `meta:current-season`.
+  if (isCutoverPath(url.pathname)) {
+    return handleCutoverRequest(
+      request,
+      url,
+      context.cutover,
+      context.requestId,
+    );
+  }
   if (request.method === 'GET') {
     if (url.pathname === '/internal/admin/quota') {
       // Source-aware: one entry per canonical source, so a source with no

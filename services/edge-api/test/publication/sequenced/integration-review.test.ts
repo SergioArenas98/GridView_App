@@ -66,6 +66,7 @@ const sequencerConfig = {
   environment: 'development' as const,
   providerMode: 'mock' as const,
   publicationAuthorityMode: 'sequencer' as const,
+  publicationCutoverControl: { kind: 'disabled' as const },
   publicBaseUrl: null,
 };
 
@@ -948,6 +949,7 @@ function portWith(
     authorizeCleanup: (r) => base.authorizeCleanup(r),
     acknowledgeCleanup: (r) => base.acknowledgeCleanup(r),
     seedCutover: (r) => base.seedCutover(r),
+    recoverCutoverSeed: (r) => base.recoverCutoverSeed(r),
     activateCutover: (r) => base.activateCutover(r),
     ...overrides,
   };

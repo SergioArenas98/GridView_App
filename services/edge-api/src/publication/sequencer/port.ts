@@ -21,6 +21,8 @@ import type {
   CutoverActivationRequest,
   CutoverSeed,
   CutoverSeedOutcome,
+  CutoverSeedRecovery,
+  CutoverSeedRecoveryRequest,
   FinalizeOutcome,
   FinalizeRequest,
   OperationIdentity,
@@ -58,6 +60,13 @@ export interface SeasonPublicationSequencerPort {
    */
   acknowledgeCleanup(request: CleanupRequest): Promise<CleanupAcknowledgement>;
   seedCutover(seed: CutoverSeed): Promise<CutoverSeedOutcome>;
+  /**
+   * Read-only: the seed already committed under this exact fingerprint, so an
+   * identical checkpoint retry reuses it rather than recomputing its floor.
+   */
+  recoverCutoverSeed(
+    request: CutoverSeedRecoveryRequest,
+  ): Promise<CutoverSeedRecovery>;
   activateCutover(
     request: CutoverActivationRequest,
   ): Promise<CutoverActivationOutcome>;
@@ -104,6 +113,12 @@ export class LocalSeasonPublicationSequencer implements SeasonPublicationSequenc
 
   async seedCutover(seed: CutoverSeed): Promise<CutoverSeedOutcome> {
     return this.coordinator.seedCutover(seed);
+  }
+
+  async recoverCutoverSeed(
+    request: CutoverSeedRecoveryRequest,
+  ): Promise<CutoverSeedRecovery> {
+    return this.coordinator.recoverCutoverSeed(request);
   }
 
   async activateCutover(

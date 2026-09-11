@@ -456,6 +456,40 @@ wires the two-phase flow below into ordinary publication, rollback and the
 public read path, selected by a `PublicationAuthorityMode` composition boundary
 resolved from `SEASON_PUBLICATION_AUTHORITY`.
 
+**Staging cutover preparation (2026-09-10) — declared, disabled, not deployed.**
+`SeasonPublicationSequencer` is now a named Worker export with an
+`[exports.SeasonPublicationSequencer]` SQLite entry and a
+`SEASON_PUBLICATION_SEQUENCER` binding for `env.staging` only (production
+declares none; there is still no `[[migrations]]` block), and an authenticated
+internal `CutoverPreparationService` implements
+[ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+D12's migration and its separate activation confirmation. **Nothing is
+provisioned, deployed, seeded, cut over or activated**, both
+`SEASON_PUBLICATION_AUTHORITY` and `SEASON_PUBLICATION_CUTOVER_CONTROL` are
+unset in every committed environment, staging still uses legacy pointers, and
+production is untouched.
+
+`SEASON_PUBLICATION_CUTOVER_CONTROL=seed:<season>` or `activate:<season>` closes
+**that one season's** publication and rollback admission before
+`SnapshotPublisher` is reached, with the bounded reason
+`season-paused-for-cutover`. Its synchronization consequence is `failed`, not
+the benign `completed-no-op` that `older-source-updated-at` gets: a cutover
+pause is a deliberate operational state, and recording it as a completed run
+would advance `lastCompletedAt` and mark every due job successful for the length
+of the cutover. Every other season, and the operator cache purge, are
+unaffected, and public reads keep resolving through the legacy authority for the
+whole pre-activation interval.
+
+The migration reads the operator-approved checkpoint's versions by **exact
+immutable versioned key** — never `active:{season}`/`previous:{season}`, never
+`listVersions` — reuses the canonical `snapshotRevision` and the **shared**
+rollback-provenance resolver rather than restating either rule, treats the
+selected `activeVersion` as mandatory and the optional `previousVersion` as
+best-effort, and writes no sidecar under an existing historical version. Seed
+and activation are two separate operator acts with no path that performs both.
+See [`GridView_Backend_Operations.md`](GridView_Backend_Operations.md) for the
+operator routes and their expected outcomes.
+
 **The mode is `legacy` by default, and no deployed environment sets it
 otherwise.** In `legacy` mode the composition builds the exact
 `SnapshotPublisher` it builds today, the public router performs no Durable

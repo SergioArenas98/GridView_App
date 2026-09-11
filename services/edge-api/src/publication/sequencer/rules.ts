@@ -281,6 +281,22 @@ export function validateCutoverSeed(
 }
 
 /**
+ * Whether a seed's high-water mark is at or above every per-key timestamp it
+ * carries - true of every seed the migration builds, because each imported
+ * timestamp is one of the values the mark is the highest of. A recovered seed
+ * that breaks it cannot be one that was committed, and is never trusted.
+ */
+export function seedFloorCoversPerKeyState(seed: CutoverSeed): boolean {
+  return seed.perKeyState.every((state) => {
+    const order = compareInstants(
+      seed.seasonSnapshotObservedAtHighWaterMark,
+      state.observedAt,
+    );
+    return order === 0 || order === 1;
+  });
+}
+
+/**
  * Whether a presented seed is byte-for-byte the state already committed.
  *
  * Every field the seed carries is compared, not just the fingerprint: a

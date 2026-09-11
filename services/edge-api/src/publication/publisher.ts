@@ -96,6 +96,18 @@ export const publicationReasons = [
    * must never re-drive it; a fresh publication goes through a new `prepare`.
    */
   'sequencer-operation-superseded',
+  /**
+   * Cutover control only (ADR 0025 D12 step 1). This season's legacy mutation
+   * admission is closed while it is being cut over, so the publication or
+   * rollback was refused **before** any publisher was reached: no candidate was
+   * written, no pointer moved and nothing was purged.
+   *
+   * It is an **operational refusal**, not the benign
+   * `older-source-updated-at` no-op: the season genuinely cannot publish for
+   * the length of the cutover, and a synchronization run must record that
+   * rather than report a completed cadence.
+   */
+  'season-paused-for-cutover',
 ] as const;
 
 export type PublicationReason = (typeof publicationReasons)[number];

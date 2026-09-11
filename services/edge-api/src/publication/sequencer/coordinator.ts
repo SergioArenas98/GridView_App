@@ -51,6 +51,8 @@ import {
   type CutoverActivationRequest,
   type CutoverSeed,
   type CutoverSeedOutcome,
+  type CutoverSeedRecovery,
+  type CutoverSeedRecoveryRequest,
   type FinalizeOutcome,
   type FinalizeRequest,
   type OperationIdentity,
@@ -86,6 +88,7 @@ import {
   isExpired,
   isOperationIdentity,
   parseCleanupRequest,
+  seedFloorCoversPerKeyState,
   validateCutoverSeed,
   validatePrepareRequest,
   seedMatchesCommittedState,
@@ -830,6 +833,74 @@ export class SeasonPublicationCoordinator {
       }
       writeAuthorityRecord(store, record);
       return { outcome: 'seeded' };
+    });
+  }
+
+  /**
+   * Returns the seed already committed under one exact fingerprint, so an
+   * identical checkpoint can be retried without recomputing its high-water mark
+   * from a later clock (D12 step 10).
+   *
+   * Read-only and request-bound: it answers only for the season this object
+   * owns and only for the fingerprint asked about, so it can never hand a caller
+   * someone else's seed. The reconstructed seed must pass the same validation
+   * `seedCutover` applies and carry a floor at or above its own per-key state;
+   * anything less is `state-corrupt`, never a partial seed. It decides nothing:
+   * a caller re-presents the seed to `seedCutover`, whose committed-state
+   * comparison produces the outcome exactly as for any other identical seed.
+   */
+  recoverCutoverSeed(request: CutoverSeedRecoveryRequest): CutoverSeedRecovery {
+    if (!isSeason(request.season)) {
+      return { outcome: 'rejected', reason: 'invalid-season' };
+    }
+    if (!isOpaqueIdentifier(request.cutoverFingerprint)) {
+      return { outcome: 'rejected', reason: 'invalid-cutover-fingerprint' };
+    }
+    return this.host.transactionSync((store): CutoverSeedRecovery => {
+      const authority = readAuthorityRecord(store);
+      if (authority.kind === 'corrupt') {
+        return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
+      if (
+        authority.kind === 'missing' ||
+        authority.value.cutoverState === 'uninitialized'
+      ) {
+        return { outcome: 'uninitialized' };
+      }
+      const record = authority.value;
+      if (record.season !== request.season) {
+        return { outcome: 'rejected', reason: 'season-mismatch' };
+      }
+      if (record.cutoverFingerprint !== request.cutoverFingerprint) {
+        return { outcome: 'rejected', reason: 'conflicting-cutover-seed' };
+      }
+      const committed = readPerKeyState(store, committedKeyPrefix);
+      if (committed.kind !== 'value') {
+        return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
+      const seed = {
+        season: record.season,
+        cutoverFingerprint: record.cutoverFingerprint,
+        activeVersion: record.activeVersion,
+        previousVersion: record.previousVersion,
+        committedSourceOrderingInput: record.committedSourceOrderingInput,
+        perKeyState: committed.value,
+        seasonSnapshotObservedAtHighWaterMark:
+          record.seasonSnapshotObservedAtHighWaterMark,
+      } as CutoverSeed;
+      // `validateCutoverSeed` rejects the nullable fields an incomplete record
+      // could still hold, and an empty per-key set.
+      if (
+        validateCutoverSeed(seed) !== null ||
+        !seedFloorCoversPerKeyState(seed)
+      ) {
+        return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
+      return {
+        outcome: 'committed',
+        cutoverState: record.cutoverState as 'seeded' | 'active',
+        seed,
+      };
     });
   }
 

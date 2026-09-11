@@ -80,8 +80,18 @@ Cloudflare Access remains a Phase 5B+ hardening option.
 - `POST /internal/admin/cache/purge`
 - `GET /internal/admin/quota`
 - `GET /internal/admin/sync/status`
+- `GET /internal/admin/publication/cutover/status`
+- `POST /internal/admin/publication/cutover/seed`
+- `POST /internal/admin/publication/cutover/activate`
 
-No state-changing route uses `GET`.
+No state-changing route uses `GET`. None of these appears in the public
+OpenAPI document, and every response is `Cache-Control: no-store`.
+
+The three `publication/cutover` routes are the staging cutover preparation
+surface (ADR 0025 D12). They are **disabled by default** and refuse every
+operation while `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset, which is what
+every committed environment leaves it as — see
+[Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--declared-disabled-not-deployed).
 
 ## Synchronization Flow
 
@@ -122,7 +132,11 @@ scheduled/manual trigger
 > the staging provisioning + cutover gated by ADR 0025 D12 "Activation
 > boundary" and
 > [`GridView_Implementation_Plan.md`](GridView_Implementation_Plan.md)
-> §14.0.11 is separately authorized. When the mode *is* selected, the
+> §14.0.11 is separately authorized — of which only the **repository-side
+> preparation** exists as of 2026-09-10: a declared staging binding, a
+> default-off cutover control and an authenticated operator runner, with
+> nothing deployed, provisioned, seeded or activated. When the mode *is*
+> selected, the
 > Integration slice raises these bounded operational events (ADR 0025 D11):
 > `publication.sequencer.committed` / `.rejected` / `.superseded`,
 > `publication.sequencer.candidate_cleanup`, `rollback.sequencer.provenance`
@@ -431,6 +445,11 @@ The republication path runs only when `SEASON_PUBLICATION_AUTHORITY=sequencer`
 is set and the season has been seeded and activated — neither of which any
 environment has done.
 
+While a season is being cut over, `/internal/admin/rollback` for **that** season
+returns `rejected` / `season-paused-for-cutover` with HTTP `409` and moves no
+pointer, because admission is closed before any publisher is reached. No
+environment sets the control, so this cannot occur today.
+
 The republication design: rollback reads a selected historical version's stable
 public data, copies it into a **new** immutable version without contacting a
 provider, recomputes volatile publication/freshness fields and per-key
@@ -507,6 +526,75 @@ pass. Recorded here only so the obligation is not lost: the runbook must
 cover the migration procedure itself, verification of the imported state,
 the authority-mode switch, and the rollback-of-the-deployment path (reverting
 to KV-pointer authority) if cutover verification fails.
+
+## Staging cutover preparation (ADR 0025 D12) — declared, disabled, not deployed
+
+Added 2026-09-10. Everything in this section exists in the repository and is
+**off**: `SEASON_PUBLICATION_AUTHORITY` and `SEASON_PUBLICATION_CUTOVER_CONTROL`
+are unset in every committed environment, no Cloudflare resource has been
+created, no Worker has been deployed, no season has been seeded or activated,
+and staging still uses legacy pointers while production is untouched. The
+sequence that would use it — staging provisioning and deployment with admission
+closed, the operator checkpoint and seed, the separate activation confirmation
+and mutation resumption, the smoke and latency review, and any later production
+decision — each remains separately authorized.
+
+### The two configuration values
+
+| Value | Effect |
+|---|---|
+| `SEASON_PUBLICATION_AUTHORITY=sequencer` | Selects the sequencer authority. Absent, empty or unrecognised resolves to `legacy`; set with no reachable port fails closed as sequencer-unavailable, never back to legacy. |
+| `SEASON_PUBLICATION_CUTOVER_CONTROL=seed:<season>` | Closes that season's legacy publication and rollback admission, and permits **only** seed preparation. |
+| `SEASON_PUBLICATION_CUTOVER_CONTROL=activate:<season>` | Keeps admission closed for that season, and permits **only** the separate activation confirmation. |
+
+Both are required, together with the staging runtime environment and a reachable
+sequencer port, before any cutover operation is possible. A malformed non-empty
+control is a bounded configuration failure, never a silent disable.
+
+### The internal operator routes
+
+All three sit behind the existing `ADMIN_TOKEN`, answer `Cache-Control:
+no-store`, and appear in **no** public OpenAPI document.
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/internal/admin/publication/cutover/status?season=YYYY` | `GET` | Read-only. Reports `disabled`, `unavailable`, `uninitialized`, `seeded` or `active`, from the sequencer alone — never inferred from a legacy pointer. |
+| `/internal/admin/publication/cutover/seed` | `POST` | Runs D12 steps 2-10 against the operator checkpoint in the body and commits a durable `seeded` state. Returns an operator receipt. |
+| `/internal/admin/publication/cutover/activate` | `POST` | Runs D12 step 11 only. Requires the receipt's checkpoint re-presented verbatim plus `confirmActivation: true`. |
+
+The request body for both `POST` routes carries a `checkpoint` naming the
+season, the exact `activeVersion`, an optional `previousVersion`, an opaque
+`migrationIdentity` and one `historicalFloorEvidence` variant. There is **no
+field for a source ordering input and none for a fingerprint** — the version's
+own sidecar or its validated uniform documents supply the provenance, and the
+fingerprint is derived from the checkpoint. `activate` additionally requires the
+literal `true`; no truthy stand-in is accepted.
+
+### Operational expectations
+
+| Situation | Result |
+|---|---|
+| No control set | `status` reports `disabled`; `seed` and `activate` return `refused`/`disabled` with HTTP `409`, having read nothing. |
+| Control set, authority mode unset | Every operation returns `refused`/`authority-mode-not-sequencer`. |
+| Control set, no reachable port | Every operation returns `refused`/`sequencer-unavailable`. |
+| Not staging | Every operation returns `refused`/`environment-not-staging`. Production can never run one. |
+| Wrong phase | `seed` under `activate:` and `activate` under `seed:` both return `refused`/`phase-not-permitted`. |
+| Malformed control | HTTP `500`, "The service is not correctly configured.", `failureCategory: configuration`. Fix the variable. |
+| Active artifact unreadable, invalid or without resolvable provenance | `failed` with a bounded reason, **no** Durable Object state written, legacy pointers untouched, and the season retryable from the start once the data problem is fixed. An unreadable inventory, document or provenance sidecar is retried within the bounded budget first; a malformed sidecar, an absent one on a `pm1-…` version, or missing/non-uniform legacy timestamps fail at once. |
+| Previous artifact unreadable or invalid | The seed still succeeds, with `previousVersion: null` and that version's timestamps omitted from the high-water mark. Roll back by naming a version explicitly until a later transition repairs the default target. |
+| Seed retried with the identical checkpoint | `already-seeded` (or `already-active`), with nothing rewritten. The retry reuses the committed seed and its high-water mark — however much later it runs, and even if the first response was lost — without re-reading the legacy artifacts; the receipt reports `activeProvenance: committed-seed`. Two overlapping identical attempts resolve the same way: one `seeded`, the other `already-seeded` on the first one's high-water mark, after exactly one extra read-only recovery. |
+| Committed seed for this checkpoint cannot be reconciled | `failed` / `committed-seed-incoherent`: the durable state under this fingerprint is corrupt, incomplete, or not one this checkpoint could have produced. Nothing is written or repaired; investigate before any further act. |
+| Seed retried with a different checkpoint | `failed` / `conflicting-cutover-seed`. Resolving it is an explicit operator decision — abandon or restart the seeded attempt; it is never applied over. |
+| Activation with an altered receipt | `failed` / `cutover-fingerprint-mismatch`, seeded attempt untouched. |
+| Activation retried identically | `already-active`, unchanged. |
+
+**Two things this preparation does not give you.** It does not prove that a
+publication or rollback admitted *before* the control was deployed has drained —
+no sleep is a substitute, and the operator accounts for known in-flight
+operations before approving a checkpoint. And it does not satisfy D12's
+pre-cutover historical-floor precondition: the evidence variants are recorded
+and validated, not established, and a `listVersions` scan is never accepted as
+proof of historical completeness.
 
 ## Cache Purge
 

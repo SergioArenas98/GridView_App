@@ -25,6 +25,7 @@ const legacyConfig = {
   environment: 'development' as const,
   providerMode: 'mock' as const,
   publicationAuthorityMode: 'legacy' as const,
+  publicationCutoverControl: { kind: 'disabled' as const },
   publicBaseUrl: null,
 };
 

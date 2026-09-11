@@ -363,6 +363,11 @@ export function countingPort(
             reason: 'state-corrupt' as const,
           }),
     ),
+    recoverCutoverSeed: record('recoverCutoverSeed', (r) =>
+      inner
+        ? inner.recoverCutoverSeed(r)
+        : Promise.resolve({ outcome: 'uninitialized' as const }),
+    ),
     activateCutover: record('activateCutover', (r) =>
       inner
         ? inner.activateCutover(r)

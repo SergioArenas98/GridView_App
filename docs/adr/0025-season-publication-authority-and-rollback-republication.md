@@ -28,11 +28,33 @@
 > `cutoverState: 'active'` (D12), so the two-phase protocol runs only under a
 > test that has explicitly seeded and activated a season.
 >
-> **Still true, and load-bearing:** no `wrangler.toml` binding, migration,
-> `[exports]` entry or Durable Object namespace declares the class; it is not a
-> named export of the Worker entry point and therefore cannot be instantiated
-> by the runtime; **no provisioning, deployment, seeding, cutover or activation
-> has occurred**, and legacy KV pointers remain authoritative in every deployed
+> **Staging cutover preparation slice (2026-09-10).** The repository-side
+> preparation for item 3 of the separated-future-work list now exists in code:
+> the class is a **named export** of the Worker entry point, an
+> `[exports.SeasonPublicationSequencer]` SQLite entry and a
+> `SEASON_PUBLICATION_SEQUENCER` binding for **`env.staging` only** are
+> declared in `wrangler.toml` (production declares none), a default-off
+> `SEASON_PUBLICATION_CUTOVER_CONTROL` closes one named season's legacy
+> mutation admission, and an authenticated internal `CutoverPreparationService`
+> implements D12's migration procedure and its separate activation
+> confirmation.
+>
+> **Declared in the repository is not provisioned or deployed, and this slice
+> is only the first.** No `wrangler deploy` has been run, no Cloudflare
+> resource exists, no Durable Object namespace has been created, no season has
+> been seeded or activated, no remote variable or secret was set, and no
+> deployed endpoint was called. `SEASON_PUBLICATION_AUTHORITY` and
+> `SEASON_PUBLICATION_CUTOVER_CONTROL` are **both unset in every committed
+> environment**, so the operator runner refuses every operation before reading
+> anything and no season is paused. **Staging still uses legacy pointers;
+> production is untouched.** The pre-cutover historical-floor activation
+> precondition below is now *represented* — as a closed, operator-supplied
+> evidence union with a required audit reference — and **has not been satisfied
+> for any real environment.**
+>
+> **Still true, and load-bearing:** **no provisioning, deployment, seeding,
+> cutover or activation has occurred**, no legacy `[[migrations]]` block
+> exists, and legacy KV pointers remain authoritative in every deployed
 > environment. `snapshotRevision`
 > ([`../publication/snapshot-revision.ts`](../../services/edge-api/src/publication/snapshot-revision.ts))
 > keeps its **no production caller** status unchanged, because the integrated
@@ -40,7 +62,9 @@
 > half of gap **G-i** is unimplemented. `PROVIDER_MODE` remains `mock | none`;
 > `recordedProvisionalSessionEndBound` remains `null`. **Phase 9B-6 and gap
 > G-i remain operationally open** — closing them requires the separately
-> authorized staging provisioning + cutover, not merged here. No provider was
+> authorized staging provisioning and deployment, the operator checkpoint and
+> seed, the separate activation confirmation and mutation resumption, and the
+> smoke and latency review, none of which is performed here. No provider was
 > contacted. Everything this ADR authorizes for *implementation* is scoped in
 > §"D12. Activation boundary" below and the separated-future-work list in
 > [`GridView_Implementation_Plan.md`](../technical/GridView_Implementation_Plan.md)
@@ -2049,6 +2073,50 @@ for planning only:
 (`PROVIDER_MODE = "none"`, no production Worker deployment implied or
 performed by this ADR).
 
+#### What the staging cutover preparation slice supplies (2026-09-10)
+
+The **repository-side** half of steps 2 and 3 above now exists, and nothing
+else does. Precisely:
+
+| Supplied | Not supplied |
+|---|---|
+| The class is a named Worker export, with an `[exports.SeasonPublicationSequencer]` SQLite entry and a `SEASON_PUBLICATION_SEQUENCER` binding for `env.staging` only (production declares none, and no `[[migrations]]` block exists). | Any deployment. No `wrangler deploy` was run, no namespace exists, and nothing is provisioned. |
+| `SEASON_PUBLICATION_CUTOVER_CONTROL`, absent in every committed environment. `seed:<season>` and `activate:<season>` each close **that one season's** legacy publication and rollback admission before `SnapshotPublisher` is reached, with a bounded `season-paused-for-cutover` refusal whose synchronization consequence is `failed`. A malformed non-empty value is a bounded configuration failure, never a silent disable. | Any closure of an environment's admission. No environment sets the control, so no season is paused anywhere. Nothing here claims that an already-admitted invocation has drained, and no fixed sleep is presented as proof that admission is closed. |
+| `CutoverPreparationService`: the operator checkpoint, its deterministic length-framed fingerprint, the closed historical-floor evidence union, D12 steps 2-10's migration against the exact immutable versioned keys under a bounded injectable retry budget, and the separate fingerprint-bound activation confirmation. | Any seed or activation. Every operation requires staging, an explicit `sequencer` authority mode, a reachable port and a control naming that season in that phase; none of those holds in any committed environment. |
+| Three authenticated internal routes under `/internal/admin/publication/cutover/`, `no-store`, absent from the public OpenAPI document. | Any public contract change, and any call to a deployed endpoint. |
+| The historical-floor activation precondition **represented**: a closed union of the four alternatives below, each carrying a required opaque audit reference, with an audited upper bound folded into the high-water-mark seed before the fingerprint-bound seed commits. | The precondition **satisfied** for any real environment. It remains an operator obligation, established against that environment's own state at the time, and no `listVersions` result is ever accepted as evidence of it. |
+
+**Cutover preparation review corrections (2026-09-10).** Two independently
+reproduced review findings on the slice, both bounded to it and neither a new
+design decision:
+
+- **An identical seed retry depended on wall time.** The high-water mark was
+  recomputed from the migration clock on every attempt and compared as part of
+  the committed seed, so retrying the same checkpoint after a lost or
+  ambiguous response reported `conflicting-cutover-seed`. The service now
+  retrieves the seed committed under the checkpoint's fingerprint first,
+  through a read-only, request-bound `recover-cutover-seed` sequencer command
+  (decoded, cross-checked and bound to its request like every other transport
+  response), and re-presents it unchanged — step 10's retry rule above. That
+  covers a retry made after the first seed committed. It also covers two
+  overlapping identical attempts that both found the season uninitialized and
+  staged different floors: the one told `conflicting-cutover-seed` recovers
+  exactly once more and re-presents the committed seed unchanged exactly once,
+  with no clock or legacy re-read and no loop. The committed-state comparison,
+  the fingerprint rule and the authority rules are unchanged, and a different
+  fingerprint still fails closed.
+- **Provenance reads bypassed the retry budget.** Inventory and document reads
+  were retried; the sidecar read was not, so one transient failure aborted a
+  valid cutover. Provenance resolution now runs inside the same budget,
+  retrying only an unreadable sidecar — step 3's provenance rule above.
+
+**Phase 9B-6 and both halves of gap G-i remain operationally open.** Steps 2-5
+of the sequence above each still require their own separate authorization:
+staging provisioning and deployment with admission closed; the operator
+checkpoint and seed; the separate activation confirmation and mutation
+resumption; the smoke and latency review; and only then any later production
+decision.
+
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from
 `SEASON_PUBLICATION_AUTHORITY`. Only the exact string `sequencer` opts in;
@@ -2172,6 +2240,18 @@ authorizes activation, not the provisional selection by itself.
    silently substitute a different version here, because migration never reads
    the live pointer keys at all past step 1.
 
+   **Provenance reads are inside this same budget, and only unreadability is
+   retried.** A sidecar read that fails (step 6's *unreadable* classification)
+   is transient: it is retried within the one common bounded budget, exactly
+   like an unreadable inventory or document, and aborts only once that budget
+   is spent. A **malformed** sidecar, an **absent** sidecar on a
+   sidecar-required version, and a **missing or non-uniform** legacy document
+   timestamp are permanent facts about an immutable artifact: each fails
+   closed at the attempt that produced it and is never retried. The same
+   bounded reads apply to the optional `previousVersion` before it is omitted
+   (step 8) and to both halves of step 9's recheck; no budget is nested inside
+   another, and none is unbounded.
+
    **This mandatory-validation rule is scoped to `activeVersion` and does not
    extend to `previousVersion`.** An earlier draft of this step required
    "every checkpoint-named inventory and document" to validate, which — since
@@ -2214,9 +2294,9 @@ authorizes activation, not the provisional selection by itself.
      `meta.sourceUpdatedAt` (which, post-cutover, is a per-key activation
      timestamp — D3, D4).
    - **A malformed sidecar fails closed.** **An unreadable sidecar fails
-     closed** — an unreadable record is never treated as an absent one, so a
-     read failure can never silently divert migration onto the legacy
-     document-inference path.
+     closed** once step 3's bounded retry budget is spent — an unreadable
+     record is never treated as an absent one, so a read failure can never
+     silently divert migration onto the legacy document-inference path.
    - **Non-uniform, missing or malformed legacy document timestamps fail
      closed** — migration does not arbitrarily choose one of them.
 
@@ -2326,6 +2406,36 @@ authorizes activation, not the provisional selection by itself.
     failed optional `previousVersion` validation is not such an input**: it
     seeds `previousVersion` as `null` (step 8) and the migration proceeds. Migration is only ever
     all-or-nothing per season — no partially-seeded season reaches `seeded`.
+
+    **Retrying an identical checkpoint reuses the already committed seed.**
+    The seed committed under the checkpoint's fingerprint is retrieved
+    **before** the migration clock is read and before any legacy read, and a
+    retry re-presents exactly that seed — its high-water mark included — so
+    it resolves to the existing `already-seeded` or `already-active` result.
+    Retry-time wall-clock advancement therefore cannot turn an identical retry
+    into a conflict, and the retry neither lowers nor advances the committed
+    high-water mark, rewrites per-key state, nor activates. Only a season with
+    no committed seed runs steps 2-9, whose single clock reading is then part
+    of the floor. Two overlapping identical attempts can both find the season
+    uninitialized and stage different floors, and the second to commit is told
+    `conflicting-cutover-seed`. That attempt alone performs **one** further
+    retrieval and, if it returns a seed this checkpoint could have produced,
+    re-presents it unchanged **once**, so the pair resolves to `seeded` and
+    `already-seeded` around the first attempt's floor. It never re-reads the
+    clock or a legacy artifact, never loops, and fails closed on every
+    inconsistent answer: a different fingerprint remains a conflict, a corrupt
+    or checkpoint-incoherent seed is `committed-seed-incoherent`, and no answer,
+    an `uninitialized` answer after the conflict, or a failed re-presentation
+    is a bounded failure that never restarts the migration. The retrieval is
+    read-only and request-bound — it answers
+    only for the exact season and fingerprint asked about — and is not a
+    second authority: the reused seed is still decided by the same
+    committed-state comparison as any other identical seed. A committed seed
+    under a different fingerprint remains a conflict; one under the same
+    fingerprint that is corrupt, incomplete, or not one this checkpoint could
+    have produced (a different active version, a previous version the
+    checkpoint never named, or a floor below its own per-key state or below an
+    audited upper bound) fails closed with nothing written or repaired.
 11. **Perform one idempotent durable transition from `seeded` to `active`,
     only after step 10 has committed successfully and only once an operator
     supplies an authenticated, explicit activation confirmation bound to the
@@ -2558,6 +2668,26 @@ note to revisit later:**
 - a separately authorized client-baseline reset or contract migration
   removes any such retained client state before activation.
 
+**How the preparation slice represents these, and what it does not claim.**
+The four alternatives above are a **closed union** in
+[`cutover/checkpoint.ts`](../../services/edge-api/src/publication/cutover/checkpoint.ts)
+(`audited-historical-upper-bound`, `no-uncovered-clock-value-audit`,
+`no-retained-pre-cutover-client-state`, `authorized-client-baseline-reset`),
+each variant carrying a **required** opaque `evidenceReference` for the audit
+trail. A bare boolean, an arbitrary free-form substitute, an unrecognised kind
+and a silent default are all unrepresentable, and the seed is refused without a
+valid variant. The `audited-historical-upper-bound` variant additionally
+requires an orderable bound, which the migration folds into the high-water-mark
+seed **before** the fingerprint-bound seed is committed — which is what "is
+imported into the seed" means for that alternative.
+
+**This records and validates evidence an authenticated operator supplied. It
+establishes nothing.** The code cannot check whether an audit was actually
+performed, and it does not try: the migration never calls `listVersions`, never
+derives a completeness claim from a prefix scan, and treats no scan result as
+satisfying any of these alternatives. Satisfying the precondition remains an
+operator obligation against the target environment's own state at the time.
+
 **This repository, today** — a statement about current environment
 evidence, not a general guarantee this ADR can claim indefinitely on the
 repository's behalf: staging has never activated this design (nothing in
@@ -2759,7 +2889,10 @@ of the cutover sequence above).
     authoritative, mutators still paused);
   - a repeated identical seed attempt (same migration identity/fingerprint)
     against an already-`seeded` or already-`active` season (idempotent,
-    returns the existing result, no re-seed and no re-transition);
+    returns the existing result, no re-seed and no re-transition) — proven with
+    a clock that has advanced since the first attempt, including after a lost
+    or unavailable first response, with the committed high-water mark
+    byte-identical before and after;
   - a conflicting seed attempt (different identity/fingerprint) against an
     already-`seeded` or already-`active` season (rejected, requires explicit
     operator handling);
