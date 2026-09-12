@@ -41,9 +41,12 @@ The edge API is deployed to Cloudflare Workers staging:
   no live Formula 1 source), `PUBLIC_BASE_URL` set for scheduled purge.
 - Cron `17 3 * * *` (03:17 **UTC** daily; Cloudflare crons are always UTC).
 - Observability enabled with persisted logs.
-- `SEASON_PUBLICATION_SEQUENCER` Durable Object binding, provisioned
-  2026-09-12, disabled — see
-  [Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled).
+- Durable Object bindings `SEASON_PUBLICATION_SEQUENCER` and
+  `PROVIDER_RATE_LIMITER`, both first provisioned by the 2026-09-12 deployment
+  (version `985115b7-abb3-4346-8845-d8ff41c80cf6`) and neither looked up by any
+  deployed code path — see
+  [Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled)
+  and [Outbound pacing](#outbound-pacing-and-the-hardened-boundary).
 - The single required secret is `ADMIN_TOKEN`, set with
   `wrangler secret put ADMIN_TOKEN --env staging` (interactive; never committed,
   printed or passed as a CLI argument).
@@ -250,12 +253,17 @@ never sleeps or holds a request waiting for capacity. A deferral carries a
 deterministic `retryAt`; acting on it is **G5 event-aware scheduling, which
 remains open**.
 
-Fail-closed everywhere: if the binding is absent - which it is in every
-environment today, because nothing is provisioned - or the object or its
-storage fails, the reservation resolves to `unavailable` and **no request is
-issued**. A storage failure is absorbed inside the object rather than thrown,
-because an exception escaping the serialized section would terminate and reset
-the shared limiter for every caller.
+Fail-closed everywhere: if the binding is absent - as it is in production,
+which has never been deployed - or the object or its storage fails, the
+reservation resolves to `unavailable` and **no request is issued**. A storage
+failure is absorbed inside the object rather than thrown, because an exception
+escaping the serialized section would terminate and reset the shared limiter
+for every caller.
+
+Staging's namespace exists - the 2026-09-12 deployment provisioned it - but
+nothing reserves through it: no adapter exists and no production module
+constructs the hardened client. What keeps staging off the network is
+`PROVIDER_MODE = mock` plus the absence of any live adapter, not this binding.
 
 Persisted limiter state distinguishes **absent** from **invalid**. A missing
 record means a genuinely new source and starts with full capacity. A record
@@ -538,20 +546,45 @@ section is now deployed to staging and still **off**:
 unset in every committed environment, no season has been seeded or activated,
 and staging still uses legacy pointers while production is untouched.
 
-**Staging provisioning (2026-09-12).** The reviewed `master` commit
-`ea8b68a0f106f36913d386064645b79cf1c10e1b` was deployed with
-`wrangler deploy --env staging` (new active version
-`985115b7-abb3-4346-8845-d8ff41c80cf6`, superseding
-`5c24d00e-dc4e-46cf-a4d4-99b09e97e12a` from 2026-07-20). `SEASON_PUBLICATION_SEQUENCER`
-is now a real Durable Object binding and namespace in staging; `ADMIN_TOKEN`
-remained the only staging secret. No environment variable was set, no season
-was paused, no checkpoint was approved, no seed or activation ran, and no
-deployed endpoint was called. Production was not deployed, changed or
-contacted, and still does not exist as a Worker on the account. The sequence
-that would use this provisioning — admission closure and the operator
-checkpoint and seed, the separate activation confirmation and mutation
-resumption, the smoke and latency review, and any later production decision —
-each remains separately authorized.
+**Staging provisioning (2026-09-12).** One `wrangler deploy --env staging` of
+the Worker tree at the reviewed `master` commit
+`ea8b68a0f106f36913d386064645b79cf1c10e1b` produced version
+`985115b7-abb3-4346-8845-d8ff41c80cf6` (~10:01 UTC, 100% of staging traffic),
+replacing `5c24d00e-dc4e-46cf-a4d4-99b09e97e12a`, the Phase 5B build of
+2026-07-20. By layer:
+
+- **Worker code:** every edge change merged on `master` since the July build
+  is now live in staging, not just the cutover surface.
+- **Durable Object infrastructure:** two bindings, neither present before —
+  `SEASON_PUBLICATION_SEQUENCER` and `PROVIDER_RATE_LIMITER` — with their
+  staging namespaces. Provisioned, not used: no code path in the deployed
+  configuration looks either one up, and nothing shows either class has been
+  invoked.
+- **Provider path:** closed, because `PROVIDER_MODE = mock` and no live
+  adapter exists — not because of the rate-limiter binding.
+- **Publication authority:** disabled (`SEASON_PUBLICATION_AUTHORITY` absent);
+  legacy KV pointers remain authoritative.
+- **Cutover control:** absent, so no season's admission is closed.
+- **Checkpoint, seed, activation and smoke verification:** none. No deployed
+  endpoint was called and no provider request was made; verification was
+  read-only Cloudflare inspection, with `ADMIN_TOKEN` confirmed as the only
+  staging secret by name only.
+- **Production:** not deployed, changed or contacted; no production Worker
+  exists on the account.
+
+The PR #20 review-correction commit changes `wrangler.toml` comments and
+documentation only — its semantic configuration is identical to `ea8b68a` —
+so it needs no redeployment, and `985115b7-…` remains the staging record.
+
+What remains, in order, each separately authorized:
+
+1. admission closure for the named season;
+2. operator checkpoint construction and approval, as ADR 0025 D12's
+   checkpoint-timing rule specifies;
+3. the seed;
+4. the separately authorized activation confirmation and mutation resumption;
+5. smoke and latency verification;
+6. any later production decision.
 
 ### The two configuration values
 

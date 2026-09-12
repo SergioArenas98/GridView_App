@@ -612,7 +612,12 @@ publication, rollback and the public read path behind a
 default** - no environment sets `SEASON_PUBLICATION_AUTHORITY`, no
 `wrangler.toml` binding, `[exports]` entry, migration or Durable Object
 namespace declares the class, and no provisioning, deployment, seeding, cutover
-or activation has occurred. So nothing computes a `snapshotObservedAt` on any
+or activation has occurred. (Superseded in part, and true when written: the
+2026-09-10 staging cutover preparation slice declared the export and a
+staging-only binding, and the 2026-09-12 staging deployment
+`985115b7-abb3-4346-8845-d8ff41c80cf6` provisioned the staging namespace. The
+authority mode is still unset and no seeding, cutover or activation has
+occurred — see ADR 0025 D12.) So nothing computes a `snapshotObservedAt` on any
 production publication path: `meta.sourceUpdatedAt` is unchanged today (the
 sequenced path that assigns per-key values runs only under a test that has
 seeded and activated a season), the D1.11a clamp event has nothing to raise
