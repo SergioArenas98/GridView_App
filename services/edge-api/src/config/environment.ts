@@ -60,8 +60,12 @@ export interface Env extends TestOnlyBindings {
    */
   SEASON_PUBLICATION_AUTHORITY?: string;
   /**
-   * The one cutover control (ADR 0025 D12 step 1). **Unset in every committed
-   * environment**, which disables every cutover operation and pauses no season.
+   * The one cutover control (ADR 0025 D12 step 1). **Unset in every deployed
+   * environment.** `env.staging` declares `seed:2026` in this repository's
+   * `wrangler.toml` (the authenticated operator's explicit season selection),
+   * but the live staging deployment predates that line and does not carry it,
+   * so every cutover operation is still disabled and no season is paused
+   * anywhere that has actually been deployed.
    *
    * `seed:<season>` and `activate:<season>` each close that one season's legacy
    * mutation admission and permit exactly one of the two cutover operations. A
@@ -123,7 +127,9 @@ export interface RuntimeConfig {
   /**
    * Which season, if any, is closed to new legacy mutation admission while it
    * is being cut over, and which single cutover operation is permitted
-   * (ADR 0025 D12). `disabled` in every committed environment.
+   * (ADR 0025 D12). `disabled` in every deployed environment; `env.staging`'s
+   * repository configuration now resolves to `{ kind: 'seed', season: 2026 }`,
+   * but that has not been deployed.
    */
   publicationCutoverControl: CutoverControl;
   publicBaseUrl: string | null;
