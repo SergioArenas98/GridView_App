@@ -304,10 +304,10 @@ and production has never been deployed.**
 | `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | **none** |
 | Namespaces provisioned on Cloudflare | none | **both, 2026-09-12** (version `985115b7-…`); neither looked up | none - never deployed |
 | Authority mode set | no | no | no |
-| Cutover control set | no | no | no |
+| Cutover control set | no | **repository only** (`seed:2026`, not deployed) | no |
 
-`SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is likewise **unset in
-every environment**. It accepts exactly `seed:<supported season>` or
+`SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is **unset in every
+deployed environment**. It accepts exactly `seed:<supported season>` or
 `activate:<supported season>`; an absent or empty value is disabled and
 preserves today's behaviour exactly. A **malformed non-empty value is a bounded
 `ConfigurationError`** — the same failure an unknown `PROVIDER_MODE` produces,
@@ -315,6 +315,16 @@ surfacing as a 500 that carries no raw value in either the response or the log
 line — because an operator who mistyped the control believes a season is paused,
 and resolving that to "disabled" would leave the season openly mutable
 underneath them.
+
+**Season-2026 admission-closure configuration prepared, 2026-09-12.** The
+authenticated operator explicitly selected season 2026, and
+`services/edge-api/wrangler.toml` now declares
+`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` under `[env.staging.vars]`
+only. The live staging deployment (`985115b7-abb3-4346-8845-d8ff41c80cf6`)
+predates this line and does not carry it, so season 2026's admission remains
+open in deployed staging until a separately authorized `wrangler deploy
+--env staging` uploads it. `SEASON_PUBLICATION_AUTHORITY` remains absent
+everywhere, so preparing this value neither seeds nor activates anything.
 
 When it *is* set, it closes **that one season's** legacy publication and
 rollback admission before `SnapshotPublisher` is reached (bounded reason

@@ -95,8 +95,10 @@ OpenAPI document, and every response is `Cache-Control: no-store`.
 
 The three `publication/cutover` routes are the staging cutover preparation
 surface (ADR 0025 D12). They are **disabled by default** and refuse every
-operation while `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset, which is what
-every committed environment leaves it as — see
+operation while `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset or
+`SEASON_PUBLICATION_AUTHORITY` is not `sequencer` — which is what every
+*deployed* environment leaves it as, even though `env.staging`'s repository
+configuration now names season 2026's seed phase (not yet deployed) — see
 [Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled).
 
 ## Synchronization Flow
@@ -149,12 +151,15 @@ scheduled/manual trigger
 > completed in version `985115b7-abb3-4346-8845-d8ff41c80cf6`, which
 > provisioned and bound **both** Durable Object bindings,
 > `SEASON_PUBLICATION_SEQUENCER` and `PROVIDER_RATE_LIMITER`. Provisioning did
-> not enable publication authority: `SEASON_PUBLICATION_AUTHORITY` and
-> `SEASON_PUBLICATION_CUTOVER_CONTROL` remain unset, so the mode is still
-> `legacy`. Activation still waits on admission closure, operator checkpoint
-> construction and approval, the seed and a separately authorized activation;
-> smoke and latency verification and any production decision are later
-> boundaries. See
+> not enable publication authority: `SEASON_PUBLICATION_AUTHORITY` remains
+> unset, so the mode is still `legacy`. `SEASON_PUBLICATION_CUTOVER_CONTROL`
+> remains unset in that deployed version too; a later repository commit
+> (2026-09-12) prepares `seed:2026` for `env.staging`, not yet deployed — see
+> [Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled)
+> for the season-2026 admission-closure preparation. Activation still waits on
+> admission closure, operator checkpoint construction and approval, the seed
+> and a separately authorized activation; smoke and latency verification and
+> any production decision are later boundaries. See
 > [Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled)
 > for the current state.
 >
@@ -556,11 +561,15 @@ to KV-pointer authority) if cutover verification fails.
 
 ## Staging cutover preparation (ADR 0025 D12) — provisioned, still disabled
 
-Added 2026-09-10; staging provisioning added 2026-09-12. Everything in this
-section is now deployed to staging and still **off**:
-`SEASON_PUBLICATION_AUTHORITY` and `SEASON_PUBLICATION_CUTOVER_CONTROL` are
-unset in every committed environment, no season has been seeded or activated,
-and staging still uses legacy pointers while production is untouched.
+Added 2026-09-10; staging provisioning added 2026-09-12; season-2026
+admission-closure configuration prepared 2026-09-12 (below). Everything
+**deployed** to staging is still **off**: `SEASON_PUBLICATION_AUTHORITY` and
+`SEASON_PUBLICATION_CUTOVER_CONTROL` are unset in the live staging version, no
+season has been seeded or activated, and staging still uses legacy pointers
+while production is untouched. The repository's `env.staging` configuration
+now additionally declares `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`
+(not yet deployed) — see "Admission-closure configuration prepared
+(2026-09-12)" below.
 
 **Staging provisioning (2026-09-12).** One `wrangler deploy --env staging`
 from the operator-recorded source tree at the reviewed `master` commit
@@ -601,9 +610,31 @@ The PR #20 review-correction commit changes `wrangler.toml` comments and
 documentation only — its semantic configuration is identical to `ea8b68a` —
 so it needs no redeployment, and `985115b7-…` remains the staging record.
 
+**Admission-closure configuration prepared (2026-09-12).** The authenticated
+operator explicitly selected **season 2026** as the named staging cutover
+season — never inferred from a KV pointer, a calendar or a provider. This
+repository's `services/edge-api/wrangler.toml` now declares, under
+`[env.staging.vars]` only:
+
+```
+SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"
+```
+
+This is **configuration preparation, not live admission closure.** The active
+staging version (`985115b7-abb3-4346-8845-d8ff41c80cf6`) predates this line and
+does not carry it, so season 2026's legacy publication and rollback admission
+remains **open** in deployed staging. The value takes effect only once a
+separately authorized `wrangler deploy --env staging` uploads it. It does not
+construct or approve a checkpoint, does not seed the sequencer, does not
+activate sequencer publication authority, and does not contact a provider.
+`SEASON_PUBLICATION_AUTHORITY` remains absent (declared nowhere), so legacy KV
+pointers remain authoritative and `PROVIDER_MODE` remains `mock`; production is
+untouched. Phase 9B-6 and both halves of gap G-i remain open.
+
 What remains, in order, each separately authorized:
 
-1. admission closure for the named season;
+1. deployment of the prepared `seed:2026` configuration, closing admission for
+   season 2026 in live staging;
 2. operator checkpoint construction and approval, as ADR 0025 D12's
    checkpoint-timing rule specifies;
 3. the seed;

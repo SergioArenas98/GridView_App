@@ -52,6 +52,7 @@ and are the single source of truth:
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
 | Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`), neither looked up by any deployed code path; see `../technical/GridView_Environments.md` |
+| `SEASON_PUBLICATION_CUTOVER_CONTROL` | `seed:2026` — **prepared in the repository 2026-09-12, not yet deployed.** The live staging version above (`985115b7-…`) predates this line and does not carry it, so season 2026's admission remains open until this configuration is deployed by a separately authorized `wrangler deploy --env staging`. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
 
 `PUBLIC_BASE_URL` is mandatory in staging: the scheduled publisher uses it to
 compute the public URLs it purges. Its absence is a configuration error.
@@ -109,7 +110,9 @@ npm exec wrangler deploy --dry-run --env staging
 The dry-run bundles the Worker and resolves bindings without uploading anything
 (`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV), the
 `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
-plus the `ENVIRONMENT`, `PROVIDER_MODE` and `PUBLIC_BASE_URL` vars.
+plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL` and (since
+2026-09-12) `SEASON_PUBLICATION_CUTOVER_CONTROL` vars — the last of these is
+prepared but not yet live; see section 2.
 
 ## 6. Deploy staging
 
