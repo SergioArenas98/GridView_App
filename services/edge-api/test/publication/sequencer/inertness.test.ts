@@ -21,13 +21,12 @@
  *   composition still builds the exact legacy `SnapshotPublisher` and the
  *   router still performs no Durable Object lookup (see `default-off.test.ts`
  *   for the behavioural proof);
- * - `env.staging` now declares `SEASON_PUBLICATION_CUTOVER_CONTROL =
+ * - `env.staging` declares `SEASON_PUBLICATION_CUTOVER_CONTROL =
  *   "seed:2026"` (the authenticated operator's explicit season-2026 selection,
- *   ADR 0025 D12 step 1) - declared in the repository only. The live staging
- *   deployment predates this line and does not carry it, so season 2026's
- *   admission is not yet closed anywhere actually deployed, and even once it
- *   is, `SEASON_PUBLICATION_AUTHORITY` staying unset means no cutover
- *   operation (seed/activate) can be attempted regardless;
+ *   ADR 0025 D12 step 1), live in deployed staging since 2026-09-12 - closing
+ *   season 2026's legacy admission there - but `SEASON_PUBLICATION_AUTHORITY`
+ *   staying unset means no cutover operation (seed/activate) can be attempted
+ *   regardless;
  * - production declares neither configuration value;
  * - the legacy `[[migrations]]` form is still absent, and `PROVIDER_MODE`, the
  *   public API and the closed document-name union are untouched.

@@ -215,7 +215,7 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 | Environment | Worker name | State |
 |---|---|---|
 | development | `gridview-api-dev` | Local `wrangler dev` only |
-| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `985115b7-abb3-4346-8845-d8ff41c80cf6` — see the Durable Object state below. |
+| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`) — see the Durable Object state below. |
 | production | `gridview-api-production` | Not provisioned |
 
 > **Staging: public availability observed; administrative state not verified.**
@@ -304,10 +304,11 @@ and production has never been deployed.**
 | `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | **none** |
 | Namespaces provisioned on Cloudflare | none | **both, 2026-09-12** (version `985115b7-…`); neither looked up | none - never deployed |
 | Authority mode set | no | no | no |
-| Cutover control set | no | **repository only** (`seed:2026`, not deployed) | no |
+| Cutover control set | no | **yes, live** (`seed:2026`, deployed 2026-09-12, version `00012c06-…`) | no |
 
-`SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is **unset in every
-deployed environment**. It accepts exactly `seed:<supported season>` or
+`SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is set in staging only —
+`seed:2026`, deployed 2026-09-12 — and remains unset in development and
+production. It accepts exactly `seed:<supported season>` or
 `activate:<supported season>`; an absent or empty value is disabled and
 preserves today's behaviour exactly. A **malformed non-empty value is a bounded
 `ConfigurationError`** — the same failure an unknown `PROVIDER_MODE` produces,
@@ -316,15 +317,18 @@ line — because an operator who mistyped the control believes a season is pause
 and resolving that to "disabled" would leave the season openly mutable
 underneath them.
 
-**Season-2026 admission-closure configuration prepared, 2026-09-12.** The
-authenticated operator explicitly selected season 2026, and
-`services/edge-api/wrangler.toml` now declares
+**Season-2026 admission closure — DONE, 2026-09-12.** The authenticated
+operator explicitly selected season 2026, and
+`services/edge-api/wrangler.toml` declares
 `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` under `[env.staging.vars]`
-only. The live staging deployment (`985115b7-abb3-4346-8845-d8ff41c80cf6`)
-predates this line and does not carry it, so season 2026's admission remains
-open in deployed staging until a separately authorized `wrangler deploy
---env staging` uploads it. `SEASON_PUBLICATION_AUTHORITY` remains absent
-everywhere, so preparing this value neither seeds nor activates anything.
+only. A separately authorized `wrangler deploy --env staging` uploaded this
+configuration from operator-recorded source revision
+`d3de839a7b297c060e6e4ee7cf1d9974a198be93`, replacing staging version
+`985115b7-abb3-4346-8845-d8ff41c80cf6` with
+`00012c06-6c09-4b2f-b24c-02d6e51ec08d` at 100% traffic. Season 2026's legacy
+publication and rollback admission is now closed in deployed staging.
+`SEASON_PUBLICATION_AUTHORITY` remains absent everywhere, so this closure
+neither seeds nor activates anything.
 
 When it *is* set, it closes **that one season's** legacy publication and
 rollback admission before `SnapshotPublisher` is reached (bounded reason

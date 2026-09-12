@@ -12,12 +12,12 @@
  * Every operation requires all of: the staging runtime environment, an explicit
  * `SEASON_PUBLICATION_AUTHORITY=sequencer`, a reachable sequencer port, and a
  * cutover control naming this exact season in this exact phase. No deployed
- * environment sets the first of those two - `env.staging`'s repository
- * configuration now names `seed:2026` for the cutover control, but that has
- * not been deployed, and `SEASON_PUBLICATION_AUTHORITY` remains unset
- * everywhere - so every operation is refused before it reads anything. Nothing
- * in this file provisions a Cloudflare resource, deploys a Worker, contacts a
- * provider or calls a deployed endpoint.
+ * environment sets the first of those two - `env.staging` has deployed
+ * `seed:2026` for the cutover control since 2026-09-12, but
+ * `SEASON_PUBLICATION_AUTHORITY` remains unset everywhere - so every
+ * operation is refused before it reads anything. Nothing in this file
+ * provisions a Cloudflare resource, deploys a Worker, contacts a provider or
+ * calls a deployed endpoint.
  *
  * ## Why the migration lives here and not in the Durable Object
  *

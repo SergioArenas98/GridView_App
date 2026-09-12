@@ -514,8 +514,8 @@ to the legacy publisher for any season that is not `cutoverState: 'active'`
 (ADR 0025 D12), so the two-phase flow runs only under a test that has seeded
 and activated a season.
 
-**Current state (as of 2026-09-12): provisioned in staging, admission-closure
-configuration prepared, neither deployed nor in use.**
+**Current state (as of 2026-09-12): provisioned in staging, admission for
+season 2026 closed, authority not in use.**
 `wrangler.toml` declares the `SEASON_PUBLICATION_SEQUENCER` binding for
 `env.staging` only, together with the exports-based
 `[exports.SeasonPublicationSequencer]` SQLite registration, and
@@ -526,28 +526,29 @@ does not prove that any object instance was invoked, and nothing shows that one
 has been. `SEASON_PUBLICATION_AUTHORITY` remains absent everywhere, so legacy
 KV publication pointers remain authoritative in every deployed environment.
 
-**Admission-closure configuration prepared (2026-09-12).** The authenticated
-operator explicitly selected season 2026 — never inferred from a KV pointer, a
-calendar or a provider. `services/edge-api/wrangler.toml` now declares, under
-`[env.staging.vars]` only, `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`.
-This is repository preparation, not live closure: the deployed staging version
-above predates this line, so season 2026's admission remains **open** in live
-staging until a separately authorized `wrangler deploy --env staging` uploads
-it. Preparing the value does not construct or approve a checkpoint, does not
-seed the sequencer, does not activate sequencer authority, and does not
-contact a provider. No checkpoint, seed, activation or smoke verification has
-occurred. Another provisioning deployment is not the next step. What remains
-is, in order — each step requiring its own explicit authorization, and none
+**Admission-closure configuration prepared (2026-09-12), superseded the same
+day.** The authenticated operator explicitly selected season 2026 — never
+inferred from a KV pointer, a calendar or a provider.
+`services/edge-api/wrangler.toml` declares, under `[env.staging.vars]` only,
+`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. This was repository
+preparation only when first written; **a separately authorized
+`wrangler deploy --env staging` has since deployed it**, from
+operator-recorded source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93`,
+replacing staging version `985115b7-abb3-4346-8845-d8ff41c80cf6` with
+`00012c06-6c09-4b2f-b24c-02d6e51ec08d` at 100% traffic. **Season 2026's
+admission is now closed** in live staging. Deploying the value did not
+construct or approve a checkpoint, did not seed the sequencer, did not
+activate sequencer authority, and did not contact a provider. No checkpoint,
+seed, activation or smoke verification has occurred. What remains is, in
+order — each step requiring its own explicit authorization, and none
 authorized by any other:
 
-1. deployment of the prepared `seed:2026` configuration, closing admission for
-   season 2026 in live staging;
-2. operator checkpoint construction and approval, as ADR 0025 D12's
+1. operator checkpoint construction and approval, as ADR 0025 D12's
    checkpoint-timing rule specifies;
-3. the seed;
-4. the separately authorized activation confirmation and mutation resumption;
-5. smoke and latency verification;
-6. any later production decision.
+2. the seed;
+3. the separately authorized activation confirmation and mutation resumption;
+4. smoke and latency verification;
+5. any later production decision.
 
 ### The two-phase flow
 

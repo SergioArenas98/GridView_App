@@ -127,9 +127,9 @@ export interface RuntimeConfig {
   /**
    * Which season, if any, is closed to new legacy mutation admission while it
    * is being cut over, and which single cutover operation is permitted
-   * (ADR 0025 D12). `disabled` in every deployed environment; `env.staging`'s
-   * repository configuration now resolves to `{ kind: 'seed', season: 2026 }`,
-   * but that has not been deployed.
+   * (ADR 0025 D12). `disabled` in development and production; `env.staging`
+   * has resolved to `{ kind: 'seed', season: 2026 }` since the 2026-09-12
+   * deployment that uploaded it.
    */
   publicationCutoverControl: CutoverControl;
   publicBaseUrl: string | null;

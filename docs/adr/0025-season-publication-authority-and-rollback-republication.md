@@ -77,6 +77,19 @@
 > `SEASON_PUBLICATION_AUTHORITY` remains absent everywhere. See D12, "What
 > admission-closure preparation supplies".
 >
+> **Admission closure (2026-09-12) supersedes the "repository only, not
+> deployed" statement in the paragraph above**, which was true when written.
+> A separately authorized `wrangler deploy --env staging` uploaded the
+> prepared `seed:2026` configuration from operator-recorded source revision
+> `d3de839a7b297c060e6e4ee7cf1d9974a198be93`, replacing staging version
+> `985115b7-abb3-4346-8845-d8ff41c80cf6` with
+> `00012c06-6c09-4b2f-b24c-02d6e51ec08d` at 100% traffic. Season 2026's legacy
+> publication and rollback admission is now closed in deployed staging.
+> `SEASON_PUBLICATION_AUTHORITY` remains absent, so publication stays on
+> legacy KV pointers; no checkpoint, seed, activation, smoke test or provider
+> request occurred. Production is untouched. See D12, "What admission closure
+> supplies".
+>
 > **Still true, and load-bearing:** **no seeding, cutover or activation has
 > occurred** — the only provisioning or deployment is the 2026-09-12 staging
 > deployment above — no legacy `[[migrations]]` block exists, and legacy KV
@@ -85,23 +98,20 @@
 > keeps its **no production caller** status unchanged, because the integrated
 > path that would compute one is gated off. The resource-level `sourceObservedAt`
 > half of gap **G-i** is unimplemented. `PROVIDER_MODE` remains `mock | none`;
-> `recordedProvisionalSessionEndBound` remains `null`. **Staging provisioning
-> and deployment completed on 2026-09-12, and season 2026's admission-closure
-> configuration is now prepared in the repository — neither is remaining work,
-> yet Phase 9B-6 and both halves of gap G-i remain operationally open.** What
+> `recordedProvisionalSessionEndBound` remains `null`. **Staging provisioning,
+> deployment and admission closure for season 2026 are all complete, yet
+> Phase 9B-6 and both halves of gap G-i remain operationally open.** What
 > remains is the rest of D12's sequence, as listed under §"D12. Activation
 > boundary" — each step requiring its own separate, explicit authorization,
 > none performed here:
 >
-> 1. deployment of the prepared `seed:2026` configuration, closing admission
->    for season 2026 in live staging;
-> 2. operator checkpoint construction and approval, under D12's
+> 1. operator checkpoint construction and approval, under D12's
 >    checkpoint-timing rule;
-> 3. the seed;
-> 4. the separately authorized activation confirmation and mutation
+> 2. the seed;
+> 3. the separately authorized activation confirmation and mutation
 >    resumption;
-> 5. smoke and latency verification;
-> 6. any later production decision.
+> 4. smoke and latency verification;
+> 5. any later production decision.
 >
 > No provider was contacted. Everything this ADR authorizes for
 > *implementation* is scoped in §"D12. Activation boundary" below and the
@@ -2169,6 +2179,11 @@ below:
 5. smoke and latency verification;
 6. any later production decision.
 
+**Item 1 above is superseded — see "What admission closure supplies
+(2026-09-12)" below the admission-closure preparation table.** This list is
+retained as the accurate dated record of what remained open before that
+deployment ran.
+
 #### What staging provisioning supplies (2026-09-12)
 
 Step 2 of the sequence above — **staging `SeasonPublicationSequencer` class
@@ -2225,6 +2240,42 @@ preparation for it, one commit on top of the state the table above records.
 This preparation does not change which step of D12's sequence is next: it
 remains admission closure (step 1), now reduced to a single separately
 authorized `wrangler deploy --env staging` of this exact configuration.
+
+**This preparation was true only until the deployment below ran.** It is
+retained as the accurate dated record of the repository-only state on
+2026-09-12 before that deployment.
+
+#### What admission closure supplies (2026-09-12)
+
+Step 1 of the sequence above — **admission closure for the named season** — is
+now done in live staging. `wrangler deploy --env staging` uploaded the
+prepared `seed:2026` configuration from the operator-recorded source revision
+`d3de839a7b297c060e6e4ee7cf1d9974a198be93` (local `HEAD`, upstream and
+`origin/master` verified equal immediately before deploying; Cloudflare
+records only source `Upload` and does not attest the commit).
+
+| Supplied | Not supplied |
+|---|---|
+| The deployed Worker replaced version `985115b7-abb3-4346-8845-d8ff41c80cf6` with `00012c06-6c09-4b2f-b24c-02d6e51ec08d`, at 100% of staging traffic. Season 2026's legacy publication and rollback admission is closed: `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` is now live. | Any checkpoint, seed, activation, mutation resumption, smoke or latency verification, or provider contact. |
+| `SEASON_PUBLICATION_AUTHORITY` remains absent everywhere, so the composition still builds the exact legacy `SnapshotPublisher` and never looks the sequencer up. Legacy KV pointers remain authoritative. | Any change to publication authority. |
+| `PROVIDER_MODE` remains `mock`; the `GRIDVIEW_DATA`, `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` bindings, the `ADMIN_TOKEN` secret (by name only), the cron trigger and observability configuration were all preserved unchanged by this deployment. | Any binding, secret, cron, observability, route or production change. Production was not touched. |
+| Read-only Cloudflare control-plane verification: the new version active at 100% traffic with the exact expected bindings and variables. | Any application endpoint call or smoke test — none was performed. |
+
+**Persistence rule.** No later deployment has replaced
+`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`; admission closure for
+season 2026 in staging persists until an explicitly authorized deployment
+changes that value.
+
+What remains of D12's sequence, in order, each requiring its own explicit
+authorization:
+
+1. operator checkpoint construction and approval, in the order the
+   checkpoint-timing rule below specifies;
+2. the seed (procedure steps 2-10, committing `seeded`);
+3. the separately authorized activation confirmation and mutation resumption
+   (procedure step 11);
+4. smoke and latency verification;
+5. any later production decision.
 
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from
