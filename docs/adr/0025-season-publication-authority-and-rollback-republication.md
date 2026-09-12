@@ -54,10 +54,13 @@
 >
 > **Staging provisioning (2026-09-12) supersedes the deployment statements in
 > the paragraph above**, which were true when written. Staging version
-> `985115b7-abb3-4346-8845-d8ff41c80cf6` runs the Worker tree at
-> `ea8b68a0f106f36913d386064645b79cf1c10e1b` with both
-> `SEASON_PUBLICATION_SEQUENCER` and `PROVIDER_RATE_LIMITER` bound and their
-> staging namespaces created; production has never been deployed. Nothing else
+> `985115b7-abb3-4346-8845-d8ff41c80cf6` was deployed from the
+> operator-recorded source tree `ea8b68a0f106f36913d386064645b79cf1c10e1b`
+> (Cloudflare records the version's source only as `Upload` and does not
+> attest the commit — see the provenance note under D12, "What staging
+> provisioning supplies") with both `SEASON_PUBLICATION_SEQUENCER` and
+> `PROVIDER_RATE_LIMITER` bound and their staging namespaces created;
+> production has never been deployed. Nothing else
 > in that paragraph changes — see D12, "What staging provisioning supplies".
 >
 > **Still true, and load-bearing:** **no seeding, cutover or activation has
@@ -2158,7 +2161,7 @@ is provisioned", which were true when written.
 
 | Layer | State after staging version `985115b7-abb3-4346-8845-d8ff41c80cf6` |
 |---|---|
-| Worker deployment | One `wrangler deploy --env staging` (2026-09-12, ~10:01 UTC, 100% of staging traffic) of the Worker tree at the reviewed `master` commit `ea8b68a0f106f36913d386064645b79cf1c10e1b`. It replaced version `5c24d00e-dc4e-46cf-a4d4-99b09e97e12a` — the Phase 5B build of 2026-07-20 — so it put **every edge change merged on `master` since then** into live staging, not only this ADR's slices. The deployed configuration is exactly the committed, reviewed `wrangler.toml`. |
+| Worker deployment | One `wrangler deploy --env staging` (2026-09-12, ~10:01 UTC, 100% of staging traffic) from the **operator-recorded** source tree at the reviewed `master` commit `ea8b68a0f106f36913d386064645b79cf1c10e1b` — see *Deployment provenance* below the table; Cloudflare does not attest the commit. It replaced version `5c24d00e-dc4e-46cf-a4d4-99b09e97e12a` — the Phase 5B build of 2026-07-20 — so the deployed source tree includes **every edge change merged on `master` since then**, not only this ADR's slices; Wrangler bundles only modules reachable from the Worker entry point. The bindings and variables Cloudflare reports for the version match the committed `env.staging` configuration. |
 | Durable Object infrastructure | **Two** bindings entered live staging, neither present in the previous version: `SEASON_PUBLICATION_SEQUENCER` (this ADR) and `PROVIDER_RATE_LIMITER` ([ADR 0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)). Both staging namespaces now exist. That is provisioning, not use: no code path in the deployed configuration looks either binding up, and nothing shows either class has been invoked. |
 | Provider path | **Still closed**, for a reason unrelated to the new binding: `PROVIDER_MODE` is `mock` and no live provider adapter exists, so nothing can issue a provider request. No production module constructs the hardened provider client, so nothing reserves through `PROVIDER_RATE_LIMITER` either. |
 | Publication authority | **Disabled.** `SEASON_PUBLICATION_AUTHORITY` is absent, so the composition builds the exact legacy `SnapshotPublisher` and never looks the sequencer up. Legacy KV pointers remain authoritative in staging. |
@@ -2167,6 +2170,22 @@ is provisioned", which were true when written.
 | Activation | **None.** No season is `seeded` or `active`. |
 | Smoke verification | **None.** No deployed endpoint — staging or production, `/v1/status` and the cutover status route included — was called, and no provider request was made. Verification was read-only Cloudflare control-plane inspection: both bindings present, `ADMIN_TOKEN` the only staging secret (by name only), both configuration values absent, and no production Worker on the account. |
 | Production | **Not provisioned, deployed or contacted.** |
+
+**Deployment provenance — what the record rests on.** The source tree is the
+operator's record, not a platform attestation. Immediately before running the
+deployment, the operator verified that local `HEAD`, its upstream and
+`origin/master` were all at `ea8b68a0f106f36913d386064645b79cf1c10e1b`, and
+records that commit as the deployed source tree. Cloudflare identifies version
+`985115b7-abb3-4346-8845-d8ff41c80cf6` only by source `Upload`, with no tag and
+no deployment message; it stores no git commit and does not independently
+attest which tree was uploaded. What Cloudflare does report — the version's
+Durable Object, KV and variable bindings — matches the committed
+`env.staging` configuration and the pre-deployment
+`wrangler deploy --dry-run --env staging` binding list. The bundle's module
+contents were not read back from Cloudflare: which dormant modules it includes
+is inferred from a local dry-run bundle of the same executable source, as
+recorded under the status table of
+[`GridView_Implementation_Plan.md` §14.0](../technical/GridView_Implementation_Plan.md#140-phase-9a-status).
 
 A later PR #20 review-correction commit changes `wrangler.toml` comments and
 documentation only; its semantic Worker configuration is identical to

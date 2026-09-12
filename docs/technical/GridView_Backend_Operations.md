@@ -562,15 +562,24 @@ section is now deployed to staging and still **off**:
 unset in every committed environment, no season has been seeded or activated,
 and staging still uses legacy pointers while production is untouched.
 
-**Staging provisioning (2026-09-12).** One `wrangler deploy --env staging` of
-the Worker tree at the reviewed `master` commit
+**Staging provisioning (2026-09-12).** One `wrangler deploy --env staging`
+from the operator-recorded source tree at the reviewed `master` commit
 `ea8b68a0f106f36913d386064645b79cf1c10e1b` produced version
 `985115b7-abb3-4346-8845-d8ff41c80cf6` (~10:01 UTC, 100% of staging traffic),
 replacing `5c24d00e-dc4e-46cf-a4d4-99b09e97e12a`, the Phase 5B build of
 2026-07-20. By layer:
 
-- **Worker code:** every edge change merged on `master` since the July build
-  is now live in staging, not just the cutover surface.
+- **Provenance:** the operator verified that local `HEAD`, its upstream and
+  `origin/master` were all at `ea8b68a` immediately before deploying, and
+  records that commit as the deployed source tree. Cloudflare records the
+  version's source only as `Upload`, with no tag, deployment message or git
+  commit, so it does not attest the tree; the bindings and variables it
+  reports match the committed `env.staging` configuration. See
+  [ADR 0025 D12, "What staging provisioning supplies"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-staging-provisioning-supplies-2026-09-12).
+- **Worker code:** the deployed source tree includes every edge change merged
+  on `master` since the July build, not just the cutover surface; only modules
+  reachable from the Worker entry point are bundled
+  ([Implementation Plan §14.0](GridView_Implementation_Plan.md#140-phase-9a-status)).
 - **Durable Object infrastructure:** two bindings, neither present before —
   `SEASON_PUBLICATION_SEQUENCER` and `PROVIDER_RATE_LIMITER` — with their
   staging namespaces. Provisioned, not used: no code path in the deployed

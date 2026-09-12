@@ -472,8 +472,11 @@ production is untouched.
 > **Staging provisioning (2026-09-12) supersedes the deployment statements in
 > the paragraph above**, which were true when written; that paragraph remains
 > the 2026-09-10 record, not a description of current state. Staging version
-> `985115b7-abb3-4346-8845-d8ff41c80cf6`, deployed on 2026-09-12, runs the
-> Worker source tree at `ea8b68a0f106f36913d386064645b79cf1c10e1b` and
+> `985115b7-abb3-4346-8845-d8ff41c80cf6`, deployed on 2026-09-12 from the
+> operator-recorded source tree `ea8b68a0f106f36913d386064645b79cf1c10e1b`
+> (Cloudflare records the source only as `Upload` and does not attest the
+> commit; see
+> [ADR 0025 D12, "What staging provisioning supplies"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-staging-provisioning-supplies-2026-09-12)),
 > provisioned and bound **both** `SEASON_PUBLICATION_SEQUENCER` and
 > `PROVIDER_RATE_LIMITER` in staging. Neither Durable Object class is known to
 > have been invoked. `SEASON_PUBLICATION_AUTHORITY` and
