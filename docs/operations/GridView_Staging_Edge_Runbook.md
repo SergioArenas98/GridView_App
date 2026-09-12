@@ -113,11 +113,10 @@ npm exec wrangler deploy --dry-run --env staging
 The dry-run bundles the Worker and resolves bindings without uploading anything
 (`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV), the
 `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
-plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL` and (since
-2026-09-12) `SEASON_PUBLICATION_CUTOVER_CONTROL` vars — the last of these is
-prepared but not yet live; see section 2. **Read the dry-run output before
-proceeding to section 6** — it is how the cutover-sensitive gate below is
-checked.
+plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL` and (live since
+2026-09-12) `SEASON_PUBLICATION_CUTOVER_CONTROL` vars; see section 2. **Read
+the dry-run output before proceeding to section 6** — it is how the
+cutover-sensitive gate below is checked.
 
 ## 6. Deploy staging
 
