@@ -135,9 +135,16 @@ bounded union (`ProviderNotAttemptedCategory`), not a free string.
 - Pacing is global per source rather than per isolate or per location.
 - `retryAt` is exposed for a future scheduler. **G5 event-aware scheduling
   remains open**; nothing here reschedules anything.
-- The Durable Object is declared and validated but **not provisioned**. Until a
-  namespace is bound, every reservation resolves to `unavailable` and no
-  request can be issued — the fail-closed default.
+- At acceptance (2026-08-23) the Durable Object was declared and validated but
+  **not provisioned**. **Superseded for staging on 2026-09-12:** staging
+  version `985115b7-abb3-4346-8845-d8ff41c80cf6` bound `PROVIDER_RATE_LIMITER`
+  and created its staging namespace; production has never been deployed and
+  has none. A bound namespace is not an open provider path: no adapter exists
+  and no production module constructs the hardened client, so nothing
+  reserves through it. Staging stays off the network because `PROVIDER_MODE`
+  is `mock` and no live adapter exists — not because of this binding.
+  Wherever the namespace is unbound, every reservation still resolves to
+  `unavailable` and no request can be issued — the fail-closed default.
 - This does **not** implement G4, G5, G8 or G9, a circuit breaker, a retry
   scheduler, public API rate limiting, or either adapter.
 

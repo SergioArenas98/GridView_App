@@ -200,8 +200,10 @@ and no schema change follows from this decision. `PROVIDER_MODE` still admits
 exactly `mock` and `none`; staging is `mock` and production is `none`. No class
 implements `ProviderResourcePort`, no production module constructs
 `MultiSourceCoordinator`, `SynchronizationService` stays on the single-provider
-path, the rate-limiter namespace stays unbound and
-`recordedProvisionalSessionEndBound` stays `null`. Nothing was fetched and no
+path, the rate-limiter namespace stays unbound (as of this decision; staging's
+was provisioned on 2026-09-12 and is still unused — see
+[ADR 0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md))
+and `recordedProvisionalSessionEndBound` stays `null`. Nothing was fetched and no
 provider was contacted.
 
 ### Still open

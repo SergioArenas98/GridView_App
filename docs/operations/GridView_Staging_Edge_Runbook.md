@@ -51,6 +51,7 @@ and are the single source of truth:
 | Cron trigger | `17 3 * * *` |
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
+| Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`), neither looked up by any deployed code path; see `../technical/GridView_Environments.md` |
 
 `PUBLIC_BASE_URL` is mandatory in staging: the scheduled publisher uses it to
 compute the public URLs it purges. Its absence is a configuration error.
@@ -106,8 +107,9 @@ npm exec wrangler deploy --dry-run --env staging
 ```
 
 The dry-run bundles the Worker and resolves bindings without uploading anything
-(`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV) plus the
-`ENVIRONMENT`, `PROVIDER_MODE` and `PUBLIC_BASE_URL` vars.
+(`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV), the
+`PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
+plus the `ENVIRONMENT`, `PROVIDER_MODE` and `PUBLIC_BASE_URL` vars.
 
 ## 6. Deploy staging
 

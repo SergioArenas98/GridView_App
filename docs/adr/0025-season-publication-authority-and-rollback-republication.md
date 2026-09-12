@@ -52,24 +52,45 @@
 > evidence union with a required audit reference — and **has not been satisfied
 > for any real environment.**
 >
-> **Still true, and load-bearing:** **no provisioning, deployment, seeding,
-> cutover or activation has occurred**, no legacy `[[migrations]]` block
-> exists, and legacy KV pointers remain authoritative in every deployed
-> environment. `snapshotRevision`
+> **Staging provisioning (2026-09-12) supersedes the deployment statements in
+> the paragraph above**, which were true when written. Staging version
+> `985115b7-abb3-4346-8845-d8ff41c80cf6` runs the Worker tree at
+> `ea8b68a0f106f36913d386064645b79cf1c10e1b` with both
+> `SEASON_PUBLICATION_SEQUENCER` and `PROVIDER_RATE_LIMITER` bound and their
+> staging namespaces created; production has never been deployed. Nothing else
+> in that paragraph changes — see D12, "What staging provisioning supplies".
+>
+> **Still true, and load-bearing:** **no seeding, cutover or activation has
+> occurred** — the only provisioning or deployment is the 2026-09-12 staging
+> deployment above — no legacy `[[migrations]]` block exists, and legacy KV
+> pointers remain authoritative in every deployed environment. `snapshotRevision`
 > ([`../publication/snapshot-revision.ts`](../../services/edge-api/src/publication/snapshot-revision.ts))
 > keeps its **no production caller** status unchanged, because the integrated
 > path that would compute one is gated off. The resource-level `sourceObservedAt`
 > half of gap **G-i** is unimplemented. `PROVIDER_MODE` remains `mock | none`;
-> `recordedProvisionalSessionEndBound` remains `null`. **Phase 9B-6 and gap
-> G-i remain operationally open** — closing them requires the separately
-> authorized staging provisioning and deployment, the operator checkpoint and
-> seed, the separate activation confirmation and mutation resumption, and the
-> smoke and latency review, none of which is performed here. No provider was
-> contacted. Everything this ADR authorizes for *implementation* is scoped in
-> §"D12. Activation boundary" below and the separated-future-work list in
+> `recordedProvisionalSessionEndBound` remains `null`. **Staging provisioning
+> and deployment completed on 2026-09-12 and are not remaining work, yet Phase
+> 9B-6 and both halves of gap G-i remain operationally open.** What remains is
+> the rest of D12's sequence, as listed under §"D12. Activation boundary" —
+> six steps, each requiring its own separate, explicit authorization, none
+> performed here:
+>
+> 1. admission closure for the named season;
+> 2. operator checkpoint construction and approval, under D12's
+>    checkpoint-timing rule;
+> 3. the seed;
+> 4. the separately authorized activation confirmation and mutation
+>    resumption;
+> 5. smoke and latency verification;
+> 6. any later production decision.
+>
+> No provider was contacted. Everything this ADR authorizes for
+> *implementation* is scoped in §"D12. Activation boundary" below and the
+> separated-future-work list in
 > [`GridView_Implementation_Plan.md`](../technical/GridView_Implementation_Plan.md)
-> §14.0.11, and every step after the second requires its own separate,
-> explicit authorization.
+> §14.0.11, and every step of D12's planning sequence after its second (staging
+> provisioning, now complete) requires its own separate, explicit
+> authorization.
 >
 > **Mechanism review corrections (2026-09-07).** A Codex review of the
 > Mechanism slice (PR #16, commit `b7c0ce4`) found three code-level defects,
@@ -185,9 +206,12 @@ accessed 2026-09-05). This repository's code and `wrangler.toml` already
 **declare** one Durable Object class following this pattern —
 `ProviderRateLimiter`
 ([ADR 0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md))
-— but ADR 0021 itself records that class as *"declared and validated but not
-provisioned"*: no namespace has been bound into any live environment, and
-this ADR changes nothing about that. The precedent this ADR relies on is the
+— but when this decision was recorded, ADR 0021 recorded that class as
+*"declared and validated but not provisioned"*: no namespace had been bound
+into any live environment, and this ADR changed nothing about that. (The
+2026-09-12 staging deployment later bound both `PROVIDER_RATE_LIMITER` and
+this ADR's sequencer in staging — see D12; the precedent below never depended
+on either namespace.) The precedent this ADR relies on is the
 **pattern being present in code and configuration**, not a live, provisioned
 namespace. This ADR authorizes a **second, unrelated** Durable Object identity
 that makes its own storage — not Workers KV — the authoritative decision
@@ -2110,12 +2134,44 @@ design decision:
   valid cutover. Provenance resolution now runs inside the same budget,
   retrying only an unreadable sidecar — step 3's provenance rule above.
 
-**Phase 9B-6 and both halves of gap G-i remain operationally open.** Steps 2-5
-of the sequence above each still require their own separate authorization:
-staging provisioning and deployment with admission closed; the operator
-checkpoint and seed; the separate activation confirmation and mutation
-resumption; the smoke and latency review; and only then any later production
-decision.
+**Phase 9B-6 and both halves of gap G-i remain operationally open.** What
+remains of the sequence above (steps 3-5, then production) is, in order — each
+requiring its own explicit authorization, and none authorized by the staging
+provisioning recorded below:
+
+1. admission closure for the named season (migration procedure step 1);
+2. operator checkpoint construction and approval, in the order the
+   checkpoint-timing rule below specifies;
+3. the seed (procedure steps 2-10, committing `seeded`);
+4. the separately authorized activation confirmation and mutation resumption
+   (procedure step 11);
+5. smoke and latency verification;
+6. any later production decision.
+
+#### What staging provisioning supplies (2026-09-12)
+
+Step 2 of the sequence above — **staging `SeasonPublicationSequencer` class
+and binding provisioned** — is done. The deployment that did it was a whole
+Worker deployment, not a one-binding change, so it is recorded here layer by
+layer. It supersedes the 2026-09-10 table's "no namespace exists" and "nothing
+is provisioned", which were true when written.
+
+| Layer | State after staging version `985115b7-abb3-4346-8845-d8ff41c80cf6` |
+|---|---|
+| Worker deployment | One `wrangler deploy --env staging` (2026-09-12, ~10:01 UTC, 100% of staging traffic) of the Worker tree at the reviewed `master` commit `ea8b68a0f106f36913d386064645b79cf1c10e1b`. It replaced version `5c24d00e-dc4e-46cf-a4d4-99b09e97e12a` — the Phase 5B build of 2026-07-20 — so it put **every edge change merged on `master` since then** into live staging, not only this ADR's slices. The deployed configuration is exactly the committed, reviewed `wrangler.toml`. |
+| Durable Object infrastructure | **Two** bindings entered live staging, neither present in the previous version: `SEASON_PUBLICATION_SEQUENCER` (this ADR) and `PROVIDER_RATE_LIMITER` ([ADR 0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)). Both staging namespaces now exist. That is provisioning, not use: no code path in the deployed configuration looks either binding up, and nothing shows either class has been invoked. |
+| Provider path | **Still closed**, for a reason unrelated to the new binding: `PROVIDER_MODE` is `mock` and no live provider adapter exists, so nothing can issue a provider request. No production module constructs the hardened provider client, so nothing reserves through `PROVIDER_RATE_LIMITER` either. |
+| Publication authority | **Disabled.** `SEASON_PUBLICATION_AUTHORITY` is absent, so the composition builds the exact legacy `SnapshotPublisher` and never looks the sequencer up. Legacy KV pointers remain authoritative in staging. |
+| Cutover control | **Absent, so admission is open.** `SEASON_PUBLICATION_CUTOVER_CONTROL` is not set and no season's legacy publication or rollback admission is paused. Admission closure (migration procedure step 1) was deliberately not bundled into this deployment; it is the first remaining step above. |
+| Checkpoint and seed | **None.** No checkpoint was constructed or approved and no seed ran. |
+| Activation | **None.** No season is `seeded` or `active`. |
+| Smoke verification | **None.** No deployed endpoint — staging or production, `/v1/status` and the cutover status route included — was called, and no provider request was made. Verification was read-only Cloudflare control-plane inspection: both bindings present, `ADMIN_TOKEN` the only staging secret (by name only), both configuration values absent, and no production Worker on the account. |
+| Production | **Not provisioned, deployed or contacted.** |
+
+A later PR #20 review-correction commit changes `wrangler.toml` comments and
+documentation only; its semantic Worker configuration is identical to
+`ea8b68a`, so it needs no redeployment and version `985115b7-…` remains the
+staging record.
 
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from
@@ -3473,8 +3529,9 @@ platform guarantee:
   documented as strongly consistent and already follows an existing pattern
   declared elsewhere in this repository's code (`ProviderRateLimiter`,
   ADR 0021) — a pattern present in code and configuration, not a live,
-  provisioned namespace (ADR 0021 itself records that class as declared but
-  not provisioned).
+  provisioned namespace (when this ADR was accepted, ADR 0021 recorded that
+  class as declared but not provisioned; its staging namespace was
+  provisioned on 2026-09-12 and is still unused).
 - The public read path gains a new dependency (a per-season Durable Object
   call) and a new, honestly-stated latency/availability trade-off (D6),
   including a narrow, bounded, newly-possible per-document mixed-release view

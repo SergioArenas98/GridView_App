@@ -34,8 +34,9 @@ interface TestOnlyBindings {
   __SNAPSHOT_VALIDATOR?: import('../validation/snapshot-validator').SnapshotValidator;
   /**
    * An in-process season publication sequencer port (ADR 0025). Test-only: the
-   * Integration path is disabled by default and no environment provisions the
-   * Durable Object, so this is how a test drives the two-phase protocol.
+   * Integration path is disabled by default and tests never reach a real
+   * Durable Object namespace, so this is how a test drives the two-phase
+   * protocol.
    */
   __SEASON_PUBLICATION_SEQUENCER?: import('../publication/sequencer/port').SeasonPublicationSequencerPort;
   /**
@@ -70,14 +71,15 @@ export interface Env extends TestOnlyBindings {
   SEASON_PUBLICATION_CUTOVER_CONTROL?: string;
   /**
    * Durable Object namespace backing the per-season publication sequencer
-   * (ADR 0025 D1). Optional in the type because **no environment has one
-   * provisioned**: `wrangler.toml` now *declares* the class export and a
-   * `SEASON_PUBLICATION_SEQUENCER` binding for `env.staging` so a future,
-   * separately authorized deployment can create it, but nothing has been
-   * deployed and no namespace exists. Production declares no such binding at
-   * all. Its absence is only reached when `SEASON_PUBLICATION_AUTHORITY` was
-   * explicitly set to `sequencer`, and the resolver then fails closed to
-   * `sequencer-unavailable` rather than falling back to the legacy authority.
+   * (ADR 0025 D1). Optional in the type because availability is
+   * environment-specific: `wrangler.toml` declares the binding for
+   * `env.staging` only and production declares none. Which environment has it
+   * provisioned is recorded in `docs/technical/GridView_Environments.md` and
+   * the staging runbook, not here. A bound namespace enables nothing by itself:
+   * the resolver only looks it up when `SEASON_PUBLICATION_AUTHORITY` is
+   * explicitly `sequencer`. Its absence is only reached in that mode, and the
+   * resolver then fails closed to `sequencer-unavailable` rather than falling
+   * back to the legacy authority.
    */
   SEASON_PUBLICATION_SEQUENCER?: DurableObjectNamespace;
   PUBLIC_BASE_URL?: string;
@@ -89,9 +91,11 @@ export interface Env extends TestOnlyBindings {
   GRIDVIEW_DATA?: KVNamespace;
   /**
    * Durable Object namespace backing the per-source provider reservation
-   * coordinator (ADR 0021). Optional in the type because no environment has it
-   * provisioned yet and nothing has been deployed; the resolver fails closed
-   * when it is absent.
+   * coordinator (ADR 0021). Optional in the type because availability is
+   * environment-specific (see `docs/technical/GridView_Environments.md`). A
+   * bound namespace does not make provider requests possible - that is
+   * governed by `PROVIDER_MODE` and whether a live adapter exists - and the
+   * resolver fails closed when it is absent.
    */
   PROVIDER_RATE_LIMITER?: DurableObjectNamespace;
 }

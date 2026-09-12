@@ -469,6 +469,17 @@ provisioned, deployed, seeded, cut over or activated**, both
 unset in every committed environment, staging still uses legacy pointers, and
 production is untouched.
 
+> **Staging provisioning (2026-09-12) supersedes the deployment statements in
+> the paragraph above**, which were true when written; that paragraph remains
+> the 2026-09-10 record, not a description of current state. Staging version
+> `985115b7-abb3-4346-8845-d8ff41c80cf6`, deployed on 2026-09-12, runs the
+> Worker source tree at `ea8b68a0f106f36913d386064645b79cf1c10e1b` and
+> provisioned and bound **both** `SEASON_PUBLICATION_SEQUENCER` and
+> `PROVIDER_RATE_LIMITER` in staging. Neither Durable Object class is known to
+> have been invoked. `SEASON_PUBLICATION_AUTHORITY` and
+> `SEASON_PUBLICATION_CUTOVER_CONTROL` remain unset, and no checkpoint, seed,
+> activation or smoke verification has occurred — see "Current state" below.
+
 `SEASON_PUBLICATION_CUTOVER_CONTROL=seed:<season>` or `activate:<season>` closes
 **that one season's** publication and rollback admission before
 `SnapshotPublisher` is reached, with the bounded reason
@@ -498,11 +509,31 @@ describe publication and rollback exactly as they run in every environment.
 Even when `sequencer` mode is selected, `SequencedPublicationService` delegates
 to the legacy publisher for any season that is not `cutoverState: 'active'`
 (ADR 0025 D12), so the two-phase flow runs only under a test that has seeded
-and activated a season. **Nothing is bound, provisioned, seeded, cut over or
-activated**: no `wrangler.toml` binding, `[exports]` entry, migration or
-Durable Object namespace declares the class, and it is not a named export of
-the Worker entry point. Legacy KV pointers remain authoritative everywhere
-until the separately authorized staging provisioning + cutover step completes.
+and activated a season.
+
+**Current state (as of 2026-09-12): provisioned in staging, not in use.**
+`wrangler.toml` declares the `SEASON_PUBLICATION_SEQUENCER` binding for
+`env.staging` only, together with the exports-based
+`[exports.SeasonPublicationSequencer]` SQLite registration, and
+`SeasonPublicationSequencer` is a named export of the Worker entry point. The
+staging namespace and binding were provisioned by staging version
+`985115b7-abb3-4346-8845-d8ff41c80cf6` on 2026-09-12. Provisioning a namespace
+does not prove that any object instance was invoked, and nothing shows that one
+has been. `SEASON_PUBLICATION_AUTHORITY` and
+`SEASON_PUBLICATION_CUTOVER_CONTROL` remain absent, so no season's admission is
+closed; no checkpoint, seed, activation or smoke verification has occurred; and
+legacy KV publication pointers remain authoritative in every deployed
+environment. Another provisioning deployment is not the next step. What
+remains is, in order — each step requiring its own explicit authorization, and
+none authorized by any other:
+
+1. admission closure for the named season;
+2. operator checkpoint construction and approval, as ADR 0025 D12's
+   checkpoint-timing rule specifies;
+3. the seed;
+4. the separately authorized activation confirmation and mutation resumption;
+5. smoke and latency verification;
+6. any later production decision.
 
 ### The two-phase flow
 
@@ -933,8 +964,10 @@ equality-and-identity signal
 [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1
 D1.7 defines. Binding it to a `snapshotObservedAt` and publishing that under
 `meta.sourceUpdatedAt` on a production path is still **blocked** on the
-separately authorized staging provisioning + cutover — see *Why the observation
-clock is not implemented yet* below.
+separately authorized cutover — staging provisioning completed on 2026-09-12,
+but no season has been seeded or activated (see "Current state" under
+"Publication authority" above) — and see *Why the observation clock is not
+implemented yet* below.
 
 ### The canonical input is constructed, never filtered
 
@@ -1155,8 +1188,10 @@ operator and validated as HTTPS — no production host is hardcoded anywhere.
 
 ### Operational blocker
 
-**No R2 media bucket is provisioned in any environment.** `wrangler.toml` gives
-staging a KV namespace and nothing else; production has no bindings at all. No
-live media publication has been executed, and none is claimed.
+**No R2 media bucket is provisioned in any environment**, and no environment in
+`wrangler.toml` declares an R2 bucket binding. The authoritative inventory of
+each environment's non-media bindings is maintained in
+[GridView_Environments.md](GridView_Environments.md). No live media publication
+has been executed, and none is claimed.
 
 Full detail: [GridView_Media.md](GridView_Media.md).
