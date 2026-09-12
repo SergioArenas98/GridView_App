@@ -32,10 +32,13 @@ Confirm exactly one account is listed and that the token includes the
 one account is ever associated, set `CLOUDFLARE_ACCOUNT_ID` explicitly before
 deploying so the target is unambiguous.
 
-## 2. Deployed staging configuration
+## 2. Committed staging baseline vs. deployed state
 
 These values are committed in `services/edge-api/wrangler.toml` (`[env.staging]`)
-and are the single source of truth:
+and are the single source of truth for the **baseline** — what the next
+deploy will upload. They are not automatically the **currently deployed**
+state: a row can be committed here before it has ever been uploaded, as the
+last row below records. Section 6 covers confirming what is actually live.
 
 | Setting | Value |
 |---|---|
@@ -112,9 +115,29 @@ The dry-run bundles the Worker and resolves bindings without uploading anything
 `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
 plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL` and (since
 2026-09-12) `SEASON_PUBLICATION_CUTOVER_CONTROL` vars — the last of these is
-prepared but not yet live; see section 2.
+prepared but not yet live; see section 2. **Read the dry-run output before
+proceeding to section 6** — it is how the cutover-sensitive gate below is
+checked.
 
 ## 6. Deploy staging
+
+There are two kinds of staging deploy, distinguished by whether the dry-run
+output in section 5 contains `SEASON_PUBLICATION_CUTOVER_CONTROL`:
+
+- **Ordinary deployment** — the dry-run shows no
+  `SEASON_PUBLICATION_CUTOVER_CONTROL` var. Proceed as a routine deploy.
+- **Cutover-sensitive deployment** — the dry-run shows
+  `SEASON_PUBLICATION_CUTOVER_CONTROL` (currently `seed:2026`). This is
+  **never routine**. Uploading it is [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary)
+  step 1: it closes publication and rollback admission for the named season
+  in live staging, before any checkpoint, seed or activation. Before running
+  the command below in this case, the operator must hold explicit,
+  separate authorization naming: the exact control value (`seed:2026`), the
+  season it closes (2026), the target environment (staging), and the
+  reviewed commit being deployed. **Merging PR #21 (or any PR) does not
+  itself authorize this deployment** — the deployment, not the merge, closes
+  admission. Without that authorization in hand, stop here; do not run the
+  deploy command.
 
 ```text
 npm exec wrangler deploy --env staging
@@ -127,7 +150,24 @@ id. Confirm the deployment:
 npm exec wrangler deployments list --env staging
 ```
 
+**Persistence rule, once `SEASON_PUBLICATION_CUTOVER_CONTROL` is live:**
+every subsequent staging deployment must preserve the live value unchanged
+unless it carries an explicitly authorized D12 transition (e.g. the
+`seed:` → `activate:` step) or an authorized recovery. Removing, replacing or
+simply omitting the var from a future deploy is itself a cutover-sensitive
+change, not a routine one, and needs the same separate authorization as
+above — an ordinary redeploy must never reopen admission by accident.
+
 ## 7. Initial synchronization and publication
+
+**Not for season 2026 while `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`
+is live in deployed staging.** Once that deploy has happened, season 2026's
+legacy publication admission is closed and this command is rejected for that
+season — see [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
+This section remains the correct workflow for any season whose admission is
+still open (a season not covered by a live cutover control, or before this
+control is deployed). For season 2026 after closure, the next authorized step
+is the D12 checkpoint and seed sequence, not this endpoint.
 
 The Worker starts with an empty KV namespace and serves controlled empty/`404`
 responses until the first release is published. Seed it through the admin
@@ -197,6 +237,14 @@ npm run workflow:staging-auth -- https://gridview-api-staging.sejuma18.workers.d
 
 ## 11. Rollback workflow
 
+**Not for season 2026 while `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`
+is live in deployed staging.** Legacy rollback admission for that season is
+closed by the same deploy that closes publication admission (section 7) — see
+[ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
+This section remains the correct workflow for any season whose admission is
+still open. For season 2026 after closure, the next authorized step is the
+D12 checkpoint and seed sequence, not this endpoint.
+
 Rollback repoints `active:{season}` to a verified previous/target release:
 
 - A rollback with no available target returns `409` and preserves the active
@@ -251,7 +299,11 @@ The scheduled handler runs the **same** orchestration as the manual admin sync
 quota state, skips when no job is due, updates sync/quota metadata, and — because
 `active:{season}` is written only on the full success path — preserves the active
 release on any failure. It logs only operational metadata (no token or
-authorization material).
+authorization material). Scheduled execution cannot reopen admission: while
+`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` is live, a scheduled run's
+covered publication attempt for season 2026 is rejected by the same admission
+guard as the manual endpoint in section 7, exactly as any other caller's would
+be.
 
 Verify with the local test suite (the safe mechanism — no remote trigger, no
 cron change):
