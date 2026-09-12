@@ -2110,12 +2110,23 @@ design decision:
   valid cutover. Provenance resolution now runs inside the same budget,
   retrying only an unreadable sidecar — step 3's provenance rule above.
 
-**Phase 9B-6 and both halves of gap G-i remain operationally open.** Steps 2-5
-of the sequence above each still require their own separate authorization:
-staging provisioning and deployment with admission closed; the operator
-checkpoint and seed; the separate activation confirmation and mutation
-resumption; the smoke and latency review; and only then any later production
-decision.
+**Phase 9B-6 and both halves of gap G-i remain operationally open.** Steps 3-5
+of the sequence above each still require their own separate authorization: the
+operator checkpoint and seed; the separate activation confirmation and
+mutation resumption; the smoke and latency review; and only then any later
+production decision.
+
+#### What staging provisioning supplies (2026-09-12)
+
+Step 2 of the sequence above — **staging `SeasonPublicationSequencer` class
+and binding provisioned** — is now done, and nothing beyond it. Precisely:
+
+| Supplied | Not supplied |
+|---|---|
+| One real `wrangler deploy --env staging` of the exact reviewed `master` commit `ea8b68a0f106f36913d386064645b79cf1c10e1b`, superseding the prior staging deployment (`5c24d00e-dc4e-46cf-a4d4-99b09e97e12a`, 2026-07-20). New active version `985115b7-abb3-4346-8845-d8ff41c80cf6` (2026-09-12), declaring `SEASON_PUBLICATION_SEQUENCER` and creating the corresponding Durable Object namespace. | Any change to which class or binding exists — the deployed configuration is byte-for-byte what was already committed and reviewed. |
+| Confirmation, via read-only Cloudflare control-plane inspection only, that the binding resolves, `ADMIN_TOKEN` remains the only staging secret, and the production Worker still does not exist on the account. | Any call to a deployed endpoint, staging or production — `/v1/status` and the cutover status route included. |
+| — | **Admission closure.** `SEASON_PUBLICATION_CUTOVER_CONTROL` was **not** set; no season's legacy publication or rollback admission is paused. Step 1 of the per-season migration procedure (admission closure) is intentionally deferred to the same authorization as the operator checkpoint and seed, not bundled into this deployment. |
+| — | Any checkpoint, seed, activation, or production change. `SEASON_PUBLICATION_AUTHORITY` remains unset in every environment; legacy KV pointers remain authoritative in staging and production alike. |
 
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from

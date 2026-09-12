@@ -41,6 +41,9 @@ The edge API is deployed to Cloudflare Workers staging:
   no live Formula 1 source), `PUBLIC_BASE_URL` set for scheduled purge.
 - Cron `17 3 * * *` (03:17 **UTC** daily; Cloudflare crons are always UTC).
 - Observability enabled with persisted logs.
+- `SEASON_PUBLICATION_SEQUENCER` Durable Object binding, provisioned
+  2026-09-12, disabled — see
+  [Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled).
 - The single required secret is `ADMIN_TOKEN`, set with
   `wrangler secret put ADMIN_TOKEN --env staging` (interactive; never committed,
   printed or passed as a CLI argument).
@@ -91,7 +94,7 @@ The three `publication/cutover` routes are the staging cutover preparation
 surface (ADR 0025 D12). They are **disabled by default** and refuse every
 operation while `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset, which is what
 every committed environment leaves it as — see
-[Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--declared-disabled-not-deployed).
+[Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled).
 
 ## Synchronization Flow
 
@@ -527,17 +530,28 @@ cover the migration procedure itself, verification of the imported state,
 the authority-mode switch, and the rollback-of-the-deployment path (reverting
 to KV-pointer authority) if cutover verification fails.
 
-## Staging cutover preparation (ADR 0025 D12) — declared, disabled, not deployed
+## Staging cutover preparation (ADR 0025 D12) — provisioned, still disabled
 
-Added 2026-09-10. Everything in this section exists in the repository and is
-**off**: `SEASON_PUBLICATION_AUTHORITY` and `SEASON_PUBLICATION_CUTOVER_CONTROL`
-are unset in every committed environment, no Cloudflare resource has been
-created, no Worker has been deployed, no season has been seeded or activated,
-and staging still uses legacy pointers while production is untouched. The
-sequence that would use it — staging provisioning and deployment with admission
-closed, the operator checkpoint and seed, the separate activation confirmation
-and mutation resumption, the smoke and latency review, and any later production
-decision — each remains separately authorized.
+Added 2026-09-10; staging provisioning added 2026-09-12. Everything in this
+section is now deployed to staging and still **off**:
+`SEASON_PUBLICATION_AUTHORITY` and `SEASON_PUBLICATION_CUTOVER_CONTROL` are
+unset in every committed environment, no season has been seeded or activated,
+and staging still uses legacy pointers while production is untouched.
+
+**Staging provisioning (2026-09-12).** The reviewed `master` commit
+`ea8b68a0f106f36913d386064645b79cf1c10e1b` was deployed with
+`wrangler deploy --env staging` (new active version
+`985115b7-abb3-4346-8845-d8ff41c80cf6`, superseding
+`5c24d00e-dc4e-46cf-a4d4-99b09e97e12a` from 2026-07-20). `SEASON_PUBLICATION_SEQUENCER`
+is now a real Durable Object binding and namespace in staging; `ADMIN_TOKEN`
+remained the only staging secret. No environment variable was set, no season
+was paused, no checkpoint was approved, no seed or activation ran, and no
+deployed endpoint was called. Production was not deployed, changed or
+contacted, and still does not exist as a Worker on the account. The sequence
+that would use this provisioning — admission closure and the operator
+checkpoint and seed, the separate activation confirmation and mutation
+resumption, the smoke and latency review, and any later production decision —
+each remains separately authorized.
 
 ### The two configuration values
 
