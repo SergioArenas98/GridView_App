@@ -11,14 +11,24 @@
  * coordinates publication authority per season, and conflating them would make
  * an unrelated limiter change a publication-authority change.
  *
- * ## Nothing here is deployable
+ * ## Registered, and inert until explicitly selected
  *
- * This module is **not** exported from the Worker entry point, and no
- * `wrangler.toml` binding, `[exports]` entry or migration declares it. Wrangler
- * resolves a Durable Object class through a named export of the Worker's main
- * module; there is none, so this class cannot be instantiated by the runtime.
- * It is a TypeScript module export used by internal tests, which is exactly the
- * scope this slice has.
+ * The class is a named export of the Worker entry point (`src/index.ts`) -
+ * which is how Wrangler resolves a Durable Object `class_name` - and
+ * `wrangler.toml` registers it in the `[exports.SeasonPublicationSequencer]`
+ * form. The `SEASON_PUBLICATION_SEQUENCER` binding is declared for
+ * `env.staging` only. Which environments have that namespace provisioned is
+ * recorded in `docs/technical/GridView_Environments.md`, not here, and a
+ * provisioned binding does not mean an object instance has ever been invoked.
+ *
+ * The Worker addresses an object only through the client below, which
+ * `resolvePublicationAuthority` constructs over the binding only once
+ * `SEASON_PUBLICATION_AUTHORITY` is explicitly `sequencer`. No committed
+ * environment sets that value or `SEASON_PUBLICATION_CUTOVER_CONTROL`, so a
+ * deployment that has the namespace bound - staging included - still never
+ * looks it up, and legacy KV pointers stay authoritative. Selected with no
+ * binding, the authority resolves to `sequencer-unavailable` and fails closed
+ * rather than falling back to legacy.
  *
  * ## Why the classic `fetch` interface
  *
@@ -178,7 +188,7 @@ function jsonResponse(body: unknown, status: number): Response {
 /**
  * The minimum namespace surface the client needs.
  *
- * `DurableObjectNamespace` is structurally assignable to it, so a future
+ * `DurableObjectNamespace` is structurally assignable to it, so a real
  * binding needs no adaptation - and a test can supply a fake namespace that
  * dispatches to a real object instance, proving the whole seam without any
  * provisioned resource.

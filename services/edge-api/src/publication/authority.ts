@@ -10,8 +10,10 @@
  *
  * `sequencer` is selected only by `SEASON_PUBLICATION_AUTHORITY=sequencer`
  * together with a way to reach the sequencer - the test-only
- * `__SEASON_PUBLICATION_SEQUENCER` port, or a future `SEASON_PUBLICATION_SEQUENCER`
- * Durable Object namespace that no `wrangler.toml` declares yet.
+ * `__SEASON_PUBLICATION_SEQUENCER` port, or a bound `SEASON_PUBLICATION_SEQUENCER`
+ * Durable Object namespace (declared for `env.staging` only). Default-off
+ * depends on that configuration value, not on whether the namespace is
+ * provisioned: while the value is absent, a bound namespace is never looked up.
  *
  * If that exact mode is selected and **neither** is available, the resolution is
  * `sequencer-unavailable`, never `legacy`. Silently falling back would discard

@@ -582,9 +582,11 @@ Both are **external and expected**, not code defects.
 1. **No approved media inventory.** `content/media/media-rights.json` is
    authoritative and empty. No Formula 1 media rights have been cleared for
    GridView.
-2. **No R2 media bucket.** `services/edge-api/wrangler.toml` provisions a KV
-   namespace for staging and nothing else; production has no bindings at all.
-   Neither a staging nor a production media bucket exists.
+2. **No R2 media bucket.** No environment in `services/edge-api/wrangler.toml`
+   declares an R2 bucket binding, and no R2 media bucket has been provisioned —
+   neither a staging nor a production media bucket exists. The authoritative
+   inventory of each environment's KV, Durable Object, variable and other
+   non-media bindings is [GridView_Environments.md](GridView_Environments.md).
 
 Consequently **no live R2 publication has been executed, and none is claimed.**
 

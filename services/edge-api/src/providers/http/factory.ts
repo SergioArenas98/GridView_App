@@ -10,9 +10,12 @@ import type { RealProviderSourceId } from './reservation-engine';
  * Resolves the reservation client for the running environment.
  *
  * Fails closed by construction: when the Durable Object namespace is not
- * bound — which is the case in every environment today, because nothing has
- * been provisioned or deployed — every reservation resolves to `unavailable`,
- * and the HTTP boundary then issues no provider request.
+ * bound in the running environment, every reservation resolves to
+ * `unavailable`, and the HTTP boundary then issues no provider request.
+ * Binding availability is environment-specific (see
+ * `docs/technical/GridView_Environments.md`), and a bound namespace is not
+ * what gates provider traffic: `PROVIDER_MODE` and whether a live adapter
+ * exists are.
  */
 export function resolveProviderRateLimiter(
   env: Env,

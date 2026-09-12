@@ -1,9 +1,14 @@
 # GridView edge API - Cloudflare Worker configuration.
 #
-# Local development only for now: no Cloudflare account resources
-# (KV namespaces, R2 buckets, routes, domains, secrets) are provisioned yet.
-# Bindings are added in Phase 5 (backend foundation) of
-# docs/technical/GridView_Implementation_Plan.md.
+# The top level is local development (`wrangler dev`) only. Live state differs
+# by environment and is recorded in docs/technical/GridView_Environments.md -
+# a declaration in this file is not evidence that anything is provisioned:
+# - `env.staging` is deployed to Cloudflare (first in Phase 5B, 2026-07-20).
+#   The 2026-09-12 staging deployment provisioned both Durable Object bindings
+#   declared for it below; no code path in that configuration looks either up.
+# - `env.production` is declared only and has never been deployed: no
+#   production Worker, KV or Durable Object namespace, R2 bucket, route,
+#   domain or secret exists.
 
 name = "gridview-api-dev"
 main = "src/index.ts"
@@ -16,9 +21,14 @@ ENVIRONMENT = "development"
 # canonical real source (`jolpica`, `openf1`), so pacing is one global budget
 # rather than a per-isolate or per-location approximation.
 #
-# NOTHING IS PROVISIONED OR DEPLOYED. The binding is declared so the class and
-# its wiring are real and validated; no adapter calls it, no provider request
-# is possible, and the resolver fails closed when the namespace is absent.
+# Declared here for every environment. Declaring is not provisioning, and
+# provisioning is not use: the staging namespace was provisioned by the
+# 2026-09-12 staging deployment, and production has never been deployed. No
+# provider adapter exists and no production module constructs the provider
+# HTTP client, so nothing looks the binding up. Staging cannot reach a live
+# provider because `PROVIDER_MODE = "mock"` and no live adapter exists - not
+# because of this binding. Wherever the namespace is absent, the resolver fails
+# closed and no provider request is issued.
 [[durable_objects.bindings]]
 name = "PROVIDER_RATE_LIMITER"
 class_name = "ProviderRateLimiter"
@@ -34,13 +44,14 @@ storage = "sqlite"
 # `previousVersion` and per-key snapshot state, once - and only once - a season
 # has been seeded and activated.
 #
-# DECLARED IN THIS REPOSITORY, NOT PROVISIONED OR DEPLOYED. This entry and the
-# `env.staging` binding below make the class deployable by a future, separately
-# authorized staging deployment; they do not create a namespace, deploy a
-# Worker, seed a season or activate one. Nothing has been deployed, no namespace
-# exists, `SEASON_PUBLICATION_AUTHORITY` is unset in every environment here, and
-# `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset too - so the class is
-# unreachable and legacy KV pointers remain authoritative everywhere.
+# DECLARED HERE; PROVISIONED IN STAGING ONLY; STILL DISABLED. This entry and
+# the `env.staging` binding below were deployed to staging on 2026-09-12, which
+# created the staging namespace. That is provisioning, not use: no season has
+# been seeded or activated, `SEASON_PUBLICATION_AUTHORITY` is unset in every
+# environment here, and `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset too - so
+# no code path looks the binding up and legacy KV pointers remain
+# authoritative everywhere. Production declares no binding and has never been
+# deployed.
 #
 # `storage = "sqlite"` is required: the coordinator commits through
 # `ctx.storage.transactionSync`, which only SQLite-backed Durable Objects
@@ -68,10 +79,10 @@ class_name = "ProviderRateLimiter"
 # Staging only, and staging is the only environment ADR 0025 D12's cutover
 # sequence is authorized to target. Production deliberately declares no
 # season-publication binding at all, so a production deployment cannot reach the
-# class even by accident. Declaring the binding does not provision the
-# namespace, and an unset `SEASON_PUBLICATION_AUTHORITY` means nothing looks it
-# up: the composition builds the exact legacy `SnapshotPublisher` it builds
-# today.
+# class even by accident. Declaring the binding does not by itself provision
+# the namespace - the 2026-09-12 staging deployment did - and an unset
+# `SEASON_PUBLICATION_AUTHORITY` means nothing looks it up: the composition
+# builds the exact legacy `SnapshotPublisher` it builds today.
 [[env.staging.durable_objects.bindings]]
 name = "SEASON_PUBLICATION_SEQUENCER"
 class_name = "SeasonPublicationSequencer"
@@ -95,6 +106,8 @@ enabled = true
 persist = true
 invocation_logs = false
 
+# Declared only; never deployed. No `gridview-api-production` Worker exists on
+# the Cloudflare account, so none of the configuration below is live.
 [env.production]
 name = "gridview-api-production"
 

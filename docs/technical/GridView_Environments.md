@@ -215,7 +215,7 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 | Environment | Worker name | State |
 |---|---|---|
 | development | `gridview-api-dev` | Local `wrangler dev` only |
-| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. |
+| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `985115b7-abb3-4346-8845-d8ff41c80cf6` — see the Durable Object state below. |
 | production | `gridview-api-production` | Not provisioned |
 
 > **Staging: public availability observed; administrative state not verified.**
@@ -264,11 +264,16 @@ Bindings are not inherited by named environments, so each declares it; the
 SQLite `exports` entry is declared once, because SQLite-backed storage is what
 Durable Objects require on the Workers Free plan.
 
-**The Durable Object is declared, not provisioned.** Nothing has been deployed,
-no namespace exists, and while the namespace is unbound every provider
-reservation resolves to `unavailable` - the fail-closed default, under which no
-outbound provider request can be issued at all. No provider adapter exists
-either, so nothing calls it.
+**The rate-limiter Durable Object is provisioned in staging only, and
+unused.** The 2026-09-12 staging deployment (version
+`985115b7-abb3-4346-8845-d8ff41c80cf6`) created its staging namespace;
+production has never been deployed and has none. Provisioning is not use: no
+provider adapter exists and no production module constructs the hardened
+provider client, so nothing reserves through it. What keeps staging off the
+network is `PROVIDER_MODE = mock` plus the absence of any live adapter - not
+the binding. Wherever the namespace is unbound, every provider reservation
+resolves to `unavailable` - the fail-closed default, under which no outbound
+provider request can be issued at all.
 
 `SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **unset in every
 environment**. An absent, empty or unrecognised value resolves to `legacy` and
@@ -280,21 +285,24 @@ sequencer-unavailable authority, never back to `legacy`, so a deployment that
 lost the binding after a cutover cannot resume reading or mutating legacy KV
 pointers.
 
-**The `SeasonPublicationSequencer` Durable Object is declared, not
-provisioned** (staging cutover preparation slice, 2026-09-10). `wrangler.toml`
-declares `[exports.SeasonPublicationSequencer]` with SQLite storage and binds
-`SEASON_PUBLICATION_SEQUENCER` for **`env.staging` only**; the class is a named
-export of the Worker entry point, which is how Wrangler resolves it. There is
-still **no `[[migrations]]` block and no production binding**. Nothing has been
-deployed, no namespace exists, no season has been seeded or activated, and
-because `SEASON_PUBLICATION_AUTHORITY` is unset the lookup is never performed:
-**staging still uses legacy pointers, and production is untouched.**
+**The `SeasonPublicationSequencer` Durable Object is provisioned in staging
+only, and disabled.** `wrangler.toml` declares
+`[exports.SeasonPublicationSequencer]` with SQLite storage and binds
+`SEASON_PUBLICATION_SEQUENCER` for **`env.staging` only** (staging cutover
+preparation slice, 2026-09-10); the class is a named export of the Worker entry
+point, which is how Wrangler resolves it. There is still **no `[[migrations]]`
+block and no production binding**. The 2026-09-12 staging deployment (version
+`985115b7-abb3-4346-8845-d8ff41c80cf6`) created the staging namespace. No
+season has been seeded or activated, and because `SEASON_PUBLICATION_AUTHORITY`
+is unset the lookup is never performed: **staging still uses legacy pointers,
+and production has never been deployed.**
 
-| Season publication sequencer | development | staging | production |
+| Durable Object state | development | staging | production |
 |---|---|---|---|
-| `[exports]` entry declared | shared, once | shared, once | shared, once |
-| Binding declared | none | `SEASON_PUBLICATION_SEQUENCER` | **none** |
-| Namespace provisioned | none | **none** | none |
+| `[exports]` entries (both classes) | shared, once | shared, once | shared, once |
+| `PROVIDER_RATE_LIMITER` binding declared | yes (local `wrangler dev` only) | yes | yes |
+| `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | **none** |
+| Namespaces provisioned on Cloudflare | none | **both, 2026-09-12** (version `985115b7-…`); neither looked up | none - never deployed |
 | Authority mode set | no | no | no |
 | Cutover control set | no | no | no |
 

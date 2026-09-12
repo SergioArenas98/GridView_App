@@ -6,7 +6,9 @@
  * narrowing was deliberate. The Mechanism slice asserted the sequencer had no
  * production caller; Integration added those callers behind a disabled gate;
  * this slice adds the named Worker export and an `env.staging` binding so a
- * future, separately authorized deployment can create the namespace.
+ * separately authorized deployment can create the namespace. Whether one has,
+ * per environment, is recorded in `docs/technical/GridView_Environments.md`
+ * and is deliberately not asserted here.
  *
  * The distinction this file now enforces is **declared in the repository**
  * versus **actually provisioned or deployed**:
@@ -72,7 +74,7 @@ function environmentSection(name: string): string {
   return next === -1 ? rest : rest.slice(0, next);
 }
 
-describe('the sequencer deployment surface is declared, not provisioned', () => {
+describe('wrangler.toml declares the sequencer surface without enabling it', () => {
   it('declares the SQLite export in the supported exports form', () => {
     expect(declaredConfig).toContain('[exports.ProviderRateLimiter]');
     expect(declaredConfig).toMatch(
@@ -119,7 +121,7 @@ describe('the sequencer deployment surface is declared, not provisioned', () => 
   });
 });
 
-describe('the class is exported so a future deployment can resolve it', () => {
+describe('the class is exported so a deployment can resolve it', () => {
   it('exports both Durable Object classes from the Worker entry point', () => {
     // Wrangler resolves a Durable Object class through a named export of the
     // Worker's main module, so the export is what makes the staging binding
