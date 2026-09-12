@@ -6,7 +6,9 @@
  * narrowing was deliberate. The Mechanism slice asserted the sequencer had no
  * production caller; Integration added those callers behind a disabled gate;
  * this slice adds the named Worker export and an `env.staging` binding so a
- * future, separately authorized deployment can create the namespace.
+ * separately authorized deployment can create the namespace. Whether one has,
+ * per environment, is recorded in `docs/technical/GridView_Environments.md`
+ * and is deliberately not asserted here.
  *
  * The distinction this file now enforces is **declared in the repository**
  * versus **actually provisioned or deployed**:

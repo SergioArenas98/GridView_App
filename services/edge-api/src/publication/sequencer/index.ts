@@ -1,10 +1,12 @@
 /**
  * The season publication sequencer mechanism (ADR 0025), as one entry point.
  *
- * **Inert by construction.** Nothing here is reachable from the Worker entry
- * point, no `wrangler.toml` binding or migration declares the Durable Object
- * class, no production code path calls the port, and no public API, OpenAPI
- * contract, routing or cache behaviour changes because these modules exist.
+ * **Inert unless explicitly selected.** The Durable Object class is exported
+ * from the Worker entry point and registered in `wrangler.toml` (see
+ * `durable-object.ts`), but the port is reached only once
+ * `SEASON_PUBLICATION_AUTHORITY` is explicitly `sequencer`, which no committed
+ * environment sets. No public API, OpenAPI contract, routing or cache behaviour
+ * changes because these modules exist.
  */
 
 export {

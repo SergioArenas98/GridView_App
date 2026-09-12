@@ -622,8 +622,12 @@ production publication path: `meta.sourceUpdatedAt` is unchanged today (the
 sequenced path that assigns per-key values runs only under a test that has
 seeded and activated a season), the D1.11a clamp event has nothing to raise
 yet, the **resource-level `sourceObservedAt` half of G-i is untouched**, and
-**G-i stays open in both halves** until the staging provisioning + cutover step
-ADR 0025 separately gates is authorized and completed.
+**G-i stays open in both halves** at least until the cutover sequence ADR 0025
+D12 governs has been separately authorized and completed: admission closure,
+operator checkpoint construction and approval, the seed and the separate
+activation, each its own authorization. Staging provisioning is not
+outstanding; it completed on 2026-09-12. Smoke and latency verification and any
+production decision are later, separately authorized gates (ADR 0025 D12).
 
 ## Reopening conditions
 

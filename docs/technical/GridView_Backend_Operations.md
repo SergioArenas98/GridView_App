@@ -141,9 +141,25 @@ scheduled/manual trigger
 > §14.0.11 is separately authorized — of which only the **repository-side
 > preparation** exists as of 2026-09-10: a declared staging binding, a
 > default-off cutover control and an authenticated operator runner, with
-> nothing deployed, provisioned, seeded or activated. When the mode *is*
-> selected, the
-> Integration slice raises these bounded operational events (ADR 0025 D11):
+> nothing deployed, provisioned, seeded or activated.
+>
+> **Staging provisioning (2026-09-12) supersedes the deployment statements at
+> the end of the paragraph above**, which were true when written and remain the
+> 2026-09-10 record, not a description of current state. Staging provisioning
+> completed in version `985115b7-abb3-4346-8845-d8ff41c80cf6`, which
+> provisioned and bound **both** Durable Object bindings,
+> `SEASON_PUBLICATION_SEQUENCER` and `PROVIDER_RATE_LIMITER`. Provisioning did
+> not enable publication authority: `SEASON_PUBLICATION_AUTHORITY` and
+> `SEASON_PUBLICATION_CUTOVER_CONTROL` remain unset, so the mode is still
+> `legacy`. Activation still waits on admission closure, operator checkpoint
+> construction and approval, the seed and a separately authorized activation;
+> smoke and latency verification and any production decision are later
+> boundaries. See
+> [Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled)
+> for the current state.
+>
+> When the mode *is* selected, the Integration slice raises these bounded
+> operational events (ADR 0025 D11):
 > `publication.sequencer.committed` / `.rejected` / `.superseded`,
 > `publication.sequencer.candidate_cleanup`, `rollback.sequencer.provenance`
 > (a bounded provenance classification) and `rollback.sequencer.rejected`.

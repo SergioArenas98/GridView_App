@@ -68,16 +68,29 @@
 > keeps its **no production caller** status unchanged, because the integrated
 > path that would compute one is gated off. The resource-level `sourceObservedAt`
 > half of gap **G-i** is unimplemented. `PROVIDER_MODE` remains `mock | none`;
-> `recordedProvisionalSessionEndBound` remains `null`. **Phase 9B-6 and gap
-> G-i remain operationally open** — closing them requires the separately
-> authorized staging provisioning and deployment, the operator checkpoint and
-> seed, the separate activation confirmation and mutation resumption, and the
-> smoke and latency review, none of which is performed here. No provider was
-> contacted. Everything this ADR authorizes for *implementation* is scoped in
-> §"D12. Activation boundary" below and the separated-future-work list in
+> `recordedProvisionalSessionEndBound` remains `null`. **Staging provisioning
+> and deployment completed on 2026-09-12 and are not remaining work, yet Phase
+> 9B-6 and both halves of gap G-i remain operationally open.** What remains is
+> the rest of D12's sequence, as listed under §"D12. Activation boundary" —
+> six steps, each requiring its own separate, explicit authorization, none
+> performed here:
+>
+> 1. admission closure for the named season;
+> 2. operator checkpoint construction and approval, under D12's
+>    checkpoint-timing rule;
+> 3. the seed;
+> 4. the separately authorized activation confirmation and mutation
+>    resumption;
+> 5. smoke and latency verification;
+> 6. any later production decision.
+>
+> No provider was contacted. Everything this ADR authorizes for
+> *implementation* is scoped in §"D12. Activation boundary" below and the
+> separated-future-work list in
 > [`GridView_Implementation_Plan.md`](../technical/GridView_Implementation_Plan.md)
-> §14.0.11, and every step after the second requires its own separate,
-> explicit authorization.
+> §14.0.11, and every step of D12's planning sequence after its second (staging
+> provisioning, now complete) requires its own separate, explicit
+> authorization.
 >
 > **Mechanism review corrections (2026-09-07).** A Codex review of the
 > Mechanism slice (PR #16, commit `b7c0ce4`) found three code-level defects,
