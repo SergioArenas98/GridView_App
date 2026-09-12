@@ -21,14 +21,21 @@
  *   composition still builds the exact legacy `SnapshotPublisher` and the
  *   router still performs no Durable Object lookup (see `default-off.test.ts`
  *   for the behavioural proof);
- * - no committed environment sets `SEASON_PUBLICATION_CUTOVER_CONTROL`, so no
- *   season is paused and no cutover operation is permitted;
+ * - `env.staging` now declares `SEASON_PUBLICATION_CUTOVER_CONTROL =
+ *   "seed:2026"` (the authenticated operator's explicit season-2026 selection,
+ *   ADR 0025 D12 step 1) - declared in the repository only. The live staging
+ *   deployment predates this line and does not carry it, so season 2026's
+ *   admission is not yet closed anywhere actually deployed, and even once it
+ *   is, `SEASON_PUBLICATION_AUTHORITY` staying unset means no cutover
+ *   operation (seed/activate) can be attempted regardless;
+ * - production declares neither configuration value;
  * - the legacy `[[migrations]]` form is still absent, and `PROVIDER_MODE`, the
  *   public API and the closed document-name union are untouched.
  *
  * Nothing here provisions a namespace, deploys a Worker, seeds a season or
  * activates one. These assertions fail the moment someone commits an authority
- * mode, a cutover control, or a production binding.
+ * mode, a cutover control naming a different season or phase, or a production
+ * binding.
  */
 
 import { readFileSync } from 'node:fs';
@@ -103,12 +110,20 @@ describe('wrangler.toml declares the sequencer surface without enabling it', () 
     expect(production).toContain('class_name = "ProviderRateLimiter"');
   });
 
-  it('sets neither the authority mode nor the cutover control anywhere', () => {
-    // Declaring a binding enables nothing: no path looks the namespace up while
-    // the authority mode is unset, and no season is paused and no cutover
-    // operation is permitted while the cutover control is unset.
+  it('sets the authority mode nowhere, and the cutover control in staging only', () => {
+    // Declaring a binding enables nothing: no path looks the namespace up
+    // while the authority mode is unset. The cutover control is now
+    // declared - staging only, naming exactly season 2026's seed phase - but
+    // that alone still permits no cutover operation while the authority mode
+    // stays unset (see `default-off.test.ts` and `composition.test.ts`).
     expect(declaredConfig).not.toContain('SEASON_PUBLICATION_AUTHORITY');
-    expect(declaredConfig).not.toContain('SEASON_PUBLICATION_CUTOVER_CONTROL');
+
+    const staging = environmentSection('staging');
+    const production = environmentSection('production');
+    expect(staging).toContain(
+      'SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"',
+    );
+    expect(production).not.toContain('SEASON_PUBLICATION_CUTOVER_CONTROL');
   });
 
   it('changes no provider mode or deployment setting', () => {

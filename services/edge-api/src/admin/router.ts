@@ -29,8 +29,11 @@ interface AdminContext {
   purgeOrigin: string;
   /**
    * The staging cutover preparation surface (ADR 0025 D12). Always constructed;
-   * it refuses every operation itself while the cutover control is unset, which
-   * is what every committed environment leaves it as.
+   * it refuses every operation itself while the cutover control is unset or
+   * `SEASON_PUBLICATION_AUTHORITY` is not `sequencer`, which is what every
+   * deployed environment leaves it as - `env.staging`'s repository
+   * configuration now names `seed:2026`, but that has not been deployed, and
+   * `SEASON_PUBLICATION_AUTHORITY` remains unset everywhere regardless.
    */
   cutover: CutoverPreparationService;
 }

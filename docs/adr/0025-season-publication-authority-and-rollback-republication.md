@@ -63,6 +63,20 @@
 > production has never been deployed. Nothing else
 > in that paragraph changes — see D12, "What staging provisioning supplies".
 >
+> **Admission-closure configuration prepared (2026-09-12) — repository only,
+> not deployed.** The authenticated operator explicitly selected **season
+> 2026** as the named staging cutover season — never inferred from a KV
+> pointer, a calendar or a provider. `services/edge-api/wrangler.toml` now
+> declares, under `[env.staging.vars]` only, `SEASON_PUBLICATION_CUTOVER_CONTROL
+> = "seed:2026"`. The live staging version (`985115b7-…` above) predates this
+> line and does not carry it, so season 2026's admission remains **open** in
+> deployed staging; the value takes effect only once a separately authorized
+> `wrangler deploy --env staging` uploads it. Preparing this value does not
+> construct or approve a checkpoint, does not seed the sequencer, does not
+> activate sequencer authority, and does not contact a provider.
+> `SEASON_PUBLICATION_AUTHORITY` remains absent everywhere. See D12, "What
+> admission-closure preparation supplies".
+>
 > **Still true, and load-bearing:** **no seeding, cutover or activation has
 > occurred** — the only provisioning or deployment is the 2026-09-12 staging
 > deployment above — no legacy `[[migrations]]` block exists, and legacy KV
@@ -72,13 +86,15 @@
 > path that would compute one is gated off. The resource-level `sourceObservedAt`
 > half of gap **G-i** is unimplemented. `PROVIDER_MODE` remains `mock | none`;
 > `recordedProvisionalSessionEndBound` remains `null`. **Staging provisioning
-> and deployment completed on 2026-09-12 and are not remaining work, yet Phase
-> 9B-6 and both halves of gap G-i remain operationally open.** What remains is
-> the rest of D12's sequence, as listed under §"D12. Activation boundary" —
-> six steps, each requiring its own separate, explicit authorization, none
-> performed here:
+> and deployment completed on 2026-09-12, and season 2026's admission-closure
+> configuration is now prepared in the repository — neither is remaining work,
+> yet Phase 9B-6 and both halves of gap G-i remain operationally open.** What
+> remains is the rest of D12's sequence, as listed under §"D12. Activation
+> boundary" — each step requiring its own separate, explicit authorization,
+> none performed here:
 >
-> 1. admission closure for the named season;
+> 1. deployment of the prepared `seed:2026` configuration, closing admission
+>    for season 2026 in live staging;
 > 2. operator checkpoint construction and approval, under D12's
 >    checkpoint-timing rule;
 > 3. the seed;
@@ -2140,9 +2156,11 @@ design decision:
 **Phase 9B-6 and both halves of gap G-i remain operationally open.** What
 remains of the sequence above (steps 3-5, then production) is, in order — each
 requiring its own explicit authorization, and none authorized by the staging
-provisioning recorded below:
+provisioning or the admission-closure configuration preparation recorded
+below:
 
-1. admission closure for the named season (migration procedure step 1);
+1. deployment of the prepared `seed:2026` configuration (migration procedure
+   step 1), closing admission for season 2026 in live staging;
 2. operator checkpoint construction and approval, in the order the
    checkpoint-timing rule below specifies;
 3. the seed (procedure steps 2-10, committing `seeded`);
@@ -2191,6 +2209,22 @@ A later PR #20 review-correction commit changes `wrangler.toml` comments and
 documentation only; its semantic Worker configuration is identical to
 `ea8b68a`, so it needs no redeployment and version `985115b7-…` remains the
 staging record.
+
+#### What admission-closure preparation supplies (2026-09-12)
+
+Step 1 of the sequence above — **admission closure for the named season** — is
+still not done in live staging. What exists is the **repository-side**
+preparation for it, one commit on top of the state the table above records.
+
+| Supplied | Not supplied |
+|---|---|
+| The authenticated operator's explicit selection of **season 2026** as the named staging cutover season — never inferred from a KV pointer, a calendar or a provider. | Any season other than 2026, and any inference of a season from repository or runtime state. |
+| `services/edge-api/wrangler.toml` declares, under `[env.staging.vars]` only, `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. Production declares no such value. | Any deployment of it. No `wrangler deploy` has run since this line was added, so the live staging version above (`985115b7-…`) does not carry it and season 2026's admission remains **open** in deployed staging. |
+| Confirmation, from the implementation, that this value alone closes season 2026's legacy publication and rollback admission once deployed, without constructing a checkpoint, seeding the sequencer, activating sequencer authority, resuming mutation or contacting a provider. | Any checkpoint, seed, activation, mutation resumption, smoke or latency verification, or provider contact. `SEASON_PUBLICATION_AUTHORITY` remains absent, so every internal cutover route still refuses at the authority-mode gate regardless. |
+
+This preparation does not change which step of D12's sequence is next: it
+remains admission closure (step 1), now reduced to a single separately
+authorized `wrangler deploy --env staging` of this exact configuration.
 
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from
