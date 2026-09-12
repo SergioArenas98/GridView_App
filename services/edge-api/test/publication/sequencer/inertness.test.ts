@@ -72,7 +72,7 @@ function environmentSection(name: string): string {
   return next === -1 ? rest : rest.slice(0, next);
 }
 
-describe('the sequencer deployment surface is declared, not provisioned', () => {
+describe('wrangler.toml declares the sequencer surface without enabling it', () => {
   it('declares the SQLite export in the supported exports form', () => {
     expect(declaredConfig).toContain('[exports.ProviderRateLimiter]');
     expect(declaredConfig).toMatch(
@@ -119,7 +119,7 @@ describe('the sequencer deployment surface is declared, not provisioned', () => 
   });
 });
 
-describe('the class is exported so a future deployment can resolve it', () => {
+describe('the class is exported so a deployment can resolve it', () => {
   it('exports both Durable Object classes from the Worker entry point', () => {
     // Wrangler resolves a Durable Object class through a named export of the
     // Worker's main module, so the export is what makes the staging binding

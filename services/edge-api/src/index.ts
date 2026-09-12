@@ -40,24 +40,28 @@ export type { Env };
  * (ADR 0021). It must be a named export of the Worker's main module for
  * Wrangler to resolve `class_name`.
  *
- * Exporting it does not provision or start anything: no environment has the
- * namespace bound yet, no adapter calls the hardened HTTP boundary, and no
- * provider request is possible.
+ * Exporting it does not provision or start anything, and where a deployment has
+ * bound the namespace nothing reserves through it: no adapter calls the
+ * hardened HTTP boundary. Provider requests are governed by `PROVIDER_MODE` and
+ * whether a live adapter exists, not by this export or its binding.
  */
 export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';
 
 /**
  * Durable Object class registered as the `SEASON_PUBLICATION_SEQUENCER` binding
  * for `env.staging` only (ADR 0025 D1, D12). Wrangler resolves a Durable Object
- * class through a named export of the Worker's main module, so a future,
- * separately authorized staging deployment needs this export to exist.
+ * class through a named export of the Worker's main module, so any deployment
+ * that binds the namespace needs this export to exist.
  *
- * **Declared, not provisioned.** Exporting it creates no namespace, deploys
- * nothing, seeds no season and activates none. Production declares no such
- * binding at all, `SEASON_PUBLICATION_AUTHORITY` is unset in every committed
- * environment - so `resolvePublicationAuthority` returns `legacy` and no code
- * path performs the lookup - and `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset
- * too, so no season is paused and no cutover operation is permitted.
+ * **Exported is not enabled.** Exporting it creates no namespace, deploys
+ * nothing, seeds no season and activates none, and a provisioned namespace is
+ * not an invoked object. Production declares no such binding at all,
+ * `SEASON_PUBLICATION_AUTHORITY` is unset in every committed environment - so
+ * `resolvePublicationAuthority` returns `legacy` and no code path performs the
+ * lookup, whether or not the namespace is provisioned - and
+ * `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset too, so no season is paused and
+ * no cutover operation is permitted. Which environment has the namespace
+ * provisioned is recorded in `docs/technical/GridView_Environments.md`.
  */
 export { SeasonPublicationSequencer } from './publication/sequencer/durable-object';
 
