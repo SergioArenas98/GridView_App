@@ -97,10 +97,10 @@ The three `publication/cutover` routes are the staging cutover preparation
 surface (ADR 0025 D12). They are **disabled by default** and refuse every
 operation while `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset or
 `SEASON_PUBLICATION_AUTHORITY` is not `sequencer` — which is what every
-*deployed* environment leaves it as: `env.staging` names and, since
-2026-09-12, has deployed season 2026's seed phase, but
-`SEASON_PUBLICATION_AUTHORITY` remains absent there too, so these routes stay
-refused regardless — see
+*deployed* environment leaves it as: `env.staging` has carried season 2026's
+seed phase since 2026-09-12 (the committed configuration now temporarily
+omits it — see below), but `SEASON_PUBLICATION_AUTHORITY` remains absent there
+too, so these routes stay refused regardless — see
 [Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled).
 
 ## Synchronization Flow
@@ -643,6 +643,22 @@ only), the cron trigger and observability configuration were all preserved
 unchanged; production is untouched, and no application endpoint or smoke test
 was called. No later deployment has replaced this value. Phase 9B-6 and both
 halves of gap G-i remain open.
+
+**Temporary reopening configuration (2026-09-13) — prepared, not deployed.**
+The read-only D12 checkpoint audit found that none of the 57 retained
+season-2026 versions records an exact `__inventory`, so a seed from the active
+version would fail `active-inventory-unavailable`, and no existing release may
+be given a reconstructed or backfilled inventory. The committed
+`wrangler.toml` therefore omits `SEASON_PUBLICATION_CUTOVER_CONTROL` from
+`[env.staging.vars]`: the declaration above is the 2026-09-12 file, and remains
+the live value. Deploying the committed file would reopen season 2026's legacy
+publication and rollback admission, so only a separately authorized,
+time-bounded deployment may do it, for exactly one inventory-bearing
+publication. Admission must then be re-closed with `seed:2026`, and the new
+version and its inventory verified, before the staging-client reset,
+checkpoint construction or seed; the list below resumes only after that and a
+re-run of the checkpoint audit. Procedure and operator warnings:
+[staging runbook §6](../operations/GridView_Staging_Edge_Runbook.md#6-deploy-staging).
 
 What remains, in order, each separately authorized:
 

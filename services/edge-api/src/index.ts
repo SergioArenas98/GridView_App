@@ -58,12 +58,11 @@ export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';
  * not an invoked object. Production declares no such binding at all,
  * `SEASON_PUBLICATION_AUTHORITY` is unset in every committed environment - so
  * `resolvePublicationAuthority` returns `legacy` and no code path performs the
- * lookup, whether or not the namespace is provisioned. `env.staging` declares
- * `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`, live in deployed
- * staging since 2026-09-12, which closes season 2026's legacy mutation
- * admission there - but `SEASON_PUBLICATION_AUTHORITY` staying unset still
- * refuses every cutover operation at the authority-mode gate. Which
- * environment has the namespace provisioned is recorded in
+ * lookup, whether or not the namespace is provisioned. Whatever
+ * `SEASON_PUBLICATION_CUTOVER_CONTROL` an environment carries, that unset
+ * authority mode still refuses every cutover operation at the authority-mode
+ * gate. Which environment has the namespace provisioned, and which cutover
+ * control is deployed where, is recorded in
  * `docs/technical/GridView_Environments.md`.
  */
 export { SeasonPublicationSequencer } from './publication/sequencer/durable-object';
@@ -262,10 +261,9 @@ async function runScheduled(env: Env): Promise<void> {
  * Whatever surface results is finally wrapped by the **cutover admission
  * boundary** when `SEASON_PUBLICATION_CUTOVER_CONTROL` names a season
  * (ADR 0025 D12 step 1), so that season's publication and rollback are refused
- * before any publisher is reached. No deployed environment sets it, so the
- * default build returns exactly what it returns today; `env.staging`'s
- * repository configuration now names season 2026, effective only once that
- * value is separately deployed.
+ * before any publisher is reached. Absent, the surface built above is returned
+ * unchanged. Which environment sets the control, committed and deployed, is
+ * recorded in `docs/technical/GridView_Environments.md`.
  */
 function buildPublicationCommands(
   authority: PublicationAuthority,

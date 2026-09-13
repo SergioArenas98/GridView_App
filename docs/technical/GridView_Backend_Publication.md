@@ -550,6 +550,19 @@ authorized by any other:
 4. smoke and latency verification;
 5. any later production decision.
 
+**Temporary reopening configuration prepared (2026-09-13), not deployed.**
+The D12 checkpoint audit found that no retained season-2026 version records an
+exact `__inventory` — and none may be given a reconstructed one — so the seed
+cannot start from any of them. `services/edge-api/wrangler.toml` now omits
+`SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]`; live staging
+(`00012c06-…`) still carries `seed:2026`, so admission stays closed. Before
+item 1 above, each separately authorized: a time-bounded deployment reopening
+admission, exactly one season-2026 publication under the current code (the
+legacy publisher writes its exact inventory), reclosure to `seed:2026`,
+verification of the new version and its inventory, the staging-client baseline
+reset, and a re-run of the checkpoint audit. See the
+[staging runbook §6](../operations/GridView_Staging_Edge_Runbook.md#6-deploy-staging).
+
 ### The two-phase flow
 
 When `sequencer` mode is selected and the season is `active`, generation and

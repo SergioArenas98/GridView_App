@@ -49,11 +49,12 @@ storage = "sqlite"
 # created the staging namespace. That is provisioning, not use: no season has
 # been seeded or activated, and `SEASON_PUBLICATION_AUTHORITY` is unset in
 # every environment here - so no code path looks this binding up and legacy KV
-# pointers remain authoritative everywhere. `env.staging` below declares
-# `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`, deployed to staging
-# (version `00012c06-…`, superseding `985115b7-…`) on 2026-09-12 - admission
-# for season 2026 is closed there too, but authority is still disabled.
-# Production declares no binding and has never been deployed.
+# pointers remain authoritative everywhere. Live staging (version
+# `00012c06-…`, 2026-09-12) carries `SEASON_PUBLICATION_CUTOVER_CONTROL =
+# "seed:2026"`, so admission for season 2026 is closed there, but authority is
+# still disabled. `env.staging` below temporarily omits that value - read the
+# warning there before deploying this file. Production declares no binding and
+# has never been deployed.
 #
 # `storage = "sqlite"` is required: the coordinator commits through
 # `ctx.storage.transactionSync`, which only SQLite-backed Durable Objects
@@ -73,25 +74,29 @@ ENVIRONMENT = "staging"
 PROVIDER_MODE = "mock"
 PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
 
-# Admission closure for season 2026 (ADR 0025 D12 step 1) - the authenticated
-# operator's explicit selection, recorded 2026-09-12, never an inference from a
-# KV pointer, a calendar or a provider.
+# Admission closure for season 2026 (ADR 0025 D12 step 1) - LIVE IN STAGING,
+# TEMPORARILY OMITTED HERE. DO NOT DEPLOY THIS FILE AS ROUTINE WORK.
 #
-# LIVE SINCE 2026-09-12. A separately authorized `wrangler deploy --env
-# staging` uploaded this value, replacing staging version
-# `985115b7-abb3-4346-8845-d8ff41c80cf6` with version
-# `00012c06-6c09-4b2f-b24c-02d6e51ec08d` at 100% traffic. Season 2026's
-# legacy publication and rollback admission is now closed in deployed
-# staging.
+# Live staging version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (2026-09-12)
+# carries `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` - the
+# authenticated operator's explicit season selection - so season 2026's legacy
+# publication and rollback admission is closed there.
 #
-# `seed:2026` closes admission and permits only the seed preparation to be
-# attempted; it does not itself construct a checkpoint, seed the sequencer or
-# touch `SEASON_PUBLICATION_AUTHORITY` (still unset above, so publication
-# stays on legacy KV pointers even after this deploys). The later
-# `seeded -> active` transition is a separate, explicitly confirmed operator
-# act and would use `activate:2026` instead - never combined with seeding in
-# one value.
-SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"
+# This file omits that value on purpose (prepared 2026-09-13). None of the
+# retained season-2026 versions records an exact `__inventory`, so the D12
+# seed cannot run, and no existing release may be given a reconstructed one.
+# The recovery is exactly one new publication under the current code, which
+# writes its own inventory. Deploying this file reopens season 2026's legacy
+# publication and rollback admission, so only a separately authorized,
+# time-bounded `wrangler deploy --env staging` may upload it - never a routine
+# or unrelated one; merging it changes nothing in Cloudflare. After that one
+# publication, a further authorized deployment restores exactly `seed:2026`
+# before any client reset, checkpoint or seed. See the staging runbook,
+# section 6.
+#
+# An absent control is disabled, not malformed. `SEASON_PUBLICATION_AUTHORITY`
+# stays unset, so nothing is seeded or activated and legacy KV pointers stay
+# authoritative.
 
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.staging.durable_objects.bindings]]
