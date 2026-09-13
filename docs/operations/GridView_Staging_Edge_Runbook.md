@@ -234,6 +234,13 @@ activated and legacy KV pointers stay authoritative; `PROVIDER_MODE` stays
 >   recovery window.** Have the reclosure change reviewed before reopening,
 >   deploy it as soon as the one publication has committed, and do not call
 >   the season-2026 rollback endpoint in between.
+> - **Do not run state-changing verification until reclosure is complete.**
+>   `npm run workflow:staging-auth` (section 10) and
+>   `npm run check:staging-observability` (section 12) both POST
+>   `/internal/admin/sync/full` and `/internal/admin/rollback`; while admission
+>   is open, each run adds another publication and pointer transition. The same
+>   holds for any manual sync (section 7) or rollback (section 11) beyond the
+>   single authorized publication.
 > - **Do not open or sync the staging app on retained test clients during the
 >   recovery window.**
 > - **Do not proceed to checkpoint construction until reclosure and inventory
@@ -249,7 +256,10 @@ season — see [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollb
 This section remains the correct workflow for any season whose admission is
 still open (a season not covered by a live cutover control, or before this
 control is deployed). For season 2026 after closure, the next authorized step
-is the D12 checkpoint and seed sequence, not this endpoint.
+is the D12 checkpoint and seed sequence, not this endpoint. **Season 2026's
+temporary recovery window (section 6) is not such an opening:** there this
+endpoint may run only as the single authorized publication, if that
+authorization names it.
 
 The Worker starts with an empty KV namespace and serves controlled empty/`404`
 responses until the first release is published. Seed it through the admin
@@ -316,6 +326,10 @@ npm run workflow:staging-auth -- https://gridview-api-staging.sejuma18.workers.d
 ```
 
 (Both read `GRIDVIEW_STAGING_ADMIN_TOKEN` from the environment; see section 4.)
+`workflow:staging-auth` changes state — it POSTs `/internal/admin/sync/full`
+and `/internal/admin/rollback` — so do not run it until the season-2026
+reclosure in section 6 is complete. `check:staging-admin` only reads status,
+probes rejected methods and purges the cache.
 
 ## 11. Rollback workflow
 
@@ -325,7 +339,8 @@ closed by the same deploy that closes publication admission (section 7) — see
 [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
 This section remains the correct workflow for any season whose admission is
 still open. For season 2026 after closure, the next authorized step is the
-D12 checkpoint and seed sequence, not this endpoint.
+D12 checkpoint and seed sequence, not this endpoint. **Not for season 2026
+during its temporary recovery window (section 6) either.**
 
 Rollback repoints `active:{season}` to a verified previous/target release:
 
@@ -353,6 +368,10 @@ material** appears in the logs.
 ```text
 npm run check:staging-observability -- https://gridview-api-staging.sejuma18.workers.dev
 ```
+
+That workflow changes state — it POSTs `/internal/admin/sync/full`,
+`/internal/admin/cache/purge` and `/internal/admin/rollback` — so do not run it
+until the season-2026 reclosure in section 6 is complete.
 
 Two hard-won details are baked into the helper:
 

@@ -741,6 +741,11 @@ change) — this is the safe verification mechanism:
 
 ### Live staging scripts (`services/edge-api`)
 
+`workflow:staging-auth` and `check:staging-observability` change state: both
+POST `/internal/admin/sync/full` and `/internal/admin/rollback`. Do not run them
+until the season-2026 reclosure step in the staging runbook's section 6 is
+complete.
+
 Read-only public checks need no token; authenticated checks read
 `GRIDVIEW_STAGING_ADMIN_TOKEN` from the environment (never a CLI argument):
 

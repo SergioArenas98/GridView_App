@@ -51,7 +51,10 @@ The edge API is deployed to Cloudflare Workers staging:
   `wrangler secret put ADMIN_TOKEN --env staging` (interactive; never committed,
   printed or passed as a CLI argument).
 
-Deploy is a normal `wrangler deploy --env staging`; a non-deploying
+Deploy is a normal `wrangler deploy --env staging`, except that one changing the
+live `SEASON_PUBLICATION_CUTOVER_CONTROL` is cutover-sensitive and never routine
+— and while the temporary season-2026 reopening configuration is committed,
+every staging deploy is (runbook section 6). A non-deploying
 `wrangler deploy --dry-run --env staging` bundles and resolves bindings without
 uploading. Temporary mock seeding variables
 (`MOCK_PROVIDER_SOURCE_UPDATED_AT`, `MOCK_PROVIDER_CONTENT_VERSION`) are used only
