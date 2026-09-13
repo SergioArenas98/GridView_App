@@ -241,9 +241,10 @@ activated and legacy KV pointers stay authoritative; `PROVIDER_MODE` stays
 > **Operator warning.**
 >
 > - **Do not deploy this configuration as part of unrelated work.** While it
->   is committed, every staging deployment of `master` is cutover-sensitive
->   (it omits the live `seed:2026`), so routine staging deployment is
->   prohibited until a reviewed change restores `seed:2026` on `master`.
+>   is on `master` without the reclosure configuration, every staging
+>   deployment of `master` is cutover-sensitive (it omits the live
+>   `seed:2026`), so routine staging deployment is prohibited until the
+>   reviewed reclosure restores `seed:2026` on `master`.
 > - **Do not leave admission open longer than the separately authorized
 >   recovery window.** Have the reclosure change reviewed before reopening,
 >   deploy it as soon as the one publication has committed, and do not call
