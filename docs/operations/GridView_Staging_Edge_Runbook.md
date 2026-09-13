@@ -318,6 +318,17 @@ stayed absent throughout. Production still has no Worker.
 7. activate through a later authorization;
 8. smoke and latency verification after activation.
 
+**Item 2 narrowed (2026-09-13).** The reference phone item 2 names is the
+former DNP-NX9, now **permanently decommissioned** from GridView staging and
+**not** reset: nothing is claimed about the data it still holds. Item 2 now
+covers only the remaining eligible clients — the `gv_phase8c2_verify`
+emulator with every restorable snapshot, and the new reference phone — each
+verified to hold no pre-cutover season-2026 state or reset separately. Never
+install, open, run or sync `com.sejuma.gridview.staging` on the DNP-NX9:
+reintroducing it invalidates the record and requires a separately authorized
+reset first. Item 1 is done (PR #24, `ca5142a`). Rule and record:
+[ADR 0025 D12, "What the client decommissioning record supplies (2026-09-13)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-client-decommissioning-record-supplies-2026-09-13).
+
 ## 7. Initial synchronization and publication
 
 **Not for season 2026 while `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`

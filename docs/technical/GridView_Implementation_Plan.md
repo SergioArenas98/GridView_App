@@ -1881,6 +1881,14 @@ before starting:
    on the emulator and the reference phone, and record durable evidence of
    it; re-run the checkpoint audit. Record:
    [staging runbook, "Recovery window record (2026-09-13)"](../operations/GridView_Staging_Edge_Runbook.md#recovery-window-record-2026-09-13).
+
+   **Client reset narrowed (2026-09-13).** The reclosure configuration is
+   merged (PR #24, `ca5142a`). The reference phone is the former DNP-NX9, now
+   permanently decommissioned from staging and **not** reset — no erasure is
+   claimed. The `gv_phase8c2_verify` emulator with every restorable snapshot,
+   and the new reference phone, still need verification or a separate reset
+   before the audit re-run. See
+   [ADR 0025 D12, "What the client decommissioning record supplies (2026-09-13)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-client-decommissioning-record-supplies-2026-09-13).
 4. **Production activation** — a separate future decision, blocked behind
    every Phase 9B exit gate and production-readiness requirement, exactly
    like every other Phase 9B production step above.
