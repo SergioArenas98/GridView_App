@@ -109,12 +109,14 @@ Staging config lives in `wrangler.toml` (`[env.staging]`): Worker
 (`workers_dev`), KV `GRIDVIEW_DATA` (`1d0fb55486a745a1ad12e03d9f04942b`),
 `PROVIDER_MODE = mock`, `PUBLIC_BASE_URL` set, and cron `17 3 * * *` (03:17 UTC).
 
-> **Never a routine deploy while the season-2026 reopening configuration is
-> committed.** Live staging keeps
-> `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`, but `wrangler.toml`
-> temporarily omits it, so `wrangler deploy --env staging` would reopen season
-> 2026's publication and rollback admission. Deploy only under the separate,
-> time-bounded authorization described in the runbook's section 6. Until that
+> **Never a routine deploy during the season-2026 inventory recovery
+> (prepared 2026-09-13, nothing deployed).** Live staging keeps
+> `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. The temporary reopening
+> configuration (PR #23) omits it, so deploying that would reopen season
+> 2026's publication and rollback admission; `wrangler.toml` here restores it
+> as the prepared reclosure configuration, deployed only immediately after the
+> one authorized publication, never before it. Deploy either only under the
+> separate, time-bounded authorization in the runbook's section 6. Until that
 > section's reclosure step is complete, do not seed and do not run
 > `workflow:staging-auth` or `check:staging-observability`: both POST
 > `/internal/admin/sync/full` and `/internal/admin/rollback`, and while

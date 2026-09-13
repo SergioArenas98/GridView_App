@@ -56,7 +56,7 @@ actually live.
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
 | Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`), neither looked up by any deployed code path; see `../technical/GridView_Environments.md` |
-| `SEASON_PUBLICATION_CUTOVER_CONTROL` | **Committed: absent** — temporarily omitted by the season-2026 reopening configuration (prepared 2026-09-13, **not deployed**; see "Temporary season-2026 reopening configuration" in section 6). **Live: `seed:2026`**, unchanged since 2026-09-12, when a separately authorized `wrangler deploy --env staging` uploaded it from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93`, replacing version `985115b7-…` with `00012c06-6c09-4b2f-b24c-02d6e51ec08d` at 100% traffic. Season 2026's legacy publication and rollback admission stays **closed** until a deployment of the committed file reopens it, which only a separately authorized, time-bounded recovery deployment may do. `SEASON_PUBLICATION_AUTHORITY` is absent from both, so neither seeds nor activates anything. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
+| `SEASON_PUBLICATION_CUTOVER_CONTROL` | **Committed: `seed:2026`** — restored by the prepared season-2026 reclosure configuration (2026-09-13, **not deployed**) after the temporary reopening configuration of PR #23 (2026-09-13, **not deployed**) omitted it; see "Temporary season-2026 reopening configuration" in section 6. **Live: `seed:2026`**, unchanged since 2026-09-12, when a separately authorized `wrangler deploy --env staging` uploaded it from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93`, replacing version `985115b7-…` with `00012c06-6c09-4b2f-b24c-02d6e51ec08d` at 100% traffic. Season 2026's legacy publication and rollback admission stays **closed** until a deployment of the reopening configuration reopens it, which only a separately authorized, time-bounded recovery deployment may do; the reclosure configuration may be deployed only immediately after that window's single publication. `SEASON_PUBLICATION_AUTHORITY` is absent from all of them, so none seeds or activates anything. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
 
 `PUBLIC_BASE_URL` is mandatory in staging: the scheduled publisher uses it to
 compute the public URLs it purges. Its absence is a configuration error.
@@ -114,9 +114,11 @@ npm exec wrangler deploy --dry-run --env staging
 The dry-run bundles the Worker and resolves bindings without uploading anything
 (`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV), the
 `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
-plus the `ENVIRONMENT`, `PROVIDER_MODE` and `PUBLIC_BASE_URL` vars. While the
-temporary season-2026 reopening configuration is committed, the dry-run shows
-**no** `SEASON_PUBLICATION_CUTOVER_CONTROL`, although live staging carries
+plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL` and
+`SEASON_PUBLICATION_CUTOVER_CONTROL` (`seed:2026`, restored by the prepared
+reclosure configuration) vars. A dry-run of the temporary season-2026
+reopening configuration (PR #23) shows **no**
+`SEASON_PUBLICATION_CUTOVER_CONTROL`, although live staging carries
 `seed:2026`; see section 2. **Read the dry-run output, and compare it with the
 live version, before proceeding to section 6** — that comparison is how the
 cutover-sensitive gate below is checked.
@@ -138,8 +140,9 @@ is a value like any other:
   [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary)
   step 1, closing publication and rollback admission for season 2026 in live
   staging before any checkpoint, seed or activation; omitting it — as the
-  committed temporary reopening configuration below does — reopens that
-  admission. Before running the command below in this case, the operator must
+  temporary reopening configuration below does — reopens that admission, and
+  restoring it — as the prepared reclosure configuration below does — closes
+  it again. Before running the command below in this case, the operator must
   hold explicit, separate authorization naming: the exact control value being
   deployed (or its absence), the season affected (2026), the target
   environment (staging), the reviewed commit being deployed and, for a
@@ -172,11 +175,11 @@ above — an ordinary redeploy must never reopen admission by accident.
 
 **Live staging remains closed.** Version
 `00012c06-6c09-4b2f-b24c-02d6e51ec08d` still carries
-`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. The committed
-`wrangler.toml` omits that value — its only configuration change — so the
-next staging deployment of it would **reopen** season 2026's legacy
-publication and rollback admission. Creating, pushing or merging the PR that
-prepared it changes nothing in Cloudflare.
+`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. The reopening
+configuration (PR #23) omits that value from `wrangler.toml` — its only
+configuration change — so a staging deployment of it would **reopen** season
+2026's legacy publication and rollback admission. Creating, pushing or
+merging the PR that prepared it changes nothing in Cloudflare.
 
 **Why.** The read-only D12 checkpoint audit (2026-09-13) found that none of
 the 57 retained season-2026 versions — active `20260912031739186-f641607c`,
@@ -199,6 +202,17 @@ current code, which writes its own exact inventory.
 6. a re-run of the D12 checkpoint audit.
 
 Only then does D12's sequence resume at checkpoint construction.
+
+**The prepared reclosure configuration (2026-09-13, not deployed)** is step
+3's reviewed change, prepared before any reopening deployment: it restores
+exactly `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` under
+`[env.staging.vars]` and changes nothing else, so its executable configuration
+matches that of live version `00012c06-…`. Because its control equals the live
+value today, the gate above would class deploying it now as ordinary — **it
+is not**. It is deployed only as step 3, under that step's separate
+authorization, immediately after step 2's publication has committed; never
+before that publication, and never as routine or unrelated work. Creating,
+pushing or merging it changes nothing in Cloudflare either.
 
 **What a reopened Worker does.** The control resolves to `disabled`, so
 season 2026's publication and rollback reach the legacy `SnapshotPublisher`
@@ -229,7 +243,7 @@ activated and legacy KV pointers stay authoritative; `PROVIDER_MODE` stays
 > - **Do not deploy this configuration as part of unrelated work.** While it
 >   is committed, every staging deployment of `master` is cutover-sensitive
 >   (it omits the live `seed:2026`), so routine staging deployment is
->   prohibited until a reviewed change restores `seed:2026` in the repository.
+>   prohibited until a reviewed change restores `seed:2026` on `master`.
 > - **Do not leave admission open longer than the separately authorized
 >   recovery window.** Have the reclosure change reviewed before reopening,
 >   deploy it as soon as the one publication has committed, and do not call

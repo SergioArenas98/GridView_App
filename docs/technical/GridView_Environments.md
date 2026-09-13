@@ -304,12 +304,12 @@ and production has never been deployed.**
 | `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | **none** |
 | Namespaces provisioned on Cloudflare | none | **both, 2026-09-12** (version `985115b7-…`); neither looked up | none - never deployed |
 | Authority mode set | no | no | no |
-| Cutover control set | no | **live: yes** (`seed:2026`, deployed 2026-09-12, version `00012c06-…`); **committed: no** — temporarily omitted 2026-09-13, not deployed (below) | no |
+| Cutover control set | no | **live: yes** (`seed:2026`, deployed 2026-09-12, version `00012c06-…`); **committed: yes** (`seed:2026`) — omitted by the temporary reopening configuration and restored by the reclosure configuration, both prepared 2026-09-13, neither deployed (below) | no |
 
 `SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is live in staging only —
-`seed:2026`, deployed 2026-09-12, although the committed configuration now
-temporarily omits it (below) — and remains unset in development and
-production. It accepts exactly `seed:<supported season>` or
+`seed:2026`, deployed 2026-09-12, and committed again by the reclosure
+configuration after the temporary reopening configuration omitted it (below)
+— and remains unset in development and production. It accepts exactly `seed:<supported season>` or
 `activate:<supported season>`; an absent or empty value is disabled and
 preserves today's behaviour exactly. A **malformed non-empty value is a bounded
 `ConfigurationError`** — the same failure an unknown `PROVIDER_MODE` produces,
@@ -335,16 +335,25 @@ neither seeds nor activates anything.
 deployed.** The D12 checkpoint audit found that no retained season-2026
 version records an exact `__inventory`, so the seed cannot run, and no existing
 release may be given a reconstructed or backfilled one.
-`services/edge-api/wrangler.toml` no longer declares
-`SEASON_PUBLICATION_CUTOVER_CONTROL` under `[env.staging.vars]`; the paragraph
-above describes the file as it stood on 2026-09-12. **Live staging is
-unchanged**: version `00012c06-…` still carries `seed:2026`, so season 2026's
-admission remains closed. Only a separately authorized, time-bounded
+The reopening configuration (PR #23) removes
+`SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]` in
+`services/edge-api/wrangler.toml`. **Live staging is unchanged**: version
+`00012c06-…` still carries `seed:2026`, so season 2026's admission remains
+closed. Only a separately authorized, time-bounded
 `wrangler deploy --env staging` would reopen it, for exactly one
 inventory-bearing publication, after which a further authorized deployment
-restores `seed:2026` before any client reset, checkpoint or seed. While this
-configuration is committed, routine staging deployment is prohibited — see
-the staging runbook, section 6.
+restores `seed:2026` before any client reset, checkpoint or seed. While the
+reopening configuration is committed without the reclosure, routine staging
+deployment is prohibited — see the staging runbook, section 6.
+
+**Season-2026 reclosure configuration — prepared 2026-09-13, not deployed.**
+Prepared after the reopening configuration and before any reopening
+deployment, it restores exactly
+`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` under `[env.staging.vars]`
+— its only change from the reopening configuration — so the committed file
+again declares what the 2026-09-12 paragraph above describes, and what live
+staging carries. It is that further authorized deployment: deployed only
+immediately after the one publication, never before it.
 
 When it *is* set, it closes **that one season's** legacy publication and
 rollback admission before `SnapshotPublisher` is reached (bounded reason

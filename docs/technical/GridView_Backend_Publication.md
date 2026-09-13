@@ -553,8 +553,10 @@ authorized by any other:
 **Temporary reopening configuration prepared (2026-09-13), not deployed.**
 The D12 checkpoint audit found that no retained season-2026 version records an
 exact `__inventory` — and none may be given a reconstructed one — so the seed
-cannot start from any of them. `services/edge-api/wrangler.toml` now omits
-`SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]`; live staging
+cannot start from any of them. The reopening configuration (PR #23) omits
+`SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]` in
+`services/edge-api/wrangler.toml`, and the reclosure configuration prepared
+after it restores exactly `seed:2026`; neither is deployed. Live staging
 (`00012c06-…`) still carries `seed:2026`, so admission stays closed. Before
 item 1 above, each separately authorized: a time-bounded deployment reopening
 admission, exactly one season-2026 publication under the current code (the

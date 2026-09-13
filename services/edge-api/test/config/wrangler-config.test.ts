@@ -82,24 +82,27 @@ function variables(block: string): Map<string, string> {
   );
 }
 
-describe('temporary season 2026 reopening configuration (ADR 0025 D12 recovery)', () => {
-  // Live staging (version `00012c06-…`) still carries `seed:2026`. This file
-  // prepares the one separately authorized deployment that would reopen
-  // season 2026's admission for a single inventory-bearing publication.
-  // Restoring `seed:2026` for reclosure must change these assertions back
-  // deliberately.
+describe('season 2026 reclosure configuration (ADR 0025 D12 recovery)', () => {
+  // Live staging (version `00012c06-…`) carries `seed:2026`. The temporary
+  // reopening configuration (PR #23) omitted it so that one separately
+  // authorized deployment could reopen season 2026's admission for a single
+  // inventory-bearing publication; this file restores exactly that value as
+  // the reclosure deployed straight after that publication. Any other staging
+  // control must change these assertions deliberately.
 
-  it('omits the cutover control, leaving exactly the three base staging variables', () => {
+  it('restores exactly seed:2026 after the three base staging variables', () => {
     expect(assignments(stagingVarsBlock(config))).toEqual([
       'ENVIRONMENT = "staging"',
       'PROVIDER_MODE = "mock"',
       'PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"',
+      'SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"',
     ]);
-    // Assigned nowhere in the file; the name still appears in the comments
-    // that record the live value.
-    expect(config).not.toMatch(
-      /^\s*"?SEASON_PUBLICATION_CUTOVER_CONTROL"?\s*=/m,
-    );
+    // Assigned exactly once anywhere in the file - so neither the top-level
+    // development table nor production sets it; the name still appears in
+    // the comments that explain the value.
+    expect(
+      config.match(/^\s*"?SEASON_PUBLICATION_CUTOVER_CONTROL"?\s*=/gm),
+    ).toHaveLength(1);
   });
 
   it('leaves the production variables exactly as they were', () => {
@@ -113,7 +116,7 @@ describe('temporary season 2026 reopening configuration (ADR 0025 D12 recovery)'
     expect(config).not.toMatch(/^\s*"?SEASON_PUBLICATION_AUTHORITY"?\s*=/m);
   });
 
-  it('resolves the prepared staging variables to open admission under the legacy authority', () => {
+  it('resolves the staging variables to the season 2026 seed phase under the legacy authority', () => {
     const vars = variables(stagingVarsBlock(config));
     const resolved = resolveRuntimeConfig({
       ENVIRONMENT: vars.get('ENVIRONMENT'),
@@ -127,7 +130,10 @@ describe('temporary season 2026 reopening configuration (ADR 0025 D12 recovery)'
     expect(resolved.environment).toBe('staging');
     expect(resolved.providerMode).toBe('mock');
     expect(resolved.publicationAuthorityMode).toBe('legacy');
-    expect(resolved.publicationCutoverControl).toEqual({ kind: 'disabled' });
+    expect(resolved.publicationCutoverControl).toEqual({
+      kind: 'seed',
+      season: 2026,
+    });
   });
 
   it('leaves every staging binding, the secret, cron and observability untouched', () => {
