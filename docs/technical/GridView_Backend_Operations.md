@@ -669,6 +669,31 @@ checkpoint construction or seed; the list below resumes only after that and a
 re-run of the checkpoint audit. Procedure and operator warnings:
 [staging runbook §6](../operations/GridView_Staging_Edge_Runbook.md#6-deploy-staging).
 
+**The recovery window (2026-09-13) supersedes two statements above**: "No
+later deployment has replaced this value" and "prepared, not deployed". Both
+were true when written. The window ran under separate authorization, which
+also covered rotating `ADMIN_TOKEN`:
+- One deployment of `master` `d50ef2f8daa6e0292274e97a5effe231951cc9fd`
+  (version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, 18:29:21Z UTC) reopened
+  admission and rotated the secret.
+- Exactly one authenticated manual full synchronization (request
+  `995967b7-9b7a-46dc-97dc-d7c18fdb5beb`) published
+  `20260913183106443-4f683541` (`applied`, mock provider only) with its exact
+  `__inventory`. It moved `active:2026` to that release and `previous:2026` to
+  `20260912031739186-f641607c`.
+- One deployment of `549bb5f3f3ee3963727a816b96fa39752355e9cd` (version
+  `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, 18:31:58Z UTC) restored
+  `seed:2026`.
+
+`SEASON_PUBLICATION_AUTHORITY` stayed absent and `PROVIDER_MODE` stayed
+`mock`. No checkpoint, seed, activation, client reset or smoke test occurred,
+and production was untouched. Before item 1 below, each still separately
+authorized: merge the reclosure configuration, so `master` carries `seed:2026`
+again; reset the staging app data on the emulator and the reference phone,
+and record durable evidence of the reset; and re-run the checkpoint audit.
+Full record:
+[staging runbook, "Recovery window record (2026-09-13)"](../operations/GridView_Staging_Edge_Runbook.md#recovery-window-record-2026-09-13).
+
 What remains, in order, each separately authorized:
 
 1. operator checkpoint construction and approval, as ADR 0025 D12's

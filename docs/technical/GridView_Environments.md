@@ -215,7 +215,7 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 | Environment | Worker name | State |
 |---|---|---|
 | development | `gridview-api-dev` | Local `wrangler dev` only |
-| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`) — see the Durable Object state below. |
+| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`). Redeployed twice more on 2026-09-13, for the season-2026 recovery window: reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, then reclosure version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, which is current and carries `seed:2026`. See the Durable Object state below. |
 | production | `gridview-api-production` | Not provisioned |
 
 > **Staging: public availability observed; administrative state not verified.**
@@ -304,7 +304,7 @@ and production has never been deployed.**
 | `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | **none** |
 | Namespaces provisioned on Cloudflare | none | **both, 2026-09-12** (version `985115b7-…`); neither looked up | none - never deployed |
 | Authority mode set | no | no | no |
-| Cutover control set | no | **live: yes** (`seed:2026`, deployed 2026-09-12, version `00012c06-…`); **committed: yes** (`seed:2026`) — omitted by the temporary reopening configuration and restored by the reclosure configuration, both prepared 2026-09-13, neither deployed (below) | no |
+| Cutover control set | no | **live: yes** (`seed:2026`: first deployed 2026-09-12 as version `00012c06-…`, absent only during the 2026-09-13 recovery window, and restored as version `c35f99c0-…`); **committed: yes** (`seed:2026`) in the reclosure configuration. `master` omits it until that configuration is merged (below) | no |
 
 `SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is live in staging only —
 `seed:2026`, deployed 2026-09-12, and committed again by the reclosure
@@ -354,6 +354,26 @@ deployment, it restores exactly
 again declares what the 2026-09-12 paragraph above describes, and what live
 staging carries. It is that further authorized deployment: deployed only
 immediately after the one publication, never before it.
+
+**Season-2026 recovery window — executed 2026-09-13.** This supersedes the "not
+deployed" and "live staging is unchanged" statements in the two paragraphs
+above, which were true when written. Under separate authorization, which also
+covered rotating `ADMIN_TOKEN`:
+- Version `38b5169a-6e3b-4e44-aed1-89ef74c0995c` (reopening, from `master`
+  `d50ef2f8daa6e0292274e97a5effe231951cc9fd`, 18:29:21Z UTC) omitted the
+  control and rotated the secret.
+- Exactly one manual full synchronization published
+  `20260913183106443-4f683541` with its exact `__inventory`.
+- Version `c35f99c0-9e89-4dd7-8fbe-449d295fb567` (reclosure, from
+  `549bb5f3f3ee3963727a816b96fa39752355e9cd`, 18:31:58Z UTC) restored
+  `seed:2026`.
+
+Live staging is closed again. `SEASON_PUBLICATION_AUTHORITY` stayed absent
+and `PROVIDER_MODE` stayed `mock`, and nothing was seeded or activated.
+Production is untouched. Until the reclosure configuration is merged,
+`master` omits the control, so routine staging deployment of `master` stays
+prohibited. Record:
+[staging runbook, "Recovery window record (2026-09-13)"](../operations/GridView_Staging_Edge_Runbook.md#recovery-window-record-2026-09-13).
 
 When it *is* set, it closes **that one season's** legacy publication and
 rollback admission before `SnapshotPublisher` is reached (bounded reason

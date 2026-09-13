@@ -565,6 +565,23 @@ verification of the new version and its inventory, the staging-client baseline
 reset, and a re-run of the checkpoint audit. See the
 [staging runbook §6](../operations/GridView_Staging_Edge_Runbook.md#6-deploy-staging).
 
+**The recovery window (2026-09-13) supersedes "neither is deployed" and
+"admission stays closed" in the paragraph above**, which were true when
+written. The window ran under separate authorization:
+- Version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, from `master` `d50ef2f…`,
+  reopened admission.
+- Exactly one manual full synchronization published
+  `20260913183106443-4f683541` (`applied`). The legacy publisher wrote its
+  exact `__inventory`, listing all 40 documents, and no sidecar. `active:2026`
+  moved to that release and `previous:2026` to `20260912031739186-f641607c`.
+- Version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, from `549bb5f…`, restored
+  `seed:2026` about 2 minutes 36 seconds after the reopening.
+
+The repository's `importRelease` accepts the new active release. Authority
+stayed legacy, and nothing was seeded or activated. The client reset and the
+audit re-run remain before item 1. Record:
+[staging runbook, "Recovery window record (2026-09-13)"](../operations/GridView_Staging_Edge_Runbook.md#recovery-window-record-2026-09-13).
+
 ### The two-phase flow
 
 When `sequencer` mode is selected and the season is `active`, generation and

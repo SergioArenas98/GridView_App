@@ -109,18 +109,19 @@ Staging config lives in `wrangler.toml` (`[env.staging]`): Worker
 (`workers_dev`), KV `GRIDVIEW_DATA` (`1d0fb55486a745a1ad12e03d9f04942b`),
 `PROVIDER_MODE = mock`, `PUBLIC_BASE_URL` set, and cron `17 3 * * *` (03:17 UTC).
 
-> **Never a routine deploy during the season-2026 inventory recovery
-> (prepared 2026-09-13, nothing deployed).** Live staging keeps
-> `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. The temporary reopening
-> configuration (PR #23) omits it, so deploying that would reopen season
-> 2026's publication and rollback admission; `wrangler.toml` here restores it
-> as the prepared reclosure configuration, deployed only immediately after the
-> one authorized publication, never before it. Deploy either only under the
-> separate, time-bounded authorization in the runbook's section 6. Until that
-> section's reclosure step is complete, do not seed and do not run
-> `workflow:staging-auth` or `check:staging-observability`: both POST
-> `/internal/admin/sync/full` and `/internal/admin/rollback`, and while
-> admission is open each run adds another publication and pointer transition.
+> **Never a routine deploy while `master` lacks the reclosure configuration.**
+> The season-2026 inventory recovery ran on 2026-09-13 under separate
+> authorization. The temporary reopening configuration (PR #23, now on
+> `master`) was deployed for exactly one publication. The reclosure
+> configuration in this `wrangler.toml` (PR #24) was deployed immediately
+> afterwards, so live staging carries
+> `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` again. Until PR #24 is
+> merged, a staging deploy of `master` would omit that value and reopen season
+> 2026's publication and rollback admission, so deploy only under the separate
+> authorization in the runbook's section 6. While admission is open, do not
+> run `workflow:staging-auth` or `check:staging-observability`: both POST
+> `/internal/admin/sync/full` and `/internal/admin/rollback`, and each run adds
+> another publication and pointer transition.
 
 ```text
 # validate + bundle without deploying
