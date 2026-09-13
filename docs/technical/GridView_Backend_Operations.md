@@ -694,6 +694,14 @@ and record durable evidence of the reset; and re-run the checkpoint audit.
 Full record:
 [staging runbook, "Recovery window record (2026-09-13)"](../operations/GridView_Staging_Edge_Runbook.md#recovery-window-record-2026-09-13).
 
+**Client reset narrowed (2026-09-13).** The reclosure configuration is merged
+(PR #24, `ca5142a`). The reference phone named above is the former DNP-NX9,
+now permanently decommissioned from staging and **not** reset — no erasure is
+claimed. The remaining eligible clients — the `gv_phase8c2_verify` emulator
+with every restorable snapshot, and the new reference phone — still need
+verification or a separate reset before the checkpoint audit is re-run. See
+[ADR 0025 D12, "What the client decommissioning record supplies (2026-09-13)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-client-decommissioning-record-supplies-2026-09-13).
+
 What remains, in order, each separately authorized:
 
 1. operator checkpoint construction and approval, as ADR 0025 D12's

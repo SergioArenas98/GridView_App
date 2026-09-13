@@ -2409,6 +2409,50 @@ What remains, in order, each requiring its own explicit authorization:
 7. activation, through a later authorization;
 8. smoke and latency verification after activation.
 
+#### What the client decommissioning record supplies (2026-09-13)
+
+The operator has **permanently decommissioned** the former physical reference
+phone from GridView staging. It is recorded under the permanent client
+decommissioning rule in "The pre-cutover historical-floor activation
+precondition" below, which defines when a device leaves the target
+environment for the `no-retained-pre-cutover-client-state` alternative.
+
+| Field | Record |
+|---|---|
+| Environment | GridView staging (Worker `gridview-api-staging`); application flavor `com.sejuma.gridview.staging` |
+| Season | 2026 |
+| Device label | Former reference phone, HONOR DNP-NX9 |
+| Decision time (UTC) | 2026-09-13T20:10:20Z — the operator's decision as recorded; the operator first stated it earlier the same UTC day |
+| Operator decision | Permanently decommissioned from GridView staging. The device will never again be used as a GridView development, staging, test or reference device; will never again install, open, run or synchronize `com.sejuma.gridview.staging`; is not counted among the devices eligible to access staging; and is not to be accessed, inspected, reset or modified as part of this migration. |
+| Evidence reference | `docs/adr/0025-season-publication-authority-and-rollback-republication.md#what-the-client-decommissioning-record-supplies-2026-09-13` |
+
+- **Historical fact.** The device ran a staging profile APK of
+  `com.sejuma.gridview.staging` against staging during Phase 8C-3
+  ([`GridView_Performance.md` §1](../technical/GridView_Performance.md#1-measurement-environment)).
+  That record also states that the staging package was uninstalled after
+  those runs. This record neither relies on nor re-verifies that statement.
+- **Limitation.** The device was not accessed, inspected, reset or modified
+  for this record. Nothing is claimed about what data it still holds: this is
+  a decommissioning, not a reset or an erasure.
+- **Consequence.** The device cannot be reintroduced to any GridView staging
+  operation unless this record is first treated as invalid and its
+  application data is reset under separate authorization, before any access.
+- **Pending evidence.** This record establishes **no** historical-floor
+  precondition for season 2026 and selects no evidence variant. Before
+  `no-retained-pre-cutover-client-state` could be selected, each remaining
+  eligible client must still be verified: the `gv_phase8c2_verify` emulator
+  together with every restorable snapshot of it, and the new reference phone,
+  on which the staging application has never been installed. Each must be
+  shown to hold no pre-cutover season-2026 state, or be reset separately.
+
+This supersedes item 2 of the list above in part: the reference phone it
+names is this device, which is decommissioned rather than reset. Item 2 now
+covers only the remaining eligible clients named under "Pending evidence".
+Item 1 is done: the reclosure configuration was merged as `master`
+`ca5142ae95b2256039f34d6bc623e32ae1c58788` (PR #24). No device, Worker, KV
+namespace or secret was touched to make this record, and no checkpoint,
+fingerprint, seed or activation occurred.
+
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from
 `SEASON_PUBLICATION_AUTHORITY`. Only the exact string `sequencer` opts in;
@@ -2994,6 +3038,50 @@ this sentence is not a substitute for doing so.
 If satisfying this precondition requires a new public client contract or a
 data reset, that is separate future authorization this documentation
 correction does not itself grant.
+
+**Permanent client decommissioning — what "the target environment" means
+for the third alternative (clarified 2026-09-13).** For
+`no-retained-pre-cutover-client-state`, *the target environment* includes
+every client device still authorized or eligible to install, open, run or
+synchronize the application flavor that talks to that environment (for
+staging, `com.sejuma.gridview.staging`). A device leaves that boundary only
+through an explicit, **permanent** operator decommissioning decision. The
+alternative's serialized form is unchanged —
+`{ kind: 'no-retained-pre-cutover-client-state', evidenceReference }` — and so
+are its decoding, the fingerprint derivation, every route and all storage.
+This clarifies what an operator may truthfully attest with it, not what the
+code accepts.
+
+- **Decommissioning erases nothing and is never a reset.** It makes no claim
+  that the application or its data was removed from the device, which may
+  still hold a pre-cutover snapshot. It is sound only because such a device
+  never presents that snapshot to the environment again. A device whose
+  retained state was actually removed is the fourth alternative's case, not
+  this one.
+- **The durable record must identify** the environment, the season, a
+  non-sensitive device label (never a serial, account identifier or machine
+  path), the UTC time of the decision, the operator's decision, and an
+  evidence reference.
+- **The decision must declare** the device permanently ineligible to install,
+  open, run or synchronize that application flavor against that environment.
+- **Invalidation.** If the device is ever reintroduced — returned to the test
+  fleet, reused as a development, test or reference device, or used with that
+  environment again in any way — its decommissioning evidence is invalid from
+  that moment, and its application data must be reset, under separate
+  authorization, before any such access. An activation that relied on the
+  evidence does not make reuse without that reset safe.
+- **It removes one device, not the rest of the obligation.** Every client that
+  remains eligible, and every restorable emulator snapshot that could bring
+  back an earlier installation, must still be inventoried and shown to hold no
+  pre-cutover state for the season, or be reset separately.
+- **Not for a device that might come back.** Decommissioning cannot be used
+  for a device that might reconnect, is merely offline, is temporarily unused,
+  or whose ownership is uncertain. Such a device stays inside the target
+  environment and needs the same evidence or reset as any retained client.
+
+No claim is made about the physical deletion of data from a decommissioned
+device. The first such record is under "What the client decommissioning record
+supplies (2026-09-13)" above.
 
 **The completeness limit, stated precisely rather than assumed away.** An
 earlier draft justified this seed's scope by claiming that nothing in this
