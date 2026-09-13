@@ -56,7 +56,7 @@ actually live.
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
 | Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`), neither looked up by any deployed code path; see `../technical/GridView_Environments.md` |
-| `SEASON_PUBLICATION_CUTOVER_CONTROL` | **Committed: absent** — temporarily omitted by the season-2026 reopening configuration (prepared 2026-09-13, **not deployed**; see "Temporary season-2026 reopening configuration" in section 6). **Live: `seed:2026`**, unchanged since 2026-09-12, when a separately authorized `wrangler deploy --env staging` uploaded it from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93`, replacing version `985115b7-…` with `00012c06-6c09-4b2f-b24c-02d6e51ec08d` at 100% traffic. Season 2026's legacy publication and rollback admission stays **closed** until a deployment of the committed file reopens it, which only a separately authorized, time-bounded recovery deployment may do. `SEASON_PUBLICATION_AUTHORITY` is absent from both, so neither seeds nor activates anything. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
+| `SEASON_PUBLICATION_CUTOVER_CONTROL` | **Committed: `seed:2026`** — restored by the season-2026 reclosure configuration (PR #24) after the temporary reopening configuration of PR #23 omitted it; see "Temporary season-2026 reopening configuration" in section 6. **Live: `seed:2026`.** It was first deployed on 2026-09-12 from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93` (version `00012c06-6c09-4b2f-b24c-02d6e51ec08d`). It was absent only during the separately authorized recovery window on 2026-09-13 (reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`). The reclosure deployment from `549bb5f3f3ee3963727a816b96fa39752355e9cd` restored it the same day as version `c35f99c0-9e89-4dd7-8fbe-449d295fb567` at 100% traffic. Season 2026's legacy publication and rollback admission is **closed**; see "Recovery window record (2026-09-13)" in section 6. Any change to the live value is cutover-sensitive (section 6). `SEASON_PUBLICATION_AUTHORITY` is absent from all of them, so none seeds or activates anything. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
 
 `PUBLIC_BASE_URL` is mandatory in staging: the scheduled publisher uses it to
 compute the public URLs it purges. Its absence is a configuration error.
@@ -104,6 +104,18 @@ $env:GRIDVIEW_STAGING_ADMIN_TOKEN = Read-Host "Staging admin token"  # not logge
 Remove-Item Env:\GRIDVIEW_STAGING_ADMIN_TOKEN
 ```
 
+**Rotation record (2026-09-13).** Under explicit operator authorization, the
+staging `ADMIN_TOKEN` was rotated once, as part of the season-2026 recovery
+window's reopening deployment
+(`wrangler deploy --env staging --secrets-file <temporary file>`). The
+temporary file lived outside the repository and was deleted immediately after
+Wrangler read it. The previous value no longer authenticates. The operator's
+reusable copy exists only as a Windows-DPAPI-encrypted file, readable by the
+operator's Windows user, in a private credential directory under that user's
+profile, outside the repository. Authenticated calls decrypt it into process
+memory only and never print it. See "Recovery window record (2026-09-13)" in
+section 6.
+
 ## 5. Validate and dry-run (no deploy)
 
 ```text
@@ -114,9 +126,11 @@ npm exec wrangler deploy --dry-run --env staging
 The dry-run bundles the Worker and resolves bindings without uploading anything
 (`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV), the
 `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
-plus the `ENVIRONMENT`, `PROVIDER_MODE` and `PUBLIC_BASE_URL` vars. While the
-temporary season-2026 reopening configuration is committed, the dry-run shows
-**no** `SEASON_PUBLICATION_CUTOVER_CONTROL`, although live staging carries
+plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL` and
+`SEASON_PUBLICATION_CUTOVER_CONTROL` (`seed:2026`, restored by the prepared
+reclosure configuration) vars. A dry-run of the temporary season-2026
+reopening configuration (PR #23) shows **no**
+`SEASON_PUBLICATION_CUTOVER_CONTROL`, although live staging carries
 `seed:2026`; see section 2. **Read the dry-run output, and compare it with the
 live version, before proceeding to section 6** — that comparison is how the
 cutover-sensitive gate below is checked.
@@ -138,8 +152,9 @@ is a value like any other:
   [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary)
   step 1, closing publication and rollback admission for season 2026 in live
   staging before any checkpoint, seed or activation; omitting it — as the
-  committed temporary reopening configuration below does — reopens that
-  admission. Before running the command below in this case, the operator must
+  temporary reopening configuration below does — reopens that admission, and
+  restoring it — as the prepared reclosure configuration below does — closes
+  it again. Before running the command below in this case, the operator must
   hold explicit, separate authorization naming: the exact control value being
   deployed (or its absence), the season affected (2026), the target
   environment (staging), the reviewed commit being deployed and, for a
@@ -170,13 +185,20 @@ above — an ordinary redeploy must never reopen admission by accident.
 
 ### Temporary season-2026 reopening configuration (prepared 2026-09-13, not deployed)
 
+> **Executed 2026-09-13.** Two kinds of statement in this subsection were true
+> when written: that this configuration and the reclosure configuration are
+> "not deployed", and that live version `00012c06-…` still carries
+> `seed:2026`. The recovery window has since deployed both, in order, and live
+> staging is closed again at version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`.
+> See "Recovery window record (2026-09-13)" below.
+
 **Live staging remains closed.** Version
 `00012c06-6c09-4b2f-b24c-02d6e51ec08d` still carries
-`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. The committed
-`wrangler.toml` omits that value — its only configuration change — so the
-next staging deployment of it would **reopen** season 2026's legacy
-publication and rollback admission. Creating, pushing or merging the PR that
-prepared it changes nothing in Cloudflare.
+`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. The reopening
+configuration (PR #23) omits that value from `wrangler.toml` — its only
+configuration change — so a staging deployment of it would **reopen** season
+2026's legacy publication and rollback admission. Creating, pushing or
+merging the PR that prepared it changes nothing in Cloudflare.
 
 **Why.** The read-only D12 checkpoint audit (2026-09-13) found that none of
 the 57 retained season-2026 versions — active `20260912031739186-f641607c`,
@@ -199,6 +221,17 @@ current code, which writes its own exact inventory.
 6. a re-run of the D12 checkpoint audit.
 
 Only then does D12's sequence resume at checkpoint construction.
+
+**The prepared reclosure configuration (2026-09-13, not deployed)** is step
+3's reviewed change, prepared before any reopening deployment: it restores
+exactly `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` under
+`[env.staging.vars]` and changes nothing else, so its executable configuration
+matches that of live version `00012c06-…`. Because its control equals the live
+value today, the gate above would class deploying it now as ordinary — **it
+is not**. It is deployed only as step 3, under that step's separate
+authorization, immediately after step 2's publication has committed; never
+before that publication, and never as routine or unrelated work. Creating,
+pushing or merging it changes nothing in Cloudflare either.
 
 **What a reopened Worker does.** The control resolves to `disabled`, so
 season 2026's publication and rollback reach the legacy `SnapshotPublisher`
@@ -227,9 +260,10 @@ activated and legacy KV pointers stay authoritative; `PROVIDER_MODE` stays
 > **Operator warning.**
 >
 > - **Do not deploy this configuration as part of unrelated work.** While it
->   is committed, every staging deployment of `master` is cutover-sensitive
->   (it omits the live `seed:2026`), so routine staging deployment is
->   prohibited until a reviewed change restores `seed:2026` in the repository.
+>   is on `master` without the reclosure configuration, every staging
+>   deployment of `master` is cutover-sensitive (it omits the live
+>   `seed:2026`), so routine staging deployment is prohibited until the
+>   reviewed reclosure restores `seed:2026` on `master`.
 > - **Do not leave admission open longer than the separately authorized
 >   recovery window.** Have the reclosure change reviewed before reopening,
 >   deploy it as soon as the one publication has committed, and do not call
@@ -246,6 +280,43 @@ activated and legacy KV pointers stay authoritative; `PROVIDER_MODE` stays
 > - **Do not proceed to checkpoint construction until reclosure and inventory
 >   verification have completed.** The client reset, checkpoint and seed all
 >   come after reclosure.
+
+### Recovery window record (2026-09-13)
+
+Executed once, under the operator's separate authorization, which also
+authorized rotating the staging `ADMIN_TOKEN`. Times are UTC; version times are
+Cloudflare's creation times. Source revisions are operator-recorded, because
+Cloudflare records each version's source only as `Upload`.
+
+| Step | Record |
+|---|---|
+| Baseline (18:28:20Z) | Version `00012c06-…` at 100%, `seed:2026`, no `SEASON_PUBLICATION_AUTHORITY`, `PROVIDER_MODE = "mock"`, secret name `ADMIN_TOKEN` only. `active:2026` was `20260912031739186-f641607c` and `previous:2026` was `20260911031751466-6b2dd9d1`. There were 57 retained versions, none with an `__inventory`, and 2287 KV keys. |
+| `ADMIN_TOKEN` rotation | A new random value was generated and supplied through `wrangler deploy --secrets-file`, in the reopening deployment only. The temporary secrets file was outside the repository and was deleted immediately after Wrangler read it. The value was never printed, committed or logged. The operator's reusable copy exists only as a Windows-DPAPI-encrypted file, readable by the operator's Windows user, in a private credential directory under that user's profile, outside the repository. The previous token no longer authenticates. |
+| Reopening | `wrangler deploy --env staging` of `master` `d50ef2f8daa6e0292274e97a5effe231951cc9fd` created version `38b5169a-6e3b-4e44-aed1-89ef74c0995c` at 18:29:21.732Z, at 100% traffic. It has no cutover control, so admission was open. Authority stayed absent, `PROVIDER_MODE` stayed `mock`, and every binding, the cron and observability were preserved. |
+| Read-only status | `GET /internal/admin/sync/status?season=2026` at 18:30:22Z (request `aff46d85-ba23-4f6b-8020-ffec731c0630`) returned 200 with the rotated token. Pointers and the 57 versions were unchanged, and no synchronization was in flight. |
+| Manual full synchronization | Exactly one authenticated `POST /internal/admin/sync/full?season=2026` was sent at 18:31:05Z (request `995967b7-9b7a-46dc-97dc-d7c18fdb5beb`) and never retried. It returned HTTP 200, `status: completed` and `season: 2026`, with all six jobs due and none skipped. The publication was `applied`, `releaseVersion` was `20260913183106443-4f683541` and `failureCategory` was `null`. It made one provider request, to the `mock` source, which succeeded. The admin response does not carry the publisher's purge reason, so whether it reported `cache-purge-failed` was not observed. |
+| Pointer transition | `active:2026` moved from `20260912031739186-f641607c` to `20260913183106443-4f683541`, and `previous:2026` moved from `20260911031751466-6b2dd9d1` to `20260912031739186-f641607c`. |
+| Reclosure | `wrangler deploy --env staging` of `549bb5f3f3ee3963727a816b96fa39752355e9cd`, with no secrets file, created version `c35f99c0-9e89-4dd7-8fbe-449d295fb567` at 18:31:58.035Z, at 100% traffic, with `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. Admission is closed again. Its dry-run bundle was byte-identical to the reopening one. Admission was open from 18:29:21.732Z to 18:31:58.035Z, and no cron fell inside that interval. |
+| Post-reclosure status | `GET /internal/admin/sync/status?season=2026` at 18:33:10Z (request `ae19d25b-aa93-460b-b3fe-2fddf4044cf9`) returned 200 with the rotated token, so the secret survived reclosure. It reported the new active and previous versions and 58 retained versions, with the last run completed and `applied`. |
+| Inventory verification | KV went from 2287 to 2328 keys. All 41 added keys are under the new release's prefix: 40 documents plus one exact `__inventory` listing exactly those 40 names, sorted and unique. No key under any older version was added or removed, and no publication-metadata sidecar was written. `meta.sourceUpdatedAt` is uniform, at `2026-07-18T11:55:00.000Z`. The repository's own `importRelease`, replayed offline against the stored values, accepts the release with provenance `legacy-uniform-documents` and 40 per-key states. |
+
+**Not done:** no second synchronization, rollback, cron invocation, client
+reset, checkpoint or fingerprint, seed, activation, smoke or latency test,
+live-provider contact or production contact. `SEASON_PUBLICATION_AUTHORITY`
+stayed absent throughout. Production still has no Worker.
+
+**Remaining, in order, each separately authorized:**
+
+1. merge the reclosure configuration, so `master` again carries the closed
+   configuration. Until then, every staging deployment of `master` is
+   cutover-sensitive;
+2. reset the staging app data on the emulator and the reference phone;
+3. record durable evidence of that reset;
+4. re-run the D12 checkpoint audit;
+5. present the exact checkpoint for explicit operator approval;
+6. seed only after approval;
+7. activate through a later authorization;
+8. smoke and latency verification after activation.
 
 ## 7. Initial synchronization and publication
 

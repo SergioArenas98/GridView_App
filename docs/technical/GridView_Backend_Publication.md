@@ -553,8 +553,10 @@ authorized by any other:
 **Temporary reopening configuration prepared (2026-09-13), not deployed.**
 The D12 checkpoint audit found that no retained season-2026 version records an
 exact `__inventory` — and none may be given a reconstructed one — so the seed
-cannot start from any of them. `services/edge-api/wrangler.toml` now omits
-`SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]`; live staging
+cannot start from any of them. The reopening configuration (PR #23) omits
+`SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]` in
+`services/edge-api/wrangler.toml`, and the reclosure configuration prepared
+after it restores exactly `seed:2026`; neither is deployed. Live staging
 (`00012c06-…`) still carries `seed:2026`, so admission stays closed. Before
 item 1 above, each separately authorized: a time-bounded deployment reopening
 admission, exactly one season-2026 publication under the current code (the
@@ -562,6 +564,23 @@ legacy publisher writes its exact inventory), reclosure to `seed:2026`,
 verification of the new version and its inventory, the staging-client baseline
 reset, and a re-run of the checkpoint audit. See the
 [staging runbook §6](../operations/GridView_Staging_Edge_Runbook.md#6-deploy-staging).
+
+**The recovery window (2026-09-13) supersedes "neither is deployed" and
+"admission stays closed" in the paragraph above**, which were true when
+written. The window ran under separate authorization:
+- Version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, from `master` `d50ef2f…`,
+  reopened admission.
+- Exactly one manual full synchronization published
+  `20260913183106443-4f683541` (`applied`). The legacy publisher wrote its
+  exact `__inventory`, listing all 40 documents, and no sidecar. `active:2026`
+  moved to that release and `previous:2026` to `20260912031739186-f641607c`.
+- Version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, from `549bb5f…`, restored
+  `seed:2026` about 2 minutes 36 seconds after the reopening.
+
+The repository's `importRelease` accepts the new active release. Authority
+stayed legacy, and nothing was seeded or activated. The client reset and the
+audit re-run remain before item 1. Record:
+[staging runbook, "Recovery window record (2026-09-13)"](../operations/GridView_Staging_Edge_Runbook.md#recovery-window-record-2026-09-13).
 
 ### The two-phase flow
 

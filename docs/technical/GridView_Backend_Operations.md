@@ -53,8 +53,9 @@ The edge API is deployed to Cloudflare Workers staging:
 
 Deploy is a normal `wrangler deploy --env staging`, except that one changing the
 live `SEASON_PUBLICATION_CUTOVER_CONTROL` is cutover-sensitive and never routine
-— and while the temporary season-2026 reopening configuration is committed,
-every staging deploy is (runbook section 6). A non-deploying
+— and while the temporary season-2026 reopening configuration is on `master`
+without the reclosure configuration, every staging deploy is (runbook
+section 6). A non-deploying
 `wrangler deploy --dry-run --env staging` bundles and resolves bindings without
 uploading. Temporary mock seeding variables
 (`MOCK_PROVIDER_SOURCE_UPDATED_AT`, `MOCK_PROVIDER_CONTENT_VERSION`) are used only
@@ -101,9 +102,11 @@ surface (ADR 0025 D12). They are **disabled by default** and refuse every
 operation while `SEASON_PUBLICATION_CUTOVER_CONTROL` is unset or
 `SEASON_PUBLICATION_AUTHORITY` is not `sequencer` — which is what every
 *deployed* environment leaves it as: `env.staging` has carried season 2026's
-seed phase since 2026-09-12 (the committed configuration now temporarily
-omits it — see below), but `SEASON_PUBLICATION_AUTHORITY` remains absent there
-too, so these routes stay refused regardless — see
+seed phase since 2026-09-12 (the temporary reopening configuration prepared
+2026-09-13 omits it and the reclosure configuration prepared after it
+restores it; neither is deployed — see below), but
+`SEASON_PUBLICATION_AUTHORITY` remains absent there too, so these routes stay
+refused regardless — see
 [Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled).
 
 ## Synchronization Flow
@@ -651,17 +654,45 @@ halves of gap G-i remain open.
 The read-only D12 checkpoint audit found that none of the 57 retained
 season-2026 versions records an exact `__inventory`, so a seed from the active
 version would fail `active-inventory-unavailable`, and no existing release may
-be given a reconstructed or backfilled inventory. The committed
-`wrangler.toml` therefore omits `SEASON_PUBLICATION_CUTOVER_CONTROL` from
-`[env.staging.vars]`: the declaration above is the 2026-09-12 file, and remains
-the live value. Deploying the committed file would reopen season 2026's legacy
-publication and rollback admission, so only a separately authorized,
-time-bounded deployment may do it, for exactly one inventory-bearing
-publication. Admission must then be re-closed with `seed:2026`, and the new
-version and its inventory verified, before the staging-client reset,
+be given a reconstructed or backfilled inventory. The reopening configuration
+(PR #23) therefore omits `SEASON_PUBLICATION_CUTOVER_CONTROL` from
+`[env.staging.vars]` in `wrangler.toml`; the declaration above is the
+2026-09-12 file, and remains the live value. Deploying the reopening
+configuration would reopen season 2026's legacy publication and rollback
+admission, so only a separately authorized, time-bounded deployment may do it,
+for exactly one inventory-bearing publication. Admission must then be
+re-closed with `seed:2026` — by the reclosure configuration, prepared after
+the reopening configuration and before any reopening deployment, which
+restores exactly that value and is not deployed — and the new version and its
+inventory verified, before the staging-client reset,
 checkpoint construction or seed; the list below resumes only after that and a
 re-run of the checkpoint audit. Procedure and operator warnings:
 [staging runbook §6](../operations/GridView_Staging_Edge_Runbook.md#6-deploy-staging).
+
+**The recovery window (2026-09-13) supersedes two statements above**: "No
+later deployment has replaced this value" and "prepared, not deployed". Both
+were true when written. The window ran under separate authorization, which
+also covered rotating `ADMIN_TOKEN`:
+- One deployment of `master` `d50ef2f8daa6e0292274e97a5effe231951cc9fd`
+  (version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, 18:29:21Z UTC) reopened
+  admission and rotated the secret.
+- Exactly one authenticated manual full synchronization (request
+  `995967b7-9b7a-46dc-97dc-d7c18fdb5beb`) published
+  `20260913183106443-4f683541` (`applied`, mock provider only) with its exact
+  `__inventory`. It moved `active:2026` to that release and `previous:2026` to
+  `20260912031739186-f641607c`.
+- One deployment of `549bb5f3f3ee3963727a816b96fa39752355e9cd` (version
+  `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, 18:31:58Z UTC) restored
+  `seed:2026`.
+
+`SEASON_PUBLICATION_AUTHORITY` stayed absent and `PROVIDER_MODE` stayed
+`mock`. No checkpoint, seed, activation, client reset or smoke test occurred,
+and production was untouched. Before item 1 below, each still separately
+authorized: merge the reclosure configuration, so `master` carries `seed:2026`
+again; reset the staging app data on the emulator and the reference phone,
+and record durable evidence of the reset; and re-run the checkpoint audit.
+Full record:
+[staging runbook, "Recovery window record (2026-09-13)"](../operations/GridView_Staging_Edge_Runbook.md#recovery-window-record-2026-09-13).
 
 What remains, in order, each separately authorized:
 

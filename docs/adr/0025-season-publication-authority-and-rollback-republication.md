@@ -95,18 +95,36 @@
 > retained season-2026 staging versions records an exact `__inventory`, so a
 > seed from the active version would fail `active-inventory-unavailable`, and
 > no existing release may be given a reconstructed or backfilled inventory.
-> `services/edge-api/wrangler.toml` therefore omits
-> `SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]` — its only
-> configuration change. **Live staging is unchanged and still closed**
-> (version `00012c06-…`, `seed:2026`). Only a separately authorized,
-> time-bounded deployment would reopen admission, for exactly one
-> inventory-bearing publication, followed by reclosure to `seed:2026` before
-> any client reset, checkpoint or seed. See D12, "What the temporary reopening
-> preparation supplies".
+> The reopening configuration (PR #23) therefore omits
+> `SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]` in
+> `services/edge-api/wrangler.toml` — its only configuration change — and a
+> reclosure configuration, prepared after it and before any reopening
+> deployment, restores exactly `seed:2026`; neither is deployed. **Live
+> staging is unchanged and still closed** (version `00012c06-…`, `seed:2026`).
+> Only a separately authorized, time-bounded deployment would reopen
+> admission, for exactly one inventory-bearing publication, followed by the
+> reclosure deployment before any client reset, checkpoint or seed. See D12,
+> "What the temporary reopening preparation supplies".
+>
+> **The recovery window (2026-09-13) supersedes the "repository only, not
+> deployed" and "live staging is unchanged and still closed" statements in the
+> paragraph above**, which were true when written. Under separate operator
+> authorization, one `wrangler deploy --env staging` of `master`
+> `d50ef2f8daa6e0292274e97a5effe231951cc9fd` reopened admission as version
+> `38b5169a-6e3b-4e44-aed1-89ef74c0995c` and rotated `ADMIN_TOKEN`. Exactly one
+> authenticated manual full synchronization then published
+> `20260913183106443-4f683541` with its exact `__inventory`, and one
+> `wrangler deploy --env staging` of `549bb5f3f3ee3963727a816b96fa39752355e9cd`
+> re-closed admission as version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`
+> (`seed:2026`). Both source revisions are operator-recorded; Cloudflare
+> records only `Upload`. `SEASON_PUBLICATION_AUTHORITY` stayed absent
+> throughout, and no checkpoint, seed, activation, client reset or smoke test
+> occurred. See D12, "What the recovery window supplied".
 >
 > **Still true, and load-bearing:** **no seeding, cutover or activation has
-> occurred** — the only provisioning or deployment is the 2026-09-12 staging
-> deployment above — no legacy `[[migrations]]` block exists, and legacy KV
+> occurred** — the only provisioning is the 2026-09-12 staging deployment
+> above; every later staging deployment changed only the cutover control or the
+> `ADMIN_TOKEN` value — no legacy `[[migrations]]` block exists, and legacy KV
 > pointers remain authoritative in every deployed environment. `snapshotRevision`
 > ([`../publication/snapshot-revision.ts`](../../services/edge-api/src/publication/snapshot-revision.ts))
 > keeps its **no production caller** status unchanged, because the integrated
@@ -2278,7 +2296,9 @@ records only source `Upload` and does not attest the commit).
 **Persistence rule.** No later deployment has replaced
 `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`; admission closure for
 season 2026 in staging persists until an explicitly authorized deployment
-changes that value.
+changes that value. *(Superseded in part on 2026-09-13: the authorized recovery
+window omitted the value for about 2 minutes 36 seconds and then restored it.
+See "What the recovery window supplied" below.)*
 
 What remains of D12's sequence, in order, each requiring its own explicit
 authorization:
@@ -2308,14 +2328,86 @@ publication under the current code, which writes its own exact inventory.
 
 | Supplied | Not supplied |
 |---|---|
-| `services/edge-api/wrangler.toml` omits `SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]`, its only configuration change. An absent control resolves to `disabled`, so once deployed the composition returns the bare legacy `SnapshotPublisher` and season 2026's legacy publication and rollback admission is open again. | Any deployment. Live staging is still version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` carrying `seed:2026`, so admission remains **closed**. Creating, pushing or merging the preparation changes nothing in Cloudflare. |
+| PR #23's `services/edge-api/wrangler.toml` omits `SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]`, its only configuration change. An absent control resolves to `disabled`, so once deployed the composition returns the bare legacy `SnapshotPublisher` and season 2026's legacy publication and rollback admission is open again. | Any deployment. Live staging is still version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` carrying `seed:2026`, so admission remains **closed**. Creating, pushing or merging the preparation changes nothing in Cloudflare. |
 | `SEASON_PUBLICATION_AUTHORITY` stays absent, `PROVIDER_MODE` stays `mock`, and every binding, the `ADMIN_TOKEN` secret requirement, the cron trigger, observability, compatibility settings and routes are unchanged. Production configuration is unchanged. | Any checkpoint, fingerprint, seed, activation, client reset, publication, endpoint call, smoke test or provider contact. |
 | The recovery sequence, each step separately authorized: (1) a time-bounded deployment of this configuration; (2) exactly one season-2026 publication under the current code; (3) an immediate reclosure deployment restoring exactly `seed:2026` — step 1 again, before any new checkpoint; (4) verification of the new version and its `__inventory`; (5) the staging-client baseline reset, recorded; (6) a re-run of the checkpoint audit. Only then does the list above resume at checkpoint construction. | A second publication. While the configuration is live, each cron run and each successful manual full synchronization creates another version, so reclosure must be live before a second can run. |
 
-While this configuration is committed, every staging deployment of `master`
-omits a value the live version carries, so it is cutover-sensitive and never
-routine. The operator procedure, the expected behaviour of the next scheduled
-run and the operator warnings are in the staging runbook, section 6.
+The reclosure configuration for step (3) was prepared the same day, as a
+separate reviewed change on top of the reopening configuration and before any
+reopening deployment: it restores exactly
+`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` and changes nothing else, so
+its executable configuration matches the closed configuration live staging
+still runs. It is not deployed, and may be deployed only as step (3),
+immediately after the one publication — never before it.
+
+While the reopening configuration is on `master` without that reclosure,
+every staging deployment of `master` omits a value the live version carries,
+so it is cutover-sensitive and never routine. The operator procedure, the
+expected behaviour of the next scheduled run and the operator warnings are in
+the staging runbook, section 6.
+
+#### What the recovery window supplied (2026-09-13)
+
+The recovery sequence above ran its steps (1) to (4) once, on 2026-09-13,
+each under the operator's separate authorization. That authorization also
+covered rotating the staging `ADMIN_TOKEN`. Times are UTC. Source revisions
+are operator-recorded; Cloudflare records each version's source only as
+`Upload`.
+
+- **Reopening.** One `wrangler deploy --env staging` of `master`
+  `d50ef2f8daa6e0292274e97a5effe231951cc9fd` created version
+  `38b5169a-6e3b-4e44-aed1-89ef74c0995c` (18:29:21.732Z, 100% traffic) without
+  `SEASON_PUBLICATION_CUTOVER_CONTROL`. The same deployment rotated
+  `ADMIN_TOKEN` through `--secrets-file`, so the previous token no longer
+  authenticates.
+- **Exactly one publication.** One authenticated
+  `POST /internal/admin/sync/full?season=2026` (request
+  `995967b7-9b7a-46dc-97dc-d7c18fdb5beb`, 18:31:05Z) ran all six jobs against
+  the mock provider with one provider request. It returned `completed` with
+  publication `applied`, release `20260913183106443-4f683541` and no failure
+  category. `active:2026` moved from `20260912031739186-f641607c` to that
+  release, and `previous:2026` moved from `20260911031751466-6b2dd9d1` to
+  `20260912031739186-f641607c`.
+- **Reclosure.** One `wrangler deploy --env staging` of
+  `549bb5f3f3ee3963727a816b96fa39752355e9cd` created version
+  `c35f99c0-9e89-4dd7-8fbe-449d295fb567` (18:31:58.035Z, 100% traffic) with
+  `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. It supplied no secret, so
+  it preserved the rotated `ADMIN_TOKEN`, which authenticated a read-only
+  status request afterwards. Admission was open for about 2 minutes 36
+  seconds, and no scheduled run fell inside that window.
+- **Inventory.** The new release holds 40 documents and one exact
+  `__inventory` listing exactly those 40 names, sorted and unique. Retained
+  season-2026 versions went from 57 to 58. No key under any older version was
+  added or removed, and no publication-metadata sidecar was written: the legacy
+  publisher writes none. The repository's own `importRelease`, replayed
+  offline against the stored values, accepts the release with provenance
+  `legacy-uniform-documents` and 40 per-key states.
+
+That removes the checkpoint audit's first blocker: the active version now
+records an exact `__inventory`. The second blocker remains: no historical-floor
+variant has been established. Nothing in this window changed
+`SEASON_PUBLICATION_AUTHORITY` (absent throughout), `PROVIDER_MODE` (`mock`),
+any binding or production. No second publication, rollback, cron invocation,
+checkpoint, fingerprint, seed, activation, client reset, smoke or latency test
+occurred.
+
+**Persistence rule, restated.** `seed:2026` has been live again since version
+`c35f99c0-…`, and admission closure persists until an explicitly authorized
+deployment changes it. Until the reclosure configuration is merged, `master`
+still omits the value, so every staging deployment of `master` stays
+cutover-sensitive.
+
+What remains, in order, each requiring its own explicit authorization:
+
+1. merge the reclosure configuration, so `master` again carries the closed
+   configuration;
+2. reset the staging app data on the emulator and the reference phone;
+3. record durable evidence of that reset;
+4. re-run the D12 checkpoint audit;
+5. present the exact checkpoint for explicit operator approval;
+6. the seed, only after that approval;
+7. activation, through a later authorization;
+8. smoke and latency verification after activation.
 
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from
