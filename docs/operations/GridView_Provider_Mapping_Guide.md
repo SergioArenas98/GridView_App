@@ -81,9 +81,10 @@ carries the whole diagnosis instead.
 
 ### 2.1 Where to look
 
-- **Staging tail:** `npm run check:staging-observability` from
-  `services/edge-api`, or `wrangler tail` filtered on
-  `provider_mapping_unresolved`.
+- **Staging tail:** `wrangler tail` filtered on `provider_mapping_unresolved`,
+  or `npm run check:staging-observability` from `services/edge-api` — which also
+  POSTs admin sync and rollback, so not before the season-2026 reclosure in the
+  staging runbook's section 6 is complete.
 - **Locally:** the same event is emitted by the test harness; see
   `services/edge-api/test/providers/mappings/mapping-containment.test.ts`.
 

@@ -90,6 +90,20 @@
 > request occurred. Production is untouched. See D12, "What admission closure
 > supplies".
 >
+> **Temporary season-2026 reopening prepared (2026-09-13) — repository only,
+> not deployed.** The read-only D12 checkpoint audit found that none of the 57
+> retained season-2026 staging versions records an exact `__inventory`, so a
+> seed from the active version would fail `active-inventory-unavailable`, and
+> no existing release may be given a reconstructed or backfilled inventory.
+> `services/edge-api/wrangler.toml` therefore omits
+> `SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]` — its only
+> configuration change. **Live staging is unchanged and still closed**
+> (version `00012c06-…`, `seed:2026`). Only a separately authorized,
+> time-bounded deployment would reopen admission, for exactly one
+> inventory-bearing publication, followed by reclosure to `seed:2026` before
+> any client reset, checkpoint or seed. See D12, "What the temporary reopening
+> preparation supplies".
+>
 > **Still true, and load-bearing:** **no seeding, cutover or activation has
 > occurred** — the only provisioning or deployment is the 2026-09-12 staging
 > deployment above — no legacy `[[migrations]]` block exists, and legacy KV
@@ -2276,6 +2290,32 @@ authorization:
    (procedure step 11);
 4. smoke and latency verification;
 5. any later production decision.
+
+#### What the temporary reopening preparation supplies (2026-09-13)
+
+The read-only D12 checkpoint audit of 2026-09-13 found the closed season
+unseedable: none of the 57 retained season-2026 staging versions — active
+`20260912031739186-f641607c`, previous `20260911031751466-6b2dd9d1` — records
+an exact `__inventory`, the repository's own `importRelease` reports
+`inventory-unavailable` for them, and a seed naming the active version would
+therefore abort at step 3 with `active-inventory-unavailable`. Step 6's rule
+governs the inventory as it governs the sidecar: nothing is created or mutated
+under an already-existing historical version, so no retained release may
+receive a reconstructed or backfilled inventory. Step 10 already provides the
+way out — with no Durable Object state written, the season "may be retried
+from step 1 once the underlying data problem is fixed" — and the fix is one new
+publication under the current code, which writes its own exact inventory.
+
+| Supplied | Not supplied |
+|---|---|
+| `services/edge-api/wrangler.toml` omits `SEASON_PUBLICATION_CUTOVER_CONTROL` from `[env.staging.vars]`, its only configuration change. An absent control resolves to `disabled`, so once deployed the composition returns the bare legacy `SnapshotPublisher` and season 2026's legacy publication and rollback admission is open again. | Any deployment. Live staging is still version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` carrying `seed:2026`, so admission remains **closed**. Creating, pushing or merging the preparation changes nothing in Cloudflare. |
+| `SEASON_PUBLICATION_AUTHORITY` stays absent, `PROVIDER_MODE` stays `mock`, and every binding, the `ADMIN_TOKEN` secret requirement, the cron trigger, observability, compatibility settings and routes are unchanged. Production configuration is unchanged. | Any checkpoint, fingerprint, seed, activation, client reset, publication, endpoint call, smoke test or provider contact. |
+| The recovery sequence, each step separately authorized: (1) a time-bounded deployment of this configuration; (2) exactly one season-2026 publication under the current code; (3) an immediate reclosure deployment restoring exactly `seed:2026` — step 1 again, before any new checkpoint; (4) verification of the new version and its `__inventory`; (5) the staging-client baseline reset, recorded; (6) a re-run of the checkpoint audit. Only then does the list above resume at checkpoint construction. | A second publication. While the configuration is live, each cron run and each successful manual full synchronization creates another version, so reclosure must be live before a second can run. |
+
+While this configuration is committed, every staging deployment of `master`
+omits a value the live version carries, so it is cutover-sensitive and never
+routine. The operator procedure, the expected behaviour of the next scheduled
+run and the operator warnings are in the staging runbook, section 6.
 
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from

@@ -2,9 +2,9 @@
  * The one explicit, typed, fail-closed cutover control
  * ([ADR 0025](../../../../../docs/adr/0025-season-publication-authority-and-rollback-republication.md)
  * D12) - **absent, and therefore disabled, in development and production.**
- * `env.staging` declares `seed:2026` in this repository's `wrangler.toml` (the
- * authenticated operator's explicit season selection), live since the
- * 2026-09-12 deployment that uploaded it.
+ * What this repository's `env.staging` declares and what deployed staging
+ * carries can differ; both are recorded in
+ * `docs/technical/GridView_Environments.md`.
  *
  * D12 step 1 closes *new legacy mutation admission* for exactly one season
  * before a checkpoint is approved, and keeps it closed until the separate
