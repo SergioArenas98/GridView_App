@@ -55,7 +55,7 @@ last row below records. Section 6 covers confirming what is actually live.
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
 | Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`), neither looked up by any deployed code path; see `../technical/GridView_Environments.md` |
-| `SEASON_PUBLICATION_CUTOVER_CONTROL` | `seed:2026` — **prepared in the repository 2026-09-12, not yet deployed.** The live staging version above (`985115b7-…`) predates this line and does not carry it, so season 2026's admission remains open until this configuration is deployed by a separately authorized `wrangler deploy --env staging`. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
+| `SEASON_PUBLICATION_CUTOVER_CONTROL` | `seed:2026` — **live since 2026-09-12.** A separately authorized `wrangler deploy --env staging` uploaded it from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93`, replacing version `985115b7-…` with `00012c06-6c09-4b2f-b24c-02d6e51ec08d` at 100% traffic. Season 2026's legacy publication and rollback admission is closed; `SEASON_PUBLICATION_AUTHORITY` remains absent, so this alone neither seeds nor activates anything. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
 
 `PUBLIC_BASE_URL` is mandatory in staging: the scheduled publisher uses it to
 compute the public URLs it purges. Its absence is a configuration error.
@@ -113,11 +113,10 @@ npm exec wrangler deploy --dry-run --env staging
 The dry-run bundles the Worker and resolves bindings without uploading anything
 (`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV), the
 `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
-plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL` and (since
-2026-09-12) `SEASON_PUBLICATION_CUTOVER_CONTROL` vars — the last of these is
-prepared but not yet live; see section 2. **Read the dry-run output before
-proceeding to section 6** — it is how the cutover-sensitive gate below is
-checked.
+plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL` and (live since
+2026-09-12) `SEASON_PUBLICATION_CUTOVER_CONTROL` vars; see section 2. **Read
+the dry-run output before proceeding to section 6** — it is how the
+cutover-sensitive gate below is checked.
 
 ## 6. Deploy staging
 

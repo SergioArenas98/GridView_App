@@ -59,12 +59,11 @@ export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';
  * `SEASON_PUBLICATION_AUTHORITY` is unset in every committed environment - so
  * `resolvePublicationAuthority` returns `legacy` and no code path performs the
  * lookup, whether or not the namespace is provisioned. `env.staging` declares
- * `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` in this repository, but
- * the live staging deployment predates that line, so no season is paused and
- * no cutover operation is permitted in any environment that has actually been
- * deployed - and even once that value is live, `SEASON_PUBLICATION_AUTHORITY`
- * staying unset still refuses every cutover operation at the authority-mode
- * gate. Which environment has the namespace provisioned is recorded in
+ * `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`, live in deployed
+ * staging since 2026-09-12, which closes season 2026's legacy mutation
+ * admission there - but `SEASON_PUBLICATION_AUTHORITY` staying unset still
+ * refuses every cutover operation at the authority-mode gate. Which
+ * environment has the namespace provisioned is recorded in
  * `docs/technical/GridView_Environments.md`.
  */
 export { SeasonPublicationSequencer } from './publication/sequencer/durable-object';
