@@ -102,3 +102,7 @@ test/**/failures/
 /.claude/scheduled_tasks.lock
 /.claude/scheduled_tasks.json
 /.claude/skills/graphify/
+#
+# Local AI context pack: a derived, non-canonical documentation snapshot for
+# external assistant projects. The tracked repository stays authoritative.
+/docs/ai_context/
