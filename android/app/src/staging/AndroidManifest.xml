@@ -1,0 +1,25 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Staging-only backup and restore isolation. Dev and production do not
+         receive this overlay and keep the platform defaults.
+
+         No com.sejuma.gridview.staging application data may leave a device
+         through cloud backup or device-to-device transfer, and none may come
+         back through restore - including restore-at-install, which runs before
+         the application is ever opened.
+
+         allowBackup="false" alone is not that boundary. For an app targeting
+         Android 12 or higher it disables cloud backup but NOT device-to-device
+         transfer, which only dataExtractionRules controls. So all three layers
+         are declared, each excluding every application-data domain:
+
+           * allowBackup           - cloud backup and restore, every API level;
+           * dataExtractionRules   - Android 12+: cloud-backup and device-transfer;
+           * fullBackupContent     - Android 11 and lower: legacy Auto Backup.
+
+         Enforced by :app:verifyStagingBackupPolicy against every variant's
+         merged manifest. See docs/technical/GridView_Environments.md. -->
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/staging_data_extraction_rules"
+        android:fullBackupContent="@xml/staging_full_backup_content" />
+</manifest>

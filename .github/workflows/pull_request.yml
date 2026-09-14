@@ -76,6 +76,10 @@ jobs:
       # is evidence for one variant on one machine; this is the regression gate
       # for all nine.
       #
+      # verifyStagingBackupPolicy reads all nine merged manifests: every staging
+      # variant disables backup and excludes all data from cloud backup and
+      # device transfer, while dev and production keep the platform defaults.
+      #
       # None of these tasks needs a secret, signing key, device or network beyond
       # the dependency resolution that build already performed, and none of them
       # uploads anything: verifyMappingUploadPolicy tests the pure authorization
@@ -97,6 +101,7 @@ jobs:
           :app:verifyAppEnvParser
           :app:verifyMappingUploadPolicy
           :app:verifyAndroidBuildPolicy
+          :app:verifyStagingBackupPolicy
 
   # ---------------------------------------------------------------------------
   # Canonical golden freshness.
