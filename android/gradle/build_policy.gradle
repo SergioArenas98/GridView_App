@@ -487,3 +487,183 @@ tasks.register('verifyAndroidBuildPolicy') {
             'Crashlytics injection and environment gates all as specified.')
     }
 }
+
+// -----------------------------------------------------------------------------
+// Staging backup and restore isolation.
+//
+// com.sejuma.gridview.staging must never back up or restore application data
+// through cloud backup, device-to-device transfer or legacy Auto Backup, while
+// dev and production keep exactly the platform defaults they had before. This
+// reads each variant's *merged* manifest - what is actually packaged - not the
+// overlay source, so a library, a new source set or a `tools:` directive that
+// changes the merge result fails here too.
+// -----------------------------------------------------------------------------
+
+/// Every application-data domain Android defines for backup rules,
+/// credential-protected and device-protected storage alike.
+def backupDomains = [
+    'root', 'file', 'database', 'sharedpref', 'external',
+    'device_root', 'device_file', 'device_database', 'device_sharedpref',
+] as Set
+
+/// Manifest attribute -> the staging-only rule resource it must reference.
+def stagingBackupRules = [
+    fullBackupContent  : 'staging_full_backup_content',
+    dataExtractionRules: 'staging_data_extraction_rules',
+]
+
+def verifyStagingBackupPolicy = tasks.register('verifyStagingBackupPolicy') {
+    group = 'verification'
+    description = 'Asserts staging-only backup and restore isolation from every merged manifest.'
+}
+
+// Variant name -> flavor and merged manifest, filled as AGP creates variants.
+// The artifact provider carries its producing task, so declaring it as an input
+// is what makes this task process every variant's manifest first.
+def mergedManifests = [:]
+androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+    def manifest = variant.artifacts.get(
+        com.android.build.api.artifact.SingleArtifact.MERGED_MANIFEST.INSTANCE)
+    mergedManifests[variant.name] = [flavor: variant.flavorName, manifest: manifest]
+    verifyStagingBackupPolicy.configure { inputs.file(manifest) }
+}
+
+verifyStagingBackupPolicy.configure {
+    doLast {
+        final String androidNs = 'http://schemas.android.com/apk/res/android'
+        List<String> failures = []
+
+        // Closures rather than methods: see verifyAppEnvParser.
+        def require = { boolean condition, String message ->
+            if (!condition) failures.add(message)
+        }
+        def parse = { File file ->
+            def factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+            factory.namespaceAware = true
+            factory.newDocumentBuilder().parse(file).documentElement
+        }
+        def childElements = { element ->
+            def nodes = element.childNodes
+            (0..<nodes.length).collect { nodes.item(it) }
+                .findAll { it.nodeType == org.w3c.dom.Node.ELEMENT_NODE }
+        }
+
+        Map<String, String> expectedIds = [
+            dev       : 'com.sejuma.gridview.dev',
+            staging   : 'com.sejuma.gridview.staging',
+            production: 'com.sejuma.gridview',
+        ]
+        List<String> flavors = project.android.productFlavors.collect { it.name }.sort()
+        require(expectedIds.keySet().sort() == flavors,
+            "expected application IDs for ${expectedIds.keySet().sort()}, build declares ${flavors}")
+
+        // Every variant the build declares, not a hand-picked few.
+        int expectedVariants = flavors.size() * project.android.buildTypes.size()
+        require(mergedManifests.size() == expectedVariants,
+            "checked ${mergedManifests.size()} merged manifests, expected ${expectedVariants}")
+
+        // --- merged manifests ------------------------------------------------
+        mergedManifests.sort().each { String name, Map entry ->
+            File file = entry.manifest.get().asFile
+            def root = parse(file)
+            def application = root.getElementsByTagName('application').item(0)
+
+            String packageName = root.getAttribute('package')
+            require(packageName == expectedIds[entry.flavor],
+                "${name}: package ${packageName}, expected ${expectedIds[entry.flavor]}")
+            require(!application.hasAttributeNS(androidNs, 'backupAgent'),
+                "${name}: declares android:backupAgent")
+
+            if (entry.flavor == 'staging') {
+                require(application.getAttributeNS(androidNs, 'allowBackup') == 'false',
+                    "${name}: android:allowBackup is not false")
+                stagingBackupRules.each { String attribute, String resource ->
+                    String actual = application.getAttributeNS(androidNs, attribute)
+                    require(actual == "@xml/${resource}".toString(),
+                        "${name}: android:${attribute}='${actual}', expected @xml/${resource}")
+                }
+            } else {
+                // Unchanged means no backup attribute at all: the platform
+                // defaults apply exactly as they did before this policy.
+                ['allowBackup', 'fullBackupContent', 'dataExtractionRules'].each { String attribute ->
+                    require(!application.hasAttributeNS(androidNs, attribute),
+                        "${name}: android:${attribute} is set; ${entry.flavor} keeps the platform defaults")
+                }
+                String text = file.getText('UTF-8')
+                stagingBackupRules.values().each { String resource ->
+                    require(!text.contains(resource),
+                        "${name}: references the staging-only resource ${resource}")
+                }
+            }
+            logger.lifecycle("  checked ${name} (${packageName})")
+        }
+
+        // --- the rule resources ----------------------------------------------
+        //
+        // Each must be defined exactly once, in the staging source set's plain
+        // `xml` directory. A copy elsewhere would either leak into dev or
+        // production, or silently override the rules for one staging build
+        // type or API level (`stagingRelease`, `xml-v31`).
+        stagingBackupRules.values().each { String resource ->
+            List<List> definitions = project.android.sourceSets.collectMany { sourceSet ->
+                sourceSet.res.srcDirs.collectMany { File resDir ->
+                    (resDir.listFiles() ?: [])
+                        .findAll { it.isDirectory() && (it.name == 'xml' || it.name.startsWith('xml-')) }
+                        .collect { new File(it, "${resource}.xml") }
+                        .findAll { it.isFile() }
+                        .collect { [sourceSet.name, it] }
+                }
+            }
+            require(definitions.size() == 1 &&
+                definitions[0][0] == 'staging' &&
+                definitions[0][1].parentFile.name == 'xml',
+                "${resource}.xml must be defined once, in the staging source set's xml/ " +
+                "directory; found ${definitions.collect { "${it[0]}:${it[1].parentFile.name}" }}")
+            if (definitions.isEmpty()) {
+                return
+            }
+
+            def rules = parse(definitions[0][1])
+            require(rules.getElementsByTagName('include').length == 0,
+                "${resource}: declares an include rule")
+
+            // Each section may hold exclude rules only, each covering a whole
+            // domain, and together they must cover every domain.
+            def excludesEveryDomain = { section, String where ->
+                Set<String> domains = [] as Set
+                childElements(section).each { rule ->
+                    require(rule.tagName == 'exclude', "${where}: unexpected <${rule.tagName}>")
+                    require(rule.getAttribute('path') == '.',
+                        "${where}: the ${rule.getAttribute('domain')} exclusion is not the whole domain")
+                    domains.add(rule.getAttribute('domain'))
+                }
+                require(domains == backupDomains,
+                    "${where}: excludes ${domains.sort()}, expected ${backupDomains.sort()}")
+            }
+
+            if (resource == stagingBackupRules.fullBackupContent) {
+                require(rules.tagName == 'full-backup-content',
+                    "${resource}: root is <${rules.tagName}>")
+                excludesEveryDomain(rules, resource)
+            } else {
+                require(rules.tagName == 'data-extraction-rules',
+                    "${resource}: root is <${rules.tagName}>")
+                def sections = childElements(rules)
+                require(sections.collect { it.tagName }.sort() == ['cloud-backup', 'device-transfer'],
+                    "${resource}: sections ${sections.collect { it.tagName }}, " +
+                    "expected exactly cloud-backup and device-transfer")
+                sections.each { excludesEveryDomain(it, "${resource}/${it.tagName}") }
+            }
+            logger.lifecycle("  checked ${resource}.xml")
+        }
+
+        if (!failures.isEmpty()) {
+            throw new GradleException(
+                'Staging backup policy violated:\n  ' + failures.join('\n  ') +
+                '\nSee docs/technical/GridView_Environments.md.'
+            )
+        }
+        logger.lifecycle('Staging backup policy: staging excludes all data from backup and ' +
+            'transfer; dev and production keep the platform defaults.')
+    }
+}

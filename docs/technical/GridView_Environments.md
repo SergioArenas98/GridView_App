@@ -28,6 +28,42 @@ Unknown or missing `APP_ENV` values fall back to `development`
 never behave as production. Non-production builds show a technical
 environment badge in the UI.
 
+### Staging backup and restore isolation
+
+`com.sejuma.gridview.staging` never backs up, transfers or restores
+application data. The staging source set (`android/app/src/staging/`) gives
+every staging build type's merged manifest three layers, each excluding every
+application-data domain, credential- and device-protected alike:
+
+- `android:allowBackup="false"` - no cloud backup and no cloud restore,
+  including restore-at-install;
+- `android:dataExtractionRules` (Android 12 and higher) - exclude-only
+  `cloud-backup` and `device-transfer` sections. This is the layer that closes
+  device-to-device transfer: for an app targeting Android 12 or higher,
+  `allowBackup="false"` does not;
+- `android:fullBackupContent` (Android 11 and lower) - the same exclusions for
+  legacy Auto Backup.
+
+Dev and production receive none of this and keep the platform defaults they
+had before. `:app:verifyStagingBackupPolicy` asserts all of it in CI, from the
+nine merged manifests and the two rule files.
+
+This prepares the contract-migration alternative of the historical-floor
+precondition in
+[ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
+It does not by itself complete D12 client-baseline evidence:
+
+- the reference phone (Honor 400 Pro) still requires a separately authorized
+  installation and verification, after merge, of an artifact built from this
+  change;
+- the earlier client decommissioning record remains invalid and still needs
+  correcting;
+- a historical cloud backup dataset, if one exists, is not claimed to have been
+  deleted - this change stops it being restored, it does not erase it;
+- staging APKs built before this change must not be installed or used, and
+  their retirement is a separate decision;
+- checkpoint, seed and activation remain pending.
+
 ## Remote data source
 
 The remote data source is chosen deliberately at build time from two defines,
