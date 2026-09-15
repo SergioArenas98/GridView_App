@@ -121,6 +121,19 @@
 > throughout, and no checkpoint, seed, activation, client reset or smoke test
 > occurred. See D12, "What the recovery window supplied".
 >
+> **Checkpoint approved and seed authority prepared (2026-09-15) —
+> repository only, not deployed.** On 2026-09-15 the operator explicitly
+> approved one exact season-2026 staging cutover checkpoint, with derived
+> fingerprint
+> `cutover1:38f726065f8cbb7f46525c213013936b9673cdccbb0128ca45a0ecfccd7c9ac2`.
+> The seed requires the sequencer authority, so
+> `services/edge-api/wrangler.toml` now selects
+> `SEASON_PUBLICATION_AUTHORITY = "sequencer"` under `[env.staging.vars]`
+> only, and keeps `seed:2026`. Live staging (`c35f99c0-…`) still has no
+> authority value, and no seed or activation has occurred. This completes
+> item 1 of the list below. See D12, "What the approved checkpoint and
+> seed-authority preparation supply (2026-09-15)".
+>
 > **Still true, and load-bearing:** **no seeding, cutover or activation has
 > occurred** — the only provisioning is the 2026-09-12 staging deployment
 > above; every later staging deployment changed only the cutover control or the
@@ -2705,6 +2718,74 @@ What remains, in order, each step under its own explicit authorization:
 5. activation, under a further authorization;
 6. smoke and latency verification;
 7. any later production decision.
+
+#### What the approved checkpoint and seed-authority preparation supply (2026-09-15)
+
+Items 1 to 3 of the list above are done. PR #28 merged as `master`
+`c0df3e5184cf15033e89559d71fa0079e2e3a752`. The read-only D12 checkpoint
+audit re-ran against that commit and passed. On 2026-09-15 the operator
+explicitly approved this exact checkpoint for GridView staging:
+
+```json
+{
+  "season": 2026,
+  "activeVersion": "20260913183106443-4f683541",
+  "previousVersion": null,
+  "migrationIdentity": "gridview-staging-2026-d12-c0df3e5-20260915-01",
+  "historicalFloorEvidence": {
+    "kind": "authorized-client-baseline-reset",
+    "evidenceReference": "docs/adr/0025-season-publication-authority-and-rollback-republication.md#what-the-authorized-client-baseline-reset-supplies-2026-09-14"
+  }
+}
+```
+
+The operator approved its derived fingerprint with it:
+`cutover1:38f726065f8cbb7f46525c213013936b9673cdccbb0128ca45a0ecfccd7c9ac2`.
+
+- **The fingerprint is derived evidence, not a checkpoint field.** The
+  repository's `cutoverFingerprint` computes it from the checkpoint's own
+  fields, and the seed recomputes it from the checkpoint it receives. It is
+  never part of the checkpoint body.
+- **The seed must present this checkpoint verbatim.** Every field keeps
+  exactly the value above: nothing changed, normalized or reinterpreted. Any
+  other value is a different checkpoint with a different fingerprint, and
+  needs a new audit and approval.
+- `previousVersion` is `null` because the previous release,
+  `20260912031739186-f641607c`, records no `__inventory`.
+
+| Supplied | Not supplied |
+|---|---|
+| The operator's approval of the exact checkpoint above, and of its derived fingerprint. | Any seed. No seed request has been sent, so season 2026 has no committed seed. |
+| `services/edge-api/wrangler.toml` selects `SEASON_PUBLICATION_AUTHORITY = "sequencer"` under `[env.staging.vars]` only, and keeps `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`. `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL`, every binding, the secret declaration, the cron and observability are unchanged. Development and production select no authority, and production still declares no season-publication binding. | Any deployment. Live staging is still version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, with the authority absent, so every cutover route still refuses with `authority-mode-not-sequencer`. Merging this configuration changes nothing in Cloudflare. |
+| Confirmation, from the implementation, that selecting `sequencer` switches no season's authority. A season the sequencer reports as `uninitialized` or `seeded` keeps the legacy KV pointers for publication, rollback and public reads. Only the activation transition to `active` changes that. The admission boundary wraps the publication surface in every authority mode, so `seed:2026` keeps season 2026's legacy publication and rollback paused, and permits only the seed. | Any activation or mutation resumption. `seeded` is not `active`. |
+
+**Why the authority value is needed.** The cutover service permits the seed
+only when four conditions hold together: the staging environment, the
+`seed:2026` control, `SEASON_PUBLICATION_AUTHORITY` set to exactly
+`sequencer`, and a reachable sequencer port. Live staging lacks only the
+authority mode. The binding is provisioned, and `seed:2026` is live.
+
+**What deploying it changes.** Publications and public reads start asking the
+sequencer for each season's cutover state before using the legacy pointers.
+If that lookup fails, they return a bounded failure instead of falling back
+(D6). Nothing is seeded or activated by the deployment itself.
+
+What remains, in order, each step under its own explicit authorization:
+
+1. merge of the pull request carrying this configuration;
+2. a cutover-sensitive `wrangler deploy --env staging` of the merged
+   configuration, adding the authority value to live staging (staging
+   runbook, section 6);
+3. the seed, presenting the approved checkpoint above verbatim and
+   committing `seeded`;
+4. activation, under a later and separate authorization: a further
+   cutover-sensitive deployment replacing `seed:2026` with `activate:2026`,
+   then the fingerprint-bound activation confirmation;
+5. smoke and latency verification;
+6. any later production decision.
+
+No Cloudflare resource, Worker endpoint, device or provider was accessed to
+prepare this configuration or write this record.
 
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from

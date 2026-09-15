@@ -45,6 +45,13 @@ describe('wrangler staging configuration', () => {
   });
 });
 
+/** The top-level (development) `[vars]` table's own body, up to the next `[` header. */
+function developmentVarsBlock(toml: string): string {
+  const match = /^\[vars\]\n([\s\S]*?)\n\[/m.exec(toml);
+  if (match?.[1] === undefined) throw new Error('[vars] not found');
+  return match[1];
+}
+
 /** The `[env.staging.vars]` table's own body, up to the next `[` header. */
 function stagingVarsBlock(toml: string): string {
   const match = /\[env\.staging\.vars\]\n([\s\S]*?)\n\[/.exec(toml);
@@ -82,26 +89,44 @@ function variables(block: string): Map<string, string> {
   );
 }
 
-describe('season 2026 reclosure configuration (ADR 0025 D12 recovery)', () => {
-  // Live staging (version `00012c06-…`) carries `seed:2026`. The temporary
-  // reopening configuration (PR #23) omitted it so that one separately
-  // authorized deployment could reopen season 2026's admission for a single
-  // inventory-bearing publication; this file restores exactly that value as
-  // the reclosure deployed straight after that publication. Any other staging
-  // control must change these assertions deliberately.
+/** The runtime configuration a vars table body resolves to. */
+function resolvedVars(block: string): ReturnType<typeof resolveRuntimeConfig> {
+  const vars = variables(block);
+  return resolveRuntimeConfig({
+    ENVIRONMENT: vars.get('ENVIRONMENT'),
+    PROVIDER_MODE: vars.get('PROVIDER_MODE'),
+    PUBLIC_BASE_URL: vars.get('PUBLIC_BASE_URL'),
+    SEASON_PUBLICATION_AUTHORITY: vars.get('SEASON_PUBLICATION_AUTHORITY'),
+    SEASON_PUBLICATION_CUTOVER_CONTROL: vars.get(
+      'SEASON_PUBLICATION_CUTOVER_CONTROL',
+    ),
+  });
+}
 
-  it('restores exactly seed:2026 after the three base staging variables', () => {
+describe('season 2026 seed configuration (ADR 0025 D12)', () => {
+  // Live staging (version `c35f99c0-…`) carries `seed:2026` and no authority
+  // mode. The operator approved the season-2026 checkpoint on 2026-09-15, and
+  // the seed refuses unless the authority mode is exactly `sequencer`, so this
+  // file selects it in staging alone and keeps `seed:2026` as the phase gate.
+  // Any other staging control or authority must change these assertions
+  // deliberately.
+
+  it('keeps exactly seed:2026 and selects sequencer after the three base staging variables', () => {
     expect(assignments(stagingVarsBlock(config))).toEqual([
       'ENVIRONMENT = "staging"',
       'PROVIDER_MODE = "mock"',
       'PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"',
       'SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"',
+      'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
     ]);
-    // Assigned exactly once anywhere in the file - so neither the top-level
-    // development table nor production sets it; the name still appears in
-    // the comments that explain the value.
+    // Each is assigned exactly once anywhere in the file - so neither the
+    // top-level development table nor production sets it; the names still
+    // appear in the comments that explain the values.
     expect(
       config.match(/^\s*"?SEASON_PUBLICATION_CUTOVER_CONTROL"?\s*=/gm),
+    ).toHaveLength(1);
+    expect(
+      config.match(/^\s*"?SEASON_PUBLICATION_AUTHORITY"?\s*=/gm),
     ).toHaveLength(1);
   });
 
@@ -112,28 +137,32 @@ describe('season 2026 reclosure configuration (ADR 0025 D12 recovery)', () => {
     ]);
   });
 
-  it('declares SEASON_PUBLICATION_AUTHORITY nowhere', () => {
-    expect(config).not.toMatch(/^\s*"?SEASON_PUBLICATION_AUTHORITY"?\s*=/m);
+  it('leaves the development variables exactly as they were', () => {
+    expect(assignments(developmentVarsBlock(config))).toEqual([
+      'ENVIRONMENT = "development"',
+    ]);
   });
 
-  it('resolves the staging variables to the season 2026 seed phase under the legacy authority', () => {
-    const vars = variables(stagingVarsBlock(config));
-    const resolved = resolveRuntimeConfig({
-      ENVIRONMENT: vars.get('ENVIRONMENT'),
-      PROVIDER_MODE: vars.get('PROVIDER_MODE'),
-      PUBLIC_BASE_URL: vars.get('PUBLIC_BASE_URL'),
-      SEASON_PUBLICATION_AUTHORITY: vars.get('SEASON_PUBLICATION_AUTHORITY'),
-      SEASON_PUBLICATION_CUTOVER_CONTROL: vars.get(
-        'SEASON_PUBLICATION_CUTOVER_CONTROL',
-      ),
-    });
+  it('resolves the staging variables to the season 2026 seed phase under the sequencer authority', () => {
+    const resolved = resolvedVars(stagingVarsBlock(config));
     expect(resolved.environment).toBe('staging');
     expect(resolved.providerMode).toBe('mock');
-    expect(resolved.publicationAuthorityMode).toBe('legacy');
+    expect(resolved.publicationAuthorityMode).toBe('sequencer');
     expect(resolved.publicationCutoverControl).toEqual({
       kind: 'seed',
       season: 2026,
     });
+  });
+
+  it('resolves development and production to the legacy authority with no cutover control', () => {
+    const development = resolvedVars(developmentVarsBlock(config));
+    const production = resolvedVars(productionVarsBlock(config));
+    expect(development.environment).toBe('development');
+    expect(production.environment).toBe('production');
+    for (const resolved of [development, production]) {
+      expect(resolved.publicationAuthorityMode).toBe('legacy');
+      expect(resolved.publicationCutoverControl).toEqual({ kind: 'disabled' });
+    }
   });
 
   it('leaves every staging binding, the secret, cron and observability untouched', () => {

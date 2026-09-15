@@ -56,7 +56,8 @@ actually live.
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
 | Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`), neither looked up by any deployed code path; see `../technical/GridView_Environments.md` |
-| `SEASON_PUBLICATION_CUTOVER_CONTROL` | **Committed: `seed:2026`** — restored by the season-2026 reclosure configuration (PR #24) after the temporary reopening configuration of PR #23 omitted it; see "Temporary season-2026 reopening configuration" in section 6. **Live: `seed:2026`.** It was first deployed on 2026-09-12 from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93` (version `00012c06-6c09-4b2f-b24c-02d6e51ec08d`). It was absent only during the separately authorized recovery window on 2026-09-13 (reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`). The reclosure deployment from `549bb5f3f3ee3963727a816b96fa39752355e9cd` restored it the same day as version `c35f99c0-9e89-4dd7-8fbe-449d295fb567` at 100% traffic. Season 2026's legacy publication and rollback admission is **closed**; see "Recovery window record (2026-09-13)" in section 6. Any change to the live value is cutover-sensitive (section 6). `SEASON_PUBLICATION_AUTHORITY` is absent from all of them, so none seeds or activates anything. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
+| `SEASON_PUBLICATION_CUTOVER_CONTROL` | **Committed: `seed:2026`** — restored by the season-2026 reclosure configuration (PR #24) after the temporary reopening configuration of PR #23 omitted it; see "Temporary season-2026 reopening configuration" in section 6. **Live: `seed:2026`.** It was first deployed on 2026-09-12 from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93` (version `00012c06-6c09-4b2f-b24c-02d6e51ec08d`). It was absent only during the separately authorized recovery window on 2026-09-13 (reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`). The reclosure deployment from `549bb5f3f3ee3963727a816b96fa39752355e9cd` restored it the same day as version `c35f99c0-9e89-4dd7-8fbe-449d295fb567` at 100% traffic. Season 2026's legacy publication and rollback admission is **closed**; see "Recovery window record (2026-09-13)" in section 6. Any change to the live value is cutover-sensitive (section 6). `SEASON_PUBLICATION_AUTHORITY` is absent from all of those live versions, so none seeds or activates anything. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
+| `SEASON_PUBLICATION_AUTHORITY` | **Committed: `sequencer`**, staging only, prepared on 2026-09-15 for the approved season-2026 seed. **Live: absent** (version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`). Merging does not deploy it. Adding it to live staging is a cutover-sensitive deployment (section 6). See "Season-2026 seed authority (prepared 2026-09-15, not deployed)" in section 6. |
 
 `PUBLIC_BASE_URL` is mandatory in staging: the scheduled publisher uses it to
 compute the public URLs it purges. Its absence is a configuration error.
@@ -126,9 +127,9 @@ npm exec wrangler deploy --dry-run --env staging
 The dry-run bundles the Worker and resolves bindings without uploading anything
 (`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV), the
 `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
-plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL` and
-`SEASON_PUBLICATION_CUTOVER_CONTROL` (`seed:2026`, restored by the prepared
-reclosure configuration) vars. A dry-run of the temporary season-2026
+plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL`,
+`SEASON_PUBLICATION_CUTOVER_CONTROL` (`seed:2026`) and
+`SEASON_PUBLICATION_AUTHORITY` (`sequencer`, prepared 2026-09-15) vars. A dry-run of the temporary season-2026
 reopening configuration (PR #23) shows **no**
 `SEASON_PUBLICATION_CUTOVER_CONTROL`, although live staging carries
 `seed:2026`; see section 2. **Read the dry-run output, and compare it with the
@@ -138,16 +139,17 @@ cutover-sensitive gate below is checked.
 ## 6. Deploy staging
 
 There are two kinds of staging deploy, distinguished by comparing
-`SEASON_PUBLICATION_CUTOVER_CONTROL` in the section 5 dry-run with the live
-version's (read the active version id from
-`npm exec wrangler deployments status --env staging`, then
+`SEASON_PUBLICATION_CUTOVER_CONTROL` and `SEASON_PUBLICATION_AUTHORITY` in
+the section 5 dry-run with the live version's (read the active version id
+from `npm exec wrangler deployments status --env staging`, then
 `npm exec wrangler versions view <version-id> --env staging`). An absent var
 is a value like any other:
 
-- **Ordinary deployment** — the dry-run and the live version carry the same
-  value, or both lack the var. Proceed as a routine deploy.
-- **Cutover-sensitive deployment** — the two differ in any way: the dry-run
-  adds the var, changes its value, or **omits a var the live version
+- **Ordinary deployment** — for each of the two vars, the dry-run and the
+  live version carry the same value, or both lack it. Proceed as a routine
+  deploy.
+- **Cutover-sensitive deployment** — either var differs in any way: the
+  dry-run adds it, changes its value, or **omits a var the live version
   carries**. This is **never routine**. Adding `seed:2026` was
   [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary)
   step 1, closing publication and rollback admission for season 2026 in live
@@ -155,8 +157,9 @@ is a value like any other:
   temporary reopening configuration below does — reopens that admission, and
   restoring it — as the prepared reclosure configuration below does — closes
   it again. Before running the command below in this case, the operator must
-  hold explicit, separate authorization naming: the exact control value being
-  deployed (or its absence), the season affected (2026), the target
+  hold explicit, separate authorization naming: the exact control and
+  authority values being deployed (or their absence), the season affected
+  (2026), the target
   environment (staging), the reviewed commit being deployed and, for a
   reopening, the bounded recovery window. **Merging a PR — PR #21, the PR that
   prepared the reopening configuration, or any other — does not itself
@@ -357,15 +360,52 @@ Quick Boot snapshot of `gv_phase8c2_verify`. Its RAM state was neither
 inspected nor retired. First inspect it, or delete the snapshot, under a
 separate authorization.
 
+### Season-2026 seed authority (prepared 2026-09-15, not deployed)
+
+The operator approved the exact season-2026 checkpoint on 2026-09-15. It is
+recorded, with its derived fingerprint, in
+[ADR 0025 D12, "What the approved checkpoint and seed-authority preparation supply (2026-09-15)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-approved-checkpoint-and-seed-authority-preparation-supply-2026-09-15).
+The seed refuses with `authority-mode-not-sequencer` unless the authority
+mode is exactly `sequencer`. So `wrangler.toml` adds
+`SEASON_PUBLICATION_AUTHORITY = "sequencer"` to `[env.staging.vars]` and keeps
+`seed:2026`. Development and production set no authority.
+
+- **Merging deploys nothing.** Live staging (`c35f99c0-…`) keeps the
+  authority absent. A dry-run of the merged configuration adds it, so
+  deploying it is cutover-sensitive under the gate above. It needs its own
+  authorization naming `sequencer`, `seed:2026` unchanged, season 2026,
+  staging and the reviewed commit.
+- **Deploying it seeds and activates nothing.** An `uninitialized` or
+  `seeded` season keeps using the legacy KV pointers for publication,
+  rollback and public reads. `seed:2026` keeps season 2026's publication and
+  rollback paused, and permits only the seed. Publications and public reads do
+  start asking the sequencer for each season's cutover state, and fail closed
+  if that lookup fails.
+- **The seed is a separate authorization.** It must present the approved
+  checkpoint verbatim, with every field exactly as recorded. The fingerprint
+  is derived from the checkpoint and is not a field of it. `seeded` is not
+  `active`.
+- **Activation is a later, separate authorization.** It needs a further
+  cutover-sensitive deployment that replaces `seed:2026` with `activate:2026`,
+  then the fingerprint-bound confirmation.
+- **Once the authority value is live, the persistence rule above applies to
+  it too.** Omitting or changing it is cutover-sensitive, never routine.
+
 What remains now, in order, each separately authorized:
 
-1. merge the pull request recording the client-baseline evidence;
-2. re-run the D12 checkpoint audit;
-3. present the exact checkpoint for explicit operator approval;
-4. seed only after that approval, under a separate authorization;
-5. activate under another authorization;
-6. run smoke and latency verification after activation;
-7. make any later production decision.
+1. merge the pull request carrying the seed-authority configuration;
+2. a cutover-sensitive `wrangler deploy --env staging` of the merged
+   configuration, which adds `SEASON_PUBLICATION_AUTHORITY = "sequencer"` to
+   live staging and leaves `seed:2026` unchanged;
+3. the seed, presenting the approved checkpoint verbatim, only once step 2 is
+   live. Before then the seed is refused with `authority-mode-not-sequencer`;
+4. activation: a further cutover-sensitive deployment replacing `seed:2026`
+   with `activate:2026`, then the fingerprint-bound confirmation;
+5. smoke and latency verification after activation;
+6. any later production decision.
+
+The client-baseline evidence merge, the checkpoint audit re-run and the
+checkpoint approval are done. See the ADR 0025 record linked above.
 
 ## 7. Initial synchronization and publication
 
