@@ -702,6 +702,16 @@ with every restorable snapshot, and the new reference phone — still need
 verification or a separate reset before the checkpoint audit is re-run. See
 [ADR 0025 D12, "What the client decommissioning record supplies (2026-09-13)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-client-decommissioning-record-supplies-2026-09-13).
 
+**Client-baseline evidence recorded (2026-09-14).** This supersedes the
+paragraph above, which was true when written. The operator's Honor 400 Pro is
+the same HONOR DNP-NX9. It was reintroduced, so its decommissioning record is
+invalid and no different new phone exists. The eligible staging clients are
+the `gv_phase8c2_verify` emulator and that phone. Season 2026's client
+baseline is recorded through `authorized-client-baseline-reset` in
+[ADR 0025 D12, "What the authorized client-baseline reset supplies (2026-09-14)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-authorized-client-baseline-reset-supplies-2026-09-14).
+Before item 1 below, each separately authorized: merge that record, then
+re-run the checkpoint audit.
+
 What remains, in order, each separately authorized:
 
 1. operator checkpoint construction and approval, as ADR 0025 D12's

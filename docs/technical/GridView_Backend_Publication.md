@@ -579,7 +579,10 @@ written. The window ran under separate authorization:
 
 The repository's `importRelease` accepts the new active release. Authority
 stayed legacy, and nothing was seeded or activated. The client reset and the
-audit re-run remain before item 1. Record:
+audit re-run remained before item 1. The client baseline has since been
+recorded (2026-09-14) in
+[ADR 0025 D12, "What the authorized client-baseline reset supplies (2026-09-14)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-authorized-client-baseline-reset-supplies-2026-09-14),
+so the audit re-run remains. Record:
 [staging runbook, "Recovery window record (2026-09-13)"](../operations/GridView_Staging_Edge_Runbook.md#recovery-window-record-2026-09-13).
 
 ### The two-phase flow
