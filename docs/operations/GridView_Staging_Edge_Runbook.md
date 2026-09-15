@@ -393,13 +393,19 @@ mode is exactly `sequencer`. So `wrangler.toml` adds
 
 What remains now, in order, each separately authorized:
 
-1. merge the pull request recording the client-baseline evidence;
-2. re-run the D12 checkpoint audit;
-3. present the exact checkpoint for explicit operator approval;
-4. seed only after that approval, under a separate authorization;
-5. activate under another authorization;
-6. run smoke and latency verification after activation;
-7. make any later production decision.
+1. merge the pull request carrying the seed-authority configuration;
+2. a cutover-sensitive `wrangler deploy --env staging` of the merged
+   configuration, which adds `SEASON_PUBLICATION_AUTHORITY = "sequencer"` to
+   live staging and leaves `seed:2026` unchanged;
+3. the seed, presenting the approved checkpoint verbatim, only once step 2 is
+   live. Before then the seed is refused with `authority-mode-not-sequencer`;
+4. activation: a further cutover-sensitive deployment replacing `seed:2026`
+   with `activate:2026`, then the fingerprint-bound confirmation;
+5. smoke and latency verification after activation;
+6. any later production decision.
+
+The client-baseline evidence merge, the checkpoint audit re-run and the
+checkpoint approval are done. See the ADR 0025 record linked above.
 
 ## 7. Initial synchronization and publication
 

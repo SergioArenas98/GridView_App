@@ -109,19 +109,18 @@ Staging config lives in `wrangler.toml` (`[env.staging]`): Worker
 (`workers_dev`), KV `GRIDVIEW_DATA` (`1d0fb55486a745a1ad12e03d9f04942b`),
 `PROVIDER_MODE = mock`, `PUBLIC_BASE_URL` set, and cron `17 3 * * *` (03:17 UTC).
 
-> **Never a routine deploy while `master` lacks the reclosure configuration.**
-> The season-2026 inventory recovery ran on 2026-09-13 under separate
-> authorization. The temporary reopening configuration (PR #23, now on
-> `master`) was deployed for exactly one publication. The reclosure
-> configuration in this `wrangler.toml` (PR #24) was deployed immediately
-> afterwards, so live staging carries
-> `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` again. Until PR #24 is
-> merged, a staging deploy of `master` would omit that value and reopen season
-> 2026's publication and rollback admission, so deploy only under the separate
-> authorization in the runbook's section 6. While admission is open, do not
-> run `workflow:staging-auth` or `check:staging-observability`: both POST
-> `/internal/admin/sync/full` and `/internal/admin/rollback`, and each run adds
-> another publication and pointer transition.
+> **Pass the runbook's section 6 gate before every staging deploy.** The gate
+> compares `SEASON_PUBLICATION_CUTOVER_CONTROL` and
+> `SEASON_PUBLICATION_AUTHORITY` in the dry-run below with the live version.
+> Any difference makes the deploy cutover-sensitive, never routine, and it
+> may run only under the separate authorization section 6 requires. Live
+> staging (`c35f99c0-…`) carries `seed:2026` and no authority value. This
+> `wrangler.toml` keeps `seed:2026` and adds
+> `SEASON_PUBLICATION_AUTHORITY = "sequencer"` for the approved season-2026
+> seed (prepared 2026-09-15), so deploying it is cutover-sensitive. Once it is
+> deployed, publications and public reads ask the season-publication
+> sequencer first and fail closed if that lookup fails. The 2026-09-13
+> season-2026 recovery window is recorded in section 6.
 
 ```text
 # validate + bundle without deploying
