@@ -44,17 +44,17 @@ storage = "sqlite"
 # `previousVersion` and per-key snapshot state, once - and only once - a season
 # has been seeded and activated.
 #
-# DECLARED HERE; PROVISIONED IN STAGING ONLY; STILL DISABLED. This entry and
-# the `env.staging` binding below were deployed to staging on 2026-09-12, which
-# created the staging namespace. That is provisioning, not use: no season has
-# been seeded or activated, and `SEASON_PUBLICATION_AUTHORITY` is unset in
-# every environment here - so no code path looks this binding up and legacy KV
-# pointers remain authoritative everywhere. Live staging (version
-# `00012c06-…`, 2026-09-12) carries `SEASON_PUBLICATION_CUTOVER_CONTROL =
-# "seed:2026"`, so admission for season 2026 is closed there, but authority is
-# still disabled. `env.staging` below declares that same value again, as the
-# prepared reclosure configuration - read the warning there before deploying
-# this file. Production declares no binding and has never been deployed.
+# DECLARED HERE; PROVISIONED IN STAGING ONLY; NOT SEEDED OR ACTIVATED. This
+# entry and the `env.staging` binding below were deployed to staging on
+# 2026-09-12, which created the staging namespace. That is provisioning, not
+# use: live staging (version `c35f99c0-…`, 2026-09-13) carries
+# `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` and no
+# `SEASON_PUBLICATION_AUTHORITY`, so no deployed code path looks this binding
+# up and legacy KV pointers remain authoritative everywhere. `env.staging`
+# below also selects `SEASON_PUBLICATION_AUTHORITY = "sequencer"`, prepared for
+# the approved season-2026 seed and not deployed - read the warning there
+# before deploying this file. Development and production select no authority;
+# production declares no binding and has never been deployed.
 #
 # `storage = "sqlite"` is required: the coordinator commits through
 # `ctx.storage.transactionSync`, which only SQLite-backed Durable Objects
@@ -74,34 +74,34 @@ ENVIRONMENT = "staging"
 PROVIDER_MODE = "mock"
 PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
 
-# Admission closure for season 2026 (ADR 0025 D12 step 1) - LIVE IN STAGING,
-# RESTORED HERE AS THE PREPARED RECLOSURE CONFIGURATION. DO NOT DEPLOY THIS
-# FILE AS ROUTINE WORK.
+# Admission closure for season 2026 (ADR 0025 D12 step 1) - LIVE IN STAGING.
+# DO NOT DEPLOY THIS FILE AS ROUTINE WORK.
 #
-# Live staging version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (2026-09-12)
+# Live staging version `c35f99c0-9e89-4dd7-8fbe-449d295fb567` (2026-09-13)
 # carries `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` - the
 # authenticated operator's explicit season selection - so season 2026's legacy
-# publication and rollback admission is closed there.
-#
-# Season-2026 inventory recovery (prepared 2026-09-13; nothing deployed). None
-# of the retained season-2026 versions records an exact `__inventory`, so the
-# D12 seed cannot run, and no existing release may be given a reconstructed
-# one. The recovery is exactly one new publication under the current code,
-# which writes its own inventory. The temporary reopening configuration
-# (PR #23) omitted this value so that one separately authorized, time-bounded
-# `wrangler deploy --env staging` can reopen admission for that publication.
-# This file restores exactly `seed:2026` as the reviewed reclosure: only the
-# further authorized deployment that immediately follows that one publication
-# may upload it - never before the publication, and never as routine or
-# unrelated work - and it must be live before any client reset, checkpoint or
-# seed. Merging it changes nothing in Cloudflare. See the staging runbook,
+# publication and rollback admission is closed there. It remains the phase
+# gate: it permits only the seed to be attempted, never activation, and keeps
+# season 2026's legacy mutators paused whatever the authority mode below. The
+# 2026-09-13 recovery that restored it is recorded in the staging runbook,
 # section 6.
-#
-# `seed:2026` closes admission and permits only the seed preparation to be
-# attempted; it does not itself construct a checkpoint, seed the sequencer or
-# touch `SEASON_PUBLICATION_AUTHORITY`, which stays unset, so nothing is seeded
-# or activated and legacy KV pointers stay authoritative.
 SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"
+
+# Sequencer authority for the approved season-2026 seed (ADR 0025 D12,
+# checkpoint approved 2026-09-15) - PREPARED HERE, NOT DEPLOYED.
+#
+# Every cutover route refuses with `authority-mode-not-sequencer` unless this
+# is exactly `sequencer`. Live staging does not carry it. Only a separately
+# authorized `wrangler deploy --env staging` uploads it, and that deployment is
+# cutover-sensitive (staging runbook, section 6); merging this file changes
+# nothing in Cloudflare. Deploying it seeds and activates nothing: a season the
+# sequencer reports as `uninitialized` or `seeded` keeps the legacy KV
+# pointers for publication, rollback and public reads until its separately
+# authorized activation, and `seed:2026` above keeps season 2026's mutators
+# paused. Once it is live, publications and public reads ask the sequencer for
+# each season's cutover state first, and fail closed if that lookup fails.
+# Development and production do not set it.
+SEASON_PUBLICATION_AUTHORITY = "sequencer"
 
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.staging.durable_objects.bindings]]
@@ -112,9 +112,10 @@ class_name = "ProviderRateLimiter"
 # sequence is authorized to target. Production deliberately declares no
 # season-publication binding at all, so a production deployment cannot reach the
 # class even by accident. Declaring the binding does not by itself provision
-# the namespace - the 2026-09-12 staging deployment did - and an unset
-# `SEASON_PUBLICATION_AUTHORITY` means nothing looks it up: the composition
-# builds the exact legacy `SnapshotPublisher` it builds today.
+# the namespace - the 2026-09-12 staging deployment did. Only
+# `SEASON_PUBLICATION_AUTHORITY = "sequencer"` makes the Worker look it up;
+# while a deployment lacks that value, the composition builds the exact legacy
+# `SnapshotPublisher`.
 [[env.staging.durable_objects.bindings]]
 name = "SEASON_PUBLICATION_SEQUENCER"
 class_name = "SeasonPublicationSequencer"

@@ -329,7 +329,9 @@ resolves to `unavailable` - the fail-closed default, under which no outbound
 provider request can be issued at all.
 
 `SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **unset in every
-environment**. An absent, empty or unrecognised value resolves to `legacy` and
+deployed environment**, and in development and production as committed. The
+repository's `env.staging` selects `sequencer` for the approved season-2026
+seed; that is prepared, not deployed (below). An absent, empty or unrecognised value resolves to `legacy` and
 never throws, so the composition builds the existing `SnapshotPublisher` and the
 public router performs no Durable Object lookup. The exact string `sequencer`
 selects the two-phase path when a sequencer port is reachable, and **fails
@@ -346,8 +348,8 @@ preparation slice, 2026-09-10); the class is a named export of the Worker entry
 point, which is how Wrangler resolves it. There is still **no `[[migrations]]`
 block and no production binding**. The 2026-09-12 staging deployment (version
 `985115b7-abb3-4346-8845-d8ff41c80cf6`) created the staging namespace. No
-season has been seeded or activated, and because `SEASON_PUBLICATION_AUTHORITY`
-is unset the lookup is never performed: **staging still uses legacy pointers,
+season has been seeded or activated, and because live staging carries no
+`SEASON_PUBLICATION_AUTHORITY` the lookup is never performed: **staging still uses legacy pointers,
 and production has never been deployed.**
 
 | Durable Object state | development | staging | production |
@@ -356,7 +358,7 @@ and production has never been deployed.**
 | `PROVIDER_RATE_LIMITER` binding declared | yes (local `wrangler dev` only) | yes | yes |
 | `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | **none** |
 | Namespaces provisioned on Cloudflare | none | **both, 2026-09-12** (version `985115b7-…`); neither looked up | none - never deployed |
-| Authority mode set | no | no | no |
+| Authority mode set | no | **live: no**; **committed: yes** (`sequencer`, prepared 2026-09-15 for the approved season-2026 seed, not deployed) | no |
 | Cutover control set | no | **live: yes** (`seed:2026`: first deployed 2026-09-12 as version `00012c06-…`, absent only during the 2026-09-13 recovery window, and restored as version `c35f99c0-…`); **committed: yes** (`seed:2026`) in the reclosure configuration. `master` omits it until that configuration is merged (below) | no |
 
 `SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is live in staging only —
@@ -435,6 +437,25 @@ operator cache purge available, and leaves public reads resolving through the
 legacy authority. It is an admission-closure boundary, **not** a quiescence
 guarantee: it stops new mutators from starting and claims nothing about an
 invocation admitted before it was deployed.
+
+**Season-2026 seed authority — prepared 2026-09-15, not deployed.** The
+operator approved the exact season-2026 cutover checkpoint on 2026-09-15. Its
+derived fingerprint, which is not a checkpoint field, is
+`cutover1:38f726065f8cbb7f46525c213013936b9673cdccbb0128ca45a0ecfccd7c9ac2`.
+The seed refuses unless the authority mode is exactly `sequencer`, so
+`services/edge-api/wrangler.toml` now selects
+`SEASON_PUBLICATION_AUTHORITY = "sequencer"` under `[env.staging.vars]` only,
+and keeps `seed:2026`.
+- Merging it deploys nothing. Live staging keeps the authority absent until a
+  separately authorized, cutover-sensitive deployment (staging runbook,
+  section 6).
+- Even once it is deployed, `uninitialized` and `seeded` seasons stay on
+  legacy pointers until a separately authorized activation, and `seed:2026`
+  keeps season 2026's mutators paused.
+- No seed has run.
+
+Record:
+[ADR 0025 D12, "What the approved checkpoint and seed-authority preparation supply (2026-09-15)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-approved-checkpoint-and-seed-authority-preparation-supply-2026-09-15).
 
 **No media bucket exists in any environment**, so no image has ever been published and no
 production CDN host appears anywhere in this repository — fabricating one would
