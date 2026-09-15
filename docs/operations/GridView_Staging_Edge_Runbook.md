@@ -352,6 +352,11 @@ activation:
 
 Breaking any of these invalidates the baseline and requires new evidence.
 
+Separately, and not only until activation: never load the `default_boot`
+Quick Boot snapshot of `gv_phase8c2_verify`. Its RAM state was neither
+inspected nor retired. First inspect it, or delete the snapshot, under a
+separate authorization.
+
 What remains now, in order, each separately authorized:
 
 1. merge the pull request recording the client-baseline evidence;

@@ -2506,7 +2506,7 @@ locally: `Pixel_9_Pro_XL`, `Pixel_9_Pro_XL_2`, `Pixel_9_Pro_XL_3`,
   `com.sejuma.gridview.staging` before activation.
 
 **Emulator `gv_phase8c2_verify` (Android 16, API 36).** Every restorable
-state was inspected:
+disk state was inspected:
 
 | State | Inspected at |
 |---|---|
@@ -2522,14 +2522,24 @@ state was inspected:
   - `pm path` found nothing, and `dumpsys package` could not find the package.
   - The Android framework control query succeeded.
 - **Snapshots.** No named saved snapshot existed.
-- **Quick Boot RAM state was not inspected.** It could not be loaded: the
-  emulator first reported a snapshot feature incompatibility, then that its
-  hardware cannot load the snapshot. Only its disk state was inspected.
+- **Quick Boot RAM state was neither inspected nor retired.** It could not be
+  loaded: the emulator first reported a snapshot feature incompatibility, then
+  that its hardware cannot load the snapshot. Only its disk state was
+  inspected, and that disk state held no staging package. The RAM image
+  remains on the AVD, because this record authorized no AVD modification.
+  `default_boot` must not be loaded on this AVD unless its RAM state is first
+  inspected, or the snapshot is deleted, under separate authorization.
 - **Isolation.** Every boot used an isolated scratch copy under a different AVD
   name. No original snapshot was created, overwritten or deleted.
-- **Integrity afterwards.** A comparison at 18:09:46Z found all 37 original AVD
-  files with their original hashes, sizes and modification times. The
-  temporary copies were then deleted.
+- **Integrity.**
+  - The last isolated boot started at 18:08:28Z.
+  - A comparison completed at 18:09:46Z, while that boot was still running on
+    its copy. It found all 37 original AVD files with their original hashes,
+    sizes and modification times.
+  - Every later step touched only the scratch copy, under a separate AVD home
+    that did not contain the original: the 18:09:57Z query, the emulator
+    shutdown and the deletion of the temporary copies at about 18:10:40Z.
+  - No comparison was repeated after those steps.
 
 **Reference phone - HONOR DNP-NX9.** This is the operator's Honor 400 Pro.
 Android reports its manufacturer and model as `HONOR DNP-NX9`. It is the same
@@ -2670,8 +2680,10 @@ staging data was deleted.
 
 - No Google cloud-backup dataset was enumerated or proven deleted.
 - The exclusion rules were not exercised against a real backup payload.
-- Quick Boot RAM state could not be loaded. The Quick Boot disk state was
-  inspected successfully, in isolation.
+- Quick Boot RAM state could not be loaded, and it was neither inspected nor
+  retired. The Quick Boot disk state was inspected successfully, in
+  isolation. Loading `default_boot` on this AVD first requires inspecting its
+  RAM state, or deleting the snapshot, under separate authorization.
 - The evidence is specific to the declared GridView staging client boundary.
   The five out-of-boundary AVDs were not inspected and are not claimed clean.
 - Rebuilding or installing a historical unprotected staging APK invalidates
