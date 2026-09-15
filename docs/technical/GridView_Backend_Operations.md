@@ -744,6 +744,12 @@ supersedes the list above, which was true when written.
   receipt exists.
 - `wrangler.toml` now commits `activate:2026` in place of `seed:2026`. It is
   not deployed.
+- Deployed, `activate:2026` keeps season 2026's publication and rollback
+  closed until the sequencer positively reports the season `active` and
+  authoritative. An unreadable or `unavailable` authority fails closed. After
+  a successful activation, publication and rollback run through
+  `SequencedPublicationService`, with no further configuration change. The
+  legacy `active:2026` and `previous:2026` pointers are not written.
 
 Record:
 [ADR 0025 D12, "What the season-2026 seed supplies (2026-09-15)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-season-2026-seed-supplies-2026-09-15).
@@ -752,7 +758,8 @@ What remains, in order, each separately authorized:
 
 1. a cutover-sensitive staging deployment of `activate:2026`;
 2. the activation confirmation, re-presenting the approved checkpoint exactly
-   with `confirmActivation: true`, and mutation resumption;
+   with `confirmActivation: true`, whose success alone resumes season 2026's
+   publication and rollback through the sequencer;
 3. smoke and latency verification;
 4. any later production decision.
 

@@ -4,12 +4,13 @@
  *
  * The composition root constructs this only when
  * `SEASON_PUBLICATION_AUTHORITY=sequencer` is set *and* a sequencer port is
- * reachable. Every deployed environment leaves that unset, gets the bare
- * `SnapshotPublisher` instead, and never reaches this file. Even when it is
- * constructed, this service delegates to the legacy `SnapshotPublisher` for any
- * season whose authority has not been switched to `cutoverState: 'active'` -
- * which no environment has done - so the two-phase protocol below runs only
- * under a test that has explicitly seeded and activated a season.
+ * reachable. `env.staging` selects it; development and production leave it
+ * unset, get the bare `SnapshotPublisher` instead, and never reach this file.
+ * Even when it is constructed, this service hands any season whose authority is
+ * not positively `cutoverState: 'active'` and authoritative to its `fallback` -
+ * the legacy `SnapshotPublisher`, or, for the season an `activate:` cutover
+ * control names, the admission boundary that refuses it (ADR 0025 D12). The
+ * two-phase protocol below runs only for a season the sequencer reports active.
  *
  * ## Why the two-phase protocol lives here and not in `SnapshotPublisher`
  *
@@ -864,8 +865,10 @@ export class SequencedPublicationService implements PublicationCommands {
   // --- authority + purge -----------------------------------------------------
 
   /**
-   * `null` - not `active`, so the caller delegates to the legacy authority.
-   * `'unavailable'` - the lookup itself could not be resolved; fail closed.
+   * `null` - not `active`, so the caller delegates to its fallback.
+   * `'unavailable'` - the lookup itself could not be resolved, or it answered
+   * `active` without declaring itself authoritative; fail closed. An `active`
+   * season is never handed to the fallback, whatever else its answer says.
    */
   private async activeAuthority(
     season: number,
@@ -875,6 +878,7 @@ export class SequencedPublicationService implements PublicationCommands {
     const authority = read.value;
     if (authority.cutoverState === 'unavailable') return 'unavailable';
     if (authority.cutoverState !== 'active') return null;
+    if (!authority.authoritative) return 'unavailable';
     return {
       activeVersion: authority.activeVersion,
       previousVersion: authority.previousVersion,

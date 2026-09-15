@@ -603,11 +603,22 @@ remain. All three were true when written.
   legacy KV pointers still serve every season.
 - No activation has occurred.
 - `wrangler.toml` now commits `activate:2026`. It is not deployed.
+- Deployed, `activate:2026` puts the admission boundary in
+  `SequencedPublicationService`'s legacy fallback slot for season 2026.
+  - `uninitialized` or `seeded`: publication and rollback are refused.
+  - A lookup that fails or answers `unavailable`: they fail closed.
+  - `active` and authoritative: they run through the two-phase flow below,
+    so a successful activation alone resumes them, with no further
+    configuration change.
+
+  The legacy publisher and the legacy `active:2026` and `previous:2026`
+  pointers are not used for season 2026 on any of those paths.
 
 What remains, each separately authorized:
 - a cutover-sensitive deployment of `activate:2026`;
 - the activation confirmation, re-presenting the approved checkpoint exactly
-  with `confirmActivation: true`, and mutation resumption;
+  with `confirmActivation: true`, whose success alone resumes season 2026's
+  publication and rollback through the sequencer;
 - smoke and latency verification;
 - any later production decision.
 

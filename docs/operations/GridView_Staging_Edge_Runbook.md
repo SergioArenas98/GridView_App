@@ -467,9 +467,9 @@ keeps `sequencer`. Nothing else in the configuration changes.
   naming `activate:2026`, `sequencer` unchanged, season 2026, staging and the
   reviewed commit.
 - **Deploying it activates nothing.** `activate:2026` keeps season 2026's
-  legacy publication and rollback admission closed, permits the activation
-  route, and refuses another seed with `phase-not-permitted`. Season 2026
-  stays `seeded`, and public reads stay on the legacy authority.
+  publication and rollback admission closed, permits the activation route,
+  and refuses another seed with `phase-not-permitted`. Season 2026 stays
+  `seeded`, and public reads stay on the legacy authority.
 - **Activation is a separate authorization.** It is one authenticated `POST`
   to `/internal/admin/publication/cutover/activate` whose body is
   `{"checkpoint": <the approved checkpoint, verbatim>, "confirmActivation": true}`.
@@ -478,17 +478,32 @@ keeps `sequencer`. Nothing else in the configuration changes.
   - A checkpoint that is not exactly the approved one does not reproduce the
     seeded fingerprint, and fails closed.
   - Either failure leaves the seed as it is.
-- **Activation does not reopen admission by itself.** While a deployed
-  control names season 2026, in either phase, that season's legacy
-  publication and rollback admission stays closed, whatever the sequencer
-  reports.
+  - The request performs only the durable `seeded -> active` transition, and
+    an identical retry returns `already-active`.
+- **A successful activation alone resumes the mutators.** No further
+  configuration change or deployment is needed.
+  - While `activate:2026` is deployed with `sequencer`, every season-2026
+    publication and rollback first reads the season's durable authority. It
+    stays refused unless the sequencer positively reports the season
+    `active` and authoritative.
+  - A failed or `unavailable` lookup fails closed. A deployed `seed:2026`
+    never reopens the season.
+  - After a successful activation, the next publication or rollback is
+    admitted through `SequencedPublicationService`. It never reaches the
+    legacy publisher. The legacy `active:2026` and `previous:2026` pointers
+    are not written and remain historical context.
+  - Public reads follow the sequencer from the same moment.
+  - Other seasons and the operator cache purge are unaffected.
+  - The full record is in
+    [ADR 0025 D12, "What the season-2026 seed supplies (2026-09-15)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-season-2026-seed-supplies-2026-09-15).
 
 What remains, in order, each separately authorized:
 
 1. merge the pull request carrying `activate:2026` and the seed record;
 2. a cutover-sensitive `wrangler deploy --env staging` of the merged
    configuration, replacing `seed:2026` with `activate:2026` in live staging;
-3. the activation `POST` described above;
+3. the activation `POST` described above, whose success alone resumes season
+   2026's publication and rollback through the sequencer;
 4. post-activation smoke and latency verification, as a separate step;
 5. any later production decision.
 
@@ -497,7 +512,8 @@ What remains, in order, each separately authorized:
 **Not for season 2026 while a `SEASON_PUBLICATION_CUTOVER_CONTROL` naming
 season 2026 (`seed:2026` or `activate:2026`) is live in deployed staging.** Once that deploy has happened, season 2026's
 legacy publication admission is closed and this command is rejected for that
-season — see [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
+season until a successful D12 activation, after which it publishes season 2026
+through the sequencer, never through the legacy pointers — see [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
 This section remains the correct workflow for any season whose admission is
 still open (a season not covered by a live cutover control, or before this
 control is deployed). For season 2026 after closure, the next authorized step

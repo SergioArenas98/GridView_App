@@ -118,8 +118,10 @@ Staging config lives in `wrangler.toml` (`[env.staging]`): Worker
 > and `seed:2026`, and season 2026 is seeded but not active. This
 > `wrangler.toml` keeps `sequencer` and replaces `seed:2026` with
 > `activate:2026` (prepared 2026-09-15), so deploying it is cutover-sensitive.
-> Deploying it activates nothing: activation is a separate, authenticated
-> request. The season-2026 recovery window and seed are recorded in section 6.
+> Deploying it activates nothing and keeps season 2026's publication and
+> rollback closed. Activation is a separate, authenticated request, and only
+> its success resumes them, through the sequencer. The season-2026 recovery
+> window and seed are recorded in section 6.
 
 Always put `--` between `npm exec` and `wrangler`, or npm takes flags such as
 `--env` and `--dry-run` as its own. In Windows PowerShell, write

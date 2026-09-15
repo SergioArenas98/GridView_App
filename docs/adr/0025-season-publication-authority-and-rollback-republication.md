@@ -171,8 +171,8 @@
 >
 > 1. a cutover-sensitive staging deployment replacing `seed:2026` with
 >    `activate:2026`;
-> 2. the separately authorized activation confirmation and mutation
->    resumption;
+> 2. the separately authorized activation confirmation, whose success alone
+>    resumes season 2026's publication and rollback through the sequencer;
 > 3. smoke and latency verification;
 > 4. any later production decision.
 >
@@ -2878,22 +2878,48 @@ repository code without contacting staging:
 |---|---|
 | A durable `seeded` state for season 2026, bound to the approved fingerprint and not authoritative. | Activation. The sequencer is not authoritative for season 2026, no activation request has been sent, and no activation receipt exists. |
 | `services/edge-api/wrangler.toml` replaces `seed:2026` with `SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"` under `[env.staging.vars]`, its only configuration change. Every other variable, every binding, the secret declaration, the cron and observability are unchanged. Development and production still have no authority and no cutover control, and production still declares no season-publication binding. | Any deployment of `activate:2026`. Live staging still carries `seed:2026`, and merging this change deploys nothing. |
-| Confirmation, from the implementation and its tests, that `activate:2026` keeps season 2026's legacy publication and rollback admission closed, permits the activation route, and refuses another seed with `phase-not-permitted`. | Mutation resumption. The composition closes season 2026's publication and rollback admission whenever a deployed control names season 2026, in either phase and whatever the sequencer reports. Activation alone does not reopen it. |
+| Confirmation, from the implementation and its tests, that `activate:2026` keeps season 2026's publication and rollback admission closed until the sequencer positively reports the season `active` and authoritative, permits the activation route, and refuses another seed with `phase-not-permitted`. After a durable activation, the same deployed configuration admits season 2026's publication and rollback through `SequencedPublicationService`; see "How mutators resume" below. | Any resumed mutation. Nothing has been activated, so season 2026's publication and rollback remain closed. |
 | | Smoke and latency verification, or any production decision. Production is untouched. |
 
 **What activation requires.** Deploying `activate:2026` is cutover-sensitive
 (staging runbook, section 6) and needs its own explicit authorization, naming
 `activate:2026`, `sequencer` unchanged, season 2026, staging and the reviewed
-commit. The deployment activates nothing: season 2026 stays `seeded`, and
-public reads stay on the legacy authority. Activation is then one separately
-authorized, authenticated `POST` to
-`/internal/admin/publication/cutover/activate` with the body
+commit. The deployment activates nothing: season 2026 stays `seeded`, its
+publication and rollback stay closed, and public reads stay on the legacy
+authority. Activation is then one separately authorized, authenticated `POST`
+to `/internal/admin/publication/cutover/activate` with the body
 `{"checkpoint": <the approved checkpoint above, verbatim>, "confirmActivation": true}`.
 - Any value other than the literal `true` fails as
   `activation-not-confirmed`.
 - The service recomputes the fingerprint from the re-presented checkpoint and
   activates only if it equals the one the sequencer holds.
 - Either failure leaves the seed as it is.
+- The request performs only the durable `seeded -> active` transition, and an
+  identical retry returns `already-active`.
+
+**How mutators resume.** The activation `POST` is the only authorized
+transition from `seeded` to `active`, and its success is what resumes season
+2026's mutators. No further configuration change or deployment is needed.
+Under `activate:2026` and `sequencer`, the admission boundary sits in
+`SequencedPublicationService`'s legacy fallback slot. Every publication and
+rollback for season 2026 first reads the season's durable authority from the
+sequencer:
+- `uninitialized` or `seeded`: refused as `season-paused-for-cutover`;
+- a lookup that fails, answers `unavailable`, or answers `active` without
+  `authoritative: true`: refused as `sequencer-authority-unavailable`, which
+  fails closed;
+- `active` and authoritative: admitted, and run through
+  `SequencedPublicationService`'s two-phase protocol.
+
+None of those paths reaches `SnapshotPublisher`. None writes the legacy
+`active:2026` or `previous:2026` pointers, which remain historical context.
+From the first request after a successful activation, the sequencer is
+authoritative for season 2026: publication and rollback run through it, and
+public reads follow it. A deployed `seed:2026` never reopens the season.
+Neither does a Worker whose sequencer is unreachable, or whose authority is
+not `sequencer`. Other seasons and the operator cache purge are unaffected.
+Post-activation smoke and latency verification still need their own
+authorization.
 
 **This supersedes** items 1 to 3 of the list under "What the approved
 checkpoint and seed-authority preparation supply (2026-09-15)". What remains,
@@ -2902,7 +2928,8 @@ in order, each step under its own explicit authorization:
 1. merge of the pull request carrying `activate:2026` and this record;
 2. a cutover-sensitive `wrangler deploy --env staging` of the merged
    configuration, replacing `seed:2026` with `activate:2026` in live staging;
-3. the activation `POST` described above;
+3. the activation `POST` described above, whose success alone resumes season
+   2026's publication and rollback through the sequencer;
 4. post-activation smoke and latency verification, as a separate step;
 5. any later production decision.
 

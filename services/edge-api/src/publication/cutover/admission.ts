@@ -6,10 +6,26 @@
  * D12 step 1 requires that **no publication or rollback mutator may be
  * *admitted*** against the legacy pointers for the season being cut over, from
  * before the checkpoint is approved until the separate activation confirmation
- * resumes that season's mutators. This decorator is that boundary: it sits
- * outside whatever publication command surface the composition built, so the
- * refusal happens **before `SnapshotPublisher` is reached at all** - not inside
- * it, and not after a candidate has been written.
+ * resumes that season's mutators through the sequencer. This decorator is that
+ * boundary, and its refusal happens **before `SnapshotPublisher` is reached at
+ * all** - not inside it, and not after a candidate has been written.
+ *
+ * ## Where the composition places it
+ *
+ * `buildPublicationCommands` in `src/index.ts` puts it in one of two places:
+ *
+ * - **Around the whole command surface** for `seed:`, and for `activate:`
+ *   without a reachable sequencer. The season is refused whatever any
+ *   authority reports.
+ * - **As the legacy fallback of `SequencedPublicationService`** for `activate:`
+ *   with a reachable sequencer. For the controlled season it is then reached
+ *   only when its durable authority is `uninitialized` or `seeded`. An
+ *   unreadable or
+ *   `unavailable` authority fails closed inside the sequenced service first,
+ *   and a season the sequencer reports `active` and authoritative is published
+ *   and rolled back by the sequenced service itself. None of those paths
+ *   reaches the legacy publisher or the legacy `active:{season}` and
+ *   `previous:{season}` pointers.
  *
  * ## What this is, and what it is deliberately not
  *

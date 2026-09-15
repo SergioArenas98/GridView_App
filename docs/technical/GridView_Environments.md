@@ -469,12 +469,20 @@ run" statements above, which were true when written.
   legacy pointers and public responses are unchanged, and no activation
   receipt exists.
 - `services/edge-api/wrangler.toml` now replaces `seed:2026` with
-  `activate:2026` under `[env.staging.vars]`. That value keeps admission
-  closed, permits the activation route and refuses another seed.
+  `activate:2026` under `[env.staging.vars]`. That value permits the
+  activation route and refuses another seed. It keeps season 2026's
+  publication and rollback closed until the sequencer positively reports the
+  season `active` and authoritative. A failed or `unavailable` lookup fails
+  closed.
 - Merging it deploys nothing. Deploying it is a cutover-sensitive step that
   needs its own authorization, and it activates nothing either.
 - Activation is a separate authenticated request. It must re-present the
   approved checkpoint exactly, with `confirmActivation: true`.
+- A successful activation alone resumes season 2026's publication and
+  rollback, through `SequencedPublicationService`. No further configuration
+  change is needed. The legacy `active:2026` and `previous:2026` pointers are
+  not written and remain historical context.
+- Smoke and latency verification stay separately authorized.
 
 Record:
 [ADR 0025 D12, "What the season-2026 seed supplies (2026-09-15)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-season-2026-seed-supplies-2026-09-15).
