@@ -48,20 +48,37 @@ Dev and production receive none of this and keep the platform defaults they
 had before. `:app:verifyStagingBackupPolicy` asserts all of it in CI, from the
 nine merged manifests and the two rule files.
 
-This prepares the contract-migration alternative of the historical-floor
+This is the contract-migration alternative of the historical-floor
 precondition in
 [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
-It does not by itself complete D12 client-baseline evidence:
+Four layers of evidence are recorded separately:
 
-- the reference phone (Honor 400 Pro) still requires a separately authorized
-  installation and verification, after merge, of an artifact built from this
-  change;
-- the earlier client decommissioning record remains invalid and still needs
-  correcting;
+- **Implementation.** PR #27, merged as `35a59e8`. CI runs
+  `verifyStagingBackupPolicy`.
+- **Protected artifact verification (2026-09-14).** A staging debug APK built
+  from `35a59e8` carries `allowBackup="false"` and both rule files. All nine
+  domains are excluded in both the cloud-backup and device-transfer sections,
+  with no include rule and no BackupAgent.
+- **Device evidence (2026-09-14).**
+  - That APK was installed once on the reference phone, the HONOR DNP-NX9
+    (the Honor 400 Pro). It was never launched and restored no data. It was
+    then cleared and uninstalled.
+  - Backup Manager still started its restore-at-install workflow for the
+    package, but the transport delivered no package.
+  - The four locally retained staging APKs built before this change were
+    deleted.
+- **D12 evidence.** Season 2026's client baseline is recorded through
+  `authorized-client-baseline-reset` in
+  [ADR 0025, "What the authorized client-baseline reset supplies (2026-09-14)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-authorized-client-baseline-reset-supplies-2026-09-14).
+  That record also corrects the invalidated 2026-09-13 decommissioning
+  record.
+
+Limits that still apply:
+
 - a historical cloud backup dataset, if one exists, is not claimed to have been
-  deleted - this change stops it being restored, it does not erase it;
-- staging APKs built before this change must not be installed or used, and
-  their retirement is a separate decision;
+  deleted - this change is meant to stop it being restored, not to erase it;
+- the exclusion layers have not been exercised against a real backup payload;
+- staging APKs built before this change must never be installed or used;
 - checkpoint, seed and activation remain pending.
 
 ## Remote data source

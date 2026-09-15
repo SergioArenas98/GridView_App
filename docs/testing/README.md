@@ -1839,10 +1839,13 @@ They were taken from a **staging profile APK** on the authorized physical
 DNP-NX9, driven through the Dart VM service over `adb` — no browser, no DevTools
 UI, and no permanent instrumentation in the repository.
 
-The DNP-NX9 has since been **permanently decommissioned from GridView staging**
-(2026-09-13): never use it again as a GridView development, staging, test or
-reference device. Nothing is claimed about the data it still holds. See
-[ADR 0025 D12, "What the client decommissioning record supplies (2026-09-13)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-client-decommissioning-record-supplies-2026-09-13).
+On 2026-09-13 the DNP-NX9 was recorded as permanently decommissioned from
+GridView staging. That record became invalid on 2026-09-14, when the operator
+reintroduced the same phone (the Honor 400 Pro). It is again the staging
+reference phone, inside the season-2026 client baseline. Before activation,
+the staging app must not be opened, run or synced on it. See
+[ADR 0025 D12, "What the authorized client-baseline reset supplies (2026-09-14)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-authorized-client-baseline-reset-supplies-2026-09-14).
+The measurements below remain valid historical evidence.
 
 Read them with their qualifications attached, because most of them are not
 acceptance results:

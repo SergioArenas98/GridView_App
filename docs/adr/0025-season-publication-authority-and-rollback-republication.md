@@ -2411,6 +2411,26 @@ What remains, in order, each requiring its own explicit authorization:
 
 #### What the client decommissioning record supplies (2026-09-13)
 
+> **Invalidated on 2026-09-14. Kept as the dated historical record.** This
+> record was true when written. It no longer supports any checkpoint. The
+> operator's Honor 400 Pro is this same HONOR DNP-NX9, the Phase 8C-3 unit. It
+> is not a different or new phone. The operator reversed the permanent
+> decommissioning after confirming that the phone was still accessible and
+> would be reused. Under the invalidation rule in "Permanent client
+> decommissioning" below, that reintroduction invalidated this record.
+>
+> - **Earliest retained evidence of the reintroduction:**
+>   2026-09-14T17:46:28Z. The operator had connected the phone to the ADB host
+>   as the intended reference phone, and `adb devices` listed it. No command
+>   was sent to it.
+> - **Operator confirmation** of the identity and the reuse:
+>   2026-09-14T18:20:05Z.
+>
+> The "new reference phone" named under "Pending evidence" below does not
+> exist. The Phase 8C-3 measurements remain valid historical evidence. The
+> replacement evidence is "What the authorized client-baseline reset supplies
+> (2026-09-14)" below.
+
 The operator has **permanently decommissioned** the former physical reference
 phone from GridView staging. It is recorded under the permanent client
 decommissioning rule in "The pre-cutover historical-floor activation
@@ -2452,6 +2472,227 @@ Item 1 is done: the reclosure configuration was merged as `master`
 `ca5142ae95b2256039f34d6bc623e32ae1c58788` (PR #24). No device, Worker, KV
 namespace or secret was touched to make this record, and no checkpoint,
 fingerprint, seed or activation occurred.
+
+#### What the authorized client-baseline reset supplies (2026-09-14)
+
+The historical-floor activation precondition for GridView staging, season
+2026, is **satisfied through `authorized-client-baseline-reset`**. That is the
+fourth alternative of "The pre-cutover historical-floor activation
+precondition" below: a separately authorized client-baseline reset or
+contract migration removes retained pre-cutover client state before
+activation. This record replaces the invalidated decommissioning record
+above.
+
+| Field | Record |
+|---|---|
+| Environment | GridView staging (Worker `gridview-api-staging`); application flavor `com.sejuma.gridview.staging` |
+| Season | 2026 |
+| Evidence variant | `authorized-client-baseline-reset` |
+| Evidence reference | `docs/adr/0025-season-publication-authority-and-rollback-republication.md#what-the-authorized-client-baseline-reset-supplies-2026-09-14` |
+| Eligible-client boundary | AVD `gv_phase8c2_verify` with every restorable state, and `Reference phone - HONOR DNP-NX9` (the operator's Honor 400 Pro). Nothing else. |
+| Checkpoint, fingerprint, seed, activation | None. No checkpoint or fingerprint was constructed, and nothing was seeded or activated. |
+
+All times below are UTC on 2026-09-14.
+
+**Eligible-client boundary.** The operator defines the complete GridView
+staging client boundary as the two clients in the table. Five other AVDs exist
+locally: `Pixel_9_Pro_XL`, `Pixel_9_Pro_XL_2`, `Pixel_9_Pro_XL_3`,
+`Pixel_9_Pro_API_35` and `Pixel_9_Pro_XL_API_35`.
+
+- None of them was ever designated a GridView staging client, so they are
+  outside the boundary.
+- None of them was inspected, and none is claimed clean.
+- None is authorized to install, open, run or synchronize
+  `com.sejuma.gridview.staging` before activation.
+
+**Emulator `gv_phase8c2_verify` (Android 16, API 36).** Every restorable
+state was inspected:
+
+| State | Inspected at |
+|---|---|
+| Current disk state, cold boot | 18:05:24Z |
+| The same disk state, cold-booted after each failed Quick Boot load | 18:05:30Z and 18:08:04Z |
+| Original base image from before the AVD's first boot | 18:07:44Z |
+| Quick Boot `default_boot` disk state, applied to an isolated copy and cold-booted there | 18:09:57Z |
+
+- **Per-state results.** In every state:
+  - Android user 0 was the only user.
+  - `com.sejuma.gridview.staging` was absent from Package Manager, including
+    retained-uninstalled records, for user 0 and for all users.
+  - `pm path` found nothing, and `dumpsys package` could not find the package.
+  - The Android framework control query succeeded.
+- **Snapshots.** No named saved snapshot existed.
+- **Quick Boot RAM state was not inspected.** It could not be loaded: the
+  emulator first reported a snapshot feature incompatibility, then that its
+  hardware cannot load the snapshot. Only its disk state was inspected.
+- **Isolation.** Every boot used an isolated scratch copy under a different AVD
+  name. No original snapshot was created, overwritten or deleted.
+- **Integrity afterwards.** A comparison at 18:09:46Z found all 37 original AVD
+  files with their original hashes, sizes and modification times. The
+  temporary copies were then deleted.
+
+**Reference phone - HONOR DNP-NX9.** This is the operator's Honor 400 Pro.
+Android reports its manufacturer and model as `HONOR DNP-NX9`. It is the same
+physical device used in Phase 8C-3, when `com.sejuma.gridview.staging` was
+installed on it. It is not a new, never-used phone. Its reintroduction and
+the invalidation it caused are recorded at the top of the decommissioning
+record above. Its serial is not recorded.
+
+Baseline before the protected installation, last checked at 20:09:02Z:
+
+- **Platform.** Android 16, SDK 36. Android user 0 was the only user.
+- **Package.** The staging package was absent:
+  - not installed, and no retained-uninstalled Package Manager record;
+  - `pm path` returned not found;
+  - `dumpsys package` could not find the package;
+  - no staging external-data directory;
+  - no staging process.
+- **Backup Manager.**
+  - It was enabled, and auto-restore remained enabled.
+  - The active transport was the GMS backup transport.
+  - Staging appeared in neither its `Ever backed up` list nor its
+    `Ancestral packages` list.
+- **Earlier `bmgr wipe`.** An earlier `bmgr wipe` for the package, at
+  18:39:45Z, did not delete any transport dataset and does not prove one was
+  deleted. The package was absent, so the framework logged that it was not
+  clearing backup data, although `bmgr` printed success. No cloud-deletion
+  claim is made.
+
+The protected APK:
+
+| Property | Value |
+|---|---|
+| Source | Exact commit `35a59e81964777f7f4a67c0d6b3be95bf62fcd71`, built in a temporary clone outside the repository |
+| SHA-256 | `0ec8a4683f9fc7bd8aefad49eca6b0ecd08730cbca30d065aa9b0953c64ea169` |
+| Application ID and version | `com.sejuma.gridview.staging`, `7 / 1.2.1-staging` |
+| Build type | Debug, debuggable |
+| Signing certificate SHA-256 | `add90b87afc084265b34eb9a9160f63ed8f17c6ab6660dbdbd3b9ce7900bcb1c`, the same signer as the Phase 8C-3 staging APKs |
+| Backup contract | `android:allowBackup="false"`; both backup-rule resources packaged; all nine domains excluded; cloud-backup and device-transfer sections both present; no include rule; no BackupAgent |
+| Build configuration | `APP_ENV=staging` and `DATA_SOURCE=fixture`. No `API_BASE_URL` was set, and the Dart kernel contains no `workers.dev` endpoint. |
+| Firebase and AdMob | No Firebase API key, Firebase app ID or AdMob ID |
+
+**Installation.**
+
+- **Install.** One `adb install --no-incremental --user 0`, which succeeded
+  between 20:12:40Z and 20:12:48Z.
+- **Package state.**
+  - The installed `base.apk` matched the protected APK byte for byte.
+  - The installed package had no `ALLOW_BACKUP` flag.
+  - Its user state was `stopped=true` and `notLaunched=true`.
+- **No start.** No staging process appeared in 30 polls over about 60 seconds,
+  and no process-start or activity event occurred.
+- **No data.**
+  - The credential-encrypted and device-encrypted sandboxes each held only
+    empty `cache/` and `code_cache/` directories, with zero files.
+  - No database, preferences, Drift or Flutter state, snapshot or
+    synchronization metadata appeared.
+  - No external-data directory appeared.
+
+**Restore at install.** Backup Manager did start its normal restore-at-install
+workflow:
+
+- It initiated `restoreAtInstall` for the package, started a restore session
+  and bound the GMS transport.
+- The transport returned `NO_MORE_PACKAGES`, so no package payload was
+  delivered.
+- No BackupAgent was bound, and no restore event occurred.
+- No application data appeared.
+- Staging stayed absent from both Backup Manager package lists.
+
+So the workflow ran, but it delivered and restored no package data. It did
+not test the exclusion rules against a real backup payload.
+
+**Cleanup.**
+
+- **Clear and uninstall.** The package clear succeeded at 20:17:36Z, and the
+  uninstall for user 0 succeeded at 20:17:37Z.
+- **Final absence.** Checks at 20:17:53Z and 20:18:42Z both confirmed:
+  - no installed package and no retained package record;
+  - no path and no package dump;
+  - no external directory and no process.
+- **Backup settings.** Backup Manager enablement, auto-restore and the active
+  transport were unchanged.
+- **Artifacts.** The temporary clone and the protected APK were deleted.
+- **Never run.** The protected APK was never opened, launched or synchronized,
+  and no network endpoint was contacted.
+
+**Legacy staging APK retirement.** The four unprotected staging APK copies
+retained locally were permanently deleted between 20:38:13.50Z and
+20:38:13.55Z:
+
+| Deleted copy | SHA-256 |
+|---|---|
+| `build/app/outputs/apk/staging/debug/app-staging-debug.apk` | `3f3a92c46b868c5a5d37ed649d7a0776135291d2c0a0d6bf9d3bac6663c4a79d` |
+| `build/app/outputs/flutter-apk/app-staging-debug.apk` | `3f3a92c46b868c5a5d37ed649d7a0776135291d2c0a0d6bf9d3bac6663c4a79d` |
+| `build/app/outputs/apk/staging/profile/app-staging-profile.apk` | `a0636b0e6d9bed644deefc946849d0a9dc16c7dc04507053fb32a676068dd01f` |
+| `build/app/outputs/flutter-apk/app-staging-profile.apk` | `a0636b0e6d9bed644deefc946849d0a9dc16c7dc04507053fb32a676068dd01f` |
+
+- **What they were.**
+  - Each debug or profile pair was byte-identical.
+  - All four were `com.sejuma.gridview.staging`, version
+    `7 / 1.2.1-staging`, and debuggable.
+  - All four were signed with the Phase 8C-3 debug certificate.
+  - None carried `allowBackup`, `fullBackupContent` or `dataExtractionRules`.
+- **Scope.** No directory was removed.
+- **Recovery.** No byte-identical rebuild is claimed. Equivalent historical
+  builds could be recreated from source, but the deleted copies are not
+  claimed recoverable.
+- **Deletion scope only.** The dev debug pair
+  (`671e3574d0eb626d5ccbfe439293024eeb472b45391a6a80ded4e9b3d6db9793`) and the
+  production release pair
+  (`078d24c207b8307158975e3adcf3c476a5eb55ba3176ed774be4cbea564a3f49`) were
+  kept, which shows the deletion stayed within scope. This is no wider claim
+  about dev or production.
+
+**Why the evidence supports `authorized-client-baseline-reset`.**
+
+- Every restorable disk state of the only eligible AVD was inspected, and none
+  held the staging package or retained package state.
+- The only eligible physical phone was migrated through the protected staging
+  contract.
+- The protected installation received no restore payload and produced no
+  application data.
+- The package was then cleared and uninstalled, and repeated final checks found
+  the phone package-absent.
+- Every locally retained unprotected staging APK copy was removed.
+- Canonical staging builds now disable backup and exclude every application-data
+  domain from cloud backup and device transfer (PR #27).
+- The eligible-client boundary is explicit.
+- No eligible client may use an unprotected staging artifact before
+  activation.
+
+**Why not `no-retained-pre-cutover-client-state`.** The evidence establishes
+local package absence and an authorized staging contract migration. It does
+not prove that every possible Google cloud-backup dataset holding earlier
+staging data was deleted.
+
+**Limitations, which stand beside this decision.**
+
+- No Google cloud-backup dataset was enumerated or proven deleted.
+- The exclusion rules were not exercised against a real backup payload.
+- Quick Boot RAM state could not be loaded. The Quick Boot disk state was
+  inspected successfully, in isolation.
+- The evidence is specific to the declared GridView staging client boundary.
+  The five out-of-boundary AVDs were not inspected and are not claimed clean.
+- Rebuilding or installing a historical unprotected staging APK invalidates
+  this operational baseline and requires new evidence. So does opening,
+  running or synchronizing staging on an eligible client before activation,
+  because that would create new pre-cutover state.
+
+No phone, emulator or AVD was accessed to write this record, and neither was
+Cloudflare, a Worker endpoint or a provider.
+
+**This supersedes** items 2 and 3 of the list under "What the recovery window
+supplied (2026-09-13)", and the decommissioning record's "Pending evidence".
+What remains, in order, each step under its own explicit authorization:
+
+1. merge of the pull request recording this evidence;
+2. a re-run of the D12 checkpoint audit;
+3. presentation of the exact checkpoint for explicit operator approval;
+4. the seed;
+5. activation, under a further authorization;
+6. smoke and latency verification;
+7. any later production decision.
 
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from
@@ -3081,7 +3322,8 @@ code accepts.
 
 No claim is made about the physical deletion of data from a decommissioned
 device. The first such record is under "What the client decommissioning record
-supplies (2026-09-13)" above.
+supplies (2026-09-13)" above. It was invalidated on 2026-09-14, when that
+device was reintroduced; see the correction at the top of that record.
 
 **The completeness limit, stated precisely rather than assumed away.** An
 earlier draft justified this seed's scope by claiming that nothing in this

@@ -318,16 +318,49 @@ stayed absent throughout. Production still has no Worker.
 7. activate through a later authorization;
 8. smoke and latency verification after activation.
 
-**Item 2 narrowed (2026-09-13).** The reference phone item 2 names is the
-former DNP-NX9, now **permanently decommissioned** from GridView staging and
-**not** reset: nothing is claimed about the data it still holds. Item 2 now
-covers only the remaining eligible clients — the `gv_phase8c2_verify`
-emulator with every restorable snapshot, and the new reference phone — each
-verified to hold no pre-cutover season-2026 state or reset separately. Never
-install, open, run or sync `com.sejuma.gridview.staging` on the DNP-NX9:
-reintroducing it invalidates the record and requires a separately authorized
-reset first. Item 1 is done (PR #24, `ca5142a`). Rule and record:
+**Item 2 narrowed (2026-09-13), then corrected (2026-09-14).** On 2026-09-13
+the reference phone item 2 names, the HONOR DNP-NX9, was recorded as
+permanently decommissioned from GridView staging instead of being reset. That
+record became invalid on 2026-09-14, when the operator reintroduced the same
+phone. The Honor 400 Pro is the DNP-NX9, so no different new reference phone
+exists. Item 1 is done (PR #24, `ca5142a`). The historical record is
 [ADR 0025 D12, "What the client decommissioning record supplies (2026-09-13)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-client-decommissioning-record-supplies-2026-09-13).
+
+**Client-baseline evidence recorded (2026-09-14).** Items 2 and 3 are
+recorded through the `authorized-client-baseline-reset` variant, a contract
+migration:
+
+- every restorable disk state of the `gv_phase8c2_verify` emulator held no
+  staging package;
+- the DNP-NX9 received one protected staging build (PR #27 backup isolation),
+  which restored no data, and was then cleared, uninstalled and found
+  package-absent twice;
+- the four locally retained unprotected staging APKs were deleted.
+
+No cloud-backup deletion, real-payload exclusion test or Quick Boot RAM
+inspection is claimed. Evidence and limitations:
+[ADR 0025 D12, "What the authorized client-baseline reset supplies (2026-09-14)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-authorized-client-baseline-reset-supplies-2026-09-14).
+
+The eligible staging clients are exactly that emulator and that phone. Until
+activation:
+
+- no other device or AVD may install, open, run or sync
+  `com.sejuma.gridview.staging`;
+- never install a staging APK built before PR #27 on either eligible client;
+- do not open, run or sync staging on either eligible client, because that
+  creates new pre-cutover state.
+
+Breaking any of these invalidates the baseline and requires new evidence.
+
+What remains now, in order, each separately authorized:
+
+1. merge the pull request recording the client-baseline evidence;
+2. re-run the D12 checkpoint audit;
+3. present the exact checkpoint for explicit operator approval;
+4. seed only after that approval, under a separate authorization;
+5. activate under another authorization;
+6. run smoke and latency verification after activation;
+7. make any later production decision.
 
 ## 7. Initial synchronization and publication
 
