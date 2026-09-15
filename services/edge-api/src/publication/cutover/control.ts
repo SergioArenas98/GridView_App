@@ -8,7 +8,8 @@
  *
  * D12 step 1 closes *new legacy mutation admission* for exactly one season
  * before a checkpoint is approved, and keeps it closed until the separate
- * activation confirmation resumes that season's mutators. This value is how
+ * activation confirmation resumes that season's mutators through the
+ * sequencer. This value is how
  * that closure is represented in the repository: one environment variable, read
  * once at the composition boundary, naming one season and one of the two
  * cutover phases.
@@ -47,9 +48,14 @@ import { isSeason } from '../sequencer/store';
 /**
  * The resolved control.
  *
- * `disabled` is the only value any committed environment produces. `seed` and
- * `activate` both close the named season's legacy mutation admission; they
- * differ only in which cutover operation they permit.
+ * Development and production resolve to `disabled`; which phase `env.staging`
+ * commits and deploys is recorded in `docs/technical/GridView_Environments.md`.
+ * `seed` and `activate` both close the named season's legacy mutation
+ * admission, permanently. They differ in which cutover operation they permit,
+ * and in one more respect: under `activate` with a reachable sequencer, a
+ * season whose durable authority is positively `active` and authoritative is
+ * published and rolled back through the sequencer, while under `seed` it is
+ * refused whatever the sequencer reports.
  */
 export type CutoverControl =
   | { readonly kind: 'disabled' }

@@ -504,8 +504,9 @@ and activation are two separate operator acts with no path that performs both.
 See [`GridView_Backend_Operations.md`](GridView_Backend_Operations.md) for the
 operator routes and their expected outcomes.
 
-**The mode is `legacy` by default, and no deployed environment sets it
-otherwise.** In `legacy` mode the composition builds the exact
+**The mode is `legacy` by default, and only live staging sets it otherwise**
+(`sequencer`, since 2026-09-15; see the 2026-09-15 paragraph under "Current
+state" below). In `legacy` mode the composition builds the exact
 `SnapshotPublisher` it builds today, the public router performs no Durable
 Object lookup, and the "Publication Algorithm" and "Rollback" sections above
 describe publication and rollback exactly as they run in every environment.
@@ -584,6 +585,45 @@ recorded (2026-09-14) in
 [ADR 0025 D12, "What the authorized client-baseline reset supplies (2026-09-14)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-authorized-client-baseline-reset-supplies-2026-09-14),
 so the audit re-run remains. Record:
 [staging runbook, "Recovery window record (2026-09-13)"](../operations/GridView_Staging_Edge_Runbook.md#recovery-window-record-2026-09-13).
+
+**Seed authority deployed and season 2026 seeded (2026-09-15).** This
+supersedes three kinds of statement, in "Current state (as of 2026-09-12)"
+and the paragraphs after it: that `SEASON_PUBLICATION_AUTHORITY` remains
+absent, that the audit re-run remains, and that items 1 and 2 of the list
+remain. All three were true when written.
+- The client-baseline record merged, the checkpoint audit re-ran and passed,
+  and the operator approved the exact checkpoint on 2026-09-15.
+- Staging version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` made
+  `SEASON_PUBLICATION_AUTHORITY = "sequencer"` live, with `seed:2026`
+  unchanged. Publications and public reads now ask the sequencer for each
+  season's cutover state first, and fail closed if that lookup fails.
+- One authenticated seed request committed season 2026 as `seeded` on its
+  first attempt. A `seeded` season is not authoritative, so
+  `SequencedPublicationService` still delegates to the legacy publisher, and
+  legacy KV pointers still serve every season.
+- No activation has occurred.
+- `wrangler.toml` now commits `activate:2026`. It is not deployed.
+- Deployed, `activate:2026` puts the admission boundary in
+  `SequencedPublicationService`'s legacy fallback slot for season 2026.
+  - `uninitialized` or `seeded`: publication and rollback are refused.
+  - A lookup that fails or answers `unavailable`: they fail closed.
+  - `active` and authoritative: they run through the two-phase flow below,
+    so a successful activation alone resumes them, with no further
+    configuration change.
+
+  The legacy publisher and the legacy `active:2026` and `previous:2026`
+  pointers are not used for season 2026 on any of those paths.
+
+What remains, each separately authorized:
+- a cutover-sensitive deployment of `activate:2026`;
+- the activation confirmation, re-presenting the approved checkpoint exactly
+  with `confirmActivation: true`, whose success alone resumes season 2026's
+  publication and rollback through the sequencer;
+- smoke and latency verification;
+- any later production decision.
+
+Record:
+[ADR 0025 D12, "What the season-2026 seed supplies (2026-09-15)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-season-2026-seed-supplies-2026-09-15).
 
 ### The two-phase flow
 

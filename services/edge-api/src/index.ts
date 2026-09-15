@@ -22,6 +22,7 @@ import {
   type PublicationCommands,
 } from './publication/commands';
 import { CutoverPausedPublicationCommands } from './publication/cutover/admission';
+import type { CutoverControl } from './publication/cutover/control';
 import { CutoverPreparationService } from './publication/cutover/service';
 import { SnapshotPublisher } from './publication/publisher';
 import { SequencedPublicationService } from './publication/sequenced/service';
@@ -55,15 +56,13 @@ export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';
  *
  * **Exported is not enabled.** Exporting it creates no namespace, deploys
  * nothing, seeds no season and activates none, and a provisioned namespace is
- * not an invoked object. Production declares no such binding at all,
- * `SEASON_PUBLICATION_AUTHORITY` is unset in every committed environment - so
- * `resolvePublicationAuthority` returns `legacy` and no code path performs the
- * lookup, whether or not the namespace is provisioned. Whatever
- * `SEASON_PUBLICATION_CUTOVER_CONTROL` an environment carries, that unset
- * authority mode still refuses every cutover operation at the authority-mode
- * gate. Which environment has the namespace provisioned, and which cutover
- * control is deployed where, is recorded in
- * `docs/technical/GridView_Environments.md`.
+ * not an invoked object. Production declares no such binding at all, and
+ * development and production leave `SEASON_PUBLICATION_AUTHORITY` unset - so
+ * there `resolvePublicationAuthority` returns `legacy`, no code path performs
+ * the lookup, and every cutover operation is refused at the authority-mode
+ * gate. Only `env.staging` selects `sequencer`. Which environment has the
+ * namespace provisioned, and which authority and cutover control are committed
+ * and deployed where, is recorded in `docs/technical/GridView_Environments.md`.
  */
 export { SeasonPublicationSequencer } from './publication/sequencer/durable-object';
 
@@ -258,12 +257,26 @@ async function runScheduled(env: Env): Promise<void> {
  * an operator who selected the sequencer must not have their KV pointers
  * mutated by a deployment that lost the binding.
  *
- * Whatever surface results is finally wrapped by the **cutover admission
- * boundary** when `SEASON_PUBLICATION_CUTOVER_CONTROL` names a season
- * (ADR 0025 D12 step 1), so that season's publication and rollback are refused
- * before any publisher is reached. Absent, the surface built above is returned
- * unchanged. Which environment sets the control, committed and deployed, is
- * recorded in `docs/technical/GridView_Environments.md`.
+ * When `SEASON_PUBLICATION_CUTOVER_CONTROL` names a season, the **cutover
+ * admission boundary** (ADR 0025 D12) refuses that season's publication and
+ * rollback before any publisher is reached. Where it sits depends on the phase:
+ *
+ * - `seed:` - and `activate:` under any authority other than a reachable
+ *   sequencer - wraps the whole surface, so the season is refused
+ *   unconditionally.
+ * - `activate:` under a reachable sequencer puts the boundary in the sequenced
+ *   service's **legacy fallback slot** instead. The service reads the season's
+ *   durable authority once per command: only a positive `active`,
+ *   authoritative answer runs the two-phase protocol; `uninitialized` and
+ *   `seeded` fall through to the boundary and are refused; an unreadable or
+ *   `unavailable` authority fails closed inside the service. Either way the
+ *   controlled season never reaches `SnapshotPublisher`, so the activation
+ *   request itself - not a further configuration change - is what resumes its
+ *   mutators, and they resume through the sequencer only.
+ *
+ * Absent, the surface built above is returned unchanged. Which environment sets
+ * the control, committed and deployed, is recorded in
+ * `docs/technical/GridView_Environments.md`.
  */
 function buildPublicationCommands(
   authority: PublicationAuthority,
@@ -275,50 +288,12 @@ function buildPublicationCommands(
   clock: import('./runtime/clock').Clock,
   purgeOrigin: string,
 ): PublicationCommands {
-  return closedForCutover(
-    config,
-    buildAuthorityCommands(
-      authority,
-      storage,
-      validator,
-      purger,
-      logger,
-      clock,
-      purgeOrigin,
-    ),
-  );
-}
-
-/**
- * Closes new legacy mutation admission for the one season the cutover control
- * names, and for no other (ADR 0025 D12 step 1).
- *
- * The boundary is applied whenever a season is named - it never depends on the
- * authority mode or on a reachable sequencer port. A refusal mutates nothing,
- * and the unsafe direction here is the other one: an operator who believes a
- * season is paused must not find it openly mutable because some *other* setting
- * was also wrong.
- */
-function closedForCutover(
-  config: RuntimeConfig,
-  commands: PublicationCommands,
-): PublicationCommands {
   const control = config.publicationCutoverControl;
-  if (control.kind === 'disabled') return commands;
-  return new CutoverPausedPublicationCommands(commands, control.season);
-}
-
-function buildAuthorityCommands(
-  authority: PublicationAuthority,
-  storage: import('./storage/types').SnapshotStorage,
-  validator: import('./validation/snapshot-validator').SnapshotValidator,
-  purger: CachePurgeAdapter,
-  logger: import('./logging/logger').Logger,
-  clock: import('./runtime/clock').Clock,
-  purgeOrigin: string,
-): PublicationCommands {
   if (authority.mode === 'sequencer-unavailable') {
-    return new UnavailableSequencerPublicationCommands();
+    return closedForCutover(
+      control,
+      new UnavailableSequencerPublicationCommands(),
+    );
   }
   const legacy = new SnapshotPublisher(
     storage,
@@ -327,17 +302,42 @@ function buildAuthorityCommands(
     logger,
     purgeOrigin,
   );
-  if (authority.mode !== 'sequencer') return legacy;
-  return new SequencedPublicationService({
-    port: authority.port,
-    fallback: legacy,
-    storage,
-    validator,
-    purger,
-    logger,
-    clock,
-    purgeOrigin,
-  });
+  if (authority.mode !== 'sequencer') return closedForCutover(control, legacy);
+  const sequenced = (fallback: PublicationCommands) =>
+    new SequencedPublicationService({
+      port: authority.port,
+      fallback,
+      storage,
+      validator,
+      purger,
+      logger,
+      clock,
+      purgeOrigin,
+    });
+  if (control.kind === 'activate') {
+    return sequenced(
+      new CutoverPausedPublicationCommands(legacy, control.season),
+    );
+  }
+  return closedForCutover(control, sequenced(legacy));
+}
+
+/**
+ * Closes new legacy mutation admission for the one season the cutover control
+ * names, and for no other (ADR 0025 D12 step 1), around the whole surface.
+ *
+ * Applied whenever a season is named and the activate-phase sequencer path
+ * above does not apply - it never depends on a reachable sequencer port. A
+ * refusal mutates nothing, and the unsafe direction here is the other one: an
+ * operator who believes a season is paused must not find it openly mutable
+ * because some *other* setting was also wrong.
+ */
+function closedForCutover(
+  control: CutoverControl,
+  commands: PublicationCommands,
+): PublicationCommands {
+  if (control.kind === 'disabled') return commands;
+  return new CutoverPausedPublicationCommands(commands, control.season);
 }
 
 function resolveCachePurger(

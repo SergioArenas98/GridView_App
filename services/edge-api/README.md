@@ -114,24 +114,31 @@ Staging config lives in `wrangler.toml` (`[env.staging]`): Worker
 > `SEASON_PUBLICATION_AUTHORITY` in the dry-run below with the live version.
 > Any difference makes the deploy cutover-sensitive, never routine, and it
 > may run only under the separate authorization section 6 requires. Live
-> staging (`c35f99c0-…`) carries `seed:2026` and no authority value. This
-> `wrangler.toml` keeps `seed:2026` and adds
-> `SEASON_PUBLICATION_AUTHORITY = "sequencer"` for the approved season-2026
-> seed (prepared 2026-09-15), so deploying it is cutover-sensitive. Once it is
-> deployed, publications and public reads ask the season-publication
-> sequencer first and fail closed if that lookup fails. The 2026-09-13
-> season-2026 recovery window is recorded in section 6.
+> staging (`cccdcf11-…`) carries `SEASON_PUBLICATION_AUTHORITY = "sequencer"`
+> and `seed:2026`, and season 2026 is seeded but not active. This
+> `wrangler.toml` keeps `sequencer` and replaces `seed:2026` with
+> `activate:2026` (prepared 2026-09-15), so deploying it is cutover-sensitive.
+> Deploying it activates nothing and keeps season 2026's publication and
+> rollback closed. Activation is a separate, authenticated request, and only
+> its success resumes them, through the sequencer. The season-2026 recovery
+> window and seed are recorded in section 6.
+
+Always put `--` between `npm exec` and `wrangler`, or npm takes flags such as
+`--env` and `--dry-run` as its own. In Windows PowerShell, write
+`npm.cmd exec -- wrangler …` instead: the `npm.ps1` shim that `npm` resolves
+to there (npm 10.9.9) can consume the separator or the Wrangler flags. See the
+runbook's opening notes.
 
 ```text
 # validate + bundle without deploying
 npm run validate
-npm exec wrangler deploy --dry-run --env staging
+npm exec -- wrangler deploy --dry-run --env staging
 
 # set the admin secret (interactive; value never echoed or committed)
-npm exec wrangler secret put ADMIN_TOKEN --env staging
+npm exec -- wrangler secret put ADMIN_TOKEN --env staging
 
 # deploy staging (never --env production)
-npm exec wrangler deploy --env staging
+npm exec -- wrangler deploy --env staging
 ```
 
 Seed the first release, then run the staging verification scripts (each reads

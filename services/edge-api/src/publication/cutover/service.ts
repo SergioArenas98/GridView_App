@@ -7,17 +7,17 @@
  * checkpoint and commits a durable `seeded` state, and - as a **separate**
  * operator act - performs the fingerprint-bound `seeded -> active` transition.
  *
- * ## Nothing here is enabled, and nothing here deploys
+ * ## Nothing here enables itself, and nothing here deploys
  *
  * Every operation requires all of: the staging runtime environment, an explicit
  * `SEASON_PUBLICATION_AUTHORITY=sequencer`, a reachable sequencer port, and a
- * cutover control naming this exact season in this exact phase. No deployed
- * environment sets the first of those two - `env.staging` has deployed
- * `seed:2026` for the cutover control since 2026-09-12, but
- * `SEASON_PUBLICATION_AUTHORITY` remains unset everywhere - so every
- * operation is refused before it reads anything. Nothing in this file
- * provisions a Cloudflare resource, deploys a Worker, contacts a provider or
- * calls a deployed endpoint.
+ * cutover control naming this exact season in this exact phase. Development
+ * and production set neither the authority nor a control, so there every
+ * operation is refused before it reads anything; which authority and phase
+ * staging commits and deploys is recorded in
+ * `docs/technical/GridView_Environments.md`. Nothing in this file provisions a
+ * Cloudflare resource, deploys a Worker, contacts a provider or calls a
+ * deployed endpoint.
  *
  * ## Why the migration lives here and not in the Durable Object
  *
@@ -74,8 +74,7 @@ import {
 /**
  * Why an operation could not even be attempted.
  *
- * Every value here is a refusal taken **before** any storage read, and none of
- * them is ever satisfied by a committed environment.
+ * Every value here is a refusal taken **before** any storage read.
  */
 export const cutoverGateRefusals = [
   /** No cutover control is set at all. */
@@ -213,7 +212,13 @@ export type CutoverStatus =
       readonly state: 'seeded' | 'active';
       readonly season: number;
       readonly phase: CutoverPhase;
-      readonly admissionClosed: true;
+      /**
+       * Whether this Worker refuses the season's publication and rollback.
+       * `false` only for an `active`, authoritative season in the `activate`
+       * phase, whose mutators run through the sequencer; legacy admission stays
+       * closed either way.
+       */
+      readonly admissionClosed: boolean;
       readonly authoritative: boolean;
       readonly activeVersion: string;
       readonly previousVersion: string | null;
@@ -288,7 +293,7 @@ export class CutoverPreparationService {
       state: authority.cutoverState,
       season,
       phase,
-      admissionClosed: true,
+      admissionClosed: phase === 'seed' || !authority.authoritative,
       authoritative: authority.authoritative,
       activeVersion: authority.activeVersion,
       previousVersion: authority.previousVersion,
@@ -515,9 +520,8 @@ export class CutoverPreparationService {
   /**
    * The one gate every operation passes, in the order that reveals the least.
    *
-   * All five conditions are required together. None of them is satisfied by a
-   * committed environment, and production fails at the environment check before
-   * an authority mode or a port is even considered.
+   * All five conditions are required together, and production fails at the
+   * environment check before an authority mode or a port is even considered.
    */
   private reachablePort(
     season: number,
