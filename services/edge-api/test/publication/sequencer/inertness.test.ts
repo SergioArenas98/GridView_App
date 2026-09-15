@@ -8,7 +8,9 @@
  * this slice adds the named Worker export and an `env.staging` binding so a
  * separately authorized deployment can create the namespace. The season-2026
  * seed preparation (2026-09-15) then selected the `sequencer` authority mode
- * for `env.staging` alone, which the seed requires. What is deployed, per
+ * for `env.staging` alone, which the seed requires, and once that seed was
+ * committed the activation preparation (2026-09-15) moved `env.staging`'s
+ * cutover control from `seed:2026` to `activate:2026`. What is deployed, per
  * environment, is recorded in `docs/technical/GridView_Environments.md` and is
  * deliberately not asserted here.
  *
@@ -25,9 +27,9 @@
  *   router performs no Durable Object lookup (see `default-off.test.ts` for
  *   the behavioural proof). Selecting it activates no season: an
  *   `uninitialized` or `seeded` season keeps the legacy authority;
- * - `env.staging` declares `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"`,
- *   the value live staging carries, which permits the seed and never
- *   activation;
+ * - `env.staging` declares `SEASON_PUBLICATION_CUTOVER_CONTROL =
+ *   "activate:2026"`, which keeps season 2026's admission closed, permits the
+ *   activation route and never another seed, and activates nothing by itself;
  * - production declares neither configuration value;
  * - the legacy `[[migrations]]` form is still absent, and `PROVIDER_MODE`, the
  *   public API and the closed document-name union are untouched.
@@ -112,17 +114,18 @@ describe('wrangler.toml declares the sequencer surface and selects it in staging
   });
 
   it('sets the authority mode and the cutover control in staging only', () => {
-    // Staging selects the sequencer authority for the approved season-2026
-    // seed and keeps the cutover control naming exactly season 2026's seed
-    // phase. Neither activates anything: the control permits only the seed,
-    // and a season stays on the legacy authority until its separate
-    // activation (see `default-off.test.ts` and `composition.test.ts`).
+    // Staging keeps the sequencer authority and names exactly season 2026's
+    // activation phase. Neither activates anything: the control only permits
+    // the activation route to be attempted, and a seeded season stays on the
+    // legacy authority until that separate, confirmed activation succeeds
+    // (see `wrangler-config.test.ts` and `activation.test.ts`).
     const staging = environmentSection('staging');
     const production = environmentSection('production');
     expect(staging).toContain('SEASON_PUBLICATION_AUTHORITY = "sequencer"');
     expect(staging).toContain(
-      'SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"',
+      'SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"',
     );
+    expect(declaredConfig).not.toContain('seed:');
     expect(production).not.toContain('SEASON_PUBLICATION_AUTHORITY');
     expect(production).not.toContain('SEASON_PUBLICATION_CUTOVER_CONTROL');
     // Each is configured exactly once in the whole file, so the top-level

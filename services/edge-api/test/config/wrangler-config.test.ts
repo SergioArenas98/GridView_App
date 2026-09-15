@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import config from '../../wrangler.toml?raw';
+import worker, { type Env } from '../../src/index';
 import { resolveRuntimeConfig } from '../../src/config/environment';
+import { CutoverPreparationService } from '../../src/publication/cutover/service';
+import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
+import { adminRequest, createHarness } from '../support/edge-harness';
+import {
+  SEASON,
+  checkpointFor,
+  cutoverContext,
+  immediateRetry,
+  inProcessPort,
+  type CutoverContext,
+} from '../publication/cutover/support';
 
 describe('wrangler staging configuration', () => {
   it('keeps the existing TOML configuration format authoritative', () => {
@@ -103,22 +115,23 @@ function resolvedVars(block: string): ReturnType<typeof resolveRuntimeConfig> {
   });
 }
 
-describe('season 2026 seed configuration (ADR 0025 D12)', () => {
-  // Live staging (version `c35f99c0-…`) carries `seed:2026` and no authority
-  // mode. The operator approved the season-2026 checkpoint on 2026-09-15, and
-  // the seed refuses unless the authority mode is exactly `sequencer`, so this
-  // file selects it in staging alone and keeps `seed:2026` as the phase gate.
-  // Any other staging control or authority must change these assertions
+describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
+  // The season-2026 seed was committed on 2026-09-15 under `seed:2026` and the
+  // `sequencer` authority. This file moves staging to the activation phase and
+  // keeps the authority. The phase change alone activates nothing (below). Any
+  // other staging control or authority must change these assertions
   // deliberately.
 
-  it('keeps exactly seed:2026 and selects sequencer after the three base staging variables', () => {
+  it('selects exactly activate:2026 and sequencer after the three base staging variables', () => {
     expect(assignments(stagingVarsBlock(config))).toEqual([
       'ENVIRONMENT = "staging"',
       'PROVIDER_MODE = "mock"',
       'PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"',
-      'SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"',
+      'SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"',
       'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
     ]);
+    // The seed phase is no longer configured anywhere.
+    expect(config).not.toMatch(/^[^#\n]*"seed:/m);
     // Each is assigned exactly once anywhere in the file - so neither the
     // top-level development table nor production sets it; the names still
     // appear in the comments that explain the values.
@@ -143,13 +156,13 @@ describe('season 2026 seed configuration (ADR 0025 D12)', () => {
     ]);
   });
 
-  it('resolves the staging variables to the season 2026 seed phase under the sequencer authority', () => {
+  it('resolves the staging variables to the season 2026 activation phase under the sequencer authority', () => {
     const resolved = resolvedVars(stagingVarsBlock(config));
     expect(resolved.environment).toBe('staging');
     expect(resolved.providerMode).toBe('mock');
     expect(resolved.publicationAuthorityMode).toBe('sequencer');
     expect(resolved.publicationCutoverControl).toEqual({
-      kind: 'seed',
+      kind: 'activate',
       season: 2026,
     });
   });
@@ -184,5 +197,187 @@ describe('season 2026 seed configuration (ADR 0025 D12)', () => {
     expect(config).toMatch(
       /\[env\.staging\.observability\]\nenabled = true\nhead_sampling_rate = 1\n\n\[env\.staging\.observability\.logs\]\nenabled = true\npersist = true\ninvocation_logs = false/,
     );
+  });
+});
+
+/** A preparation service composed from one committed vars table. */
+function committedService(
+  block: string,
+  context: CutoverContext,
+): CutoverPreparationService {
+  return new CutoverPreparationService({
+    config: resolvedVars(block),
+    authority: { mode: 'sequencer', port: context.port },
+    storage: context.storage,
+    validator: runtimeSnapshotValidator,
+    logger: context.logger,
+    clock: context.clock,
+    retry: immediateRetry,
+  });
+}
+
+describe('the committed activation phase activates nothing by itself (ADR 0025 D12)', () => {
+  // `cutoverContext()` also composes a seed-phase service over the same
+  // in-process sequencer. It stands in for the season-2026 seed that is
+  // already committed. Every other service here is composed from a committed
+  // vars table.
+
+  it('neither seeds nor activates a season that holds no seed', async () => {
+    const context = await cutoverContext();
+    const staging = committedService(stagingVarsBlock(config), context);
+
+    expect(await staging.status(SEASON)).toEqual({
+      state: 'uninitialized',
+      season: SEASON,
+      phase: 'activate',
+      admissionClosed: true,
+    });
+    expect(await staging.seed(checkpointFor())).toEqual({
+      kind: 'refused',
+      refusal: 'phase-not-permitted',
+    });
+    expect(await staging.activate(checkpointFor(), true)).toEqual({
+      kind: 'failed',
+      failure: 'cutover-not-seeded',
+    });
+    expect(await context.port.readAuthority(SEASON)).toEqual({
+      cutoverState: 'uninitialized',
+      authoritative: false,
+    });
+  });
+
+  it('keeps a seeded season non-authoritative until the confirmed, fingerprint-bound activation', async () => {
+    const context = await cutoverContext();
+    expect((await context.service.seed(checkpointFor())).kind).toBe('seeded');
+    const staging = committedService(stagingVarsBlock(config), context);
+
+    expect(await staging.status(SEASON)).toMatchObject({
+      state: 'seeded',
+      phase: 'activate',
+      admissionClosed: true,
+      authoritative: false,
+    });
+    expect(await staging.seed(checkpointFor())).toEqual({
+      kind: 'refused',
+      refusal: 'phase-not-permitted',
+    });
+    expect(await staging.activate(checkpointFor(), false)).toEqual({
+      kind: 'failed',
+      failure: 'activation-not-confirmed',
+    });
+    expect(
+      await staging.activate(
+        checkpointFor({ migrationIdentity: 'a-different-attempt' }),
+        true,
+      ),
+    ).toEqual({ kind: 'failed', failure: 'cutover-fingerprint-mismatch' });
+    expect(await context.port.readAuthority(SEASON)).toMatchObject({
+      cutoverState: 'seeded',
+      authoritative: false,
+    });
+
+    expect((await staging.activate(checkpointFor(), true)).kind).toBe(
+      'activated',
+    );
+    expect(await context.port.readAuthority(SEASON)).toMatchObject({
+      cutoverState: 'active',
+      authoritative: true,
+    });
+  });
+
+  it('refuses both operations under the committed development and production variables', async () => {
+    const context = await cutoverContext();
+    await context.service.seed(checkpointFor());
+    for (const block of [
+      developmentVarsBlock(config),
+      productionVarsBlock(config),
+    ]) {
+      const service = committedService(block, context);
+      expect(await service.seed(checkpointFor())).toEqual({
+        kind: 'refused',
+        refusal: 'disabled',
+      });
+      expect(await service.activate(checkpointFor(), true)).toEqual({
+        kind: 'refused',
+        refusal: 'disabled',
+      });
+    }
+    expect(await context.port.readAuthority(SEASON)).toMatchObject({
+      cutoverState: 'seeded',
+      authoritative: false,
+    });
+  });
+});
+
+/** The Worker env the committed staging vars produce, over an in-process port. */
+function committedStagingEnv(): Env {
+  const vars = variables(stagingVarsBlock(config));
+  const value = (name: string): string => {
+    const found = vars.get(name);
+    if (found === undefined) throw new Error(`${name} is not committed`);
+    return found;
+  };
+  return {
+    ...createHarness().env,
+    ENVIRONMENT: value('ENVIRONMENT'),
+    PROVIDER_MODE: value('PROVIDER_MODE'),
+    PUBLIC_BASE_URL: value('PUBLIC_BASE_URL'),
+    SEASON_PUBLICATION_AUTHORITY: value('SEASON_PUBLICATION_AUTHORITY'),
+    SEASON_PUBLICATION_CUTOVER_CONTROL: value(
+      'SEASON_PUBLICATION_CUTOVER_CONTROL',
+    ),
+    __SEASON_PUBLICATION_SEQUENCER: inProcessPort(),
+    __CUTOVER_RETRY: immediateRetry,
+  };
+}
+
+async function body(response: Response): Promise<Record<string, unknown>> {
+  return (await response.json()) as Record<string, unknown>;
+}
+
+describe('the committed staging variables at the Worker boundary', () => {
+  const SEED = '/internal/admin/publication/cutover/seed';
+  const ACTIVATE = '/internal/admin/publication/cutover/activate';
+
+  it('refuses the seed route in the activation phase', async () => {
+    const response = await worker.fetch(
+      adminRequest(SEED, 'local-test-token', { checkpoint: checkpointFor() }),
+      committedStagingEnv(),
+    );
+    expect(response.status).toBe(409);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(await body(response)).toMatchObject({
+      data: { kind: 'refused', refusal: 'phase-not-permitted' },
+    });
+  });
+
+  it('admits the activation route only with the literal confirmActivation true', async () => {
+    const env = committedStagingEnv();
+    for (const confirmActivation of [undefined, false, 'true', 1, {}]) {
+      const response = await worker.fetch(
+        adminRequest(ACTIVATE, 'local-test-token', {
+          checkpoint: checkpointFor(),
+          confirmActivation,
+        }),
+        env,
+      );
+      expect(response.status).toBe(409);
+      expect(await body(response)).toMatchObject({
+        data: { kind: 'failed', failure: 'activation-not-confirmed' },
+      });
+    }
+    // The literal `true` passes the phase gate and the confirmation, and then
+    // reaches the sequencer, which holds no seed in this in-process port.
+    const confirmed = await worker.fetch(
+      adminRequest(ACTIVATE, 'local-test-token', {
+        checkpoint: checkpointFor(),
+        confirmActivation: true,
+      }),
+      env,
+    );
+    expect(confirmed.headers.get('Cache-Control')).toBe('no-store');
+    expect(await body(confirmed)).toMatchObject({
+      data: { kind: 'failed', failure: 'cutover-not-seeded' },
+    });
   });
 });

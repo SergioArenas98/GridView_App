@@ -268,7 +268,7 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 | Environment | Worker name | State |
 |---|---|---|
 | development | `gridview-api-dev` | Local `wrangler dev` only |
-| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`). Redeployed twice more on 2026-09-13, for the season-2026 recovery window: reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, then reclosure version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, which is current and carries `seed:2026`. See the Durable Object state below. |
+| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`). Redeployed twice more on 2026-09-13, for the season-2026 recovery window: reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, then reclosure version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, carrying `seed:2026`. Redeployed on 2026-09-15 as version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`, which adds `SEASON_PUBLICATION_AUTHORITY = "sequencer"`, keeps `seed:2026`, and is current. See the Durable Object state below. |
 | production | `gridview-api-production` | Not provisioned |
 
 > **Staging: public availability observed; administrative state not verified.**
@@ -328,10 +328,9 @@ the binding. Wherever the namespace is unbound, every provider reservation
 resolves to `unavailable` - the fail-closed default, under which no outbound
 provider request can be issued at all.
 
-`SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **unset in every
-deployed environment**, and in development and production as committed. The
-repository's `env.staging` selects `sequencer` for the approved season-2026
-seed; that is prepared, not deployed (below). An absent, empty or unrecognised value resolves to `legacy` and
+`SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **`sequencer` in
+live staging** since 2026-09-15 (version `cccdcf11-…`), and in `env.staging`
+as committed. It is unset in development and production. An absent, empty or unrecognised value resolves to `legacy` and
 never throws, so the composition builds the existing `SnapshotPublisher` and the
 public router performs no Durable Object lookup. The exact string `sequencer`
 selects the two-phase path when a sequencer port is reachable, and **fails
@@ -347,24 +346,24 @@ only, and disabled.** `wrangler.toml` declares
 preparation slice, 2026-09-10); the class is a named export of the Worker entry
 point, which is how Wrangler resolves it. There is still **no `[[migrations]]`
 block and no production binding**. The 2026-09-12 staging deployment (version
-`985115b7-abb3-4346-8845-d8ff41c80cf6`) created the staging namespace. No
-season has been seeded or activated, and because live staging carries no
-`SEASON_PUBLICATION_AUTHORITY` the lookup is never performed: **staging still uses legacy pointers,
-and production has never been deployed.**
+`985115b7-abb3-4346-8845-d8ff41c80cf6`) created the staging namespace. Since
+2026-09-15, live staging selects `sequencer`, so publications and public reads
+look the sequencer up. Season 2026 was seeded that day and has not been
+activated. A `seeded` season is not authoritative, so **staging still uses
+legacy pointers for every season, and production has never been deployed.**
 
 | Durable Object state | development | staging | production |
 |---|---|---|---|
 | `[exports]` entries (both classes) | shared, once | shared, once | shared, once |
 | `PROVIDER_RATE_LIMITER` binding declared | yes (local `wrangler dev` only) | yes | yes |
 | `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | **none** |
-| Namespaces provisioned on Cloudflare | none | **both, 2026-09-12** (version `985115b7-…`); neither looked up | none - never deployed |
-| Authority mode set | no | **live: no**; **committed: yes** (`sequencer`, prepared 2026-09-15 for the approved season-2026 seed, not deployed) | no |
-| Cutover control set | no | **live: yes** (`seed:2026`: first deployed 2026-09-12 as version `00012c06-…`, absent only during the 2026-09-13 recovery window, and restored as version `c35f99c0-…`); **committed: yes** (`seed:2026`) in the reclosure configuration. `master` omits it until that configuration is merged (below) | no |
+| Namespaces provisioned on Cloudflare | none | **both, 2026-09-12** (version `985115b7-…`); since 2026-09-15 the sequencer is looked up, and the rate limiter still is not | none - never deployed |
+| Authority mode set | no | **live: yes** (`sequencer`, since 2026-09-15, version `cccdcf11-…`); **committed: yes** (`sequencer`) | no |
+| Cutover control set | no | **live: yes** (`seed:2026`: first deployed 2026-09-12 as version `00012c06-…`, absent only during the 2026-09-13 recovery window, restored as version `c35f99c0-…`, and kept by `cccdcf11-…`); **committed: yes** (`activate:2026`, prepared 2026-09-15, not deployed; below) | no |
 
 `SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is live in staging only —
-`seed:2026`, deployed 2026-09-12, and committed again by the reclosure
-configuration after the temporary reopening configuration omitted it (below)
-— and remains unset in development and production. It accepts exactly `seed:<supported season>` or
+`seed:2026`, deployed 2026-09-12 — and remains unset in development and
+production. `env.staging` now commits `activate:2026` instead (below). It accepts exactly `seed:<supported season>` or
 `activate:<supported season>`; an absent or empty value is disabled and
 preserves today's behaviour exactly. A **malformed non-empty value is a bounded
 `ConfigurationError`** — the same failure an unknown `PROVIDER_MODE` produces,
@@ -456,6 +455,29 @@ and keeps `seed:2026`.
 
 Record:
 [ADR 0025 D12, "What the approved checkpoint and seed-authority preparation supply (2026-09-15)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-approved-checkpoint-and-seed-authority-preparation-supply-2026-09-15).
+
+**Season-2026 seed — committed 2026-09-15; activation phase prepared, not
+deployed.** This supersedes the "Merging it deploys nothing" and "No seed has
+run" statements above, which were true when written.
+- A separately authorized, cutover-sensitive deployment made the authority
+  live as staging version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`, keeping
+  `seed:2026`.
+- A separately authorized seed then presented the approved checkpoint
+  verbatim, once, at 2026-09-15T20:33:07.492Z UTC. It committed season 2026 as
+  `seeded` on the first attempt, under the approved fingerprint.
+- The season is **not active**. The sequencer is not authoritative for it, the
+  legacy pointers and public responses are unchanged, and no activation
+  receipt exists.
+- `services/edge-api/wrangler.toml` now replaces `seed:2026` with
+  `activate:2026` under `[env.staging.vars]`. That value keeps admission
+  closed, permits the activation route and refuses another seed.
+- Merging it deploys nothing. Deploying it is a cutover-sensitive step that
+  needs its own authorization, and it activates nothing either.
+- Activation is a separate authenticated request. It must re-present the
+  approved checkpoint exactly, with `confirmActivation: true`.
+
+Record:
+[ADR 0025 D12, "What the season-2026 seed supplies (2026-09-15)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-season-2026-seed-supplies-2026-09-15).
 
 **No media bucket exists in any environment**, so no image has ever been published and no
 production CDN host appears anywhere in this repository — fabricating one would
