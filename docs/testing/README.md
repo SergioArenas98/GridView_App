@@ -742,9 +742,21 @@ change) — this is the safe verification mechanism:
 ### Live staging scripts (`services/edge-api`)
 
 `workflow:staging-auth` and `check:staging-observability` change state: both
-POST `/internal/admin/sync/full` and `/internal/admin/rollback`. Do not run them
-until the season-2026 reclosure step in the staging runbook's section 6 is
-complete.
+POST `/internal/admin/sync/full` and `/internal/admin/rollback`. The
+season-2026 reclosure they originally waited on completed on 2026-09-13, and
+season 2026 was **activated** in staging on 2026-09-16 — so for season 2026
+those POSTs are now **admitted** and run through the sequencer, each creating a
+real publication or rollback. Do not run either against staging without the
+separate authorization a season-2026 mutation requires.
+
+`smoke:staging` is read-only, but it is **not** strictly `GET`/`HEAD`. Of its
+60 requests, 59 are public `GET` or `HEAD` and **one is a `POST` to
+`/v1/seasons/2026/calendar`** that asserts the unsupported-method contract.
+That POST is rejected with HTTP `405` at the Worker entry point, before
+routing, storage or any sequencer logic, so it causes no mutation. A full run
+is 41 checks; it last passed unmodified on 2026-09-16 with exit code 0, in the
+staging post-activation verification recorded in
+[ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-post-activation-verification-supplies-2026-09-16).
 
 Read-only public checks need no token; authenticated checks read
 `GRIDVIEW_STAGING_ADMIN_TOKEN` from the environment (never a CLI argument):

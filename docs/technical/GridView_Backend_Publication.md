@@ -505,18 +505,21 @@ See [`GridView_Backend_Operations.md`](GridView_Backend_Operations.md) for the
 operator routes and their expected outcomes.
 
 **The mode is `legacy` by default, and only live staging sets it otherwise**
-(`sequencer`, since 2026-09-15; see the 2026-09-15 paragraph under "Current
+(`sequencer`, since 2026-09-15; see the dated paragraphs under "Current
 state" below). In `legacy` mode the composition builds the exact
 `SnapshotPublisher` it builds today, the public router performs no Durable
 Object lookup, and the "Publication Algorithm" and "Rollback" sections above
 describe publication and rollback exactly as they run in every environment.
 Even when `sequencer` mode is selected, `SequencedPublicationService` delegates
 to the legacy publisher for any season that is not `cutoverState: 'active'`
-(ADR 0025 D12), so the two-phase flow runs only under a test that has seeded
-and activated a season.
+(ADR 0025 D12). **Since the 2026-09-16 activation, staging season 2026 is
+`active`**, so the two-phase flow below is the live path for that one season;
+every other season, and every other environment, still takes the legacy path.
 
-**Current state (as of 2026-09-12): provisioned in staging, admission for
-season 2026 closed, authority not in use.**
+**Current state (as of 2026-09-16): provisioned in staging, season 2026
+activated, and the sequencer authoritative for that one season in staging
+only.** The 2026-09-12 paragraph immediately below is retained as the dated
+record of what was true then; the dated paragraphs after it carry it forward.
 `wrangler.toml` declares the `SEASON_PUBLICATION_SEQUENCER` binding for
 `env.staging` only, together with the exports-based
 `[exports.SeasonPublicationSequencer]` SQLite registration, and
@@ -624,6 +627,50 @@ What remains, each separately authorized:
 
 Record:
 [ADR 0025 D12, "What the season-2026 seed supplies (2026-09-15)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-season-2026-seed-supplies-2026-09-15).
+
+**Activation phase deployed and season 2026 activated (2026-09-16).** This
+supersedes "No activation has occurred", "`wrangler.toml` now commits
+`activate:2026`. It is not deployed." and the "What remains" list above, all
+true when written. Each step ran under its own separate authorization.
+
+- Staging version `c297d260-c81b-4110-bdf2-7572e1206af3`, deployed from
+  `master` `36b0fd21c31c78a7b213f5c542f4367f8471c1e0` between
+  `2026-09-16T16:02:49.010Z` and `16:03:09.042Z` UTC (version created
+  `16:03:01.459Z`, 100% traffic), made `activate:2026` live and kept
+  `sequencer`. Nothing else changed, **nothing was seeded or activated by the
+  deployment**, and no rollback was required.
+- Exactly one authenticated activation `POST` (request
+  `48bc9ea7-87bf-42a6-ae1e-da45e3dbf9fa`, 481-byte body, HTTP `200`,
+  `no-store`) then re-presented the approved checkpoint verbatim and committed
+  the durable `seeded → active` transition, under the unchanged fingerprint
+  `cutover1:38f726065f8cbb7f46525c213013936b9673cdccbb0128ca45a0ecfccd7c9ac2`,
+  with `activeVersion` `20260913183106443-4f683541` and `previousVersion`
+  `null`.
+- **Season 2026 is `active`, `authoritative: true` and `admissionClosed:
+  false`.** From that moment its publication and rollback run through the
+  two-phase flow below, and public reads follow the sequencer. **The activation
+  alone resumed the mutators — no third deployment was needed.**
+- The legacy `active:2026` and `previous:2026` pointers are present and
+  unchanged, but are **no longer authoritative** for season 2026. **No
+  publication or rollback was triggered by the activation**: no new publication
+  version exists, the 58 retained versions and the synchronization record are
+  unchanged, and the public ETags did not move.
+- **There is no durable activation-receipt object.**
+  `CutoverActivationReceipt` is the HTTP response shape; the durable proof is
+  the authority record itself.
+- Post-activation smoke, ETag, concurrency and latency verification passed
+  read-only the same day (41 checks and exit code 0; twelve concurrent `200`s
+  with no `429` or `5xx`; combined p95 **94.7 ms** against a 300 ms target; 163
+  local fallback tests). No live fault was injected, so fallback behaviour is
+  proven by tests rather than live injection.
+- **Production is untouched and unauthorized**, with no Worker, KV namespace,
+  sequencer binding, admin token or provider configuration. What remains is a
+  separate production-readiness assessment and an explicit operator decision.
+
+Record:
+[ADR 0025 D12, "What the season-2026 activation supplies (2026-09-16)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-season-2026-activation-supplies-2026-09-16)
+and
+["What the post-activation verification supplies (2026-09-16)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-post-activation-verification-supplies-2026-09-16).
 
 ### The two-phase flow
 

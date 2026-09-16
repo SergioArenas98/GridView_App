@@ -151,30 +151,48 @@
 > staging phase from `seed:2026` to `activate:2026` — repository only, not
 > deployed. See D12, "What the season-2026 seed supplies (2026-09-15)".
 >
-> **Still true, and load-bearing:** **no cutover or activation has
-> occurred**, and the only seed is the 2026-09-15 staging seed of season 2026,
-> which is `seeded` and not authoritative. The only provisioning is the
-> 2026-09-12 staging deployment above; every later staging deployment changed
-> only the cutover control, the authority value or the `ADMIN_TOKEN` value.
+> **Activation phase deployed and season 2026 activated (2026-09-16) — this
+> supersedes the "repository only, not deployed" and "Season 2026 is not
+> active" statements in the paragraph above**, which were true when written.
+> Under separate authorization, one cutover-sensitive
+> `wrangler deploy --env staging` of `master`
+> `36b0fd21c31c78a7b213f5c542f4367f8471c1e0` (operator-recorded; Cloudflare
+> records only `Upload`) replaced staging version
+> `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` with
+> `c297d260-c81b-4110-bdf2-7572e1206af3` at 100% traffic, moving the live
+> control from `seed:2026` to `activate:2026` with `sequencer` unchanged. It
+> activated nothing. Under a further separate authorization, exactly one
+> authenticated activation `POST` then re-presented the approved checkpoint
+> verbatim and committed the durable `seeded → active` transition. **Season
+> 2026 is now `active` and authoritative in staging, and its mutators are
+> resumed**; the legacy `active:2026` and `previous:2026` pointers are present
+> and unchanged but no longer authoritative. Post-activation smoke, ETag,
+> concurrency and latency verification passed read-only on the same day. See
+> D12, "What the season-2026 activation supplies (2026-09-16)" and "What the
+> post-activation verification supplies (2026-09-16)".
+>
+> **Still true, and load-bearing:** the only cutover is season 2026's, in
+> **staging only**, and the only seed is its 2026-09-15 seed. The only
+> provisioning is the 2026-09-12 staging deployment above; every later staging
+> deployment changed only the cutover control, the authority value or the
+> `ADMIN_TOKEN` value.
 > No legacy `[[migrations]]` block exists, and legacy KV
-> pointers remain authoritative in every deployed environment. `snapshotRevision`
+> pointers remain authoritative in every deployed environment **except season
+> 2026 in staging**. `snapshotRevision`
 > ([`../publication/snapshot-revision.ts`](../../services/edge-api/src/publication/snapshot-revision.ts))
 > keeps its **no production caller** status unchanged, because the integrated
 > path that would compute one is gated off. The resource-level `sourceObservedAt`
 > half of gap **G-i** is unimplemented. `PROVIDER_MODE` remains `mock | none`;
-> `recordedProvisionalSessionEndBound` remains `null`. **Staging provisioning,
-> deployment, admission closure, checkpoint approval and the seed for season
-> 2026 are all complete, yet Phase 9B-6 and both halves of gap G-i remain
-> operationally open.** What remains is the rest of D12's sequence, as listed
-> under §"D12. Activation boundary" — each step requiring its own separate,
-> explicit authorization, none performed here:
->
-> 1. a cutover-sensitive staging deployment replacing `seed:2026` with
->    `activate:2026`;
-> 2. the separately authorized activation confirmation, whose success alone
->    resumes season 2026's publication and rollback through the sequencer;
-> 3. smoke and latency verification;
-> 4. any later production decision.
+> `recordedProvisionalSessionEndBound` remains `null`. **D12's staging sequence
+> for season 2026 is complete — provisioning, admission closure, checkpoint
+> approval, the seed, the activation-phase deployment, the activation and the
+> post-activation verification — yet Phase 9B-6 and both halves of gap G-i
+> remain operationally open**, because no publication has run through the
+> sequencer since activation and the resource-level `sourceObservedAt` half is
+> unimplemented. What remains, under its own separate and explicit
+> authorization and not performed here, is a **production-readiness assessment
+> and an explicit operator decision**. Nothing above authorizes, prepares or
+> implies a production rollout.
 >
 > No provider was contacted. Everything this ADR authorizes for
 > *implementation* is scoped in §"D12. Activation boundary" below and the
@@ -2942,6 +2960,183 @@ supplies (2026-09-14)" still stand:
 No Cloudflare resource, Worker endpoint, device or provider was accessed to
 prepare this configuration or write this record.
 
+#### What the season-2026 activation supplies (2026-09-16)
+
+Items 1 to 3 of the list under "What the season-2026 seed supplies
+(2026-09-15)" are done, each under its own separate authorization. **Season
+2026 is active and authoritative in staging.** Production is untouched.
+
+**Item 1 — merge.** PR #30 merged as `master`
+`36b0fd21c31c78a7b213f5c542f4367f8471c1e0`.
+
+**Item 2 — the activation-phase deployment.** One cutover-sensitive
+`wrangler deploy --env staging` of that commit (operator-recorded; Cloudflare
+records the version's source only as `Upload`) replaced staging version
+`cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` with
+`c297d260-c81b-4110-bdf2-7572e1206af3`.
+
+| Deployment | Value |
+|---|---|
+| Source commit | `36b0fd21c31c78a7b213f5c542f4367f8471c1e0` |
+| Previous version | `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` |
+| New version | `c297d260-c81b-4110-bdf2-7572e1206af3` |
+| Deployment interval (UTC) | `2026-09-16T16:02:49.010Z` to `2026-09-16T16:03:09.042Z` |
+| New version created (UTC) | `2026-09-16T16:03:01.459Z` |
+| Traffic | 100% |
+| Control transition | `seed:2026` to `activate:2026` |
+| `SEASON_PUBLICATION_AUTHORITY` | `sequencer`, unchanged |
+
+No other configuration change was intended or made: `ENVIRONMENT`,
+`PROVIDER_MODE`, `PUBLIC_BASE_URL`, every binding, the secret declaration, the
+cron and observability are unchanged. **No seed or activation occurred during
+the deployment.** Immediately afterwards season 2026 was still `seeded`, phase
+`activate`, `admissionClosed: true` and `authoritative: false`, with the
+approved active version and fingerprint unchanged. **No rollback was
+required.**
+
+**Item 3 — the activation.** Exactly one authenticated `POST` was sent to
+`/internal/admin/publication/cutover/activate`, re-presenting the approved
+checkpoint above verbatim with `confirmActivation: true`. It was never
+retried.
+
+| Activation request | Value |
+|---|---|
+| Requests sent | Exactly one `POST` |
+| Start (UTC) | `2026-09-16T16:22:11.2531640Z` |
+| Completed (UTC) | `2026-09-16T16:22:11.3570831Z` |
+| Response | HTTP `200`, `Cache-Control: no-store` |
+| Request ID | `48bc9ea7-87bf-42a6-ae1e-da45e3dbf9fa` |
+| Request body | 481 UTF-8 bytes |
+| Request-body SHA-256 | `ca3766731417914103aff9b9801bcffb8e2c6d9d89b6b67064541bc5707f0fa7` |
+
+| Receipt field | Value |
+|---|---|
+| `kind` | `activated` |
+| `outcome` | `activated` — this request performed the transition, not `already-active` |
+| `cutoverState` | `active` |
+| `season` | `2026` |
+| `activeVersion` | `20260913183106443-4f683541` |
+| `previousVersion` | `null` |
+| `cutoverFingerprint` | `cutover1:38f726065f8cbb7f46525c213013936b9673cdccbb0128ca45a0ecfccd7c9ac2`, the approved value |
+
+**What the receipt is, and is not.** `CutoverActivationReceipt` is the **shape
+of the HTTP response**. The system stores **no separate durable
+activation-receipt object and no KV receipt key.** The durable proof of
+activation is the authority record's transition to `cutoverState: "active"`,
+together with `authoritative: true`, the unchanged fingerprint and the
+committed versions. Nothing here should be read as claiming a stored receipt
+object exists.
+
+**State after activation.** Two bounded read-only observations, taken minutes
+apart, returned **identical authoritative state**: `state: "active"`, phase
+`activate`, `authoritative: true` and `admissionClosed: false`, with
+`activeVersion` `20260913183106443-4f683541`, `previousVersion` `null` and the
+approved fingerprint. **`admissionClosed` became `false`, so the activation
+alone resumed season 2026's mutators — no third deployment was required.** The
+legacy `active:2026` and `previous:2026` pointers remained present and
+unchanged but **ceased to be authoritative**. **No publication or rollback was
+triggered during activation**, and no synchronization, purge or cron run was
+either; the 58 retained versions, the synchronization record and the public
+ETags were unchanged.
+
+| Supplied | Not supplied |
+|---|---|
+| A durable `active`, authoritative cutover state for season 2026 in staging, bound to the approved fingerprint, with its publication and rollback resumed through `SequencedPublicationService`. | Any durable receipt object. Activation is a state transition; the receipt exists only as the response above. |
+| The activation-phase configuration live in staging as version `c297d260-c81b-4110-bdf2-7572e1206af3` at 100% traffic. | Any production deployment, KV namespace, sequencer binding, admin token or provider configuration. Production remains unprovisioned and untouched. |
+| Post-activation smoke, ETag, concurrency and latency verification — see the next subsection. | Any provider contact. `PROVIDER_MODE` is still `mock` and no live adapter exists. |
+
+No production environment, provider or client device was accessed to perform
+the deployment, the activation or this record.
+
+#### What the post-activation verification supplies (2026-09-16)
+
+Item 4 of the list under "What the season-2026 seed supplies (2026-09-15)" —
+post-activation smoke and latency verification — is done, read-only and
+staging-only. **No live fault was injected and no live mutation was
+performed.**
+
+**Official smoke.** The bundled `scripts/staging-smoke.mjs` was run **exactly
+once and unmodified**: **60 HTTP requests, 41 checks, exit code 0.** 59 of the
+60 are public `GET` or `HEAD`; **one is a `POST` to
+`/v1/seasons/2026/calendar`**, which intentionally verifies the
+unsupported-method contract. It returns HTTP `405` at the Worker entry point
+**before routing, storage or sequencer logic is reached**, so it causes no
+mutation. No unexpected status and no internal identifier was exposed. Any
+documentation describing this script as strictly `GET`/`HEAD`-only is
+corrected accordingly.
+
+**ETag contract.** Three representative public routes each returned HTTP `200`
+with a weak `W/"gv1-…"` ETag, `HEAD` parity (identical validator and cache
+headers, empty body), and a conditional `GET` returning HTTP `304` with an
+**empty body**. No internal publication version or storage identity appeared in
+any response.
+
+**Concurrent smoke.** Twelve overlapping requests, at a measured **maximum
+concurrency of 12**, returned **twelve HTTP `200` responses, with no `429` and
+no `5xx`**. Each route held **one stable ETag**; the calendar's was
+`W/"gv1-12d59307"` with `generatedAt` `2026-09-13T18:31:06.443Z`. **No
+mixed-release or fallback signature was observed.**
+
+**Latency.** **90 measured requests** — three representative public routes, 30
+samples per route, interleaved at a **combined request rate of 37.9 per
+minute**, with **nearest-rank percentiles** and **zero failures**.
+
+| Dataset | p95 |
+|---|---|
+| **Combined (90 samples)** | **94.7 ms** |
+| `/v1/status` | 102.8 ms |
+| `/v1/seasons/2026/calendar` | 88.1 ms |
+| `/v1/home?season=2026` | 94.7 ms |
+
+Against the internal cached-public-API target of **p95 at most 300 ms**, this
+**passed**. It is a bounded client-observed sample from one interval and one
+network location. It **does not establish monthly availability**, and it is
+**not a before-and-after comparison**, because no equivalent pre-activation
+latency sample was preserved. The provisional **60 requests-per-minute** limit
+is documented but **is not implemented as a Worker per-IP limiter**.
+
+**Fallback and availability.** **No live fault injection was performed.**
+Eleven existing local test files and **163 tests passed**, covering fail-closed
+authority lookup, unavailable-sequencer behaviour, an `active` answer without
+`authoritative: true`, unreadable active inventory, bounded degraded
+responses, the positive adjacent-version fallback, `no-store` fallback
+behaviour and the prohibition on falling back to the legacy pointers. Live
+staging demonstrated **healthy authoritative reads only**; failure and fallback
+behaviour **remains proven by tests rather than by live destructive
+injection**.
+
+**Final state, and what did not change.** Version
+`c297d260-c81b-4110-bdf2-7572e1206af3` remained the newest at 100%. Season 2026
+remained `active`, authoritative and admission-open, with the fingerprint and
+versions unchanged. The legacy pointers were unchanged. **58 versions were
+still retained.** The KV key set was **identical by name before and after —
+2328 keys total: 2321 snapshot keys and 7 non-snapshot keys.** Synchronization
+state was **byte-identical**, **no new publication version appeared**, and the
+public ETags were unchanged. The `/v1/status` body changed only in
+request-specific metadata and the elapsed `snapshotAgeSeconds`; that is
+expected of a live-computed document and **did not change its ETag**. **No
+synchronization, publication, rollback, purge, cron, provider or production
+operation occurred.**
+
+**Evidence limitations.**
+
+- The live cron configuration was **inferred unchanged** because no deployment
+  occurred; it is **not independently readable** through the available
+  read-only Wrangler surface.
+- **KV listing is eventually consistent**, so a key inventory is evidence, not
+  a completeness proof.
+- **The Wrangler version list is rolling and capped**, so it cannot enumerate
+  every version ever created.
+- **No live failure was injected**, so the deployed Worker's degraded paths
+  were never exercised in staging.
+- **The activation receipt exists as a response, not as a separately stored
+  object.**
+
+**What remains, under its own separate authorization:** a
+**production-readiness assessment and an explicit operator decision**. This is
+**not** an automatic production rollout, and nothing above authorizes,
+prepares or implies one.
+
 **Default-off and fail-closed are different rules, and both hold.** The
 authority mode is a composition-boundary value read from
 `SEASON_PUBLICATION_AUTHORITY`. Only the exact string `sequencer` opts in;
@@ -4435,6 +4630,14 @@ platform guarantee:
 - **Nothing here is implemented.** `snapshotRevision` still has no production
   caller; D1.9-D1.11 remain unimplemented; G-i remains open; Phase 9B-6 is
   not closed by this ADR.
+  - *Correction (2026-09-16), scoped to deployment rather than to this ADR's
+    own effect.* The Mechanism, Integration and staging cutover-preparation
+    slices have since been implemented, and season 2026's **staging** cutover
+    has been deployed, seeded, activated and verified. The bullet above stays
+    accurate about what **this ADR** performs; `snapshotRevision` still has no
+    production caller, so D1.9-D1.11 and G-i remain open, and production
+    remains untouched. See D12, "What the season-2026 activation supplies
+    (2026-09-16)".
 
 ## Reopening conditions
 
