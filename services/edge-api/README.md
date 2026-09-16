@@ -114,14 +114,16 @@ Staging config lives in `wrangler.toml` (`[env.staging]`): Worker
 > `SEASON_PUBLICATION_AUTHORITY` in the dry-run below with the live version.
 > Any difference makes the deploy cutover-sensitive, never routine, and it
 > may run only under the separate authorization section 6 requires. Live
-> staging (`cccdcf11-…`) carries `SEASON_PUBLICATION_AUTHORITY = "sequencer"`
-> and `seed:2026`, and season 2026 is seeded but not active. This
-> `wrangler.toml` keeps `sequencer` and replaces `seed:2026` with
-> `activate:2026` (prepared 2026-09-15), so deploying it is cutover-sensitive.
-> Deploying it activates nothing and keeps season 2026's publication and
-> rollback closed. Activation is a separate, authenticated request, and only
-> its success resumes them, through the sequencer. The season-2026 recovery
-> window and seed are recorded in section 6.
+> staging (`c297d260-…`, deployed 2026-09-16) carries
+> `SEASON_PUBLICATION_AUTHORITY = "sequencer"` and `activate:2026` — which is
+> exactly what this `wrangler.toml` commits, so the two values match again and
+> a staging deploy of `master` is ordinary by that gate. Any deploy that
+> changes or omits either value remains cutover-sensitive. Season 2026 was
+> **activated on 2026-09-16** and is `active` and authoritative: its
+> publication and rollback run through the sequencer, and the legacy
+> `active:2026` / `previous:2026` pointers are unchanged but no longer
+> authoritative. The season-2026 recovery window, seed, activation and
+> post-activation verification are recorded in section 6.
 
 Always put `--` between `npm exec` and `wrangler`, or npm takes flags such as
 `--env` and `--dry-run` as its own. In Windows PowerShell, write

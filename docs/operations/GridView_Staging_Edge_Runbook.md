@@ -70,8 +70,8 @@ actually live.
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
 | Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`); since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`) the sequencer is looked up, and the rate limiter still is not; see `../technical/GridView_Environments.md` |
-| `SEASON_PUBLICATION_CUTOVER_CONTROL` | **Committed: `activate:2026`**, prepared on 2026-09-15 after the season-2026 seed committed; see "Season-2026 seed record and activation phase (2026-09-15)" in section 6. Before that, `master` carried `seed:2026`, restored by the reclosure configuration (PR #24). **Live: `seed:2026`.** It was first deployed on 2026-09-12 from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93` (version `00012c06-6c09-4b2f-b24c-02d6e51ec08d`). It was absent only during the separately authorized recovery window on 2026-09-13 (reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`). The reclosure deployment from `549bb5f3f3ee3963727a816b96fa39752355e9cd` restored it the same day as version `c35f99c0-9e89-4dd7-8fbe-449d295fb567` at 100% traffic, and version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` kept it on 2026-09-15. Season 2026's legacy publication and rollback admission is **closed**, and `activate:2026` keeps it closed; see "Recovery window record (2026-09-13)" in section 6. Any change to the live value is cutover-sensitive (section 6). Neither phase activates anything by itself. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
-| `SEASON_PUBLICATION_AUTHORITY` | **Committed: `sequencer`**, staging only, prepared on 2026-09-15 for the approved season-2026 seed. **Live: `sequencer`** since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`); every earlier live version lacked it. A later deployment that omits or changes it is cutover-sensitive (section 6). See "Season-2026 seed authority (prepared 2026-09-15, not deployed)" and "Season-2026 seed record and activation phase (2026-09-15)" in section 6. |
+| `SEASON_PUBLICATION_CUTOVER_CONTROL` | **Committed: `activate:2026`**, prepared on 2026-09-15 after the season-2026 seed committed; see "Season-2026 seed record and activation phase (2026-09-15)" in section 6. Before that, `master` carried `seed:2026`, restored by the reclosure configuration (PR #24). **Live: `activate:2026`**, since 2026-09-16 (version `c297d260-c81b-4110-bdf2-7572e1206af3`), so committed and live match again. The earlier `seed:2026` was first deployed on 2026-09-12 from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93` (version `00012c06-6c09-4b2f-b24c-02d6e51ec08d`). It was absent only during the separately authorized recovery window on 2026-09-13 (reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`). The reclosure deployment from `549bb5f3f3ee3963727a816b96fa39752355e9cd` restored it the same day as version `c35f99c0-9e89-4dd7-8fbe-449d295fb567` at 100% traffic, and version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` kept it on 2026-09-15. Season 2026's legacy publication and rollback admission was **closed** from 2026-09-12, and `activate:2026` kept it closed until the activation. **Season 2026 was activated on 2026-09-16**, so `admissionClosed` is now `false` and its publication and rollback run through the sequencer, never through the legacy pointers; see "Recovery window record (2026-09-13)" and "Season-2026 activation-phase deployment and activation (2026-09-16)" in section 6. Any change to the live value is cutover-sensitive (section 6). Neither phase activates anything by itself. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
+| `SEASON_PUBLICATION_AUTHORITY` | **Committed: `sequencer`**, staging only, prepared on 2026-09-15 for the approved season-2026 seed. **Live: `sequencer`** since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`), kept unchanged by version `c297d260-c81b-4110-bdf2-7572e1206af3` on 2026-09-16; every earlier live version lacked it. A later deployment that omits or changes it is cutover-sensitive (section 6). See "Season-2026 seed authority (prepared 2026-09-15, not deployed)" and "Season-2026 seed record and activation phase (2026-09-15)" in section 6. |
 
 `PUBLIC_BASE_URL` is mandatory in staging: the scheduled publisher uses it to
 compute the public URLs it purges. Its absence is a configuration error.
@@ -145,12 +145,13 @@ The dry-run bundles the Worker and resolves bindings without uploading anything
 (`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV), the
 `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
 plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL`,
-`SEASON_PUBLICATION_CUTOVER_CONTROL` (`activate:2026`, prepared 2026-09-15;
-live staging carries `seed:2026`) and `SEASON_PUBLICATION_AUTHORITY`
-(`sequencer`, live since 2026-09-15) vars. A dry-run of the temporary season-2026
-reopening configuration (PR #23) shows **no**
-`SEASON_PUBLICATION_CUTOVER_CONTROL`, although live staging carries
-`seed:2026`; see section 2. **Read the dry-run output, and compare it with the
+`SEASON_PUBLICATION_CUTOVER_CONTROL` (`activate:2026`, live since 2026-09-16)
+and `SEASON_PUBLICATION_AUTHORITY` (`sequencer`, live since 2026-09-15) vars.
+Committed and live now match for both, so a deploy of `master` is ordinary
+under the section 6 gate. The historical dry-run of the temporary season-2026
+reopening configuration (PR #23) showed **no**
+`SEASON_PUBLICATION_CUTOVER_CONTROL` while live staging carried `seed:2026`;
+that configuration is superseded — see section 2. **Read the dry-run output, and compare it with the
 live version, before proceeding to section 6** — that comparison is how the
 cutover-sensitive gate below is checked.
 
@@ -507,6 +508,128 @@ What remains, in order, each separately authorized:
 4. post-activation smoke and latency verification, as a separate step;
 5. any later production decision.
 
+### Season-2026 activation-phase deployment and activation (2026-09-16)
+
+This supersedes "Activation phase — prepared, not deployed" and items 1 to 4 of
+the list above, which were true when written. Each step below ran under its own
+separate authorization.
+
+**Item 1 — merge.** PR #30 merged as `master`
+`36b0fd21c31c78a7b213f5c542f4367f8471c1e0`.
+
+**Item 2 — the activation-phase deployment.** One cutover-sensitive
+`wrangler deploy --env staging` of that commit. Times are UTC; the source
+revision is operator-recorded, because Cloudflare records each version's source
+only as `Upload`.
+
+| Deployment | Record |
+|---|---|
+| Source commit | `36b0fd21c31c78a7b213f5c542f4367f8471c1e0` |
+| Previous version | `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` |
+| New version | `c297d260-c81b-4110-bdf2-7572e1206af3` |
+| Deployment interval | `2026-09-16T16:02:49.010Z` to `2026-09-16T16:03:09.042Z` |
+| New version created | `2026-09-16T16:03:01.459Z` |
+| Traffic | 100% |
+| Control transition | `seed:2026` to `activate:2026` |
+| `SEASON_PUBLICATION_AUTHORITY` | `sequencer`, unchanged |
+
+No other configuration change was intended or made: `ENVIRONMENT`,
+`PROVIDER_MODE`, `PUBLIC_BASE_URL`, every binding, the `ADMIN_TOKEN`
+declaration, the cron and observability are unchanged. **No seed or activation
+occurred during the deployment.** Immediately afterwards season 2026 was still
+`seeded`, phase `activate`, `admissionClosed: true` and `authoritative: false`,
+with the approved active version and fingerprint unchanged. **No rollback was
+required.**
+
+**Item 3 — the activation.** Exactly one authenticated `POST` to
+`/internal/admin/publication/cutover/activate`, never retried, re-presenting
+the approved checkpoint verbatim with `confirmActivation: true`.
+
+| Activation | Record |
+|---|---|
+| Requests sent | Exactly one `POST` |
+| Start | `2026-09-16T16:22:11.2531640Z` |
+| Completed | `2026-09-16T16:22:11.3570831Z` |
+| Response | HTTP `200`, `Cache-Control: no-store` |
+| Request ID | `48bc9ea7-87bf-42a6-ae1e-da45e3dbf9fa` |
+| Request body | 481 UTF-8 bytes, SHA-256 `ca3766731417914103aff9b9801bcffb8e2c6d9d89b6b67064541bc5707f0fa7` |
+| Receipt | `kind` `activated`, `outcome` `activated`, `cutoverState` `active`, `season` `2026`, `activeVersion` `20260913183106443-4f683541`, `previousVersion` `null`, fingerprint `cutover1:38f726065f8cbb7f46525c213013936b9673cdccbb0128ca45a0ecfccd7c9ac2` |
+
+**There is no durable receipt object.** `CutoverActivationReceipt` is the shape
+of the HTTP response; the system stores no separate activation-receipt record
+and no KV receipt key. The durable proof is the authority record's transition
+to `active`, with `authoritative: true`, the unchanged fingerprint and the
+committed versions. Do not go looking for a stored receipt — there is none.
+
+**Resulting state.** Two bounded read-only observations minutes apart returned
+identical authoritative state: `active`, phase `activate`, `authoritative:
+true`, `admissionClosed: false`, the same versions and fingerprint.
+**`admissionClosed` became `false`, so the activation alone resumed the
+mutators — no third deployment was required.** The legacy `active:2026` and
+`previous:2026` pointers remained present and unchanged but **ceased to be
+authoritative**. **No publication or rollback was triggered during
+activation**, and no synchronization, purge or cron run was either; the 58
+retained versions, the synchronization record and the public ETags were
+unchanged.
+
+Full record:
+[ADR 0025 D12, "What the season-2026 activation supplies (2026-09-16)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-season-2026-activation-supplies-2026-09-16).
+
+### Season-2026 post-activation verification (2026-09-16)
+
+Item 4 of the list above is done, read-only and staging-only. **No live fault
+was injected and no live mutation was performed.**
+
+- **Official smoke** (section 8): run **exactly once, unmodified** — 60 HTTP
+  requests, **41 checks, exit code 0**. 59 requests are public `GET` or `HEAD`;
+  one is a `POST` asserting the unsupported-method contract and is rejected
+  with `405` before any handler (section 8).
+- **ETag, HEAD and conditional requests** (section 9): three representative
+  routes each returned `200` with a weak `W/"gv1-…"` ETag, `HEAD` parity, and a
+  conditional `GET` returning `304` with an empty body. No internal
+  publication version or storage identity was exposed.
+- **Bounded concurrency:** twelve overlapping requests at a measured maximum
+  concurrency of 12 returned **twelve `200`s, no `429`, no `5xx`**, one stable
+  ETag per route — calendar `W/"gv1-12d59307"`, `generatedAt`
+  `2026-09-13T18:31:06.443Z` — and **no mixed-release or fallback signature**.
+- **Latency:** 90 measured requests over three public routes, 30 per route, at
+  a combined **37.9 requests per minute**, nearest-rank percentiles, **zero
+  failures**. Combined **p95 94.7 ms** (`/v1/status` 102.8 ms, calendar
+  88.1 ms, home 94.7 ms) against the internal cached-public-API target of
+  **p95 at most 300 ms**: **passed**.
+- **Fallback:** no live fault injection. Eleven existing local test files and
+  **163 tests passed**, covering fail-closed authority lookup, unavailable
+  sequencer, non-authoritative `active` answers, unreadable active inventory,
+  bounded degraded responses, the positive adjacent-version fallback,
+  `no-store` fallback behaviour and the prohibition on falling back to the
+  legacy pointers.
+- **Final state:** version `c297d260-…` still newest at 100%; season 2026 still
+  `active`, authoritative and admission-open; fingerprint, versions and legacy
+  pointers unchanged; **58 retained versions**; the KV key set **identical by
+  name — 2328 total, 2321 snapshot and 7 non-snapshot**; synchronization state
+  **byte-identical**; no new publication version; public ETags unchanged.
+  `/v1/status` differed only in request-specific metadata and elapsed
+  `snapshotAgeSeconds`, which is expected and left its ETag unchanged.
+
+**Evidence limitations.** The live cron configuration was **inferred**
+unchanged because no deployment occurred — it is not readable through the
+authorized read-only Wrangler surface. KV listing is eventually consistent. The
+Wrangler version list is rolling and capped. No live failure was injected, so
+the deployed Worker's degraded paths were never exercised here. The activation
+receipt exists as a response, not as a stored object. The latency figure is a
+bounded client-observed sample from one interval and one network location: it
+establishes **no monthly availability**, and it is **not** a before-and-after
+comparison, because no equivalent pre-activation sample was preserved. The
+provisional 60 requests-per-minute figure is **not implemented as a Worker
+per-IP limiter**.
+
+Full record:
+[ADR 0025 D12, "What the post-activation verification supplies (2026-09-16)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-post-activation-verification-supplies-2026-09-16).
+
+**What remains:** a separate **production-readiness assessment and an explicit
+operator decision**. Production has never been deployed and is not authorized
+for deployment by anything above.
+
 ## 7. Initial synchronization and publication
 
 **Not for season 2026 while a `SEASON_PUBLICATION_CUTOVER_CONTROL` naming
@@ -514,6 +637,9 @@ season 2026 (`seed:2026` or `activate:2026`) is live in deployed staging.** Once
 legacy publication admission is closed and this command is rejected for that
 season until a successful D12 activation, after which it publishes season 2026
 through the sequencer, never through the legacy pointers — see [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
+**Season 2026 was activated on 2026-09-16**, so this endpoint is admitted for
+it again and publishes through the sequencer. That is a real staging mutation
+and still needs its own authorization.
 This section remains the correct workflow for any season whose admission is
 still open (a season not covered by a live cutover control, or before this
 control is deployed). For season 2026 after closure, the next authorized step
@@ -559,6 +685,17 @@ The bundled `scripts/staging-smoke.mjs` walks every public OpenAPI route:
 npm run smoke:staging -- https://gridview-api-staging.sejuma18.workers.dev
 ```
 
+**The script is read-only, but it is not strictly `GET`/`HEAD`.** A full run
+issues **60 requests and asserts 41 checks**. 59 requests are public `GET` or
+`HEAD`; **one is a `POST` to `/v1/seasons/2026/calendar`**, which exists to
+verify the unsupported-method contract (`405`, `Allow: GET, HEAD`,
+`Cache-Control: no-store`, `error.code = METHOD_NOT_ALLOWED`). That request is
+rejected at the Worker entry point **before routing, storage, the publisher or
+any sequencer logic is reached**, so it cannot mutate anything and it is safe
+to run against a live cutover season. Do not describe this script as
+`GET`/`HEAD`-only. It last ran unmodified on 2026-09-16 with exit code 0
+(section 6, post-activation verification).
+
 ## 9. ETag, HEAD and 304 verification
 
 Success snapshot responses carry a **weak** ETag derived from
@@ -588,8 +725,11 @@ npm run workflow:staging-auth -- https://gridview-api-staging.sejuma18.workers.d
 
 (Both read `GRIDVIEW_STAGING_ADMIN_TOKEN` from the environment; see section 4.)
 `workflow:staging-auth` changes state — it POSTs `/internal/admin/sync/full`
-and `/internal/admin/rollback` — so do not run it until the season-2026
-reclosure in section 6 is complete. `check:staging-admin` only reads status,
+and `/internal/admin/rollback`. The season-2026 reclosure it originally waited
+on completed on 2026-09-13, and **season 2026 was activated on 2026-09-16**, so
+both POSTs are now admitted for that season and run through the sequencer, each
+creating a real publication or rollback. Do not run it without the separate
+authorization a season-2026 mutation requires. `check:staging-admin` only reads status,
 probes rejected methods and purges the cache.
 
 ## 11. Rollback workflow
@@ -598,6 +738,9 @@ probes rejected methods and purges the cache.
 season 2026 (`seed:2026` or `activate:2026`) is live in deployed staging.** Legacy rollback admission for that season is
 closed by the same deploy that closes publication admission (section 7) — see
 [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
+**Season 2026 was activated on 2026-09-16**, so rollback is admitted for it
+again and runs through the sequencer, never through the legacy pointers. That
+is a real staging mutation and still needs its own authorization.
 This section remains the correct workflow for any season whose admission is
 still open. For season 2026 after closure, the next authorized step is the
 D12 activation sequence in section 6, not this endpoint. **Not for season 2026
@@ -631,8 +774,11 @@ npm run check:staging-observability -- https://gridview-api-staging.sejuma18.wor
 ```
 
 That workflow changes state — it POSTs `/internal/admin/sync/full`,
-`/internal/admin/cache/purge` and `/internal/admin/rollback` — so do not run it
-until the season-2026 reclosure in section 6 is complete.
+`/internal/admin/cache/purge` and `/internal/admin/rollback`. The season-2026
+reclosure it originally waited on completed on 2026-09-13, and **season 2026
+was activated on 2026-09-16**, so its publication and rollback POSTs are now
+admitted for that season and run through the sequencer. Do not run it without
+the separate authorization a season-2026 mutation requires.
 
 Two hard-won details are baked into the helper:
 
@@ -661,12 +807,14 @@ The scheduled handler runs the **same** orchestration as the manual admin sync
 quota state, skips when no job is due, updates sync/quota metadata, and — because
 `active:{season}` is written only on the full success path — preserves the active
 release on any failure. It logs only operational metadata (no token or
-authorization material). Scheduled execution cannot reopen admission: while
-`SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` is live, a scheduled run's
-covered publication attempt for season 2026 is rejected by the same admission
-guard as the manual endpoint in section 7, exactly as any other caller's would
-be. Once the temporary reopening configuration in section 6 is deployed, the
-next scheduled run **does** publish season 2026; see that subsection.
+authorization material). Scheduled execution cannot reopen admission by
+itself: while a `SEASON_PUBLICATION_CUTOVER_CONTROL` naming season 2026 is live
+and the sequencer does not yet report the season `active` and authoritative, a
+scheduled run's covered publication attempt for season 2026 is rejected by the
+same admission guard as the manual endpoint in section 7, exactly as any other
+caller's would be. **Since the 2026-09-16 activation, season 2026 is `active`
+and authoritative, so a scheduled season-2026 publication is admitted and runs
+through the sequencer, never through the legacy pointers** (section 6).
 
 Verify with the local test suite (the safe mechanism — no remote trigger, no
 cron change):
