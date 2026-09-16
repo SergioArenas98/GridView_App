@@ -632,21 +632,21 @@ for deployment by anything above.
 
 ## 7. Initial synchronization and publication
 
-**Not for season 2026 while a `SEASON_PUBLICATION_CUTOVER_CONTROL` naming
-season 2026 (`seed:2026` or `activate:2026`) is live in deployed staging.** Once that deploy has happened, season 2026's
-legacy publication admission is closed and this command is rejected for that
-season until a successful D12 activation, after which it publishes season 2026
-through the sequencer, never through the legacy pointers — see [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
-**Season 2026 was activated on 2026-09-16**, so this endpoint is admitted for
-it again and publishes through the sequencer. That is a real staging mutation
-and still needs its own authorization.
+**Not for season 2026 between the deploy of a `SEASON_PUBLICATION_CUTOVER_CONTROL`
+naming season 2026 (`seed:2026` or `activate:2026`) and that season's successful
+D12 activation.** Inside that window season 2026's legacy publication admission
+is closed and this command is rejected for it — see [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
+**Season 2026 was activated on 2026-09-16, so that window is closed for it:**
+this endpoint is admitted for season 2026 again and publishes through the
+sequencer, never through the legacy pointers. That is a real staging mutation
+and still needs its own authorization. The control remains `activate:2026` in
+deployed staging; a live control alone no longer bars the endpoint once the
+season it names has been activated.
 This section remains the correct workflow for any season whose admission is
 still open (a season not covered by a live cutover control, or before this
-control is deployed). For season 2026 after closure, the next authorized step
-is the D12 activation sequence in section 6, not this endpoint. **Season 2026's
-temporary recovery window (section 6) is not such an opening:** there this
-endpoint may run only as the single authorized publication, if that
-authorization names it.
+control is deployed). **Season 2026's temporary recovery window (section 6) was
+not such an opening:** there this endpoint could run only as the single
+authorized publication, if that authorization named it.
 
 The Worker starts with an empty KV namespace and serves controlled empty/`404`
 responses until the first release is published. Seed it through the admin
@@ -734,17 +734,20 @@ probes rejected methods and purges the cache.
 
 ## 11. Rollback workflow
 
-**Not for season 2026 while a `SEASON_PUBLICATION_CUTOVER_CONTROL` naming
-season 2026 (`seed:2026` or `activate:2026`) is live in deployed staging.** Legacy rollback admission for that season is
-closed by the same deploy that closes publication admission (section 7) — see
+**Not for season 2026 between the deploy of a `SEASON_PUBLICATION_CUTOVER_CONTROL`
+naming season 2026 (`seed:2026` or `activate:2026`) and that season's successful
+D12 activation.** Legacy rollback admission for that season is closed by the
+same deploy that closes publication admission (section 7) — see
 [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary).
-**Season 2026 was activated on 2026-09-16**, so rollback is admitted for it
-again and runs through the sequencer, never through the legacy pointers. That
-is a real staging mutation and still needs its own authorization.
+**Season 2026 was activated on 2026-09-16, so that window is closed for it:**
+rollback is admitted for season 2026 again and runs through the sequencer,
+never through the legacy pointers. That is a real staging mutation and still
+needs its own authorization. The control remains `activate:2026` in deployed
+staging; a live control alone no longer bars rollback once the season it names
+has been activated.
 This section remains the correct workflow for any season whose admission is
-still open. For season 2026 after closure, the next authorized step is the
-D12 activation sequence in section 6, not this endpoint. **Not for season 2026
-during its temporary recovery window (section 6) either.**
+still open. **It was not for season 2026 during that season's temporary
+recovery window (section 6) either.**
 
 Rollback repoints `active:{season}` to a verified previous/target release:
 
