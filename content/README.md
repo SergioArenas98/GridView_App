@@ -98,21 +98,20 @@ is **immutable** and is never renamed, repointed at another event or reused. No
 adapter derives, normalizes or mints one. `GrandPrix.id` stays
 `{season}-{eventSlug}` and is built elsewhere, never here.
 
-**The registry is deliberately empty.** The mechanism exists — the `event`
-mapping entity, its schemas and its `validate:content` rules — but no curated
-event identity has been created, because creating one needs separately
-authorized provider evidence. Because event resolution fails closed, an empty
-registry means every event mapping target is missing and no calendar can
-resolve. As with the media-rights register, **do not add a record here to make
-a build or a test pass**: automated tests build synthetic registries inside the
-test run, outside `content/` entirely.
+**The registry holds the 23 identities a curator approved on 2026-09-19** for
+the 2026 calendar observed that day (`../docs/technical/GridView_Provider_Evaluation.md`
+§8.8). No slug was derived from a provider name. Because event resolution fails
+closed, an event with no curated identity has a missing mapping target and no
+calendar containing it can resolve. As with the media-rights register, **do not
+add a record here to make a build or a test pass**: automated tests build
+synthetic registries inside the test run, outside `content/` entirely.
 
 An event mapping is keyed on a **provider locator**, not an identifier, because
 Jolpica publishes none: the complete tuple of the file's season plus `round`,
 exact `raceName` and exact `circuitId`. A record never repeats its season, so a
 locator can never disagree with its own file. Every component must match
-exactly; no subset, fuzzy or normalized match exists. No event mapping record
-exists today.
+exactly; no subset, fuzzy or normalized match exists. Season 2026 carries 23
+event mappings, one per observed locator. No adapter consumes them yet.
 
 `seasons/<year>/provider-evidence.development.json` (`kind: provider-evidence`)
 records every provider identity this repository already has evidence for.

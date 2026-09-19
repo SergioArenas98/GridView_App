@@ -14,7 +14,7 @@
   - [`../adr/0019-formula-one-provider-legal-gate.md`](../adr/0019-formula-one-provider-legal-gate.md)
   - [`../adr/0020-provider-source-observation-and-reconciliation.md`](../adr/0020-provider-source-observation-and-reconciliation.md)
   - [`../adr/0018-advertising-not-retained-for-v1.md`](../adr/0018-advertising-not-retained-for-v1.md)
-- Research access date: **2026-08-19** (no new external research was performed for versions 0.4 or 0.5; no provider has been contacted)
+- Research access date: **2026-08-19** (no new external research was performed for versions 0.4 or 0.5; no inquiry has been sent to any provider). One further authorised calendar observation is dated **2026-09-19** (§8.8)
 - Document date: 2026-08-25
 
 ### Revision history
@@ -33,6 +33,7 @@
 | 1.0 | 2026-09-03 | **Phase 9B-6 (PR 1): `snapshotRevision` implemented as a mechanism; the observation clock is blocked.** The binding canonical revision input of [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) D1.7 now exists and is tested: a schema-aware canonical representation of the normalized public `data` payload plus its `schemaVersion`, **constructed** from a per-snapshot-key declaration rather than filtered out of a serialized envelope, so every exclusion holds by construction - including `HomeData.freshness`, the one place where excluded metadata (`generatedAt`, `sourceUpdatedAt`, `staleAfter`, the server-stale flag) lives *inside* `data`. Deterministic UTF-8 byte key ordering with a dedicated comparator (JavaScript's default UTF-16 unit order is not the documented rule), domain order preserved for ordered arrays, exactly two arrays declared unordered with their stable GridView identity, absent/null collapsed only for the properties the contract declares with `?`, RFC 3339 canonicalized to UTC **without truncating fractional precision** and without `Date` (which would roll a leap second), one canonical numeric spelling, and SHA-256 over a length-framed canonical text prefixed `gv-canon/1`, rendered `sha256:<64 hex>`. **`snapshotObservedAt` is not implemented and D1.10 is blocked**: the strictly-monotonic assignment must be computed pre-commit from the pair the active pointer names, and two publications for one season can both reach `SnapshotPublisher` (the staging cron and the protected `/internal/admin/sync/full`, which forces every job and always publishes) without observing each other, so two changed revisions can receive equal or decreasing timestamps. Workers KV offers no compare-and-set and no cross-isolate lock ([ADR 0007](../adr/0007-versioned-kv-publication-active-pointer.md), [ADR 0010](../adr/0010-workers-kv-consistency-limitation.md)); closing it needs a serialization mechanism that is an infrastructure decision this pass was not authorized to take. **`meta.sourceUpdatedAt` is unchanged** - still provider-supplied, staging still publishing the mock provider's constant - and the module has **no production caller**. **G-i therefore stays open in both halves.** **G3 gains an explicit prerequisite: production operational runbooks.** Dormant throughout: no adapter, no provider contacted, no request made or made possible, nothing deployed, no licensing conclusion changed. `PROVIDER_MODE` still admits exactly `mock` and `none`, production remains `"none"`, and OpenF1 stays fail-closed with no recorded bound. G1, G3, G5, G9 and G-l remain open. |
 | 1.1 | 2026-09-16 | **Phase 9B: Grand Prix event identity decided, not implemented** ([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity)). §8.4 records no event identifier on a Jolpica race object, so the first calendar adapter slice stopped before editing. A curated GridView event registry now owns an immutable, curator-created `eventSlug`, and Jolpica events resolve only through a season-scoped provider locator - the complete tuple `season`, `round`, exact `raceName`, exact `circuitId` - with no subset, fuzzy or normalized matching and fail-closed resolution. The Jolpica calendar emits `unknown` statuses, `hasResults` is owned by season assembly, and no timestamp is manufactured. New gap **G-m** tracks the unimplemented mechanism. **Documentation only: no provider was contacted, no request was made, nothing was deployed, and no licensing conclusion changes.** G1, G5, G9 and G-l remain open. |
 | 1.2 | 2026-09-19 | **Phase 9B: the event-registry mechanism is implemented; the dataset is not** ([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity) A5). A curated GridView event registry owns every immutable `eventSlug`, `event` joins the mapping entity union as a seventh closed combination (Jolpica only), and the Jolpica locator is a closed composite value - the file's season plus `round`, exact `raceName`, exact `circuitId` - keyed as `eventLocator` with an injective length-prefixed encoding whose type tag makes a locator key incapable of colliding with a scalar one. A record never carries its own season, and one that does is rejected by the schema and the resolver alike. Matching is exact: no subset, fuzzy, slugified, case-folded, trimmed or punctuation-normalized match exists, and absent, ambiguous, duplicated, dangling or malformed records fail the whole registry closed. JSON Schema and `npm run validate:content` cover the registry, the mapping and the evidence corpus, and duplicate canonical registry ids are now rejected rather than silently collapsed. **Dormant and unbundled: no adapter consumes it, no runtime module outside `src/providers/mappings/` imports it, the Worker entry point cannot reach it, no provider was contacted, no request was made or made possible, nothing was deployed, and no licensing conclusion changes.** **The curated event dataset is deliberately absent**: the registry is committed empty and no complete locator is recorded (**G-l**). `PROVIDER_MODE` still admits exactly `mock` and `none`, production remains `"none"`, and OpenF1 stays fail-closed. G1, G5, G9 and G-l remain open, and both adapters remain unimplemented. |
+| 1.3 | 2026-09-19 | **Phase 9B: the curated 2026 event dataset exists** (§8.8). One further public `GET`, separately authorised - `https://api.jolpi.ca/ergast/f1/2026/races/?limit=100` at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23 races, SHA-256 `87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed` - supplied the 2026 calendar's 23 exact Jolpica event locators, corroborated against the official Formula 1 2026 calendar accessed the same day. A curator approved all 23 `eventSlug` identities; the curated event registry now holds exactly those 23, and every observed locator has a reviewed mapping and an evidence-corpus entry. The raw response stays outside the repository; §8.8 records its metadata, licence and attribution. **Event-mapping coverage of the observed 2026 calendar is complete, and it is a point-in-time observation**: any later calendar change fails closed until another reviewed mapping update. **G-l stays open**: 22 of the 23 observed circuit identifiers still lack a curated circuit mapping, so a working calendar adapter remains blocked. **No Jolpica adapter exists**, the `hasResults` assembly change (ADR 0022 amendment A7) is not implemented, and no Worker or GridView runtime has contacted a provider. The earlier "no request was made" statements in this history describe each phase's own work; §0.3 and §8.1 record the ~25 authorised research requests of 2026-08-19. `PROVIDER_MODE` still admits exactly `mock` and `none`, production remains `"none"`, and no licensing conclusion changes. G1, G5, G9 and G-l remain open. |
 
 ---
 
@@ -73,10 +74,14 @@ handle any API key, or call any authenticated endpoint. **No inquiry has been
 sent to either project.** No production adapter exists and none is authorised
 here.
 
-A small number of **unauthenticated public `GET` requests** was made under the
-authorisation recorded in §8.1, solely to validate the data mapping. No
+A small number of **unauthenticated public `GET` requests** — roughly 25 — was
+made on 2026-08-19 under the authorisation recorded in §8.1, solely to validate
+the data mapping. **One further unauthenticated `GET`**, separately authorised,
+was made on 2026-09-19 to record the 2026 calendar's event locators (§8.8). No
 credential, cookie or token was used; no paid or live endpoint was touched; no
-image was downloaded; no response was retained inside the repository.
+image was downloaded; no response was retained inside the repository. None of
+these requests was made by GridView's software: the Worker, its hardened
+provider client and its rate limiter have made no provider request.
 
 ### 0.4 Why silence is not the question
 
@@ -794,6 +799,9 @@ validate the proposed mapping. Every restriction was observed:
 | No personal identifiers or machine-specific paths in documentation | None appears below. |
 | Stop if authentication, payment or permission is indicated | No such response was received; every call returned HTTP 200. |
 
+One further request, separately authorised on 2026-09-19 under the same
+restrictions, is recorded in §8.8.
+
 ### 8.2 Target event
 
 The latest safely completed session was selected programmatically as the most
@@ -912,6 +920,125 @@ Consequences:
 | M11 | **Whether OpenF1 revises `date_end` after an overrun is `unverified`** | A red-flagged or delayed session actually ends later, which moves the live-window boundary. Anchoring on the scheduled end alone would place a request inside the paid live window. Because the revision behaviour is unverified, the detect-and-re-anchor backstop (§10.2 rule 4) **cannot be relied on to notice the overrun**. The operative control is therefore §10.2 rule 3: fetch only from a justified upper bound, otherwise **skip the provisional fetch** and wait for reconciliation. Both are Phase 9B requirements. |
 
 **No adapter was implemented.** These are recorded as Phase 9B requirements.
+
+### 8.8 2026 calendar observation and the curated event dataset (2026-09-19)
+
+One further public `GET` was **separately and explicitly authorised on
+2026-09-19**, solely to collect evidence for the curated Grand Prix event
+dataset. It is recorded here because [ADR 0022](../adr/0022-curated-provider-identifier-mappings.md#a4---evidence-and-review-are-at-least-as-strict-as-existing-mappings)
+amendment A4 requires every event mapping's evidence to point inside this
+repository. It was a one-off request from a developer machine, **not** a request
+by GridView's Worker, its hardened provider HTTP client or its rate limiter:
+GridView's application code has still made no provider request. No other
+request, to Jolpica or to OpenF1, accompanied it.
+
+| Field | Value |
+|---|---|
+| Provider | Jolpica F1 |
+| Endpoint | `https://api.jolpi.ca/ergast/f1/2026/races/?limit=100` |
+| Method | One unauthenticated `GET`. No credential, cookie or token; no redirect followed; no retry |
+| Request window (UTC) | Started `2026-09-19T19:38:14.947Z`, completed `2026-09-19T19:38:15.183Z`; response `Date` `2026-09-19T19:38:15Z` |
+| Status | HTTP 200, `application/json` |
+| Count | `limit` 100, `offset` 0, `total` 23; 23 race objects returned, so the declared and returned counts agree |
+| Body | 14 295 bytes; SHA-256 `87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed` over the exact bytes received |
+| Freshness | Served from Jolpica's CDN cache (`cf-cache-status: HIT`, `Age: 135`), so it reflects Jolpica's state when that response was generated |
+| Structural checks | Strict UTF-8 JSON; every race carries `season` "2026"; rounds unique, contiguous 1-23 and ascending; no `raceName` or `circuitId` has edge whitespace; every complete tuple unique; no `circuitId` hosts two events |
+| Raw capture | Held by the operator **outside the repository and not committed**, like the §8.1 responses. This section is the repository-owned record; the hash above lets a reviewer holding the capture confirm it is the one summarised here |
+
+**Licence and attribution** ([ADR 0019](../adr/0019-formula-one-provider-legal-gate.md),
+§7.2, §7.6.2, §7.6.3). The `round`, `raceName` and `circuitId` values below are
+**Jolpica F1** data (`https://github.com/jolpica/jolpica-f1`, §13 S5, S8, S10),
+licensed under **CC BY-NC-SA 4.0**
+(`https://creativecommons.org/licenses/by-nc-sa/4.0/`). GridView records only
+those three fields of each race, verbatim, and pairs each tuple with its own
+curated `eventSlug`; that pairing is GridView's modification, and no other
+response content is reproduced. ShareAlike applies to this recorded data as
+§7.6.3 describes. The locators are internal ([ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)
+D10) and are published nowhere.
+
+**Official corroboration.** The official Formula 1 2026 calendar,
+`https://www.formula1.com/en/racing/2026`, **accessed 2026-09-19**, lists the
+same 23 rounds in the same order. It is used only to corroborate each event's
+identity. It is not a licensed data source, nothing from it is committed beyond
+the location labels in the table below, and no Formula 1 name or mark is
+licensed to GridView (§0.2).
+
+**Curator decisions, approved 2026-09-19.** Every `eventSlug` below is an
+explicit curator decision recorded in the reviewed change that added it, as
+ADR 0022 amendment A1 requires. None was derived by software from a `raceName`:
+
+- **Round 7** is the distinct Barcelona-Catalunya event and uses
+  `barcelona-grand-prix`.
+- **Round 14** is the Madrid event, which retains the official Spanish Grand
+  Prix identity and uses `spanish-grand-prix`.
+- **Round 16** retains the Bahrain Grand Prix identity despite its 2026
+  relocation to Sepang. The circuit belongs to the season's provider locator,
+  not to the identity.
+- **Round 20** uses the official contemporary event identity
+  `sao-paulo-grand-prix`, although Jolpica exposes `Brazilian Grand Prix`.
+- **Eight slugs that already appeared in mocks, contract fixtures or tests** -
+  `australian-grand-prix`, `japanese-grand-prix`, `monaco-grand-prix`,
+  `british-grand-prix`, `belgian-grand-prix`, `hungarian-grand-prix`,
+  `dutch-grand-prix` and `italian-grand-prix` - are adopted explicitly here.
+  Their earlier appearance was not the approval, and the mock rounds they
+  carried were never evidence.
+- `french-grand-prix`, `mystery-grand-prix` and `test-grand-prix` are synthetic
+  test identities and are **not** canonical.
+
+Each mapping's locator is the exact observed tuple; its season is the season of
+the file it lives in, never a field of the record.
+
+| Round | Exact `raceName` | Exact `circuitId` | Curated `eventSlug` | Official calendar, 2026-09-19 |
+|---|---|---|---|---|
+| 1 | `Australian Grand Prix` | `albert_park` | `australian-grand-prix` | Round 1, Australia |
+| 2 | `Chinese Grand Prix` | `shanghai` | `chinese-grand-prix` | Round 2, China |
+| 3 | `Japanese Grand Prix` | `suzuka` | `japanese-grand-prix` | Round 3, Japan |
+| 4 | `Miami Grand Prix` | `miami` | `miami-grand-prix` | Round 4, Miami |
+| 5 | `Canadian Grand Prix` | `villeneuve` | `canadian-grand-prix` | Round 5, Canada |
+| 6 | `Monaco Grand Prix` | `monaco` | `monaco-grand-prix` | Round 6, Monaco |
+| 7 | `Barcelona Grand Prix` | `catalunya` | `barcelona-grand-prix` | Round 7, Barcelona-Catalunya |
+| 8 | `Austrian Grand Prix` | `red_bull_ring` | `austrian-grand-prix` | Round 8, Austria |
+| 9 | `British Grand Prix` | `silverstone` | `british-grand-prix` | Round 9, Great Britain |
+| 10 | `Belgian Grand Prix` | `spa` | `belgian-grand-prix` | Round 10, Belgium |
+| 11 | `Hungarian Grand Prix` | `hungaroring` | `hungarian-grand-prix` | Round 11, Hungary |
+| 12 | `Dutch Grand Prix` | `zandvoort` | `dutch-grand-prix` | Round 12, Netherlands |
+| 13 | `Italian Grand Prix` | `monza` | `italian-grand-prix` | Round 13, Italy |
+| 14 | `Spanish Grand Prix` | `madring` | `spanish-grand-prix` | Round 14, Spain |
+| 15 | `Azerbaijan Grand Prix` | `baku` | `azerbaijan-grand-prix` | Round 15, Azerbaijan |
+| 16 | `Bahrain Grand Prix in Malaysia` | `sepang` | `bahrain-grand-prix` | Round 16, Bahrain (held in Malaysia) |
+| 17 | `Singapore Grand Prix` | `marina_bay` | `singapore-grand-prix` | Round 17, Singapore |
+| 18 | `United States Grand Prix` | `americas` | `united-states-grand-prix` | Round 18, United States |
+| 19 | `Mexico City Grand Prix` | `rodriguez` | `mexico-city-grand-prix` | Round 19, Mexico |
+| 20 | `Brazilian Grand Prix` | `interlagos` | `sao-paulo-grand-prix` | Round 20, Brazil (São Paulo) |
+| 21 | `Las Vegas Grand Prix` | `vegas` | `las-vegas-grand-prix` | Round 21, Las Vegas |
+| 22 | `Qatar Grand Prix` | `losail` | `qatar-grand-prix` | Round 22, Qatar |
+| 23 | `Abu Dhabi Grand Prix` | `yas_marina` | `abu-dhabi-grand-prix` | Round 23, Abu Dhabi |
+
+All 23 identities are in `content/registries/events.development.json`, and all
+23 locators are mapped in `content/seasons/2026/provider-mappings.development.json`
+and recorded in `content/seasons/2026/provider-evidence.development.json`. A
+test reconstructs this table from those files and fails if either side drifts.
+
+**Limits of this evidence:**
+
+- **It is a point-in-time observation from 2026-09-19.** Rounds 15-23 were
+  still in the future. A later calendar change, rename, round shift or venue
+  change produces a tuple no record matches, so the calendar **fails closed**
+  until another reviewed mapping update lands on new, separately authorised
+  evidence (ADR 0022 amendment A3; Mapping Guide §15.3).
+- **`round` arrives as a JSON string** (`"1"`); the curated locator stores an
+  integer. The adapter's one strict parse is A5 item 2's concern and is not
+  implemented.
+- **Circuit coverage is not part of this dataset.** The 23 `circuitId`s are
+  locator components here. Only `albert_park` has a curated circuit mapping,
+  `hungaroring` is acknowledged unmapped, and the other 21 are not in the
+  circuit evidence corpus. Because an event mapping never implies a circuit
+  (A3), **22 of 23 circuits still lack a curated mapping and a working
+  calendar adapter remains blocked** (G-l).
+- §8.4's 24 circuits against 23 races (M8) is not explained by this response,
+  which carries 23 distinct `circuitId`s.
+- **No Jolpica adapter exists**, and the `hasResults` assembly change (ADR 0022
+  amendment A7) is still open.
 
 ---
 
@@ -2519,8 +2646,8 @@ Full detail in Appendix D.
 | G-h | ~~`providerCallCount` is untyped and would silently under-report per-source usage.~~ **Closed in Phase 9B-1 (2026-08-23).** The structural cast is removed; `FormulaOneProvider` requires a typed `sourceId` and `requestMetrics()`, and `SyncResult` carries operation-scoped and lifetime attempt counts split by source and by job category, with failed and rate-limited attempts counted. |
 | G-i | **`sourceUpdatedAt` must be derived from GridView's own observation state** (§10.7.1). Neither provider publishes an update timestamp, so the published value is the snapshot-level `snapshotObservedAt`, bound to `snapshotRevision` (ADR 0020 D1.9); the resource-level `sourceObservedAt` is internal reconciliation state and is never published (D1.12). Both require the previously stored revision and are therefore coordinator and publication state, not adapter state. ~~Blocking for Phase 9B.~~ **Decided** by [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1; the remaining work is implementation (it rides on G4 and G9). **Partially implemented 2026-09-03 (Phase 9B-6, PR 1): `snapshotRevision` and its canonical input exist and are tested, with no production caller. `snapshotObservedAt` does not, and D1.10's strictly-monotonic assignment is blocked** - it must be computed pre-commit from the pair the active pointer names, two same-season publications can both reach the publisher without observing each other, and Workers KV offers no compare-and-set or cross-isolate lock to serialize them (ADR 0007, ADR 0010). `meta.sourceUpdatedAt` is unchanged. **This gap stays open in both halves.** |
 | F3-F5 | ~~**Three referential rules the domain model defines and the preflight did not enforce** — driver participation-span validity, the canonical Grand Prix edition identity `{season}-{eventSlug}` and the canonical constructor season-entry identity `{season}-{constructorId}`. Raised by the final bounded review of PR #12, verified, and deferred to the adapter-registration / G4-activation gate because no current source can produce the invalid states.~~ **Closed in Phase 9B-5 (2026-09-02)** ([ADR 0024](../adr/0024-deep-normalized-contract-validation.md)) as three independent relations in the closed `seasonRelations` vocabulary. No symmetric identity relation exists for a *driver* season entry: §6.7 appends a start round for a split seat, so its identity is not a strict function of the payload. |
-| G-l | **The curated mapping *dataset* is incomplete.** G-e closed the *mechanism*; this is the separate, still-open question of *coverage*. Only identifiers already recorded in §8 are curated: `Cadillac` and `Racing Bulls` have no canonical GridView constructor identity, `antonelli` / `driver_number 12` has no canonical driver identity, `hungaroring` has no canonical circuit identity, and no OpenF1 `circuit_key` value is recorded anywhere. Each gap is an explicit acknowledgement in `provider-evidence.development.json` and blocks the affected resource. Closing it needs curated GridView identities and more recorded provider evidence, not more mapping code. Once the `event` entity exists (**G-m**), curated Jolpica event locators join this coverage gap; none is recorded today. |
-| G-m | ~~**No curated event identity mechanism exists.**~~ **Closed as a mechanism on 2026-09-19** ([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity) A5), decided 2026-09-16. A curated event registry (`content/registries/events.development.json`) owns an immutable `eventSlug`; the mapping entity union is now `driver`, `constructor`, `circuit`, `event`; a Jolpica event resolves only through the complete season-scoped locator - the file's season plus `round`, exact `raceName`, exact `circuitId`, carried in one closed composite value keyed as `eventLocator` - with no subset, fuzzy or normalized matching, an injective key encoding, and fail-closed resolution on an absent, ambiguous, dangling or malformed record. Schemas and `validate:content` cover the registry, the mapping and the evidence corpus. **The mechanism is dormant and unbundled**: no runtime module outside `src/providers/mappings/` imports it and the Worker entry point cannot reach it. **The dataset half is not closed and is tracked as G-l**: the event registry is committed **empty**, no event mapping record exists, and no complete locator is recorded anywhere (amendment A4). **No Jolpica adapter exists**, so every Jolpica resource that produces a `GrandPrix` or `Session` stays blocked. No provider was contacted and no request was made. |
+| G-l | **The curated mapping *dataset* is incomplete.** G-e closed the *mechanism*; this is the separate, still-open question of *coverage*. Only identifiers already recorded in §8 are curated: `Cadillac` and `Racing Bulls` have no canonical GridView constructor identity, `antonelli` / `driver_number 12` has no canonical driver identity, `hungaroring` has no canonical circuit identity, and no OpenF1 `circuit_key` value is recorded anywhere. Each gap is an explicit acknowledgement in `provider-evidence.development.json` and blocks the affected resource. Closing it needs curated GridView identities and more recorded provider evidence, not more mapping code. **Event-identity sub-gap closed on 2026-09-19** (§8.8): the curated event registry holds 23 curator-approved `eventSlug` identities, and all 23 Jolpica event locators observed for 2026 have a reviewed mapping and an evidence-corpus entry. That coverage is a point-in-time observation; a later calendar change fails closed until another reviewed update. **G-l itself stays open**: 22 of the 23 observed circuit identifiers still lack a curated circuit mapping (21 are not yet in the circuit evidence corpus at all), which blocks a working calendar adapter, and the driver, constructor and `circuit_key` gaps above are unchanged. |
+| G-m | ~~**No curated event identity mechanism exists.**~~ **Closed as a mechanism on 2026-09-19** ([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity) A5), decided 2026-09-16. A curated event registry (`content/registries/events.development.json`) owns an immutable `eventSlug`; the mapping entity union is now `driver`, `constructor`, `circuit`, `event`; a Jolpica event resolves only through the complete season-scoped locator - the file's season plus `round`, exact `raceName`, exact `circuitId`, carried in one closed composite value keyed as `eventLocator` - with no subset, fuzzy or normalized matching, an injective key encoding, and fail-closed resolution on an absent, ambiguous, dangling or malformed record. Schemas and `validate:content` cover the registry, the mapping and the evidence corpus. **The mechanism is dormant and unbundled**: no runtime module outside `src/providers/mappings/` imports it and the Worker entry point cannot reach it. **The dataset half is tracked as G-l**, where the 2026 event-identity sub-gap was closed on 2026-09-19 (§8.8): 23 curated identities and 23 mapped locators. **No Jolpica adapter exists**, so every Jolpica resource that produces a `GrandPrix` or `Session` stays blocked. The mechanism work itself contacted no provider and made no request. |
 | G-k | ~~**`QuotaState` has the wrong windows** (§8.6).~~ **Closed in Phase 9B-1 (2026-08-23).** `QuotaState` is per source and holds an extensible window collection: OpenF1 per-second and per-minute, Jolpica per-second and per-hour, no daily bucket for either, mock limits marked test-only. The §16.1 thresholds are implemented against it. The **rate limiter** it feeds is G7, which was **closed separately by Phase 9B-2** (Appendix D.3). |
 | G-j | ~~**The post-reconciliation cadence and the settling predicate are unspecified.**~~ **Specified** in §10.4.1 under [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §3-§4: the five invariants are binding and the state machine, cadence bounds and slow sweep are recorded against them. The I3/I4 tension is resolved by a bounded settling predicate plus a fixed-budget weekly sweep. Volume figures are bounded (§11.3.1). The remaining work is **implementation**, including the operational events in §10.4.1 and §10.9.1. |
 

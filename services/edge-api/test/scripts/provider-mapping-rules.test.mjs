@@ -56,6 +56,11 @@ const canonicalIds = {
       (c) => c.id,
     ),
   ),
+  event: new Set(
+    read('content', 'registries', 'events.development.json').events.map(
+      (e) => e.id,
+    ),
+  ),
 };
 
 const base = {

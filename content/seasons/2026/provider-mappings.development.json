@@ -74,6 +74,286 @@
       "gridviewId": "red-bull",
       "evidence": "GridView_Provider_Evaluation.md 8.5 - recorded name disagreement, OpenF1 'Red Bull Racing' against Jolpica 'Red Bull'.",
       "note": "The GridView constructor is named 'Red Bull' in the curated registry, which is the string the other source uses. Neither name is the key; the curated ID is."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 1,
+        "raceName": "Australian Grand Prix",
+        "circuitId": "albert_park"
+      },
+      "gridviewId": "australian-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 1 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 1."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 2,
+        "raceName": "Chinese Grand Prix",
+        "circuitId": "shanghai"
+      },
+      "gridviewId": "chinese-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 2 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 2."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 3,
+        "raceName": "Japanese Grand Prix",
+        "circuitId": "suzuka"
+      },
+      "gridviewId": "japanese-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 3 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 3."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 4,
+        "raceName": "Miami Grand Prix",
+        "circuitId": "miami"
+      },
+      "gridviewId": "miami-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 4 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 4."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 5,
+        "raceName": "Canadian Grand Prix",
+        "circuitId": "villeneuve"
+      },
+      "gridviewId": "canadian-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 5 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 5."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 6,
+        "raceName": "Monaco Grand Prix",
+        "circuitId": "monaco"
+      },
+      "gridviewId": "monaco-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 6 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 6."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 7,
+        "raceName": "Barcelona Grand Prix",
+        "circuitId": "catalunya"
+      },
+      "gridviewId": "barcelona-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 7 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 7.",
+      "note": "Curator decision 2026-09-19: the Barcelona-Catalunya race is a distinct event from the Spanish Grand Prix held in Madrid in the same season (round 14), so it has its own identity."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 8,
+        "raceName": "Austrian Grand Prix",
+        "circuitId": "red_bull_ring"
+      },
+      "gridviewId": "austrian-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 8 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 8."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 9,
+        "raceName": "British Grand Prix",
+        "circuitId": "silverstone"
+      },
+      "gridviewId": "british-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 9 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 9."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 10,
+        "raceName": "Belgian Grand Prix",
+        "circuitId": "spa"
+      },
+      "gridviewId": "belgian-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 10 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 10."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 11,
+        "raceName": "Hungarian Grand Prix",
+        "circuitId": "hungaroring"
+      },
+      "gridviewId": "hungarian-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 11 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 11."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 12,
+        "raceName": "Dutch Grand Prix",
+        "circuitId": "zandvoort"
+      },
+      "gridviewId": "dutch-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 12 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 12."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 13,
+        "raceName": "Italian Grand Prix",
+        "circuitId": "monza"
+      },
+      "gridviewId": "italian-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 13 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 13."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 14,
+        "raceName": "Spanish Grand Prix",
+        "circuitId": "madring"
+      },
+      "gridviewId": "spanish-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 14 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 14.",
+      "note": "Curator decision 2026-09-19: the Madrid race retains the official Spanish Grand Prix identity. The venue is a season-scoped locator fact, not part of the identity."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 15,
+        "raceName": "Azerbaijan Grand Prix",
+        "circuitId": "baku"
+      },
+      "gridviewId": "azerbaijan-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 15 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 15."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 16,
+        "raceName": "Bahrain Grand Prix in Malaysia",
+        "circuitId": "sepang"
+      },
+      "gridviewId": "bahrain-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 16 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 16.",
+      "note": "Curator decision 2026-09-19: the 2026 edition relocated to Sepang retains the Bahrain Grand Prix identity. The circuit belongs to this season's provider locator, never to the identity, and the exact raceName is kept verbatim."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 17,
+        "raceName": "Singapore Grand Prix",
+        "circuitId": "marina_bay"
+      },
+      "gridviewId": "singapore-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 17 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 17."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 18,
+        "raceName": "United States Grand Prix",
+        "circuitId": "americas"
+      },
+      "gridviewId": "united-states-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 18 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 18."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 19,
+        "raceName": "Mexico City Grand Prix",
+        "circuitId": "rodriguez"
+      },
+      "gridviewId": "mexico-city-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 19 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 19."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 20,
+        "raceName": "Brazilian Grand Prix",
+        "circuitId": "interlagos"
+      },
+      "gridviewId": "sao-paulo-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 20 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 20.",
+      "note": "Curator decision 2026-09-19: the identity is the official contemporary São Paulo Grand Prix. Jolpica's exact raceName 'Brazilian Grand Prix' is kept verbatim as the locator; the two strings differ by design, and neither is derived from the other."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 21,
+        "raceName": "Las Vegas Grand Prix",
+        "circuitId": "vegas"
+      },
+      "gridviewId": "las-vegas-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 21 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 21."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 22,
+        "raceName": "Qatar Grand Prix",
+        "circuitId": "losail"
+      },
+      "gridviewId": "qatar-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 22 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 22."
+    },
+    {
+      "source": "jolpica",
+      "entity": "event",
+      "providerField": "eventLocator",
+      "providerValue": {
+        "round": 23,
+        "raceName": "Abu Dhabi Grand Prix",
+        "circuitId": "yas_marina"
+      },
+      "gridviewId": "abu-dhabi-grand-prix",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 round 23 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 23."
     }
   ]
 }

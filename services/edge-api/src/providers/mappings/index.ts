@@ -52,10 +52,9 @@ export function curatedRegistries(): CanonicalRegistries {
     driver: canonicalIdsFrom(driversRegistry.drivers),
     constructor: canonicalIdsFrom(constructorsRegistry.constructors),
     circuit: canonicalIdsFrom(circuitsRegistry.circuits),
-    // Empty today, and that is the accurate state: no curated event identity
-    // exists yet, so every event mapping target is `target-missing` and no
-    // calendar can resolve. Adding one needs separately authorized evidence
-    // (ADR 0022 amendment A4).
+    // The curator-approved identities (ADR 0022 amendment A1). An event with
+    // no curated identity makes its mapping target `target-missing`, so no
+    // calendar containing it can resolve.
     event: canonicalIdsFrom(eventsRegistry.events),
   };
 }

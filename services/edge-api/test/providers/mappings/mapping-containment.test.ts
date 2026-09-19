@@ -122,12 +122,23 @@ function curatedProviderValues(): readonly string[] {
  * registries, season entries, overrides and media metadata. This is the whole
  * source of public content, so any string absent from it cannot reach a public
  * surface for a legitimate reason.
+ *
+ * The event registry belongs here like every other curated registry: its
+ * slugs build the public `GrandPrix.id`, and its human-readable names are
+ * GridView's own event names. Most of them happen to equal Jolpica's
+ * `raceName` (`Italian Grand Prix`), which is also the public display name the
+ * contract already carries — using a display string in the public `name` field
+ * is not a leak (ADR 0022 amendment A2). Such a value is excluded from the
+ * string search below exactly like `mclaren`; the `raceName` and
+ * `eventLocator` structural markers carry the assertion for it instead, and a
+ * `raceName` that differs from every curated name stays a marker.
  */
 function publicFacingCuratedContent(): string {
   const files = [
     ['content', 'registries', 'drivers.mock.json'],
     ['content', 'registries', 'constructors.mock.json'],
     ['content', 'registries', 'circuits.mock.json'],
+    ['content', 'registries', 'events.development.json'],
     ['content', 'seasons', '2026', 'driver-entries.mock.json'],
     ['content', 'seasons', '2026', 'constructor-entries.mock.json'],
     ['content', 'seasons', '2026', 'overrides.mock.json'],
@@ -295,6 +306,12 @@ describe('provider identifiers stay out of every public surface', () => {
       'hungaroring',
       'Racing Bulls',
       'Cadillac',
+      // Curated event locator components that match no GridView name, so
+      // they must stay distinguishable leak markers.
+      'Bahrain Grand Prix in Malaysia',
+      'Brazilian Grand Prix',
+      'sepang',
+      'interlagos',
     ]) {
       expect(leakMarkers).toContain(expected);
     }
@@ -303,8 +320,8 @@ describe('provider identifiers stay out of every public surface', () => {
   it('flattens a composite event locator into its components', () => {
     // Guards the marker set against the `[object Object]` hole: an event
     // mapping must contribute its raceName and circuitId as real markers, not
-    // one useless stringified object. Asserted directly because no event
-    // mapping is curated yet, so the curated content cannot exercise it.
+    // one useless stringified object. Asserted directly as well as through
+    // the curated event locators pinned above.
     expect(
       flattenProviderValue({
         round: 11,

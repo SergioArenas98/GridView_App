@@ -103,15 +103,25 @@ describe('the committed event registry', () => {
     ).toBe(true);
   });
 
-  it('is the canonical empty representation, carrying no event record', () => {
-    expect(registry.kind).toBe('event-registry');
-    expect(registry.events).toEqual([]);
+  it('passes the registry document-set rule with one id per curated event', () => {
+    // The exact curated dataset is pinned in
+    // test/providers/mappings/event-dataset-2026.test.ts; this asserts only
+    // that the build-time rule accepts the committed document as it ships.
+    const { problems, ids } = validateRegistryDocumentSet(
+      'event-registry',
+      'events',
+      [{ label: 'events.development.json', data: registry }],
+    );
+
+    expect(problems).toEqual([]);
+    expect(ids.size).toBe(registry.events.length);
   });
 
-  it('records no Jolpica locator anywhere in curated content', () => {
-    // A4: no complete locator exists in this repository, and seeding one needs
-    // separately authorized evidence. This asserts the dataset really is absent
-    // rather than merely undocumented.
+  it('records every curated event locator as both mapped and evidenced', () => {
+    // A4: every locator joins the season's evidence corpus. The build-time
+    // coverage rule proves the two sets agree; this pins that no event
+    // locator is merely acknowledged, because an acknowledgement is a
+    // blocker, never a mapping.
     const mappings = read(
       'content',
       'seasons',
@@ -124,14 +134,12 @@ describe('the committed event registry', () => {
       '2026',
       'provider-evidence.development.json',
     );
+    const events = (entries) =>
+      entries.filter((entry) => entry.entity === 'event');
 
-    const eventEntries = [
-      ...mappings.mappings,
-      ...evidence.identities,
-      ...evidence.acknowledgedUnmapped,
-    ].filter((entry) => entry.entity === 'event');
-
-    expect(eventEntries).toEqual([]);
+    expect(events(mappings.mappings)).toHaveLength(registry.events.length);
+    expect(events(evidence.identities)).toHaveLength(registry.events.length);
+    expect(events(evidence.acknowledgedUnmapped)).toEqual([]);
   });
 });
 
@@ -615,7 +623,7 @@ describe('exactly one curated registry document per entity kind', () => {
     ]);
   });
 
-  it('accepts the committed empty registry', () => {
+  it('accepts an empty registry', () => {
     const { problems, ids } = validateRegistryDocumentSet(
       'event-registry',
       'events',

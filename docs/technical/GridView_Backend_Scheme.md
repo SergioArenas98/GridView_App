@@ -728,9 +728,11 @@ Recommended JSON forms:
 >
 > **The mechanism was implemented on 2026-09-19** — the event registry, the
 > `event` entity, their schemas and `validate:content` coverage — and is
-> dormant and unbundled. **The event mapping data does not exist**: the
-> registry is committed empty and no complete locator is recorded anywhere. No
-> Jolpica adapter exists, so the Jolpica calendar resource remains blocked.
+> dormant and unbundled. **The 2026 event mapping data was curated the same
+> day**: 23 curator-approved identities and 23 mapped Jolpica locators,
+> recorded in Provider Evaluation §8.8. No Jolpica adapter exists and 22 of the
+> 23 observed circuit identifiers have no curated circuit mapping, so the
+> Jolpica calendar resource remains blocked.
 
 ---
 
@@ -748,7 +750,7 @@ Different fields may come from different sources.
 | Driver season team | Provider | Curated override |
 | Team identity | Curated GridView registry | Provider mapping |
 | Circuit identity | Curated GridView registry | Provider mapping |
-| Grand Prix event identity (`eventSlug`) | Curated GridView event registry (mechanism implemented 2026-09-19; registry committed empty) | Provider locator mapping |
+| Grand Prix event identity (`eventSlug`) | Curated GridView event registry (mechanism implemented 2026-09-19; 23 curated 2026 identities) | Provider locator mapping |
 | Biography/profile facts | Curated content or permitted provider data | Manual correction |
 | Team colors | Curated seasonal content | Provider as fallback |
 | Media | Licensed GridView media library | Local placeholder |
