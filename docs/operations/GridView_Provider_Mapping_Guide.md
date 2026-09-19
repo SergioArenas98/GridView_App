@@ -114,11 +114,13 @@ for. Do not infer them from the value.
 There is no other combination, and there is no `mock` source: the mock provider
 emits GridView-owned identities and must never have a mapping.
 
-> **Grand Prix events are decided but not implemented.** A seventh combination
-> — Jolpica, `event`, the complete event locator — is decided by the
-> [ADR 0022 amendment of 2026-09-16](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity).
-> It does not exist in the schema, the resolver or `validate:content` yet, so it
-> cannot be curated today. See §15.
+> **A seventh combination exists for Grand Prix events**: Jolpica, `event`,
+> `eventLocator`, the complete event locator, decided by the
+> [ADR 0022 amendment of 2026-09-16](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity)
+> and implemented on 2026-09-19. The schema, the resolver and
+> `validate:content` all support it. **No event mapping can be curated today
+> even so**: the curated event registry is empty, so every target would be
+> missing, and no complete locator is recorded in this repository. See §15.
 
 ---
 
@@ -359,27 +361,39 @@ This is asserted by tests, not just stated here.
 - No runtime code writes the registry to KV, a Durable Object or local storage.
 - No discovery job invents mappings from observed provider data.
 - No provider is contacted by any part of this workflow.
-- No event registry, `event` mapping entity or event mapping record exists yet
-  (§15).
+- No event mapping record exists, the curated event registry is empty, and no
+  Jolpica adapter exists (§15).
 
 ---
 
 ## 15. Grand Prix events — decided, not yet operational
 
-> **Nothing in this section can be followed today.** The decision is recorded
-> in the
-> [ADR 0022 amendment of 2026-09-16](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity);
-> the event registry, the `event` mapping entity, their schemas and their
-> `validate:content` rules are **not implemented**, and no event mapping data
-> exists. This section fixes the procedure that implementation must support.
+> **The mechanism exists; the data does not.** The decision is recorded in the
+> [ADR 0022 amendment of 2026-09-16](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity)
+> and the event registry, the `event` mapping entity, their schemas and their
+> `validate:content` rules were implemented on 2026-09-19.
+>
+> **No step below can be completed today.** `content/registries/events.development.json`
+> is committed **empty**, so any event mapping would fail validation with a
+> missing target, and **no complete Jolpica locator is recorded anywhere in
+> this repository** — gathering one is a separately authorized activity that
+> has not happened. No Jolpica adapter exists, and no provider request has ever
+> been made. This section is the procedure to follow once both the evidence and
+> the curated identities exist.
 
 ### 15.1 Identity comes from a curated event registry
 
-A curator creates each `eventSlug` in a curated GridView event registry, in a
-reviewed change, following `GridView_Domain_Model.md` §4. **An accepted
-`eventSlug` is immutable**: it is never renamed, repointed or reused, whatever
-later happens to the race's name or sponsor. `GrandPrix.id` stays
-`{season}-{eventSlug}`.
+A curator creates each `eventSlug` in `content/registries/events.development.json`
+(`kind: event-registry`), in a reviewed change, following
+`GridView_Domain_Model.md` §4. **An accepted `eventSlug` is immutable**: it is
+never renamed, repointed or reused, whatever later happens to the race's name
+or sponsor. `GrandPrix.id` stays `{season}-{eventSlug}` and is built elsewhere,
+never by the registry and never by an adapter.
+
+A registry entry carries an `id` and a human-readable `name` for the reviewer,
+and nothing else that could be mistaken for identity: no round, no date, no
+circuit and no provider value. Two entries may never claim the same `id`;
+`validate:content` rejects a duplicate rather than collapsing it.
 
 No adapter derives, normalizes or mints an `eventSlug`, and a Jolpica
 `raceName`, `round` or `circuitId` is never a GridView identity.
@@ -395,7 +409,14 @@ unique outside that source and season.
 The season comes from the file the record lives in — `content/seasons/<year>/`
 — exactly as it does for a driver, constructor or circuit mapping (§1). A
 record never repeats it, so a locator can never disagree with its own season
-and then match nothing.
+and then match nothing. A record that nonetheless carries an inner `season` is
+**rejected** by both the schema and the resolver.
+
+The record's `providerField` is the literal `eventLocator`. That is GridView's
+own name for the composite, not a Jolpica field name: the locator spans three
+Jolpica fields at once, so no upstream field name describes it. Its
+`providerValue` is the object `{ round, raceName, circuitId }` — `round` an
+integer between 1 and 40, the other two exact strings.
 
 - **Every component must match exactly.** Matching on `raceName`, `round` or
   `circuitId` alone, or on any subset, is forbidden.

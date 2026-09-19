@@ -724,10 +724,13 @@ Recommended JSON forms:
 > season-scoped **provider locator**: the complete tuple of `season`, `round`,
 > exact `raceName` and exact `circuitId`. Every component must match exactly;
 > no subset, fuzzy or normalized match exists, and an absent, ambiguous or
-> conflicting locator fails the calendar resource closed. The event registry,
-> the `event` entity, their schemas, `validate:content` coverage and the event
-> mapping data **do not exist yet**, so the Jolpica calendar resource remains
-> blocked.
+> conflicting locator fails the calendar resource closed.
+>
+> **The mechanism was implemented on 2026-09-19** — the event registry, the
+> `event` entity, their schemas and `validate:content` coverage — and is
+> dormant and unbundled. **The event mapping data does not exist**: the
+> registry is committed empty and no complete locator is recorded anywhere. No
+> Jolpica adapter exists, so the Jolpica calendar resource remains blocked.
 
 ---
 
@@ -745,7 +748,7 @@ Different fields may come from different sources.
 | Driver season team | Provider | Curated override |
 | Team identity | Curated GridView registry | Provider mapping |
 | Circuit identity | Curated GridView registry | Provider mapping |
-| Grand Prix event identity (`eventSlug`) | Curated GridView event registry (decided 2026-09-16, not implemented) | Provider locator mapping |
+| Grand Prix event identity (`eventSlug`) | Curated GridView event registry (mechanism implemented 2026-09-19; registry committed empty) | Provider locator mapping |
 | Biography/profile facts | Curated content or permitted provider data | Manual correction |
 | Team colors | Curated seasonal content | Provider as fallback |
 | Media | Licensed GridView media library | Local placeholder |

@@ -230,8 +230,9 @@ circuit identifier is never a canonical identity, and no adapter derives an
 `eventSlug` from one. Jolpica events resolve only through a curated,
 season-scoped locator — the complete tuple of `season`, `round`, exact
 `raceName` and exact Jolpica `circuitId` — which is a provider locator, not an
-identity. The event registry, its mapping support and its data do not exist
-yet.
+identity. The event registry and its mapping support were implemented on
+2026-09-19 and are dormant; **the curated event data does not exist** — the
+registry is committed empty and no complete locator is recorded.
 
 ---
 
@@ -414,7 +415,8 @@ race classification is `final` or `provisional`. A calendar source that supplies
 no trustworthy lifecycle status emits `unknown` for `status` rather than
 inferring one from the clock. These rules are decided
 ([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity),
-A6-A7) and not yet implemented.
+A6-A7) and not yet implemented: no calendar source exists to emit `unknown`,
+and season assembly still takes `hasResults` verbatim from its contribution.
 
 ### 6.6 Session
 

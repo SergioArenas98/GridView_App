@@ -38,6 +38,7 @@ const kindToSchemaId = {
     'https://gridview.local/schemas/constructor-registry.schema.json',
   'circuit-registry':
     'https://gridview.local/schemas/circuit-registry.schema.json',
+  'event-registry': 'https://gridview.local/schemas/event-registry.schema.json',
   'driver-season-entries':
     'https://gridview.local/schemas/driver-season-entries.schema.json',
   'constructor-season-entries':
@@ -115,12 +116,33 @@ const registryIds = {
   driver: collectIds('driver-registry', 'drivers'),
   constructor: collectIds('constructor-registry', 'constructors'),
   circuit: collectIds('circuit-registry', 'circuits'),
+  event: collectIds('event-registry', 'events'),
 };
 
+/**
+ * Collects the canonical IDs a registry kind owns, rejecting duplicates.
+ *
+ * A `Set` silently collapses a repeated ID, which would hide exactly the
+ * mistake that matters most here: two curated entries claiming one identity.
+ * For events that is unrecoverable rather than untidy - an `eventSlug` is
+ * immutable and names one event for ever (ADR 0022 amendment A1) - so a
+ * duplicate is reported instead of absorbed. The same rule holds for drivers,
+ * constructors and circuits, which have never carried one.
+ */
 function collectIds(kind, arrayKey) {
   const ids = new Set();
-  for (const { data } of parsedByKind.get(kind) ?? []) {
-    for (const entry of data[arrayKey] ?? []) ids.add(entry.id);
+  for (const { label, data } of parsedByKind.get(kind) ?? []) {
+    for (const [index, entry] of (data[arrayKey] ?? []).entries()) {
+      if (ids.has(entry.id)) {
+        failures += 1;
+        console.error(`FAIL ${label}`);
+        console.error(
+          `  - ${arrayKey}[${index}] duplicate canonical id "${entry.id}"`,
+        );
+        continue;
+      }
+      ids.add(entry.id);
+    }
   }
   return ids;
 }

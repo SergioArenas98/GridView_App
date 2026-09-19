@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/event-registry.schema.json",
+  "title": "GridView Grand Prix event registry (curated stable identity)",
+  "description": "The curated registry that owns every eventSlug. A curator creates each slug in a reviewed repository change, exactly as for a driver, constructor or circuit; no provider adapter derives, normalizes or mints one. An accepted eventSlug is immutable: it is never renamed, repointed at another event or reused. A slug is season-independent - the same event recurs every season - so the season qualifier lives in GrandPrix.id ({season}-{eventSlug}), which is built elsewhere and never here. See docs/adr/0022-curated-provider-identifier-mappings.md amendment A1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "status", "events"],
+  "properties": {
+    "kind": { "const": "event-registry" },
+    "status": { "$ref": "common.schema.json#/$defs/mockStatus" },
+    "note": { "type": "string" },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/registryEvent" }
+    }
+  },
+  "$defs": {
+    "registryEvent": {
+      "description": "One canonical event identity. It carries no provider value, no provider response object, no round, no date and no circuit: those are season-scoped or provider-scoped facts that belong to a season's calendar or to a mapping record, not to the identity itself.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/slug" },
+        "name": {
+          "description": "Human-readable name for the reviewer. Never an identity, and never used for matching.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "countryCode": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/countryCode" },
+            { "type": "null" }
+          ]
+        },
+        "note": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

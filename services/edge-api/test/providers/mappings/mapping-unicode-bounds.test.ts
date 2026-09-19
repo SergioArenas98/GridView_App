@@ -121,7 +121,12 @@ describe('every layer agrees at the 64/65 code-point boundary', () => {
           mappings: [],
         },
       ],
-      { driver: new Set(), constructor: new Set(), circuit: new Set() },
+      {
+        driver: new Set(),
+        constructor: new Set(),
+        circuit: new Set(),
+        event: new Set(),
+      },
     );
     const result = registry.resolve(teamNameKey(atBound));
     expect(result.outcome).toBe('unresolved');

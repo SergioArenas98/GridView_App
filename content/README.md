@@ -14,13 +14,14 @@ content/
 │   ├── driver-registry.schema.json
 │   ├── constructor-registry.schema.json
 │   ├── circuit-registry.schema.json
+│   ├── event-registry.schema.json     (curated eventSlug identity)
 │   ├── driver-season-entries.schema.json
 │   ├── constructor-season-entries.schema.json
 │   ├── media-assets.schema.json
 │   ├── provider-mappings.schema.json   (INTERNAL: curated provider-ID mappings)
 │   ├── provider-evidence.schema.json   (INTERNAL: approved provider-ID corpus)
 │   └── overrides.schema.json
-├── registries/        stable identities (drivers, constructors, circuits)
+├── registries/        stable identities (drivers, constructors, circuits, events)
 ├── seasons/2026/      season entries, provider mappings, provider evidence, overrides
 └── media/             media asset metadata
 ```
@@ -88,6 +89,30 @@ matched by exact typed equality. Nothing is trimmed, case-folded, slugged,
 transliterated or fuzzy-matched, and integer `1` is never string `"1"`. There
 is no `mock` source: the mock provider emits GridView-owned identities and must
 not have a mapping.
+
+## Grand Prix event registry
+
+`registries/events.development.json` (`kind: event-registry`) owns every
+`eventSlug`. A curator creates each slug in a reviewed change; an accepted slug
+is **immutable** and is never renamed, repointed at another event or reused. No
+adapter derives, normalizes or mints one. `GrandPrix.id` stays
+`{season}-{eventSlug}` and is built elsewhere, never here.
+
+**The registry is deliberately empty.** The mechanism exists — the `event`
+mapping entity, its schemas and its `validate:content` rules — but no curated
+event identity has been created, because creating one needs separately
+authorized provider evidence. Because event resolution fails closed, an empty
+registry means every event mapping target is missing and no calendar can
+resolve. As with the media-rights register, **do not add a record here to make
+a build or a test pass**: automated tests build synthetic registries inside the
+test run, outside `content/` entirely.
+
+An event mapping is keyed on a **provider locator**, not an identifier, because
+Jolpica publishes none: the complete tuple of the file's season plus `round`,
+exact `raceName` and exact `circuitId`. A record never repeats its season, so a
+locator can never disagree with its own file. Every component must match
+exactly; no subset, fuzzy or normalized match exists. No event mapping record
+exists today.
 
 `seasons/<year>/provider-evidence.development.json` (`kind: provider-evidence`)
 records every provider identity this repository already has evidence for.

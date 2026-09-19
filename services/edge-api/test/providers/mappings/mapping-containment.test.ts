@@ -220,6 +220,32 @@ describe('an unmapped identity produces a bounded operational signal', () => {
     expect(String(event.providerMappingValue).length).toBeLessThanOrEqual(67);
     expect(event.providerMappingValue).not.toBe(long);
   });
+
+  it('bounds every component of an event locator', () => {
+    // A composite locator is rendered component by component, and each one
+    // carries the same bound as a scalar value: an operator can still tell
+    // which event failed, and nothing provider-controlled is unbounded
+    // (ADR 0022 D10, amendment A5.5).
+    const long = 'y'.repeat(500);
+    const event = providerMappingFailureEvent({
+      reason: 'unmapped',
+      season: SEASON,
+      source: 'jolpica',
+      entity: 'event',
+      providerField: 'eventLocator',
+      providerValue: { round: 11, raceName: long, circuitId: long },
+    });
+
+    const rendered = String(event.providerMappingValue);
+    expect(rendered).not.toContain(long);
+    expect(rendered).toContain('round=11');
+    expect(rendered).toContain('raceName=');
+    expect(rendered).toContain('circuitId=');
+    // Three bounded components plus their fixed labels, nothing more.
+    expect(rendered.length).toBeLessThan(230);
+    // The locator object itself is never serialized into the event.
+    expect(JSON.stringify(event)).not.toContain('"raceName"');
+  });
 });
 
 describe('provider identifiers stay out of every public surface', () => {
