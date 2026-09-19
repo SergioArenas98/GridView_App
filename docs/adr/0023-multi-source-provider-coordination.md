@@ -610,6 +610,16 @@ keeps publishing that same absence document exactly as before. The
 `unavailable` contribution is never discarded to force completeness, and
 `hasResults` is never rewritten.
 
+> **Amended 2026-09-16 (decision only, not implemented)** by
+> [ADR 0022, amendment A7](0022-curated-provider-identifier-mappings.md#a7---hasresults-is-owned-by-season-assembly).
+> For coordinated season assembly, a calendar contribution's `hasResults` is a
+> provisional `false` that is evidence in neither direction, and assembly
+> **derives** the final value — `true` exactly when the round has a selected
+> race classification carrying `final` or `provisional`. Deriving it is not
+> repairing it: nothing is fabricated or discarded. Until that implementation
+> lands, the code still behaves as this section describes. The text above is
+> retained for the record.
+
 **This is publication completeness, not scheduling.** The predicate reads one
 field of data the source supplied. No clock, event offset, session duration,
 cadence or due-job calculation is involved, and G5 remains untouched. A
@@ -993,6 +1003,14 @@ event-status table uses. Both mismatch directions fail closed: a classification
 published under a `false` flag would be invisible, and a `true` flag with no
 classification advertises data that does not exist. No flag is rewritten and no
 result is fabricated or discarded to repair the disagreement.
+
+> **Amended 2026-09-16 (decision only, not implemented)** by
+> [ADR 0022, amendment A7](0022-curated-provider-identifier-mappings.md#a7---hasresults-is-owned-by-season-assembly).
+> The calendar no longer asserts availability: assembly derives `hasResults`
+> from the selected, classified race results before this preflight runs, so
+> the exact cross-resource assertion above holds by construction and
+> `event-has-results` remains unchanged as the guard against an assembly
+> defect. The text above is retained for the record.
 
 **Grand Prix round and Grand Prix id are independently unique.** The local
 database keys `grand_prix` on `id` _and_ carries `UNIQUE(season, round)`, so

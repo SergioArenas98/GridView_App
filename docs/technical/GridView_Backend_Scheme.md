@@ -716,6 +716,18 @@ Recommended JSON forms:
 > mutation endpoint and no KV, Durable Object or database store — an operator
 > changes the registry through a reviewed repository change
 > ([operations guide](../operations/GridView_Provider_Mapping_Guide.md)).
+>
+> **Grand Prix event identity is decided, not implemented (2026-09-16).** The
+> [ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity)
+> adds a curated GridView event registry that owns an immutable, curator-created
+> `eventSlug`, and a new `event` mapping entity keyed, for Jolpica, on a
+> season-scoped **provider locator**: the complete tuple of `season`, `round`,
+> exact `raceName` and exact `circuitId`. Every component must match exactly;
+> no subset, fuzzy or normalized match exists, and an absent, ambiguous or
+> conflicting locator fails the calendar resource closed. The event registry,
+> the `event` entity, their schemas, `validate:content` coverage and the event
+> mapping data **do not exist yet**, so the Jolpica calendar resource remains
+> blocked.
 
 ---
 
@@ -733,6 +745,7 @@ Different fields may come from different sources.
 | Driver season team | Provider | Curated override |
 | Team identity | Curated GridView registry | Provider mapping |
 | Circuit identity | Curated GridView registry | Provider mapping |
+| Grand Prix event identity (`eventSlug`) | Curated GridView event registry (decided 2026-09-16, not implemented) | Provider locator mapping |
 | Biography/profile facts | Curated content or permitted provider data | Manual correction |
 | Team colors | Curated seasonal content | Provider as fallback |
 | Media | Licensed GridView media library | Local placeholder |
