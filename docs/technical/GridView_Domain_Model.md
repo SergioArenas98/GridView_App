@@ -143,6 +143,12 @@ Normalisation rules applied when a slug is first minted:
 A slug is minted once and then frozen. Later spelling, branding or sponsor
 changes never alter it.
 
+These rules are applied by a **curator** when a slug is first created in a
+curated registry. A provider adapter never applies them: no adapter derives,
+normalizes or mints a slug from provider data
+([ADR 0022](../adr/0022-curated-provider-identifier-mappings.md) D2, D5 and its
+2026-09-16 amendment A1).
+
 ### 4.2 Public stable IDs
 
 Every public identifier is a lowercase ASCII kebab-case slug with **no type
@@ -214,6 +220,18 @@ creates, renames or repoints one. Mappings are season-qualified, matched by
 exact typed equality with no normalisation or slug minting, and several
 explicit provider aliases may target one GridView identity. The registry is
 dormant until a provider adapter exists.
+
+**Grand Prix event identity (decided 2026-09-16, not implemented).** The
+[ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity)
+extends this rule to events. A curator creates each `eventSlug` in a curated
+GridView event registry, and an accepted `eventSlug` is immutable.
+`GrandPrix.id` remains `{season}-{eventSlug}`. A provider display name, round or
+circuit identifier is never a canonical identity, and no adapter derives an
+`eventSlug` from one. Jolpica events resolve only through a curated,
+season-scoped locator — the complete tuple of `season`, `round`, exact
+`raceName` and exact Jolpica `circuitId` — which is a provider locator, not an
+identity. The event registry, its mapping support and its data do not exist
+yet.
 
 ---
 
@@ -387,6 +405,16 @@ Identity: `id` (`{season}-{eventSlug}`). A season-scoped event.
 | `sessions` | `Session[]` | R | Ordered weekend schedule (may be empty if unknown). |
 | `hasResults` | boolean | R | Whether any classified result is available. |
 | `media` | `MediaAsset[]` | N | Event media. |
+
+For a season assembled from coordinated provider resources, `eventSlug` comes
+from the curated event registry (§4.4), and `hasResults` is owned by season
+assembly rather than by the calendar source: a calendar contribution carries a
+provisional `false`, and assembly sets `true` only for a round whose selected
+race classification is `final` or `provisional`. A calendar source that supplies
+no trustworthy lifecycle status emits `unknown` for `status` rather than
+inferring one from the clock. These rules are decided
+([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity),
+A6-A7) and not yet implemented.
 
 ### 6.6 Session
 

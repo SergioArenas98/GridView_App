@@ -114,6 +114,12 @@ for. Do not infer them from the value.
 There is no other combination, and there is no `mock` source: the mock provider
 emits GridView-owned identities and must never have a mapping.
 
+> **Grand Prix events are decided but not implemented.** A seventh combination
+> — Jolpica, `event`, the complete event locator — is decided by the
+> [ADR 0022 amendment of 2026-09-16](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity).
+> It does not exist in the schema, the resolver or `validate:content` yet, so it
+> cannot be curated today. See §15.
+
 ---
 
 ## 4. Verifying the intended GridView identity
@@ -353,3 +359,73 @@ This is asserted by tests, not just stated here.
 - No runtime code writes the registry to KV, a Durable Object or local storage.
 - No discovery job invents mappings from observed provider data.
 - No provider is contacted by any part of this workflow.
+- No event registry, `event` mapping entity or event mapping record exists yet
+  (§15).
+
+---
+
+## 15. Grand Prix events — decided, not yet operational
+
+> **Nothing in this section can be followed today.** The decision is recorded
+> in the
+> [ADR 0022 amendment of 2026-09-16](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity);
+> the event registry, the `event` mapping entity, their schemas and their
+> `validate:content` rules are **not implemented**, and no event mapping data
+> exists. This section fixes the procedure that implementation must support.
+
+### 15.1 Identity comes from a curated event registry
+
+A curator creates each `eventSlug` in a curated GridView event registry, in a
+reviewed change, following `GridView_Domain_Model.md` §4. **An accepted
+`eventSlug` is immutable**: it is never renamed, repointed or reused, whatever
+later happens to the race's name or sponsor. `GrandPrix.id` stays
+`{season}-{eventSlug}`.
+
+No adapter derives, normalizes or mints an `eventSlug`, and a Jolpica
+`raceName`, `round` or `circuitId` is never a GridView identity.
+
+### 15.2 The Jolpica event locator
+
+Jolpica publishes no event identifier, so an event mapping is keyed on a
+**provider locator**: the complete tuple `season`, `round`, exact `raceName` and
+exact Jolpica `circuitId`, within the Jolpica source. It locates one event in
+one season's Jolpica calendar; it is not an identity and is never treated as
+unique outside that source and season.
+
+The season comes from the file the record lives in — `content/seasons/<year>/`
+— exactly as it does for a driver, constructor or circuit mapping (§1). A
+record never repeats it, so a locator can never disagree with its own season
+and then match nothing.
+
+- **Every component must match exactly.** Matching on `raceName`, `round` or
+  `circuitId` alone, or on any subset, is forbidden.
+- **No fuzzy matching, slugification, case folding or punctuation
+  normalization** — §11 applies to every component.
+- **An absent, ambiguous or conflicting locator fails closed.** The calendar
+  resource stops with the same `provider_mapping_unresolved` signal as any
+  other unresolved identity (§2).
+- **Two events may share a circuit in one season**, which is why `circuitId`
+  never identifies an event on its own.
+
+### 15.3 When the calendar changes
+
+A calendar change, sponsor rename, round shift or circuit change produces a
+tuple no record matches, and the calendar fails closed. The fix is a reviewed
+mapping update with evidence, never a looser match:
+
+1. Confirm, from recorded evidence, which existing `eventSlug` the changed race
+   is. If it is a genuinely new event, create the `eventSlug` first (§5 order).
+2. Add the new locator as **its own record** targeting that `eventSlug`. Earlier
+   locators may stay as historical aliases (§7); each still matches only its
+   own complete tuple.
+3. Record the observed tuple in the season's evidence file, and state in the
+   pull request what changed and where the evidence lives (§6, §8).
+
+A single observation can never match two events. If two races in one calendar
+resolve to the same `eventSlug`, the season candidate is withheld by the
+existing `duplicate-identity` check rather than by picking one.
+
+Evidence and review are at least as strict as for drivers, constructors and
+circuits: mandatory evidence already in the repository, all four components
+recorded as observed, and no component recalled, inferred or completed by hand.
+Collecting new evidence from Jolpica is a separately authorized activity.
