@@ -2158,10 +2158,11 @@ another source rather than bypassing the requirement.
   evidence.~~ **Done for 2026 on 2026-09-19** (§14.0.14): 23 identities and
   23 mapped locators. A later calendar change needs another reviewed update.
 - Curate **circuit coverage** for the 2026 calendar: 17 of the 23 observed
-  Jolpica circuit identifiers have no curated circuit mapping (six were mapped
-  by 2026-09-19), which blocks every Jolpica resource that produces a
-  `GrandPrix` or `Session`. Sixteen of the 17 need a new canonical GridView
-  circuit identity; `hungaroring` is acknowledged unmapped.
+  Jolpica circuit identifiers have no curated circuit mapping (six are curated:
+  `albert_park`, plus five approved on 2026-09-19), which blocks every Jolpica
+  resource that produces a `GrandPrix` or `Session`. Sixteen of the 17 need a
+  new canonical GridView circuit identity; `hungaroring` is acknowledged
+  unmapped.
 - Derive `hasResults` in season assembly from selected, classified race
   results before the preflight, leaving `event-has-results` unchanged (A7).
 - Implement the **Jolpica** adapter against the coordination port, emitting
