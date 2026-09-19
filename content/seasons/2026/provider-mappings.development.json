@@ -41,6 +41,48 @@
       "note": "Jolpica separates words with an underscore and GridView with a hyphen. Converting one into the other would be slug minting, which is forbidden; the pair is curated instead."
     },
     {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "suzuka",
+      "gridviewId": "suzuka",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit suzuka - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 3.",
+      "note": "The provider value happens to equal the curated GridView ID here, and likewise for monaco, silverstone and monza below. The agreement is coincidental and is never a matching rule: each pair is an explicit curator decision, exactly like spa -> spa-francorchamps, where the two strings differ."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "monaco",
+      "gridviewId": "monaco",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit monaco - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 6."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "silverstone",
+      "gridviewId": "silverstone",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit silverstone - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 9."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "spa",
+      "gridviewId": "spa-francorchamps",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit spa - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 10.",
+      "note": "The provider value and the curated GridView ID are different strings. Neither is derived from the other: shortening spa-francorchamps or expanding spa would be slug minting, which is forbidden, so the pair is curated instead."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "monza",
+      "gridviewId": "monza",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit monza - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 13."
+    },
+    {
       "source": "openf1",
       "entity": "driver",
       "providerField": "driver_number",
