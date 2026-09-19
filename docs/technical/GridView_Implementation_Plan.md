@@ -2847,7 +2847,7 @@ Decision deadline:
 | Remote images hurt performance | Slow scrolling and memory pressure | Variants, caching and profiling |
 | Team/driver mappings change mid-season | Incorrect content | Stable IDs and curated mappings |
 | A calendar change, sponsor rename, round shift or circuit change breaks a curated Jolpica event locator | The season calendar fails closed until a reviewed mapping update lands; last-known-good stays published | Complete-tuple locators, explicit alias records with evidence, the bounded `provider_mapping_unresolved` signal (§14.0.12) |
-| Jolpica-sourced event and session status is `unknown` | Weaker completeness: a completed race without its classification publishes with `hasResults: false` instead of withholding the season; no status label is shown | Date-based client relevance rules; stronger status only from a separately selected resource or G5/G9 (§14.0.12) |
+| Jolpica-sourced event and session status is `unknown` | Weaker completeness: a race that was in fact completed, but whose classification was never planned or was selected as the `unavailable` absence document, publishes with `hasResults: false` instead of withholding the season; no status label is shown | Date-based client relevance rules; stronger status only from a separately selected resource or G5/G9 (§14.0.12) |
 | A present Jolpica session lacks a usable start time | The whole calendar resource fails as `invalid-payload`; last-known-good stays published | No manufactured timestamps; evidence review before enabling a season (§14.0.12) |
 | Flutter dependency changes | Build instability | Pin SDK and dependencies |
 | Worker/KV eventual consistency causes mixed data | Inconsistent snapshots | Versioned atomic publication |

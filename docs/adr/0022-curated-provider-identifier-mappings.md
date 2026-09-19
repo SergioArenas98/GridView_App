@@ -449,10 +449,13 @@ Verified consequences at `88f3b18`:
 - `unknown` is a valid enum member at the coordination boundary (ADR 0024).
 - `requiresRaceClassification('unknown')` is `false`
   (`season-assembly.ts`), so for a calendar sourced this way the
-  `missing-round-classification` gap can never fire. A completed race whose
-  classification is missing publishes with `hasResults: false` instead of
-  withholding the season. That fails towards not fabricating, but it is a
-  **weaker completeness guarantee** than a source that supplies `completed`
+  `missing-round-classification` gap can never fire. A race that was in fact
+  completed, but for which no classification was planned — or whose selected
+  classification is the `unavailable` absence document — then publishes with
+  `hasResults: false` instead of withholding the season. A classification that
+  _was_ planned and produced no candidate still fails the run as
+  `resource-unavailable`, unchanged. That fails towards not fabricating, but it
+  is a **weaker completeness guarantee** than a source supplying `completed`
   receives, and it stays weaker until a stronger status exists.
 - The client's relevant-event rules are date-based
   (`lib/features/shared/domain/relevant_event.dart`) and tolerate `unknown`,
@@ -515,9 +518,10 @@ in this amendment):
   emitted for it.
 - **A session block that is present but cannot produce a complete RFC 3339
   instant fails the calendar resource as `invalid-payload`.**
-- **A race that lacks the `date` or `time` needed for the race session the
-  adapter emits for every event, with its start instant, fails the complete
-  calendar resource**, also as `invalid-payload`.
+- **A race that lacks the `date` or `time` its own race session needs for a
+  complete start instant fails the complete calendar resource**, also as
+  `invalid-payload`. The adapter emits a race session for every calendar event,
+  so this is never an optional block.
 - **The end-of-day fallback in Provider Evaluation §10.4** (`date` at
   `23:59:59` UTC) is a future reconciliation scheduling anchor. It does not
   alter public session timestamps, and the adapter must not reuse it.
