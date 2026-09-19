@@ -332,12 +332,23 @@ season-qualified mapping (D3).
 Jolpica provides no stable event identifier. GridView therefore defines a
 season-scoped, explicitly curated **provider locator** — the complete tuple:
 
-| Component   | Jolpica source      |
-| ----------- | ------------------- |
-| `season`    | `season`            |
-| `round`     | `round`             |
-| `raceName`  | `raceName`, exact   |
-| `circuitId` | `Circuit.circuitId` |
+| Component   | Jolpica source      | Where it is curated                           |
+| ----------- | ------------------- | --------------------------------------------- |
+| `season`    | `season`            | The existing season qualifier of the key (D3) |
+| `round`     | `round`             | The mapping record                            |
+| `raceName`  | `raceName`, exact   | The mapping record                            |
+| `circuitId` | `Circuit.circuitId` | The mapping record                            |
+
+**The `season` component is the key's existing season qualifier, never a
+second season.** D4's key is already season-qualified, and D3 makes the
+season-scoped mapping file supply that value, so a record in
+`content/seasons/2026/` is a 2026 locator by construction. A record must not
+carry its own season alongside it: two season fields could disagree, and a
+record whose inner season contradicted its file would pass schema, uniqueness,
+target and evidence validation yet never match any lookup — a curated mapping
+that looks correct while the calendar fails closed for ever. If an
+implementation ever does represent the season inside the record, validation
+must reject any record whose inner season differs from its file's season.
 
 **The tuple is a provider locator, not a canonical identity.** It is internal
 (D10), it is never published, it never builds any GridView ID, and it is
@@ -416,13 +427,17 @@ The future implementation should:
    source/entity/field combinations with exactly one new member: Jolpica, event,
    the A2 locator. No OpenF1 event combination is added.
 2. **Represent the locator as a closed, typed composite value** that fills the
-   provider-value position of the existing key. Its key encoding must be
-   injective by construction (structured, or length-prefixed like the
-   preflight's composite identities), never a separator-joined string. Each
-   component's type is part of the key (D4). `raceName` and `circuitId` are
-   exact strings. `season` and `round` are integers; if Jolpica's recorded wire
-   form differs, the implementation defines one strict parse, and anything it
-   refuses is `invalid-key` rather than a lenient coercion.
+   provider-value position of the existing key — `round`, `raceName` and
+   `circuitId` — while the season stays the key's existing qualifier (A2). The
+   curated record therefore carries no season of its own, and a schema that
+   nonetheless admitted one would need a semantic rule requiring it to equal
+   the file's season. Its key encoding must be injective by construction
+   (structured, or length-prefixed like the preflight's composite identities),
+   never a separator-joined string. Each component's type is part of the key
+   (D4). `raceName` and `circuitId` are exact strings, `round` an integer; if
+   Jolpica's recorded wire form differs, the implementation defines one strict
+   parse, and anything it refuses is `invalid-key` rather than a lenient
+   coercion.
 3. **Extend `CanonicalRegistries` with events**, built from the curated event
    registry, so `target-missing` covers event targets too.
 4. **Add JSON Schema and `validate:content` coverage**: a schema for the event

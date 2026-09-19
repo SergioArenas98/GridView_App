@@ -392,6 +392,11 @@ exact Jolpica `circuitId`, within the Jolpica source. It locates one event in
 one season's Jolpica calendar; it is not an identity and is never treated as
 unique outside that source and season.
 
+The season comes from the file the record lives in — `content/seasons/<year>/`
+— exactly as it does for a driver, constructor or circuit mapping (§1). A
+record never repeats it, so a locator can never disagree with its own season
+and then match nothing.
+
 - **Every component must match exactly.** Matching on `raceName`, `round` or
   `circuitId` alone, or on any subset, is forbidden.
 - **No fuzzy matching, slugification, case folding or punctuation
