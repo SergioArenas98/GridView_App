@@ -17,6 +17,7 @@
 import driversRegistry from '../../../../../content/registries/drivers.mock.json';
 import constructorsRegistry from '../../../../../content/registries/constructors.mock.json';
 import circuitsRegistry from '../../../../../content/registries/circuits.mock.json';
+import eventsRegistry from '../../../../../content/registries/events.development.json';
 import mappings2026 from '../../../../../content/seasons/2026/provider-mappings.development.json';
 
 import {
@@ -51,6 +52,11 @@ export function curatedRegistries(): CanonicalRegistries {
     driver: canonicalIdsFrom(driversRegistry.drivers),
     constructor: canonicalIdsFrom(constructorsRegistry.constructors),
     circuit: canonicalIdsFrom(circuitsRegistry.circuits),
+    // Empty today, and that is the accurate state: no curated event identity
+    // exists yet, so every event mapping target is `target-missing` and no
+    // calendar can resolve. Adding one needs separately authorized evidence
+    // (ADR 0022 amendment A4).
+    event: canonicalIdsFrom(eventsRegistry.events),
   };
 }
 

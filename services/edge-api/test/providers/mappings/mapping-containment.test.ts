@@ -43,7 +43,39 @@ const mappingStructuralMarkers: readonly string[] = [
   'driver_number',
   'team_name',
   'circuit_key',
+  // The event locator's own names. `eventLocator` is GridView's internal name
+  // for the composite and `raceName` is Jolpica's field name; neither is a
+  // public contract field (the public display name is `name`), so either one
+  // on a public surface could only be a leak. `round` and `circuitId` are
+  // deliberately absent for the same reason `driverId` is: they are
+  // legitimate public GridView field names that happen to coincide with
+  // Jolpica's.
+  'eventLocator',
+  'raceName',
 ];
+
+/**
+ * A curated `providerValue`, which is a scalar for most entity kinds and the
+ * composite event locator for `event`.
+ */
+type CuratedProviderValue =
+  string | number | { round: number; raceName: string; circuitId: string };
+
+/**
+ * Every exact provider string a curated value contributes.
+ *
+ * A composite locator is **flattened into its components**. `String(locator)`
+ * would yield `[object Object]`, which is not a value any public surface could
+ * leak, so every leak marker an event mapping should contribute would silently
+ * vanish the moment real event data is curated - and the public-surface
+ * assertions would keep passing while checking nothing about it.
+ */
+function flattenProviderValue(value: CuratedProviderValue): readonly string[] {
+  if (typeof value === 'object' && value !== null) {
+    return [String(value.round), value.raceName, value.circuitId];
+  }
+  return [String(value)];
+}
 
 /** Every exact provider value the curated mapping content declares. */
 function curatedProviderValues(): readonly string[] {
@@ -66,16 +98,20 @@ function curatedProviderValues(): readonly string[] {
   const values = new Set<string>();
   for (const file of files) {
     const parsed = JSON.parse(readFileSync(file, 'utf8')) as {
-      mappings?: { providerValue: string | number }[];
-      identities?: { providerValue: string | number }[];
-      acknowledgedUnmapped?: { providerValue: string | number }[];
+      mappings?: { providerValue: CuratedProviderValue }[];
+      identities?: { providerValue: CuratedProviderValue }[];
+      acknowledgedUnmapped?: { providerValue: CuratedProviderValue }[];
     };
     for (const group of [
       parsed.mappings,
       parsed.identities,
       parsed.acknowledgedUnmapped,
     ]) {
-      for (const entry of group ?? []) values.add(String(entry.providerValue));
+      for (const entry of group ?? []) {
+        for (const value of flattenProviderValue(entry.providerValue)) {
+          values.add(value);
+        }
+      }
     }
   }
   return [...values];
@@ -220,6 +256,32 @@ describe('an unmapped identity produces a bounded operational signal', () => {
     expect(String(event.providerMappingValue).length).toBeLessThanOrEqual(67);
     expect(event.providerMappingValue).not.toBe(long);
   });
+
+  it('bounds every component of an event locator', () => {
+    // A composite locator is rendered component by component, and each one
+    // carries the same bound as a scalar value: an operator can still tell
+    // which event failed, and nothing provider-controlled is unbounded
+    // (ADR 0022 D10, amendment A5.5).
+    const long = 'y'.repeat(500);
+    const event = providerMappingFailureEvent({
+      reason: 'unmapped',
+      season: SEASON,
+      source: 'jolpica',
+      entity: 'event',
+      providerField: 'eventLocator',
+      providerValue: { round: 11, raceName: long, circuitId: long },
+    });
+
+    const rendered = String(event.providerMappingValue);
+    expect(rendered).not.toContain(long);
+    expect(rendered).toContain('round=11');
+    expect(rendered).toContain('raceName=');
+    expect(rendered).toContain('circuitId=');
+    // Three bounded components plus their fixed labels, nothing more.
+    expect(rendered.length).toBeLessThan(230);
+    // The locator object itself is never serialized into the event.
+    expect(JSON.stringify(event)).not.toContain('"raceName"');
+  });
 });
 
 describe('provider identifiers stay out of every public surface', () => {
@@ -236,6 +298,32 @@ describe('provider identifiers stay out of every public surface', () => {
     ]) {
       expect(leakMarkers).toContain(expected);
     }
+  });
+
+  it('flattens a composite event locator into its components', () => {
+    // Guards the marker set against the `[object Object]` hole: an event
+    // mapping must contribute its raceName and circuitId as real markers, not
+    // one useless stringified object. Asserted directly because no event
+    // mapping is curated yet, so the curated content cannot exercise it.
+    expect(
+      flattenProviderValue({
+        round: 11,
+        raceName: 'Hungarian Grand Prix',
+        circuitId: 'hungaroring',
+      }),
+    ).toEqual(['11', 'Hungarian Grand Prix', 'hungaroring']);
+
+    expect(flattenProviderValue('norris')).toEqual(['norris']);
+    expect(flattenProviderValue(1)).toEqual(['1']);
+  });
+
+  it('names the event locator among the structural markers', () => {
+    expect(mappingStructuralMarkers).toContain('eventLocator');
+    expect(mappingStructuralMarkers).toContain('raceName');
+    // `round` and `circuitId` are legitimate public contract field names and
+    // must stay out of the marker set, exactly as `driverId` does.
+    expect(mappingStructuralMarkers).not.toContain('round');
+    expect(mappingStructuralMarkers).not.toContain('circuitId');
   });
 
   // Case 42

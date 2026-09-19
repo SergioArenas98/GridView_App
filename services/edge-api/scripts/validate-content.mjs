@@ -13,6 +13,7 @@ import { heading, printAjvErrors, summarize } from './lib/report.mjs';
 import {
   validateEvidenceCoverage,
   validateMappingDocument,
+  validateRegistryDocumentSet,
   validateSeasonalDocumentSet,
 } from './lib/provider-mapping-rules.mjs';
 
@@ -38,6 +39,7 @@ const kindToSchemaId = {
     'https://gridview.local/schemas/constructor-registry.schema.json',
   'circuit-registry':
     'https://gridview.local/schemas/circuit-registry.schema.json',
+  'event-registry': 'https://gridview.local/schemas/event-registry.schema.json',
   'driver-season-entries':
     'https://gridview.local/schemas/driver-season-entries.schema.json',
   'constructor-season-entries':
@@ -111,17 +113,36 @@ for (const file of files) {
 
 heading('provider mapping semantics');
 
+/**
+ * Structural problems with the curated registries themselves.
+ *
+ * Collected rather than printed inline so they gate the dependent passes the
+ * same way `validateSeasonalDocumentSet`'s problems already do: when the
+ * canonical identity set is undecided, every target check below it is
+ * meaningless and would only bury the real cause under a cascade.
+ */
+const registryProblems = [];
+
 const registryIds = {
   driver: collectIds('driver-registry', 'drivers'),
   constructor: collectIds('constructor-registry', 'constructors'),
   circuit: collectIds('circuit-registry', 'circuits'),
+  event: collectIds('event-registry', 'events'),
 };
 
+/**
+ * Collects the canonical IDs a registry kind owns.
+ *
+ * The rule itself lives in `./lib/provider-mapping-rules.mjs` so it can be
+ * unit tested directly, exactly like the seasonal document-set rule.
+ */
 function collectIds(kind, arrayKey) {
-  const ids = new Set();
-  for (const { data } of parsedByKind.get(kind) ?? []) {
-    for (const entry of data[arrayKey] ?? []) ids.add(entry.id);
-  }
+  const { problems, ids } = validateRegistryDocumentSet(
+    kind,
+    arrayKey,
+    parsedByKind.get(kind) ?? [],
+  );
+  registryProblems.push(...problems);
   return ids;
 }
 
@@ -136,14 +157,14 @@ let semanticChecks = 0;
 const { problems: structureProblems, mappingsBySeason } =
   validateSeasonalDocumentSet(mappingDocuments, evidenceDocuments);
 
-for (const problem of structureProblems) {
+for (const problem of [...registryProblems, ...structureProblems]) {
   semanticChecks += 1;
   failures += 1;
   console.error(`FAIL ${problem.label}`);
   console.error(`  - (root) ${problem.message}`);
 }
 
-if (structureProblems.length === 0) {
+if (registryProblems.length === 0 && structureProblems.length === 0) {
   for (const { label, data } of mappingDocuments) {
     semanticChecks += 1;
     const problems = validateMappingDocument(data, registryIds);

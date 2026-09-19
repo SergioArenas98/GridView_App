@@ -50,6 +50,7 @@ const registries = {
   driver: new Set(['lando-norris']),
   constructor: new Set<string>(),
   circuit: new Set<string>(),
+  event: new Set<string>(),
 };
 
 describe('the key decoder rejects any additional property', () => {

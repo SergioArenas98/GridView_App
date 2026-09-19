@@ -1,0 +1,7 @@
+{
+  "$schema": "../schemas/event-registry.schema.json",
+  "kind": "event-registry",
+  "status": "development",
+  "note": "The curated registry that owns every eventSlug. It is EMPTY, and that is the accurate state: no curated Grand Prix event identity has been created yet, and creating one needs separately authorized provider evidence (ADR 0022 amendment A4). Because event resolution fails closed, an empty registry means every event mapping target is missing and no Jolpica calendar can resolve - which is the intended behaviour, not a gap to work around. Do not add a record here to make a test or a build pass: automated tests build synthetic registries inside the test run, outside content/ entirely. A slug added here is immutable for ever: it is never renamed, repointed at another event or reused.",
+  "events": []
+}

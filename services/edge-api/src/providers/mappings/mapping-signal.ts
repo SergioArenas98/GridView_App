@@ -14,6 +14,7 @@
  */
 
 import type { LogEvent } from '../../logging/logger';
+import type { ProviderEventLocator } from './mapping-key';
 import type { ProviderMappingFailure } from './mapping-registry';
 
 /** Bounded failure category, consistent with the existing logging vocabulary. */
@@ -30,7 +31,27 @@ export const PROVIDER_MAPPING_OPERATION = 'provider.mapping.resolve';
  */
 const DIAGNOSTIC_VALUE_MAX_LENGTH = 64;
 
-function boundedDiagnosticValue(value: string | number): string {
+function boundedDiagnosticValue(
+  value: string | number | ProviderEventLocator,
+): string {
+  // A composite event locator is rendered component by component, and **each
+  // component carries the same bound as a scalar value**. Bounding only the
+  // joined text would truncate the trailing components away entirely, leaving
+  // an operator unable to tell which event failed to resolve; bounding each
+  // one keeps the signal diagnostic while staying bounded overall (ADR 0022
+  // D10, amendment A5.5). Nothing provider-controlled is unbounded, and the
+  // locator object itself is never serialized.
+  if (typeof value === 'object' && value !== null) {
+    return (
+      `round=${boundedScalar(value.round)} ` +
+      `raceName=${boundedScalar(value.raceName)} ` +
+      `circuitId=${boundedScalar(value.circuitId)}`
+    );
+  }
+  return boundedScalar(value);
+}
+
+function boundedScalar(value: string | number): string {
   // Defensive: a caller that casts past the types must not be able to reach
   // string methods on a non-string and throw from inside a logging helper.
   const text = typeof value === 'string' ? value : String(value);

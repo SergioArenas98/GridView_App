@@ -19,6 +19,7 @@ import {
   isPublicIdGrammar,
   validateProviderMappingKey,
   type GridViewIdFor,
+  type ProviderEventLocator,
   type ProviderKeyProblem,
   type ProviderMappingEntity,
   type ProviderMappingField,
@@ -67,7 +68,7 @@ export interface ProviderMappingFailure {
    * action for it is "fix the adapter", not "curate this identifier", so the
    * bounded `keyProblem` carries the whole diagnosis instead.
    */
-  readonly providerValue: string | number | null;
+  readonly providerValue: string | number | ProviderEventLocator | null;
   /** Bounded sub-reason; present only when `reason` is `invalid-key`. */
   readonly keyProblem?: ProviderKeyProblem;
 }
@@ -94,11 +95,18 @@ export interface RegistryProblem {
     | 'target-missing';
 }
 
-/** The curated registries that own canonical identities, by entity kind. */
+/**
+ * The curated registries that own canonical identities, by entity kind.
+ *
+ * `event` holds curator-created `eventSlug` values from the curated event
+ * registry (amendment A1, A5.3), so `target-missing` covers event targets on
+ * exactly the same terms as driver, constructor and circuit targets.
+ */
 export interface CanonicalRegistries {
   readonly driver: ReadonlySet<string>;
   readonly constructor: ReadonlySet<string>;
   readonly circuit: ReadonlySet<string>;
+  readonly event: ReadonlySet<string>;
 }
 
 interface IndexedTarget {

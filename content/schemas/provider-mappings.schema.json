@@ -45,6 +45,17 @@
       "minimum": 1,
       "maximum": 9007199254740991
     },
+    "eventLocator": {
+      "description": "The complete Jolpica event locator: round, exact raceName and exact Circuit.circuitId together. Every component must match exactly - matching on any proper subset is forbidden, and no fuzzy, slugified, case-folded or punctuation-normalized match exists. It carries NO season: the season is the key's existing qualifier, supplied by the content/seasons/<year>/ file this record lives in, so a locator can never disagree with its own season and then match nothing. additionalProperties:false therefore rejects a redundant inner \"season\". This is a provider locator, not an identity: it is internal, never published and never builds a GridView ID. See docs/adr/0022-curated-provider-identifier-mappings.md amendment A2.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["round", "raceName", "circuitId"],
+      "properties": {
+        "round": { "$ref": "common.schema.json#/$defs/round" },
+        "raceName": { "$ref": "#/$defs/providerString" },
+        "circuitId": { "$ref": "#/$defs/providerString" }
+      }
+    },
     "mapping": {
       "description": "One curated mapping. The source, entity kind, provider field and provider value type form a single valid discriminated combination; no other combination is representable.",
       "oneOf": [
@@ -169,6 +180,28 @@
             "entity": { "const": "circuit" },
             "providerField": { "const": "circuit_key" },
             "providerValue": { "$ref": "#/$defs/providerInteger" },
+            "gridviewId": { "$ref": "common.schema.json#/$defs/slug" },
+            "evidence": { "$ref": "#/$defs/evidence" },
+            "note": { "$ref": "#/$defs/boundedText" }
+          }
+        },
+        {
+          "description": "The one event combination. \"eventLocator\" is GridView's own name for the composite locator, because Jolpica publishes no event identifier and the locator spans three Jolpica fields at once. \"gridviewId\" is an eventSlug that must already exist in the curated event registry; it is never a GrandPrix.id. There is no OpenF1 event combination.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "gridviewId",
+            "evidence"
+          ],
+          "properties": {
+            "source": { "const": "jolpica" },
+            "entity": { "const": "event" },
+            "providerField": { "const": "eventLocator" },
+            "providerValue": { "$ref": "#/$defs/eventLocator" },
             "gridviewId": { "$ref": "common.schema.json#/$defs/slug" },
             "evidence": { "$ref": "#/$defs/evidence" },
             "note": { "$ref": "#/$defs/boundedText" }

@@ -19,6 +19,7 @@ export const registryFileForEntity = Object.freeze({
   driver: 'registries/drivers.mock.json',
   constructor: 'registries/constructors.mock.json',
   circuit: 'registries/circuits.mock.json',
+  event: 'registries/events.development.json',
 });
 
 /**
@@ -62,6 +63,15 @@ export const providerKeyShapes = Object.freeze([
     providerField: 'circuit_key',
     valueType: 'integer',
   },
+  // Exactly one event combination, and it is Jolpica's (ADR 0022 amendment
+  // A5.1). `eventLocator` is GridView's own name for the composite locator,
+  // because Jolpica publishes no event identifier at all.
+  {
+    source: 'jolpica',
+    entity: 'event',
+    providerField: 'eventLocator',
+    valueType: 'locator',
+  },
 ]);
 
 /**
@@ -77,6 +87,9 @@ export const providerKeyShapes = Object.freeze([
 const PROVIDER_STRING_MAX_LENGTH = 64;
 const SEASON_MIN = 1950;
 const SEASON_MAX = 2100;
+/** Matches `common.schema.json#/$defs/round` and the TypeScript runtime. */
+const ROUND_MIN = 1;
+const ROUND_MAX = 40;
 
 /** Exact upstream string: bounded, no control character, no edge whitespace. */
 export function isProviderStringValue(value) {
@@ -112,9 +125,52 @@ export function isSeason(value) {
   );
 }
 
+function isRound(value) {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= ROUND_MIN &&
+    value <= ROUND_MAX
+  );
+}
+
+/**
+ * The complete, closed set of properties an event locator may carry.
+ *
+ * `season` is deliberately absent: it is the key's own qualifier, supplied by
+ * the season file the record lives in (ADR 0022 amendment A2). A locator that
+ * carried its own season could contradict its file and then match nothing for
+ * ever while passing every other check, so a redundant inner `season` is
+ * rejected here rather than reconciled.
+ */
+export const PROVIDER_LOCATOR_PROPERTIES = new Set([
+  'round',
+  'raceName',
+  'circuitId',
+]);
+
+/** An exact, complete Jolpica event locator. No component is repaired. */
+export function isProviderEventLocator(value) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  if (!hasNoUnexpectedProperty(value, PROVIDER_LOCATOR_PROPERTIES)) {
+    return false;
+  }
+  if (Object.keys(value).length !== PROVIDER_LOCATOR_PROPERTIES.size) {
+    return false;
+  }
+  return (
+    isRound(value.round) &&
+    isProviderStringValue(value.raceName) &&
+    isProviderStringValue(value.circuitId)
+  );
+}
+
 function valueTypeOf(value) {
   if (isProviderStringValue(value)) return 'string';
   if (isProviderIntegerValue(value)) return 'integer';
+  if (isProviderEventLocator(value)) return 'locator';
   return null;
 }
 
@@ -220,14 +276,37 @@ export function canonicalKey({
     source,
     entity,
     providerField,
-    valueType,
-    String(providerValue),
+    ...valueComponents(valueType, providerValue),
   ];
   let encoded = '';
   for (const component of components) {
     encoded += component.length + ':' + component + ';';
   }
   return encoded;
+}
+
+/**
+ * The type tag followed by the value's own components.
+ *
+ * The tag is length-prefixed and comes first, so it determines how many frames
+ * follow: a locator contributes three where a scalar contributes one, and no
+ * scalar key can produce a locator key's frame sequence. The locator's
+ * components are never joined into one string, so a `raceName` containing the
+ * framing characters cannot impersonate a `circuitId`.
+ *
+ * Must stay byte-identical to `valueComponents` in
+ * `src/providers/mappings/mapping-key.ts`.
+ */
+function valueComponents(valueType, providerValue) {
+  if (valueType === 'locator') {
+    return [
+      'locator',
+      String(providerValue.round),
+      providerValue.raceName,
+      providerValue.circuitId,
+    ];
+  }
+  return [valueType, String(providerValue)];
 }
 
 /** Human-readable form of a key, for validator output only. */
@@ -247,8 +326,32 @@ export function describeKey({
     '.' +
     providerField +
     ' = ' +
-    JSON.stringify(providerValue)
+    describeValue(providerValue)
   );
+}
+
+/**
+ * A deterministic rendering of a provider value.
+ *
+ * A locator is rendered component by component in a fixed order rather than
+ * through `JSON.stringify`, whose output follows the object's own property
+ * insertion order: two records describing the same locator with their keys
+ * written in a different order would otherwise produce different validator
+ * messages for the same problem.
+ */
+function describeValue(providerValue) {
+  if (isProviderEventLocator(providerValue)) {
+    return (
+      '{round: ' +
+      providerValue.round +
+      ', raceName: ' +
+      JSON.stringify(providerValue.raceName) +
+      ', circuitId: ' +
+      JSON.stringify(providerValue.circuitId) +
+      '}'
+    );
+  }
+  return JSON.stringify(providerValue);
 }
 
 /**
@@ -334,6 +437,69 @@ export function validateSeasonalDocumentSet(
   }
 
   return { problems, mappingsBySeason };
+}
+
+/**
+ * Enforces exactly one curated registry document per entity kind.
+ *
+ * `src/providers/mappings/index.ts` imports **one** registry file per kind, so
+ * accepting several at build time would let validated content diverge from
+ * what actually ships: a mapping whose target lives only in the second file
+ * would pass `validate:content` and then be rejected as `target-missing` by
+ * the deployed registry - content that looks reviewed and correct while the
+ * resource fails closed. Merging them would preserve that divergence rather
+ * than remove it, so a second document is rejected outright. This is the same
+ * rule `validateSeasonalDocumentSet` applies to seasonal documents.
+ *
+ * It also reports a repeated canonical ID rather than letting a `Set` collapse
+ * it. Two curated entries claiming one identity is the mistake that matters
+ * most, and for an immutable `eventSlug` it is unrecoverable rather than
+ * untidy (ADR 0022 amendment A1).
+ *
+ * `documents` is a `{ label, data }` list for one kind. Returns
+ * `{ problems, ids }`; `ids` is empty whenever `problems` is non-empty,
+ * because a canonical set that is undecided must not be used for target
+ * checks. Output order depends only on document label and record index, never
+ * on file discovery order, and no document content is echoed.
+ */
+export function validateRegistryDocumentSet(kind, arrayKey, documents) {
+  const problems = [];
+  const ids = new Set();
+
+  if (documents.length > 1) {
+    const paths = documents.map((entry) => entry.label).sort();
+    problems.push({
+      label: paths[0],
+      message:
+        documents.length +
+        ' ' +
+        kind +
+        ' documents; exactly one is allowed because the runtime imports one: ' +
+        paths.join(', '),
+    });
+    return { problems, ids: new Set() };
+  }
+
+  for (const { label, data } of documents) {
+    (data[arrayKey] ?? []).forEach((entry, index) => {
+      if (ids.has(entry.id)) {
+        problems.push({
+          label,
+          message:
+            arrayKey +
+            '[' +
+            index +
+            '] duplicate canonical id "' +
+            entry.id +
+            '"',
+        });
+        return;
+      }
+      ids.add(entry.id);
+    });
+  }
+
+  return problems.length > 0 ? { problems, ids: new Set() } : { problems, ids };
 }
 
 /**

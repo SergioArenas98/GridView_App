@@ -131,6 +131,35 @@
               "$ref": "provider-mappings.schema.json#/$defs/evidence"
             }
           }
+        },
+        {
+          "description": "One observed Jolpica event locator. All four components - the file's season plus round, raceName and circuitId - must be recorded as observed; none may be recalled from memory, inferred from a display name or completed by hand.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "entity",
+            "providerField",
+            "providerValue",
+            "evidence"
+          ],
+          "properties": {
+            "source": {
+              "const": "jolpica"
+            },
+            "entity": {
+              "const": "event"
+            },
+            "providerField": {
+              "const": "eventLocator"
+            },
+            "providerValue": {
+              "$ref": "provider-mappings.schema.json#/$defs/eventLocator"
+            },
+            "evidence": {
+              "$ref": "provider-mappings.schema.json#/$defs/evidence"
+            }
+          }
         }
       ]
     },
@@ -149,7 +178,7 @@
           "enum": ["jolpica", "openf1"]
         },
         "entity": {
-          "enum": ["driver", "constructor", "circuit"]
+          "enum": ["driver", "constructor", "circuit", "event"]
         },
         "providerField": {
           "enum": [
@@ -158,7 +187,8 @@
             "circuitId",
             "driver_number",
             "team_name",
-            "circuit_key"
+            "circuit_key",
+            "eventLocator"
           ]
         },
         "providerValue": {
@@ -168,6 +198,9 @@
             },
             {
               "$ref": "provider-mappings.schema.json#/$defs/providerInteger"
+            },
+            {
+              "$ref": "provider-mappings.schema.json#/$defs/eventLocator"
             }
           ]
         },

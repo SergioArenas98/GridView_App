@@ -355,6 +355,7 @@ describe('the validated-construction boundary has no structural bypass', () => {
       driver: drivers,
       constructor: new Set(),
       circuit: new Set(),
+      event: new Set(),
     });
     expect(built.isValid).toBe(true);
 

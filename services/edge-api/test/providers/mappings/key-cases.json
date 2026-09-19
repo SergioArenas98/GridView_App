@@ -546,6 +546,338 @@
         "providerField": "team_name",
         "providerValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎🏎"
       }
+    },
+    {
+      "label": "jolpica event locator",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 11,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "jolpica event locator at the round lower bound",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 1,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "jolpica event locator at the round upper bound",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 40,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "jolpica event locator differing only in circuit",
+      "accepted": true,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 11,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "balaton"
+        }
+      }
+    },
+    {
+      "label": "event locator carrying a redundant season",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 11,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring",
+          "season": 2026
+        }
+      }
+    },
+    {
+      "label": "event locator missing circuitId",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 11,
+          "raceName": "Hungarian Grand Prix"
+        }
+      }
+    },
+    {
+      "label": "event locator missing round",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "event locator with a zero round",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 0,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "event locator with a negative round",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": -1,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "event locator above the round upper bound",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 41,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "event locator with a non-integer round",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 1.5,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "event locator with a string round",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": "11",
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "event locator with an empty raceName",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 11,
+          "raceName": "",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "event locator with an empty circuitId",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 11,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": ""
+        }
+      }
+    },
+    {
+      "label": "event locator with a padded raceName",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 11,
+          "raceName": " Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "event locator with a trailing-space circuitId",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 11,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring "
+        }
+      }
+    },
+    {
+      "label": "event locator as an array",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": [11, "Hungarian Grand Prix", "hungaroring"]
+      }
+    },
+    {
+      "label": "event locator as a bare string",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": "11|Hungarian Grand Prix|hungaroring"
+      }
+    },
+    {
+      "label": "openf1 event locator has no declared combination",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "openf1",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 11,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "jolpica event keyed on driverId instead of the locator",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "driverId",
+        "providerValue": {
+          "round": 11,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "jolpica driver keyed on a locator value",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "driver",
+        "providerField": "driverId",
+        "providerValue": {
+          "round": 11,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
+    },
+    {
+      "label": "jolpica event with a plain string value",
+      "accepted": false,
+      "key": {
+        "season": 2026,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": "hungaroring"
+      }
+    },
+    {
+      "label": "event locator in an out-of-range season",
+      "accepted": false,
+      "key": {
+        "season": 1949,
+        "source": "jolpica",
+        "entity": "event",
+        "providerField": "eventLocator",
+        "providerValue": {
+          "round": 11,
+          "raceName": "Hungarian Grand Prix",
+          "circuitId": "hungaroring"
+        }
+      }
     }
   ]
 }

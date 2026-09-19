@@ -27,14 +27,28 @@ export type ProviderMappingSource = (typeof providerMappingSources)[number];
  * The stable identity kinds a curated GridView registry already governs.
  * Meeting and session identities are deliberately excluded: no authoritative
  * contract requires them in this phase, and neither has a curated registry.
+ *
+ * `event` was added by the ADR 0022 amendment of 2026-09-16 (A1, A5.1), which
+ * introduced the curated GridView event registry that owns `eventSlug`.
  */
 export const providerMappingEntities = [
   'driver',
   'constructor',
   'circuit',
+  'event',
 ] as const;
 export type ProviderMappingEntity = (typeof providerMappingEntities)[number];
 
+/**
+ * The upstream field a key is read from.
+ *
+ * Every member but `eventLocator` is the literal name of a provider field.
+ * `eventLocator` is **GridView's own name for a composite locator**, because
+ * Jolpica publishes no event identifier at all (amendment A2): the locator
+ * spans three Jolpica fields at once and no single upstream field name
+ * describes it. Naming it here keeps the five-part key shape (D4) intact
+ * rather than making the field position optional for one entity kind.
+ */
 export const providerMappingFields = [
   'driverId',
   'constructorId',
@@ -42,8 +56,26 @@ export const providerMappingFields = [
   'driver_number',
   'team_name',
   'circuit_key',
+  'eventLocator',
 ] as const;
 export type ProviderMappingField = (typeof providerMappingFields)[number];
+
+/**
+ * The Jolpica event locator: a complete, season-scoped provider locator.
+ *
+ * It is **not an identity** (amendment A2). It is internal, never published,
+ * never builds a GridView ID, and is never unique outside its source and
+ * season. The season is deliberately **absent**: it is the key's existing
+ * season qualifier, supplied by the `content/seasons/<year>/` file the record
+ * lives in (D3). A record that carried its own season could disagree with its
+ * file and then match nothing while passing every other check, so a second
+ * season field is unrepresentable here and rejected at decode time.
+ */
+export interface ProviderEventLocator {
+  readonly round: number;
+  readonly raceName: string;
+  readonly circuitId: string;
+}
 
 /**
  * The closed discriminated union of provider keys.
@@ -103,6 +135,13 @@ export type ProviderMappingKey =
       readonly entity: 'circuit';
       readonly providerField: 'circuit_key';
       readonly providerValue: number;
+    }
+  | {
+      readonly season: number;
+      readonly source: 'jolpica';
+      readonly entity: 'event';
+      readonly providerField: 'eventLocator';
+      readonly providerValue: ProviderEventLocator;
     };
 
 /** The key variants whose entity kind is `E`. */
@@ -130,11 +169,22 @@ export type GridViewConstructorId = string & {
 export type GridViewCircuitId = string & {
   readonly [gridViewIdBrand]: 'circuit';
 };
+/**
+ * A curator-created `eventSlug` from the curated event registry.
+ *
+ * It is **not** a `GrandPrix.id`. `GrandPrix.id` stays `{season}-{eventSlug}`
+ * and is built by `canonicalGrandPrixId`; nothing here constructs it
+ * (amendment A1).
+ */
+export type GridViewEventId = string & {
+  readonly [gridViewIdBrand]: 'event';
+};
 
 export interface GridViewIdByEntity {
   readonly driver: GridViewDriverId;
   readonly constructor: GridViewConstructorId;
   readonly circuit: GridViewCircuitId;
+  readonly event: GridViewEventId;
 }
 
 /** The GridView identity type a key of entity kind `E` resolves to. */
@@ -149,8 +199,17 @@ interface KeyShape {
   readonly source: ProviderMappingSource;
   readonly entity: ProviderMappingEntity;
   readonly providerField: ProviderMappingField;
-  readonly valueType: 'string' | 'integer';
+  readonly valueType: ProviderValueType;
 }
+
+/**
+ * The value's type, which is part of the key (D4).
+ *
+ * `locator` is the composite Jolpica event locator. Keeping it a distinct tag
+ * means an event key can never collide with a string or integer key, exactly
+ * as integer `1` can never collide with string `"1"`.
+ */
+type ProviderValueType = 'string' | 'integer' | 'locator';
 
 export const providerKeyShapes: readonly KeyShape[] = Object.freeze([
   {
@@ -188,6 +247,15 @@ export const providerKeyShapes: readonly KeyShape[] = Object.freeze([
     entity: 'circuit',
     providerField: 'circuit_key',
     valueType: 'integer',
+  },
+  // Exactly one event combination, and it is Jolpica's (amendment A5.1).
+  // No OpenF1 event combination exists: `meeting_key` stays excluded by the
+  // ADR's scope note, and the OpenF1 path remains fail-closed.
+  {
+    source: 'jolpica',
+    entity: 'event',
+    providerField: 'eventLocator',
+    valueType: 'locator',
   },
 ] as const satisfies readonly KeyShape[]);
 
@@ -240,9 +308,69 @@ export function isProviderIntegerValue(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 }
 
-function valueTypeOf(value: unknown): 'string' | 'integer' | null {
+/**
+ * The round bound, matching `common.schema.json#/$defs/round`.
+ *
+ * A round is not an arbitrary positive integer: the curated content schema has
+ * always bounded it, and the two layers must agree or content that passed
+ * `validate:content` could still invalidate the whole runtime registry.
+ */
+const ROUND_MIN = 1;
+const ROUND_MAX = 40;
+
+function isRound(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= ROUND_MIN &&
+    value <= ROUND_MAX
+  );
+}
+
+/**
+ * The complete, closed set of properties an event locator may carry.
+ *
+ * `season` is deliberately **not** a member. The season is the key's own
+ * qualifier (amendment A2), so a locator that carried one could contradict its
+ * file and match nothing for ever while passing schema, uniqueness, target and
+ * evidence validation. Rejecting it outright is stricter than the fallback A2
+ * allows (requiring an inner season to equal the file's), and is possible here
+ * precisely because no inner season is represented.
+ */
+export const PROVIDER_LOCATOR_PROPERTIES: ReadonlySet<string> = new Set([
+  'round',
+  'raceName',
+  'circuitId',
+]);
+
+/**
+ * An exact, complete Jolpica event locator.
+ *
+ * Every component is validated on its own terms and none is repaired: no
+ * trimming, case folding, punctuation rewriting or numeric coercion applies to
+ * any of them (amendment A2).
+ */
+export function isProviderEventLocator(
+  value: unknown,
+): value is ProviderEventLocator {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  if (!hasExactlyOwnProperties(value, PROVIDER_LOCATOR_PROPERTIES)) {
+    return false;
+  }
+  const locator = value as Record<string, unknown>;
+  return (
+    isRound(locator.round) &&
+    isProviderStringValue(locator.raceName) &&
+    isProviderStringValue(locator.circuitId)
+  );
+}
+
+function valueTypeOf(value: unknown): ProviderValueType | null {
   if (isProviderStringValue(value)) return 'string';
   if (isProviderIntegerValue(value)) return 'integer';
+  if (isProviderEventLocator(value)) return 'locator';
   return null;
 }
 
@@ -382,9 +510,24 @@ export function decodeProviderMappingKey(
       source: shape.source,
       entity: shape.entity,
       providerField: shape.providerField,
-      providerValue: record.providerValue,
+      // A composite value is copied into a frozen object of its own rather
+      // than aliased. The caller keeps whatever it passed in - nothing here
+      // mutates it - and the decoded key cannot be changed afterwards through
+      // a reference the caller still holds.
+      providerValue:
+        valueType === 'locator'
+          ? frozenLocator(record.providerValue as ProviderEventLocator)
+          : record.providerValue,
     } as ProviderMappingKey,
   };
+}
+
+function frozenLocator(locator: ProviderEventLocator): ProviderEventLocator {
+  return Object.freeze({
+    round: locator.round,
+    raceName: locator.raceName,
+    circuitId: locator.circuitId,
+  });
 }
 
 /**
@@ -441,12 +584,30 @@ export function canonicalKey(key: ProviderMappingKey): string {
     key.source,
     key.entity,
     key.providerField,
-    typeof key.providerValue === 'number' ? 'integer' : 'string',
-    String(key.providerValue),
+    ...valueComponents(key.providerValue),
   ];
   let encoded = '';
   for (const component of components) {
     encoded += component.length + ':' + component + ';';
   }
   return encoded;
+}
+
+/**
+ * The type tag followed by the value's own components.
+ *
+ * The tag comes first and is itself length-prefixed, so it determines how many
+ * frames follow. That keeps the whole encoding injective even though a locator
+ * contributes three frames where a scalar contributes one: no scalar key can
+ * ever produce the frame sequence of a locator key, because no scalar tag is
+ * `locator`. The locator's components are emitted in a fixed order and are
+ * never joined into one string, so a `raceName` containing the framing
+ * characters cannot impersonate a `circuitId`.
+ */
+function valueComponents(
+  value: string | number | ProviderEventLocator,
+): readonly string[] {
+  if (typeof value === 'number') return ['integer', String(value)];
+  if (typeof value === 'string') return ['string', value];
+  return ['locator', String(value.round), value.raceName, value.circuitId];
 }

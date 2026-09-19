@@ -5,7 +5,8 @@
 - Phase: 9B-3
 - Amended: 2026-09-16 —
   [Grand Prix event identity](#amendment-2026-09-16-grand-prix-event-identity)
-  (decision only; nothing implemented)
+  (decided 2026-09-16; the **mechanism** was implemented 2026-09-19, the
+  curated event dataset and the adapter remain absent)
 - Closes: gap **G8** (Provider Evaluation §14.4 **G-e**, Backend Scheme
   §8.1) — **the mechanism only.** The mapping **dataset** is deliberately
   limited to identifiers already recorded in Provider Evaluation §8; live
@@ -126,7 +127,9 @@ at module scope — the opposite of per-request accounting and quota state.
 ### D7 - Validation is both structural and semantic
 
 JSON Schema 2020-12 owns one record's shape: a closed discriminated union of
-the six valid (source, entity, field, value type) combinations,
+the valid (source, entity, field, value type) combinations - six when this ADR
+was accepted, seven since the 2026-09-16 amendment added the Jolpica event
+locator -
 `additionalProperties: false` at every boundary, bounded strings, no empty
 value, no leading or trailing whitespace, no control characters, safe-integer
 bounds, and the public-ID grammar on every target.
@@ -254,16 +257,20 @@ integers and can be added later under the same model if a contract requires it.
 
 ## Amendment 2026-09-16: Grand Prix event identity
 
-- Status: Accepted — **decision only**
+- Status: Accepted. **Mechanism implemented 2026-09-19** (A5); the dataset,
+  the adapter and the A7 assembly change are still outstanding
 - Date: 2026-09-16
 - Phase: 9B, recorded before the first Jolpica calendar adapter slice
 - Amends: this ADR's [scope note](#scope-note), and — for coordinated season
   assembly only — the rule in
   [ADR 0023](0023-multi-source-provider-coordination.md) D11 that `hasResults` is
   never rewritten (A7)
-- Implements: **nothing.** No registry, TypeScript type, JSON Schema, content
-  validator, mapping record, fixture, adapter, test, configuration or CI file
-  changes with it.
+- Implements: **nothing when it was recorded.** No registry, TypeScript type,
+  JSON Schema, content validator, mapping record, fixture, adapter, test,
+  configuration or CI file changed with it. The A5 mechanism — the event
+  registry, the `event` mapping entity, their schemas, `validate:content`
+  coverage and tests — landed separately on 2026-09-19. **No mapping record,
+  no adapter and no configuration change landed with it either.**
 
 ### Amendment context
 
@@ -419,9 +426,17 @@ publishing the locator, or any provider identifier, as identity.
   observed provider value. No event mapping could be seeded without new
   evidence.
 
-### A5 - Required implementation shape (not implemented)
+### A5 - Required implementation shape
 
-The future implementation should:
+> **Implemented as a mechanism on 2026-09-19** (Phase 9B event-registry
+> mechanism). All five items below exist, with schemas, `validate:content`
+> coverage and tests. **The curated event dataset does not**: the event
+> registry is committed empty, no event mapping record exists, no Jolpica
+> adapter exists, and no provider request has been made. The mechanism is
+> dormant and unbundled — no runtime module outside `src/providers/mappings/`
+> imports it, and the Worker entry point cannot reach it.
+
+The implementation should:
 
 1. **Extend the mapping entity union with `event`**, and the closed
    source/entity/field combinations with exactly one new member: Jolpica, event,
@@ -438,6 +453,21 @@ The future implementation should:
    Jolpica's recorded wire form differs, the implementation defines one strict
    parse, and anything it refuses is `invalid-key` rather than a lenient
    coercion.
+
+   **As implemented (2026-09-19).** The field position carries the literal
+   `eventLocator`, which is **GridView's own name for the composite**, not a
+   Jolpica field name: the locator spans three Jolpica fields at once, so no
+   upstream name describes it, and naming it keeps the five-part key shape
+   intact rather than making the field position optional for one entity kind.
+   The value is a closed `{ round, raceName, circuitId }` object with
+   `additionalProperties: false`; a redundant inner `season` is **rejected**
+   rather than reconciled, which is stricter than the fallback this section
+   allows and is possible because no inner season is represented. `round`
+   carries the existing curated bound (`common.schema.json#/$defs/round`,
+   1-40), so the schema and the runtime agree. The key encoding tags the value
+   type `locator` and emits the three components as separate length-prefixed
+   frames, so the tag determines the frame count and the encoding stays
+   injective across scalar and composite keys alike.
 3. **Extend `CanonicalRegistries` with events**, built from the curated event
    registry, so `target-missing` covers event targets too.
 4. **Add JSON Schema and `validate:content` coverage**: a schema for the event
@@ -605,7 +635,7 @@ must satisfy.
 | Item                                         | State                                                                    |
 | -------------------------------------------- | ------------------------------------------------------------------------ |
 | Event identity decision                      | **Accepted** (2026-09-16)                                                |
-| Event registry and `event` mapping support   | **Not implemented**                                                      |
+| Event registry and `event` mapping support   | **Implemented as a mechanism** (2026-09-19); dormant and unbundled (A5)  |
 | Event mapping dataset                        | **Not created**; no complete locator is recorded (A4)                    |
 | `hasResults` derivation in assembly          | **Not implemented**; the preflight and assembly are unchanged (A7)       |
 | Jolpica adapter, for any resource            | **Not implemented and not registered**                                   |
@@ -619,6 +649,13 @@ must satisfy.
 registry mechanism and curated event mapping data for the season it serves
 actually exist. This amendment defines the implementation path; it does not
 shorten it.
+
+> **Status on 2026-09-19.** The mechanism half now exists and is dormant. The
+> **dataset** half does not: the curated event registry is committed empty, no
+> event mapping record exists, no complete locator is recorded anywhere in this
+> repository (A4), and gathering one is still a separately authorized activity.
+> The adapter itself remains unimplemented and unregistered, so the calendar
+> resource is still blocked.
 
 `PROVIDER_MODE` still admits exactly `mock` and `none`, staging is `mock` and
 production is `none`. Nothing here authorizes a provider request, deployment,
