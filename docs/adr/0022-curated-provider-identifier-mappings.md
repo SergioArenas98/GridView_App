@@ -5,8 +5,9 @@
 - Phase: 9B-3
 - Amended: 2026-09-16 —
   [Grand Prix event identity](#amendment-2026-09-16-grand-prix-event-identity)
-  (decided 2026-09-16; the **mechanism** was implemented 2026-09-19, the
-  curated event dataset and the adapter remain absent)
+  (decided 2026-09-16; the **mechanism** was implemented 2026-09-19 and the
+  curated **2026 event dataset** was added the same day; the adapter remains
+  absent)
 - Closes: gap **G8** (Provider Evaluation §14.4 **G-e**, Backend Scheme
   §8.1) — **the mechanism only.** The mapping **dataset** is deliberately
   limited to identifiers already recorded in Provider Evaluation §8; live
@@ -257,8 +258,9 @@ integers and can be added later under the same model if a contract requires it.
 
 ## Amendment 2026-09-16: Grand Prix event identity
 
-- Status: Accepted. **Mechanism implemented 2026-09-19** (A5); the dataset,
-  the adapter and the A7 assembly change are still outstanding
+- Status: Accepted. **Mechanism implemented 2026-09-19** (A5), and the
+  curated **2026 event dataset** added the same day (A4 status note); the
+  adapter and the A7 assembly change are still outstanding
 - Date: 2026-09-16
 - Phase: 9B, recorded before the first Jolpica calendar adapter slice
 - Amends: this ADR's [scope note](#scope-note), and — for coordinated season
@@ -426,14 +428,26 @@ publishing the locator, or any provider identifier, as identity.
   observed provider value. No event mapping could be seeded without new
   evidence.
 
+> **Status on 2026-09-19: the 2026 dataset exists.** One further Jolpica
+> calendar request was separately authorized and made on 2026-09-19. Its
+> metadata, licence and attribution, the 23 exact observed locators and the
+> curator decisions are recorded in
+> [Provider Evaluation §8.8](../technical/GridView_Provider_Evaluation.md#88-2026-calendar-observation-and-the-curated-event-dataset-2026-09-19);
+> the raw response stays outside the repository. A curator approved all 23
+> `eventSlug` identities, the event registry holds exactly those 23, and every
+> observed 2026 locator has a reviewed mapping and an evidence-corpus entry.
+> That is a point-in-time observation: a later calendar change fails closed
+> until another reviewed mapping update (A3). The statements above describe the
+> repository when this amendment was accepted.
+
 ### A5 - Required implementation shape
 
 > **Implemented as a mechanism on 2026-09-19** (Phase 9B event-registry
 > mechanism). All five items below exist, with schemas, `validate:content`
-> coverage and tests. **The curated event dataset does not**: the event
-> registry is committed empty, no event mapping record exists, no Jolpica
-> adapter exists, and no provider request has been made. The mechanism is
-> dormant and unbundled — no runtime module outside `src/providers/mappings/`
+> coverage and tests. **The curated 2026 event dataset was added the same
+> day** (A4 status note): 23 identities and 23 mapped locators. No Jolpica
+> adapter exists, and no Worker or GridView runtime has made a provider
+> request. The mechanism is dormant and unbundled — no runtime module outside `src/providers/mappings/`
 > imports it, and the Worker entry point cannot reach it.
 
 The implementation should:
@@ -636,26 +650,32 @@ must satisfy.
 | -------------------------------------------- | ------------------------------------------------------------------------ |
 | Event identity decision                      | **Accepted** (2026-09-16)                                                |
 | Event registry and `event` mapping support   | **Implemented as a mechanism** (2026-09-19); dormant and unbundled (A5)  |
-| Event mapping dataset                        | **Not created**; no complete locator is recorded (A4)                    |
+| Event mapping dataset                        | **Created for 2026** (2026-09-19): 23 identities, 23 locators (A4)       |
 | `hasResults` derivation in assembly          | **Not implemented**; the preflight and assembly are unchanged (A7)       |
 | Jolpica adapter, for any resource            | **Not implemented and not registered**                                   |
 | `provider-neutrality.test.ts`                | **Unchanged**; its replacement is required when adapter work begins (A9) |
 | G1 (live provider mode)                      | **Open**                                                                 |
 | G5 (event-aware scheduling), G9 (provenance) | **Open**                                                                 |
-| G-l (mapping dataset coverage)               | **Open**, and now also covers event locators                             |
-| Provider requests                            | **None, ever.** No provider was contacted.                               |
+| G-l (mapping dataset coverage)               | **Open**; its 2026 event-identity sub-gap is closed, circuits are not    |
+| Provider requests                            | **Research only** (~25 on 2026-08-19, 1 on 2026-09-19); none by GridView |
 
 **The calendar adapter is not unblocked.** It stays blocked until the event
 registry mechanism and curated event mapping data for the season it serves
 actually exist. This amendment defines the implementation path; it does not
 shorten it.
 
-> **Status on 2026-09-19.** The mechanism half now exists and is dormant. The
-> **dataset** half does not: the curated event registry is committed empty, no
-> event mapping record exists, no complete locator is recorded anywhere in this
-> repository (A4), and gathering one is still a separately authorized activity.
-> The adapter itself remains unimplemented and unregistered, so the calendar
-> resource is still blocked.
+> **Status on 2026-09-19.** Both halves now exist for season 2026 and are
+> dormant: the mechanism, and the curated dataset of 23 identities and 23
+> mapped locators (A4 status note). **The calendar resource is still blocked**:
+> 22 of the 23 observed Jolpica circuit identifiers have no curated circuit
+> mapping, and an event mapping never implies a circuit (A3). The adapter
+> itself remains unimplemented and unregistered, and A7 is not implemented.
+>
+> **Provider requests, precisely.** The "none" statements in this ADR describe
+> its own work. Roughly 25 authorized research `GET`s were recorded on
+> 2026-08-19 (Provider Evaluation §8.1) and one authorized calendar-evidence
+> `GET` on 2026-09-19 (§8.8). GridView's application code, the Worker provider
+> client and the rate limiter have made **no** provider request.
 
 `PROVIDER_MODE` still admits exactly `mock` and `none`, staging is `mock` and
 production is `none`. Nothing here authorizes a provider request, deployment,

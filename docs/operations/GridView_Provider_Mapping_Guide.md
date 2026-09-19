@@ -118,9 +118,8 @@ emits GridView-owned identities and must never have a mapping.
 > `eventLocator`, the complete event locator, decided by the
 > [ADR 0022 amendment of 2026-09-16](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity)
 > and implemented on 2026-09-19. The schema, the resolver and
-> `validate:content` all support it. **No event mapping can be curated today
-> even so**: the curated event registry is empty, so every target would be
-> missing, and no complete locator is recorded in this repository. See §15.
+> `validate:content` all support it. **Season 2026 carries 23 curated event
+> mappings**, one for every locator observed on 2026-09-19. See §15.
 
 ---
 
@@ -361,25 +360,32 @@ This is asserted by tests, not just stated here.
 - No runtime code writes the registry to KV, a Durable Object or local storage.
 - No discovery job invents mappings from observed provider data.
 - No provider is contacted by any part of this workflow.
-- No event mapping record exists, the curated event registry is empty, and no
-  Jolpica adapter exists (§15).
+- No Jolpica adapter exists, so nothing resolves the 23 curated 2026 event
+  mappings at runtime (§15).
 
 ---
 
 ## 15. Grand Prix events — decided, not yet operational
 
-> **The mechanism exists; the data does not.** The decision is recorded in the
+> **The mechanism and the 2026 data exist; the adapter does not.** The
+> decision is recorded in the
 > [ADR 0022 amendment of 2026-09-16](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity)
 > and the event registry, the `event` mapping entity, their schemas and their
 > `validate:content` rules were implemented on 2026-09-19.
 >
-> **No step below can be completed today.** `content/registries/events.development.json`
-> is committed **empty**, so any event mapping would fail validation with a
-> missing target, and **no complete Jolpica locator is recorded anywhere in
-> this repository** — gathering one is a separately authorized activity that
-> has not happened. No Jolpica adapter exists, and no provider request has ever
-> been made. This section is the procedure to follow once both the evidence and
-> the curated identities exist.
+> **The 2026 dataset was curated on 2026-09-19.** `content/registries/events.development.json`
+> holds 23 curator-approved `eventSlug` identities, and every one of the 23
+> Jolpica locators observed that day has a reviewed mapping and an evidence
+> entry. The observation, its licence and attribution and the curator decisions
+> are recorded in Provider Evaluation §8.8; the raw response is not committed.
+> It is a **point-in-time** observation, so a later calendar change fails
+> closed until another reviewed update (§15.3).
+>
+> **Nothing resolves them yet.** No Jolpica adapter exists, and 22 of the 23
+> observed circuit identifiers still have no curated circuit mapping, so a
+> working calendar stays blocked. The only provider requests on record are
+> authorized research requests — about 25 on 2026-08-19 and one on 2026-09-19
+> — and GridView's own code has made none.
 
 ### 15.1 Identity comes from a curated event registry
 

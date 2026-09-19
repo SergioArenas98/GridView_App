@@ -221,7 +221,7 @@ exact typed equality with no normalisation or slug minting, and several
 explicit provider aliases may target one GridView identity. The registry is
 dormant until a provider adapter exists.
 
-**Grand Prix event identity (decided 2026-09-16, not implemented).** The
+**Grand Prix event identity (decided 2026-09-16; mechanism and 2026 data added 2026-09-19).** The
 [ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity)
 extends this rule to events. A curator creates each `eventSlug` in a curated
 GridView event registry, and an accepted `eventSlug` is immutable.
@@ -231,8 +231,9 @@ circuit identifier is never a canonical identity, and no adapter derives an
 season-scoped locator — the complete tuple of `season`, `round`, exact
 `raceName` and exact Jolpica `circuitId` — which is a provider locator, not an
 identity. The event registry and its mapping support were implemented on
-2026-09-19 and are dormant; **the curated event data does not exist** — the
-registry is committed empty and no complete locator is recorded.
+2026-09-19 and are dormant. **The curated 2026 event data was added the same
+day**: 23 curator-approved `eventSlug` identities and one mapped Jolpica
+locator for each (Provider Evaluation §8.8).
 
 ---
 

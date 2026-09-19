@@ -8,8 +8,8 @@
  *
  * **Every provider value here is a synthetic fixture.** No live Jolpica payload
  * is copied, nothing in this file is curated content, and nothing here is an
- * approved mapping. The real curated event registry is empty, and stays empty
- * until separately authorized evidence exists (A4).
+ * approved mapping. The real curated 2026 dataset is asserted separately, in
+ * event-dataset-2026.test.ts.
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -94,20 +94,19 @@ function eventKey(
 // ---------------------------------------------------------------------------
 
 describe('the curated event registry', () => {
-  it('is committed, well-formed and deliberately empty', () => {
+  it('is committed and well-formed', () => {
     expect(eventsRegistry.kind).toBe('event-registry');
-    expect(eventsRegistry.events).toEqual([]);
-    // The emptiness is the accurate state, not an oversight: A4 records that
-    // no complete locator exists in the repository, so no event identity may
-    // be created yet.
-    expect(eventsRegistry.note).toMatch(/EMPTY/);
+    // The exact curated dataset is pinned in event-dataset-2026.test.ts.
+    expect(eventsRegistry.events).toHaveLength(23);
   });
 
-  it('exposes an empty canonical event set to the resolver', () => {
-    expect(curatedRegistries().event.size).toBe(0);
+  it('exposes exactly the curated canonical event set to the resolver', () => {
+    expect([...curatedRegistries().event].sort()).toEqual(
+      eventsRegistry.events.map((event) => event.id).sort(),
+    );
   });
 
-  it('makes every event mapping target missing while it is empty', () => {
+  it('makes every event mapping target missing when it is empty', () => {
     const built = registryOfEvents([eventRecord(locator())], SEASON, {
       ...canonical,
       event: new Set<string>(),
