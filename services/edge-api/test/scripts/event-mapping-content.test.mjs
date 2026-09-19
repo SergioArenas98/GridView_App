@@ -25,6 +25,7 @@ import {
   isValidKeyShape,
   validateEvidenceCoverage,
   validateMappingDocument,
+  validateRegistryDocumentSet,
   validateSeasonalDocumentSet,
 } from '../../scripts/lib/provider-mapping-rules.mjs';
 
@@ -586,6 +587,148 @@ describe('season context is required and checked', () => {
     expect(
       problems.some((problem) => problem.message.includes('exactly one')),
     ).toBe(true);
+  });
+});
+
+describe('exactly one curated registry document per entity kind', () => {
+  const doc = (label, events) => ({
+    label,
+    data: { kind: 'event-registry', status: 'development', events },
+  });
+
+  it('accepts a single document and returns its ids', () => {
+    const { problems, ids } = validateRegistryDocumentSet(
+      'event-registry',
+      'events',
+      [
+        doc('events.development.json', [
+          { id: 'hungarian-grand-prix', name: 'Hungarian Grand Prix' },
+          { id: 'european-grand-prix', name: 'European Grand Prix' },
+        ]),
+      ],
+    );
+
+    expect(problems).toEqual([]);
+    expect([...ids].sort()).toEqual([
+      'european-grand-prix',
+      'hungarian-grand-prix',
+    ]);
+  });
+
+  it('accepts the committed empty registry', () => {
+    const { problems, ids } = validateRegistryDocumentSet(
+      'event-registry',
+      'events',
+      [doc('events.development.json', [])],
+    );
+
+    expect(problems).toEqual([]);
+    expect(ids.size).toBe(0);
+  });
+
+  it('accepts no document at all', () => {
+    const { problems, ids } = validateRegistryDocumentSet(
+      'event-registry',
+      'events',
+      [],
+    );
+
+    expect(problems).toEqual([]);
+    expect(ids.size).toBe(0);
+  });
+
+  it('rejects a second registry document for the same kind', () => {
+    // The runtime imports one file per kind. A target that lived only in the
+    // second file would pass validation and then be rejected as
+    // `target-missing` by the deployed registry.
+    const { problems } = validateRegistryDocumentSet(
+      'event-registry',
+      'events',
+      [
+        doc('events.development.json', [{ id: 'a-grand-prix', name: 'A' }]),
+        doc('events-extra.json', [{ id: 'b-grand-prix', name: 'B' }]),
+      ],
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0].message).toContain('exactly one is allowed');
+    expect(problems[0].message).toContain('the runtime imports one');
+  });
+
+  it('withholds every id when a second document exists', () => {
+    // Otherwise the extra file's ids would authorize mapping targets the
+    // deployed registry cannot resolve - the exact divergence this rejects.
+    const { ids } = validateRegistryDocumentSet('event-registry', 'events', [
+      doc('events.development.json', [{ id: 'a-grand-prix', name: 'A' }]),
+      doc('events-extra.json', [{ id: 'b-grand-prix', name: 'B' }]),
+    ]);
+
+    expect(ids.size).toBe(0);
+  });
+
+  it('reports a duplicate canonical id rather than collapsing it', () => {
+    const { problems, ids } = validateRegistryDocumentSet(
+      'event-registry',
+      'events',
+      [
+        doc('events.development.json', [
+          { id: 'hungarian-grand-prix', name: 'A' },
+          { id: 'hungarian-grand-prix', name: 'B' },
+        ]),
+      ],
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0].message).toContain('duplicate canonical id');
+    expect(problems[0].message).toContain('events[1]');
+    // An undecided canonical set must not be used for target checks.
+    expect(ids.size).toBe(0);
+  });
+
+  it('applies the same rule to the other registry kinds', () => {
+    const { problems } = validateRegistryDocumentSet(
+      'driver-registry',
+      'drivers',
+      [
+        { label: 'drivers.mock.json', data: { drivers: [{ id: 'a-driver' }] } },
+        {
+          label: 'drivers-extra.json',
+          data: { drivers: [{ id: 'b-driver' }] },
+        },
+      ],
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0].message).toContain('driver-registry');
+  });
+
+  it('names documents in a stable order, whatever order they arrive in', () => {
+    const a = doc('events.development.json', [
+      { id: 'a-grand-prix', name: 'A' },
+    ]);
+    const b = doc('events-extra.json', [{ id: 'b-grand-prix', name: 'B' }]);
+
+    const forwards = validateRegistryDocumentSet('event-registry', 'events', [
+      a,
+      b,
+    ]);
+    const backwards = validateRegistryDocumentSet('event-registry', 'events', [
+      b,
+      a,
+    ]);
+
+    expect(forwards.problems).toEqual(backwards.problems);
+  });
+
+  it('does not mutate the documents it reads', () => {
+    const documents = [
+      doc('events.development.json', [{ id: 'a-grand-prix', name: 'A' }]),
+    ];
+    const snapshot = JSON.parse(JSON.stringify(documents));
+
+    validateRegistryDocumentSet('event-registry', 'events', documents);
+
+    expect(documents).toEqual(snapshot);
   });
 });
 

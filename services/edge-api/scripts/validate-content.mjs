@@ -13,6 +13,7 @@ import { heading, printAjvErrors, summarize } from './lib/report.mjs';
 import {
   validateEvidenceCoverage,
   validateMappingDocument,
+  validateRegistryDocumentSet,
   validateSeasonalDocumentSet,
 } from './lib/provider-mapping-rules.mjs';
 
@@ -112,6 +113,16 @@ for (const file of files) {
 
 heading('provider mapping semantics');
 
+/**
+ * Structural problems with the curated registries themselves.
+ *
+ * Collected rather than printed inline so they gate the dependent passes the
+ * same way `validateSeasonalDocumentSet`'s problems already do: when the
+ * canonical identity set is undecided, every target check below it is
+ * meaningless and would only bury the real cause under a cascade.
+ */
+const registryProblems = [];
+
 const registryIds = {
   driver: collectIds('driver-registry', 'drivers'),
   constructor: collectIds('constructor-registry', 'constructors'),
@@ -120,30 +131,18 @@ const registryIds = {
 };
 
 /**
- * Collects the canonical IDs a registry kind owns, rejecting duplicates.
+ * Collects the canonical IDs a registry kind owns.
  *
- * A `Set` silently collapses a repeated ID, which would hide exactly the
- * mistake that matters most here: two curated entries claiming one identity.
- * For events that is unrecoverable rather than untidy - an `eventSlug` is
- * immutable and names one event for ever (ADR 0022 amendment A1) - so a
- * duplicate is reported instead of absorbed. The same rule holds for drivers,
- * constructors and circuits, which have never carried one.
+ * The rule itself lives in `./lib/provider-mapping-rules.mjs` so it can be
+ * unit tested directly, exactly like the seasonal document-set rule.
  */
 function collectIds(kind, arrayKey) {
-  const ids = new Set();
-  for (const { label, data } of parsedByKind.get(kind) ?? []) {
-    for (const [index, entry] of (data[arrayKey] ?? []).entries()) {
-      if (ids.has(entry.id)) {
-        failures += 1;
-        console.error(`FAIL ${label}`);
-        console.error(
-          `  - ${arrayKey}[${index}] duplicate canonical id "${entry.id}"`,
-        );
-        continue;
-      }
-      ids.add(entry.id);
-    }
-  }
+  const { problems, ids } = validateRegistryDocumentSet(
+    kind,
+    arrayKey,
+    parsedByKind.get(kind) ?? [],
+  );
+  registryProblems.push(...problems);
   return ids;
 }
 
@@ -158,14 +157,14 @@ let semanticChecks = 0;
 const { problems: structureProblems, mappingsBySeason } =
   validateSeasonalDocumentSet(mappingDocuments, evidenceDocuments);
 
-for (const problem of structureProblems) {
+for (const problem of [...registryProblems, ...structureProblems]) {
   semanticChecks += 1;
   failures += 1;
   console.error(`FAIL ${problem.label}`);
   console.error(`  - (root) ${problem.message}`);
 }
 
-if (structureProblems.length === 0) {
+if (registryProblems.length === 0 && structureProblems.length === 0) {
   for (const { label, data } of mappingDocuments) {
     semanticChecks += 1;
     const problems = validateMappingDocument(data, registryIds);

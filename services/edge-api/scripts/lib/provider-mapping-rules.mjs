@@ -440,6 +440,69 @@ export function validateSeasonalDocumentSet(
 }
 
 /**
+ * Enforces exactly one curated registry document per entity kind.
+ *
+ * `src/providers/mappings/index.ts` imports **one** registry file per kind, so
+ * accepting several at build time would let validated content diverge from
+ * what actually ships: a mapping whose target lives only in the second file
+ * would pass `validate:content` and then be rejected as `target-missing` by
+ * the deployed registry - content that looks reviewed and correct while the
+ * resource fails closed. Merging them would preserve that divergence rather
+ * than remove it, so a second document is rejected outright. This is the same
+ * rule `validateSeasonalDocumentSet` applies to seasonal documents.
+ *
+ * It also reports a repeated canonical ID rather than letting a `Set` collapse
+ * it. Two curated entries claiming one identity is the mistake that matters
+ * most, and for an immutable `eventSlug` it is unrecoverable rather than
+ * untidy (ADR 0022 amendment A1).
+ *
+ * `documents` is a `{ label, data }` list for one kind. Returns
+ * `{ problems, ids }`; `ids` is empty whenever `problems` is non-empty,
+ * because a canonical set that is undecided must not be used for target
+ * checks. Output order depends only on document label and record index, never
+ * on file discovery order, and no document content is echoed.
+ */
+export function validateRegistryDocumentSet(kind, arrayKey, documents) {
+  const problems = [];
+  const ids = new Set();
+
+  if (documents.length > 1) {
+    const paths = documents.map((entry) => entry.label).sort();
+    problems.push({
+      label: paths[0],
+      message:
+        documents.length +
+        ' ' +
+        kind +
+        ' documents; exactly one is allowed because the runtime imports one: ' +
+        paths.join(', '),
+    });
+    return { problems, ids: new Set() };
+  }
+
+  for (const { label, data } of documents) {
+    (data[arrayKey] ?? []).forEach((entry, index) => {
+      if (ids.has(entry.id)) {
+        problems.push({
+          label,
+          message:
+            arrayKey +
+            '[' +
+            index +
+            '] duplicate canonical id "' +
+            entry.id +
+            '"',
+        });
+        return;
+      }
+      ids.add(entry.id);
+    });
+  }
+
+  return problems.length > 0 ? { problems, ids: new Set() } : { problems, ids };
+}
+
+/**
  * Validates one parsed mapping document against the curated registries.
  *
  * canonicalIds is { driver: Set, constructor: Set, circuit: Set }.
