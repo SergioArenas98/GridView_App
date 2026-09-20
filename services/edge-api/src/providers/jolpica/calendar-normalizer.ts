@@ -82,11 +82,15 @@ const sprintEvidenceBlocks: readonly JolpicaSessionBlock[] = [
  *
  * **All four are required together.** Each one alone is unremarkable - a sprint
  * weekend carries a first practice and a qualifying too - so no subset
- * distinguishes the formats. Only the full set does: three practices plus a
- * qualifying is a shape a sprint weekend cannot have, because a sprint weekend
- * replaces the second and third practice with its sprint sessions (Provider
- * Evaluation §8.4). A row carrying the complete set has therefore said
- * everything a standard weekend says and nothing a sprint one does.
+ * distinguishes the formats.
+ *
+ * What makes the full set safe is **where it is checked**: the sprint branch
+ * runs first, so this set is only ever consulted for a row with no sprint
+ * evidence at all. A weekend carrying sprint evidence therefore cannot be
+ * classified `standard` no matter which practices it lists. Provider
+ * Evaluation §8.4 records one round that omitted the second and third practice
+ * while carrying both sprint blocks; that is a single observation, not an
+ * upstream guarantee, so it corroborates this rule rather than justifying it.
  */
 const standardEvidenceBlocks: readonly JolpicaSessionBlock[] = [
   'FirstPractice',

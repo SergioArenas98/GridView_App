@@ -591,11 +591,17 @@ describe('the weekend format discriminator', () => {
     ]);
   });
 
-  it('neither removes nor reorders the sessions it classifies', async () => {
-    // An unusual but valid combination: the complete standard signature plus
-    // a sprint, with qualifying brought forward. The format answers `sprint`
-    // on the sprint block's evidence, and the session list is still exactly
-    // what was supplied, in instant order.
+  it('answers sprint for a row that also carries the full standard signature', async () => {
+    // This is the branch-ordering guarantee A10 rests on: the `standard`
+    // branch is unreachable while either sprint block is present, so sprint
+    // evidence wins however complete the practice schedule looks. Without it,
+    // the four-block signature would only be safe by induction from a single
+    // observed round.
+    //
+    // It doubles as the no-removal, no-reordering case: an unusual but valid
+    // combination - the full standard signature plus a sprint, with qualifying
+    // brought forward - is carried by its actual session list, in instant
+    // order, and nothing is dropped to fit the answer.
     const transport = jsonTransport(
       envelope([
         race({

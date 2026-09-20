@@ -679,13 +679,26 @@ D5 forbid, produced from silence. Silence is not evidence.
 
 **Why the complete FP1/FP2/FP3/Qualifying signature is sufficient.** No single
 member of that set distinguishes the formats - a sprint weekend carries a first
-practice and a qualifying too - but the complete set does. A sprint weekend
-replaces the second and third practice with its sprint sessions (Provider
-Evaluation §8.4), so a row carrying three practices *and* a qualifying *and*
-neither sprint block has stated the whole shape of a standard weekend and
-nothing of a sprint one. This is a positive reading of a present signature, not
-an inference from what is missing, which is what separates it from the rejected
-absence rule.
+practice and a qualifying too - but the complete set, *reached only after the
+sprint branch has already declined*, does.
+
+The ordering carries the argument, and it is structural rather than
+inductive: **the `standard` branch is unreachable while either sprint block is
+present**, so no payload carrying sprint evidence can be classified `standard`,
+whatever its practice blocks look like. The remaining question is only whether a
+weekend with **no sprint evidence at all** and a full three-practice-plus-
+qualifying schedule could be anything other than standard, and such a payload
+has stated the whole shape of a standard weekend and nothing of a sprint one.
+
+**The supporting observation is a single one, and is not load-bearing.**
+Provider Evaluation §8.4 records that round 2 of 2026 carried `Sprint` and
+`SprintQualifying` and omitted `SecondPractice`/`ThirdPractice`. That is one
+observed round, not a documented upstream guarantee, and this amendment does
+not generalize it into one. It corroborates the rule; the branch ordering above
+is what makes the rule safe.
+
+This is a positive reading of a present signature, not an inference from what is
+missing, which is what separates it from the rejected absence rule.
 
 **A block counts as evidence only if it decoded.** `sessions` holds exactly the
 blocks that were present *and* produced a complete instant, because a present
