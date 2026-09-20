@@ -80,18 +80,54 @@ function weekendFormat(race: DecodedRace): WeekendFormat {
     : 'unknown';
 }
 
+/**
+ * Every session of one weekend, **ordered by its own start instant**.
+ *
+ * `sessions` is an ordered list in the canonical snapshot schema and the
+ * client renders it in the delivered order, never re-sorting it
+ * (`home_session_focus.dart`). The product contract is chronological display
+ * (`GridView_PRD.md` §Grand Prix acceptance criteria) and explicit support for
+ * **changed session orders**, rendering "the sessions supplied by the data
+ * model rather than assuming a fixed sequence"
+ * (`GridView_App_Flow.md` §7.4). Ordering therefore belongs to whoever
+ * supplies the list, which is this adapter.
+ *
+ * Emitting the blocks in their usual weekend sequence would be exactly the
+ * fixed-sequence assumption §7.4 forbids: a rescheduled weekend - qualifying
+ * moved before sprint qualifying, say - is a payload Jolpica can legitimately
+ * publish, and it would be delivered, and displayed, in the wrong order.
+ *
+ * Two details make this total and deterministic:
+ *
+ * - **Every instant exists.** A present block without a complete instant
+ *   already failed the resource, and the race's instant is required (A8), so
+ *   there is no missing value to position.
+ * - **Comparison is lexicographic, not chronological arithmetic.** Every
+ *   instant is the same fixed-width `YYYY-MM-DDTHH:MM:SSZ` UTC form, for which
+ *   byte order and time order coincide, so no parsing, zone maths or
+ *   `Date` round trip can go wrong here. `sort` is stable, so two sessions
+ *   sharing an instant keep their block order and the canonical serialization
+ *   stays deterministic.
+ */
 function sessionsFor(race: DecodedRace, grandPrixId: string): Session[] {
-  const sessions = race.sessions.map((decoded) =>
-    normalizedSession(
-      grandPrixId,
-      blockSessionTypes[decoded.block],
-      decoded.startTime,
-    ),
-  );
-  // The race closes every weekend, and its instant is required rather than
-  // optional (A8), so it is appended last in canonical weekend order.
-  sessions.push(normalizedSession(grandPrixId, 'race', race.startTime));
-  return sessions;
+  const scheduled = [
+    ...race.sessions.map((decoded) => ({
+      type: blockSessionTypes[decoded.block],
+      startTime: decoded.startTime,
+    })),
+    { type: 'race' as SessionType, startTime: race.startTime },
+  ];
+  return scheduled
+    .sort((left, right) => {
+      // A comparator that never answers 0 makes equal elements compare
+      // inconsistently, which would defeat the stability the deterministic
+      // ordering above relies on.
+      if (left.startTime === right.startTime) return 0;
+      return left.startTime < right.startTime ? -1 : 1;
+    })
+    .map((entry) =>
+      normalizedSession(grandPrixId, entry.type, entry.startTime),
+    );
 }
 
 function normalizedSession(

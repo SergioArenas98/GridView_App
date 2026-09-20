@@ -207,6 +207,68 @@ describe('normalization of a calendar', () => {
     );
   });
 
+  it('orders a rescheduled weekend by its actual start instants', async () => {
+    // GridView_App_Flow.md §7.4 requires supporting changed session orders and
+    // forbids assuming a fixed sequence; the client renders the delivered
+    // order and never re-sorts. So the supplied order must be chronological,
+    // not the usual block sequence.
+    const transport = jsonTransport(
+      envelope([
+        race({
+          ...sprintWeekend,
+          blocks: {
+            FirstPractice: { date: '2026-03-13', time: '03:30:00Z' },
+            // Qualifying brought forward ahead of both sprint sessions.
+            Qualifying: { date: '2026-03-13', time: '05:00:00Z' },
+            SprintQualifying: { date: '2026-03-13', time: '07:30:00Z' },
+            Sprint: { date: '2026-03-14', time: '03:00:00Z' },
+          },
+        }),
+      ]),
+    );
+    const { port } = harness({ transport });
+
+    const [event] = eventsOf(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    expect(event?.sessions.map((session) => session.type)).toEqual([
+      'practice_1',
+      'qualifying',
+      'sprint_qualifying',
+      'sprint',
+      'race',
+    ]);
+    const times = event?.sessions.map((session) => session.startTime) ?? [];
+    expect([...times].sort()).toEqual(times);
+  });
+
+  it('orders sessions deterministically when two share an instant', async () => {
+    // Both before the standard weekend's own race instant (2026-03-08T04:00Z).
+    const shared = { date: '2026-03-06', time: '01:30:00Z' };
+    const transport = jsonTransport(
+      envelope([
+        race({
+          ...standardWeekend,
+          blocks: { FirstPractice: shared, SecondPractice: shared },
+        }),
+      ]),
+    );
+    const { port } = harness({ transport });
+
+    const [event] = eventsOf(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    // Equal instants keep their block order, so the canonical serialization
+    // of this calendar is stable across runs.
+    expect(event?.sessions.map((session) => session.type)).toEqual([
+      'practice_1',
+      'practice_2',
+      'race',
+    ]);
+  });
+
   it('emits no session for an absent optional block', async () => {
     const transport = jsonTransport(
       envelope([
