@@ -132,7 +132,16 @@ function resolveSpecifier(from: string, specifier: string): string | null {
     else segments.push(part);
   }
   const base = segments.join('/');
-  for (const candidate of [`${base}.ts`, `${base}/index.ts`]) {
+  // `allowImportingTsExtensions` is enabled, so a legal import may already
+  // carry its own `.ts`. The resolved path is therefore tried first: appending
+  // a second extension would turn `./x/index.ts` into `x/index.ts.ts`, find
+  // nothing and report no edge at all. It is eligible only when it names a
+  // TypeScript module, so the curated JSON content - which every candidate is
+  // still checked for existence under `src/` - stays outside the closure.
+  const candidates = base.endsWith('.ts')
+    ? [base, `${base}.ts`, `${base}/index.ts`]
+    : [`${base}.ts`, `${base}/index.ts`];
+  for (const candidate of candidates) {
     if (existsSync(join(srcRoot, candidate))) return candidate;
   }
   return null;
@@ -292,6 +301,68 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
         resolveSpecifier(factory, specifier)?.startsWith('providers/jolpica/'),
       ),
     ).toBe(true);
+  });
+
+  /**
+   * Regression for the same two boundaries, through the resolver rather than
+   * the specifier walk.
+   *
+   * `tsconfig.json` enables `allowImportingTsExtensions`, so
+   * `./providers/jolpica/index.ts` is a legal production import here. A
+   * resolver that appends an extension unconditionally turns it into
+   * `index.ts.ts`, resolves nothing and reports no edge - so both assertions
+   * would pass while the Worker bundled the adapter.
+   */
+  it('resolves an explicit .ts import into the adapter directory', () => {
+    // Boundary 1: the entry point reaching the adapter, statically and
+    // dynamically, with the extension written out.
+    const entryForms = [
+      ['import "./providers/jolpica/index.ts";', 'providers/jolpica/index.ts'],
+      [
+        'void import("./providers/jolpica/calendar-port.ts");',
+        'providers/jolpica/calendar-port.ts',
+      ],
+    ] as const;
+
+    for (const [contents, expected] of entryForms) {
+      const reached = importSpecifiers(contents, 'index.ts')
+        .map((specifier) => resolveSpecifier('index.ts', specifier))
+        .filter((resolved) => resolved?.startsWith('providers/jolpica/'));
+      expect(reached).toEqual([expected]);
+    }
+
+    // Boundary 2: the importer scan flags the factory in either form.
+    const factory = 'providers/factory.ts';
+    for (const contents of [
+      'import "./jolpica/index.ts";',
+      'void import("./jolpica/calendar-port.ts");',
+    ]) {
+      expect(
+        importSpecifiers(contents, factory).some((specifier) =>
+          resolveSpecifier(factory, specifier)?.startsWith(
+            'providers/jolpica/',
+          ),
+        ),
+      ).toBe(true);
+    }
+
+    // The extensionless forms keep resolving exactly as before.
+    expect(resolveSpecifier('index.ts', './providers/jolpica')).toBe(
+      'providers/jolpica/index.ts',
+    );
+    expect(
+      resolveSpecifier('providers/factory.ts', './jolpica/calendar-port'),
+    ).toBe('providers/jolpica/calendar-port.ts');
+
+    // Containment is unchanged: every candidate is still checked for
+    // existence under `src/`, so the curated JSON content - which lives
+    // outside it - is still no module edge.
+    expect(
+      resolveSpecifier(
+        'providers/jolpica/curated-events.ts',
+        '../../../../../content/registries/events.development.json',
+      ),
+    ).toBeNull();
   });
 
   it('is constructed by no production composition', () => {
