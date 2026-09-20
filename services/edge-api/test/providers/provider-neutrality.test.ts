@@ -95,15 +95,18 @@ function importSpecifiers(contents: string, fileName: string): string[] {
       specifiers.push(node.moduleSpecifier.text);
     }
     // A dynamic `import('...')` is an edge too, and is how a module could
-    // otherwise be pulled in without a static declaration.
+    // otherwise be pulled in without a static declaration. The `...Like` form
+    // of the predicate also admits a no-substitution template literal, which
+    // is an equally valid dynamic specifier: `ts.isStringLiteral` alone would
+    // report no edge at all for `import(`./x`)`.
     if (
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&
       node.arguments.length > 0 &&
       node.arguments[0] !== undefined &&
-      ts.isStringLiteral(node.arguments[0])
+      ts.isStringLiteralLike(node.arguments[0])
     ) {
-      specifiers.push((node.arguments[0] as ts.StringLiteral).text);
+      specifiers.push((node.arguments[0] as ts.StringLiteralLike).text);
     }
     ts.forEachChild(node, visit);
   };
@@ -249,6 +252,46 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     });
 
     expect(importers).toEqual([]);
+  });
+
+  /**
+   * Regression for the two boundaries above.
+   *
+   * Both are built on `importSpecifiers`, so an edge that walk cannot see is
+   * an edge neither boundary can refuse. A dynamic import may name its module
+   * with a no-substitution template literal, which is string-*like* but is not
+   * a `ts.StringLiteral`: under that narrower predicate both assertions would
+   * pass while a real runtime import of the adapter existed.
+   */
+  it('sees a template-literal dynamic import into the adapter directory', () => {
+    // The entry point pulling in the adapter, written both ways.
+    const templateForm = 'void import(`./providers/jolpica`);';
+    const stringForm = "void import('./providers/jolpica');";
+
+    expect(importSpecifiers(templateForm, 'index.ts')).toEqual([
+      './providers/jolpica',
+    ]);
+    // The ordinary string-literal form stays covered.
+    expect(importSpecifiers(stringForm, 'index.ts')).toEqual([
+      './providers/jolpica',
+    ]);
+
+    // Boundary 1: the entry-point closure walk would admit it into the set the
+    // bundler ships, which is what `bundled` is asserted to be empty of.
+    const reached = importSpecifiers(templateForm, 'index.ts')
+      .map((specifier) => resolveSpecifier('index.ts', specifier))
+      .filter((resolved) => resolved?.startsWith('providers/jolpica/'));
+    expect(reached).toEqual(['providers/jolpica/index.ts']);
+
+    // Boundary 2: the importer scan flags the module as an importer, which is
+    // what `importers` is asserted to be empty of. The factory is the module
+    // that would plausibly reach for it.
+    const factory = 'providers/factory.ts';
+    expect(
+      importSpecifiers('void import(`./jolpica`);', factory).some((specifier) =>
+        resolveSpecifier(factory, specifier)?.startsWith('providers/jolpica/'),
+      ),
+    ).toBe(true);
   });
 
   it('is constructed by no production composition', () => {
