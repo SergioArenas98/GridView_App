@@ -44,7 +44,10 @@ import {
   type ProviderMappingRegistry,
 } from '../mappings';
 import type { ProviderAttemptOutcome } from '../provider-metrics';
-import { decodeSeasonCalendar } from './calendar-payload';
+import {
+  decodeSeasonCalendar,
+  type CalendarDecodeResult,
+} from './calendar-payload';
 import { normalizeSeasonCalendar } from './calendar-normalizer';
 import { curatedEventNames, type CuratedEventNames } from './curated-events';
 
@@ -129,11 +132,22 @@ export class JolpicaCalendarPort implements ProviderResourcePort {
       outcome: 'successful',
     };
 
-    const decoded = decodeSeasonCalendar(
-      result.data,
-      season,
-      calendarPageLimit,
-    );
+    // `result.data` is `unknown`, so the client interface permits a value that
+    // throws when it is merely read. Today's production client cannot supply
+    // one - it obtains data through `JSON.parse`, which only ever yields plain
+    // values - but the port is total for what its interface allows rather than
+    // for what one implementation happens to produce. This runs only after a
+    // successful response has already established its attempt, so a throw here
+    // would discard a request the provider did answer. Nothing past the decode
+    // needs the guard: it works on decoded values this module built itself.
+    let decoded: CalendarDecodeResult;
+    try {
+      decoded = decodeSeasonCalendar(result.data, season, calendarPageLimit);
+    } catch {
+      // The body could not be read as the documented envelope. The raw error
+      // is dropped rather than carried: it is provider-derived and unbounded.
+      decoded = { ok: false, problem: 'envelope' };
+    }
     if (!decoded.ok) {
       // The response was read and could not be normalized under the adapter's
       // rules. It stays an attempted request, counted once, never selected.

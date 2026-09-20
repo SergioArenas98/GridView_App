@@ -20,7 +20,12 @@ import { join } from 'node:path';
 
 import { CapturingLogger } from '../../../src/logging/logger';
 import { ProviderHttpClient } from '../../../src/providers/http/provider-http-client';
-import type { ProviderTransport } from '../../../src/providers/http/provider-http-client';
+import type {
+  ProviderHttpClientOptions,
+  ProviderHttpResult,
+  ProviderRequest,
+  ProviderTransport,
+} from '../../../src/providers/http/provider-http-client';
 import type {
   ProviderRateLimiterClient,
   ReservationOutcome,
@@ -214,6 +219,24 @@ export const allowingLimiter: ProviderRateLimiterClient = {
   },
 };
 
+export interface CountingLimiter {
+  readonly limiter: ProviderRateLimiterClient;
+  /** One entry per reservation, in order. */
+  readonly reservations: readonly RealProviderSourceId[];
+}
+
+/** A limiter that grants capacity and records how often it was asked. */
+export function countingLimiter(): CountingLimiter {
+  const reservations: RealProviderSourceId[] = [];
+  const limiter: ProviderRateLimiterClient = {
+    async reserve(sourceId: RealProviderSourceId): Promise<ReservationOutcome> {
+      reservations.push(sourceId);
+      return { outcome: 'allowed', sourceId, headroom: [] };
+    },
+  };
+  return { limiter, reservations };
+}
+
 /** A limiter that always defers, so nothing may leave GridView. */
 export function deferringLimiter(retryAt: string): ProviderRateLimiterClient {
   return {
@@ -321,6 +344,32 @@ function describe(request: Request): TransportRecord {
   };
 }
 
+/**
+ * The real client, with the decoded body of a **successful** response replaced
+ * by an arbitrary value.
+ *
+ * The limiter, the transport and every response check still run exactly once,
+ * unchanged; only `data` is substituted, and only on success. This is the one
+ * way to hand the port a value its `unknown` body type permits but `JSON.parse`
+ * can never produce - such as an object with a throwing accessor.
+ */
+class SubstitutedDataClient extends ProviderHttpClient {
+  private readonly data: () => unknown;
+
+  constructor(options: ProviderHttpClientOptions, data: () => unknown) {
+    super(options);
+    this.data = data;
+  }
+
+  override async getJson<T = unknown>(
+    request: ProviderRequest,
+  ): Promise<ProviderHttpResult<T>> {
+    const result = await super.getJson<T>(request);
+    if (!result.ok) return result;
+    return { ...result, data: this.data() as T };
+  }
+}
+
 export interface PortHarness {
   readonly port: JolpicaCalendarPort;
   readonly logger: CapturingLogger;
@@ -332,17 +381,22 @@ export interface HarnessOptions {
   readonly limiter?: ProviderRateLimiterClient;
   /** Replaces the curated registry, for the unmapped-identity cases. */
   readonly emptyRegistry?: boolean;
+  /** Substitutes the decoded body the client hands the port on success. */
+  readonly successData?: () => unknown;
 }
 
 /** Builds the adapter over fakes only. No binding, no network, no clock. */
 export function harness(options: HarnessOptions = {}): PortHarness {
   const recording = options.transport ?? jsonTransport(envelope([]));
   const logger = new CapturingLogger();
-  const client = new ProviderHttpClient({
+  const clientOptions = {
     transport: recording.transport,
     limiter: options.limiter ?? allowingLimiter,
     logger,
-  });
+  };
+  const client = options.successData
+    ? new SubstitutedDataClient(clientOptions, options.successData)
+    : new ProviderHttpClient(clientOptions);
   const port = new JolpicaCalendarPort({
     client,
     logger,

@@ -23,6 +23,7 @@ import { gridViewUserAgent } from '../../../src/providers/http/provider-http-cli
 import {
   LIMIT,
   SEASON,
+  countingLimiter,
   curatedEventLocators,
   deferringLimiter,
   envelope,
@@ -1241,18 +1242,39 @@ describe('attempt and limiter accounting', () => {
 
   it('never throws out of the port', async () => {
     // An adapter that throws discards the attempt from the run's accounting,
-    // so a hostile body must still become a typed outcome.
-    const hostile = {
-      get MRData() {
-        throw new Error('hostile accessor');
-      },
-    };
+    // so a hostile body must still become a typed outcome. The value is
+    // injected as the successful client's own `data`, which is where the port
+    // actually reads it from: a body the transport returns would be flattened
+    // by `JSON.parse` and could never carry an accessor.
     const transport = jsonTransport(envelope([race(standardWeekend)]));
-    const { port } = harness({ transport });
+    const { limiter, reservations } = countingLimiter();
+    const { port, logger, calls } = harness({
+      transport,
+      limiter,
+      successData: () => ({
+        get MRData(): never {
+          throw new Error('hostile accessor');
+        },
+      }),
+    });
 
-    await expect(
-      port.fetchResource({ source: 'jolpica', resource: calendar }),
-    ).resolves.toBeDefined();
-    expect(hostile).toBeDefined();
+    const outcome = wellFormed(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    expect(outcome.outcome).toBe('failed');
+    if (outcome.outcome !== 'failed') throw new Error('unreachable');
+    expect(outcome.reason).toBe('invalid-payload');
+    // The request left and was answered before the body was read, so it stays
+    // the one successful attempt the accounting already owes.
+    expect(outcome.attempt.outcome).toBe('successful');
+    // Read once, sent once: the guard adds no retry and no second reservation.
+    expect(reservations).toHaveLength(1);
+    expect(calls).toHaveLength(1);
+    // Nothing provider-derived crosses the boundary - not the raw message, and
+    // not the field whose accessor raised it.
+    expect(JSON.stringify(outcome)).not.toContain('hostile accessor');
+    expect(logger.serialized()).not.toContain('hostile accessor');
+    expect(logger.serialized()).not.toContain('MRData');
   });
 });
