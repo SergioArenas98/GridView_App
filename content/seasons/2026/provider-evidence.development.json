@@ -4,7 +4,7 @@
   "schemaVersion": 1,
   "status": "development",
   "season": 2026,
-  "note": "INTERNAL ONLY. The closed set of exact 2026 provider identities recorded in docs/technical/GridView_Provider_Evaluation.md section 8. Every value was observed through an explicitly authorized request recorded there (8.1 for 2026-08-19, 8.8 for the 2026-09-19 calendar) and copied exactly; nothing was scraped, inferred from a display name or recalled from memory. The 8.8 calendar is recorded here as its 23 event locators, plus the five circuitIds it also supplied as circuit identities: a circuitId inside a locator is only a locator component, so a circuit identity is always its own record with its own evidence. The other 16 observed circuitIds are still absent and remain circuit-coverage work (gap G-l). Every entry must be mapped in provider-mappings.development.json or acknowledged below; validation fails otherwise. An acknowledgement is a temporary blocker, never a mapping: the runtime still resolves the identity as unmapped and the affected resource still fails closed.",
+  "note": "INTERNAL ONLY. The closed set of exact 2026 provider identities recorded in docs/technical/GridView_Provider_Evaluation.md section 8. Every value was observed through an explicitly authorized request recorded there (8.1 for 2026-08-19, 8.8 for the 2026-09-19 calendar) and copied exactly; nothing was scraped, inferred from a display name or recalled from memory. The 8.8 calendar is recorded here as its 23 event locators plus all 23 circuitIds it supplied: a circuitId inside a locator is only a locator component, so a circuit identity is always its own record with its own evidence. Every observed 2026 circuitId is now mapped, so the circuit portion of gap G-l is closed and no circuit is acknowledged below. Every entry must be mapped in provider-mappings.development.json or acknowledged below; validation fails otherwise. An acknowledgement is a temporary blocker, never a mapping: the runtime still resolves the identity as unmapped and the affected resource still fails closed.",
   "identities": [
     {
       "source": "jolpica",
@@ -81,7 +81,119 @@
       "entity": "circuit",
       "providerField": "circuitId",
       "providerValue": "hungaroring",
-      "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica circuitId slug example."
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit hungaroring - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 11."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "shanghai",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit shanghai - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 2."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "miami",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit miami - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 4."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "villeneuve",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit villeneuve - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 5."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "catalunya",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit catalunya - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 7."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "red_bull_ring",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit red_bull_ring - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 8."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "zandvoort",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit zandvoort - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 12."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "madring",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit madring - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 14."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "baku",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit baku - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 15."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "sepang",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit sepang - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 16."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "marina_bay",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit marina_bay - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 17."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "americas",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit americas - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 18."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "rodriguez",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit rodriguez - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 19."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "interlagos",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit interlagos - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 20."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "vegas",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit vegas - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 21."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "losail",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit losail - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 22."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "yas_marina",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit yas_marina - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 23."
     },
     {
       "source": "openf1",
@@ -394,14 +506,6 @@
       "providerValue": "antonelli",
       "reason": "no-canonical-gridview-identity",
       "detail": "No canonical GridView driver identity exists for this competitor in content/registries/drivers.mock.json. Creating one is a curated-identity decision, not a mapping decision, and inventing a target ID from the provider slug is forbidden. Left unmapped so synchronization fails closed."
-    },
-    {
-      "source": "jolpica",
-      "entity": "circuit",
-      "providerField": "circuitId",
-      "providerValue": "hungaroring",
-      "reason": "no-canonical-gridview-identity",
-      "detail": "No canonical GridView circuit identity exists for the Hungaroring in content/registries/circuits.mock.json. Left unmapped so synchronization fails closed rather than minting a slug."
     },
     {
       "source": "openf1",

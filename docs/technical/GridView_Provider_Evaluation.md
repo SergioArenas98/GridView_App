@@ -35,6 +35,7 @@
 | 1.2 | 2026-09-19 | **Phase 9B: the event-registry mechanism is implemented; the dataset is not** ([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity) A5). A curated GridView event registry owns every immutable `eventSlug`, `event` joins the mapping entity union as a seventh closed combination (Jolpica only), and the Jolpica locator is a closed composite value - the file's season plus `round`, exact `raceName`, exact `circuitId` - keyed as `eventLocator` with an injective length-prefixed encoding whose type tag makes a locator key incapable of colliding with a scalar one. A record never carries its own season, and one that does is rejected by the schema and the resolver alike. Matching is exact: no subset, fuzzy, slugified, case-folded, trimmed or punctuation-normalized match exists, and absent, ambiguous, duplicated, dangling or malformed records fail the whole registry closed. JSON Schema and `npm run validate:content` cover the registry, the mapping and the evidence corpus, and duplicate canonical registry ids are now rejected rather than silently collapsed. **Dormant and unbundled: no adapter consumes it, no runtime module outside `src/providers/mappings/` imports it, the Worker entry point cannot reach it, no provider was contacted, no request was made or made possible, nothing was deployed, and no licensing conclusion changes.** **The curated event dataset is deliberately absent**: the registry is committed empty and no complete locator is recorded (**G-l**). `PROVIDER_MODE` still admits exactly `mock` and `none`, production remains `"none"`, and OpenF1 stays fail-closed. G1, G5, G9 and G-l remain open, and both adapters remain unimplemented. |
 | 1.3 | 2026-09-19 | **Phase 9B: the curated 2026 event dataset exists** (§8.8). One further public `GET`, separately authorised - `https://api.jolpi.ca/ergast/f1/2026/races/?limit=100` at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23 races, SHA-256 `87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed` - supplied the 2026 calendar's 23 exact Jolpica event locators, corroborated against the official Formula 1 2026 calendar accessed the same day. A curator approved all 23 `eventSlug` identities; the curated event registry now holds exactly those 23, and every observed locator has a reviewed mapping and an evidence-corpus entry. The raw response stays outside the repository; §8.8 records its metadata, licence and attribution. **Event-mapping coverage of the observed 2026 calendar is complete, and it is a point-in-time observation**: any later calendar change fails closed until another reviewed mapping update. **G-l stays open**: 22 of the 23 observed circuit identifiers still lack a curated circuit mapping, so a working calendar adapter remains blocked. **No Jolpica adapter exists**, the `hasResults` assembly change (ADR 0022 amendment A7) is not implemented, and no Worker or GridView runtime has contacted a provider. The earlier "no request was made" statements in this history describe each phase's own work; §0.3 and §8.1 record the ~25 authorised research requests of 2026-08-19. `PROVIDER_MODE` still admits exactly `mock` and `none`, production remains `"none"`, and no licensing conclusion changes. G1, G5, G9 and G-l remain open. |
 | 1.4 | 2026-09-19 | **Phase 9B: the five already-canonical 2026 circuit identifiers are mapped** (§8.8.1). The same 2026-09-19 response recorded in §8.8 - SHA-256 `87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed` - also carries a `Circuit` object per race. Five observed `circuitId`s name a venue for which a canonical GridView circuit identity already existed, so each was curated as a mapping only: `monaco` → `monaco`, `monza` → `monza`, `silverstone` → `silverstone`, `suzuka` → `suzuka` and `spa` → `spa-francorchamps`. **No circuit identity was created, renamed or removed**; the curated circuit registry is unchanged at six identities. **No additional provider request was made** - no provider, service or device was contacted - so the request history in §0.3, §8.1 and §8.8 is unchanged. **G-l stays open**: curated circuit coverage is now **6 of the 23** observed 2026 circuit identifiers, **17 remain unresolved** (`hungaroring` acknowledged unmapped, and 16 that require a new canonical GridView circuit identity), so **a working calendar adapter remains blocked on circuit coverage**. No Jolpica adapter exists, ADR 0022 amendment A7 is not implemented, `PROVIDER_MODE` still admits exactly `mock` and `none`, production remains `"none"`, and no licensing conclusion changes. |
+| 1.5 | 2026-09-20 | **Phase 9B: the 2026 circuit identity dataset is complete** (§8.8.1). A curator approved a canonical GridView circuit identity for each of the 17 observed 2026 `circuitId`s that lacked one, and each was mapped from the same 2026-09-19 response already recorded in §8.8 - SHA-256 `87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed`. **No additional provider request was made**; no provider, service or device was contacted, so the request history in §0.3, §8.1 and §8.8 is unchanged. Curated circuit coverage of the observed 2026 calendar is now **23 of 23**, no observed 2026 `circuitId` is acknowledged as unmapped, and the season-2026 dataset holds **53 exact mappings**, **57 approved evidence identities** and **four acknowledgements** (`antonelli`, OpenF1 `driver_number` 12, `Cadillac`, `Racing Bulls` - none of them a circuit). Commercially named venues take an immutable geographic ID (`red_bull_ring` → `spielberg`, `madring` → `madrid`) with the branding carried by the mutable display name; official names win over colloquial ones (`interlagos` → `jose-carlos-pace`, `losail` → `lusail`). Each new registry row carries **only `id` and `name`** - no locality, country or coordinates. **The circuit portion of G-l is complete and circuit coverage no longer blocks the calendar adapter, but no Jolpica adapter exists**, ADR 0022 amendment A7 is not implemented, and a complete dataset is not an adapter or a production path. **G-l itself stays open** on the four non-circuit acknowledgements and the unrecorded OpenF1 `circuit_key`. `PROVIDER_MODE` still admits exactly `mock` and `none`, production remains `"none"`, **no live provider mode has been enabled**, G1 remains open, and no licensing conclusion changes. |
 
 ---
 
@@ -1024,18 +1025,26 @@ All 23 identities are in `content/registries/events.development.json`, and all
 and recorded in `content/seasons/2026/provider-evidence.development.json`. A
 test reconstructs this table from those files and fails if either side drifts.
 
-#### 8.8.1 Circuit evidence for the five circuits mapped on 2026-09-19
+#### 8.8.1 Circuit evidence for the 23 season-2026 circuits
 
-Each race in the same response carries a `Circuit` object. Five of the 23
-observed `circuitId`s name a venue for which a canonical GridView circuit
-identity **already existed** in `content/registries/circuits.mock.json`, so each
-pair below is a **mapping decision only**. No circuit identity was created,
-renamed or removed, and the curated circuit registry still holds exactly its six
-identities. An event mapping never implies a circuit ([ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)
+Each race in the same response carries a `Circuit` object, so the single
+response recorded at the top of §8.8 supplies all 23 observed `circuitId`s.
+Every one of them now has a canonical GridView circuit identity, a reviewed
+mapping and an evidence-corpus entry, reached in two recorded passes: **five
+mapping-only decisions on 2026-09-19**, where the canonical identity already
+existed, and **seventeen curated identities approved on 2026-09-20**, where it
+did not. An event mapping never implies a circuit ([ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)
 amendment A3), so every row here is its own curated mapping and its own entry in
 the evidence corpus. The provider value is never the identity: `spa` maps to
 `spa-francorchamps` precisely because the two strings differ and neither may be
 derived from the other.
+
+##### The five mapped on 2026-09-19 (mapping decisions only)
+
+Five of the 23 observed `circuitId`s name a venue for which a canonical GridView
+circuit identity **already existed** in `content/registries/circuits.mock.json`,
+so each pair below was a **mapping decision only**: no circuit identity was
+created, renamed or removed for any of them.
 
 | Round | Exact `circuitId` | Observed `circuitName` | Observed locality, country | Observed `lat`, `long` | Canonical GridView circuit |
 |---|---|---|---|---|---|
@@ -1063,17 +1072,80 @@ reconciled, and none of them is a conflict of identity:
 - `monza` - observed `Autodromo Nazionale di Monza` against the registry's
   `Autodromo Nazionale Monza`: the same venue, with and without the preposition.
 
-**What this does and does not cover.** These five plus `albert_park` from §8.4
-bring curated circuit coverage to **6 of the 23** observed 2026 circuit
-identifiers. **17 remain unresolved and every one of them still blocks the
-affected resource**: `hungaroring` stays explicitly acknowledged as unmapped
-with reason `no-canonical-gridview-identity`, and the other **16** -
-`shanghai`, `miami`, `villeneuve`, `catalunya`, `red_bull_ring`, `zandvoort`,
-`madring`, `baku`, `sepang`, `marina_bay`, `americas`, `rodriguez`,
-`interlagos`, `vegas`, `losail` and `yas_marina` - **require a new canonical
-GridView circuit identity**, which is a curated-identity decision outside this
-record and is not taken here. **The calendar adapter therefore remains blocked
-on circuit coverage.**
+##### The seventeen curated on 2026-09-20 (new canonical identities)
+
+The remaining 17 observed `circuitId`s had no canonical GridView circuit
+identity, so a curator created one for each. Every canonical ID and display name
+below is **curator-authored**: no provider name was adopted as an identity, no
+alias was created and no provider value was normalised into an ID.
+
+The canonical ID is **immutable**. The display name carries the venue's current
+public branding and **may be updated later** if that branding changes. Three
+decisions are recorded explicitly:
+
+- **A commercially named venue takes a geographic ID.** `red_bull_ring` and
+  `madring` name venues whose public branding is commercial and can change, so
+  the curated IDs are `spielberg` and `madrid` — the geography, which does not
+  change when a sponsor does — while the display names `Red Bull Ring` and
+  `Madring` carry the branding.
+- **An official name wins over a colloquial one.** `interlagos` and `losail` are
+  the provider's colloquial and alternative-romanisation forms; the curated
+  identities are the official `jose-carlos-pace` and `lusail`.
+- **Generic circuit words are stripped from the ID** and kept in the display
+  name. Where that leaves the curated ID equal to the provider value —
+  `hungaroring` and `sepang`, approved as canonical IDs in their own right, and
+  `shanghai`, `miami`, `zandvoort` and `baku` — the agreement is a curator
+  decision, never a matching rule.
+
+| Round | Exact `circuitId` | Canonical GridView circuit | Canonical display name |
+|---|---|---|---|
+| 2 | `shanghai` | `shanghai` | `Shanghai International Circuit` |
+| 4 | `miami` | `miami` | `Miami International Autodrome` |
+| 5 | `villeneuve` | `gilles-villeneuve` | `Circuit Gilles Villeneuve` |
+| 7 | `catalunya` | `barcelona-catalunya` | `Circuit de Barcelona-Catalunya` |
+| 8 | `red_bull_ring` | `spielberg` | `Red Bull Ring` |
+| 11 | `hungaroring` | `hungaroring` | `Hungaroring` |
+| 12 | `zandvoort` | `zandvoort` | `Circuit Zandvoort` |
+| 14 | `madring` | `madrid` | `Madring` |
+| 15 | `baku` | `baku` | `Baku City Circuit` |
+| 16 | `sepang` | `sepang` | `Sepang International Circuit` |
+| 17 | `marina_bay` | `marina-bay` | `Marina Bay Street Circuit` |
+| 18 | `americas` | `circuit-of-the-americas` | `Circuit of the Americas` |
+| 19 | `rodriguez` | `hermanos-rodriguez` | `Autódromo Hermanos Rodríguez` |
+| 20 | `interlagos` | `jose-carlos-pace` | `Autódromo José Carlos Pace` |
+| 21 | `vegas` | `las-vegas-strip` | `Las Vegas Strip Circuit` |
+| 22 | `losail` | `lusail` | `Lusail International Circuit` |
+| 23 | `yas_marina` | `yas-marina` | `Yas Marina Circuit` |
+
+**Each new registry row carries only `id` and `name`.** No locality, country,
+coordinates, length, corner count, direction, first-Grand-Prix year or lap
+record was committed for any of them. Those are descriptive facts GridView does
+not own for these venues, and the observed `Circuit` object is not a licence to
+publish them; the identity is all this dataset needs and all it records. The
+curated circuit registry therefore holds **23 identities**, six of them
+pre-existing rows with illustrative development facts and seventeen of them
+identity-only.
+
+**What this does and does not cover.** Curated circuit coverage of the observed
+2026 calendar is now **23 of 23**, and **no observed 2026 `circuitId` is
+acknowledged as unmapped**. The season-2026 dataset holds **53 exact mappings**
+and **57 approved evidence identities**, with **four acknowledgements**
+remaining — `antonelli`, OpenF1 `driver_number` `12`, `Cadillac` and
+`Racing Bulls`, none of them a circuit.
+
+**Circuit coverage no longer blocks the calendar adapter, and no adapter
+exists.** The two statements are independent and both are true: the dataset gap
+that blocked a Jolpica calendar adapter is closed, and **no Jolpica adapter has
+been written**. A complete mapping dataset is not an adapter, a runtime path or
+a production capability. `PROVIDER_MODE` still admits exactly `mock` and `none`,
+production remains `"none"`, **no live provider mode has been enabled**, and
+**G1 remains open**. The **circuit portion of G-l is complete**; **G-l itself
+remains open** because the four non-circuit identities above are still
+acknowledged as unmapped and no OpenF1 `circuit_key` value is recorded anywhere.
+
+This coverage is a **point-in-time observation** of the calendar as it stood on
+2026-09-19. A later calendar change fails closed until another reviewed mapping
+update.
 
 **No additional provider request was made.** Every value in this subsection was
 read from the single response already recorded at the top of §8.8, whose exact
@@ -1092,13 +1164,13 @@ and above is unchanged.
 - **`round` arrives as a JSON string** (`"1"`); the curated locator stores an
   integer. The adapter's one strict parse is A5 item 2's concern and is not
   implemented.
-- **Circuit coverage is still incomplete.** The 23 `circuitId`s are locator
-  components in the event table above. Six of them now also have a curated
-  circuit mapping in their own right - `albert_park` from §8.4 and the five
-  approved in §8.8.1 - `hungaroring` is acknowledged unmapped, and the other 16
-  are not in the circuit evidence corpus at all. Because an event mapping never
-  implies a circuit (A3), **17 of 23 circuits still lack a curated mapping and a
-  working calendar adapter remains blocked** (G-l).
+- **Circuit coverage is complete for this calendar.** The 23 `circuitId`s are
+  locator components in the event table above, and every one of them now also
+  has a curated circuit identity and mapping in its own right - `albert_park`
+  from §8.4, five approved in §8.8.1 on 2026-09-19 and 17 approved there on
+  2026-09-20. An event mapping still never implies a circuit (A3), so each is
+  its own record. **Circuit coverage no longer blocks a calendar adapter; no
+  such adapter exists.**
 - §8.4's 24 circuits against 23 races (M8) is not explained by this response,
   which carries 23 distinct `circuitId`s.
 - **No Jolpica adapter exists**, and the `hasResults` assembly change (ADR 0022
@@ -2710,7 +2782,7 @@ Full detail in Appendix D.
 | G-h | ~~`providerCallCount` is untyped and would silently under-report per-source usage.~~ **Closed in Phase 9B-1 (2026-08-23).** The structural cast is removed; `FormulaOneProvider` requires a typed `sourceId` and `requestMetrics()`, and `SyncResult` carries operation-scoped and lifetime attempt counts split by source and by job category, with failed and rate-limited attempts counted. |
 | G-i | **`sourceUpdatedAt` must be derived from GridView's own observation state** (§10.7.1). Neither provider publishes an update timestamp, so the published value is the snapshot-level `snapshotObservedAt`, bound to `snapshotRevision` (ADR 0020 D1.9); the resource-level `sourceObservedAt` is internal reconciliation state and is never published (D1.12). Both require the previously stored revision and are therefore coordinator and publication state, not adapter state. ~~Blocking for Phase 9B.~~ **Decided** by [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1; the remaining work is implementation (it rides on G4 and G9). **Partially implemented 2026-09-03 (Phase 9B-6, PR 1): `snapshotRevision` and its canonical input exist and are tested, with no production caller. `snapshotObservedAt` does not, and D1.10's strictly-monotonic assignment is blocked** - it must be computed pre-commit from the pair the active pointer names, two same-season publications can both reach the publisher without observing each other, and Workers KV offers no compare-and-set or cross-isolate lock to serialize them (ADR 0007, ADR 0010). `meta.sourceUpdatedAt` is unchanged. **This gap stays open in both halves.** |
 | F3-F5 | ~~**Three referential rules the domain model defines and the preflight did not enforce** — driver participation-span validity, the canonical Grand Prix edition identity `{season}-{eventSlug}` and the canonical constructor season-entry identity `{season}-{constructorId}`. Raised by the final bounded review of PR #12, verified, and deferred to the adapter-registration / G4-activation gate because no current source can produce the invalid states.~~ **Closed in Phase 9B-5 (2026-09-02)** ([ADR 0024](../adr/0024-deep-normalized-contract-validation.md)) as three independent relations in the closed `seasonRelations` vocabulary. No symmetric identity relation exists for a *driver* season entry: §6.7 appends a start round for a split seat, so its identity is not a strict function of the payload. |
-| G-l | **The curated mapping *dataset* is incomplete.** G-e closed the *mechanism*; this is the separate, still-open question of *coverage*. Only identifiers already recorded in §8 are curated: `Cadillac` and `Racing Bulls` have no canonical GridView constructor identity, `antonelli` / `driver_number 12` has no canonical driver identity, `hungaroring` has no canonical circuit identity, and no OpenF1 `circuit_key` value is recorded anywhere. Each gap is an explicit acknowledgement in `provider-evidence.development.json` and blocks the affected resource. Closing it needs curated GridView identities and more recorded provider evidence, not more mapping code. **Event-identity sub-gap closed on 2026-09-19** (§8.8): the curated event registry holds 23 curator-approved `eventSlug` identities, and all 23 Jolpica event locators observed for 2026 have a reviewed mapping and an evidence-corpus entry. That coverage is a point-in-time observation; a later calendar change fails closed until another reviewed update. **Five circuit mappings added on 2026-09-19** (§8.8.1) for the observed `circuitId`s whose canonical GridView circuit already existed - `monaco`, `monza`, `silverstone`, `suzuka` and `spa` - as mappings only, creating no identity. **G-l itself stays open**: curated circuit coverage is 6 of the 23 observed circuit identifiers, so 17 still lack a curated mapping (`hungaroring` acknowledged, and 16 that are not in the circuit evidence corpus at all and need a new canonical GridView circuit identity), which blocks a working calendar adapter, and the driver, constructor and `circuit_key` gaps above are unchanged. |
+| G-l | **The curated mapping *dataset* is incomplete.** G-e closed the *mechanism*; this is the separate, still-open question of *coverage*. Only identifiers already recorded in §8 are curated: `Cadillac` and `Racing Bulls` have no canonical GridView constructor identity, `antonelli` / `driver_number 12` has no canonical driver identity, and no OpenF1 `circuit_key` value is recorded anywhere. Each gap is an explicit acknowledgement in `provider-evidence.development.json` and blocks the affected resource. Closing it needs curated GridView identities and more recorded provider evidence, not more mapping code. **Event-identity sub-gap closed on 2026-09-19** (§8.8): the curated event registry holds 23 curator-approved `eventSlug` identities, and all 23 Jolpica event locators observed for 2026 have a reviewed mapping and an evidence-corpus entry. That coverage is a point-in-time observation; a later calendar change fails closed until another reviewed update. **Circuit sub-gap closed on 2026-09-20** (§8.8.1): five mappings were added on 2026-09-19 for the observed `circuitId`s whose canonical GridView circuit already existed, and on 2026-09-20 a curator approved a canonical identity for each of the remaining 17. Curated circuit coverage of the observed 2026 calendar is **23 of 23**, no observed 2026 `circuitId` is acknowledged as unmapped, and **circuit coverage no longer blocks a calendar adapter** - though **no Jolpica adapter exists**, so nothing consumes any of this. **G-l itself stays open**: `Cadillac`, `Racing Bulls`, `antonelli` / `driver_number 12` are still acknowledged as unmapped for want of a canonical GridView identity, and no OpenF1 `circuit_key` value is recorded anywhere. The season-2026 dataset holds 53 exact mappings, 57 approved evidence identities and four acknowledgements. |
 | G-m | ~~**No curated event identity mechanism exists.**~~ **Closed as a mechanism on 2026-09-19** ([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity) A5), decided 2026-09-16. A curated event registry (`content/registries/events.development.json`) owns an immutable `eventSlug`; the mapping entity union is now `driver`, `constructor`, `circuit`, `event`; a Jolpica event resolves only through the complete season-scoped locator - the file's season plus `round`, exact `raceName`, exact `circuitId`, carried in one closed composite value keyed as `eventLocator` - with no subset, fuzzy or normalized matching, an injective key encoding, and fail-closed resolution on an absent, ambiguous, dangling or malformed record. Schemas and `validate:content` cover the registry, the mapping and the evidence corpus. **The mechanism is dormant and unbundled**: no runtime module outside `src/providers/mappings/` imports it and the Worker entry point cannot reach it. **The dataset half is tracked as G-l**, where the 2026 event-identity sub-gap was closed on 2026-09-19 (§8.8): 23 curated identities and 23 mapped locators. **No Jolpica adapter exists**, so every Jolpica resource that produces a `GrandPrix` or `Session` stays blocked. The mechanism work itself contacted no provider and made no request. |
 | G-k | ~~**`QuotaState` has the wrong windows** (§8.6).~~ **Closed in Phase 9B-1 (2026-08-23).** `QuotaState` is per source and holds an extensible window collection: OpenF1 per-second and per-minute, Jolpica per-second and per-hour, no daily bucket for either, mock limits marked test-only. The §16.1 thresholds are implemented against it. The **rate limiter** it feeds is G7, which was **closed separately by Phase 9B-2** (Appendix D.3). |
 | G-j | ~~**The post-reconciliation cadence and the settling predicate are unspecified.**~~ **Specified** in §10.4.1 under [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §3-§4: the five invariants are binding and the state machine, cadence bounds and slow sweep are recorded against them. The I3/I4 tension is resolved by a bounded settling predicate plus a fixed-budget weekly sweep. Volume figures are bounded (§11.3.1). The remaining work is **implementation**, including the operational events in §10.4.1 and §10.9.1. |

@@ -112,7 +112,9 @@ describe('an acknowledged identity still fails closed at runtime', () => {
       },
     ]);
 
-    expect(checks.length).toBe(5);
+    // Four since 2026-09-20: `hungaroring` left this set when the 2026
+    // circuit dataset gave it a canonical identity and a mapping.
+    expect(checks.length).toBe(4);
     for (const [, lookup] of checks) {
       const result = registry.resolveUnknown(lookup);
       expect(result.outcome, JSON.stringify(lookup)).toBe('unresolved');

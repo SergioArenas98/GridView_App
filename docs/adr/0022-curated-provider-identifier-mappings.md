@@ -656,7 +656,7 @@ must satisfy.
 | `provider-neutrality.test.ts`                | **Unchanged**; its replacement is required when adapter work begins (A9) |
 | G1 (live provider mode)                      | **Open**                                                                 |
 | G5 (event-aware scheduling), G9 (provenance) | **Open**                                                                 |
-| G-l (mapping dataset coverage)               | **Open**; its 2026 event-identity sub-gap is closed, circuits are not    |
+| G-l (mapping dataset coverage)               | **Open**; its 2026 event and circuit sub-gaps are both closed           |
 | Provider requests                            | **Research only** (~25 on 2026-08-19, 1 on 2026-09-19); none by GridView |
 
 **The calendar adapter is not unblocked.** It stays blocked until the event
@@ -667,13 +667,13 @@ shorten it.
 > **Status on 2026-09-19.** Both halves now exist for season 2026 and are
 > dormant: the mechanism, and the curated dataset of 23 identities and 23
 > mapped locators (A4 status note). **The calendar resource is still blocked**:
-> 17 of the 23 observed Jolpica circuit identifiers have no curated circuit
-> mapping, and an event mapping never implies a circuit (A3). Six are curated:
-> `albert_park`, plus the five approved later the same day for observed
-> `circuitId`s whose canonical GridView circuit already existed (Provider
-> Evaluation §8.8.1). Of the 17, `hungaroring` is acknowledged unmapped and the
-> other 16 need a new canonical GridView circuit identity. The adapter
-> itself remains unimplemented and unregistered, and A7 is not implemented.
+> All 23 observed Jolpica circuit identifiers are now curated and mapped
+> (Provider Evaluation §8.8.1): `albert_park` from §8.4, five approved on
+> 2026-09-19 whose canonical GridView circuit already existed, and 17 canonical
+> identities approved on 2026-09-20. An event mapping still never implies a
+> circuit (A3), so each is its own curated mapping. **Circuit coverage no
+> longer blocks the adapter, but the adapter itself remains unimplemented and
+> unregistered**, and A7 is not implemented.
 >
 > **Provider requests, precisely.** The "none" statements in this ADR describe
 > its own work. Roughly 25 authorized research `GET`s were recorded on

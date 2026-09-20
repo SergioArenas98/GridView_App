@@ -87,6 +87,74 @@
       "direction": "clockwise",
       "firstGrandPrixYear": 1987,
       "lapRecord": null
+    },
+    {
+      "id": "shanghai",
+      "name": "Shanghai International Circuit"
+    },
+    {
+      "id": "miami",
+      "name": "Miami International Autodrome"
+    },
+    {
+      "id": "gilles-villeneuve",
+      "name": "Circuit Gilles Villeneuve"
+    },
+    {
+      "id": "barcelona-catalunya",
+      "name": "Circuit de Barcelona-Catalunya"
+    },
+    {
+      "id": "spielberg",
+      "name": "Red Bull Ring"
+    },
+    {
+      "id": "hungaroring",
+      "name": "Hungaroring"
+    },
+    {
+      "id": "zandvoort",
+      "name": "Circuit Zandvoort"
+    },
+    {
+      "id": "madrid",
+      "name": "Madring"
+    },
+    {
+      "id": "baku",
+      "name": "Baku City Circuit"
+    },
+    {
+      "id": "sepang",
+      "name": "Sepang International Circuit"
+    },
+    {
+      "id": "marina-bay",
+      "name": "Marina Bay Street Circuit"
+    },
+    {
+      "id": "circuit-of-the-americas",
+      "name": "Circuit of the Americas"
+    },
+    {
+      "id": "hermanos-rodriguez",
+      "name": "Autódromo Hermanos Rodríguez"
+    },
+    {
+      "id": "jose-carlos-pace",
+      "name": "Autódromo José Carlos Pace"
+    },
+    {
+      "id": "las-vegas-strip",
+      "name": "Las Vegas Strip Circuit"
+    },
+    {
+      "id": "lusail",
+      "name": "Lusail International Circuit"
+    },
+    {
+      "id": "yas-marina",
+      "name": "Yas Marina Circuit"
     }
   ]
 }

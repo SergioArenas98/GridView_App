@@ -269,7 +269,13 @@ describe('the repository-owned evidence record (Provider Evaluation §8.8)', () 
     'GridView_Provider_Evaluation.md',
   );
   const start = evaluation.indexOf('### 8.8 ');
-  const section = evaluation.slice(start, evaluation.indexOf('\n---\n', start));
+  // Stops at §8.8.1, which is the *circuit* evidence record and carries its
+  // own tables in the same shape. Reading to the next `---` would swallow it
+  // and mix circuit rows into the event reconstruction below.
+  const section = evaluation.slice(
+    start,
+    evaluation.indexOf('#### 8.8.1 ', start),
+  );
 
   it('records the observation the mappings cite', () => {
     expect(start).toBeGreaterThan(0);
