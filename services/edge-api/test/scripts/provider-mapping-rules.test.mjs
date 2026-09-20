@@ -21,6 +21,7 @@ import {
   isValidKeyShape,
   validateEvidenceCoverage,
   validateMappingDocument,
+  validateRegistryDocumentSet,
 } from '../../scripts/lib/provider-mapping-rules.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -415,5 +416,66 @@ describe('required case 51 - approved identities cannot be silently omitted', ()
     const problems = validateEvidenceCoverage(orphan, document);
     expect(problems).toHaveLength(1);
     expect(problems[0]).toMatch(/does not correspond to any recorded identity/);
+  });
+});
+
+describe('a curated registry identity is unique or the whole set is refused', () => {
+  const circuits = read('content', 'registries', 'circuits.mock.json').circuits;
+
+  it('accepts the committed 23 circuit identities', () => {
+    const { problems, ids } = validateRegistryDocumentSet(
+      'circuit-registry',
+      'circuits',
+      [{ label: 'circuits.mock.json', data: { circuits } }],
+    );
+
+    expect(problems).toEqual([]);
+    expect(ids.size).toBe(23);
+  });
+
+  it('rejects a duplicated canonical id and decides no canonical set', () => {
+    // The defect the 2026 circuit dataset could plausibly introduce: 17 rows
+    // added in one pass, one of them repeating an id that already existed.
+    // A duplicate must never silently collapse into one identity.
+    const { problems, ids } = validateRegistryDocumentSet(
+      'circuit-registry',
+      'circuits',
+      [
+        {
+          label: 'circuits.mock.json',
+          data: {
+            circuits: [...circuits, { id: 'hungaroring', name: 'Hungaroring' }],
+          },
+        },
+      ],
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0].message).toMatch(/duplicate canonical id "hungaroring"/);
+    // An undecided canonical set is never handed on for target checks.
+    expect(ids.size).toBe(0);
+  });
+
+  it('rejects a duplicate of a newly curated identity just the same', () => {
+    const { problems } = validateRegistryDocumentSet(
+      'circuit-registry',
+      'circuits',
+      [
+        {
+          label: 'circuits.mock.json',
+          data: {
+            circuits: [
+              ...circuits,
+              { id: 'jose-carlos-pace', name: 'Autódromo José Carlos Pace' },
+            ],
+          },
+        },
+      ],
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0].message).toMatch(
+      /duplicate canonical id "jose-carlos-pace"/,
+    );
   });
 });

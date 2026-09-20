@@ -54,7 +54,19 @@ export interface MockProviderOptions {
 
 type RegistryDriver = Omit<Driver, 'media'>;
 type RegistryConstructor = Omit<Constructor, 'media'>;
-type RegistryCircuit = Omit<Circuit, 'media'>;
+
+/**
+ * A curated circuit registry row.
+ *
+ * Only `id` and `name` are curated for every circuit. The descriptive facts
+ * are optional, because a curated identity may exist for a circuit whose
+ * physical description GridView does not own; the 2026 circuits curated for
+ * provider mapping are identity-only rows of exactly that kind. The normalized
+ * contract still requires each of those keys to be *present* as an explicit
+ * `null`, so `withCircuitMedia` supplies them on the way out.
+ */
+type RegistryCircuit = Pick<Circuit, 'id' | 'name'> &
+  Partial<Omit<Circuit, 'id' | 'name' | 'media'>>;
 
 export class MockFormulaOneProvider implements FormulaOneProvider {
   readonly name = 'mock-development-provider';
@@ -458,7 +470,20 @@ function withConstructorMedia(
 }
 
 function withCircuitMedia(circuits: RegistryCircuit[]): Circuit[] {
+  // An absent descriptive fact becomes an explicit `null`: "GridView records
+  // no such fact", which is what the contract asks for. A row that carries the
+  // fact keeps it, because the row is spread over these defaults.
   return circuits.map((circuit) => ({
+    locality: null,
+    country: null,
+    countryCode: null,
+    latitude: null,
+    longitude: null,
+    lengthMeters: null,
+    cornerCount: null,
+    direction: null,
+    firstGrandPrixYear: null,
+    lapRecord: null,
     ...circuit,
     media: mediaFor('circuit', circuit.id),
   }));

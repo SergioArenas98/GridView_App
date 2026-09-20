@@ -179,11 +179,12 @@ all, such as OpenF1 `circuit_key` - cannot be written here without fabricating
 a provider value. Those are tracked as gap **G-l** in
 `../technical/GridView_Provider_Evaluation.md` instead.
 
-Five identities sit in this state today: `Cadillac` and `Racing Bulls`
-(OpenF1 `team_name`), `antonelli` (Jolpica `driverId`) with its OpenF1
-`driver_number` `12`, and `hungaroring` (Jolpica `circuitId`). Two of them are
-half of the four constructor-name disagreements recorded in Provider Evaluation
-§8.5.
+Four identities sit in this state today: `Cadillac` and `Racing Bulls`
+(OpenF1 `team_name`) and `antonelli` (Jolpica `driverId`) with its OpenF1
+`driver_number` `12`. Two of them are half of the four constructor-name
+disagreements recorded in Provider Evaluation §8.5. **No circuit is
+acknowledged**: all 23 observed season-2026 `circuitId`s are curated and mapped
+(§8.8.1).
 
 ---
 
@@ -381,12 +382,12 @@ This is asserted by tests, not just stated here.
 > It is a **point-in-time** observation, so a later calendar change fails
 > closed until another reviewed update (§15.3).
 >
-> **Nothing resolves them yet.** No Jolpica adapter exists, and 17 of the 23
-> observed circuit identifiers still have no curated circuit mapping - six are
-> curated, `albert_park` from Provider Evaluation §8.4 and five more approved on
-> 2026-09-19 (§8.8.1), and of the rest `hungaroring` is acknowledged unmapped
-> while 16 need a new canonical GridView circuit identity - so a working
-> calendar stays blocked. The only provider requests on record are
+> **Nothing resolves them yet.** No Jolpica adapter exists. All 23 observed
+> circuit identifiers are curated and mapped (Provider Evaluation §8.8.1):
+> `albert_park` from §8.4, five approved on 2026-09-19 and 17 canonical
+> identities approved on 2026-09-20, so **circuit coverage no longer blocks a
+> working calendar** - but with no adapter, nothing consumes any of it. The
+> only provider requests on record are
 > authorized research requests — about 25 on 2026-08-19 and one on 2026-09-19
 > — and GridView's own code has made none.
 

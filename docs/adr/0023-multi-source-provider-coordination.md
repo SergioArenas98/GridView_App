@@ -1245,7 +1245,8 @@ provider was contacted.
 **G5 remains open** — no event-aware scheduling or cadence calculation.
 **G9 remains open** — no persisted provenance and no provisional/reconciled
 record state. **G-l remains open** — the mapping dataset is still limited to
-identifiers already recorded in Provider Evaluation §8. **G1 and G3 remain
+identifiers already recorded in Provider Evaluation §8, though its 2026 event
+and circuit sub-gaps are now closed. **G1 and G3 remain
 open** — no live provider mode and no production cron. **Deep
 normalized-contract validation for a real adapter remains open** and is an
 activation gate on registering one (D14); the coordinator-owned normalized

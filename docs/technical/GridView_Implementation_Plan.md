@@ -1522,7 +1522,7 @@ nothing was provisioned or deployed.**
 | Operational signal | One bounded structured event (`failureCategory: provider_mapping_unresolved`) carrying source, season, entity kind, provider field and a closed failure reason, plus the bounded exact provider value in a single **internal** diagnostic field. No registry, mapping record, upstream payload or exception body is serialized. |
 | Provider-ID containment | **Unchanged and extended.** Provider identifiers appear only in the curated mapping and evidence content, the internal diagnostic log field and narrowly scoped internal tests. Tests assert they reach no public v1 response, no OpenAPI text, no public fixture, no published snapshot and no Flutter-facing artifact. |
 | Operator workflow | A **reviewed repository change**, documented in [GridView_Provider_Mapping_Guide.md](../operations/GridView_Provider_Mapping_Guide.md). There is no admin mutation endpoint and no KV, Durable Object or database store. |
-| **G-l - mapping dataset coverage** | **Open, and deliberately so.** The mechanism is complete; the dataset is not. Only identifiers already recorded in Provider Evaluation §8 are curated, and five approved identities are explicitly acknowledged as unmapped because no canonical GridView identity exists for them. Every one blocks the affected resource. This is tracked separately from G8 so "the registry works" is never read as "the season is mapped". |
+| **G-l - mapping dataset coverage** | **Open, and deliberately so.** The mechanism is complete; the dataset is not. Only identifiers already recorded in Provider Evaluation §8 are curated, and four approved identities are explicitly acknowledged as unmapped because no canonical GridView identity exists for them. The circuit portion is complete (23 of 23 observed 2026 circuits, §8.8.1); the four that remain are not circuits. Every one blocks the affected resource. This is tracked separately from G8 so "the registry works" is never read as "the season is mapped". |
 | **G4, G5, G9 and everything else** | **Still open at the end of 9B-3.** G4 - the multi-source coordination mechanism - was subsequently **closed by Phase 9B-4** (§14.0.8). No Jolpica or OpenF1 adapter, no event-aware scheduling (G5), no production cron (G3/G-b), no reconciliation or provisional/reconciled state (G9), no `sourceObservedAt` / `snapshotRevision` / `snapshotObservedAt` persistence, no operator backlog, no attribution or ShareAlike publication surface. |
 | Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; staging is `mock`, production is `none`. |
 | OpenF1 | **Still fail-closed** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §5). Recording its field names and a driver number is curation, not an unlock. |
@@ -2054,7 +2054,7 @@ deployed.**
 | Evidence corpus | All 23 locators recorded as approved identities; none acknowledged. |
 | Coverage | **Event-mapping coverage of the observed 2026 calendar is complete.** It is a point-in-time observation: a later calendar change, rename, round shift or venue change fails closed until another reviewed mapping update on new evidence. |
 | Proof | `npm run validate:content` (schema, key uniqueness, target existence, two-way evidence coverage) and `test/providers/mappings/event-dataset-2026.test.ts`, which pins the curator table, reconstructs Provider Evaluation §8.8 from the committed content, and proves order independence and exact-only resolution. It runs from a clean checkout without the raw capture. |
-| **Circuit coverage** | **Open.** 17 of the 23 observed Jolpica circuit identifiers have no curated circuit mapping. Six are mapped: `albert_park` from Provider Evaluation §8.4, plus the five added on 2026-09-19 (§8.8.1) whose canonical GridView circuit already existed - `monaco`, `monza`, `silverstone`, `suzuka` and `spa` → `spa-francorchamps`. Of the 17, `hungaroring` is acknowledged unmapped and the other 16 need a new canonical GridView circuit identity. An event mapping never implies a circuit, so a functioning calendar adapter remains blocked. |
+| **Circuit coverage** | **Complete at 23 of 23** (2026-09-20, Provider Evaluation §8.8.1). `albert_park` from §8.4, five added on 2026-09-19 whose canonical GridView circuit already existed - `monaco`, `monza`, `silverstone`, `suzuka` and `spa` → `spa-francorchamps` - and 17 canonical identities approved on 2026-09-20, each new registry row carrying only `id` and `name`. No observed 2026 `circuitId` is acknowledged as unmapped. An event mapping still never implies a circuit, so each is its own curated mapping. **Circuit coverage no longer blocks a calendar adapter; no such adapter exists.** |
 | **Jolpica adapter** | **Not implemented and not registered.** |
 | `hasResults` derivation (A7) | **Not implemented.** |
 | Provider requests | GridView's application code, the Worker provider client and the rate limiter have made **none**. The only requests on record are the authorized research requests of 2026-08-19 (Provider Evaluation §8.1) and the one calendar-evidence request above. |
@@ -2157,12 +2157,11 @@ another source rather than bypassing the requirement.
   identities and event mappings themselves from separately authorized
   evidence.~~ **Done for 2026 on 2026-09-19** (§14.0.14): 23 identities and
   23 mapped locators. A later calendar change needs another reviewed update.
-- Curate **circuit coverage** for the 2026 calendar: 17 of the 23 observed
-  Jolpica circuit identifiers have no curated circuit mapping (six are curated:
-  `albert_park`, plus five approved on 2026-09-19), which blocks every Jolpica
-  resource that produces a `GrandPrix` or `Session`. Sixteen of the 17 need a
-  new canonical GridView circuit identity; `hungaroring` is acknowledged
-  unmapped.
+- ~~Curate **circuit coverage** for the 2026 calendar.~~ **Done on 2026-09-20**
+  (Provider Evaluation §8.8.1): all 23 observed Jolpica circuit identifiers are
+  curated and mapped, so no Jolpica resource that produces a `GrandPrix` or
+  `Session` is blocked on circuit coverage any more. **No adapter exists to
+  consume it.**
 - Derive `hasResults` in season assembly from selected, classified race
   results before the preflight, leaving `event-has-results` unchanged (A7).
 - Implement the **Jolpica** adapter against the coordination port, emitting
@@ -2289,11 +2288,14 @@ these are the implementation tasks.
   9B-3** (§14.0.7,
   [ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)), dormant
   until an adapter consumes it. **The mapping dataset remains incomplete and
-  is still outstanding work under gap G-l**: 36 exact mappings are curated -
-  13 driver, constructor and circuit mappings plus the 23 season-2026 event
-  locators (§14.0.14, Provider Evaluation §8.8 and §8.8.1) - and five approved
-  identities are explicitly acknowledged as unmapped, so any identity outside
-  that set still blocks its resource.
+  is still outstanding work under gap G-l**: 53 exact mappings are curated -
+  7 driver and constructor mappings, the 23 season-2026 circuit mappings and
+  the 23 season-2026 event locators (§14.0.14, Provider Evaluation §8.8 and
+  §8.8.1) - and four approved identities are explicitly acknowledged as
+  unmapped, so any identity outside that set still blocks its resource. The
+  **circuit portion of G-l is complete at 23 of 23** observed 2026 circuits,
+  which **no longer blocks a calendar adapter**; **no Jolpica adapter exists**,
+  so nothing consumes it.
 - Locally modelled quota monitoring (Phase 9B-1) and a per-provider rate
   limiter (Phase 9B-2, [ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
 - Attribution surface in the app and in the public API documentation, held as

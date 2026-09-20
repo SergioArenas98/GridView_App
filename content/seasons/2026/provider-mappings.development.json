@@ -83,6 +83,153 @@
       "evidence": "GridView_Provider_Evaluation.md 8.8 circuit monza - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 13."
     },
     {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "shanghai",
+      "gridviewId": "shanghai",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit shanghai - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 2."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "miami",
+      "gridviewId": "miami",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit miami - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 4."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "villeneuve",
+      "gridviewId": "gilles-villeneuve",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit villeneuve - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 5.",
+      "note": "The provider value is a fragment of the curated GridView ID. Neither string is derived from the other: expanding the fragment would be slug minting, which is forbidden, so the pair is curated instead."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "catalunya",
+      "gridviewId": "barcelona-catalunya",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit catalunya - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 7.",
+      "note": "The provider value is a fragment of the curated GridView ID. Neither string is derived from the other: expanding the fragment would be slug minting, which is forbidden, so the pair is curated instead."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "red_bull_ring",
+      "gridviewId": "spielberg",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit red_bull_ring - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 8.",
+      "note": "The venue carries a commercial name. The curated GridView ID is the geography of the venue, which does not change when the sponsorship does, and is immutable once published; the current public branding is carried by the registry display name, which may be updated later. Jolpica separates words with an underscore and GridView with a hyphen. Converting one into the other would be slug minting, which is forbidden; the pair is curated instead."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "hungaroring",
+      "gridviewId": "hungaroring",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit hungaroring - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 11."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "zandvoort",
+      "gridviewId": "zandvoort",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit zandvoort - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 12."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "madring",
+      "gridviewId": "madrid",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit madring - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 14.",
+      "note": "The venue carries a commercial name. The curated GridView ID is the geography of the venue, which does not change when the branding does, and is immutable once published; the current public branding is carried by the registry display name, which may be updated later."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "baku",
+      "gridviewId": "baku",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit baku - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 15."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "sepang",
+      "gridviewId": "sepang",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit sepang - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 16."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "marina_bay",
+      "gridviewId": "marina-bay",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit marina_bay - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 17.",
+      "note": "Jolpica separates words with an underscore and GridView with a hyphen. Converting one into the other would be slug minting, which is forbidden; the pair is curated instead."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "americas",
+      "gridviewId": "circuit-of-the-americas",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit americas - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 18.",
+      "note": "The provider value is a fragment of the curated GridView ID. Neither string is derived from the other: expanding the fragment would be slug minting, which is forbidden, so the pair is curated instead."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "rodriguez",
+      "gridviewId": "hermanos-rodriguez",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit rodriguez - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 19.",
+      "note": "The provider value is a fragment of the curated GridView ID. Neither string is derived from the other: expanding the fragment would be slug minting, which is forbidden, so the pair is curated instead."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "interlagos",
+      "gridviewId": "jose-carlos-pace",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit interlagos - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 20.",
+      "note": "The provider uses the colloquial name of the locality; the curated GridView ID and display name use the official name of the circuit. The two strings share nothing, so the pair is curated and neither is derived from the other."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "vegas",
+      "gridviewId": "las-vegas-strip",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit vegas - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 21.",
+      "note": "The provider value is a fragment of the curated GridView ID. Neither string is derived from the other: expanding the fragment would be slug minting, which is forbidden, so the pair is curated instead."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "losail",
+      "gridviewId": "lusail",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit losail - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 22.",
+      "note": "The provider and GridView romanise the venue differently. Transliterating one into the other would be normalization, which is forbidden; the pair is curated instead."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "yas_marina",
+      "gridviewId": "yas-marina",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit yas_marina - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 23.",
+      "note": "Jolpica separates words with an underscore and GridView with a hyphen. Converting one into the other would be slug minting, which is forbidden; the pair is curated instead."
+    },
+    {
       "source": "openf1",
       "entity": "driver",
       "providerField": "driver_number",

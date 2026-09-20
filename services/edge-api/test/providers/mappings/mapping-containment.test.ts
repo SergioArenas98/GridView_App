@@ -303,18 +303,84 @@ describe('provider identifiers stay out of every public surface', () => {
     for (const expected of [
       'antonelli',
       'albert_park',
-      'hungaroring',
       'Racing Bulls',
       'Cadillac',
       // Curated event locator components that match no GridView name, so
       // they must stay distinguishable leak markers.
       'Bahrain Grand Prix in Malaysia',
       'Brazilian Grand Prix',
-      'sepang',
+      // The provider value for the Brazilian round. The approved canonical
+      // identity is `jose-carlos-pace`/`Autodromo Jose Carlos Pace`, which
+      // shares no substring with it, so it stays a marker even though the
+      // circuit it names is now fully curated and mapped.
       'interlagos',
     ]) {
       expect(leakMarkers).toContain(expected);
     }
+  });
+
+  /**
+   * The 2026 circuit dataset made `hungaroring` and `sepang` curated public
+   * content: both were approved as canonical GridView circuit IDs, so both now
+   * appear in `circuits.mock.json` and are legitimately allowed on a public
+   * surface. They therefore drop out of the provider-only marker list.
+   *
+   * That is a deliberate transition, not an erosion of the guarantee. The two
+   * assertions below pin *why* each one is absent, so a future change that
+   * removes the canonical identity while leaving the mapping in place - which
+   * would make the provider value provider-only again - fails here rather than
+   * silently shrinking the marker set.
+   */
+  describe('a newly curated provider value stops being a leak marker', () => {
+    const canonicalCircuitIds = new Set(
+      (
+        JSON.parse(
+          readFileSync(
+            join(repoRoot, 'content', 'registries', 'circuits.mock.json'),
+            'utf8',
+          ),
+        ) as { circuits: { id: string }[] }
+      ).circuits.map((circuit) => circuit.id),
+    );
+
+    it.each(['hungaroring', 'sepang'])(
+      'excludes %s because it is now a canonical registry identity',
+      (providerValue) => {
+        // Absent from the marker list...
+        expect(leakMarkers).not.toContain(providerValue);
+        // ...for exactly one reason: it is curated public content now.
+        expect(canonicalCircuitIds).toContain(providerValue);
+        expect(publicFacingCuratedContent()).toContain(providerValue);
+      },
+    );
+
+    it('still protects every provider value the registry does not contain', () => {
+      // The general guarantee is unchanged: a provider value that is not
+      // itself curated public content stays a marker. These three are the
+      // underscore-bearing forms, whose approved canonical IDs are hyphenated
+      // or geographic and so never contain the exact provider string.
+      for (const providerValue of [
+        'red_bull_ring',
+        'marina_bay',
+        'yas_marina',
+      ]) {
+        expect(canonicalCircuitIds).not.toContain(providerValue);
+        expect(leakMarkers).toContain(providerValue);
+      }
+    });
+
+    it('derives the exclusion from content, never from a hard-coded allowance', () => {
+      // Nothing is exempted by name: a value is excluded only when it really
+      // occurs in the curated public content, which is what makes the two
+      // exclusions above safe.
+      const publicContent = publicFacingCuratedContent();
+      for (const value of curatedProviderValues()) {
+        if (value.length <= 2) continue;
+        expect(leakMarkers.includes(value), value).toBe(
+          !publicContent.includes(value),
+        );
+      }
+    });
   });
 
   it('flattens a composite event locator into its components', () => {

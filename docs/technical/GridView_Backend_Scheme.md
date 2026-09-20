@@ -730,12 +730,11 @@ Recommended JSON forms:
 > `event` entity, their schemas and `validate:content` coverage — and is
 > dormant and unbundled. **The 2026 event mapping data was curated the same
 > day**: 23 curator-approved identities and 23 mapped Jolpica locators,
-> recorded in Provider Evaluation §8.8. No Jolpica adapter exists and 17 of the
-> 23 observed circuit identifiers have no curated circuit mapping - five more
-> were curated the same day (§8.8.1), bringing the total to six with
-> `albert_park`; `hungaroring` is acknowledged unmapped and the other 16 need a
-> new canonical GridView circuit identity - so the Jolpica calendar resource
-> remains blocked.
+> recorded in Provider Evaluation §8.8. All 23 observed circuit identifiers are
+> curated and mapped (§8.8.1): `albert_park` from §8.4, five curated on
+> 2026-09-19 and 17 canonical identities approved on 2026-09-20. **No Jolpica
+> adapter exists**, so the Jolpica calendar resource remains unimplemented -
+> but it is no longer blocked on circuit coverage.
 
 ---
 
