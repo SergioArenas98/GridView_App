@@ -2289,9 +2289,11 @@ these are the implementation tasks.
   9B-3** (§14.0.7,
   [ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)), dormant
   until an adapter consumes it. **The mapping dataset remains incomplete and
-  is still outstanding work under gap G-l**: eight exact mappings are curated
-  and five approved identities are explicitly acknowledged as unmapped, so any
-  identity outside that set still blocks its resource.
+  is still outstanding work under gap G-l**: 36 exact mappings are curated -
+  13 driver, constructor and circuit mappings plus the 23 season-2026 event
+  locators (§14.0.14, Provider Evaluation §8.8 and §8.8.1) - and five approved
+  identities are explicitly acknowledged as unmapped, so any identity outside
+  that set still blocks its resource.
 - Locally modelled quota monitoring (Phase 9B-1) and a per-provider rate
   limiter (Phase 9B-2, [ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
 - Attribution surface in the app and in the public API documentation, held as

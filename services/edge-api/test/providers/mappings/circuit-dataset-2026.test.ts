@@ -483,6 +483,34 @@ describe('nothing outside the circuit dataset moved', () => {
     expect(evidenceCorpus.identities).toHaveLength(41);
     expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(5);
   });
+
+  it('keeps every stated mapping total in the Implementation Plan true', () => {
+    // Pinned by count, not by wording: the deliverables list drifted once,
+    // claiming eight curated mappings after the dataset had grown past it.
+    const plan = readRepoFile(
+      'docs',
+      'technical',
+      'GridView_Implementation_Plan.md',
+    );
+    const claims = [...plan.matchAll(/(\d+) exact mappings are curated/g)].map(
+      ([, count]) => Number(count),
+    );
+
+    expect(claims.length).toBeGreaterThan(0);
+    for (const claimed of claims) {
+      expect(claimed).toBe(mappingDocument.mappings.length);
+    }
+
+    const acknowledged = [
+      ...plan.matchAll(
+        /(\w+) approved identities are explicitly acknowledged as unmapped/g,
+      ),
+    ].map(([, word]) => word);
+    for (const word of acknowledged) {
+      expect(word).toBe('five');
+    }
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(5);
+  });
 });
 
 describe('the repository-owned evidence record (Provider Evaluation §8.8.1)', () => {
