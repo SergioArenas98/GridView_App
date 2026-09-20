@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -63,6 +63,101 @@ function declaresPinnedOrigin(contents: string, fileName: string): boolean {
   return found;
 }
 
+/** Every TypeScript module under a directory, as repo-relative POSIX paths. */
+function sourceFiles(sourceDir: string): string[] {
+  return (readdirSync(sourceDir, { recursive: true }) as string[])
+    .map((entry) => entry.toString().split('\\').join('/'))
+    .filter((entry) => entry.endsWith('.ts'));
+}
+
+/**
+ * The relative import and re-export specifiers one module declares.
+ *
+ * Parsed from the AST rather than matched textually, so a specifier inside a
+ * comment or a string cannot forge an edge and a multi-line import cannot hide
+ * one. Bare specifiers are package imports and cannot reach `src/`.
+ */
+function importSpecifiers(contents: string, fileName: string): string[] {
+  const source = ts.createSourceFile(
+    fileName,
+    contents,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    ts.ScriptKind.TS,
+  );
+  const specifiers: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      specifiers.push(node.moduleSpecifier.text);
+    }
+    // A dynamic `import('...')` is an edge too, and is how a module could
+    // otherwise be pulled in without a static declaration.
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length > 0 &&
+      node.arguments[0] !== undefined &&
+      ts.isStringLiteral(node.arguments[0])
+    ) {
+      specifiers.push((node.arguments[0] as ts.StringLiteral).text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+  return specifiers;
+}
+
+const srcRoot = join(repoRoot, 'services', 'edge-api', 'src');
+
+/**
+ * Resolves one relative specifier to a repo-relative module path under `src/`.
+ *
+ * Returns `null` for a bare package specifier, for anything resolving outside
+ * `src/` (the curated JSON content, for instance) and for a path with no
+ * TypeScript module behind it.
+ */
+function resolveSpecifier(from: string, specifier: string): string | null {
+  if (!specifier.startsWith('.')) return null;
+  const segments = from.split('/').slice(0, -1);
+  for (const part of specifier.split('/')) {
+    if (part === '.' || part === '') continue;
+    if (part === '..') segments.pop();
+    else segments.push(part);
+  }
+  const base = segments.join('/');
+  for (const candidate of [`${base}.ts`, `${base}/index.ts`]) {
+    if (existsSync(join(srcRoot, candidate))) return candidate;
+  }
+  return null;
+}
+
+/**
+ * The transitive import closure of the Worker entry point.
+ *
+ * This is the set a bundler would ship. A module absent from it cannot be
+ * reached at runtime however it is named, which is the dormancy proof A9 asks
+ * for in place of a file-name assertion.
+ */
+function reachableFromEntryPoint(): ReadonlySet<string> {
+  const seen = new Set<string>();
+  const pending = ['index.ts'];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined || seen.has(current)) continue;
+    seen.add(current);
+    const contents = readFileSync(join(srcRoot, current), 'utf8');
+    for (const specifier of importSpecifiers(contents, current)) {
+      const resolved = resolveSpecifier(current, specifier);
+      if (resolved !== null && !seen.has(resolved)) pending.push(resolved);
+    }
+  }
+  return seen;
+}
+
 describe('runtime provider modes are unchanged by Phase 9B-1', () => {
   it('admits exactly mock and none', () => {
     expect(resolveProviderMode('mock', 'development')).toBe('mock');
@@ -110,7 +205,78 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     const names = entries.map((entry) => entry.toString().toLowerCase());
 
     expect(names.some((name) => name.includes('openf1'))).toBe(false);
-    expect(names.some((name) => name.includes('jolpica'))).toBe(false);
+  });
+
+  /**
+   * The Jolpica file-name assertion that stood here is **replaced**, in the
+   * same change that adds the adapter, exactly as ADR 0022 amendment A9
+   * requires.
+   *
+   * A name-based proxy was sound only while no adapter could exist. It lets a
+   * real adapter pass by choosing a neutral name and fails an honest one that
+   * is fully dormant, so it is not a sustainable architectural test. The
+   * assertions below are the boundaries A9 names instead: the adapter is
+   * unreachable from the Worker entry point, nothing outside its own directory
+   * imports it, and no configuration enables it.
+   */
+  it('keeps the Jolpica adapter unreachable from the Worker entry point', () => {
+    const reachable = reachableFromEntryPoint();
+
+    // The entry point's transitive import closure is what the bundler ships.
+    // Nothing under the adapter directory may appear in it.
+    const bundled = [...reachable].filter((file) =>
+      file.startsWith('providers/jolpica/'),
+    );
+    expect(bundled).toEqual([]);
+
+    // The closure is real, not an empty set from a resolver that found
+    // nothing: the entry point genuinely reaches its own modules.
+    expect(reachable.has('index.ts')).toBe(true);
+    expect(reachable.has('providers/factory.ts')).toBe(true);
+    expect(reachable.has('sync/sync-service.ts')).toBe(true);
+  });
+
+  it('is imported by no runtime module outside its own directory', () => {
+    const sourceDir = join(repoRoot, 'services', 'edge-api', 'src');
+    const files = sourceFiles(sourceDir);
+
+    const importers = files.filter((file) => {
+      if (file.startsWith('providers/jolpica/')) return false;
+      const contents = readFileSync(join(sourceDir, file), 'utf8');
+      return importSpecifiers(contents, file).some((specifier) =>
+        resolveSpecifier(file, specifier)?.startsWith('providers/jolpica/'),
+      );
+    });
+
+    expect(importers).toEqual([]);
+  });
+
+  it('is constructed by no production composition', () => {
+    const sourceDir = join(repoRoot, 'services', 'edge-api', 'src');
+    for (const file of sourceFiles(sourceDir)) {
+      if (file.startsWith('providers/jolpica/')) continue;
+      const contents = readFileSync(join(sourceDir, file), 'utf8');
+      expect(contents).not.toContain('JolpicaCalendarPort');
+      // The coordinator that would drive a port is itself still unconstructed
+      // outside its own dormant scope.
+      expect(contents).not.toContain('new MultiSourceCoordinator');
+    }
+  });
+
+  it('is enabled by no binding, variable, route or cron', () => {
+    const path = join(repoRoot, 'services', 'edge-api', 'wrangler.toml');
+    // Comments are excluded deliberately. Prose naming the source is exactly
+    // the weak, name-based signal A9 replaced; what must hold is that no
+    // *declaration* enables an adapter.
+    const declarations = readFileSync(path, 'utf8')
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+
+    expect(declarations).not.toMatch(/\bjolpica\b/i);
+    expect(declarations).not.toMatch(/\bopenf1\b/i);
+    // No cron would drive a coordinated run for this season either.
+    expect(declarations).not.toContain('[triggers]');
   });
 
   /**

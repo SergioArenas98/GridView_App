@@ -288,13 +288,17 @@ describe('the coordination seam is dormant', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('adds no provider adapter and no source-named module', () => {
+  it('adds no OpenF1 adapter and no source-named module for it', () => {
     const providerFiles = (
       readdirSync(join(sourceDir, 'providers'), { recursive: true }) as string[]
     ).map((entry) => entry.toString().toLowerCase());
 
     expect(providerFiles.some((name) => name.includes('openf1'))).toBe(false);
-    expect(providerFiles.some((name) => name.includes('jolpica'))).toBe(false);
+    // The Jolpica file-name assertion that stood beside this one is gone: a
+    // calendar-only Jolpica adapter now exists at `src/providers/jolpica/`,
+    // honestly named, and its dormancy is proven by composition and
+    // dependency boundaries instead (ADR 0022 amendment A9). Those assertions
+    // live in `test/providers/provider-neutrality.test.ts`.
   });
 
   it('keeps the runtime provider mode union unchanged', () => {

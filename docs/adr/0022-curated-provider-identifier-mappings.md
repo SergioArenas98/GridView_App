@@ -258,9 +258,11 @@ integers and can be added later under the same model if a contract requires it.
 
 ## Amendment 2026-09-16: Grand Prix event identity
 
-- Status: Accepted. **Mechanism implemented 2026-09-19** (A5), and the
-  curated **2026 event dataset** added the same day (A4 status note); the
-  adapter and the A7 assembly change are still outstanding
+- Status: Accepted. **Mechanism implemented 2026-09-19** (A5), the curated
+  **2026 event dataset** added the same day (A4 status note), and the
+  **season-calendar port implemented, fixture-tested and dormant on
+  2026-09-20** with the A9 test replacement made in the same change. Every
+  other Jolpica resource and the A7 assembly change are still outstanding
 - Date: 2026-09-16
 - Phase: 9B, recorded before the first Jolpica calendar adapter slice
 - Amends: this ADR's [scope note](#scope-note), and — for coordinated season
@@ -446,9 +448,14 @@ publishing the locator, or any provider identifier, as identity.
 > mechanism). All five items below exist, with schemas, `validate:content`
 > coverage and tests. **The curated 2026 event dataset was added the same
 > day** (A4 status note): 23 identities and 23 mapped locators. No Jolpica
-> adapter exists, and no Worker or GridView runtime has made a provider
+> adapter existed then, and no Worker or GridView runtime has made a provider
 > request. The mechanism is dormant and unbundled — no runtime module outside `src/providers/mappings/`
 > imports it, and the Worker entry point cannot reach it.
+>
+> **On 2026-09-20** a **season-calendar-only** Jolpica port was added at
+> `src/providers/jolpica/` and consumes this mechanism. It is equally dormant
+> and unbundled, still no provider request has been made, and no other
+> resource is implemented.
 
 The implementation should:
 
@@ -626,6 +633,18 @@ implementation begins, its "no Jolpica file name" assertion must be replaced by
 assertions of the boundaries above, in the same change that adds the adapter.
 The OpenF1 file-name assertion is outside this decision.
 
+> **Done on 2026-09-20**, in the change that added the season-calendar port.
+> The Jolpica file-name assertions in `provider-neutrality.test.ts` and in
+> `coordination-containment.test.ts` are replaced by the boundaries above:
+> the transitive import closure of `src/index.ts` contains no module under
+> `src/providers/jolpica/`, no module outside that directory imports it, no
+> production composition constructs it, and no Wrangler declaration names it.
+> `deep-validation-gate.test.ts`'s textual `ProviderResourcePort` scan excludes
+> the adapter directory on the same reasoning — implementing the port is not
+> wiring it. The OpenF1 file-name assertion is untouched. The dry-run Worker
+> bundle is byte-identical to the baseline and contains none of the adapter's
+> symbols.
+
 ### Rejected alternatives
 
 | Alternative                                  | Why rejected                                                                                                          |
@@ -652,8 +671,9 @@ must satisfy.
 | Event registry and `event` mapping support   | **Implemented as a mechanism** (2026-09-19); dormant and unbundled (A5)  |
 | Event mapping dataset                        | **Created for 2026** (2026-09-19): 23 identities, 23 locators (A4)       |
 | `hasResults` derivation in assembly          | **Not implemented**; the preflight and assembly are unchanged (A7)       |
-| Jolpica adapter, for any resource            | **Not implemented and not registered**                                   |
-| `provider-neutrality.test.ts`                | **Unchanged**; its replacement is required when adapter work begins (A9) |
+| Jolpica **season-calendar** port              | **Implemented, fixture-tested and dormant** (2026-09-20); not registered, not constructed by any production composition and absent from the Worker bundle |
+| Jolpica adapter, for every other resource     | **Not implemented.** Participants, event schedules, classifications and standings are refused as `resource-unsupported`; this is not a working full adapter |
+| `provider-neutrality.test.ts`                | **Replaced** (2026-09-20), in the same change that added the adapter: composition, dependency and configuration dormancy assertions in place of the Jolpica file-name assertion (A9) |
 | G1 (live provider mode)                      | **Open**                                                                 |
 | G5 (event-aware scheduling), G9 (provenance) | **Open**                                                                 |
 | G-l (mapping dataset coverage)               | **Open**; its 2026 event and circuit sub-gaps are both closed           |
@@ -674,6 +694,13 @@ shorten it.
 > circuit (A3), so each is its own curated mapping. **Circuit coverage no
 > longer blocks the adapter, but the adapter itself remains unimplemented and
 > unregistered**, and A7 is not implemented.
+>
+> **Status on 2026-09-20.** The **season-calendar resource is no longer
+> blocked**: its port is implemented, fixture-tested and dormant
+> (Implementation Plan §14.0.16). It is still not registered, not constructed
+> by any production composition and absent from the Worker bundle; no provider
+> request was made and no provider mode was added. **Every other Jolpica
+> resource remains unimplemented**, and A7 is still not implemented.
 >
 > **Provider requests, precisely.** The "none" statements in this ADR describe
 > its own work. Roughly 25 authorized research `GET`s were recorded on

@@ -2086,6 +2086,34 @@ deployed.**
 | **G1, G5, G9** | **Open.** No live provider mode has been enabled. |
 | Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; staging is `mock`, production is `none`. |
 
+### 14.0.16 Phase 9B Jolpica season-calendar port - implemented, fixture-tested, dormant
+
+Implemented on **2026-09-20** under ADR 0022 amendment A5-A9 and ADR 0023.
+**Code and tests only: no runtime wiring, no configuration change, no provider
+request and nothing deployed.**
+
+| Item | Status |
+|---|---|
+| What exists | The **Jolpica season-calendar port** at `services/edge-api/src/providers/jolpica/`, implementing the existing `ProviderResourcePort` unchanged. It is honestly named, per A9. |
+| Supported resource | **`season-calendar` only.** Every other coordinated resource returns the established `resource-unsupported` not-attempted outcome **before** reserving limiter capacity, constructing a request, invoking transport or counting an attempt. |
+| **Not implemented by this slice** | **Participants, event schedules, session classifications and standings.** Participant-resource pagination is a later slice. This is **not a working full Jolpica adapter and not release readiness.** |
+| Provider access | **No provider request was made.** Every test drives an injected in-memory transport; the adapter never calls global `fetch`, never builds a second HTTP client and never names an origin. |
+| Transport boundary | The existing hardened boundary only (`providers/http/provider-http-client.ts`), which owns origin pinning, `GET`, the identifying `User-Agent`, no cookies/credentials/authorization, limiter reservation, timeout, redirect, content-type and response-size caps. The request is `GET /ergast/f1/{season}/races/?limit=100`, with the season taken from the requested resource rather than a constant. |
+| Pagination | **Fails closed.** A complete page within the explicit limit is accepted; metadata indicating more rows exist than were returned fails the resource. Nothing is truncated and no multi-page accounting is invented, because one calendar resource maps to one transport attempt. |
+| Identity | Resolved **only** through the curated season-qualified event locator and the independent curated circuit mapping. No slug minting, case folding, trimming, fuzzy matching, alias, provider-ID fallback or silent row drop. An unresolved event or circuit fails the **whole** calendar as `mapping-failure` with bounded diagnostics and no partial payload. |
+| Normalization | `GrandPrix.status` and `Session.status` are `unknown` (A6); provisional `hasResults: false` (A7); no manufactured timestamp and no clock read (A8); absent optional blocks emit no session; a present block without a complete instant fails the resource as `invalid-payload`. Canonical identities come from the existing helpers, and session order is the canonical weekend order. |
+| `GrandPrix.format` | **An adapter normalization choice, not a decision this slice invents.** A `Sprint` block is positive evidence of `sprint`; its absence is **not** positive evidence of `standard`, so the honest existing `unknown` member is used instead. No accepted decision assigns this field; see the note in `calendar-normalizer.ts`. |
+| Dormancy | **Proven by composition, per A9.** `src/index.ts` cannot reach it, nothing outside its directory imports it, no production composition constructs it, `SynchronizationService` is unchanged, `PROVIDER_MODE` still admits exactly `mock` and `none`, and no binding, variable, route or cron names it. The **dry-run Worker bundle is byte-identical** to the baseline bundle (`a04e6f7764afbd8b3fd580dab07bd5eb413e70dd8c95cc399a39be4a5bad2d97`), and contains none of the adapter's symbols. |
+| Structural tests | The A9 replacement was made **in the same change**: the "no Jolpica file name" assertions in `provider-neutrality.test.ts` and `coordination-containment.test.ts` are replaced by transitive-import-closure, importer, construction and configuration assertions. The OpenF1 file-name assertion is untouched. |
+| Fixtures | **Repository-owned and synthetic.** The preserved raw provider response is **not** committed and is not read. The 23-row case is a minimal projection rebuilt from `content/seasons/2026/provider-mappings.development.json` at test time. No coordinate, Wikipedia URL, locality or country field appears in any fixture. |
+| Mock provider | **Byte-for-byte unchanged.** |
+| Coverage | **Calendar identity coverage 23 of 23; circuit identity coverage 23 of 23.** The four non-circuit acknowledgements remain. |
+| `hasResults` derivation (A7) | **Still not implemented.** It remains a separate season-assembly task and is deliberately not done here. |
+| **G1** | **Open.** No live provider mode was added. |
+| **G-l** | **Open overall.** |
+| **G5, G9** | **Open.** |
+| Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; staging is `mock`, production is `none`. |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in
@@ -2192,7 +2220,10 @@ another source rather than bypassing the requirement.
   `unknown` calendar statuses and never manufacturing a timestamp (A6, A8). In
   the same change, replace the "no Jolpica file name" assertion in
   `provider-neutrality.test.ts` with composition and dependency dormancy
-  assertions (A9).
+  assertions (A9). **The season-calendar resource is done** (2026-09-20,
+  §14.0.16): implemented, fixture-tested and dormant, with the A9 replacement
+  made in the same change. **Participants, event schedules, classifications
+  and standings are not implemented**, so this is not a working full adapter.
 - Implement the **OpenF1** adapter, fixture-tested only, behind the
   bound-or-skip gate.
 - ~~Add runtime response validation.~~ **Done in Phase 9B-5** (§14.0.9,
