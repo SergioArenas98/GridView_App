@@ -424,6 +424,33 @@ describe('untrusted payload validation', () => {
       ]),
     ],
     [
+      // A8 separates an entirely absent block from a present, unusable one.
+      // An explicit `null` is present, so it must fail rather than silently
+      // drop the session from the weekend.
+      'an explicitly null session block',
+      envelope([race({ ...standardWeekend, blocks: { Qualifying: null } })]),
+    ],
+    [
+      // A null under one alias must not let the other slip past the
+      // contradictory-alias check: both names are still present.
+      'a null sprint-qualifying alias beside a populated one',
+      envelope([
+        race({
+          ...sprintWeekend,
+          blocks: {
+            SprintQualifying: null,
+            SprintShootout: { date: '2026-03-13', time: '07:30:00Z' },
+          },
+        }),
+      ]),
+    ],
+    [
+      'a non-object session block',
+      envelope([
+        race({ ...standardWeekend, blocks: { Qualifying: 'tomorrow' } }),
+      ]),
+    ],
+    [
       'truncated pagination metadata',
       envelope([race(standardWeekend)], { total: '23' }),
     ],

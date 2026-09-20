@@ -199,15 +199,25 @@ function readInstant(source: Record<string, unknown>): string | null {
  * - **Present block that cannot** - fails the whole resource. A session
  *   Jolpica did deliver is never published with a silently absent start, which
  *   is an adapter rule stricter than the nullable contract field (A8).
+ *
+ * **Presence is structural, and `null` is present.** A8 draws its line between
+ * a block that is *entirely absent* and one that is *there but unusable*, so
+ * only a missing key may take the absence path. `Qualifying: null` is a block
+ * Jolpica put in the response and could not describe; skipping it would
+ * publish a weekend with a session silently missing, which is exactly the
+ * outcome A8 exists to prevent. The row comes from `JSON.parse`, where a key
+ * can only be missing or carry a JSON value, so `undefined` means absent and
+ * nothing else does.
  */
 function readSessions(
   row: Record<string, unknown>,
 ): readonly DecodedSession[] | CalendarDecodeProblem {
   const sprintQualifyingNames = sprintQualifyingAliases.filter(
-    (name) => row[name] !== undefined && row[name] !== null,
+    (name) => row[name] !== undefined,
   );
   // Two names for one block. Nothing here can decide which is authoritative,
-  // and picking one would be inventing an answer.
+  // and picking one would be inventing an answer. A `null` under one of them
+  // still counts as present, so it cannot be used to slip past this check.
   if (sprintQualifyingNames.length > 1) return 'session-block';
 
   const sessions: DecodedSession[] = [];
@@ -219,7 +229,8 @@ function readSessions(
         ? (sprintQualifyingNames[0] ?? block)
         : block;
     const raw = row[field];
-    if (raw === undefined || raw === null) continue;
+    if (raw === undefined) continue;
+    // `null` lands here and is refused: it is present and is not a block.
     if (!isRecord(raw)) return 'session-block';
     const startTime = readInstant(raw);
     if (startTime === null) return 'session-instant';
