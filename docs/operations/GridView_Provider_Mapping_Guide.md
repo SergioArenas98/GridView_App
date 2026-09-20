@@ -381,9 +381,12 @@ This is asserted by tests, not just stated here.
 > It is a **point-in-time** observation, so a later calendar change fails
 > closed until another reviewed update (§15.3).
 >
-> **Nothing resolves them yet.** No Jolpica adapter exists, and 22 of the 23
-> observed circuit identifiers still have no curated circuit mapping, so a
-> working calendar stays blocked. The only provider requests on record are
+> **Nothing resolves them yet.** No Jolpica adapter exists, and 17 of the 23
+> observed circuit identifiers still have no curated circuit mapping - six are
+> curated, `albert_park` from Provider Evaluation §8.4 and five more approved on
+> 2026-09-19 (§8.8.1), and of the rest `hungaroring` is acknowledged unmapped
+> while 16 need a new canonical GridView circuit identity - so a working
+> calendar stays blocked. The only provider requests on record are
 > authorized research requests — about 25 on 2026-08-19 and one on 2026-09-19
 > — and GridView's own code has made none.
 

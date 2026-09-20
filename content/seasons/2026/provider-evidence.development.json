@@ -4,7 +4,7 @@
   "schemaVersion": 1,
   "status": "development",
   "season": 2026,
-  "note": "INTERNAL ONLY. The closed set of exact 2026 provider identities recorded in docs/technical/GridView_Provider_Evaluation.md section 8. Every value was observed through an explicitly authorized request recorded there (8.1 for 2026-08-19, 8.8 for the 2026-09-19 calendar) and copied exactly; nothing was scraped, inferred from a display name or recalled from memory. The 8.8 calendar is recorded here as its 23 event locators only: a circuitId inside a locator is a locator component, and adding the 21 observed circuitIds not already listed below as circuit identities is separate circuit-coverage work (gap G-l). Every entry must be mapped in provider-mappings.development.json or acknowledged below; validation fails otherwise. An acknowledgement is a temporary blocker, never a mapping: the runtime still resolves the identity as unmapped and the affected resource still fails closed.",
+  "note": "INTERNAL ONLY. The closed set of exact 2026 provider identities recorded in docs/technical/GridView_Provider_Evaluation.md section 8. Every value was observed through an explicitly authorized request recorded there (8.1 for 2026-08-19, 8.8 for the 2026-09-19 calendar) and copied exactly; nothing was scraped, inferred from a display name or recalled from memory. The 8.8 calendar is recorded here as its 23 event locators, plus the five circuitIds it also supplied as circuit identities: a circuitId inside a locator is only a locator component, so a circuit identity is always its own record with its own evidence. The other 16 observed circuitIds are still absent and remain circuit-coverage work (gap G-l). Every entry must be mapped in provider-mappings.development.json or acknowledged below; validation fails otherwise. An acknowledgement is a temporary blocker, never a mapping: the runtime still resolves the identity as unmapped and the affected resource still fails closed.",
   "identities": [
     {
       "source": "jolpica",
@@ -40,6 +40,41 @@
       "providerField": "circuitId",
       "providerValue": "albert_park",
       "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica circuitId slug example."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "suzuka",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit suzuka - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 3."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "monaco",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit monaco - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 6."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "silverstone",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit silverstone - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 9."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "spa",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit spa - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 10."
+    },
+    {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "monza",
+      "evidence": "GridView_Provider_Evaluation.md 8.8 circuit monza - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 13."
     },
     {
       "source": "jolpica",

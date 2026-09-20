@@ -667,8 +667,12 @@ shorten it.
 > **Status on 2026-09-19.** Both halves now exist for season 2026 and are
 > dormant: the mechanism, and the curated dataset of 23 identities and 23
 > mapped locators (A4 status note). **The calendar resource is still blocked**:
-> 22 of the 23 observed Jolpica circuit identifiers have no curated circuit
-> mapping, and an event mapping never implies a circuit (A3). The adapter
+> 17 of the 23 observed Jolpica circuit identifiers have no curated circuit
+> mapping, and an event mapping never implies a circuit (A3). Six are curated:
+> `albert_park`, plus the five approved later the same day for observed
+> `circuitId`s whose canonical GridView circuit already existed (Provider
+> Evaluation §8.8.1). Of the 17, `hungaroring` is acknowledged unmapped and the
+> other 16 need a new canonical GridView circuit identity. The adapter
 > itself remains unimplemented and unregistered, and A7 is not implemented.
 >
 > **Provider requests, precisely.** The "none" statements in this ADR describe
