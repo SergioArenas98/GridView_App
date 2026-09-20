@@ -61,21 +61,40 @@ export type CalendarNormalization =
 export const maxReportedMappingFailures = 5;
 
 /**
+ * The blocks that exist only on a sprint weekend.
+ *
+ * **Either one is evidence, independently.** They are separately optional
+ * upstream, so a cancelled sprint or a partially finalized schedule can carry
+ * sprint qualifying without a sprint, and a weekend is no less a sprint
+ * weekend for it. Keying the format on `Sprint` alone would drop the sprint
+ * designation from exactly those payloads. The sprint-qualifying block is
+ * already normalized to one member here, so the `SprintShootout` spelling is
+ * covered without naming it again.
+ */
+const sprintEvidenceBlocks: ReadonlySet<JolpicaSessionBlock> = new Set([
+  'Sprint',
+  'SprintQualifying',
+]);
+
+/**
  * The weekend format, read from the row's own composition.
  *
- * A `Sprint` block is **positive provider evidence** of a sprint weekend. Its
- * absence is not positive evidence of a standard one: a calendar published
- * before a sprint round's detail firms up simply omits the block, and calling
- * that `standard` would be a confident wrong answer of exactly the kind D4 and
- * D5 forbid. So the honest third member of the existing enum is used instead,
- * and nothing downstream is told more than Jolpica actually said.
+ * A sprint-specific block is **positive provider evidence** of a sprint
+ * weekend. Its absence is not positive evidence of a standard one: a calendar
+ * published before a sprint round's detail firms up simply omits the blocks,
+ * and calling that `standard` would be a confident wrong answer of exactly the
+ * kind D4 and D5 forbid. So the honest third member of the existing enum is
+ * used instead, and nothing downstream is told more than Jolpica actually
+ * said.
  *
  * No accepted decision assigns `GrandPrix.format` for a Jolpica calendar; this
  * is an adapter normalization choice made on A6's reasoning, not a new
  * architecture decision.
  */
 function weekendFormat(race: DecodedRace): WeekendFormat {
-  return race.sessions.some((session) => session.block === 'Sprint')
+  return race.sessions.some((session) =>
+    sprintEvidenceBlocks.has(session.block),
+  )
     ? 'sprint'
     : 'unknown';
 }

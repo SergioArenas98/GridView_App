@@ -183,6 +183,53 @@ describe('normalization of a calendar', () => {
     );
   });
 
+  it('treats sprint qualifying alone as sprint evidence', async () => {
+    // The two sprint blocks are separately optional upstream, so a cancelled
+    // sprint or a partly finalized schedule can carry sprint qualifying
+    // without a sprint. The weekend is a sprint weekend either way, and the
+    // client only renders the sprint chip when the format says so.
+    const transport = jsonTransport(
+      envelope([
+        race({
+          ...sprintWeekend,
+          blocks: {
+            FirstPractice: { date: '2026-03-13', time: '03:30:00Z' },
+            SprintQualifying: { date: '2026-03-13', time: '07:30:00Z' },
+            Qualifying: { date: '2026-03-14', time: '07:00:00Z' },
+          },
+        }),
+      ]),
+    );
+    const { port } = harness({ transport });
+
+    const [event] = eventsOf(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    expect(event?.sessions.map((session) => session.type)).not.toContain(
+      'sprint',
+    );
+    expect(event?.format).toBe('sprint');
+  });
+
+  it('treats the sprint block alone as sprint evidence', async () => {
+    const transport = jsonTransport(
+      envelope([
+        race({
+          ...sprintWeekend,
+          blocks: { Sprint: { date: '2026-03-14', time: '03:00:00Z' } },
+        }),
+      ]),
+    );
+    const { port } = harness({ transport });
+
+    const [event] = eventsOf(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    expect(event?.format).toBe('sprint');
+  });
+
   it('accepts SprintShootout as the same block under its earlier name', async () => {
     const { SprintQualifying, ...rest } = sprintWeekend.blocks as Record<
       string,
