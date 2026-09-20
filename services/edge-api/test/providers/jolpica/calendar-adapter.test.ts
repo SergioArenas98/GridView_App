@@ -7,7 +7,7 @@
  * require deliberately replacing both.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   payloadMatchesResource,
@@ -134,6 +134,9 @@ describe('normalization of a calendar', () => {
     expect(event?.round).toBe(1);
     expect(event?.circuitId).toBe('albert-park');
     expect(event?.status).toBe('unknown');
+    // A10: neither sprint block, and the complete FP1/FP2/FP3/Qualifying
+    // signature present, is positive evidence of a standard weekend.
+    expect(event?.format).toBe('standard');
     expect(event?.hasResults).toBe(false);
     expect(event?.officialName).toBeNull();
     expect(event?.startDate).toBeNull();
@@ -460,6 +463,300 @@ describe('normalization of a calendar', () => {
     expect(serialized).not.toContain('22.2222');
     // The provider's own locator components are not public content either.
     expect(serialized).not.toContain('albert_park');
+  });
+});
+
+/**
+ * The weekend-format discriminator (ADR 0022 amendment A10).
+ *
+ * Each answer needs its own positive evidence, and the discriminator is
+ * descriptive of the session list rather than a template that generates one.
+ */
+describe('the weekend format discriminator', () => {
+  async function formatOf(
+    blocks: Readonly<Record<string, unknown>> | undefined,
+  ): Promise<string | undefined> {
+    const transport = jsonTransport(
+      envelope([race({ ...standardWeekend, blocks })]),
+    );
+    const { port } = harness({ transport });
+    const [event] = eventsOf(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+    return event?.format;
+  }
+
+  const fp1 = { date: '2026-03-06', time: '01:30:00Z' };
+  const fp2 = { date: '2026-03-06', time: '05:00:00Z' };
+  const fp3 = { date: '2026-03-07', time: '01:30:00Z' };
+  const qualifying = { date: '2026-03-07', time: '05:00:00Z' };
+
+  it('reads standard only from the complete four-block signature', async () => {
+    expect(
+      await formatOf({
+        FirstPractice: fp1,
+        SecondPractice: fp2,
+        ThirdPractice: fp3,
+        Qualifying: qualifying,
+      }),
+    ).toBe('standard');
+  });
+
+  // Each of these is one block short of the standard signature. None of them
+  // is evidence of a sprint weekend either, so none may be promoted: an
+  // incomplete schedule is a schedule GridView has not been told the shape of.
+  const incomplete: readonly [string, Record<string, unknown>][] = [
+    [
+      'no third practice',
+      { FirstPractice: fp1, SecondPractice: fp2, Qualifying: qualifying },
+    ],
+    [
+      'no second practice',
+      { FirstPractice: fp1, ThirdPractice: fp3, Qualifying: qualifying },
+    ],
+    [
+      'no first practice',
+      { SecondPractice: fp2, ThirdPractice: fp3, Qualifying: qualifying },
+    ],
+    [
+      'no qualifying',
+      { FirstPractice: fp1, SecondPractice: fp2, ThirdPractice: fp3 },
+    ],
+    ['qualifying only', { Qualifying: qualifying }],
+  ];
+
+  it.each(incomplete)(
+    'refuses to promote an incomplete standard set to standard: %s',
+    async (_label, blocks) => {
+      expect(await formatOf(blocks)).toBe('unknown');
+    },
+  );
+
+  it('does not synthesize a session the row never carried', async () => {
+    // A standard classification must describe the four blocks supplied plus
+    // the race, and must not fill in a weekend template.
+    const transport = jsonTransport(
+      envelope([
+        race({
+          ...standardWeekend,
+          blocks: {
+            FirstPractice: fp1,
+            SecondPractice: fp2,
+            ThirdPractice: fp3,
+            Qualifying: qualifying,
+          },
+        }),
+      ]),
+    );
+    const { port } = harness({ transport });
+    const [event] = eventsOf(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    expect(event?.format).toBe('standard');
+    expect(event?.sessions).toHaveLength(5);
+    expect(event?.sessions.map((session) => session.type)).not.toContain(
+      'sprint',
+    );
+    expect(event?.sessions.map((session) => session.type)).not.toContain(
+      'sprint_qualifying',
+    );
+  });
+
+  it('classifies a sprint weekend without adding its missing counterpart', async () => {
+    // Sprint qualifying alone is sprint evidence, and the absent `Sprint`
+    // block stays absent: the discriminator describes the list, it does not
+    // complete it.
+    const transport = jsonTransport(
+      envelope([
+        race({
+          ...sprintWeekend,
+          blocks: {
+            FirstPractice: fp1,
+            SprintQualifying: { date: '2026-03-13', time: '07:30:00Z' },
+          },
+        }),
+      ]),
+    );
+    const { port } = harness({ transport });
+    const [event] = eventsOf(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    expect(event?.format).toBe('sprint');
+    expect(event?.sessions.map((session) => session.type)).toEqual([
+      'practice_1',
+      'sprint_qualifying',
+      'race',
+    ]);
+  });
+
+  it('neither removes nor reorders the sessions it classifies', async () => {
+    // An unusual but valid combination: the complete standard signature plus
+    // a sprint, with qualifying brought forward. The format answers `sprint`
+    // on the sprint block's evidence, and the session list is still exactly
+    // what was supplied, in instant order.
+    const transport = jsonTransport(
+      envelope([
+        race({
+          ...standardWeekend,
+          blocks: {
+            FirstPractice: fp1,
+            SecondPractice: fp2,
+            ThirdPractice: fp3,
+            Qualifying: { date: '2026-03-06', time: '03:00:00Z' },
+            Sprint: { date: '2026-03-07', time: '03:00:00Z' },
+          },
+        }),
+      ]),
+    );
+    const { port } = harness({ transport });
+    const [event] = eventsOf(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    expect(event?.format).toBe('sprint');
+    expect(event?.sessions.map((session) => session.type)).toEqual([
+      'practice_1',
+      'qualifying',
+      'practice_2',
+      'practice_3',
+      'sprint',
+      'race',
+    ]);
+    const times = event?.sessions.map((session) => session.startTime) ?? [];
+    expect([...times].sort()).toEqual(times);
+  });
+
+  it('cannot be influenced by an irrelevant upstream field', async () => {
+    // Everything here is a decoy: a provider-supplied format field, a
+    // sprint-flavoured flag, name and URL. None is admissible evidence, so the
+    // answer stays exactly what the blocks say - and what they say here is an
+    // incomplete standard set.
+    const transport = jsonTransport(
+      envelope([
+        race({
+          ...standardWeekend,
+          blocks: { FirstPractice: fp1, Qualifying: qualifying },
+          extra: {
+            format: 'sprint',
+            sprint: true,
+            raceType: 'SPRINT',
+            sprintWeekend: true,
+            url: 'https://example.invalid/sprint',
+          },
+        }),
+      ]),
+    );
+    const { port } = harness({ transport });
+    const [event] = eventsOf(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    expect(event?.format).toBe('unknown');
+    expect(JSON.stringify(event)).not.toContain('example.invalid');
+  });
+
+  it('refuses a sprint-named field that is not a session block', async () => {
+    // The mirror image: `Sprint` carrying a string is *present* and is not a
+    // block, so it is refused outright rather than read as sprint evidence.
+    const transport = jsonTransport(
+      envelope([race({ ...standardWeekend, blocks: { Sprint: 'yes' } })]),
+    );
+    const { port } = harness({ transport });
+
+    const outcome = wellFormed(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    expect(outcome.outcome).toBe('failed');
+    if (outcome.outcome !== 'failed') throw new Error('unreachable');
+    expect(outcome.reason).toBe('invalid-payload');
+  });
+
+  it('classifies the complete 23-row calendar from blocks alone', async () => {
+    // Which 2026 rounds are sprint rounds is not recorded in this repository,
+    // so the shapes are stated here rather than assumed: one sprint row, one
+    // complete-standard row, and 21 rows whose schedule detail is absent.
+    const sprintRound = 2;
+    const standardRound = 1;
+    const races = fullSeasonRaces({
+      [sprintRound]: {
+        FirstPractice: { date: '2026-03-06', time: '01:30:00Z' },
+        SprintQualifying: { date: '2026-03-06', time: '05:00:00Z' },
+        Sprint: { date: '2026-03-07', time: '03:00:00Z' },
+        Qualifying: { date: '2026-03-07', time: '07:00:00Z' },
+      },
+      [standardRound]: {
+        FirstPractice: fp1,
+        SecondPractice: fp2,
+        ThirdPractice: fp3,
+        Qualifying: qualifying,
+      },
+    });
+    expect(races).toHaveLength(23);
+
+    const transport = jsonTransport(envelope(races));
+    const { port } = harness({ transport });
+    const events = eventsOf(
+      await port.fetchResource({ source: 'jolpica', resource: calendar }),
+    );
+
+    expect(events).toHaveLength(23);
+    const formatByRound = new Map(
+      events.map((event) => [event.round, event.format]),
+    );
+    expect(formatByRound.get(sprintRound)).toBe('sprint');
+    expect(formatByRound.get(standardRound)).toBe('standard');
+    // Every row whose schedule detail is absent stays `unknown`: a calendar
+    // that omits its blocks has not said which format the weekend is.
+    expect(
+      events
+        .filter(
+          (event) =>
+            event.round !== sprintRound && event.round !== standardRound,
+        )
+        .every((event) => event.format === 'unknown'),
+    ).toBe(true);
+    for (const event of events) {
+      expect(validateGrandPrix(event, 'event').length).toBe(0);
+    }
+  });
+
+  it('consults no clock', async () => {
+    // The classification is a pure reading of the row. Driving the identical
+    // payload under two system times decades apart must produce the identical
+    // calendar - format, sessions and instants alike.
+    const blocks = {
+      FirstPractice: fp1,
+      SecondPractice: fp2,
+      ThirdPractice: fp3,
+      Qualifying: qualifying,
+    };
+
+    async function calendarUnder(systemTime: Date): Promise<string> {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(systemTime);
+        const transport = jsonTransport(
+          envelope([race({ ...standardWeekend, blocks })]),
+        );
+        const { port } = harness({ transport });
+        const events = eventsOf(
+          await port.fetchResource({ source: 'jolpica', resource: calendar }),
+        );
+        return JSON.stringify(events);
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+
+    // Long before every session, and long after.
+    const early = await calendarUnder(new Date('1990-01-01T00:00:00Z'));
+    const late = await calendarUnder(new Date('2099-01-01T00:00:00Z'));
+
+    expect(early).toBe(late);
+    expect(early).toContain('"format":"standard"');
   });
 });
 

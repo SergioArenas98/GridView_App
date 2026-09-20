@@ -2088,9 +2088,14 @@ deployed.**
 
 ### 14.0.16 Phase 9B Jolpica season-calendar port - implemented, fixture-tested, dormant
 
-Implemented on **2026-09-20** under ADR 0022 amendment A5-A9 and ADR 0023.
+Implemented on **2026-09-20** under ADR 0022 amendment A5-A10 and ADR 0023.
 **Code and tests only: no runtime wiring, no configuration change, no provider
 request and nothing deployed.**
+
+> **Weekend format, 2026-09-20.** The one field this slice first shipped without
+> an accepted rule is now decided: **ADR 0022 amendment A10** records the
+> three-way evidence rule and the adapter implements it. Nothing else in this
+> section changes, and the resource remains dormant.
 
 | Item | Status |
 |---|---|
@@ -2102,7 +2107,7 @@ request and nothing deployed.**
 | Pagination | **Fails closed.** A complete page within the explicit limit is accepted; metadata indicating more rows exist than were returned fails the resource. Nothing is truncated and no multi-page accounting is invented, because one calendar resource maps to one transport attempt. |
 | Identity | Resolved **only** through the curated season-qualified event locator and the independent curated circuit mapping. No slug minting, case folding, trimming, fuzzy matching, alias, provider-ID fallback or silent row drop. An unresolved event or circuit fails the **whole** calendar as `mapping-failure` with bounded diagnostics and no partial payload. |
 | Normalization | `GrandPrix.status` and `Session.status` are `unknown` (A6); provisional `hasResults: false` (A7); no manufactured timestamp and no clock read (A8); absent optional blocks emit no session; a present block without a complete instant fails the resource as `invalid-payload`. Canonical identities come from the existing helpers. **Sessions are delivered ordered by their own start instants**, not in a fixed block sequence: `sessions` is an ordered list the client renders without re-sorting, the PRD requires chronological display, and App Flow §7.4 requires supporting changed session orders, so a rescheduled weekend must still arrive in order. Equal instants keep block order, so the canonical serialization stays deterministic. |
-| `GrandPrix.format` | **An adapter normalization choice, not a decision this slice invents.** Either sprint-specific block - `Sprint` or `SprintQualifying` - is positive evidence of `sprint`, independently, because the two are separately optional upstream. The absence of both is **not** positive evidence of `standard`, so the honest existing `unknown` member is used instead. No accepted decision assigns this field; see the note in `calendar-normalizer.ts`. |
+| `GrandPrix.format` | **Decided and implemented under ADR 0022 amendment A10** (2026-09-20), which closes the gap this slice originally recorded as unresolved. Three answers, each needing its own positive evidence: either sprint-specific block - `Sprint` or `SprintQualifying` - gives `sprint` independently, because the two are separately optional upstream and the missing counterpart is never inferred; the complete `FirstPractice`/`SecondPractice`/`ThirdPractice`/`Qualifying` signature with neither sprint block gives `standard`; anything less gives `unknown`. **The absence of sprint blocks alone is never promoted to `standard`.** The format never adds, removes, reorders or synthesizes a session - the ordered `sessions` array stays authoritative and an unusual combination is carried by its actual list - and is never derived from the event name, round, date, clock, another season or an assumed Formula 1 rule. **No enum, contract, runtime or provider-mode change**; `WeekendFormat` already carried `unknown`. |
 | Dormancy | **Proven by composition, per A9.** `src/index.ts` cannot reach it, nothing outside its directory imports it, no production composition constructs it, `SynchronizationService` is unchanged, `PROVIDER_MODE` still admits exactly `mock` and `none`, and no binding, variable, route or cron names it. The **dry-run Worker bundle is byte-identical** to the baseline bundle (`a04e6f7764afbd8b3fd580dab07bd5eb413e70dd8c95cc399a39be4a5bad2d97`), and contains none of the adapter's symbols. |
 | Structural tests | The A9 replacement was made **in the same change**: the "no Jolpica file name" assertions in `provider-neutrality.test.ts` and `coordination-containment.test.ts` are replaced by transitive-import-closure, importer, construction and configuration assertions. The OpenF1 file-name assertion is untouched. |
 | Fixtures | **Repository-owned and synthetic.** The preserved raw provider response is **not** committed and is not read. The 23-row case is a minimal projection rebuilt from `content/seasons/2026/provider-mappings.development.json` at test time. No coordinate, Wikipedia URL, locality or country field appears in any fixture. |

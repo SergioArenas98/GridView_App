@@ -176,8 +176,18 @@ export function curatedEventLocators(): readonly CuratedLocator[] {
  * Dates are fabricated from the round number: they are irrelevant to what the
  * 23-row cases prove (identity resolution across the whole season), and
  * inventing them keeps the real observed schedule out of the repository.
+ *
+ * `blocksByRound` attaches session blocks to named rounds. Which rounds are
+ * sprint rounds in 2026 is **not** recorded in this repository, and inventing
+ * an answer here would put an unevidenced schedule into a fixture. So the
+ * caller states the shape it wants to classify, and every unnamed round keeps
+ * the no-blocks projection.
  */
-export function fullSeasonRaces(): readonly Record<string, unknown>[] {
+export function fullSeasonRaces(
+  blocksByRound: Readonly<
+    Record<number, Readonly<Record<string, BlockFixture | unknown>>>
+  > = {},
+): readonly Record<string, unknown>[] {
   return curatedEventLocators().map((locator) =>
     race({
       round: String(locator.round),
@@ -185,6 +195,7 @@ export function fullSeasonRaces(): readonly Record<string, unknown>[] {
       circuitId: locator.circuitId,
       date: fabricatedDate(locator.round),
       time: '12:00:00Z',
+      blocks: blocksByRound[locator.round],
     }),
   );
 }

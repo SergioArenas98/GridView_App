@@ -400,7 +400,7 @@ Identity: `id` (`{season}-{eventSlug}`). A season-scoped event.
 | `officialName` | string | N | Full sponsor-inclusive name. |
 | `circuitId` | string (slug) | R | Host circuit reference. |
 | `status` | `EventStatus` | R | Event lifecycle state. |
-| `format` | `WeekendFormat` | R | `standard` or `sprint`. |
+| `format` | `WeekendFormat` | R | Normally `standard` or `sprint`. A producer may emit `unknown` when its source evidence is insufficient to establish either, rather than guessing one (ADR 0022 A10). |
 | `startDate` | date | N | Event start (local calendar date). |
 | `endDate` | date | N | Event end (local calendar date). |
 | `timezone` | string (IANA) | N | Event-local zone, e.g. `Europe/Brussels`. |

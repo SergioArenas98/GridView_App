@@ -14,7 +14,8 @@
  *
  * - every `GrandPrix.status` and `Session.status` is `unknown` (A6);
  * - `hasResults` is a provisional `false` that assembly later owns (A7);
- * - no timestamp is manufactured and the clock is never read (A8).
+ * - no timestamp is manufactured and the clock is never read (A8);
+ * - `GrandPrix.format` states only what the row's own blocks evidence (A10).
  */
 
 import type { GrandPrix, Session } from '../../contract/types';
@@ -71,31 +72,63 @@ export const maxReportedMappingFailures = 5;
  * already normalized to one member here, so the `SprintShootout` spelling is
  * covered without naming it again.
  */
-const sprintEvidenceBlocks: ReadonlySet<JolpicaSessionBlock> = new Set([
+const sprintEvidenceBlocks: readonly JolpicaSessionBlock[] = [
   'Sprint',
   'SprintQualifying',
-]);
+];
 
 /**
- * The weekend format, read from the row's own composition.
+ * The complete signature of a standard weekend.
  *
- * A sprint-specific block is **positive provider evidence** of a sprint
- * weekend. Its absence is not positive evidence of a standard one: a calendar
- * published before a sprint round's detail firms up simply omits the blocks,
- * and calling that `standard` would be a confident wrong answer of exactly the
- * kind D4 and D5 forbid. So the honest third member of the existing enum is
- * used instead, and nothing downstream is told more than Jolpica actually
- * said.
+ * **All four are required together.** Each one alone is unremarkable - a sprint
+ * weekend carries a first practice and a qualifying too - so no subset
+ * distinguishes the formats. Only the full set does: three practices plus a
+ * qualifying is a shape a sprint weekend cannot have, because a sprint weekend
+ * replaces the second and third practice with its sprint sessions (Provider
+ * Evaluation §8.4). A row carrying the complete set has therefore said
+ * everything a standard weekend says and nothing a sprint one does.
+ */
+const standardEvidenceBlocks: readonly JolpicaSessionBlock[] = [
+  'FirstPractice',
+  'SecondPractice',
+  'ThirdPractice',
+  'Qualifying',
+];
+
+/**
+ * The weekend format, read from the row's own composition (A10).
  *
- * No accepted decision assigns `GrandPrix.format` for a Jolpica calendar; this
- * is an adapter normalization choice made on A6's reasoning, not a new
- * architecture decision.
+ * Three answers, each requiring its own positive evidence:
+ *
+ * - **`sprint`** - either sprint-specific block is present. Either one alone is
+ *   enough, independently, and the missing counterpart is never inferred or
+ *   created.
+ * - **`standard`** - neither sprint block is present *and* the complete
+ *   four-block standard signature is.
+ * - **`unknown`** - neither sprint block is present and the standard set is
+ *   incomplete.
+ *
+ * **The absence of sprint blocks is not, by itself, evidence of a standard
+ * weekend.** A calendar published before a sprint round's detail firms up
+ * simply omits them, and promoting that silence to `standard` would be a
+ * confident wrong answer of exactly the kind D4 and D5 forbid. The honest third
+ * member of the existing enum is used instead, and nothing downstream is told
+ * more than Jolpica actually said.
+ *
+ * **A block counts only if it decoded.** `race.sessions` holds exactly the
+ * blocks that were present *and* produced a complete instant, because a present
+ * block that could not already failed the whole resource (A8). So there is no
+ * path by which a malformed block is counted as evidence of anything.
+ *
+ * This reads the row's own composition and nothing else: not the event name,
+ * the round, the date, the current time, another season or an assumed Formula 1
+ * rule.
  */
 function weekendFormat(race: DecodedRace): WeekendFormat {
-  return race.sessions.some((session) =>
-    sprintEvidenceBlocks.has(session.block),
-  )
-    ? 'sprint'
+  const present = new Set(race.sessions.map((session) => session.block));
+  if (sprintEvidenceBlocks.some((block) => present.has(block))) return 'sprint';
+  return standardEvidenceBlocks.every((block) => present.has(block))
+    ? 'standard'
     : 'unknown';
 }
 
