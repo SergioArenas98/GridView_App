@@ -414,10 +414,18 @@ assembly rather than by the calendar source: a calendar contribution carries a
 provisional `false`, and assembly sets `true` only for a round whose selected
 race classification is `final` or `provisional`. A calendar source that supplies
 no trustworthy lifecycle status emits `unknown` for `status` rather than
-inferring one from the clock. These rules are decided
-([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity),
-A6-A7) and not yet implemented: no calendar source exists to emit `unknown`,
-and season assembly still takes `hasResults` verbatim from its contribution.
+inferring one from the clock. These rules are decided in the
+[ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity),
+and their implementation status differs by rule:
+
+| Rule | Status |
+|---|---|
+| **A6** - calendar `status` is `unknown` | **Implemented, dormant.** The Jolpica season-calendar port emits `unknown` for every `GrandPrix.status` and every `Session.status`. It is not registered, not constructed by any production composition and absent from the Worker bundle, so no deployed code path reaches it yet. |
+| **A10** - `format` from block evidence | **Implemented, dormant**, on the same port. |
+| **A7** - assembly-owned `hasResults` | **Not implemented.** Season assembly still takes `hasResults` verbatim from its contribution; the derivation from selected, classified race results remains outstanding. |
+
+Until a calendar source is actually wired, every published season still comes
+from the mock provider.
 
 ### 6.6 Session
 

@@ -686,9 +686,9 @@ The ordering carries the argument, and it is structural rather than
 inductive: **the `standard` branch is unreachable while either sprint block is
 present**, so no payload carrying sprint evidence can be classified `standard`,
 whatever its practice blocks look like. The remaining question is only whether a
-weekend with **no sprint evidence at all** and a full three-practice-plus-
-qualifying schedule could be anything other than standard, and such a payload
-has stated the whole shape of a standard weekend and nothing of a sprint one.
+weekend with **no sprint evidence at all**, carrying three practices and a
+qualifying, could be anything other than standard - and such a payload has
+stated the whole shape of a standard weekend and nothing of a sprint one.
 
 **The supporting observation is a single one, and is not load-bearing.**
 Provider Evaluation §8.4 records that round 2 of 2026 carried `Sprint` and
