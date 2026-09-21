@@ -35,19 +35,30 @@ const pinnedOrigins: readonly string[] = [
 ];
 
 /**
+ * Parses one module for the walks below.
+ *
+ * The script kind is inferred from the file name rather than pinned to `TS`,
+ * because the closure now includes JavaScript modules: `.jsx` content parsed
+ * as TypeScript mis-reads `<div>` as a type assertion, which would silently
+ * lose every import in the file and, with it, every edge out of it.
+ */
+function parseModule(contents: string, fileName: string): ts.SourceFile {
+  return ts.createSourceFile(
+    fileName,
+    contents,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+  );
+}
+
+/**
  * True when the module declares a string-like literal whose value *is* one of
  * the pinned origins. Parses with the TypeScript compiler API and walks the
  * AST, so only genuine literals count - not prose, identifiers or a host that
  * merely appears somewhere inside a longer string.
  */
 function declaresPinnedOrigin(contents: string, fileName: string): boolean {
-  const source = ts.createSourceFile(
-    fileName,
-    contents,
-    ts.ScriptTarget.Latest,
-    /* setParentNodes */ false,
-    ts.ScriptKind.TS,
-  );
+  const source = parseModule(contents, fileName);
 
   let found = false;
   const visit = (node: ts.Node): void => {
@@ -65,14 +76,23 @@ function declaresPinnedOrigin(contents: string, fileName: string): boolean {
 }
 
 /**
- * The TypeScript extensions that carry executable code, as the compiler names
- * them.
+ * Every extension that carries executable code, as the compiler names them.
  *
- * Enumerated from `ts.Extension` rather than matched as filename suffixes:
- * `.mts` and `.cts` are ordinary modules a bundler ships, but neither ends in
- * `.ts`, so a suffix test silently skips them. Declaration extensions are
- * deliberately absent - `.d.ts` has no runtime behind it - and `.d.ts` does
- * end in `.ts`, so it has to be excluded rather than merely not listed.
+ * The question this set answers is "would the bundler ship this file", not
+ * "is this TypeScript". Both halves matter:
+ *
+ * - `.mts` and `.cts` are ordinary modules, but neither ends in `.ts`, so a
+ *   suffix test silently skips them.
+ * - JavaScript is equally executable. A `.ts` module may import a `.js`,
+ *   `.jsx`, `.mjs` or `.cjs` file living under `src/` - the compiler resolves
+ *   all four here even though `allowJs` is unset, each reporting its own
+ *   extension - and esbuild bundles it. Omitting them lets a JavaScript
+ *   intermediary import the adapter unseen by every boundary below.
+ *
+ * Declaration extensions are excluded because they carry no runtime, and
+ * `.d.ts` ends in `.ts`, so it must be excluded rather than merely not
+ * listed. JSON is excluded because it cannot declare an import and so can
+ * never extend the closure.
  */
 // Typed as `string`, not `ts.Extension`: `ResolvedModuleFull.extension` is a
 // plain string, and the values still come from the compiler's own enum.
@@ -81,11 +101,15 @@ const executableExtensions: readonly string[] = [
   ts.Extension.Tsx,
   ts.Extension.Mts,
   ts.Extension.Cts,
+  ts.Extension.Js,
+  ts.Extension.Jsx,
+  ts.Extension.Mjs,
+  ts.Extension.Cjs,
 ];
 
 const declarationSuffixes: readonly string[] = ['.d.ts', '.d.mts', '.d.cts'];
 
-/** True for a file a bundler could execute as TypeScript source. */
+/** True for a file a bundler could execute. */
 function isExecutableModule(fileName: string): boolean {
   if (declarationSuffixes.some((suffix) => fileName.endsWith(suffix))) {
     return false;
@@ -93,7 +117,7 @@ function isExecutableModule(fileName: string): boolean {
   return executableExtensions.some((extension) => fileName.endsWith(extension));
 }
 
-/** Every TypeScript module under a directory, as repo-relative POSIX paths. */
+/** Every executable module under a directory, as repo-relative POSIX paths. */
 function sourceFiles(sourceDir: string): string[] {
   return (readdirSync(sourceDir, { recursive: true }) as string[])
     .map((entry) => entry.toString().split('\\').join('/'))
@@ -108,13 +132,7 @@ function sourceFiles(sourceDir: string): string[] {
  * one. Bare specifiers are package imports and cannot reach `src/`.
  */
 function importSpecifiers(contents: string, fileName: string): string[] {
-  const source = ts.createSourceFile(
-    fileName,
-    contents,
-    ts.ScriptTarget.Latest,
-    /* setParentNodes */ false,
-    ts.ScriptKind.TS,
-  );
+  const source = parseModule(contents, fileName);
   const specifiers: string[] = [];
   const visit = (node: ts.Node): void => {
     if (
@@ -161,13 +179,7 @@ function importSpecifiers(contents: string, fileName: string): string[] {
  * makes this a tripwire rather than a restriction.
  */
 function computedDynamicImports(contents: string, fileName: string): string[] {
-  const source = ts.createSourceFile(
-    fileName,
-    contents,
-    ts.ScriptTarget.Latest,
-    /* setParentNodes */ false,
-    ts.ScriptKind.TS,
-  );
+  const source = parseModule(contents, fileName);
   const computed: string[] = [];
   const visit = (node: ts.Node): void => {
     if (
@@ -570,30 +582,40 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
    *
    * `.mts` and `.cts` are ordinary modules - an entry point can re-export the
    * dormant port from `providers/jolpica/entry.mts` - yet neither ends in
-   * `.ts`. A resolver keyed on `ts.Extension.Ts`/`Tsx` alone drops them, and
-   * a `sourceFiles` filter testing `endsWith('.ts')` never even reads them, so
-   * both A9 boundaries and the origin-confinement scan would pass over a live
-   * adapter. The extension set is enumerated from the compiler's own enum for
-   * exactly this reason.
+   * `.ts`. JavaScript is executable on the same terms: a reachable `.ts`
+   * module may import a `.js`, `.jsx`, `.mjs` or `.cjs` file under `src/`,
+   * which the compiler resolves here even with `allowJs` unset, and which
+   * esbuild bundles. Any extension left out of the set is dropped by
+   * `resolveSpecifier` and never read by `sourceFiles`, so all three
+   * boundaries pass over a live adapter reached through it.
    */
-  it('counts every executable TypeScript extension as a module', () => {
+  it('counts every executable extension as a module', () => {
     for (const fileName of [
       'providers/jolpica/entry.ts',
       'providers/jolpica/entry.tsx',
       'providers/jolpica/entry.mts',
       'providers/jolpica/entry.cts',
+      // JavaScript is executable too. A `.ts` module may import a JS file
+      // under `src/`, and esbuild bundles it, so a JS intermediary left out
+      // of this set could import the adapter unseen by every boundary.
+      'providers/jolpica/entry.js',
+      'providers/jolpica/entry.jsx',
+      'providers/jolpica/entry.mjs',
+      'providers/jolpica/entry.cjs',
     ]) {
       expect(isExecutableModule(fileName)).toBe(true);
     }
 
-    // Declaration files carry no runtime, and `.d.ts` ends in `.ts`, so it has
-    // to be excluded rather than simply left off the list.
+    // Declaration files carry no runtime, and each of them ends in an
+    // extension that is otherwise accepted, so they have to be excluded
+    // rather than simply left off the list. JSON cannot declare an import and
+    // so can never extend the closure.
     for (const fileName of [
       'providers/jolpica/entry.d.ts',
       'providers/jolpica/entry.d.mts',
       'providers/jolpica/entry.d.cts',
-      'providers/jolpica/entry.js',
       'content/registries/events.development.json',
+      'providers/jolpica/notes.md',
     ]) {
       expect(isExecutableModule(fileName)).toBe(false);
     }
@@ -602,7 +624,11 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     // enum rather than restated as filename suffixes.
     expect([...executableExtensions].sort()).toEqual(
       [
+        ts.Extension.Cjs,
         ts.Extension.Cts,
+        ts.Extension.Js,
+        ts.Extension.Jsx,
+        ts.Extension.Mjs,
         ts.Extension.Mts,
         ts.Extension.Ts,
         ts.Extension.Tsx,
