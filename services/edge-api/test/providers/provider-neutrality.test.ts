@@ -144,6 +144,48 @@ function importSpecifiers(contents: string, fileName: string): string[] {
   return specifiers;
 }
 
+/**
+ * The dynamic imports whose specifier is **not** a literal, as source text.
+ *
+ * `importSpecifiers` can only record an edge it can read, and a computed
+ * specifier - `` import(`./providers/${mode}`) `` or `import('./p/' + mode)` -
+ * is not a `StringLiteralLike` at all. That is worse than a missing edge:
+ * esbuild, which is what Wrangler bundles with, expands a relative template
+ * pattern and ships *every* module matching it, so a computed import under
+ * `src/` can bundle and select the adapter while all three boundaries stay
+ * green. Verified against esbuild directly, not assumed.
+ *
+ * No specifier of this shape can be resolved soundly to a single module, so
+ * the boundary is conservative rather than clever: production code may not
+ * contain one at all. Today it contains no dynamic import of any kind, which
+ * makes this a tripwire rather than a restriction.
+ */
+function computedDynamicImports(contents: string, fileName: string): string[] {
+  const source = ts.createSourceFile(
+    fileName,
+    contents,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    ts.ScriptKind.TS,
+  );
+  const computed: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length > 0
+    ) {
+      const specifier = node.arguments[0];
+      if (specifier !== undefined && !ts.isStringLiteralLike(specifier)) {
+        computed.push(specifier.getText(source));
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+  return computed;
+}
+
 const srcRoot = join(edgeApiRoot, 'src');
 
 /**
@@ -571,6 +613,53 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     const files = sourceFiles(join(repoRoot, 'services', 'edge-api', 'src'));
     expect(files).toContain('providers/jolpica/calendar-port.ts');
     expect(files).toContain('index.ts');
+  });
+
+  /**
+   * The third boundary the specifier walk needs, because it is the one edge
+   * that cannot be read rather than merely one that was read wrongly.
+   *
+   * A computed dynamic import defeats the closure by construction, and esbuild
+   * expands a relative template pattern into every matching module - so
+   * `` import(`./providers/${mode}`) `` in the entry point would bundle the
+   * adapter and let a variable select it, with all three boundaries green.
+   * Rejecting the shape outright is the only sound answer; there is no
+   * defensible single target to resolve it to.
+   */
+  it('contains no computed dynamic import anywhere under src/', () => {
+    const sourceDir = join(repoRoot, 'services', 'edge-api', 'src');
+
+    const offenders = sourceFiles(sourceDir).flatMap((file) =>
+      computedDynamicImports(
+        readFileSync(join(sourceDir, file), 'utf8'),
+        file,
+      ).map((specifier) => `${file}: import(${specifier})`),
+    );
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('refuses every dynamic specifier it cannot resolve', () => {
+    // Literal forms remain resolvable, so they are not refused here - they are
+    // the ones `importSpecifiers` turns into real edges.
+    for (const contents of [
+      "void import('./providers/jolpica');",
+      'void import(`./providers/jolpica`);',
+    ]) {
+      expect(computedDynamicImports(contents, 'index.ts')).toEqual([]);
+    }
+
+    // Everything else is refused by shape: a substitution-bearing template,
+    // a concatenation, and a bare identifier all name an unknowable module.
+    expect(
+      computedDynamicImports('void import(`./providers/${mode}`);', 'index.ts'),
+    ).toEqual(['`./providers/${mode}`']);
+    expect(
+      computedDynamicImports("void import('./providers/' + mode);", 'index.ts'),
+    ).toEqual(["'./providers/' + mode"]);
+    expect(computedDynamicImports('void import(chosen);', 'index.ts')).toEqual([
+      'chosen',
+    ]);
   });
 
   it('is constructed by no production composition', () => {
