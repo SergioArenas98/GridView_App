@@ -1,5 +1,19 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { isAbsolute, join, relative } from 'node:path';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+// Reached through Wrangler, which pins `esbuild` to an exact version and is
+// the only reason it is installed. That is deliberate rather than incidental:
+// the dormancy proof below has to run the bundler the deployed Worker is
+// actually built by, so a separately declared copy - free to drift to another
+// version, with other resolution behaviour - would be the weaker dependency.
+import { build, type BuildOptions, type Metafile } from 'esbuild';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -38,9 +52,10 @@ const pinnedOrigins: readonly string[] = [
  * Parses one module for the walks below.
  *
  * The script kind is inferred from the file name rather than pinned to `TS`,
- * because the closure now includes JavaScript modules: `.jsx` content parsed
- * as TypeScript mis-reads `<div>` as a type assertion, which would silently
- * lose every import in the file and, with it, every edge out of it.
+ * because those walks read every executable module under `src/`, JavaScript
+ * included: `.jsx` content parsed as TypeScript mis-reads `<div>` as a type
+ * assertion, which silently loses the rest of the file and, with it, any
+ * origin literal or computed import declared after that point.
  */
 function parseModule(contents: string, fileName: string): ts.SourceFile {
   return ts.createSourceFile(
@@ -84,18 +99,22 @@ function declaresPinnedOrigin(contents: string, fileName: string): boolean {
  * - `.mts` and `.cts` are ordinary modules, but neither ends in `.ts`, so a
  *   suffix test silently skips them.
  * - JavaScript is equally executable. A `.ts` module may import a `.js`,
- *   `.jsx`, `.mjs` or `.cjs` file living under `src/` - the compiler resolves
- *   all four here even though `allowJs` is unset, each reporting its own
- *   extension - and esbuild bundles it. Omitting them lets a JavaScript
- *   intermediary import the adapter unseen by every boundary below.
+ *   `.jsx`, `.mjs` or `.cjs` file living under `src/`, and esbuild bundles
+ *   it - the `.cjs` case through a static `require`, which is not an ESM
+ *   edge at all.
+ *
+ * It decides which modules become **entry points** of the second dormancy
+ * graph below. A module left out of the set is never made an entry point, so
+ * an adapter it reaches is never seen: the set has to be the bundler's notion
+ * of executable, not TypeScript's.
  *
  * Declaration extensions are excluded because they carry no runtime, and
  * `.d.ts` ends in `.ts`, so it must be excluded rather than merely not
  * listed. JSON is excluded because it cannot declare an import and so can
- * never extend the closure.
+ * never extend a closure.
  */
-// Typed as `string`, not `ts.Extension`: `ResolvedModuleFull.extension` is a
-// plain string, and the values still come from the compiler's own enum.
+// Typed as `string`, not `ts.Extension`: these are compared as filename
+// suffixes, and the values still come from the compiler's own enum.
 const executableExtensions: readonly string[] = [
   ts.Extension.Ts,
   ts.Extension.Tsx,
@@ -125,58 +144,21 @@ function sourceFiles(sourceDir: string): string[] {
 }
 
 /**
- * The relative import and re-export specifiers one module declares.
- *
- * Parsed from the AST rather than matched textually, so a specifier inside a
- * comment or a string cannot forge an edge and a multi-line import cannot hide
- * one. Bare specifiers are package imports and cannot reach `src/`.
- */
-function importSpecifiers(contents: string, fileName: string): string[] {
-  const source = parseModule(contents, fileName);
-  const specifiers: string[] = [];
-  const visit = (node: ts.Node): void => {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier !== undefined &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      specifiers.push(node.moduleSpecifier.text);
-    }
-    // A dynamic `import('...')` is an edge too, and is how a module could
-    // otherwise be pulled in without a static declaration. The `...Like` form
-    // of the predicate also admits a no-substitution template literal, which
-    // is an equally valid dynamic specifier: `ts.isStringLiteral` alone would
-    // report no edge at all for `import(`./x`)`.
-    if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length > 0 &&
-      node.arguments[0] !== undefined &&
-      ts.isStringLiteralLike(node.arguments[0])
-    ) {
-      specifiers.push((node.arguments[0] as ts.StringLiteralLike).text);
-    }
-    ts.forEachChild(node, visit);
-  };
-  ts.forEachChild(source, visit);
-  return specifiers;
-}
-
-/**
  * The dynamic imports whose specifier is **not** a literal, as source text.
  *
- * `importSpecifiers` can only record an edge it can read, and a computed
- * specifier - `` import(`./providers/${mode}`) `` or `import('./p/' + mode)` -
- * is not a `StringLiteralLike` at all. That is worse than a missing edge:
- * esbuild, which is what Wrangler bundles with, expands a relative template
- * pattern and ships *every* module matching it, so a computed import under
- * `src/` can bundle and select the adapter while all three boundaries stay
- * green. Verified against esbuild directly, not assumed.
+ * The dormancy graphs below are built by esbuild itself, so they see every
+ * edge esbuild can resolve - including the relative template pattern
+ * `` import(`./providers/${mode}`) ``, which esbuild expands into *every*
+ * matching module. What no bundler can resolve is a specifier assembled at
+ * runtime, `import('./p/' + mode)` or `import(chosen)`: esbuild records no
+ * edge and bundles nothing for it.
  *
- * No specifier of this shape can be resolved soundly to a single module, so
- * the boundary is conservative rather than clever: production code may not
- * contain one at all. Today it contains no dynamic import of any kind, which
- * makes this a tripwire rather than a restriction.
+ * That leaves no reachable adapter - an unbundled specifier resolves to
+ * nothing in the Workers runtime either - but it does leave a shape whose
+ * meaning cannot be read off the bundle. The boundary is therefore
+ * conservative rather than clever: production code may not contain one at
+ * all. Today it contains no dynamic import of any kind, which makes this a
+ * tripwire rather than a restriction.
  */
 function computedDynamicImports(contents: string, fileName: string): string[] {
   const source = parseModule(contents, fileName);
@@ -200,102 +182,151 @@ function computedDynamicImports(contents: string, fileName: string): string[] {
 
 const srcRoot = join(edgeApiRoot, 'src');
 
-/**
- * The Edge API's own compiler options, read from its `tsconfig.json` rather
- * than restated here.
- *
- * The closure below is only a dormancy proof if it resolves specifiers the
- * way the build does. Restating the options - or the resolution rules they
- * select - lets the two drift apart silently, which is precisely how a legal
- * import becomes invisible to this file.
- */
-const compilerOptions: ts.CompilerOptions = (() => {
-  const configPath = join(edgeApiRoot, 'tsconfig.json');
-  const read = ts.readConfigFile(configPath, ts.sys.readFile);
-  if (read.error !== undefined) {
-    throw new Error(
-      `cannot read ${configPath}: ${ts.flattenDiagnosticMessageText(read.error.messageText, ' ')}`,
-    );
-  }
-  const parsed = ts.parseJsonConfigFileContent(
-    read.config,
-    ts.sys,
-    edgeApiRoot,
-    undefined,
-    configPath,
-  );
-  if (parsed.errors.length > 0) {
-    throw new Error(
-      `cannot parse ${configPath}: ${parsed.errors
-        .map((error) => ts.flattenDiagnosticMessageText(error.messageText, ' '))
-        .join('; ')}`,
-    );
-  }
-  return parsed.options;
-})();
+/** The dormant adapter directory, as esbuild names it in a metafile. */
+const dormantDir = 'src/providers/jolpica/';
 
-const moduleResolutionHost = ts.createCompilerHost(compilerOptions);
+/** The Worker entry point, relative to the Edge API project root. */
+const workerEntryPoint = 'src/index.ts';
 
 /**
- * Resolves one import specifier to a repo-relative module path under `src/`.
+ * The Worker build, as the deployed bundle is actually produced.
  *
- * Resolution is delegated to `ts.resolveModuleName` under the options above,
- * so every specifier the compiler accepts is an edge here too. A hand-written
- * candidate list cannot hold that promise: under this project's
- * `moduleResolution: "bundler"`, a relative `./x.js` resolves to `x.ts`, and a
- * resolver that only ever appended `.ts` found nothing for
- * `./providers/jolpica/index.js` and reported no edge at all - so both
- * boundaries passed while a legal production import reached the adapter.
+ * These are Wrangler's own esbuild options for a modules Worker, minus the
+ * ones that only shape the emitted text (`minify`, `sourcemap`, `keepNames`,
+ * `define`, `inject` and its plugins). Everything that decides *which files
+ * end up in the bundle* is kept verbatim, because that is the only thing
+ * these boundaries read:
  *
- * Returns `null` for anything that is not a TypeScript source module inside
- * `src/`: an unresolved specifier, a package resolved out of `node_modules`,
- * a declaration file with no runtime behind it, and the curated JSON content,
- * which `resolveJsonModule` does resolve but which lives outside the root.
+ * - `conditions` and the absent `platform` pick the same package-export and
+ *   `main`-field branches Wrangler resolves through.
+ * - `loader` maps `.js`, `.mjs` and `.cjs` onto the JSX loader exactly as
+ *   Wrangler does, so a JavaScript or CommonJS intermediary under `src/` is
+ *   parsed and followed rather than treated as an opaque file.
+ * - `bundle` is what makes esbuild walk edges at all - including a static
+ *   `require('./providers/jolpica')`, which is not an ESM import and which a
+ *   hand-written specifier walk over the TypeScript AST did not see.
+ *
+ * Nothing is written: `write: false` keeps the proof in memory, so no
+ * generated bundle can land in the repository.
  */
-function resolveSpecifier(from: string, specifier: string): string | null {
-  const { resolvedModule } = ts.resolveModuleName(
-    specifier,
-    join(srcRoot, from),
-    compilerOptions,
-    moduleResolutionHost,
-  );
-  if (
-    resolvedModule === undefined ||
-    resolvedModule.isExternalLibraryImport === true
-  ) {
-    return null;
+const workerBuildOptions: BuildOptions = {
+  bundle: true,
+  write: false,
+  metafile: true,
+  format: 'esm',
+  target: 'es2024',
+  supported: { 'import-source': true },
+  loader: { '.js': 'jsx', '.mjs': 'jsx', '.cjs': 'jsx' },
+  conditions: ['workerd', 'worker', 'browser'],
+  external: ['__STATIC_CONTENT_MANIFEST'],
+  // Required by esbuild whenever there is more than one entry point. Nothing
+  // is emitted to it, and it is resolved against `absWorkingDir`, never the
+  // repository.
+  outdir: 'dormancy-graph',
+  // Wrangler's own value. A build error still rejects; only esbuild's own
+  // logging is suppressed.
+  logLevel: 'silent',
+};
+
+/**
+ * The module graph esbuild builds for a set of entry points.
+ *
+ * This is the dormancy proof itself: not a re-implementation of module
+ * resolution, but the resolver the deployed bundle is produced by. Every edge
+ * shape the bundler follows - a static import, a re-export, a dynamic
+ * `import()` with a literal or template specifier, a relative template
+ * pattern it expands, and a static `require` inside a CommonJS module - is an
+ * edge here by construction rather than by a rule this file remembered to
+ * write down.
+ *
+ * `absWorkingDir` is what metafile keys are relative to, so a fixture rooted
+ * at a temporary directory yields the same `src/...` keys as the real tree
+ * and can be checked by the same helpers below.
+ */
+async function moduleGraph(
+  absWorkingDir: string,
+  entryPoints: readonly string[],
+): Promise<Metafile> {
+  const result = await build({
+    ...workerBuildOptions,
+    absWorkingDir,
+    entryPoints: [...entryPoints],
+  });
+  if (result.metafile === undefined) {
+    throw new Error('esbuild produced no metafile');
   }
-  if (!executableExtensions.includes(resolvedModule.extension)) return null;
-  const resolved = relative(srcRoot, resolvedModule.resolvedFileName)
-    .split('\\')
-    .join('/');
-  // Containment. `relative` yields a `..` prefix for anything above `src/`,
-  // and an absolute path when there is no relative route at all.
-  if (resolved.startsWith('../') || isAbsolute(resolved)) return null;
-  return resolved;
+  return result.metafile;
+}
+
+/** Every module of the dormant directory the graph contains. */
+function dormantModules(metafile: Metafile): string[] {
+  return Object.keys(metafile.inputs)
+    .filter((input) => input.startsWith(dormantDir))
+    .sort();
 }
 
 /**
- * The transitive import closure of the Worker entry point.
+ * Every edge that crosses *into* the dormant directory, with its importer and
+ * the kind esbuild recorded.
  *
- * This is the set a bundler would ship. A module absent from it cannot be
- * reached at runtime however it is named, which is the dormancy proof A9 asks
- * for in place of a file-name assertion.
+ * `dormantModules` is the complete statement - a module the bundler never
+ * reads cannot run - and this is what makes a failure legible: it names the
+ * module that reached in and whether it did so by `import-statement`,
+ * `dynamic-import` or `require-call`.
  */
-function reachableFromEntryPoint(): ReadonlySet<string> {
-  const seen = new Set<string>();
-  const pending = ['index.ts'];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (current === undefined || seen.has(current)) continue;
-    seen.add(current);
-    const contents = readFileSync(join(srcRoot, current), 'utf8');
-    for (const specifier of importSpecifiers(contents, current)) {
-      const resolved = resolveSpecifier(current, specifier);
-      if (resolved !== null && !seen.has(resolved)) pending.push(resolved);
+function edgesIntoDormantDir(metafile: Metafile): string[] {
+  const edges: string[] = [];
+  for (const [input, detail] of Object.entries(metafile.inputs)) {
+    if (input.startsWith(dormantDir)) continue;
+    for (const imported of detail.imports) {
+      if (imported.path.startsWith(dormantDir)) {
+        edges.push(`${input} -> ${imported.path} (${imported.kind})`);
+      }
     }
   }
-  return seen;
+  return edges.sort();
+}
+
+/**
+ * Every runtime module under `src/` that is not part of the dormant adapter,
+ * as an esbuild entry point.
+ *
+ * The entry-point graph answers "is the adapter in the deployed bundle". This
+ * set answers the separate question A9 also asks: does *anything* under
+ * `src/` reach the adapter, including a module the entry point does not
+ * reach today. Making every such module an entry point means the union of
+ * their graphs contains a dormant module only if one of them imported it.
+ */
+function runtimeEntryPointsOutsideDormantDir(): string[] {
+  return sourceFiles(srcRoot)
+    .map((file) => `src/${file}`)
+    .filter((entry) => !entry.startsWith(dormantDir));
+}
+
+/**
+ * Runs `assert` against a throwaway source tree written outside the
+ * repository, and removes it afterwards however the assertion ends.
+ *
+ * The negative controls need a tree in which the adapter *is* reachable. They
+ * build it with `moduleGraph` and the options above - the same helper and the
+ * same build configuration the real assertions use - so what they demonstrate
+ * is that this proof fails when it should, not that some parallel check does.
+ */
+async function withSourceTree(
+  files: Readonly<Record<string, string>>,
+  assert: (root: string) => Promise<void>,
+): Promise<void> {
+  const root = mkdtempSync(join(tmpdir(), 'gridview-dormancy-'));
+  try {
+    for (const [file, contents] of Object.entries(files)) {
+      const target = join(root, file);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, contents, 'utf8');
+    }
+    await assert(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 describe('runtime provider modes are unchanged by Phase 9B-1', () => {
@@ -358,236 +389,170 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
    * assertions below are the boundaries A9 names instead: the adapter is
    * unreachable from the Worker entry point, nothing outside its own directory
    * imports it, and no configuration enables it.
+   *
+   * The first two are answered by **the bundler itself**, not by a private
+   * model of it. An earlier revision walked the TypeScript AST and resolved
+   * specifiers with `ts.resolveModuleName`; every defect found in it was the
+   * same defect - an edge the real build follows and the model did not, most
+   * recently a static `require` in a CommonJS intermediary, which is not an
+   * ESM import at all. Asking esbuild under Wrangler's own options removes
+   * the class rather than another instance of it.
    */
-  it('keeps the Jolpica adapter unreachable from the Worker entry point', () => {
-    const reachable = reachableFromEntryPoint();
+  it('keeps the Jolpica adapter unreachable from the Worker entry point', async () => {
+    const graph = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
 
-    // The entry point's transitive import closure is what the bundler ships.
-    // Nothing under the adapter directory may appear in it.
-    const bundled = [...reachable].filter((file) =>
-      file.startsWith('providers/jolpica/'),
+    // The entry point's graph is the set of files the deployed bundle is
+    // built from. Nothing under the adapter directory may appear in it.
+    expect(edgesIntoDormantDir(graph)).toEqual([]);
+    expect(dormantModules(graph)).toEqual([]);
+
+    // The graph is real, not an empty one from a build that resolved nothing:
+    // the entry point genuinely reaches its own modules.
+    const inputs = Object.keys(graph.inputs);
+    expect(inputs).toContain(workerEntryPoint);
+    expect(inputs).toContain('src/providers/factory.ts');
+    expect(inputs).toContain('src/sync/sync-service.ts');
+  });
+
+  it('is imported by no runtime module outside its own directory', async () => {
+    const entryPoints = runtimeEntryPointsOutsideDormantDir();
+    const graph = await moduleGraph(edgeApiRoot, entryPoints);
+
+    // Every module outside the adapter directory is its own entry point, so
+    // an adapter module in this graph was reached from one of them - whether
+    // or not the Worker entry point reaches that importer.
+    expect(edgesIntoDormantDir(graph)).toEqual([]);
+    expect(dormantModules(graph)).toEqual([]);
+
+    // The enumeration is real, and it excludes exactly the adapter.
+    expect(entryPoints).toContain(workerEntryPoint);
+    expect(entryPoints).toContain('src/providers/coordination/coordinator.ts');
+    expect(entryPoints.some((entry) => entry.startsWith(dormantDir))).toBe(
+      false,
     );
-    expect(bundled).toEqual([]);
-
-    // The closure is real, not an empty set from a resolver that found
-    // nothing: the entry point genuinely reaches its own modules.
-    expect(reachable.has('index.ts')).toBe(true);
-    expect(reachable.has('providers/factory.ts')).toBe(true);
-    expect(reachable.has('sync/sync-service.ts')).toBe(true);
-  });
-
-  it('is imported by no runtime module outside its own directory', () => {
-    const sourceDir = join(repoRoot, 'services', 'edge-api', 'src');
-    const files = sourceFiles(sourceDir);
-
-    const importers = files.filter((file) => {
-      if (file.startsWith('providers/jolpica/')) return false;
-      const contents = readFileSync(join(sourceDir, file), 'utf8');
-      return importSpecifiers(contents, file).some((specifier) =>
-        resolveSpecifier(file, specifier)?.startsWith('providers/jolpica/'),
-      );
-    });
-
-    expect(importers).toEqual([]);
-  });
-
-  /**
-   * Regression for the two boundaries above.
-   *
-   * Both are built on `importSpecifiers`, so an edge that walk cannot see is
-   * an edge neither boundary can refuse. A dynamic import may name its module
-   * with a no-substitution template literal, which is string-*like* but is not
-   * a `ts.StringLiteral`: under that narrower predicate both assertions would
-   * pass while a real runtime import of the adapter existed.
-   */
-  it('sees a template-literal dynamic import into the adapter directory', () => {
-    // The entry point pulling in the adapter, written both ways.
-    const templateForm = 'void import(`./providers/jolpica`);';
-    const stringForm = "void import('./providers/jolpica');";
-
-    expect(importSpecifiers(templateForm, 'index.ts')).toEqual([
-      './providers/jolpica',
-    ]);
-    // The ordinary string-literal form stays covered.
-    expect(importSpecifiers(stringForm, 'index.ts')).toEqual([
-      './providers/jolpica',
-    ]);
-
-    // Boundary 1: the entry-point closure walk would admit it into the set the
-    // bundler ships, which is what `bundled` is asserted to be empty of.
-    const reached = importSpecifiers(templateForm, 'index.ts')
-      .map((specifier) => resolveSpecifier('index.ts', specifier))
-      .filter((resolved) => resolved?.startsWith('providers/jolpica/'));
-    expect(reached).toEqual(['providers/jolpica/index.ts']);
-
-    // Boundary 2: the importer scan flags the module as an importer, which is
-    // what `importers` is asserted to be empty of. The factory is the module
-    // that would plausibly reach for it.
-    const factory = 'providers/factory.ts';
-    expect(
-      importSpecifiers('void import(`./jolpica`);', factory).some((specifier) =>
-        resolveSpecifier(factory, specifier)?.startsWith('providers/jolpica/'),
-      ),
-    ).toBe(true);
-  });
-
-  /**
-   * Regression for the same two boundaries, through the resolver rather than
-   * the specifier walk.
-   *
-   * `tsconfig.json` enables `allowImportingTsExtensions`, so
-   * `./providers/jolpica/index.ts` is a legal production import here. A
-   * resolver that appends an extension unconditionally turns it into
-   * `index.ts.ts`, resolves nothing and reports no edge - so both assertions
-   * would pass while the Worker bundled the adapter.
-   */
-  it('resolves an explicit .ts import into the adapter directory', () => {
-    // Boundary 1: the entry point reaching the adapter, statically and
-    // dynamically, with the extension written out.
-    const entryForms = [
-      ['import "./providers/jolpica/index.ts";', 'providers/jolpica/index.ts'],
-      [
-        'void import("./providers/jolpica/calendar-port.ts");',
-        'providers/jolpica/calendar-port.ts',
-      ],
-    ] as const;
-
-    for (const [contents, expected] of entryForms) {
-      const reached = importSpecifiers(contents, 'index.ts')
-        .map((specifier) => resolveSpecifier('index.ts', specifier))
-        .filter((resolved) => resolved?.startsWith('providers/jolpica/'));
-      expect(reached).toEqual([expected]);
-    }
-
-    // Boundary 2: the importer scan flags the factory in either form.
-    const factory = 'providers/factory.ts';
-    for (const contents of [
-      'import "./jolpica/index.ts";',
-      'void import("./jolpica/calendar-port.ts");',
-    ]) {
-      expect(
-        importSpecifiers(contents, factory).some((specifier) =>
-          resolveSpecifier(factory, specifier)?.startsWith(
-            'providers/jolpica/',
-          ),
-        ),
-      ).toBe(true);
-    }
-
-    // The extensionless forms keep resolving exactly as before.
-    expect(resolveSpecifier('index.ts', './providers/jolpica')).toBe(
-      'providers/jolpica/index.ts',
+    // The graph covers more than the deployed bundle: the coordination seam
+    // is dormant too, and is in this graph only because it is an entry point
+    // of its own.
+    expect(Object.keys(graph.inputs)).toContain(
+      'src/providers/coordination/coordinator.ts',
     );
-    expect(
-      resolveSpecifier('providers/factory.ts', './jolpica/calendar-port'),
-    ).toBe('providers/jolpica/calendar-port.ts');
-
-    // Containment is unchanged: every candidate is still checked for
-    // existence under `src/`, so the curated JSON content - which lives
-    // outside it - is still no module edge.
-    expect(
-      resolveSpecifier(
-        'providers/jolpica/curated-events.ts',
-        '../../../../../content/registries/events.development.json',
-      ),
-    ).toBeNull();
   });
 
   /**
-   * Regression for the same two boundaries, through a legal `.js` specifier.
+   * Non-vacuity for both boundaries above, in the four shapes a reachable
+   * adapter could take.
    *
-   * `./x.js` is the extension-bearing form the ecosystem writes by habit, and
-   * under `moduleResolution: "bundler"` the compiler substitutes it onto
-   * `x.ts`. A resolver that appended `.ts` to the literal specifier looked for
-   * `index.js.ts`, found nothing and reported no edge - so the adapter could
-   * be imported by the entry point, in a form that typechecks and bundles,
-   * while both assertions above stayed green.
+   * Each control builds a throwaway tree with `moduleGraph` under
+   * `workerBuildOptions` - the same helper and the same build configuration
+   * the two assertions use - and requires the boundary to report the edge.
+   * The `require-call` row is the one a specifier walk over the TypeScript
+   * AST missed entirely: `require` is not an ESM import, and Wrangler's
+   * bundler follows it.
    */
-  it('resolves a .js specifier onto its TypeScript source', () => {
-    // Boundary 1: the entry point reaching the adapter, statically and
-    // dynamically, through the extension the bundler rewrites.
-    const entryForms = [
-      ['import "./providers/jolpica/index.js";', 'providers/jolpica/index.ts'],
+  it('reports a reachable adapter through every edge shape a bundle follows', async () => {
+    const dormantModule = `${dormantDir}index.ts`;
+    const adapter = { [dormantModule]: 'export const port = 1;\n' };
+
+    const reachable: readonly [string, string, Record<string, string>][] = [
       [
-        'void import(`./providers/jolpica/calendar-port.js`);',
-        'providers/jolpica/calendar-port.ts',
+        'import-statement',
+        'src/index.ts',
+        {
+          'src/index.ts': "import './providers/jolpica';\nexport default {};\n",
+          ...adapter,
+        },
       ],
-    ] as const;
+      [
+        'dynamic-import',
+        'src/index.ts',
+        {
+          'src/index.ts':
+            'void import(`./providers/jolpica`);\nexport default {};\n',
+          ...adapter,
+        },
+      ],
+      [
+        // A JavaScript intermediary, imported with the `.js` specifier the
+        // ecosystem writes by habit and re-exporting the adapter the same way.
+        'import-statement',
+        'src/bridge.js',
+        {
+          'src/index.ts': "import './bridge.js';\nexport default {};\n",
+          'src/bridge.js': "export * from './providers/jolpica/index.js';\n",
+          ...adapter,
+        },
+      ],
+      [
+        // A CommonJS intermediary reaching the adapter by static `require`.
+        'require-call',
+        'src/bridge.cjs',
+        {
+          'src/index.ts': "import './bridge.cjs';\nexport default {};\n",
+          'src/bridge.cjs':
+            "module.exports = require('./providers/jolpica');\n",
+          ...adapter,
+        },
+      ],
+    ];
 
-    for (const [contents, expected] of entryForms) {
-      const reached = importSpecifiers(contents, 'index.ts')
-        .map((specifier) => resolveSpecifier('index.ts', specifier))
-        .filter((resolved) => resolved?.startsWith('providers/jolpica/'));
-      expect(reached).toEqual([expected]);
-    }
-
-    // Boundary 2: the importer scan flags the factory in either form.
-    const factory = 'providers/factory.ts';
-    for (const contents of [
-      'import "./jolpica/index.js";',
-      'void import("./jolpica/calendar-port.js");',
-    ]) {
-      expect(
-        importSpecifiers(contents, factory).some((specifier) =>
-          resolveSpecifier(factory, specifier)?.startsWith(
-            'providers/jolpica/',
-          ),
-        ),
-      ).toBe(true);
+    for (const [kind, importer, files] of reachable) {
+      await withSourceTree(files, async (root) => {
+        const graph = await moduleGraph(root, ['src/index.ts']);
+        expect(edgesIntoDormantDir(graph)).toEqual([
+          `${importer} -> ${dormantModule} (${kind})`,
+        ]);
+        expect(dormantModules(graph)).toEqual([dormantModule]);
+      });
     }
   });
 
   /**
-   * The other half of delegating to the compiler: what it declines to resolve,
-   * and what resolves outside `src/`, must not become an edge either - or the
-   * closure grows false members and the boundaries above stop meaning
-   * anything.
+   * Non-vacuity for the *second* boundary specifically, which the controls
+   * above cannot supply: each of them is reachable from the entry point, so
+   * the entry-point graph alone would have caught it.
    *
-   * The `.mjs` and `.cjs` rows record **observed** behaviour, not assumed
-   * symmetry with `.js`. The compiler substitutes each JavaScript form onto
-   * its own TypeScript counterpart - `./x.js` onto `x.ts`, `./x.mjs` onto
-   * `x.mts`, `./x.cjs` onto `x.cts` - so those two are unresolved here only
-   * because the adapter directory holds no `.mts` or `.cts` module. They are
-   * not inherently unresolvable, which is why `resolveSpecifier` accepts
-   * every executable extension rather than trusting this pair to stay empty.
+   * Here the importer is an orphan - no edge reaches it from `src/index.ts` -
+   * so the entry-point graph is legitimately clean while a runtime module
+   * under `src/` does import the adapter. Only the all-modules graph sees it,
+   * which is why that assertion is not folded into the first.
    */
-  it('makes no edge from unresolved, external or escaping specifiers', () => {
-    const from = 'index.ts';
+  it('reports an adapter reached only from outside the entry-point graph', async () => {
+    const dormantModule = `${dormantDir}index.ts`;
 
-    // Nothing behind the path at all.
-    expect(resolveSpecifier(from, './providers/jolpica/nope')).toBeNull();
-    expect(resolveSpecifier(from, './providers/jolpica/nope.js')).toBeNull();
+    await withSourceTree(
+      {
+        'src/index.ts': 'export default {};\n',
+        'src/orphan.ts': "export * from './providers/jolpica';\n",
+        [dormantModule]: 'export const port = 1;\n',
+      },
+      async (root) => {
+        const entryGraph = await moduleGraph(root, ['src/index.ts']);
+        expect(dormantModules(entryGraph)).toEqual([]);
 
-    // No `.mjs`/`.cjs` substitution onto a `.ts` source here. Were that to
-    // change, these fail and the closure gains the edge deliberately rather
-    // than through a rule this file invented.
-    expect(resolveSpecifier(from, './providers/jolpica/index.mjs')).toBeNull();
-    expect(resolveSpecifier(from, './providers/jolpica/index.cjs')).toBeNull();
-
-    // Packages and Node builtins are not `src/` modules.
-    expect(resolveSpecifier(from, 'typescript')).toBeNull();
-    expect(resolveSpecifier(from, 'node:fs')).toBeNull();
-
-    // A real TypeScript module that resolves *outside* the source root is
-    // rejected by containment, not by failing to resolve: the harness below
-    // genuinely exists and the compiler finds it, extensionless or not.
-    expect(resolveSpecifier(from, '../test/support/edge-harness')).toBeNull();
-    expect(
-      resolveSpecifier(from, '../test/support/edge-harness.js'),
-    ).toBeNull();
+        const allModules = await moduleGraph(root, [
+          'src/index.ts',
+          'src/orphan.ts',
+        ]);
+        expect(edgesIntoDormantDir(allModules)).toEqual([
+          `src/orphan.ts -> ${dormantModule} (import-statement)`,
+        ]);
+        expect(dormantModules(allModules)).toEqual([dormantModule]);
+      },
+    );
   });
 
   /**
-   * Every extension a bundler executes is an edge, not just `.ts`.
+   * Every extension a bundler executes has to be an entry point, not just
+   * `.ts`.
    *
-   * `.mts` and `.cts` are ordinary modules - an entry point can re-export the
-   * dormant port from `providers/jolpica/entry.mts` - yet neither ends in
-   * `.ts`. JavaScript is executable on the same terms: a reachable `.ts`
-   * module may import a `.js`, `.jsx`, `.mjs` or `.cjs` file under `src/`,
-   * which the compiler resolves here even with `allowJs` unset, and which
-   * esbuild bundles. Any extension left out of the set is dropped by
-   * `resolveSpecifier` and never read by `sourceFiles`, so all three
-   * boundaries pass over a live adapter reached through it.
+   * `.mts` and `.cts` are ordinary modules - one can re-export the dormant
+   * port from `providers/jolpica/entry.mts` - yet neither ends in `.ts`.
+   * JavaScript is executable on the same terms: a `.js`, `.jsx`, `.mjs` or
+   * `.cjs` file under `src/` is bundled by esbuild like any other module, and
+   * a `.cjs` one can reach the adapter by `require` alone. Any extension left
+   * out of the set is never read by `sourceFiles`, so it never becomes an
+   * entry point of the all-modules graph and an adapter it imports is never
+   * seen there.
    */
   it('counts every executable extension as a module', () => {
     for (const fileName of [
@@ -596,8 +561,8 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
       'providers/jolpica/entry.mts',
       'providers/jolpica/entry.cts',
       // JavaScript is executable too. A `.ts` module may import a JS file
-      // under `src/`, and esbuild bundles it, so a JS intermediary left out
-      // of this set could import the adapter unseen by every boundary.
+      // under `src/`, and esbuild bundles it, so a JS or CommonJS
+      // intermediary left out of this set never becomes an entry point.
       'providers/jolpica/entry.js',
       'providers/jolpica/entry.jsx',
       'providers/jolpica/entry.mjs',
@@ -609,7 +574,7 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     // Declaration files carry no runtime, and each of them ends in an
     // extension that is otherwise accepted, so they have to be excluded
     // rather than simply left off the list. JSON cannot declare an import and
-    // so can never extend the closure.
+    // so can never extend a graph.
     for (const fileName of [
       'providers/jolpica/entry.d.ts',
       'providers/jolpica/entry.d.mts',
@@ -620,8 +585,8 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
       expect(isExecutableModule(fileName)).toBe(false);
     }
 
-    // The set the resolver accepts is the same one, taken from the compiler's
-    // enum rather than restated as filename suffixes.
+    // The set is taken from the compiler's own enum rather than restated here
+    // as filename suffixes.
     expect([...executableExtensions].sort()).toEqual(
       [
         ts.Extension.Cjs,
@@ -642,15 +607,18 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
   });
 
   /**
-   * The third boundary the specifier walk needs, because it is the one edge
-   * that cannot be read rather than merely one that was read wrongly.
+   * The one shape the two graphs above cannot describe, rather than one they
+   * might describe wrongly.
    *
-   * A computed dynamic import defeats the closure by construction, and esbuild
-   * expands a relative template pattern into every matching module - so
-   * `` import(`./providers/${mode}`) `` in the entry point would bundle the
-   * adapter and let a variable select it, with all three boundaries green.
+   * esbuild expands a relative template pattern into every matching module,
+   * so `` import(`./providers/${mode}`) `` does appear in both graphs and is
+   * caught there. A specifier assembled at runtime - `import('./p/' + mode)`
+   * or `import(chosen)` - resolves to nothing at build time, so it neither
+   * bundles the adapter nor says anything about it.
+   *
    * Rejecting the shape outright is the only sound answer; there is no
-   * defensible single target to resolve it to.
+   * defensible single target to resolve it to, and a bundle proof cannot
+   * speak about a module the bundler never saw.
    */
   it('contains no computed dynamic import anywhere under src/', () => {
     const sourceDir = join(repoRoot, 'services', 'edge-api', 'src');
@@ -666,8 +634,8 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
   });
 
   it('refuses every dynamic specifier it cannot resolve', () => {
-    // Literal forms remain resolvable, so they are not refused here - they are
-    // the ones `importSpecifiers` turns into real edges.
+    // Literal forms remain resolvable, so they are not refused here - the
+    // bundle graphs above record them as `dynamic-import` edges.
     for (const contents of [
       "void import('./providers/jolpica');",
       'void import(`./providers/jolpica`);',
