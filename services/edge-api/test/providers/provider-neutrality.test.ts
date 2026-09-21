@@ -8,11 +8,10 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-// Reached through Wrangler, which pins `esbuild` to an exact version and is
-// the only reason it is installed. That is deliberate rather than incidental:
-// the dormancy proof below has to run the bundler the deployed Worker is
-// actually built by, so a separately declared copy - free to drift to another
-// version, with other resolution behaviour - would be the weaker dependency.
+// Declared directly as a devDependency and pinned to the exact
+// version Wrangler itself pins, so the dormancy proof runs the
+// bundler the deployed Worker is actually built by and cannot
+// drift away from it.
 import { build, type BuildOptions, type Metafile } from 'esbuild';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
