@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { isAbsolute, join, relative } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -16,6 +16,7 @@ import {
 } from '../support/edge-harness';
 
 const repoRoot = join(__dirname, '..', '..', '..', '..');
+const edgeApiRoot = join(repoRoot, 'services', 'edge-api');
 
 /**
  * The two origins the outbound boundary is allowed to pin.
@@ -114,37 +115,86 @@ function importSpecifiers(contents: string, fileName: string): string[] {
   return specifiers;
 }
 
-const srcRoot = join(repoRoot, 'services', 'edge-api', 'src');
+const srcRoot = join(edgeApiRoot, 'src');
 
 /**
- * Resolves one relative specifier to a repo-relative module path under `src/`.
+ * The Edge API's own compiler options, read from its `tsconfig.json` rather
+ * than restated here.
  *
- * Returns `null` for a bare package specifier, for anything resolving outside
- * `src/` (the curated JSON content, for instance) and for a path with no
- * TypeScript module behind it.
+ * The closure below is only a dormancy proof if it resolves specifiers the
+ * way the build does. Restating the options - or the resolution rules they
+ * select - lets the two drift apart silently, which is precisely how a legal
+ * import becomes invisible to this file.
+ */
+const compilerOptions: ts.CompilerOptions = (() => {
+  const configPath = join(edgeApiRoot, 'tsconfig.json');
+  const read = ts.readConfigFile(configPath, ts.sys.readFile);
+  if (read.error !== undefined) {
+    throw new Error(
+      `cannot read ${configPath}: ${ts.flattenDiagnosticMessageText(read.error.messageText, ' ')}`,
+    );
+  }
+  const parsed = ts.parseJsonConfigFileContent(
+    read.config,
+    ts.sys,
+    edgeApiRoot,
+    undefined,
+    configPath,
+  );
+  if (parsed.errors.length > 0) {
+    throw new Error(
+      `cannot parse ${configPath}: ${parsed.errors
+        .map((error) => ts.flattenDiagnosticMessageText(error.messageText, ' '))
+        .join('; ')}`,
+    );
+  }
+  return parsed.options;
+})();
+
+const moduleResolutionHost = ts.createCompilerHost(compilerOptions);
+
+/**
+ * Resolves one import specifier to a repo-relative module path under `src/`.
+ *
+ * Resolution is delegated to `ts.resolveModuleName` under the options above,
+ * so every specifier the compiler accepts is an edge here too. A hand-written
+ * candidate list cannot hold that promise: under this project's
+ * `moduleResolution: "bundler"`, a relative `./x.js` resolves to `x.ts`, and a
+ * resolver that only ever appended `.ts` found nothing for
+ * `./providers/jolpica/index.js` and reported no edge at all - so both
+ * boundaries passed while a legal production import reached the adapter.
+ *
+ * Returns `null` for anything that is not a TypeScript source module inside
+ * `src/`: an unresolved specifier, a package resolved out of `node_modules`,
+ * a declaration file with no runtime behind it, and the curated JSON content,
+ * which `resolveJsonModule` does resolve but which lives outside the root.
  */
 function resolveSpecifier(from: string, specifier: string): string | null {
-  if (!specifier.startsWith('.')) return null;
-  const segments = from.split('/').slice(0, -1);
-  for (const part of specifier.split('/')) {
-    if (part === '.' || part === '') continue;
-    if (part === '..') segments.pop();
-    else segments.push(part);
+  const { resolvedModule } = ts.resolveModuleName(
+    specifier,
+    join(srcRoot, from),
+    compilerOptions,
+    moduleResolutionHost,
+  );
+  if (
+    resolvedModule === undefined ||
+    resolvedModule.isExternalLibraryImport === true
+  ) {
+    return null;
   }
-  const base = segments.join('/');
-  // `allowImportingTsExtensions` is enabled, so a legal import may already
-  // carry its own `.ts`. The resolved path is therefore tried first: appending
-  // a second extension would turn `./x/index.ts` into `x/index.ts.ts`, find
-  // nothing and report no edge at all. It is eligible only when it names a
-  // TypeScript module, so the curated JSON content - which every candidate is
-  // still checked for existence under `src/` - stays outside the closure.
-  const candidates = base.endsWith('.ts')
-    ? [base, `${base}.ts`, `${base}/index.ts`]
-    : [`${base}.ts`, `${base}/index.ts`];
-  for (const candidate of candidates) {
-    if (existsSync(join(srcRoot, candidate))) return candidate;
+  if (
+    resolvedModule.extension !== ts.Extension.Ts &&
+    resolvedModule.extension !== ts.Extension.Tsx
+  ) {
+    return null;
   }
-  return null;
+  const resolved = relative(srcRoot, resolvedModule.resolvedFileName)
+    .split('\\')
+    .join('/');
+  // Containment. `relative` yields a `..` prefix for anything above `src/`,
+  // and an absolute path when there is no relative route at all.
+  if (resolved.startsWith('../') || isAbsolute(resolved)) return null;
+  return resolved;
 }
 
 /**
@@ -362,6 +412,86 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
         'providers/jolpica/curated-events.ts',
         '../../../../../content/registries/events.development.json',
       ),
+    ).toBeNull();
+  });
+
+  /**
+   * Regression for the same two boundaries, through a legal `.js` specifier.
+   *
+   * `./x.js` is the extension-bearing form the ecosystem writes by habit, and
+   * under `moduleResolution: "bundler"` the compiler substitutes it onto
+   * `x.ts`. A resolver that appended `.ts` to the literal specifier looked for
+   * `index.js.ts`, found nothing and reported no edge - so the adapter could
+   * be imported by the entry point, in a form that typechecks and bundles,
+   * while both assertions above stayed green.
+   */
+  it('resolves a .js specifier onto its TypeScript source', () => {
+    // Boundary 1: the entry point reaching the adapter, statically and
+    // dynamically, through the extension the bundler rewrites.
+    const entryForms = [
+      ['import "./providers/jolpica/index.js";', 'providers/jolpica/index.ts'],
+      [
+        'void import(`./providers/jolpica/calendar-port.js`);',
+        'providers/jolpica/calendar-port.ts',
+      ],
+    ] as const;
+
+    for (const [contents, expected] of entryForms) {
+      const reached = importSpecifiers(contents, 'index.ts')
+        .map((specifier) => resolveSpecifier('index.ts', specifier))
+        .filter((resolved) => resolved?.startsWith('providers/jolpica/'));
+      expect(reached).toEqual([expected]);
+    }
+
+    // Boundary 2: the importer scan flags the factory in either form.
+    const factory = 'providers/factory.ts';
+    for (const contents of [
+      'import "./jolpica/index.js";',
+      'void import("./jolpica/calendar-port.js");',
+    ]) {
+      expect(
+        importSpecifiers(contents, factory).some((specifier) =>
+          resolveSpecifier(factory, specifier)?.startsWith(
+            'providers/jolpica/',
+          ),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  /**
+   * The other half of delegating to the compiler: what it declines to resolve,
+   * and what resolves outside `src/`, must not become an edge either - or the
+   * closure grows false members and the boundaries above stop meaning
+   * anything.
+   *
+   * The `.mjs` and `.cjs` rows record **observed** behaviour, not assumed
+   * symmetry with `.js`: this compiler substitutes `./x.js` onto `x.ts` and
+   * leaves `./x.mjs` and `./x.cjs` unresolved when only `x.ts` exists.
+   */
+  it('makes no edge from unresolved, external or escaping specifiers', () => {
+    const from = 'index.ts';
+
+    // Nothing behind the path at all.
+    expect(resolveSpecifier(from, './providers/jolpica/nope')).toBeNull();
+    expect(resolveSpecifier(from, './providers/jolpica/nope.js')).toBeNull();
+
+    // No `.mjs`/`.cjs` substitution onto a `.ts` source here. Were that to
+    // change, these fail and the closure gains the edge deliberately rather
+    // than through a rule this file invented.
+    expect(resolveSpecifier(from, './providers/jolpica/index.mjs')).toBeNull();
+    expect(resolveSpecifier(from, './providers/jolpica/index.cjs')).toBeNull();
+
+    // Packages and Node builtins are not `src/` modules.
+    expect(resolveSpecifier(from, 'typescript')).toBeNull();
+    expect(resolveSpecifier(from, 'node:fs')).toBeNull();
+
+    // A real TypeScript module that resolves *outside* the source root is
+    // rejected by containment, not by failing to resolve: the harness below
+    // genuinely exists and the compiler finds it, extensionless or not.
+    expect(resolveSpecifier(from, '../test/support/edge-harness')).toBeNull();
+    expect(
+      resolveSpecifier(from, '../test/support/edge-harness.js'),
     ).toBeNull();
   });
 
