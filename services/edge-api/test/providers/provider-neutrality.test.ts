@@ -64,11 +64,40 @@ function declaresPinnedOrigin(contents: string, fileName: string): boolean {
   return found;
 }
 
+/**
+ * The TypeScript extensions that carry executable code, as the compiler names
+ * them.
+ *
+ * Enumerated from `ts.Extension` rather than matched as filename suffixes:
+ * `.mts` and `.cts` are ordinary modules a bundler ships, but neither ends in
+ * `.ts`, so a suffix test silently skips them. Declaration extensions are
+ * deliberately absent - `.d.ts` has no runtime behind it - and `.d.ts` does
+ * end in `.ts`, so it has to be excluded rather than merely not listed.
+ */
+// Typed as `string`, not `ts.Extension`: `ResolvedModuleFull.extension` is a
+// plain string, and the values still come from the compiler's own enum.
+const executableExtensions: readonly string[] = [
+  ts.Extension.Ts,
+  ts.Extension.Tsx,
+  ts.Extension.Mts,
+  ts.Extension.Cts,
+];
+
+const declarationSuffixes: readonly string[] = ['.d.ts', '.d.mts', '.d.cts'];
+
+/** True for a file a bundler could execute as TypeScript source. */
+function isExecutableModule(fileName: string): boolean {
+  if (declarationSuffixes.some((suffix) => fileName.endsWith(suffix))) {
+    return false;
+  }
+  return executableExtensions.some((extension) => fileName.endsWith(extension));
+}
+
 /** Every TypeScript module under a directory, as repo-relative POSIX paths. */
 function sourceFiles(sourceDir: string): string[] {
   return (readdirSync(sourceDir, { recursive: true }) as string[])
     .map((entry) => entry.toString().split('\\').join('/'))
-    .filter((entry) => entry.endsWith('.ts'));
+    .filter(isExecutableModule);
 }
 
 /**
@@ -182,12 +211,7 @@ function resolveSpecifier(from: string, specifier: string): string | null {
   ) {
     return null;
   }
-  if (
-    resolvedModule.extension !== ts.Extension.Ts &&
-    resolvedModule.extension !== ts.Extension.Tsx
-  ) {
-    return null;
-  }
+  if (!executableExtensions.includes(resolvedModule.extension)) return null;
   const resolved = relative(srcRoot, resolvedModule.resolvedFileName)
     .split('\\')
     .join('/');
@@ -466,8 +490,12 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
    * anything.
    *
    * The `.mjs` and `.cjs` rows record **observed** behaviour, not assumed
-   * symmetry with `.js`: this compiler substitutes `./x.js` onto `x.ts` and
-   * leaves `./x.mjs` and `./x.cjs` unresolved when only `x.ts` exists.
+   * symmetry with `.js`. The compiler substitutes each JavaScript form onto
+   * its own TypeScript counterpart - `./x.js` onto `x.ts`, `./x.mjs` onto
+   * `x.mts`, `./x.cjs` onto `x.cts` - so those two are unresolved here only
+   * because the adapter directory holds no `.mts` or `.cts` module. They are
+   * not inherently unresolvable, which is why `resolveSpecifier` accepts
+   * every executable extension rather than trusting this pair to stay empty.
    */
   it('makes no edge from unresolved, external or escaping specifiers', () => {
     const from = 'index.ts';
@@ -493,6 +521,56 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     expect(
       resolveSpecifier(from, '../test/support/edge-harness.js'),
     ).toBeNull();
+  });
+
+  /**
+   * Every extension a bundler executes is an edge, not just `.ts`.
+   *
+   * `.mts` and `.cts` are ordinary modules - an entry point can re-export the
+   * dormant port from `providers/jolpica/entry.mts` - yet neither ends in
+   * `.ts`. A resolver keyed on `ts.Extension.Ts`/`Tsx` alone drops them, and
+   * a `sourceFiles` filter testing `endsWith('.ts')` never even reads them, so
+   * both A9 boundaries and the origin-confinement scan would pass over a live
+   * adapter. The extension set is enumerated from the compiler's own enum for
+   * exactly this reason.
+   */
+  it('counts every executable TypeScript extension as a module', () => {
+    for (const fileName of [
+      'providers/jolpica/entry.ts',
+      'providers/jolpica/entry.tsx',
+      'providers/jolpica/entry.mts',
+      'providers/jolpica/entry.cts',
+    ]) {
+      expect(isExecutableModule(fileName)).toBe(true);
+    }
+
+    // Declaration files carry no runtime, and `.d.ts` ends in `.ts`, so it has
+    // to be excluded rather than simply left off the list.
+    for (const fileName of [
+      'providers/jolpica/entry.d.ts',
+      'providers/jolpica/entry.d.mts',
+      'providers/jolpica/entry.d.cts',
+      'providers/jolpica/entry.js',
+      'content/registries/events.development.json',
+    ]) {
+      expect(isExecutableModule(fileName)).toBe(false);
+    }
+
+    // The set the resolver accepts is the same one, taken from the compiler's
+    // enum rather than restated as filename suffixes.
+    expect([...executableExtensions].sort()).toEqual(
+      [
+        ts.Extension.Cts,
+        ts.Extension.Mts,
+        ts.Extension.Ts,
+        ts.Extension.Tsx,
+      ].sort(),
+    );
+
+    // The real enumeration reaches every module actually on disk.
+    const files = sourceFiles(join(repoRoot, 'services', 'edge-api', 'src'));
+    expect(files).toContain('providers/jolpica/calendar-port.ts');
+    expect(files).toContain('index.ts');
   });
 
   it('is constructed by no production composition', () => {
@@ -536,10 +614,11 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
    */
   it('confines provider origins to the hardened boundary and forbids direct fetch', () => {
     const sourceDir = join(repoRoot, 'services', 'edge-api', 'src');
-    const boundary = join('providers', 'http', 'provider-http-client.ts');
-    const files = (readdirSync(sourceDir, { recursive: true }) as string[])
-      .map((entry) => entry.toString())
-      .filter((entry) => entry.endsWith('.ts'));
+    const boundary = 'providers/http/provider-http-client.ts';
+    // Same module enumeration as the dormancy boundaries: a `.mts` or `.cts`
+    // module hard-coding its own origin is exactly what this test is for, and
+    // neither ends in `.ts`.
+    const files = sourceFiles(sourceDir);
 
     const filesNamingAnOrigin: string[] = [];
     for (const file of files) {
