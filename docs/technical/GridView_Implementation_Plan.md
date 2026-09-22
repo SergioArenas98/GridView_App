@@ -1278,7 +1278,9 @@ curated event and circuit mappings only when exercised directly by tests, and
 **no deployed or application path consumes it**. **Phase 9B (2026-09-22) added a
 second, equally dormant `season-circuits` port** (§14.0.17) on the same terms:
 not registered, not reachable from the Worker, never used for a provider
-request, with a byte-identical dry-run bundle. Everything else remains open:
+request, with a byte-identical dry-run bundle. **Phase 9B (2026-09-23) decided
+the season-participation semantics** ([ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md),
+§14.0.18) as documentation only. Nothing implements it. Everything else remains open:
 **no complete Jolpica adapter - participants, event schedules, session
 classifications and standings are unimplemented - and no event-aware scheduler,
 reconciliation or provenance state machine, live provider mode, production cron
@@ -2162,6 +2164,35 @@ provider request and nothing deployed.**
 | **G1** | **Open.** No live provider mode was added; `PROVIDER_MODE` admits exactly `mock` and `none`. |
 | **G-l, G5, G9** | **Open.** |
 
+### 14.0.18 Phase 9B season-participation semantics - decided, not implemented
+
+Recorded on **2026-09-23** as
+[ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md) (Model
+F). **Documentation only: no code, test, schema, content, configuration or CI
+file changed, no provider was contacted, no provider evidence was captured and
+nothing was deployed.**
+
+| Item | Status |
+|---|---|
+| Meaning of `season-participants` | **Decided.** An identity inventory plus race participation. It is not a line-up and not general weekend participation (D1). |
+| Identity universe | **Decided.** `/{season}/drivers/?limit=100` and `/{season}/constructors/?limit=100` define it. Every row resolves through a curated season-qualified mapping or the whole identity resource fails. No row is dropped. The 31 recorded 2026 driver identities stay identities even if some never race, and an identity without a span never enters the season Drivers collection (D2). |
+| Participation source | **Decided.** Only selected, classified Jolpica **race**-result rows create a `DriverSeasonEntry`. The season lists, standings, qualifying, sprint, practice, the calendar, a clock, an expected line-up and unselected or invalid documents never do (D3). |
+| Round accounting | **Decided.** Future rounds never close a span. A round left unaccounted before the latest classified round withholds the candidate. Cancellation counts only through an accepted curated record, which does not exist yet, and is never inferred (D4). |
+| Span derivation | **Decided.** Spans are rebuilt from scratch from the complete selected set. Same constructor across accounted rounds extends a span; a constructor change or an observed absence closes it at the previous observed round; a return opens a new span. Contradictory or duplicate rows invalidate the candidate (D5). |
+| Null semantics | **Decided.** `endRound: null` means no exit observed yet; it predicts nothing. Domain Model §6.7 is amended, with no schema change (D6). |
+| Entry identity | **Decided.** `{season}-{driverId}` for the first or only span, and `{season}-{driverId}-{startRound}` for each later span (D7). The mock `driver-entries` data does not conform yet and is unchanged. |
+| Optional fields | **Decided.** `raceNumber` and `shortCode` are `null`; `role` is `race`; constructor branding is `null` unless separately sourced; `driverLineup` is `null` (D8). |
+| Pre-season | **Decided.** Zero spans before the first classified race, accepted as a temporary limitation. There is no guessed line-up and no standings fallback (D9). |
+| Ownership | **Decided.** Identity normalization emits identities and constructor entries only. The race-results port owns classifications. Season assembly derives spans from the selected rows, amending ADR 0023 D11 by reference. No second result request and no participants schedule are introduced (D11, D13). |
+| Validation | **Required, not implemented.** New closed relations in both directions (every selected row in exactly one span; every span supported by a row), an atomic candidate, and last-known-good on failure (D12). |
+| Driver-detail current span | **Known defect, not fixed.** `snapshots/generator.ts` takes the first matching entry. It must select the open span, else the latest `startRound`, before any multi-span season is published (D12). |
+| `hasResults` derivation (A7) | **Still not implemented.** It remains a separate required assembly change. |
+| Provider captures | **Missing.** The season drivers and constructors responses and the per-round race results are not preserved. 29 of 31 driver and 9 of 11 constructor Jolpica identifiers are unrecorded. |
+| Identities and mappings | **Incomplete.** The registries are still `status: mock`. `antonelli` still blocks; OpenF1 `12`, `Cadillac` and `Racing Bulls` are unchanged. |
+| Drivers and constructors identity port, race-results port, assembly derivation | **Not implemented.** |
+| Request budget | **Reconciliation outstanding.** The Provider Evaluation §11.2 weekly participants line must be counted at the actual owning resources before runtime wiring. No volume has been measured. |
+| **G1, G5, G9, G-l** | **Open.** No runtime wiring and no provider activation. `PROVIDER_MODE` admits exactly `mock` and `none`. |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in
@@ -2267,6 +2298,18 @@ another source rather than bypassing the requirement.
   remains unimplemented** and no deployed or application path consumes it.
 - Derive `hasResults` in season assembly from selected, classified race
   results before the preflight, leaving `event-has-results` unchanged (A7).
+- Implement [ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md)
+  (§14.0.18). Each item below is outstanding:
+  - capture the season drivers and constructors responses and the per-round
+    race results under separate authorization;
+  - curate the identities and mappings;
+  - build the drivers and constructors identity normalization with explicit
+    `limit=100`, and the race-results port;
+  - derive participation spans in season assembly from the selected
+    classifications;
+  - add the two new closed integrity relations;
+  - fix driver detail to select the current span;
+  - reconcile the weekly participants request budget.
 - Implement the **Jolpica** adapter against the coordination port, emitting
   `unknown` calendar statuses and never manufacturing a timestamp (A6, A8). In
   the same change, replace the "no Jolpica file name" assertion in
@@ -3030,6 +3073,8 @@ Decision deadline:
 | Legacy local data crashes new app | Failed update | Idempotent migration and upgrade tests |
 | Remote images hurt performance | Slow scrolling and memory pressure | Variants, caching and profiling |
 | Team/driver mappings change mid-season | Incorrect content | Stable IDs and curated mappings |
+| A season-list driver or constructor identity has no curated mapping, including one who never races (ADR 0026 D2) | The participants identity resource fails closed as `mapping-failure`; last-known-good stays published | Curate every `/drivers/` and `/constructors/` row from preserved evidence before enabling a season (§14.0.18) |
+| A race classification is missing for a round before the latest classified round, or a round is cancelled with no curated record (ADR 0026 D4) | The participants candidate is withheld; last-known-good stays published | Complete round accounting; an accepted curated cancellation record, which does not exist yet |
 | A calendar change, sponsor rename, round shift or circuit change breaks a curated Jolpica event locator | The season calendar fails closed until a reviewed mapping update lands; last-known-good stays published | Complete-tuple locators, explicit alias records with evidence, the bounded `provider_mapping_unresolved` signal (§14.0.12) |
 | Jolpica's season circuits include a row with no curated mapping - Provider Evaluation §8.4 recorded 24 circuits for 23 races (§8.7 M8, unexplained) | The dormant `season-circuits` resource fails closed as `mapping-failure` once enabled; last-known-good stays published | No calendar filter and no assumed row count; resolve the extra identity through a reviewed mapping on separately authorized evidence before enabling the resource (§14.0.17) |
 | Jolpica-sourced event and session status is `unknown` | Weaker completeness: a race that was in fact completed, but whose classification was never planned or was selected as the `unavailable` absence document, publishes with `hasResults: false` instead of withholding the season; no status label is shown | Date-based client relevance rules; stronger status only from a separately selected resource or G5/G9 (§14.0.12) |
