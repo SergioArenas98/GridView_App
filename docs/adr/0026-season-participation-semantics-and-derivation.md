@@ -52,7 +52,9 @@ The repository already forces several answers:
 4. **Every fetched provider row must resolve** (ADR 0022 D10), so the set of
    endpoints fetched defines the curation burden.
 5. **Last-known-good is snapshot-level.** Assembly publishes from one run's
-   selections and there is no per-resource carry-over (G9 is open).
+   selections and there is no per-resource carry-over (G9 is open). D14 does
+   not change this: it consults the authoritative snapshot only to refuse a
+   publication that would lose classified coverage, never to supply a row.
 6. **Jolpica event status is `unknown`** (ADR 0022 A6), so the ADR 0023 D11
    status table never *requires* a classification for a Jolpica round. A rule
    that needs complete round accounting must state it itself.
@@ -164,8 +166,8 @@ Every calendar round is in exactly one of these states:
 |---|---|---|
 | Selected classified round | A race classification for the round is selected and is `final` or `provisional` | Accounted. Each row is a participation observation |
 | Explicitly cancelled round | Cancellation is established by an **accepted curated record** | Accounted, and skipped for continuity. No observation, no synthetic span |
-| Future round | A calendar round after the latest selected classified round | Not yet observed. Never closes an open span |
-| Unaccounted round | A calendar round before the latest selected classified round that is neither classified nor curated as cancelled: its result is missing, unavailable or unknown | **Withholds** the participants candidate |
+| Future round | A calendar round after the **coverage horizon**: the later of the latest selected classified round in this run and the latest classified round in the authoritative snapshot (D14) | Not yet observed. Never closes an open span |
+| Unaccounted round | A calendar round at or before the coverage horizon that is neither classified in this run nor curated as cancelled: its result is missing, unavailable or unknown | **Withholds** the participants candidate |
 | Provider-invalid round | A planned race classification that is invalid, rejected, contradictory or unmapped | **Withholds** the participants candidate |
 
 Rules:
@@ -183,12 +185,27 @@ Rules:
 - There is **no** clock-based "this round should have happened" rule.
 - Missing, malformed or contradictory round data fails the complete candidate;
   partial spans are never published.
+- "Future" is **never** determined only from the latest classified round
+  available in the current run. A round the authoritative snapshot already
+  publishes as classified is never future, and its absence from this run's
+  selection withholds the candidate (D14).
+
+> **Revised 2026-09-23, during review and before this ADR was merged.** An
+> earlier draft defined a future round as one after the latest selected
+> classified round **of the current run**. Review found that a run in which
+> already published rounds were temporarily unavailable would then treat them
+> as future and could publish truncated spans, or even an empty roster. The
+> coverage horizon and D14 replaced that definition. The draft rule never
+> reached a client and was never implemented.
 
 ### D5 - Span derivation
 
 Spans are a pure function of the complete selected classification set,
 **rebuilt from scratch on every run**. They are never patched field by field,
-so a provider correction is absorbed by rebuilding.
+so a provider correction is absorbed by rebuilding. No span, row or round is
+carried forward from an earlier run. Rebuilding from scratch **does not
+authorize historical truncation**: a rebuilt candidate that covers fewer
+classified rounds than the authoritative snapshot is withheld (D14).
 
 1. A driver's first selected classified race observation **starts** a span.
 2. The next **accounted** race round (skipping only curated cancellations)
@@ -265,7 +282,21 @@ Consequences:
 - At most one span of a driver has a null `startRound` (only a span beginning
   at the season's first selected classified race round, D6), and two spans of
   one driver can never share a non-null `startRound` (D5 rule 6), so two
-  derived spans never share an ID.
+  spans **of the same driver** never share an ID.
+- The rule is **not** globally injective across drivers. `GridViewId` allows a
+  driver ID to end in a numeric segment, so the base entry of a driver
+  `foo-7` and the round-7 entry of a driver `foo` both render as
+  `{season}-foo-7`. The grammar alone therefore does not prevent collisions,
+  and the OpenAPI description and example do not prove injectivity either.
+- Every candidate season must validate its derived entry IDs across the
+  **complete** `driverEntries` collection before publication. Any collision
+  fails the complete candidate publication, and the previous valid snapshot
+  remains live. Neither entry is silently dropped, merged or automatically
+  renamed, and no alternative separator or encoding is applied.
+- Resolving a real collision requires an explicit curator and contract
+  decision before that dataset can publish. The current curated driver IDs do
+  not exercise this case, so it is a fail-closed future risk, not a present
+  dataset conflict.
 - The driver's identity never changes, and no provider identifier is ever
   copied into an ID.
 - The rule matches the existing OpenAPI `DriverSeasonEntry.id` description and
@@ -284,6 +315,13 @@ decimal accepted start round, joined with the existing hyphen separator.
 > draft disagreed with the OpenAPI example for an incoming mid-season seat. It
 > was replaced by the start-boundary rule above. The draft rule never reached
 > the canonical documentation and was never implemented.
+>
+> **Revised again 2026-09-23, during review and before this ADR was merged.**
+> The start-boundary text first said that two derived spans "never share an
+> ID". That holds only within one driver: review showed that the base ID of a
+> driver whose ID ends in a numeric segment can equal a suffixed ID of another
+> driver. The ID syntax is unchanged. The overstatement was replaced by the
+> cross-collection uniqueness validation above and in D12.
 
 ### D8 - Field policy
 
@@ -305,6 +343,10 @@ available.
 - Before the first selected classified race result, the season may contain
   mapped driver and constructor identities but **zero** `DriverSeasonEntry`
   rows.
+- An empty pre-season Drivers collection may be published **only** while no
+  authoritative snapshot of the season has yet published a classified round.
+  Once one has, a run with no selected classified round is a coverage
+  regression and is withheld (D14); it is never republished as pre-season.
 - GridView does **not** publish a guessed pre-season line-up. Standings and
   announced line-ups are never a silent fallback.
 - The empty pre-season Drivers collection is an accepted temporary product
@@ -415,6 +457,21 @@ implemented by this decision:
 9. **Provider evidence is captured.** The season drivers and constructors
    responses and the per-round race results are not preserved, and capturing
    them needs separate authorization.
+10. **The classified-round coverage guard (D14).** Before publishing, the
+    candidate's classified-round set must be checked to contain every
+    classified round of the authoritative snapshot, and the whole candidate
+    withheld otherwise. This needs a read of the authoritative snapshot, or of
+    equivalent durable coverage metadata, that season assembly does not have
+    today: `season-assembly.ts` reads nothing from an earlier publication. If
+    the guard relies on persisted coverage metadata rather than the active
+    release itself, it depends on the open **G9** persistence gap. Neither is
+    implemented.
+11. **Global season-entry ID uniqueness (D7).** A closed validation over the
+    complete derived `driverEntries` collection must reject the whole
+    candidate on any duplicate entry ID, including a cross-driver collision
+    between a base and a suffixed ID. No entry is dropped, merged or renamed.
+    Item 4 alone does not satisfy this: a deterministic per-entry rule is not
+    a uniqueness proof.
 
 ### D13 - Requests and scheduling
 
@@ -433,6 +490,40 @@ implemented by this decision:
   circuits (3 calls)" budget line (Provider Evaluation §11.2) must be
   reconciled with this ownership before runtime wiring.
 - No request volume has been measured for any of this.
+
+### D14 - Classified-round coverage never regresses
+
+Added 2026-09-23, during review and before this ADR was merged. A candidate
+publication can **never** reduce the classified-round coverage already present
+in the currently authoritative season snapshot (the active release, ADR 0007).
+
+- Any round already represented by a selected classified result in the
+  authoritative snapshot remains accounted for in every later run. It is never
+  reclassified as future (D4).
+- Before publishing, the candidate's classified-round set must **contain every
+  classified round** present in the authoritative snapshot.
+- If a previously published classified round is unavailable, unresolved or
+  absent from the new selection, the **entire** update is withheld and the
+  previous snapshot remains live.
+- Rebuilding spans from scratch (D5) does **not** authorize historical
+  truncation.
+- An empty pre-season Drivers collection may be published only when no
+  authoritative snapshot has yet published a classified round (D9).
+- Any intentional removal or rollback of previously published classified
+  coverage requires a separate accepted decision or a curated recovery
+  operation. It never happens implicitly because a provider response is
+  temporarily incomplete.
+
+**Previous state is a guard, not an input.** D5 still derives spans only from
+the current run's selected rows, and no row, span or round is carried forward
+from an earlier run. The authoritative snapshot, or equivalent durable coverage
+metadata, is consulted only to compare classified-round sets and refuse a
+regressive publication. It never contributes a row or a span to the candidate.
+
+The guard requires access to that snapshot or metadata, which season assembly
+does not have today. It is a D12 publication prerequisite (item 10), and where
+it depends on persisted coverage metadata it depends on the open G9 gap. It is
+not implemented.
 
 ## Resolved choices
 
@@ -485,6 +576,13 @@ The seven choices the decision pack left open are settled:
   before OpenF1 is unlocked (D3).
 - **Split-span ID rule implementation.** The start-boundary ID rule is
   decided (D7) but not implemented.
+- **Global entry-ID uniqueness.** The rule is not injective across drivers.
+  The cross-collection uniqueness validation (D12 item 11) is not
+  implemented, and a real collision would need a curator and contract
+  decision.
+- **Classified-coverage non-regression.** The D14 guard and the read of the
+  authoritative snapshot or durable coverage metadata it needs are not
+  implemented (D12 item 10), and may depend on G9.
 - **Client "Full season" inference.** The Flutter client still renders
   null/null as "Full season". Removing that inference is a mandatory
   publication prerequisite (D12 item 3), and it is not implemented.
