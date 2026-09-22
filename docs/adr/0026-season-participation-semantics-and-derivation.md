@@ -227,40 +227,63 @@ A null end **does not** assert that the driver will remain with the
 constructor until the season ends. When the season is complete and no later
 observation closed the span, null remains the valid representation of "no
 observed exit". The contract is unchanged: both fields are already nullable
-integers.
+integers. Null/null alone therefore never proves participation for the
+complete season. The Flutter client currently renders it as "Full season",
+which contradicts this meaning; correcting that is a publication prerequisite
+(D12 item 3).
 
 ### D7 - `DriverSeasonEntry` identity
 
-The previously undefined split-span convention is resolved:
+The previously undefined split-span convention is resolved. A span's ID is
+determined by its **own accepted start boundary**, never by its ordinal
+position among the driver's spans:
 
-- The **first or only** span of a driver in a season keeps the base identity
+- If `startRound` is `null`, the ID is the base identity
   `{season}-{driverId}`.
-- Each **later** span of the same driver, whether a return or a constructor
-  change, appends its actual accepted start round:
-  `{season}-{driverId}-{startRound}`.
-- A later span always has a non-null `startRound`, because an earlier span
-  precedes it.
-- IDs are deterministic from the final derived span set. Two derived spans
-  never share an ID, because one driver's spans never share a start round.
+- If `startRound` is non-null, the ID is `{season}-{driverId}-{startRound}`.
+
+The rule applies identically whether the span is the driver's first observed
+span, only span or a later span, and whether a later span is a return to the
+same constructor or a move to a different one. For example:
+
+| Span | ID |
+|---|---|
+| Observed from the season start, no observed exit | `2026-max-verstappen` |
+| Driver's first appearance at round 7 | `2026-franco-colapinto-7` |
+| A later return beginning at round 12 | `{season}-{driverId}-12` |
+
+Consequences:
+
+- "First span" is not an identity condition. A driver who joins mid-season
+  receives a suffixed ID even when that is the driver's only span.
+- The ID is a strict function of the entry's own `season`, `driverId` and
+  `startRound`. It stays deterministic when a provider correction inserts an
+  **earlier** span: the earlier span takes its own ID, and no existing later
+  span is renamed.
+- A correction that changes a span's accepted `startRound` may legitimately
+  change that span's ID, because the span boundary itself changed.
+- At most one span of a driver has a null `startRound` (only a span beginning
+  at the season's first selected classified race round, D6), and two spans of
+  one driver can never share a non-null `startRound` (D5 rule 6), so two
+  derived spans never share an ID.
 - The driver's identity never changes, and no provider identifier is ever
   copied into an ID.
-
-**Known limitation: stability under correction.** Because spans are rebuilt
-(D5), a provider correction that inserts an **earlier** span for a driver
-reassigns identities. For example, a span published as `2026-driver` (first
-span, starting at round 10) becomes `2026-driver-10` if a correction adds an
-earlier stint, and the new earlier stint takes `2026-driver`. The client
-replaces a season's entries wholesale (`replaceDriverSeasonEntries`), so no
-stale row lingers, but a public entry ID can then name a different span. An
-alternative that is stable under insertion appends `-{startRound}` whenever
-`startRound` is non-null. Adopting it would change this accepted convention,
-so it needs its own decision before the derivation is implemented.
+- The rule matches the existing OpenAPI `DriverSeasonEntry.id` description and
+  example (`2026-franco-colapinto-7`) and the mid-season entry in the current
+  mock data (`2026-franco-colapinto-10`, `startRound: 10`). The OpenAPI
+  contract is unchanged.
 
 This uses the existing `GridViewId` grammar
-(`^[a-z0-9]+(-[a-z0-9]+)*$`, at most 96 characters) with the separator and
-decimal round the Domain Model already names. A first span that begins
-mid-season keeps the base ID and carries its non-null `startRound` in the
-field.
+(`^[a-z0-9]+(-[a-z0-9]+)*$`, at most 96 characters). The suffix is the
+decimal accepted start round, joined with the existing hyphen separator.
+
+> **Revised 2026-09-23, during review and before this ADR was merged.** An
+> earlier draft of D7 gave the base ID to a driver's "first or only" span and
+> suffixed only later spans. Review found that a correction inserting an
+> earlier span would then rename an already published later span, and that the
+> draft disagreed with the OpenAPI example for an incoming mid-season seat. It
+> was replaced by the start-boundary rule above. The draft rule never reached
+> the canonical documentation and was never implemented.
 
 ### D8 - Field policy
 
@@ -272,7 +295,7 @@ available.
 | `DriverSeasonEntry.raceNumber` | `null`. The normalized race classification carries no accepted season car-number field. Career `permanentNumber` is never substituted |
 | `DriverSeasonEntry.role` | `race`, because the span exists only through accepted race-classification rows. `reserve` and `test` are never produced by this derivation |
 | `DriverSeasonEntry.shortCode` | `null` unless separately supplied by an accepted season-specific source |
-| `DriverSeasonEntry.startRound` | `null` when the first span begins at the season's first selected classified race round; otherwise the span's first observed round |
+| `DriverSeasonEntry.startRound` | `null` when the span begins at the season's first selected classified race round; otherwise the span's first observed round. It selects the base or suffixed ID (D7) |
 | `DriverSeasonEntry.endRound` | `null` while no accepted later observation proves exit; otherwise the span's final observed race round |
 | `ConstructorSeasonEntry.fullName`, `shortName`, colours, `powerUnit`, `teamPrincipal`, `base`, `chassis` | `null` unless separately sourced |
 | `ConstructorSeasonEntry.driverLineup` | `null` in the provider-produced entry. The line-up is derived from driver spans (`GridView_Local_Data.md` §10.3) |
@@ -328,39 +351,70 @@ contract change in D12.
 
 ### D12 - Validation and publication
 
-Required of the future implementation; none of it exists:
+Required of the future implementation:
 
-- A new closed season-integrity relation proves that every selected race
-  classification row belongs to **exactly one** matching driver span.
-- The inverse also holds: every driver span is supported by **at least one**
-  selected classification row.
 - The existing `driver-entry-span` relation stays.
 - The participants candidate is **atomic**. Partial spans are never
   published, and on incomplete or contradictory evidence the previous valid
   snapshot remains live (ADR 0023 D11, ADR 0007).
-- **Driver detail must select the current relevant span**, rather than taking
-  the first entry: the open span, else the latest `startRound`, as the client
-  already does (`GridView_Local_Data.md` §10.2). Today `snapshots/generator.ts`
-  takes the first matching entry. That known defect must be fixed before any
-  multi-span season is published.
-- **The season Drivers collection cannot yet carry split spans.** The
-  generator emits one `SeasonDriverSummary` per `driverEntries` row, and that
-  schema carries neither the entry `id` nor `startRound`/`endRound`. The
-  client (`summary_mapper.dart`) therefore gives every summary the ID
-  `{season}-{driverId}` with null bounds, and two spans of one driver would
-  collide on the primary key inside `replaceDriverSeasonEntries`, rolling back
-  the refresh. Before any season in which a driver has more than one span is
-  published, a separately decided contract and client change is required.
-  That change must either carry span identity and bounds in the season
-  collection or publish one explicitly selected summary per driver. Until it
-  exists, such a candidate must not be published.
-- **A7 (`hasResults` derivation) remains a separate required assembly
-  change.** It shares the classified-round input and does not depend on this
-  decision, but no season with a classified round can publish through
-  coordination until A7 exists.
 
-None of the driver-detail fix, the split-span collection change and A7 is
-implemented by this decision.
+**Publication prerequisites.** No ADR 0026-derived span may reach a client
+until **every** item below holds. Each is a separate prerequisite, and none is
+implemented by this decision:
+
+1. **Season Drivers collection support for split spans.** The generator emits
+   one `SeasonDriverSummary` per `driverEntries` row, and that schema carries
+   neither the entry `id` nor `startRound`/`endRound`. The client
+   (`summary_mapper.dart`) therefore gives every summary the ID
+   `{season}-{driverId}` with null bounds, and two spans of one driver would
+   collide on the primary key inside `replaceDriverSeasonEntries`, rolling
+   back the refresh. A separately decided contract (public DTO) and client
+   change must let the summary carry more than one span per driver without an
+   ID collision and without flattening, or publish one explicitly selected
+   summary per driver. Until it exists, a candidate in which any driver has
+   more than one span must not be published.
+2. **Driver detail selects the current relevant span**, rather than taking
+   the first entry: the open span, else the latest `startRound`, as the client
+   already does (`GridView_Local_Data.md` §10.2). Today
+   `snapshots/generator.ts` takes the first matching entry. That known defect
+   must be fixed.
+3. **The Flutter client stops inferring "Full season" from null/null.**
+   `EntityFormatter.participationSpan`
+   (`lib/features/shared/presentation/entity_formatting.dart`) renders
+   `startRound == null && endRound == null` as the localized "Full season"
+   (`participationFullSeason`), and the `isFullSeason` getters on
+   `TeamLineupMember` (`season_card.dart`) and `DriverParticipation`
+   (`entity_profile.dart`) classify the same value as full-season. Under D6,
+   null/null means only that participation was already in effect at the
+   beginning of the observed season scope **and** that no later accepted
+   observation has established an exit. It does not prove participation for
+   the complete season, so the client must not render "Full season" from
+   null/null alone. Until explicit completed-season evidence exists, the
+   presentation must use non-predictive wording, such as "From season start"
+   or a reviewed equivalent. The final string is product copy for that change
+   to settle; the normative requirement is only that "Full season" is never
+   inferred from null/null. This correction and its tests are mandatory
+   before any ADR 0026-derived span reaches a client.
+4. **A deterministic implementation of the D7 ID rule**: base ID when
+   `startRound` is null, `-{startRound}` suffix otherwise, computed from the
+   entry's own fields.
+5. **Bidirectional classification-to-span integrity.** A new closed
+   season-integrity relation proves that every selected race classification
+   row belongs to **exactly one** matching driver span, and its inverse proves
+   that every driver span is supported by **at least one** selected
+   classification row.
+6. **A7 (`hasResults` derivation).** It remains a separate required assembly
+   change. It shares the classified-round input and does not depend on this
+   decision, but no season with a classified round can publish through
+   coordination until A7 exists.
+7. **OpenF1 participation stays blocked.** A selected OpenF1 race
+   classification creates no span, so the candidate is withheld (D3), until a
+   separate decision settles provisional-source participation.
+8. **Participant identities and mappings are complete** for every
+   `/drivers/` and `/constructors/` row (D2). They are incomplete today.
+9. **Provider evidence is captured.** The season drivers and constructors
+   responses and the per-round race results are not preserved, and capturing
+   them needs separate authorization.
 
 ### D13 - Requests and scheduling
 
@@ -402,8 +456,9 @@ The seven choices the decision pack left open are settled:
   owned by different components.
 - A span model with one source, whose published spans and published results
   cannot disagree.
-- An in-season open-span meaning that predicts nothing, and a deterministic
-  split-span identity.
+- An in-season open-span meaning that predicts nothing, and a split-span
+  identity determined by each span's own start boundary, which stays stable
+  when an earlier span is inserted.
 - No new provider request class and no new schedule.
 
 ### What stays open
@@ -428,8 +483,11 @@ The seven choices the decision pack left open are settled:
 - **Provisional-source participation.** Whether a selected OpenF1 race
   classification may create participation is undecided, and must be settled
   before OpenF1 is unlocked (D3).
-- **Split-span ID stability.** Whether to adopt an insertion-stable entry-ID
-  rule is an open decision (D7).
+- **Split-span ID rule implementation.** The start-boundary ID rule is
+  decided (D7) but not implemented.
+- **Client "Full season" inference.** The Flutter client still renders
+  null/null as "Full season". Removing that inference is a mandatory
+  publication prerequisite (D12 item 3), and it is not implemented.
 - **Cancelled rounds.** There is no curated cancelled-round record or schema.
 - **A7** `hasResults` is not implemented.
 - **Runtime.** Runtime wiring, G1 (live provider mode) and provider activation
@@ -442,11 +500,12 @@ The seven choices the decision pack left open are settled:
 The mock `content/seasons/2026/driver-entries.mock.json` and the contract
 fixtures derived from it predate this decision:
 
-- They give a single-span, mid-season driver the suffixed ID
-  `2026-franco-colapinto-10`, where D7 gives `2026-franco-colapinto` with
-  `startRound: 10`.
-- They give a round-1 span an explicit `startRound: 1`, where D6 gives
-  `null`.
+- They give a round-1 span (`2026-jack-doohan`) an explicit `startRound: 1`,
+  where D6 gives `null`. With D6's `null`, the existing ID is already the one
+  D7 gives.
+
+Their single-span, mid-season entry `2026-franco-colapinto-10` with
+`startRound: 10` already matches D7.
 
 They are `NON-AUTHORITATIVE` and remain valid against the schema. This decision
 does not change them. They are to be brought into line when the derivation is

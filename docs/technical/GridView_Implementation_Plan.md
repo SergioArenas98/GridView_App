@@ -2180,7 +2180,7 @@ nothing was deployed.**
 | Round accounting | **Decided.** Future rounds never close a span. A round left unaccounted before the latest classified round withholds the candidate. Cancellation counts only through an accepted curated record, which does not exist yet, and is never inferred (D4). |
 | Span derivation | **Decided.** Spans are rebuilt from scratch from the complete selected set. Same constructor across accounted rounds extends a span; a constructor change or an observed absence closes it at the previous observed round; a return opens a new span. Contradictory or duplicate rows invalidate the candidate (D5). |
 | Null semantics | **Decided.** `endRound: null` means no exit observed yet; it predicts nothing. Domain Model §6.7 is amended, with no schema change (D6). |
-| Entry identity | **Decided.** `{season}-{driverId}` for the first or only span, and `{season}-{driverId}-{startRound}` for each later span (D7). The mock `driver-entries` data does not conform yet and is unchanged. |
+| Entry identity | **Decided.** `{season}-{driverId}` when `startRound` is null, and `{season}-{driverId}-{startRound}` when it is non-null, whatever the span's position among the driver's spans (D7). Inserting an earlier span renames no later span; a mid-season-only driver is suffixed; a corrected `startRound` may change that span's ID. It matches the unchanged OpenAPI example `2026-franco-colapinto-7`. **Not implemented.** The mock `driver-entries` data still gives a round-1 span `startRound: 1` and is unchanged. |
 | Optional fields | **Decided.** `raceNumber` and `shortCode` are `null`; `role` is `race`; constructor branding is `null` unless separately sourced; `driverLineup` is `null` (D8). |
 | Pre-season | **Decided.** Zero spans before the first classified race, accepted as a temporary limitation. There is no guessed line-up and no standings fallback (D9). |
 | Ownership | **Decided.** Identity normalization emits identities and constructor entries only. The race-results port owns classifications. Season assembly derives spans from the selected rows, amending ADR 0023 D11 by reference. No second result request and no participants schedule are introduced (D11, D13). |
@@ -2188,7 +2188,8 @@ nothing was deployed.**
 | Driver-detail current span | **Known defect, not fixed.** `snapshots/generator.ts` takes the first matching entry. It must select the open span, else the latest `startRound`, before any multi-span season is published (D12). |
 | Split-span season collection | **Contract gap, undecided.** `SeasonDriverSummary` carries no entry `id` or bounds, and the client derives `{season}-{driverId}` for every summary, so two spans of one driver would collide in `replaceDriverSeasonEntries`. A separately decided contract and client change must precede any multi-span season (D12). |
 | Provisional-source participation | **Undecided.** Only Jolpica rows create spans. A selected OpenF1 race classification withholds the candidate, and this must be decided before OpenF1 is unlocked (D3). |
-| Split-span ID stability | **Open decision.** Under the accepted rule, a correction that inserts an earlier span reassigns entry IDs. An insertion-stable alternative needs its own decision (D7). |
+| Split-span ID stability | **Decided (revised during review, 2026-09-23).** The start-boundary rule above replaced a draft "first or only span keeps the base ID" rule, which would have renamed a published later span when a correction inserted an earlier one (D7). |
+| Client "Full season" inference | **Known defect, not fixed.** `EntityFormatter.participationSpan` and the `isFullSeason` getters treat `startRound == null && endRound == null` as "Full season". Under D6 that value proves only participation from the observed season start with no observed exit. The Flutter client must stop inferring "Full season" from it, using non-predictive wording until completed-season evidence exists, before any ADR 0026-derived span reaches a client (D12). |
 | `hasResults` derivation (A7) | **Still not implemented.** It remains a separate required assembly change. |
 | Provider captures | **Missing.** The season drivers and constructors responses and the per-round race results are not preserved. 29 of 31 driver and 9 of 11 constructor Jolpica identifiers are unrecorded. |
 | Identities and mappings | **Incomplete.** The registries are still `status: mock`. `antonelli` still blocks; OpenF1 `12`, `Cadillac` and `Racing Bulls` are unchanged. |
@@ -2314,6 +2315,11 @@ another source rather than bypassing the requirement.
   - fix driver detail to select the current span;
   - decide and implement the season-collection contract change for split
     spans;
+  - remove the Flutter client's null/null-to-"Full season" inference, with
+    tests;
+  - implement the D7 start-boundary entry-ID rule deterministically;
+  - decide provisional-source (OpenF1) participation before OpenF1 is
+    unlocked;
   - reconcile the weekly participants request budget.
 - Implement the **Jolpica** adapter against the coordination port, emitting
   `unknown` calendar statuses and never manufacturing a timestamp (A6, A8). In
@@ -3080,6 +3086,7 @@ Decision deadline:
 | Team/driver mappings change mid-season | Incorrect content | Stable IDs and curated mappings |
 | A season-list driver or constructor identity has no curated mapping, including one who never races (ADR 0026 D2) | The participants identity resource fails closed as `mapping-failure`; last-known-good stays published | Curate every `/drivers/` and `/constructors/` row from preserved evidence before enabling a season (§14.0.18) |
 | A race classification is missing for a round before the latest classified round, or a round is cancelled with no curated record (ADR 0026 D4) | The participants candidate is withheld; last-known-good stays published | Complete round accounting; an accepted curated cancellation record, which does not exist yet |
+| ADR 0026-derived spans reach the current Flutter client, which renders `startRound == null && endRound == null` as "Full season" (ADR 0026 D6, D12) | An in-progress season predicts that a driver stays with the constructor to the season end | Remove the null/null-to-"Full season" inference and use non-predictive wording before any derived span is published; a mandatory D12 prerequisite, not implemented |
 | A calendar change, sponsor rename, round shift or circuit change breaks a curated Jolpica event locator | The season calendar fails closed until a reviewed mapping update lands; last-known-good stays published | Complete-tuple locators, explicit alias records with evidence, the bounded `provider_mapping_unresolved` signal (§14.0.12) |
 | Jolpica's season circuits include a row with no curated mapping - Provider Evaluation §8.4 recorded 24 circuits for 23 races (§8.7 M8, unexplained) | The dormant `season-circuits` resource fails closed as `mapping-failure` once enabled; last-known-good stays published | No calendar filter and no assumed row count; resolve the extra identity through a reviewed mapping on separately authorized evidence before enabling the resource (§14.0.17) |
 | Jolpica-sourced event and session status is `unknown` | Weaker completeness: a race that was in fact completed, but whose classification was never planned or was selected as the `unavailable` absence document, publishes with `hasResults: false` instead of withholding the season; no status label is shown | Date-based client relevance rules; stronger status only from a separately selected resource or G5/G9 (§14.0.12) |
