@@ -93,6 +93,12 @@ test/**/failures/
 /.claude/scheduled_tasks.lock
 /.claude/scheduled_tasks.json
 #
+# Retired local-tool residue. Keep ignored to prevent generated data,
+# local backups and third-party skill copies from being committed.
+/graphify-out/
+/.claude/settings.json.graphify-bak
+/.claude/skills/graphify/
+#
 # Local AI context pack: a derived, non-canonical documentation snapshot for
 # external assistant projects. The tracked repository stays authoritative.
 /docs/ai_context/
