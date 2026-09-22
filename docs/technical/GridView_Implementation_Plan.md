@@ -1275,7 +1275,10 @@ registered with the coordination seam and not selectable through
 `PROVIDER_MODE`, no production coordinator or event-aware scheduler invokes it,
 and the dry-run bundle is byte-identical to the baseline. It consumes the
 curated event and circuit mappings only when exercised directly by tests, and
-**no deployed or application path consumes it**. Everything else remains open:
+**no deployed or application path consumes it**. **Phase 9B (2026-09-22) added a
+second, equally dormant `season-circuits` port** (§14.0.17) on the same terms:
+not registered, not reachable from the Worker, never used for a provider
+request, with a byte-identical dry-run bundle. Everything else remains open:
 **no complete Jolpica adapter - participants, event schedules, session
 classifications and standings are unimplemented - and no event-aware scheduler,
 reconciliation or provenance state machine, live provider mode, production cron
@@ -1369,7 +1372,7 @@ project is not required before Phase 9B.
 | Source | Role | Status |
 |---|---|---|
 | **OpenF1** | *Provisional* post-session classification, points and championship state | **Specified but NOT unlocked** — see below |
-| **Jolpica F1** | *Complete* season metadata, calendar, session times, participants, circuits, historical depth, and *reconciled* final results and standings | **Selected and unlocked** — only a **dormant, fixture-tested `season-calendar` port** exists (§14.0.16); it is outside the runtime composition and import closure, is not selectable through `PROVIDER_MODE`, and the **complete adapter and every other Jolpica resource remain unimplemented**, so no deployed or application path consumes it and nothing is running |
+| **Jolpica F1** | *Complete* season metadata, calendar, session times, participants, circuits, historical depth, and *reconciled* final results and standings | **Selected and unlocked** — only two **dormant, fixture-tested ports** exist, `season-calendar` (§14.0.16) and `season-circuits` (§14.0.17); they are outside the runtime composition and import closure, are not selectable through `PROVIDER_MODE`, and the **complete adapter and every other Jolpica resource remain unimplemented**, so no deployed or application path consumes them and nothing is running |
 
 **The OpenF1 path is locked, and Phase 9B must not implement it as though it
 were live.** OpenF1's data is free only outside a live window that closes **30
@@ -1385,12 +1388,13 @@ Consequently:
 
 - the skip rule applies to **every** session;
 - **Jolpica is the source for all data**, including session schedules — once its
-  complete adapter is built. Today only a **dormant, fixture-tested Jolpica
-  `season-calendar` port** exists (§14.0.16) and **no OpenF1 adapter exists at
-  all**; the port is absent from the runtime composition and import closure, is
-  not registered or selectable through `PROVIDER_MODE`, and no production
-  coordinator or event-aware scheduler invokes it, so no deployed or application
-  path consumes it, nothing is running and production remains
+  complete adapter is built. Today only the **dormant, fixture-tested Jolpica
+  `season-calendar` and `season-circuits` ports** exist (§14.0.16, §14.0.17)
+  and **no OpenF1 adapter exists at all**; both ports are absent from the
+  runtime composition and import closure, are not registered or selectable
+  through `PROVIDER_MODE`, and no production coordinator or event-aware
+  scheduler invokes them, so no deployed or application path consumes them,
+  nothing is running and production remains
   `PROVIDER_MODE = "none"`;
 - **the C6 freshness objective is not met by any implemented mechanism**;
 - **no GridView request reaches OpenF1 by any route** — there is no baseline
@@ -2068,7 +2072,7 @@ deployed.**
 | Evidence corpus | All 23 locators recorded as approved identities; none acknowledged. |
 | Coverage | **Event-mapping coverage of the observed 2026 calendar is complete.** It is a point-in-time observation: a later calendar change, rename, round shift or venue change fails closed until another reviewed mapping update on new evidence. |
 | Proof | `npm run validate:content` (schema, key uniqueness, target existence, two-way evidence coverage) and `test/providers/mappings/event-dataset-2026.test.ts`, which pins the curator table, reconstructs Provider Evaluation §8.8 from the committed content, and proves order independence and exact-only resolution. It runs from a clean checkout without the raw capture. |
-| **Circuit coverage** | **Complete at 23 of 23** (2026-09-20, Provider Evaluation §8.8.1). `albert_park` from §8.4, five added on 2026-09-19 whose canonical GridView circuit already existed - `monaco`, `monza`, `silverstone`, `suzuka` and `spa` → `spa-francorchamps` - and 17 canonical identities approved on 2026-09-20, each new registry row carrying only `id` and `name`. No observed 2026 `circuitId` is acknowledged as unmapped. An event mapping still never implies a circuit, so each is its own curated mapping. **Circuit coverage no longer blocks a calendar adapter. Superseded 2026-09-20** (§14.0.16): a **dormant, fixture-tested `season-calendar` port** now consumes this coverage when exercised directly by tests, while the **complete Jolpica adapter stays unimplemented** and no deployed or application path consumes it. |
+| **Circuit coverage** | **Complete at 23 of 23** (2026-09-20, Provider Evaluation §8.8.1). `albert_park` from §8.4, five added on 2026-09-19 whose canonical GridView circuit already existed - `monaco`, `monza`, `silverstone`, `suzuka` and `spa` → `spa-francorchamps` - and 17 canonical identities approved on 2026-09-20, each new registry row carrying only `id` and `name`. No observed 2026 `circuitId` is acknowledged as unmapped. An event mapping still never implies a circuit, so each is its own curated mapping. **Circuit coverage no longer blocks a calendar adapter. Superseded 2026-09-20** (§14.0.16): a **dormant, fixture-tested `season-calendar` port** now consumes this coverage when exercised directly by tests, while the **complete Jolpica adapter stays unimplemented** and no deployed or application path consumes it. **Amended 2026-09-22** (§14.0.17): a dormant, fixture-tested `season-circuits` port consumes the same 23 mappings on the same terms. |
 | **Jolpica adapter** | **Not implemented and not registered.** |
 | `hasResults` derivation (A7) | **Not implemented.** |
 | Provider requests | GridView's application code, the Worker provider client and the rate limiter have made **none**. The only requests on record are the authorized research requests of 2026-08-19 (Provider Evaluation §8.1) and the one calendar-evidence request above. |
@@ -2132,6 +2136,31 @@ request and nothing deployed.**
 | **G-l** | **Open overall.** |
 | **G5, G9** | **Open.** |
 | Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; staging is `mock`, production is `none`. |
+
+### 14.0.17 Phase 9B Jolpica season-circuits port - implemented, fixture-tested, dormant
+
+Implemented on **2026-09-22** under ADR 0022 D2-D10 and amendment A9, and ADR
+0023. **Code and tests only: no runtime wiring, no configuration change, no
+provider request and nothing deployed.**
+
+| Item | Status |
+|---|---|
+| What exists | The **Jolpica season-circuits port** (`JolpicaCircuitsPort`) at `services/edge-api/src/providers/jolpica/`, implementing the existing `ProviderResourcePort` unchanged, beside - not inside - the calendar port. |
+| Supported resource | **`season-circuits` only.** Every other coordinated resource, including `season-calendar`, returns `resource-unsupported` before reserving limiter capacity, building a request, invoking transport or counting an attempt. The calendar port is **unchanged** and still refuses `season-circuits`. |
+| Provider access | **No provider request was made.** Every test drives an injected in-memory transport. GridView software has never fetched circuit data. |
+| Transport boundary | The existing hardened boundary and its Jolpica limiter reservation only. The request is `GET /ergast/f1/{season}/circuits/?limit=100`, with the season taken from the requested resource. |
+| Pagination | **Explicit `limit=100`** (the documented cap; Provider Evaluation §8.7 M10). `limit`, `offset` and `total` are strict non-negative integer strings; a JSON number, sign, exponent, padding, whitespace or non-finite value fails. A complete page is required: `offset` 0, the echoed `limit` as requested, and `total` equal to the rows returned and within the limit. One resource is one transport attempt. |
+| Envelope | `MRData.CircuitTable` must restate the requested season as a string, and `Circuits` must be an array of objects each carrying a non-empty string `circuitId`. Two rows with one `circuitId` fail the resource. The table's `season` field mirrors the calendar's `RaceTable.season`; it is not separately evidenced for this endpoint in the repository, and its absence fails closed. |
+| Identity | Every `circuitId` resolves **only** through the curated season-qualified mapping. No slug minting, case folding, trimming, alias rule or provider-ID fallback. An unresolved row fails the **whole** resource as `mapping-failure` with the bounded mapping signal and no partial payload (ADR 0022 D10). Two distinct provider identities resolving to one canonical circuit fail as `invalid-payload`. |
+| Canonical content | Identity, `name` and every descriptive fact come from the curated circuit registry. **The provider's `circuitName`, `url` and `Location` - coordinates, locality and country - are never decoded**, so they can neither reach nor alter the payload. The 17 identity-only rows yield an explicit `null` for all ten descriptive facts, by the same defaults as the mock provider's content seam, pinned by a parity test; the six rows with curated development facts keep them exactly. `media` is `null`, as on the calendar's `GrandPrix`: the only committed circuit media is mock media. |
+| M8 (24 circuits for 23 races) | **Still open and unexplained** (Provider Evaluation §8.7). No selection rule was invented: the resource is exactly the provider's rows, each resolved, or nothing. It is not filtered against the calendar and its size is not compared with the number of races. A 24th row without a curated mapping fails the resource; a curated one would be carried. Calendar coverage remains the season preflight's `event-circuit` relation. |
+| Failures | Transport failures map exactly as the calendar port's do (parity-tested). A rate-limit deferral or unavailable limiter is `not-attempted`, never an attempt. A decode or normalization exception becomes `invalid-payload` and never escapes the port. Nothing provider-derived is logged. |
+| Dormancy | **Proven by composition, per A9**, with the existing esbuild-metafile tests under Wrangler's own options, plus a module-by-module check that the circuits modules are buildable from the port yet absent from the Worker entry point's graph. Nothing outside the adapter directory imports or constructs it. The **dry-run Worker bundle is byte-identical** to the baseline at `5037e42` (`a04e6f7764afbd8b3fd580dab07bd5eb413e70dd8c95cc399a39be4a5bad2d97`, recomputed for this change) and contains none of the port's symbols. |
+| Mock provider, calendar port | **Unchanged.** |
+| Mapping data | **Unchanged**: 23 circuit identities, 23 circuit mappings, zero circuit acknowledgements, 23 event identities and locators. |
+| `hasResults` derivation (A7) | **Still not implemented.** |
+| **G1** | **Open.** No live provider mode was added; `PROVIDER_MODE` admits exactly `mock` and `none`. |
+| **G-l, G5, G9** | **Open.** |
 
 ## 14.1 Objective
 
@@ -2232,8 +2261,9 @@ another source rather than bypassing the requirement.
   (Provider Evaluation §8.8.1): all 23 observed Jolpica circuit identifiers are
   curated and mapped, so no Jolpica resource that produces a `GrandPrix` or
   `Session` is blocked on circuit coverage any more. **Only the dormant,
-  fixture-tested `season-calendar` port consumes it** (2026-09-20, §14.0.16),
-  and only when exercised directly by tests; the **complete Jolpica adapter
+  fixture-tested `season-calendar` port** (2026-09-20, §14.0.16) and, since
+  2026-09-22, the equally dormant **`season-circuits` port** (§14.0.17)
+  consume it, and only when exercised directly by tests; the **complete Jolpica adapter
   remains unimplemented** and no deployed or application path consumes it.
 - Derive `hasResults` in season assembly from selected, classified race
   results before the preflight, leaving `event-has-results` unchanged (A7).
@@ -2243,7 +2273,9 @@ another source rather than bypassing the requirement.
   `provider-neutrality.test.ts` with composition and dependency dormancy
   assertions (A9). **The season-calendar resource is done** (2026-09-20,
   §14.0.16): implemented, fixture-tested and dormant, with the A9 replacement
-  made in the same change. **Participants, event schedules, classifications
+  made in the same change. **The season-circuits resource is done**
+  (2026-09-22, §14.0.17): implemented, fixture-tested and dormant, inside the
+  existing A9 boundary. **Participants, event schedules, classifications
   and standings are not implemented**, so this is not a working full adapter.
 - Implement the **OpenF1** adapter, fixture-tested only, behind the
   bound-or-skip gate.
@@ -2279,10 +2311,10 @@ another source rather than bypassing the requirement.
   ([ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)):
   a Durable Object with one identity per real source performing exact
   sliding-window reservations across every published window. Nothing is paced
-  yet: the only port that reserves through it is the dormant, fixture-tested
-  `season-calendar` port (§14.0.16), which does so only when exercised directly
-  by tests against an injected transport, and no deployed or application path
-  reaches it.
+  yet: the only ports that reserve through it are the dormant, fixture-tested
+  `season-calendar` and `season-circuits` ports (§14.0.16, §14.0.17), which do
+  so only when exercised directly by tests against an injected transport, and
+  no deployed or application path reaches them.
 - Implement provider-specific error mapping.
 - ~~Add response-size and timeout controls, a fixed-hostname outbound helper,
   and Jolpica's mandatory identifying `User-Agent`.~~ **Done in Phase 9B-2**:
@@ -2375,7 +2407,8 @@ these are the implementation tasks.
   **circuit portion of G-l is complete at 23 of 23** observed 2026 circuits,
   which **no longer blocks a calendar adapter**. The **dormant, fixture-tested
   `season-calendar` port** (§14.0.16) consumes the curated event and circuit
-  mappings **only when exercised directly by tests**; the **complete Jolpica
+  mappings, and the equally dormant **`season-circuits` port** (§14.0.17) the
+  circuit mappings, **only when exercised directly by tests**; the **complete Jolpica
   adapter is still unimplemented**, and no deployed or application path
   consumes the registry.
 - Locally modelled quota monitoring (Phase 9B-1) and a per-provider rate
@@ -2998,6 +3031,7 @@ Decision deadline:
 | Remote images hurt performance | Slow scrolling and memory pressure | Variants, caching and profiling |
 | Team/driver mappings change mid-season | Incorrect content | Stable IDs and curated mappings |
 | A calendar change, sponsor rename, round shift or circuit change breaks a curated Jolpica event locator | The season calendar fails closed until a reviewed mapping update lands; last-known-good stays published | Complete-tuple locators, explicit alias records with evidence, the bounded `provider_mapping_unresolved` signal (§14.0.12) |
+| Jolpica's season circuits include a row with no curated mapping - Provider Evaluation §8.4 recorded 24 circuits for 23 races (§8.7 M8, unexplained) | The dormant `season-circuits` resource fails closed as `mapping-failure` once enabled; last-known-good stays published | No calendar filter and no assumed row count; resolve the extra identity through a reviewed mapping on separately authorized evidence before enabling the resource (§14.0.17) |
 | Jolpica-sourced event and session status is `unknown` | Weaker completeness: a race that was in fact completed, but whose classification was never planned or was selected as the `unavailable` absence document, publishes with `hasResults: false` instead of withholding the season; no status label is shown | Date-based client relevance rules; stronger status only from a separately selected resource or G5/G9 (§14.0.12) |
 | A present Jolpica session lacks a usable start time | The whole calendar resource fails as `invalid-payload`; last-known-good stays published | No manufactured timestamps; evidence review before enabling a season (§14.0.12) |
 | Flutter dependency changes | Build instability | Pin SDK and dependencies |
