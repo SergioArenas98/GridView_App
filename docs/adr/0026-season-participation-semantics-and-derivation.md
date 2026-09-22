@@ -139,6 +139,17 @@ None of the following creates, extends or closes a span:
 - external reputation or an expected or announced line-up;
 - an unselected, unavailable, invalid or rejected result document.
 
+**Provisional classifications.** ADR 0023 D4 and D8 allow a provisional
+OpenF1 race classification to be selected when no reconciled contribution
+exists. OpenF1 is locked (D5), so no such classification can be selected
+today. This decision derives participation from Jolpica rows only. A selected
+race classification from any other source therefore produces no span, and
+under D12 its rows cannot be placed in a span, so the candidate is withheld.
+That is the intended fail-closed outcome. **Before the OpenF1 path is
+unlocked**, a separate decision must settle whether participation derives
+from a selected provisional classification or whether provisional race
+fallback is excluded from coordinated publication.
+
 One normalized race-result row observes exactly one driver, one constructor
 and one round. A row is participation whatever its finishing status: finished,
 retired, not classified, disqualified or not started, **if the row is
@@ -234,6 +245,17 @@ The previously undefined split-span convention is resolved:
 - The driver's identity never changes, and no provider identifier is ever
   copied into an ID.
 
+**Known limitation: stability under correction.** Because spans are rebuilt
+(D5), a provider correction that inserts an **earlier** span for a driver
+reassigns identities. For example, a span published as `2026-driver` (first
+span, starting at round 10) becomes `2026-driver-10` if a correction adds an
+earlier stint, and the new earlier stint takes `2026-driver`. The client
+replaces a season's entries wholesale (`replaceDriverSeasonEntries`), so no
+stale row lingers, but a public entry ID can then name a different span. An
+alternative that is stable under insertion appends `-{startRound}` whenever
+`startRound` is non-null. Adopting it would change this accepted convention,
+so it needs its own decision before the derivation is implemented.
+
 This uses the existing `GridViewId` grammar
 (`^[a-z0-9]+(-[a-z0-9]+)*$`, at most 96 characters) with the separator and
 decimal round the Domain Model already names. A first span that begins
@@ -300,8 +322,9 @@ participants contribution's `driverEntries` carries no participation evidence,
 and assembly derives the final collection. That is a derivation, not a
 repair: nothing is fabricated, discarded or invented. Whether the contribution
 carries an empty list or the field is otherwise reconciled is an
-implementation detail of the future change, which must leave the published
-contract unchanged.
+implementation detail of the future change. This ADR changes no contract, but
+publishing a driver with more than one span needs the separately decided
+contract change in D12.
 
 ### D12 - Validation and publication
 
@@ -320,12 +343,24 @@ Required of the future implementation; none of it exists:
   already does (`GridView_Local_Data.md` §10.2). Today `snapshots/generator.ts`
   takes the first matching entry. That known defect must be fixed before any
   multi-span season is published.
+- **The season Drivers collection cannot yet carry split spans.** The
+  generator emits one `SeasonDriverSummary` per `driverEntries` row, and that
+  schema carries neither the entry `id` nor `startRound`/`endRound`. The
+  client (`summary_mapper.dart`) therefore gives every summary the ID
+  `{season}-{driverId}` with null bounds, and two spans of one driver would
+  collide on the primary key inside `replaceDriverSeasonEntries`, rolling back
+  the refresh. Before any season in which a driver has more than one span is
+  published, a separately decided contract and client change is required.
+  That change must either carry span identity and bounds in the season
+  collection or publish one explicitly selected summary per driver. Until it
+  exists, such a candidate must not be published.
 - **A7 (`hasResults` derivation) remains a separate required assembly
   change.** It shares the classified-round input and does not depend on this
   decision, but no season with a classified round can publish through
   coordination until A7 exists.
 
-Neither the driver-detail fix nor A7 is implemented by this decision.
+None of the driver-detail fix, the split-span collection change and A7 is
+implemented by this decision.
 
 ### D13 - Requests and scheduling
 
@@ -388,6 +423,13 @@ The seven choices the decision pack left open are settled:
   the race-results port are not implemented.
 - **Validation and fixes.** Assembly derivation and the new integrity
   relations are not implemented, nor is the driver-detail current-span fix.
+- **Split-span publication.** The contract and client change that lets the
+  season Drivers collection carry split spans is undecided (D12).
+- **Provisional-source participation.** Whether a selected OpenF1 race
+  classification may create participation is undecided, and must be settled
+  before OpenF1 is unlocked (D3).
+- **Split-span ID stability.** Whether to adopt an insertion-stable entry-ID
+  rule is an open decision (D7).
 - **Cancelled rounds.** There is no curated cancelled-round record or schema.
 - **A7** `hasResults` is not implemented.
 - **Runtime.** Runtime wiring, G1 (live provider mode) and provider activation

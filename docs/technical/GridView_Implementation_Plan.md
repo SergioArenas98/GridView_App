@@ -2186,6 +2186,9 @@ nothing was deployed.**
 | Ownership | **Decided.** Identity normalization emits identities and constructor entries only. The race-results port owns classifications. Season assembly derives spans from the selected rows, amending ADR 0023 D11 by reference. No second result request and no participants schedule are introduced (D11, D13). |
 | Validation | **Required, not implemented.** New closed relations in both directions (every selected row in exactly one span; every span supported by a row), an atomic candidate, and last-known-good on failure (D12). |
 | Driver-detail current span | **Known defect, not fixed.** `snapshots/generator.ts` takes the first matching entry. It must select the open span, else the latest `startRound`, before any multi-span season is published (D12). |
+| Split-span season collection | **Contract gap, undecided.** `SeasonDriverSummary` carries no entry `id` or bounds, and the client derives `{season}-{driverId}` for every summary, so two spans of one driver would collide in `replaceDriverSeasonEntries`. A separately decided contract and client change must precede any multi-span season (D12). |
+| Provisional-source participation | **Undecided.** Only Jolpica rows create spans. A selected OpenF1 race classification withholds the candidate, and this must be decided before OpenF1 is unlocked (D3). |
+| Split-span ID stability | **Open decision.** Under the accepted rule, a correction that inserts an earlier span reassigns entry IDs. An insertion-stable alternative needs its own decision (D7). |
 | `hasResults` derivation (A7) | **Still not implemented.** It remains a separate required assembly change. |
 | Provider captures | **Missing.** The season drivers and constructors responses and the per-round race results are not preserved. 29 of 31 driver and 9 of 11 constructor Jolpica identifiers are unrecorded. |
 | Identities and mappings | **Incomplete.** The registries are still `status: mock`. `antonelli` still blocks; OpenF1 `12`, `Cadillac` and `Racing Bulls` are unchanged. |
@@ -2309,6 +2312,8 @@ another source rather than bypassing the requirement.
     classifications;
   - add the two new closed integrity relations;
   - fix driver detail to select the current span;
+  - decide and implement the season-collection contract change for split
+    spans;
   - reconcile the weekly participants request budget.
 - Implement the **Jolpica** adapter against the coordination port, emitting
   `unknown` calendar statuses and never manufacturing a timestamp (A6, A8). In
