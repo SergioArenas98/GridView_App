@@ -438,6 +438,34 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
   });
 
   /**
+   * The season-circuits port, named module by module.
+   *
+   * The directory-wide assertions above already cover it. This pins the claim
+   * specifically and non-vacuously: rooted at the port itself, the same
+   * bundler under the same options reaches every circuits module, so their
+   * absence from the Worker entry point's graph is a statement about
+   * reachability rather than about a misspelt path.
+   */
+  it('keeps the season-circuits port out of the Worker graph', async () => {
+    const circuitsModules = [
+      `${dormantDir}circuits-port.ts`,
+      `${dormantDir}circuits-payload.ts`,
+      `${dormantDir}circuits-normalizer.ts`,
+      `${dormantDir}curated-circuits.ts`,
+    ];
+
+    const own = await moduleGraph(edgeApiRoot, [circuitsModules[0] as string]);
+    for (const module of circuitsModules) {
+      expect(Object.keys(own.inputs)).toContain(module);
+    }
+
+    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
+    for (const module of circuitsModules) {
+      expect(Object.keys(worker.inputs)).not.toContain(module);
+    }
+  });
+
+  /**
    * Non-vacuity for both boundaries above, in the four shapes a reachable
    * adapter could take.
    *
@@ -602,6 +630,7 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     // The real enumeration reaches every module actually on disk.
     const files = sourceFiles(join(repoRoot, 'services', 'edge-api', 'src'));
     expect(files).toContain('providers/jolpica/calendar-port.ts');
+    expect(files).toContain('providers/jolpica/circuits-port.ts');
     expect(files).toContain('index.ts');
   });
 
@@ -661,6 +690,7 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
       if (file.startsWith('providers/jolpica/')) continue;
       const contents = readFileSync(join(sourceDir, file), 'utf8');
       expect(contents).not.toContain('JolpicaCalendarPort');
+      expect(contents).not.toContain('JolpicaCircuitsPort');
       // The coordinator that would drive a port is itself still unconstructed
       // outside its own dormant scope.
       expect(contents).not.toContain('new MultiSourceCoordinator');
