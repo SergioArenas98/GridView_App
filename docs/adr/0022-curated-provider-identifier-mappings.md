@@ -261,8 +261,10 @@ integers and can be added later under the same model if a contract requires it.
 - Status: Accepted. **Mechanism implemented 2026-09-19** (A5), the curated
   **2026 event dataset** added the same day (A4 status note), and the
   **season-calendar port implemented, fixture-tested and dormant on
-  2026-09-20** with the A9 test replacement made in the same change. Every
-  other Jolpica resource and the A7 assembly change are still outstanding
+  2026-09-20** with the A9 test replacement made in the same change. A
+  **season-circuits port** followed on **2026-09-22**, equally dormant
+  (Implementation Plan §14.0.17). Every other Jolpica resource and the A7
+  assembly change are still outstanding
 - Date: 2026-09-16
 - Phase: 9B, recorded before the first Jolpica calendar adapter slice
 - Amends: this ADR's [scope note](#scope-note), and — for coordinated season
@@ -772,6 +774,7 @@ a future adapter must satisfy.
 | `hasResults` derivation in assembly          | **Not implemented**; the preflight and assembly are unchanged (A7)       |
 | Jolpica **season-calendar** port              | **Implemented, fixture-tested and dormant** (2026-09-20); not registered, not constructed by any production composition and absent from the Worker bundle |
 | Weekend-format rule (A10)                     | **Decided and implemented** (2026-09-20), in the same change that records it. Three-way evidence rule; no enum, contract or runtime change |
+| Jolpica **season-circuits** port             | **Implemented, fixture-tested and dormant** (2026-09-22, Implementation Plan §14.0.17); a separate port that answers only `season-circuits`, resolving every `circuitId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |
 | Jolpica adapter, for every other resource     | **Not implemented.** Participants, event schedules, classifications and standings are refused as `resource-unsupported`; this is not a working full adapter |
 | `provider-neutrality.test.ts`                | **Replaced** (2026-09-20), in the same change that added the adapter: composition, dependency and configuration dormancy assertions in place of the Jolpica file-name assertion (A9) |
 | G1 (live provider mode)                      | **Open**                                                                 |
@@ -801,6 +804,14 @@ shorten it.
 > by any production composition and absent from the Worker bundle; no provider
 > request was made and no provider mode was added. **Every other Jolpica
 > resource remains unimplemented**, and A7 is still not implemented.
+>
+> **Status on 2026-09-22.** A second dormant, fixture-tested port now answers
+> the **season-circuits** resource (Implementation Plan §14.0.17), on the same
+> A9 terms and with a byte-identical Worker bundle. It applies D10 unchanged:
+> every `circuitId` resolves through the curated mapping or the whole resource
+> fails, so the unexplained 24-circuits-for-23-races observation (Provider
+> Evaluation §8.7 M8) needed no new rule and remains open. Participants, event
+> schedules, classifications and standings remain unimplemented, as does A7.
 >
 > **Provider requests, precisely.** The "none" statements in this ADR describe
 > its own work. Roughly 25 authorized research `GET`s were recorded on
