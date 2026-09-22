@@ -258,9 +258,11 @@ integers and can be added later under the same model if a contract requires it.
 
 ## Amendment 2026-09-16: Grand Prix event identity
 
-- Status: Accepted. **Mechanism implemented 2026-09-19** (A5), and the
-  curated **2026 event dataset** added the same day (A4 status note); the
-  adapter and the A7 assembly change are still outstanding
+- Status: Accepted. **Mechanism implemented 2026-09-19** (A5), the curated
+  **2026 event dataset** added the same day (A4 status note), and the
+  **season-calendar port implemented, fixture-tested and dormant on
+  2026-09-20** with the A9 test replacement made in the same change. Every
+  other Jolpica resource and the A7 assembly change are still outstanding
 - Date: 2026-09-16
 - Phase: 9B, recorded before the first Jolpica calendar adapter slice
 - Amends: this ADR's [scope note](#scope-note), and — for coordinated season
@@ -446,9 +448,14 @@ publishing the locator, or any provider identifier, as identity.
 > mechanism). All five items below exist, with schemas, `validate:content`
 > coverage and tests. **The curated 2026 event dataset was added the same
 > day** (A4 status note): 23 identities and 23 mapped locators. No Jolpica
-> adapter exists, and no Worker or GridView runtime has made a provider
+> adapter existed then, and no Worker or GridView runtime has made a provider
 > request. The mechanism is dormant and unbundled — no runtime module outside `src/providers/mappings/`
 > imports it, and the Worker entry point cannot reach it.
+>
+> **On 2026-09-20** a **season-calendar-only** Jolpica port was added at
+> `src/providers/jolpica/` and consumes this mechanism. It is equally dormant
+> and unbundled, still no provider request has been made, and no other
+> resource is implemented.
 
 The implementation should:
 
@@ -626,6 +633,113 @@ implementation begins, its "no Jolpica file name" assertion must be replaced by
 assertions of the boundaries above, in the same change that adds the adapter.
 The OpenF1 file-name assertion is outside this decision.
 
+> **Done on 2026-09-20**, in the change that added the season-calendar port.
+> The Jolpica file-name assertions in `provider-neutrality.test.ts` and in
+> `coordination-containment.test.ts` are replaced by the boundaries above:
+> the transitive import closure of `src/index.ts` contains no module under
+> `src/providers/jolpica/`, no module outside that directory imports it, no
+> production composition constructs it, and no Wrangler declaration names it.
+> `deep-validation-gate.test.ts`'s textual `ProviderResourcePort` scan excludes
+> the adapter directory on the same reasoning — implementing the port is not
+> wiring it. The OpenF1 file-name assertion is untouched. The dry-run Worker
+> bundle is byte-identical to the baseline and contains none of the adapter's
+> symbols.
+
+### A10 - The weekend format states only what the row's blocks evidence
+
+**Added 2026-09-20.** A5-A9 left one field of the calendar contribution
+undecided. The port implemented on 2026-09-20 therefore filled
+`GrandPrix.format` on A6's reasoning without an accepted rule of its own, and
+recorded that gap rather than hiding it. This closes it, on the same evidence
+discipline as A6 and A8: the adapter says what the provider said, and no more.
+
+**The rule.** Read the weekend format from the row's own session blocks, and
+from nothing else.
+
+1. **`sprint`** - a valid `Sprint` block **or** a valid `SprintQualifying`
+   block is present.
+   - **Either block is positive evidence of a sprint weekend**, independently.
+   - **Both are not required.**
+   - **The missing counterpart is never inferred or created.**
+2. **`standard`** - **only** when neither sprint-specific block is present
+   **and** all four standard evidence blocks are present and valid:
+   `FirstPractice`, `SecondPractice`, `ThirdPractice`, `Qualifying`.
+3. **`unknown`** - when neither sprint-specific block is present and the
+   complete standard evidence set is not available. **Missing or incomplete
+   schedule evidence must never be promoted to `standard`.**
+
+**Why the absence of sprint blocks cannot, by itself, prove `standard`.** The
+two sprint blocks are separately optional upstream (A8's premise, and the
+reason A10.1 accepts either alone). A calendar published before a round's
+detail firms up simply omits its blocks, as does one published while a sprint
+is cancelled or unconfirmed. Under an absence rule every one of those rows
+would be published as a confidently standard weekend, and the client renders
+the format as fact. That is a confident wrong answer of exactly the kind D4 and
+D5 forbid, produced from silence. Silence is not evidence.
+
+**Why the complete FP1/FP2/FP3/Qualifying signature is sufficient.** No single
+member of that set distinguishes the formats - a sprint weekend carries a first
+practice and a qualifying too - but the complete set, *reached only after the
+sprint branch has already declined*, does.
+
+The ordering carries the argument, and it is structural rather than
+inductive: **the `standard` branch is unreachable while either sprint block is
+present**, so no payload carrying sprint evidence can be classified `standard`,
+whatever its practice blocks look like. The remaining question is only whether a
+weekend with **no sprint evidence at all**, carrying three practices and a
+qualifying, could be anything other than standard - and such a payload has
+stated the whole shape of a standard weekend and nothing of a sprint one.
+
+**The supporting observation is a single one, and is not load-bearing.**
+Provider Evaluation §8.4 records that round 2 of 2026 carried `Sprint` and
+`SprintQualifying` and omitted `SecondPractice`/`ThirdPractice`. That is one
+observed round, not a documented upstream guarantee, and this amendment does
+not generalize it into one. It corroborates the rule; the branch ordering above
+is what makes the rule safe.
+
+This is a positive reading of a present signature, not an inference from what is
+missing, which is what separates it from the rejected absence rule.
+
+**A block counts as evidence only if it decoded.** `sessions` holds exactly the
+blocks that were present *and* produced a complete instant, because a present
+block that could not already failed the whole resource as `invalid-payload`
+(A8). A malformed or `null` block therefore never becomes evidence of any
+format.
+
+**Sessions stay data-driven, and the discriminator never touches them.**
+
+- The ordered normalized `sessions` array remains authoritative.
+- `format` must never add, remove, reorder or synthesize a session.
+- An unusual but valid combination is represented by its **actual session
+  list**, whatever the discriminator answers. A row carrying the complete
+  standard signature *and* a sprint is a `sprint` weekend whose session list
+  contains all of them, in instant order.
+- The discriminator is **descriptive evidence about the list, never a template
+  for generating one.**
+
+**The format is never derived from** the event name, the round, the date, the
+current time, a comparison with another season, an assumed Formula 1 rule, or
+the absence of sprint data alone.
+
+**A8 is unchanged and remains authoritative for session times.** An absent
+optional block emits no session; a present block without the complete valid
+instant A8 requires makes the provider payload invalid; no session is emitted
+with `startTime: null`; no midnight is manufactured, the race time is never
+reused and no timezone is inferred. Nullable `endTime`, display metadata and
+media fields are unaffected. This amendment required no implementation change
+there.
+
+**Scope.** This decision applies to **Jolpica calendar normalization**. It does
+not unlock runtime wiring, a provider mode, live traffic, deployment or any
+other Jolpica resource; `PROVIDER_MODE` still admits exactly `mock` and `none`.
+It changes no enum: `WeekendFormat` already carried `unknown`, and the
+Domain Model's per-field note is corrected to say so rather than being widened.
+
+**A later provider format change needs no new decision.** A weekend shape this
+rule does not recognize classifies as `unknown` and is carried by its actual
+sessions array, which stays correct and complete. The rule fails towards saying
+less, never towards inventing a category.
+
 ### Rejected alternatives
 
 | Alternative                                  | Why rejected                                                                                                          |
@@ -636,13 +750,17 @@ The OpenF1 file-name assertion is outside this decision.
 | Derive `eventSlug` from `raceName`           | Slug minting: the public identity would then depend on provider branding (D5).                                        |
 | Use OpenF1 `meeting_key` as the event anchor | A provider identifier is never canonical (D2), it is not a Jolpica field, and the OpenF1 path stays fail-closed.      |
 | Fuzzy or normalized locator matching         | Produces confident wrong answers (D4, D5).                                                                            |
+| Read the absence of both sprint blocks as `standard` (A10) | Publishes a confident format for every row whose schedule detail is simply not published yet. Silence is not evidence. |
+| Require **both** sprint blocks for `sprint` (A10) | The two are separately optional upstream, so a cancelled sprint or a partly finalized schedule would lose a sprint designation it plainly has. |
+| Derive the format from the event name, round, date or clock (A10) | None is schedule evidence. A round shifts when a calendar changes, and reading a clock is the inference A6 and A8 already forbid. |
+| Add a fourth `WeekendFormat` member for "not yet published" (A10) | `unknown` already means exactly that, and a new member would change the public contract and every client that renders it. |
 
 ### Consequences of the amendment
 
 **What it records.** The canonical event identity rule, the Jolpica event
 locator and its matching, alias, evidence and review rules, the calendar status,
-`hasResults` and missing-time semantics, and the dormancy proof a future adapter
-must satisfy.
+`hasResults`, weekend-format and missing-time semantics, and the dormancy proof
+a future adapter must satisfy.
 
 **What it does not do:**
 
@@ -652,8 +770,10 @@ must satisfy.
 | Event registry and `event` mapping support   | **Implemented as a mechanism** (2026-09-19); dormant and unbundled (A5)  |
 | Event mapping dataset                        | **Created for 2026** (2026-09-19): 23 identities, 23 locators (A4)       |
 | `hasResults` derivation in assembly          | **Not implemented**; the preflight and assembly are unchanged (A7)       |
-| Jolpica adapter, for any resource            | **Not implemented and not registered**                                   |
-| `provider-neutrality.test.ts`                | **Unchanged**; its replacement is required when adapter work begins (A9) |
+| Jolpica **season-calendar** port              | **Implemented, fixture-tested and dormant** (2026-09-20); not registered, not constructed by any production composition and absent from the Worker bundle |
+| Weekend-format rule (A10)                     | **Decided and implemented** (2026-09-20), in the same change that records it. Three-way evidence rule; no enum, contract or runtime change |
+| Jolpica adapter, for every other resource     | **Not implemented.** Participants, event schedules, classifications and standings are refused as `resource-unsupported`; this is not a working full adapter |
+| `provider-neutrality.test.ts`                | **Replaced** (2026-09-20), in the same change that added the adapter: composition, dependency and configuration dormancy assertions in place of the Jolpica file-name assertion (A9) |
 | G1 (live provider mode)                      | **Open**                                                                 |
 | G5 (event-aware scheduling), G9 (provenance) | **Open**                                                                 |
 | G-l (mapping dataset coverage)               | **Open**; its 2026 event and circuit sub-gaps are both closed           |
@@ -674,6 +794,13 @@ shorten it.
 > circuit (A3), so each is its own curated mapping. **Circuit coverage no
 > longer blocks the adapter, but the adapter itself remains unimplemented and
 > unregistered**, and A7 is not implemented.
+>
+> **Status on 2026-09-20.** The **season-calendar resource is no longer
+> blocked**: its port is implemented, fixture-tested and dormant
+> (Implementation Plan §14.0.16). It is still not registered, not constructed
+> by any production composition and absent from the Worker bundle; no provider
+> request was made and no provider mode was added. **Every other Jolpica
+> resource remains unimplemented**, and A7 is still not implemented.
 >
 > **Provider requests, precisely.** The "none" statements in this ADR describe
 > its own work. Roughly 25 authorized research `GET`s were recorded on

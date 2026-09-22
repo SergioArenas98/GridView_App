@@ -400,7 +400,7 @@ Identity: `id` (`{season}-{eventSlug}`). A season-scoped event.
 | `officialName` | string | N | Full sponsor-inclusive name. |
 | `circuitId` | string (slug) | R | Host circuit reference. |
 | `status` | `EventStatus` | R | Event lifecycle state. |
-| `format` | `WeekendFormat` | R | `standard` or `sprint`. |
+| `format` | `WeekendFormat` | R | Normally `standard` or `sprint`. A producer may emit `unknown` when its source evidence is insufficient to establish either, rather than guessing one (ADR 0022 A10). |
 | `startDate` | date | N | Event start (local calendar date). |
 | `endDate` | date | N | Event end (local calendar date). |
 | `timezone` | string (IANA) | N | Event-local zone, e.g. `Europe/Brussels`. |
@@ -414,10 +414,18 @@ assembly rather than by the calendar source: a calendar contribution carries a
 provisional `false`, and assembly sets `true` only for a round whose selected
 race classification is `final` or `provisional`. A calendar source that supplies
 no trustworthy lifecycle status emits `unknown` for `status` rather than
-inferring one from the clock. These rules are decided
-([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity),
-A6-A7) and not yet implemented: no calendar source exists to emit `unknown`,
-and season assembly still takes `hasResults` verbatim from its contribution.
+inferring one from the clock. These rules are decided in the
+[ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity),
+and their implementation status differs by rule:
+
+| Rule | Status |
+|---|---|
+| **A6** - calendar `status` is `unknown` | **Implemented, dormant.** The Jolpica season-calendar port emits `unknown` for every `GrandPrix.status` and every `Session.status`. It is not registered, not constructed by any production composition and absent from the Worker bundle, so no deployed code path reaches it yet. |
+| **A10** - `format` from block evidence | **Implemented, dormant**, on the same port. |
+| **A7** - assembly-owned `hasResults` | **Not implemented.** Season assembly still takes `hasResults` verbatim from its contribution; the derivation from selected, classified race results remains outstanding. |
+
+Until a calendar source is actually wired, every published season still comes
+from the mock provider.
 
 ### 6.6 Session
 

@@ -152,8 +152,20 @@ describe('deep validation runs at the coordination boundary instead', () => {
 });
 
 describe('no real coordination port is wired into production', () => {
+  /**
+   * The coordination module owns the port, and the dormant Jolpica adapter
+   * implements it, so both necessarily name the type. Neither is *wiring*.
+   *
+   * Excluding the adapter here is the A9 replacement applied to this
+   * assertion too: naming a type is a textual proxy, and what must actually
+   * hold is that no module reachable from the Worker entry point registers a
+   * port. That is asserted directly, by transitive import closure, in
+   * `test/providers/provider-neutrality.test.ts`.
+   */
   const files = sourceFiles(sourceRoot).filter(
-    (path) => !path.includes(join('providers', 'coordination')),
+    (path) =>
+      !path.includes(join('providers', 'coordination')) &&
+      !path.includes(join('providers', 'jolpica')),
   );
 
   it('constructs no coordinator outside the coordination module', () => {
