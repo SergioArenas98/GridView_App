@@ -382,7 +382,7 @@ describe('the M8 row-count observation', () => {
   it('fails the whole resource when a 24th row has no curated mapping', async () => {
     const rows = [
       ...fullSeasonCircuitRows(),
-      circuitRow('synthetic_unmapped_venue'),
+      circuitRow('synthetic_unmapped_venue', syntheticDescription),
     ];
     expect(rows).toHaveLength(24);
 
@@ -394,6 +394,12 @@ describe('the M8 row-count observation', () => {
       (event) => event.operation === 'provider.mapping.resolve',
     );
     expect(signals).toHaveLength(1);
+    // The one provider value that is logged is the bounded internal mapping
+    // diagnostic ADR 0022 D10 permits. Nothing else from the payload is.
+    expect(signals[0]?.providerMappingValue).toBe('synthetic_unmapped_venue');
+    expect(logger.serialized()).not.toContain('MRData');
+    expect(logger.serialized()).not.toContain('CircuitTable');
+    expect(logger.serialized()).not.toContain('Synthetic Provider');
   });
 
   it('carries an extra row that is curated, without comparing to the calendar', async () => {
