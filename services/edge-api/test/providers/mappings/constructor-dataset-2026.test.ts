@@ -8,8 +8,10 @@
  *
  * - `mclaren` and `mercedes` were already mapped (§8.4) and are untouched.
  * - `alpine`, `ferrari` and `red_bull` map onto identities that already existed.
- * - `audi` continues the existing `sauber` identity, whose display name is now
- *   `Audi`. No `audi` identity exists.
+ * - `audi` continues the existing `sauber` identity. By a curator-approved
+ *   identity decision (Domain Model §6.3 naming layers) the stable ID stays
+ *   `sauber` while its current canonical `name` and `shortName` become `Audi`.
+ *   No `audi` identity exists, and season entrant names stay season-scoped.
  * - `rb` maps to the curator-authored `racing-bulls`. `rb` is never an ID.
  * - `aston-martin`, `cadillac`, `haas`, `racing-bulls` and `williams` are new,
  *   identity-only rows: `id` and `name`, nothing else.
@@ -111,8 +113,8 @@ const PRE_EXISTING_MAPPINGS = [
 
 /**
  * The six registry rows that predate the dataset, exactly as they must now
- * read. Only `sauber`'s `name` changed (`Sauber` -> `Audi`); every other
- * property of every row, and its key order, is unchanged.
+ * read. Only `sauber`'s `name` and `shortName` changed (`Sauber` -> `Audi`);
+ * every other property of every row, and its key order, is unchanged.
  */
 const PRE_EXISTING_ROWS = [
   {
@@ -163,7 +165,7 @@ const PRE_EXISTING_ROWS = [
   {
     id: 'sauber',
     name: 'Audi',
-    shortName: 'Sauber',
+    shortName: 'Audi',
     nationality: 'Swiss',
     countryCode: 'CH',
     colorPrimary: '#52e252',
@@ -171,6 +173,22 @@ const PRE_EXISTING_ROWS = [
       'Stable constructor identity used to demonstrate cross-season rebranding in fixtures.',
   },
 ] as const;
+
+/**
+ * The `sauber` row exactly as it read before this dataset (`master` at
+ * `9fa4606`). The curator decision may change only its `name` and
+ * `shortName`; the biography is still true and stays byte-identical.
+ */
+const SAUBER_BASELINE = {
+  id: 'sauber',
+  name: 'Sauber',
+  shortName: 'Sauber',
+  nationality: 'Swiss',
+  countryCode: 'CH',
+  colorPrimary: '#52e252',
+  biography:
+    'Stable constructor identity used to demonstrate cross-season rebranding in fixtures.',
+} as const;
 
 /** The four acknowledgements, each with its closed reason. */
 const ACKNOWLEDGEMENTS: readonly (readonly [string, string, string, string])[] =
@@ -323,7 +341,7 @@ describe('the curated constructor registry', () => {
     }
   });
 
-  it('keeps every pre-existing row byte-identical apart from the sauber name', () => {
+  it('keeps every pre-existing row byte-identical apart from the sauber names', () => {
     for (const expected of PRE_EXISTING_ROWS) {
       const row = constructorRegistry.find((entry) => entry.id === expected.id);
       // Serialized, so key order counts as much as every value.
@@ -331,12 +349,39 @@ describe('the curated constructor registry', () => {
     }
   });
 
+  it('changes only the name and short name of the sauber row', () => {
+    const row = constructorRegistry.find((entry) => entry.id === 'sauber');
+    const baseline: Record<string, unknown> = SAUBER_BASELINE;
+    const changed = Object.keys(baseline).filter(
+      (field) =>
+        JSON.stringify(row?.[field]) !== JSON.stringify(baseline[field]),
+    );
+
+    expect(changed).toEqual(['name', 'shortName']);
+    expect(Object.keys(row ?? {})).toEqual(Object.keys(baseline));
+    // The lineage biography is still true, so it is byte-identical.
+    expect(row?.biography).toBe(SAUBER_BASELINE.biography);
+  });
+
+  it('keeps season naming out of the stable identity row', () => {
+    const row = constructorRegistry.find((entry) => entry.id === 'sauber');
+    for (const seasonField of [
+      'fullName',
+      'season',
+      'powerUnit',
+      'driverLineup',
+    ]) {
+      expect(row, seasonField).not.toHaveProperty(seasonField);
+    }
+  });
+
   it('continues the sauber identity as Audi and creates no audi or rb identity', () => {
     const ids = new Set(constructorRegistry.map((entry) => entry.id as string));
+    const sauber = constructorRegistry.find((entry) => entry.id === 'sauber');
 
-    expect(
-      constructorRegistry.find((entry) => entry.id === 'sauber')?.name,
-    ).toBe('Audi');
+    expect(sauber?.id).toBe('sauber');
+    expect(sauber?.name).toBe('Audi');
+    expect(sauber?.shortName).toBe('Audi');
     expect(ids.has('audi')).toBe(false);
     expect(ids.has('rb')).toBe(false);
     // Neither provider ID is adopted anywhere in the registry as an ID token.
@@ -392,6 +437,13 @@ describe('the 2026 Jolpica constructor mappings', () => {
   it('maps `audi` onto the continued `sauber` identity', () => {
     expect(resolvedConstructor('audi')).toBe('sauber');
     expect(resolvedConstructor('sauber')).toBeNull();
+    // Never `audi -> audi`: the provider ID is not adopted as a target.
+    expect(
+      mappingDocument.mappings.filter((record) => record.gridviewId === 'audi'),
+    ).toEqual([]);
+    expect(
+      constructorMappings.filter((record) => record.providerValue === 'audi'),
+    ).toHaveLength(1);
   });
 
   it('gives every canonical constructor exactly one Jolpica provider value', () => {
@@ -681,6 +733,72 @@ describe('the repository-owned evidence record (Provider Evaluation §8.9)', () 
         row.gridviewId,
       ).toBe(row.name);
     }
+  });
+});
+
+describe('the Sauber/Audi naming decision is documented as curator-approved', () => {
+  // Blockquote markers are dropped so a dated note reads as prose.
+  const flatten = (text: string): string =>
+    text.replace(/^>[ ]?/gm, '').replace(/\s+/g, ' ');
+  const domainModel = flatten(
+    readRepoFile('docs', 'technical', 'GridView_Domain_Model.md'),
+  );
+  const adr0022 = flatten(
+    readRepoFile('docs', 'adr', '0022-curated-provider-identifier-mappings.md'),
+  );
+  const evaluation = readRepoFile(
+    'docs',
+    'technical',
+    'GridView_Provider_Evaluation.md',
+  );
+  const start = evaluation.indexOf('### 8.9 ');
+  const section89 = flatten(
+    evaluation.slice(start, evaluation.indexOf('\n---\n', start)),
+  );
+
+  it('states the three naming layers in the Domain Model', () => {
+    for (const rule of [
+      '`Constructor.id` is **immutable**',
+      '**current canonical public name** of that stable lineage',
+      '**current short public label**',
+      '**only through an explicit curator-reviewed decision**',
+      'A provider value never renames an identity automatically',
+      'remains the **exact entrant name for a particular season**',
+      'Season livery, sponsor name, power unit and line-up stay outside `Constructor`',
+      'never infer it from the current canonical name',
+      'affects only `ConstructorSeasonEntry`',
+      'not an ordinary provider alias and not an unreviewed sponsor rename',
+    ]) {
+      expect(domainModel, rule).toContain(rule);
+    }
+  });
+
+  it('never again says that only season entries may change a name', () => {
+    // The pre-2026-09-23 wording forbade any change to `Constructor.name`. It
+    // survives only inside the dated amendment that quotes it.
+    expect(domainModel).not.toContain('Canonical base name');
+    expect(domainModel).not.toContain(
+      'constructor slug; only its season entries change',
+    );
+    expect(domainModel).toContain(
+      'The original text ended "only its season entries change"',
+    );
+  });
+
+  it('records the decision in ADR 0022 and Provider Evaluation §8.9', () => {
+    expect(adr0022).toContain(
+      'Note 2026-09-23 - current name versus stable ID',
+    );
+    expect(adr0022).toContain('curator-authored lineage decision');
+    expect(adr0022).toContain(
+      'Jolpica supplied neither the `sauber` ID nor the lineage ruling',
+    );
+    expect(section89).toContain('**curator-authored lineage decision**');
+    expect(section89).toContain(
+      "**substantive transformation of the constructor's public identity**",
+    );
+    expect(section89).toContain('`ConstructorSeasonEntry.fullName`');
+    expect(section89).not.toContain('display name becomes **`Audi`**');
   });
 });
 
