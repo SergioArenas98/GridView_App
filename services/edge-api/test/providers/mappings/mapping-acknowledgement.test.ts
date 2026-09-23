@@ -118,8 +118,10 @@ describe('an acknowledged identity still fails closed at runtime', () => {
     ]);
 
     // Four since 2026-09-20: `hungaroring` left this set when the 2026
-    // circuit dataset gave it a canonical identity and a mapping.
-    expect(checks.length).toBe(4);
+    // circuit dataset gave it a canonical identity and a mapping. Three since
+    // 2026-09-23: Jolpica `antonelli` left it when the 2026 driver dataset
+    // did the same. The three left are all OpenF1.
+    expect(checks.length).toBe(3);
     for (const [, lookup] of checks) {
       const result = registry.resolveUnknown(lookup);
       expect(result.outcome, JSON.stringify(lookup)).toBe('unresolved');

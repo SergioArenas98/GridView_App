@@ -40,6 +40,7 @@
 | 1.7 | 2026-09-22 | **Phase 9B: a dormant Jolpica `season-circuits` port exists** (Implementation Plan §14.0.17). `src/providers/jolpica/` now also holds a fixture-tested port for the `season-circuits` coordinated resource: one `GET /ergast/f1/{season}/circuits/?limit=100` through the hardened boundary, strict envelope and pagination decoding, and every `circuitId` resolved through the curated season-qualified mapping, with the canonical identity, name and descriptive facts taken from the curated circuit registry - never from `circuitName`, `Location` or coordinates, which are not decoded at all. **§8.7 M8 stays open and unexplained**: no rule was invented for it. The port applies the existing ADR 0022 D10 rule - every provider row must resolve and no row is dropped from an otherwise accepted resource - so a 24th row without a curated mapping fails the whole resource as `mapping-failure`, and the resource is never filtered against the calendar. **It is dormant** exactly like the calendar port: absent from the runtime composition and the Worker entry point's import closure, not registered, not selectable through `PROVIDER_MODE` (still exactly `mock` and `none`), and invoked by no production coordinator; the dry-run Worker bundle is byte-identical. **No provider request was made for this change**, so the request history in §0.3, §8.1 and §8.8 is unchanged, and GridView software has never fetched circuit data. This supersedes the "only a `season-calendar` port" statements in §8.8.1, §10.1, §11.4, §11.5 and §15.1 below, which now name both ports; the earlier dated rows are left unrewritten as the historical record. **The complete Jolpica adapter remains unimplemented** - participants, event schedules, classifications and standings - as do ADR 0022 amendment A7, G1 and the OpenF1 path. |
 | 1.8 | 2026-09-23 | **Phase 9B: season-participation semantics decided, not implemented** ([ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md)). `/{season}/drivers/?limit=100` and `/{season}/constructors/?limit=100` define the complete identity universe: every row must resolve through a curated mapping or the identity resource fails, and the 31 recorded 2026 driver identities remain identities even if some never race. They never create participation. A `DriverSeasonEntry` is derived by season assembly **only** from selected, classified race-result rows - never from standings, qualifying, sprint, practice, the calendar or a clock - so no second result request and no participants schedule is introduced. The §8.4 reading of the 31 rows as "mid-season churn" is left as recorded but is **unverified**: the same pass recorded 22 driver-standings rows at round 11. The §11.2 weekly participants budget line must be reconciled with this ownership before runtime wiring. **No provider request was made** and no evidence was captured, so §0.3, §8.1 and §8.8 are unchanged. No port, assembly change, relation or mapping exists for it; `antonelli` and the three OpenF1 acknowledgements are unchanged, and G1, G5, G9 and G-l remain open. |
 | 1.9 | 2026-09-23 | **Phase 9B: the 2026 constructor identity dataset is complete; drivers are not** (§8.9). One separately authorised public `GET` of `https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100` at 2026-09-23T18:33:16Z returned HTTP 200 with 11 of 11 rows (SHA-256 `bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e`). The raw response is not committed. A curator approved a mapping for every observed `constructorId`. `audi` continues the stable `sauber` identity, whose current canonical name and short name are now `Audi` by curator decision (Domain Model §6.3 naming layers; the 2026 entrant name stays season-scoped), and no `audi` identity exists. `rb` maps to the curator-authored `racing-bulls` and is never an ID. `aston-martin`, `cadillac`, `haas`, `racing-bulls` and `williams` are new identity-only rows. The constructor registry holds **11** identities, the season-2026 dataset **62 exact mappings**, **66 approved evidence identities** and **four acknowledgements**. The OpenF1 `Cadillac` and `Racing Bulls` acknowledgements stay unmapped with the corrected reason `no-approved-provider-mapping`. **Driver identity coverage remains incomplete**, participant identities as a whole are not complete, and no drivers, constructors or participants port exists. The two Jolpica ports remain dormant, and the ADR 0026 implementation prerequisites remain open. `PROVIDER_MODE` still admits exactly `mock` and `none`, no live provider mode has been enabled, nothing was deployed, no cutover occurred, and no licensing conclusion changes. G1, G5, G9 and G-l remain open. |
+| 1.10 | 2026-09-23 | **Phase 9B: the 2026 driver identity dataset is complete** (§8.10). The driver response of the same separately authorised capture, `GET https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100` at 2026-09-23T18:33:12Z, returned HTTP 200 with 32 of 32 rows (SHA-256 `2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743`). The raw response is not committed. A curator approved a mapping for every observed `driverId`, with curator-authored canonical IDs built from the complete recorded given and family name (`antonelli` maps to `andrea-kimi-antonelli`) and display names that keep their diacritics. 25 identity-only rows were added, nine of them from name-only provider rows, and no provider descriptive field was imported. `max-verstappen` and `lando-norris` lost their unreliable `permanentNumber`. The driver registry holds **33** identities, the season-2026 dataset **93 exact mappings**, **96 approved evidence identities** and **three acknowledgements**, all OpenF1: `driver_number` `12` stays unmapped with the reason `no-approved-provider-mapping`. No participants port exists, the two Jolpica ports remain dormant, and the ADR 0026 implementation prerequisites remain open. `PROVIDER_MODE` still admits exactly `mock` and `none`, no live provider mode has been enabled, nothing was deployed, no cutover occurred, and no licensing conclusion changes. G1, G5, G9 and G-l remain open. |
 
 ---
 
@@ -1206,7 +1207,9 @@ and above is unchanged.
 > added nine Jolpica constructor mappings and nine evidence identities, so the
 > season-2026 dataset now holds **62** exact mappings and **66** approved
 > evidence identities. The acknowledgement count is still four, and no circuit
-> row changed.
+> row changed. **Note 2026-09-23 (v1.10):** the 2026 driver dataset (§8.10)
+> brought the totals to **93** exact mappings, **96** approved evidence
+> identities and **three** acknowledgements; no circuit row changed.
 
 ### 8.9 2026 constructor identity observation and the curated constructor dataset (2026-09-23)
 
@@ -1320,6 +1323,159 @@ device was contacted.
 2026-09-23. A constructor added, renamed or re-keyed later produces a
 `constructorId` no record matches, and the identity resource fails closed until
 another reviewed update lands on new, separately authorised evidence.
+
+> **Note 2026-09-23 (v1.10).** The totals and the driver-coverage statement
+> above are those of the constructor dataset and are left as recorded. The
+> 2026 driver dataset (§8.10) then curated and mapped all 32 observed Jolpica
+> `driverId`s, so the season-2026 dataset holds **93** exact mappings, **96**
+> approved evidence identities and **three** acknowledgements, all OpenF1.
+> No constructor row, mapping or evidence record changed.
+
+### 8.10 2026 driver identity observation and the curated driver dataset (2026-09-23)
+
+The driver half of the two season-2026 Jolpica participant-list `GET`s
+**separately and explicitly authorised on 2026-09-23** (§8.9) is recorded here,
+solely as identity evidence under
+[ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md). The
+request came from a developer machine. It was **not** made by GridView's
+Worker, its hardened provider HTTP client or its rate limiter.
+
+| Field | Value |
+|---|---|
+| Provider | Jolpica F1 |
+| Endpoint | `https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100` |
+| Method | One unauthenticated `GET`, with no credential, cookie or token, no redirect followed and no retry |
+| Request window (UTC) | Started `2026-09-23T18:33:12.832Z`, completed `2026-09-23T18:33:12.964Z`; response `Date` `2026-09-23T18:33:12Z` |
+| Status | HTTP 200, `application/json` |
+| Count | `limit` 100, `offset` 0, `total` 32; 32 driver rows returned, so the declared and returned counts agree |
+| Body | 5 598 bytes; SHA-256 `2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743` over the exact bytes received |
+| Cache headers | `cf-cache-status: MISS` together with `Age: 202`; recorded as observed and not interpreted |
+| Structural checks | Strict UTF-8 JSON with no BOM; `DriverTable.season` is `"2026"`; 32 unique `driverId`s, each a non-empty `[a-z0-9_]+` string. Nine rows carry only `driverId`, `givenName` and `familyName` |
+| Raw capture | Held by the operator **outside the repository and not committed**, like the §8.1, §8.8 and §8.9 responses. This section is the repository-owned record; the hash above lets a reviewer holding the capture confirm it is the one summarised here |
+| Curator decision pack | A private pack built only from this capture, SHA-256 `faa23a5f9acad648489515a82e8d57f15165762c79d7732c3613a7694764c47b`, also held outside the repository and not committed. The curator approved its recommended driver payload on 2026-09-23; it is the table below |
+
+**Licence and attribution** ([ADR 0019](../adr/0019-formula-one-provider-legal-gate.md),
+§7.2, §7.6.2, §7.6.3). The `driverId` values below are **Jolpica F1** data
+(`https://github.com/jolpica/jolpica-f1`), licensed under **CC BY-NC-SA 4.0**
+(`https://creativecommons.org/licenses/by-nc-sa/4.0/`). GridView records each
+exact `driverId` and pairs it with a curated GridView driver; that pairing is
+GridView's modification. ShareAlike applies to this recorded data as §7.6.3
+describes. The provider values are internal ([ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)
+D10) and are published nowhere.
+
+**Curator decisions, approved 2026-09-23.** Every canonical ID and display name
+below is **curator-authored**. The given and family name in each provider row
+supports it, but none was copied from the provider by pass-through or by rule.
+
+- **Canonical IDs use the complete recorded given and family name**, slugged
+  once by the curator under Domain Model §4.1: lowercase ASCII, diacritics
+  transliterated, punctuation dropped, spaces and underscores replaced by one
+  hyphen. A surname-only provider `driverId` (`albon`, `hamilton`) is never a
+  canonical ID, and no adapter ever applies this rule. A compound given name
+  keeps every token: `antonelli` maps to **`andrea-kimi-antonelli`**.
+- **IDs are ASCII; display names keep their diacritics**, stored NFC. A
+  curator never adds a diacritic that was not observed and never strips one
+  that was: `nico-hulkenberg` is displayed `Nico Hülkenberg` and
+  `sergio-perez` is displayed `Sergio Pérez`.
+- **The nine name-only rows are identities.** `paul_aron`, `dino_beganovic`,
+  `luke_browning`, `jak_crawford`, `leonardo_fornaroli`, `colton_herta`,
+  `ryo_hirakawa`, `ayumu_iwasa` and `frederik_vesti` carry nothing beyond a
+  name. ADR 0026 D2 requires every `/drivers/` row to resolve, so each gets an
+  identity-only row. Nothing is inferred about team, role, activity or rounds;
+  their presence in the list is recorded only as "listed".
+- **No provider descriptive field was imported.** The **25 new identities**
+  carry **only `id` and `fullName`**. The provider's separate given and family
+  name fields, code, number, nationality, date of birth and URL are evidence
+  only: they are licensed provider facts, and ADR 0026 D2 forbids provider
+  display fields becoming canonical content by pass-through. The
+  content-loading seam supplies the explicit `null` the normalized contract
+  needs for every absent optional fact.
+- **`max-verstappen` and `lando-norris` no longer carry `permanentNumber`.**
+  The captured field behaves as the driver's season car number - it gives
+  Norris `1` (§8.7 M2) - so it cannot establish the career permanent number
+  that the Domain Model §6.2 field means. The illustrative mock values are
+  unsourced, so both are removed and no other number replaces them. The season
+  car number belongs in `DriverSeasonEntry.raceNumber`. No other property of
+  any pre-existing row changed.
+- **Six provider values** - `colapinto`, `hamilton`, `leclerc`,
+  `max_verstappen`, `piastri` and `russell` - map to identities that already
+  existed. These are mapping decisions only.
+- **`norris`** was already mapped (§8.4) and is unchanged.
+- **`jack-doohan`** stays a canonical identity. No captured row maps to it,
+  and no Jolpica mapping was invented for it.
+- **OpenF1 `driver_number` `12` stays acknowledged and unmapped.** It refers to
+  the same competitor as `antonelli` (§8.5). A canonical identity now exists,
+  so its reason changes to `no-approved-provider-mapping`. Mapping it needs a
+  separate curator decision.
+
+| Exact `driverId` | Canonical GridView driver | Canonical display name | Decision |
+|---|---|---|---|
+| `albon` | `alexander-albon` | `Alexander Albon` | New identity-only row |
+| `alonso` | `fernando-alonso` | `Fernando Alonso` | New identity-only row |
+| `antonelli` | `andrea-kimi-antonelli` | `Andrea Kimi Antonelli` | New identity-only row; the Jolpica acknowledgement is removed |
+| `arvid_lindblad` | `arvid-lindblad` | `Arvid Lindblad` | New identity-only row |
+| `ayumu_iwasa` | `ayumu-iwasa` | `Ayumu Iwasa` | New identity-only row from a name-only provider row |
+| `bearman` | `oliver-bearman` | `Oliver Bearman` | New identity-only row |
+| `bortoleto` | `gabriel-bortoleto` | `Gabriel Bortoleto` | New identity-only row |
+| `bottas` | `valtteri-bottas` | `Valtteri Bottas` | New identity-only row |
+| `colapinto` | `franco-colapinto` | `Franco Colapinto` | Mapping only; identity already existed |
+| `colton_herta` | `colton-herta` | `Colton Herta` | New identity-only row from a name-only provider row |
+| `dino_beganovic` | `dino-beganovic` | `Dino Beganovic` | New identity-only row from a name-only provider row |
+| `frederik_vesti` | `frederik-vesti` | `Frederik Vesti` | New identity-only row from a name-only provider row |
+| `gasly` | `pierre-gasly` | `Pierre Gasly` | New identity-only row |
+| `hadjar` | `isack-hadjar` | `Isack Hadjar` | New identity-only row |
+| `hamilton` | `lewis-hamilton` | `Lewis Hamilton` | Mapping only; identity already existed |
+| `hulkenberg` | `nico-hulkenberg` | `Nico Hülkenberg` | New identity-only row |
+| `jak_crawford` | `jak-crawford` | `Jak Crawford` | New identity-only row from a name-only provider row |
+| `lawson` | `liam-lawson` | `Liam Lawson` | New identity-only row |
+| `leclerc` | `charles-leclerc` | `Charles Leclerc` | Mapping only; identity already existed |
+| `leonardo_fornaroli` | `leonardo-fornaroli` | `Leonardo Fornaroli` | New identity-only row from a name-only provider row |
+| `luke_browning` | `luke-browning` | `Luke Browning` | New identity-only row from a name-only provider row |
+| `max_verstappen` | `max-verstappen` | `Max Verstappen` | Mapping only; identity already existed; `permanentNumber` removed |
+| `norris` | `lando-norris` | `Lando Norris` | Pre-existing mapping (§8.4), unchanged; `permanentNumber` removed from the identity |
+| `ocon` | `esteban-ocon` | `Esteban Ocon` | New identity-only row |
+| `paul_aron` | `paul-aron` | `Paul Aron` | New identity-only row from a name-only provider row |
+| `perez` | `sergio-perez` | `Sergio Pérez` | New identity-only row |
+| `piastri` | `oscar-piastri` | `Oscar Piastri` | Mapping only; identity already existed |
+| `russell` | `george-russell` | `George Russell` | Mapping only; identity already existed |
+| `ryo_hirakawa` | `ryo-hirakawa` | `Ryo Hirakawa` | New identity-only row from a name-only provider row |
+| `sainz` | `carlos-sainz` | `Carlos Sainz` | New identity-only row |
+| `stroll` | `lance-stroll` | `Lance Stroll` | New identity-only row |
+| `tsunoda` | `yuki-tsunoda` | `Yuki Tsunoda` | New identity-only row |
+
+All 33 identities are in `content/registries/drivers.mock.json`. All 32
+provider values are mapped in `content/seasons/2026/provider-mappings.development.json`
+and recorded in `content/seasons/2026/provider-evidence.development.json`, and
+every new record cites this section and the response hash. A test reconstructs
+this table from those files and fails if either side drifts.
+
+**What this does and does not cover.** Curated driver identity coverage of the
+observed 2026 list is **32 of 32**, and no Jolpica identity is acknowledged as
+unmapped. The driver registry holds **33** identities and there are **32**
+Jolpica driver mappings. The season-2026 dataset holds **93 exact mappings**
+and **96 approved evidence identities**, with **three acknowledgements**
+remaining, all OpenF1: `driver_number` `12`, `Cadillac` and `Racing Bulls`,
+each with the reason `no-approved-provider-mapping`. Constructors stay at 11 /
+11, and events and circuits at 23 / 23.
+
+Complete participant identity coverage is not a participants resource: no
+drivers, constructors or participants port exists, no participant span is
+derived, and no result or standing is available. The ADR 0026 implementation
+prerequisites remain open. The two existing Jolpica ports, `season-calendar`
+and `season-circuits`, remain dormant. `PROVIDER_MODE` still admits exactly
+`mock` and `none`, and **no live provider mode has been enabled**. Nothing was
+deployed and no cutover occurred. The new identities feed the mock provider,
+so a later deploy of a `master` that contains them changes the staging mock
+snapshot and is cutover-sensitive.
+
+**No additional provider request was made** for this dataset. Every value was
+read from the single driver response above. No provider, service or device was
+contacted.
+
+**Limits of this evidence.** It is a point-in-time observation from
+2026-09-23. A driver added or re-keyed later produces a `driverId` that no
+record matches, and the identity resource fails closed until another reviewed
+update lands on new, separately authorised evidence.
 
 ---
 
@@ -2949,7 +3105,7 @@ Full detail in Appendix D.
 | G-h | ~~`providerCallCount` is untyped and would silently under-report per-source usage.~~ **Closed in Phase 9B-1 (2026-08-23).** The structural cast is removed; `FormulaOneProvider` requires a typed `sourceId` and `requestMetrics()`, and `SyncResult` carries operation-scoped and lifetime attempt counts split by source and by job category, with failed and rate-limited attempts counted. |
 | G-i | **`sourceUpdatedAt` must be derived from GridView's own observation state** (§10.7.1). Neither provider publishes an update timestamp, so the published value is the snapshot-level `snapshotObservedAt`, bound to `snapshotRevision` (ADR 0020 D1.9); the resource-level `sourceObservedAt` is internal reconciliation state and is never published (D1.12). Both require the previously stored revision and are therefore coordinator and publication state, not adapter state. ~~Blocking for Phase 9B.~~ **Decided** by [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §1; the remaining work is implementation (it rides on G4 and G9). **Partially implemented 2026-09-03 (Phase 9B-6, PR 1): `snapshotRevision` and its canonical input exist and are tested, with no production caller. `snapshotObservedAt` does not, and D1.10's strictly-monotonic assignment is blocked** - it must be computed pre-commit from the pair the active pointer names, two same-season publications can both reach the publisher without observing each other, and Workers KV offers no compare-and-set or cross-isolate lock to serialize them (ADR 0007, ADR 0010). `meta.sourceUpdatedAt` is unchanged. **This gap stays open in both halves.** |
 | F3-F5 | ~~**Three referential rules the domain model defines and the preflight did not enforce** — driver participation-span validity, the canonical Grand Prix edition identity `{season}-{eventSlug}` and the canonical constructor season-entry identity `{season}-{constructorId}`. Raised by the final bounded review of PR #12, verified, and deferred to the adapter-registration / G4-activation gate because no current source can produce the invalid states.~~ **Closed in Phase 9B-5 (2026-09-02)** ([ADR 0024](../adr/0024-deep-normalized-contract-validation.md)) as three independent relations in the closed `seasonRelations` vocabulary. No symmetric identity relation exists for a *driver* season entry: §6.7 appends a start round for a split seat, so its identity is not a strict function of the payload. |
-| G-l | **The curated mapping *dataset* is incomplete.** G-e closed the *mechanism*; this is the separate, still-open question of *coverage*. Only identifiers already recorded in §8 are curated: `Cadillac` and `Racing Bulls` have no canonical GridView constructor identity, `antonelli` / `driver_number 12` has no canonical driver identity, and no OpenF1 `circuit_key` value is recorded anywhere. Each gap is an explicit acknowledgement in `provider-evidence.development.json` and blocks the affected resource. Closing it needs curated GridView identities and more recorded provider evidence, not more mapping code. **Event-identity sub-gap closed on 2026-09-19** (§8.8): the curated event registry holds 23 curator-approved `eventSlug` identities, and all 23 Jolpica event locators observed for 2026 have a reviewed mapping and an evidence-corpus entry. That coverage is a point-in-time observation; a later calendar change fails closed until another reviewed update. **Circuit sub-gap closed on 2026-09-20** (§8.8.1): five mappings were added on 2026-09-19 for the observed `circuitId`s whose canonical GridView circuit already existed, and on 2026-09-20 a curator approved a canonical identity for each of the remaining 17. Curated circuit coverage of the observed 2026 calendar is **23 of 23**, no observed 2026 `circuitId` is acknowledged as unmapped, and **circuit coverage no longer blocks a calendar adapter** - though **no Jolpica adapter exists**, so nothing consumes any of this. **Superseded 2026-09-21** (v1.6, Implementation Plan §14.0.16): a **dormant, fixture-tested Jolpica `season-calendar` port** now consumes the curated event and circuit mappings **when exercised directly by tests**, while remaining outside the runtime composition and the Worker entry point's import closure, unselectable through `PROVIDER_MODE` and invoked by no production coordinator or event-aware scheduler, so **no deployed or application path consumes any of this**. The **complete Jolpica adapter stays unimplemented**. **G-l itself stays open**: `Cadillac`, `Racing Bulls`, `antonelli` / `driver_number 12` are still acknowledged as unmapped for want of a canonical GridView identity, and no OpenF1 `circuit_key` value is recorded anywhere. The season-2026 dataset holds 53 exact mappings, 57 approved evidence identities and four acknowledgements. **2026-09-23 (v1.8):** [ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md) makes every `/drivers/` and `/constructors/` row part of the required coverage, including identities that never race, so the unrecorded 29 of 31 driver and 9 of 11 constructor identifiers are now explicitly in G-l's scope. It changes no mapping or acknowledgement. **2026-09-23 (v1.9):** the constructor sub-gap is closed for 2026 (§8.9). All 11 observed Jolpica `constructorId`s are curated and mapped, the registry holds 11 constructors, and the dataset holds 62 exact mappings, 66 approved evidence identities and four acknowledgements. `Cadillac` and `Racing Bulls` now have canonical identities but stay acknowledged as unmapped for OpenF1 with the reason `no-approved-provider-mapping`. **G-l stays open** on driver identity coverage (8 identities, one Jolpica driver mapping), `antonelli` / `driver_number 12`, those two OpenF1 constructor values and the unrecorded OpenF1 `circuit_key`. |
+| G-l | **The curated mapping *dataset* is incomplete.** G-e closed the *mechanism*; this is the separate, still-open question of *coverage*. Only identifiers already recorded in §8 are curated: `Cadillac` and `Racing Bulls` have no canonical GridView constructor identity, `antonelli` / `driver_number 12` has no canonical driver identity, and no OpenF1 `circuit_key` value is recorded anywhere. Each gap is an explicit acknowledgement in `provider-evidence.development.json` and blocks the affected resource. Closing it needs curated GridView identities and more recorded provider evidence, not more mapping code. **Event-identity sub-gap closed on 2026-09-19** (§8.8): the curated event registry holds 23 curator-approved `eventSlug` identities, and all 23 Jolpica event locators observed for 2026 have a reviewed mapping and an evidence-corpus entry. That coverage is a point-in-time observation; a later calendar change fails closed until another reviewed update. **Circuit sub-gap closed on 2026-09-20** (§8.8.1): five mappings were added on 2026-09-19 for the observed `circuitId`s whose canonical GridView circuit already existed, and on 2026-09-20 a curator approved a canonical identity for each of the remaining 17. Curated circuit coverage of the observed 2026 calendar is **23 of 23**, no observed 2026 `circuitId` is acknowledged as unmapped, and **circuit coverage no longer blocks a calendar adapter** - though **no Jolpica adapter exists**, so nothing consumes any of this. **Superseded 2026-09-21** (v1.6, Implementation Plan §14.0.16): a **dormant, fixture-tested Jolpica `season-calendar` port** now consumes the curated event and circuit mappings **when exercised directly by tests**, while remaining outside the runtime composition and the Worker entry point's import closure, unselectable through `PROVIDER_MODE` and invoked by no production coordinator or event-aware scheduler, so **no deployed or application path consumes any of this**. The **complete Jolpica adapter stays unimplemented**. **G-l itself stays open**: `Cadillac`, `Racing Bulls`, `antonelli` / `driver_number 12` are still acknowledged as unmapped for want of a canonical GridView identity, and no OpenF1 `circuit_key` value is recorded anywhere. The season-2026 dataset holds 53 exact mappings, 57 approved evidence identities and four acknowledgements. **2026-09-23 (v1.8):** [ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md) makes every `/drivers/` and `/constructors/` row part of the required coverage, including identities that never race, so the unrecorded 29 of 31 driver and 9 of 11 constructor identifiers are now explicitly in G-l's scope. It changes no mapping or acknowledgement. **2026-09-23 (v1.9):** the constructor sub-gap is closed for 2026 (§8.9). All 11 observed Jolpica `constructorId`s are curated and mapped, the registry holds 11 constructors, and the dataset holds 62 exact mappings, 66 approved evidence identities and four acknowledgements. `Cadillac` and `Racing Bulls` now have canonical identities but stay acknowledged as unmapped for OpenF1 with the reason `no-approved-provider-mapping`. **G-l stays open** on driver identity coverage (8 identities, one Jolpica driver mapping), `antonelli` / `driver_number 12`, those two OpenF1 constructor values and the unrecorded OpenF1 `circuit_key`. **2026-09-23 (v1.10):** the driver sub-gap is closed for 2026 (§8.10). All 32 observed Jolpica `driverId`s are curated and mapped, the registry holds 33 drivers (`jack-doohan` has no Jolpica mapping), and the dataset holds 93 exact mappings, 96 approved evidence identities and three acknowledgements. `antonelli` is mapped to `andrea-kimi-antonelli`; OpenF1 `driver_number` `12` stays acknowledged as unmapped with the reason `no-approved-provider-mapping`. **G-l stays open** on the three OpenF1 values `12`, `Cadillac` and `Racing Bulls` and the unrecorded OpenF1 `circuit_key`. |
 | G-m | ~~**No curated event identity mechanism exists.**~~ **Closed as a mechanism on 2026-09-19** ([ADR 0022 amendment](../adr/0022-curated-provider-identifier-mappings.md#amendment-2026-09-16-grand-prix-event-identity) A5), decided 2026-09-16. A curated event registry (`content/registries/events.development.json`) owns an immutable `eventSlug`; the mapping entity union is now `driver`, `constructor`, `circuit`, `event`; a Jolpica event resolves only through the complete season-scoped locator - the file's season plus `round`, exact `raceName`, exact `circuitId`, carried in one closed composite value keyed as `eventLocator` - with no subset, fuzzy or normalized matching, an injective key encoding, and fail-closed resolution on an absent, ambiguous, dangling or malformed record. Schemas and `validate:content` cover the registry, the mapping and the evidence corpus. **The mechanism is dormant and unbundled**: no runtime module outside `src/providers/mappings/` imports it and the Worker entry point cannot reach it. **The dataset half is tracked as G-l**, where the 2026 event-identity sub-gap was closed on 2026-09-19 (§8.8): 23 curated identities and 23 mapped locators. **No Jolpica adapter exists**, so every Jolpica resource that produces a `GrandPrix` or `Session` stays blocked. The mechanism work itself contacted no provider and made no request. **Superseded 2026-09-21** (v1.6, Implementation Plan §14.0.16): a **dormant, fixture-tested Jolpica `season-calendar` port** now produces `GrandPrix` and `Session` values through this registry under test, so the **season-calendar resource is no longer blocked**; it stays outside the runtime composition and the Worker entry point's import closure, unselectable through `PROVIDER_MODE` and invoked by no production coordinator or event-aware scheduler. **Every other Jolpica resource remains blocked**, the complete adapter is unimplemented, ADR 0022 amendment A7 is still open, and this change likewise contacted no provider and made no request. |
 | G-k | ~~**`QuotaState` has the wrong windows** (§8.6).~~ **Closed in Phase 9B-1 (2026-08-23).** `QuotaState` is per source and holds an extensible window collection: OpenF1 per-second and per-minute, Jolpica per-second and per-hour, no daily bucket for either, mock limits marked test-only. The §16.1 thresholds are implemented against it. The **rate limiter** it feeds is G7, which was **closed separately by Phase 9B-2** (Appendix D.3). |
 | G-j | ~~**The post-reconciliation cadence and the settling predicate are unspecified.**~~ **Specified** in §10.4.1 under [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §3-§4: the five invariants are binding and the state machine, cadence bounds and slow sweep are recorded against them. The I3/I4 tension is resolved by a bounded settling predicate plus a fixed-budget weekly sweep. Volume figures are bounded (§11.3.1). The remaining work is **implementation**, including the operational events in §10.4.1 and §10.9.1. |

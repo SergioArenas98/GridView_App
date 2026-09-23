@@ -301,8 +301,13 @@ describe('provider identifiers stay out of every public surface', () => {
     // vacuously, so pin both the size and the values that matter most.
     expect(leakMarkers.length).toBeGreaterThanOrEqual(5);
     for (const expected of [
-      'antonelli',
       'albert_park',
+      // Jolpica driverIds whose curated identities (`max-verstappen`,
+      // `paul-aron`) are hyphenated, so the exact underscore form never occurs
+      // in public content and stays a distinguishable leak marker after the
+      // 2026 driver dataset.
+      'max_verstappen',
+      'paul_aron',
       // Jolpica constructorIds whose curated identities (`aston-martin`,
       // `red-bull`, `sauber`) never contain the exact provider string, so they
       // stay distinguishable leak markers after the 2026 constructor dataset.
@@ -402,6 +407,39 @@ describe('provider identifiers stay out of every public surface', () => {
         expect(publicFacingCuratedContent()).toContain(providerValue);
       },
     );
+
+    /**
+     * The 2026 driver dataset did the same to Jolpica `antonelli`: the curated
+     * canonical driver ID is `andrea-kimi-antonelli`, which contains the exact
+     * provider string, so a public surface carrying that ID legitimately
+     * carries `antonelli` too. The exact `antonelli` -> `andrea-kimi-antonelli`
+     * association is pinned in driver-dataset-2026.test.ts instead.
+     */
+    it('excludes antonelli because it is inside canonical driver andrea-kimi-antonelli', () => {
+      const drivers = (
+        JSON.parse(
+          readFileSync(
+            join(repoRoot, 'content', 'registries', 'drivers.mock.json'),
+            'utf8',
+          ),
+        ) as { drivers: { id: string }[] }
+      ).drivers;
+
+      expect(curatedProviderValues()).toContain('antonelli');
+      expect(leakMarkers).not.toContain('antonelli');
+      expect(drivers.map((entry) => entry.id)).toContain(
+        'andrea-kimi-antonelli',
+      );
+      expect(publicFacingCuratedContent()).toContain('antonelli');
+    });
+
+    it('leaves the two-character OpenF1 `12` to the exact dataset pin', () => {
+      // Like `rb` below: a two-character value is skipped by the general rule
+      // rather than exempted by name. Its protection is the exact assertion in
+      // driver-dataset-2026.test.ts that `12` stays acknowledged and unmapped.
+      expect(curatedProviderValues()).toContain('12');
+      expect(leakMarkers).not.toContain('12');
+    });
 
     it('leaves the two-character `rb` to the exact dataset pin', () => {
       // `rb` is a substring of countless public strings, so the general rule

@@ -190,11 +190,14 @@ const SAUBER_BASELINE = {
     'Stable constructor identity used to demonstrate cross-season rebranding in fixtures.',
 } as const;
 
-/** The four acknowledgements, each with its closed reason. */
+/**
+ * The three acknowledgements left once the 2026-09-23 driver dataset mapped
+ * Jolpica `antonelli` and corrected the OpenF1 `12` reason, each with its
+ * closed reason.
+ */
 const ACKNOWLEDGEMENTS: readonly (readonly [string, string, string, string])[] =
   [
-    ['jolpica', 'driver', 'antonelli', 'no-canonical-gridview-identity'],
-    ['openf1', 'driver', '12', 'no-canonical-gridview-identity'],
+    ['openf1', 'driver', '12', 'no-approved-provider-mapping'],
     ['openf1', 'constructor', 'Cadillac', 'no-approved-provider-mapping'],
     ['openf1', 'constructor', 'Racing Bulls', 'no-approved-provider-mapping'],
   ];
@@ -549,8 +552,8 @@ describe('the 2026 constructor evidence corpus', () => {
     ).toEqual([]);
   });
 
-  it('keeps the four acknowledgements, with accurate OpenF1 reasons', () => {
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(4);
+  it('keeps the three acknowledgements, with accurate OpenF1 reasons', () => {
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
     expect(
       evidenceCorpus.acknowledgedUnmapped
         .map((record) => [
@@ -634,13 +637,16 @@ describe('the constructors reach the normalized contract', () => {
 });
 
 describe('nothing outside the constructor dataset moved', () => {
-  it('pins the final dataset totals', () => {
-    expect(mappingDocument.mappings).toHaveLength(62);
-    expect(evidenceCorpus.identities).toHaveLength(66);
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(4);
+  it('pins the dataset totals, including the later driver dataset', () => {
+    // 62 / 66 / 4 when this dataset merged; the 2026-09-23 driver dataset
+    // added 31 driver mappings and 30 driver evidence identities and removed
+    // the Jolpica `antonelli` acknowledgement.
+    expect(mappingDocument.mappings).toHaveLength(93);
+    expect(evidenceCorpus.identities).toHaveLength(96);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
   });
 
-  it('leaves drivers at 8 identities and one Jolpica mapping', () => {
+  it('leaves drivers to the driver dataset: 33 identities, 32 Jolpica mappings', () => {
     const drivers = (
       JSON.parse(
         readRepoFile('content', 'registries', 'drivers.mock.json'),
@@ -652,11 +658,14 @@ describe('nothing outside the constructor dataset moved', () => {
       (record) => record.source === 'jolpica' && record.entity === 'driver',
     );
 
-    expect(drivers).toHaveLength(8);
-    expect(canonical.driver.size).toBe(8);
-    expect(
-      jolpicaDrivers.map((record) => [record.providerValue, record.gridviewId]),
-    ).toEqual([['norris', 'lando-norris']]);
+    // Row-for-row pinning lives in driver-dataset-2026.test.ts.
+    expect(drivers).toHaveLength(33);
+    expect(canonical.driver.size).toBe(33);
+    expect(jolpicaDrivers).toHaveLength(32);
+    expect(jolpicaDrivers[0]).toMatchObject({
+      providerValue: 'norris',
+      gridviewId: 'lando-norris',
+    });
   });
 
   it('leaves events and circuits fully mapped at 23 / 23', () => {
@@ -678,7 +687,11 @@ describe('the repository-owned evidence record (Provider Evaluation §8.9)', () 
     'GridView_Provider_Evaluation.md',
   );
   const start = evaluation.indexOf('### 8.9 ');
-  const section = evaluation.slice(start, evaluation.indexOf('\n---\n', start));
+  // §8.10 (drivers) follows §8.9 directly, so the section ends at its heading.
+  const section = evaluation.slice(
+    start,
+    evaluation.indexOf('\n### 8.10 ', start),
+  );
   const flat = section.replace(/\s+/g, ' ');
 
   it('records the observation, its licence and its coverage', () => {
@@ -753,7 +766,7 @@ describe('the Sauber/Audi naming decision is documented as curator-approved', ()
   );
   const start = evaluation.indexOf('### 8.9 ');
   const section89 = flatten(
-    evaluation.slice(start, evaluation.indexOf('\n---\n', start)),
+    evaluation.slice(start, evaluation.indexOf('\n### 8.10 ', start)),
   );
 
   it('states the three naming layers in the Domain Model', () => {

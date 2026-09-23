@@ -699,6 +699,18 @@ The seven choices the decision pack left open are settled:
   > incomplete**, no drivers, constructors or participants port exists, and
   > every other item in this list stays open.
 
+  > **Note 2026-09-23 (drivers).** A further reviewed change, the 2026 driver
+  > dataset (Provider Evaluation §8.10, Implementation Plan §14.0.20),
+  > recorded the season driver list captured that day and curated and mapped
+  > all 32 Jolpica driver identifiers, including the nine name-only rows, as
+  > identity-only registry rows. `antonelli` maps to `andrea-kimi-antonelli`
+  > and no longer blocks. OpenF1 `12` stays acknowledged and unmapped, now with
+  > the reason `no-approved-provider-mapping`. Jolpica participant identity
+  > coverage for 2026 is therefore complete, and both registries keep
+  > `status: mock`. **No drivers, constructors or participants port exists**,
+  > no span is derived, the per-round race results are still not preserved,
+  > and every other item in this list stays open.
+
 - **Ports.** The Jolpica drivers and constructors identity normalization and
   the race-results port are not implemented.
 - **Validation and fixes.** Assembly derivation and the new integrity

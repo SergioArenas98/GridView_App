@@ -10,7 +10,6 @@
       "givenName": "Max",
       "familyName": "Verstappen",
       "shortCode": "VER",
-      "permanentNumber": 1,
       "nationality": "Dutch",
       "countryCode": "NL",
       "dateOfBirth": "1997-09-30",
@@ -49,7 +48,6 @@
       "givenName": "Lando",
       "familyName": "Norris",
       "shortCode": "NOR",
-      "permanentNumber": 4,
       "nationality": "British",
       "countryCode": "GB",
       "dateOfBirth": "1999-11-13",
@@ -107,6 +105,106 @@
       "dateOfBirth": "2003-05-27",
       "placeOfBirth": "Pilar",
       "biography": null
+    },
+    {
+      "id": "alexander-albon",
+      "fullName": "Alexander Albon"
+    },
+    {
+      "id": "fernando-alonso",
+      "fullName": "Fernando Alonso"
+    },
+    {
+      "id": "andrea-kimi-antonelli",
+      "fullName": "Andrea Kimi Antonelli"
+    },
+    {
+      "id": "paul-aron",
+      "fullName": "Paul Aron"
+    },
+    {
+      "id": "oliver-bearman",
+      "fullName": "Oliver Bearman"
+    },
+    {
+      "id": "dino-beganovic",
+      "fullName": "Dino Beganovic"
+    },
+    {
+      "id": "gabriel-bortoleto",
+      "fullName": "Gabriel Bortoleto"
+    },
+    {
+      "id": "valtteri-bottas",
+      "fullName": "Valtteri Bottas"
+    },
+    {
+      "id": "luke-browning",
+      "fullName": "Luke Browning"
+    },
+    {
+      "id": "jak-crawford",
+      "fullName": "Jak Crawford"
+    },
+    {
+      "id": "leonardo-fornaroli",
+      "fullName": "Leonardo Fornaroli"
+    },
+    {
+      "id": "pierre-gasly",
+      "fullName": "Pierre Gasly"
+    },
+    {
+      "id": "isack-hadjar",
+      "fullName": "Isack Hadjar"
+    },
+    {
+      "id": "colton-herta",
+      "fullName": "Colton Herta"
+    },
+    {
+      "id": "ryo-hirakawa",
+      "fullName": "Ryo Hirakawa"
+    },
+    {
+      "id": "nico-hulkenberg",
+      "fullName": "Nico Hülkenberg"
+    },
+    {
+      "id": "ayumu-iwasa",
+      "fullName": "Ayumu Iwasa"
+    },
+    {
+      "id": "liam-lawson",
+      "fullName": "Liam Lawson"
+    },
+    {
+      "id": "arvid-lindblad",
+      "fullName": "Arvid Lindblad"
+    },
+    {
+      "id": "esteban-ocon",
+      "fullName": "Esteban Ocon"
+    },
+    {
+      "id": "sergio-perez",
+      "fullName": "Sergio Pérez"
+    },
+    {
+      "id": "carlos-sainz",
+      "fullName": "Carlos Sainz"
+    },
+    {
+      "id": "lance-stroll",
+      "fullName": "Lance Stroll"
+    },
+    {
+      "id": "yuki-tsunoda",
+      "fullName": "Yuki Tsunoda"
+    },
+    {
+      "id": "frederik-vesti",
+      "fullName": "Frederik Vesti"
     }
   ]
 }
