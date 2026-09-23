@@ -177,12 +177,13 @@ keeps synchronization failing closed instead of silently dropping a row.
 Reasons are a closed set, so an acknowledgement cannot be turned into a
 free-text coverage excuse:
 
-| `reason`                           | Meaning                                                                                          |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `no-canonical-gridview-identity`   | The entity has no curated GridView identity yet. Fix by curating the identity first (§5 step 1). |
-| `identity-pending-curation-review` | The GridView identity is disputed or under review.                                               |
+| `reason`                           | Meaning                                                                                            |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `no-canonical-gridview-identity`   | The entity has no curated GridView identity yet. Fix by curating the identity first (§5 step 1).   |
+| `identity-pending-curation-review` | The GridView identity is disputed or under review.                                                 |
+| `no-approved-provider-mapping`     | The canonical GridView identity exists, but no mapping from this provider value has been approved. |
 
-Both reasons describe **one exact observed provider identity**, and every
+Every reason describes **one exact observed provider identity**, and every
 acknowledgement must correspond to an entry in `identities`. A _field-level_
 gap - a provider field for which the repository records no approved value at
 all, such as OpenF1 `circuit_key` - cannot be written here without fabricating
@@ -195,6 +196,14 @@ Four identities sit in this state today: `Cadillac` and `Racing Bulls`
 disagreements recorded in Provider Evaluation §8.5. **No circuit is
 acknowledged**: all 23 observed season-2026 `circuitId`s are curated and mapped
 (§8.8.1).
+
+**Update 2026-09-23.** The 2026 constructor dataset (Provider Evaluation §8.9)
+curated the canonical constructors `cadillac` and `racing-bulls`, so the OpenF1
+`Cadillac` and `Racing Bulls` acknowledgements now use
+`no-approved-provider-mapping`. They stay unmapped until a separate, reviewed
+OpenF1 mapping decision. `antonelli` and `driver_number` `12` keep
+`no-canonical-gridview-identity`. **No Jolpica constructor is acknowledged**:
+all 11 observed season-2026 `constructorId`s are curated and mapped.
 
 ---
 

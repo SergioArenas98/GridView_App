@@ -8,6 +8,8 @@
   (decided 2026-09-16; the **mechanism** was implemented 2026-09-19 and the
   curated **2026 event dataset** was added the same day; the adapter remains
   absent)
+- Noted: 2026-09-23 — [current constructor name versus stable ID](#d2---gridview-owns-stable-identity)
+  (the curator-approved `sauber` → `Audi` naming decision; the ID is unchanged)
 - Closes: gap **G8** (Provider Evaluation §14.4 **G-e**, Backend Scheme
   §8.1) — **the mechanism only.** The mapping **dataset** is deliberately
   limited to identifiers already recorded in Provider Evaluation §8; live
@@ -68,6 +70,22 @@ provider ID is ever converted into a new GridView ID.
 The precedence recorded in Backend Scheme §9 is preserved: driver, team and
 circuit identity come from the curated GridView registry, with provider mapping
 as the secondary source.
+
+> **Note 2026-09-23 - current name versus stable ID.** "Never change" applies
+> to the ID. A constructor's current canonical public name and short name
+> (`Constructor.name`, `Constructor.shortName`) may change, but only through
+> an explicitly curator-approved, repository-recorded decision that keeps the
+> ID and leaves each historical season name in its season entry
+> ([Domain Model §6.3](../technical/GridView_Domain_Model.md#63-constructor),
+> naming layers). A provider value never renames an identity: a new provider
+> name or ID is evidence for review, and a mapping still only points at an
+> existing identity. The first such decision is the 2026 constructor dataset
+> (Provider Evaluation §8.9): Jolpica's observed `constructorId` `audi`, with
+> the observed name "Audi", maps to the existing, unchanged ID `sauber`,
+> whose current canonical name and short name the curator set to `Audi`. That
+> mapping is a curator-authored lineage decision; Jolpica supplied neither the
+> `sauber` ID nor the lineage ruling. No `audi` identity exists. The exact 2026
+> entrant name is deferred to the 2026 `ConstructorSeasonEntry.fullName`.
 
 ### D3 - Every mapping is season-qualified, Jolpica included
 
@@ -230,6 +248,12 @@ constructors against the eleven on the recorded grid), so they are left
 unmapped with a written reason rather than having an ID minted for them. No
 OpenF1 `circuit_key` value is recorded anywhere, so no OpenF1 circuit mapping
 could be seeded.
+
+> **Note 2026-09-23.** The six-constructor figure describes the registry when
+> this ADR was accepted. The 2026 constructor dataset (Provider Evaluation §8.9)
+> curated `cadillac` and `racing-bulls` and brought the registry to 11. The
+> OpenF1 `Cadillac` and `Racing Bulls` values stay unmapped, now with the reason
+> `no-approved-provider-mapping`.
 
 This does **not** establish live-provider coverage.
 

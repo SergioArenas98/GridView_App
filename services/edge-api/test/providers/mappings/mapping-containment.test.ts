@@ -303,8 +303,12 @@ describe('provider identifiers stay out of every public surface', () => {
     for (const expected of [
       'antonelli',
       'albert_park',
-      'Racing Bulls',
-      'Cadillac',
+      // Jolpica constructorIds whose curated identities (`aston-martin`,
+      // `red-bull`, `sauber`) never contain the exact provider string, so they
+      // stay distinguishable leak markers after the 2026 constructor dataset.
+      'aston_martin',
+      'red_bull',
+      'audi',
       // Curated event locator components that match no GridView name, so
       // they must stay distinguishable leak markers.
       'Bahrain Grand Prix in Malaysia',
@@ -367,6 +371,45 @@ describe('provider identifiers stay out of every public surface', () => {
         expect(canonicalCircuitIds).not.toContain(providerValue);
         expect(leakMarkers).toContain(providerValue);
       }
+    });
+
+    /**
+     * The 2026 constructor dataset did the same to two OpenF1 `team_name`
+     * values. `Cadillac` and `Racing Bulls` are still acknowledged as unmapped
+     * for OpenF1, but they are now the curator-authored display names of the
+     * canonical constructors `cadillac` and `racing-bulls`, so a public surface
+     * may legitimately carry them and they are no longer provider-only.
+     */
+    it.each([
+      ['Cadillac', 'cadillac'],
+      ['Racing Bulls', 'racing-bulls'],
+    ])(
+      'excludes %s because it is now the display name of canonical constructor %s',
+      (providerValue, canonicalId) => {
+        const constructors = (
+          JSON.parse(
+            readFileSync(
+              join(repoRoot, 'content', 'registries', 'constructors.mock.json'),
+              'utf8',
+            ),
+          ) as { constructors: { id: string; name: string }[] }
+        ).constructors;
+
+        expect(leakMarkers).not.toContain(providerValue);
+        expect(
+          constructors.find((entry) => entry.id === canonicalId)?.name,
+        ).toBe(providerValue);
+        expect(publicFacingCuratedContent()).toContain(providerValue);
+      },
+    );
+
+    it('leaves the two-character `rb` to the exact dataset pin', () => {
+      // `rb` is a substring of countless public strings, so the general rule
+      // skips every value of two characters or fewer rather than exempting it
+      // by name. Its protection is the exact `rb` -> `racing-bulls` assertion
+      // in constructor-dataset-2026.test.ts, never substring containment.
+      expect(curatedProviderValues()).toContain('rb');
+      expect(leakMarkers).not.toContain('rb');
     });
 
     it('derives the exclusion from content, never from a hard-coded allowance', () => {

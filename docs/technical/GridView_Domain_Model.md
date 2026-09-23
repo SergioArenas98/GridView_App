@@ -12,6 +12,9 @@
   - `GridView_Implementation_Plan.md` (section 7 - Phase 2)
   - `../api/gridview-api-v1.yaml` (OpenAPI source of truth)
 - Document date: 2026-07-18
+- Amended: 2026-09-23 - constructor naming layers (§1, §6.3, §6.8): a
+  stable `Constructor.id`, a current canonical public name that changes only
+  by explicit curator decision, and season-scoped entrant names
 
 ---
 
@@ -35,6 +38,13 @@ This document establishes:
 
 It intentionally does **not** define provider mappings, curated-content JSON
 Schemas or fixtures. Those are delivered in Batch 2B.
+
+> **Amended 2026-09-23.** A constructor's name has three layers, and only the
+> first is identity: the immutable `Constructor.id`; the current canonical
+> public name and short name of that stable lineage (`Constructor.name`,
+> `Constructor.shortName`), which change only through an explicit
+> curator-reviewed decision; and the exact entrant name of each season
+> (`ConstructorSeasonEntry.fullName`). See §6.3 and §6.8.
 
 ---
 
@@ -372,13 +382,54 @@ power unit and line-up** live in `ConstructorSeasonEntry`.
 | Field | Type | R/N | Meaning |
 |---|---|---|---|
 | `id` | string (slug) | R | Stable constructor slug, e.g. `red-bull`. |
-| `name` | string | R | Canonical base name, e.g. "Red Bull". Season entrant names differ. |
-| `shortName` | string | N | Short display name. |
+| `name` | string | R | Current canonical public name of the stable lineage, e.g. "Red Bull". Changes only by explicit curator decision (below). Season entrant names differ. |
+| `shortName` | string | N | Current short public label of the stable lineage. Changes only with `name`, under the same rule. |
 | `nationality` | string | N | Racing licence nationality display value. |
 | `countryCode` | string | N | ISO 3166-1 alpha-2, uppercase. |
 | `colorPrimary` | string | N | Base brand colour, `#RRGGBB`. Season livery overrides in the season entry. |
 | `biography` | string | N | Curated team profile. |
 | `media` | `MediaAsset[]` | N | Logos and related media. |
+
+**Naming layers (amended 2026-09-23).** *This replaces the original reading of
+`name` as a fixed "canonical base name" that no decision could change.*
+
+- `Constructor.id` is **immutable**. It identifies the continuing constructor
+  lineage and keeps references, history and relationships intact across any
+  change of name.
+- `Constructor.name` is the **current canonical public name** of that stable
+  lineage, and `Constructor.shortName` its **current short public label**.
+  Both are mutable, but **only through an explicit curator-reviewed
+  decision**. A provider value never renames an identity automatically: a new
+  provider name or provider ID is evidence for review, never an update.
+- `ConstructorSeasonEntry.fullName` remains the **exact entrant name for a
+  particular season** (§6.8). Season livery, sponsor name, power unit and
+  line-up stay outside `Constructor`.
+
+Two kinds of change are distinguished:
+
+1. A **title sponsor, livery or ordinary commercial naming change** affects
+   only `ConstructorSeasonEntry`. `Constructor.name` and `shortName` do not
+   move.
+2. An explicitly curator-approved **substantive transformation of the
+   constructor's public identity** may update `Constructor.name` and
+   `Constructor.shortName` while `Constructor.id` stays unchanged. It
+   requires all of: explicit curator approval; a repository-owned evidence or
+   decision record; an unchanged stable ID; preservation of every historical
+   season name in its own season entry; and a review of current and
+   historical presentation, so the new current name is not projected
+   backwards onto seasons that used another name.
+
+Historical and season-scoped views use their season entry's contemporary name
+and never infer it from the current canonical name.
+
+The first application of rule 2 is **Audi (2026-09-23)**: the stable lineage
+`sauber` now carries the current canonical name and short name `Audi` (Provider
+Evaluation §8.9, [ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)
+D2). It is a substantive curated identity transition within the `sauber`
+lineage, not an ordinary provider alias and not an unreviewed sponsor rename.
+No `audi` identity exists. The exact 2026 entrant name belongs to the 2026
+`ConstructorSeasonEntry.fullName`, and earlier seasons keep their contemporary
+Sauber, Alfa Romeo or Stake names in their own season entries.
 
 ### 6.4 Circuit
 
@@ -548,7 +599,16 @@ and line-up.
 **Constructor rebranding** is modelled by keeping the stable `Constructor.id`
 constant and varying `ConstructorSeasonEntry.fullName`/colours per season. A team
 that competes as "Alfa Romeo", then "Stake", then "Audi" keeps one stable
-constructor slug; only its season entries change.
+constructor slug, and each season entry keeps that season's contemporary name.
+
+> **Amended 2026-09-23.** The original text ended "only its season entries
+> change". That no longer holds in every case: an ordinary sponsor, livery or
+> commercial rename still changes only the season entries, but an explicitly
+> curator-approved substantive transformation may also update the current
+> `Constructor.name` and `Constructor.shortName`, never the ID (§6.3, naming
+> layers). Audi is the first such transition. Either way, a season-scoped or
+> historical view names the team by its season entry's `fullName`, not by the
+> current `Constructor.name`.
 
 ### 6.9 DriverStanding
 

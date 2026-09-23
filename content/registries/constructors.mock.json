@@ -51,12 +51,32 @@
     },
     {
       "id": "sauber",
-      "name": "Sauber",
-      "shortName": "Sauber",
+      "name": "Audi",
+      "shortName": "Audi",
       "nationality": "Swiss",
       "countryCode": "CH",
       "colorPrimary": "#52e252",
       "biography": "Stable constructor identity used to demonstrate cross-season rebranding in fixtures."
+    },
+    {
+      "id": "aston-martin",
+      "name": "Aston Martin"
+    },
+    {
+      "id": "cadillac",
+      "name": "Cadillac"
+    },
+    {
+      "id": "haas",
+      "name": "Haas"
+    },
+    {
+      "id": "racing-bulls",
+      "name": "Racing Bulls"
+    },
+    {
+      "id": "williams",
+      "name": "Williams"
     }
   ]
 }

@@ -77,12 +77,17 @@ describe('an acknowledgement reason is a closed set', () => {
    * `identities`, so that reason could only ever be attached to a record that
    * contradicts it, and validation accepted the contradiction. Field-level
    * gaps such as the uncurated OpenF1 `circuit_key` are tracked as G-l.
+   *
+   * `no-approved-provider-mapping` (added 2026-09-23) is also an exact-identity
+   * reason: the canonical GridView identity exists, but no mapping from this
+   * one observed provider value to it has been approved.
    */
   it('offers only reasons its shape can truthfully express', () => {
     const reasons = schema.$defs.acknowledgement.properties.reason.enum ?? [];
     expect(reasons).toEqual([
       'no-canonical-gridview-identity',
       'identity-pending-curation-review',
+      'no-approved-provider-mapping',
     ]);
     expect(reasons).not.toContain('provider-value-not-yet-evidenced');
   });
