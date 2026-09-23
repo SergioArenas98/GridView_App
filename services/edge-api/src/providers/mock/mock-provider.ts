@@ -53,7 +53,20 @@ export interface MockProviderOptions {
 }
 
 type RegistryDriver = Omit<Driver, 'media'>;
-type RegistryConstructor = Omit<Constructor, 'media'>;
+
+/**
+ * A curated constructor registry row.
+ *
+ * Only `id` and `name` are curated for every constructor. The descriptive
+ * facts are optional, because a curated identity may exist for a team whose
+ * short name, nationality, country, colour or biography GridView does not own;
+ * the 2026 constructors curated for provider mapping include identity-only rows
+ * of exactly that kind. The normalized contract still requires each of those
+ * keys to be *present* as an explicit `null`, so `withConstructorMedia`
+ * supplies them on the way out.
+ */
+type RegistryConstructor = Pick<Constructor, 'id' | 'name'> &
+  Partial<Omit<Constructor, 'id' | 'name' | 'media'>>;
 
 /**
  * A curated circuit registry row.
@@ -463,9 +476,21 @@ function withDriverMedia(drivers: RegistryDriver[]): Driver[] {
 function withConstructorMedia(
   constructors: RegistryConstructor[],
 ): Constructor[] {
-  return constructors.map((constructor) => ({
-    ...constructor,
-    media: mediaFor('constructor', constructor.id),
+  // An absent descriptive fact becomes an explicit `null`, exactly as for
+  // circuits below. A row that carries the fact - including an authored
+  // `null` - keeps it, because the row is spread over these defaults. `id` and
+  // `name` lead, so a fully described row keeps its property order and its
+  // normalized output is unchanged.
+  return constructors.map(({ id, name, ...facts }) => ({
+    id,
+    name,
+    shortName: null,
+    nationality: null,
+    countryCode: null,
+    colorPrimary: null,
+    biography: null,
+    ...facts,
+    media: mediaFor('constructor', id),
   }));
 }
 
