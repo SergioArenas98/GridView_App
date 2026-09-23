@@ -151,6 +151,16 @@ If no canonical GridView identity exists, this is **not** a mapping task.
 2. Add the season entry, if the entity participates in that season.
 3. Only then add the provider mapping.
 
+> **Season entries under ADR 0026 (2026-09-23).** For the Jolpica path, step 2
+> no longer means curating a `DriverSeasonEntry` by hand. Under
+> [ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md),
+> season assembly derives driver participation spans from selected race
+> classifications, and a constructor's season entry is emitted for each mapped
+> constructor the season endpoint lists. Curation for a new participant is
+> therefore the identity (step 1) and the mapping (step 3). This is decided
+> but not implemented. The mock `driver-entries` content is development data
+> only.
+
 Until step 1 exists, record the identity in the season's
 `provider-evidence.development.json` under `acknowledgedUnmapped`, with a
 closed-enum `reason` and a written `detail`. That keeps the gap visible and
@@ -330,6 +340,16 @@ expected, not exceptional.
 The fail-closed behaviour is the feature: an unmapped mid-season entrant stops
 the resource and raises the signal, rather than appearing under a guessed
 identifier that later has to be migrated.
+
+**Every season-list identity needs curation, not only racers (ADR 0026,
+2026-09-23).** `/{season}/drivers/?limit=100` and
+`/{season}/constructors/?limit=100` define the complete identity universe, so
+every returned row must be mapped before the participants resource can
+publish, including a driver who never appears in a race classification. Such a
+driver remains an identity without a participation span. It is never dropped,
+and never listed in the season Drivers collection. Whether any of the 31
+recorded 2026 driver identities is such a case is unverified, because the
+response was not preserved (Provider Evaluation §8.4).
 
 ---
 

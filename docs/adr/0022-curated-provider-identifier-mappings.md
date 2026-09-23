@@ -813,6 +813,14 @@ shorten it.
 > Evaluation §8.7 M8) needed no new rule and remains open. Participants, event
 > schedules, classifications and standings remain unimplemented, as does A7.
 >
+> **Reference 2026-09-23.** The semantics of the participants resource are
+> decided in [ADR 0026](0026-season-participation-semantics-and-derivation.md),
+> which applies D10 unchanged to the season drivers and constructors
+> endpoints: every row resolves or the whole identity resource fails, and no
+> row is dropped. It approves no identity and changes no mapping. `antonelli`
+> and the three OpenF1 acknowledgements stay exactly as recorded above.
+> Participants remain unimplemented.
+>
 > **Provider requests, precisely.** The "none" statements in this ADR describe
 > its own work. Roughly 25 authorized research `GET`s were recorded on
 > 2026-08-19 (Provider Evaluation §8.1) and one authorized calendar-evidence

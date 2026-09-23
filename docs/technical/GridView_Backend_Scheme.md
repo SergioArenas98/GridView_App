@@ -758,6 +758,18 @@ Different fields may come from different sources.
 | Media | Licensed GridView media library | Local placeholder |
 | Update timestamps | GridView synchronization | Provider timestamp |
 
+> **Driver season team, clarified 2026-09-23** by
+> [ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md).
+> "Provider" means the provider's **selected race classifications**, and
+> nothing else. Season assembly derives every `DriverSeasonEntry` from the
+> exact classification rows it selected for publication, while the season
+> drivers and constructors endpoints supply identities only. Standings,
+> qualifying, sprint and announced line-ups never establish a team. The
+> "curated override" column names no existing mechanism: no season-entry
+> override schema exists (`overrides.schema.json` covers identity fields only),
+> and curated pre-season participation would need its own future decision. None
+> of this is implemented.
+
 ### 9.1 Precedence
 
 Recommended precedence:

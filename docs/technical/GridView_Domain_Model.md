@@ -76,7 +76,7 @@ The v1 domain has fourteen entities.
 | `Circuit` | Stable identity | `id` (circuit slug) |
 | `GrandPrix` | Season-scoped event | `id` (`{season}-{eventSlug}`, e.g. `2026-belgian-grand-prix`) |
 | `Session` | Event-scoped | `id` (`{grandPrixId}-{sessionType}`) |
-| `DriverSeasonEntry` | Season participation | `id` (`{season}-{driverId}`, + start round if split) |
+| `DriverSeasonEntry` | Season participation | `id` (`{season}-{driverId}` when `startRound` is null; `{season}-{driverId}-{startRound}` otherwise, ADR 0026) |
 | `ConstructorSeasonEntry` | Season participation | `id` (`{season}-{constructorId}`) |
 | `DriverStanding` | Season standing row | (`season`, `driverId`) |
 | `ConstructorStanding` | Season standing row | (`season`, `constructorId`) |
@@ -163,7 +163,7 @@ endpoint, never by the identifier.
 | Grand Prix (edition) | `{season}-{eventSlug}` | `2026-belgian-grand-prix` |
 | Session | `{grandPrixId}-{sessionType}` | `2026-belgian-grand-prix-race` |
 | Race result | `{grandPrixId}-{sessionType}-results` | `2026-belgian-grand-prix-race-results` |
-| Driver season entry | `{season}-{driverId}` (+ start round if split) | `2026-max-verstappen` |
+| Driver season entry | `{season}-{driverId}` when `startRound` is null; `{season}-{driverId}-{startRound}` when it is non-null | `2026-max-verstappen`, `2026-franco-colapinto-7` |
 | Constructor season entry | `{season}-{constructorId}` | `2026-red-bull` |
 | Media asset | `{entityId}-{category}-{version}` | `max-verstappen-portrait-v1` |
 
@@ -184,6 +184,23 @@ seat, so it is not a strict function of the payload and no equality rule could
 be stated for it. What *is* enforced for driver participation is span validity
 (`driver-entry-span`): no inverted span, and no two overlapping stints for one
 driver, matching the local write rule exactly.
+
+> **Amended 2026-09-23** by
+> [ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md#d7---driverseasonentry-identity).
+> The split-seat convention is now defined by each span's own accepted start
+> boundary, not by its position among the driver's spans. A **base** ID
+> (`{season}-{driverId}`) means `startRound` is null; a **suffixed** ID
+> (`{season}-{driverId}-{startRound}`) means `startRound` is non-null, with the
+> decimal accepted start round joined by the existing hyphen separator. Being
+> the driver's first span is not an identity condition, so a driver who joins
+> mid-season is suffixed even when that is their only span. The ID is
+> therefore a strict function of the entry's own `season`, `driverId` and
+> `startRound`, and it stays deterministic when a correction inserts an
+> earlier span: no existing later span is renamed. The exclusion above still
+> describes the code: no equality relation for the driver season entry exists
+> today, and a deterministic implementation of the rule is an ADR 0026 D12
+> publication prerequisite. The OpenAPI example `2026-franco-colapinto-7`
+> already follows this rule.
 
 A **Grand Prix edition ID embeds the season year** because an event edition is
 season-specific: the same `eventSlug` (`belgian-grand-prix`, `monaco-grand-prix`)
@@ -459,7 +476,7 @@ session set.
 
 ### 6.7 DriverSeasonEntry
 
-Identity: `id` (`{season}-{driverId}`, plus start round for a split seat). A
+Identity: `id` (`{season}-{driverId}`, plus `-{startRound}` when `startRound` is non-null). A
 driver's participation for a team over a span of a season.
 
 | Field | Type | R/N | Meaning |
@@ -471,14 +488,42 @@ driver's participation for a team over a span of a season.
 | `raceNumber` | integer | N | Season car number (may differ from `permanentNumber`). |
 | `role` | `DriverRole` | N | `race`, `reserve`, `test`. |
 | `shortCode` | string | N | Season TLA override. |
-| `startRound` | integer | N | First round of this participation (for mid-season joins). |
-| `endRound` | integer | N | Last round of this participation (for mid-season exits). |
+| `startRound` | integer | N | First round of this participation. `null`: already in effect at the start of the season's observed scope. |
+| `endRound` | integer | N | Last observed round of this participation. `null`: no exit observed yet (see below). |
 
 **Mid-season driver change** is modelled by two entries: the outgoing driver with
 `endRound = N`, and the incoming driver with `startRound = N + 1`, both pointing
 at the same `constructorId`. Driver identity never changes; only participation
 spans differ. A `startRound`/`endRound` of `null` means "from the season start"
 / "until the season end".
+
+> **Amended 2026-09-23** by
+> [ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md). The
+> sentence above is retained for the record. Its predictive reading of a null
+> `endRound` is replaced. The contract is unchanged, because both fields were
+> already nullable integers.
+>
+> - `startRound: null` means participation was already in effect at the
+>   beginning of the season's observed scope, i.e. the span begins at the
+>   season's first selected classified race round.
+> - `endRound: null` means **no later accepted race-classification observation
+>   has yet established the driver's exit** from that span. It does not assert
+>   that the driver will stay with the constructor until the season ends. Once
+>   a season is complete, a span that nothing closed keeps `null` as "no
+>   observed exit".
+>
+> For provider-derived participation, spans come only from selected,
+> classified race-result rows and are derived by season assembly. The role is
+> therefore `race`, and `raceNumber` and `shortCode` are `null` unless a
+> separate accepted source supplies them. A span whose `startRound` is null
+> has the ID `{season}-{driverId}`; a span whose `startRound` is non-null has
+> the ID `{season}-{driverId}-{startRound}`, whether it is the driver's first,
+> only or a later span, and whether it is a return or a constructor change.
+>
+> Under the meaning above, null/null does not prove participation for the
+> complete season.
+> The client's current rendering of null/null as "Full season" must be removed
+> before any ADR 0026-derived span reaches a client (ADR 0026 D12).
 
 ### 6.8 ConstructorSeasonEntry
 
@@ -498,7 +543,7 @@ and line-up.
 | `teamPrincipal` | string | N | Team principal. |
 | `base` | string | N | Team headquarters. |
 | `chassis` | string | N | Chassis designation. |
-| `driverLineup` | string[] (slugs) | N | Driver references for the season. |
+| `driverLineup` | string[] (slugs) | N | Driver references for the season. `null` in a provider-produced entry: the line-up is derived from `DriverSeasonEntry` spans (ADR 0026). |
 
 **Constructor rebranding** is modelled by keeping the stable `Constructor.id`
 constant and varying `ConstructorSeasonEntry.fullName`/colours per season. A team
@@ -762,7 +807,10 @@ confirmation:
   focuses on the race, but the contract already supports sprint results.
 - **M6 - Mid-season changes via participation spans (decided).** `startRound`/
   `endRound` on `DriverSeasonEntry` rather than mutating identity. See section
-  6.7.
+  6.7. **Extended 2026-09-23** by
+  [ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md):
+  it defines how spans are derived from race classifications, the no-prediction
+  meaning of a null `endRound`, and the split-span identity.
 - **M7 - Metadata schemas split (decided in review).** Separate `BaseMeta`,
   `SnapshotMeta` and `SeasonSnapshotMeta` instead of one globally-nullable meta.
   Snapshot responses carry required provenance. See section 7.

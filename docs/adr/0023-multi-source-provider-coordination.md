@@ -620,6 +620,20 @@ keeps publishing that same absence document exactly as before. The
 > lands, the code still behaves as this section describes. The text above is
 > retained for the record.
 
+> **Annotated 2026-09-23 (decision only, not implemented)** by
+> [ADR 0026](0026-season-participation-semantics-and-derivation.md#d11---ownership).
+> For coordinated season assembly, **participation spans are owned by
+> assembly**. The participants contribution supplies identities and
+> constructor season entries only. Assembly derives every `DriverSeasonEntry`
+> from the exact race classifications it selected for publication, so
+> published participation and published results come from the same rows.
+> A round left unaccounted before the latest classified round withholds the
+> candidate, and last-known-good stays live. Two new closed integrity
+> relations are also required: every selected classification row lies in
+> exactly one matching span, and every span is supported by a row. Like A7,
+> this is a derivation, not a repair, and until it is implemented the code
+> behaves as this section describes.
+
 **This is publication completeness, not scheduling.** The predicate reads one
 field of data the source supplied. No clock, event offset, session duration,
 cadence or due-job calculation is involved, and G5 remains untouched. A
