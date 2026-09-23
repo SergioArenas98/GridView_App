@@ -217,12 +217,24 @@ const EXPECTED_REGISTRY: readonly (readonly [string, string])[] = [
 /**
  * The non-circuit mappings, pinned so this change cannot disturb them. The
  * 23 event locators are pinned row for row in `event-dataset-2026.test.ts`;
- * here only their count and their untouched evidence are asserted.
+ * here only their count and their untouched evidence are asserted. The nine
+ * Jolpica constructor mappings added by the 2026-09-23 constructor dataset
+ * are pinned row for row, with their evidence, in
+ * `constructor-dataset-2026.test.ts`.
  */
 const OTHER_MAPPINGS: readonly (readonly [string, string, string, string])[] = [
   ['jolpica', 'driver', 'norris', 'lando-norris'],
   ['jolpica', 'constructor', 'mclaren', 'mclaren'],
   ['jolpica', 'constructor', 'mercedes', 'mercedes'],
+  ['jolpica', 'constructor', 'alpine', 'alpine'],
+  ['jolpica', 'constructor', 'aston_martin', 'aston-martin'],
+  ['jolpica', 'constructor', 'audi', 'sauber'],
+  ['jolpica', 'constructor', 'cadillac', 'cadillac'],
+  ['jolpica', 'constructor', 'ferrari', 'ferrari'],
+  ['jolpica', 'constructor', 'haas', 'haas'],
+  ['jolpica', 'constructor', 'rb', 'racing-bulls'],
+  ['jolpica', 'constructor', 'red_bull', 'red-bull'],
+  ['jolpica', 'constructor', 'williams', 'williams'],
   ['openf1', 'driver', '1', 'lando-norris'],
   ['openf1', 'constructor', 'Mercedes', 'mercedes'],
   ['openf1', 'constructor', 'Alpine', 'alpine'],
@@ -232,7 +244,10 @@ const OTHER_MAPPINGS: readonly (readonly [string, string, string, string])[] = [
 /**
  * The four acknowledgements that survive this dataset, each with its closed
  * reason. `hungaroring` is deliberately absent: it is mapped now, and an
- * acknowledgement is never allowed to coexist with a mapping.
+ * acknowledgement is never allowed to coexist with a mapping. The two OpenF1
+ * constructor reasons were corrected on 2026-09-23, when the canonical
+ * `cadillac` and `racing-bulls` identities were curated without any OpenF1
+ * mapping to them.
  */
 const NON_CIRCUIT_ACKNOWLEDGEMENTS: readonly (readonly [
   string,
@@ -242,8 +257,8 @@ const NON_CIRCUIT_ACKNOWLEDGEMENTS: readonly (readonly [
 ])[] = [
   ['jolpica', 'driver', 'antonelli', 'no-canonical-gridview-identity'],
   ['openf1', 'driver', '12', 'no-canonical-gridview-identity'],
-  ['openf1', 'constructor', 'Cadillac', 'no-canonical-gridview-identity'],
-  ['openf1', 'constructor', 'Racing Bulls', 'no-canonical-gridview-identity'],
+  ['openf1', 'constructor', 'Cadillac', 'no-approved-provider-mapping'],
+  ['openf1', 'constructor', 'Racing Bulls', 'no-approved-provider-mapping'],
 ];
 
 interface CuratedRecord {
@@ -498,7 +513,7 @@ describe('the 2026 circuit evidence corpus', () => {
     expect(evidenceCorpus.acknowledgedUnmapped.filter(isCircuit)).toEqual([]);
   });
 
-  it('keeps the four non-circuit acknowledgements exactly as they were', () => {
+  it('keeps exactly the four non-circuit acknowledgements', () => {
     expect(
       evidenceCorpus.acknowledgedUnmapped
         .map((record) => [
@@ -605,7 +620,7 @@ describe('nothing outside the circuit dataset moved', () => {
     expect(new Set(events.map((entry) => entry.id)).size).toBe(23);
   });
 
-  it('keeps every driver and constructor mapping exactly as it was', () => {
+  it('keeps every driver and constructor mapping at its curated target', () => {
     const others = mappingDocument.mappings
       .filter((record) => !isCircuit(record) && !isEvent(record))
       .map((record) => [
@@ -624,8 +639,8 @@ describe('nothing outside the circuit dataset moved', () => {
     expect(mappingDocument.mappings).toHaveLength(
       OTHER_MAPPINGS.length + ALL_ASSOCIATIONS.length + 23,
     );
-    expect(mappingDocument.mappings).toHaveLength(53);
-    expect(evidenceCorpus.identities).toHaveLength(57);
+    expect(mappingDocument.mappings).toHaveLength(62);
+    expect(evidenceCorpus.identities).toHaveLength(66);
     expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(4);
   });
 

@@ -688,6 +688,17 @@ The seven choices the decision pack left open are settled:
   `status: mock`.
 - **Acknowledgements.** `antonelli` still blocks. OpenF1 `12`, `Cadillac` and
   `Racing Bulls` are unchanged.
+
+  > **Note 2026-09-23.** A later reviewed change, the 2026 constructor
+  > dataset (Provider Evaluation §8.9, Implementation Plan §14.0.19),
+  > recorded the season constructor list captured that day and curated and
+  > mapped all 11 Jolpica constructor identifiers. `audi` continues `sauber`, and `rb` maps
+  > to `racing-bulls`. The OpenF1 `Cadillac` and `Racing Bulls`
+  > acknowledgements stay unmapped with the reason
+  > `no-approved-provider-mapping`. **Driver identities and mappings remain
+  > incomplete**, no drivers, constructors or participants port exists, and
+  > every other item in this list stays open.
+
 - **Ports.** The Jolpica drivers and constructors identity normalization and
   the race-results port are not implemented.
 - **Validation and fixes.** Assembly derivation and the new integrity

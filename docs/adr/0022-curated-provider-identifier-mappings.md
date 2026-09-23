@@ -231,6 +231,12 @@ unmapped with a written reason rather than having an ID minted for them. No
 OpenF1 `circuit_key` value is recorded anywhere, so no OpenF1 circuit mapping
 could be seeded.
 
+> **Note 2026-09-23.** The six-constructor figure describes the registry when
+> this ADR was accepted. The 2026 constructor dataset (Provider Evaluation §8.9)
+> curated `cadillac` and `racing-bulls` and brought the registry to 11. The
+> OpenF1 `Cadillac` and `Racing Bulls` values stay unmapped, now with the reason
+> `no-approved-provider-mapping`.
+
 This does **not** establish live-provider coverage.
 
 ### Still open

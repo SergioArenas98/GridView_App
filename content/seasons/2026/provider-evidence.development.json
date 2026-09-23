@@ -4,7 +4,7 @@
   "schemaVersion": 1,
   "status": "development",
   "season": 2026,
-  "note": "INTERNAL ONLY. The closed set of exact 2026 provider identities recorded in docs/technical/GridView_Provider_Evaluation.md section 8. Every value was observed through an explicitly authorized request recorded there (8.1 for 2026-08-19, 8.8 for the 2026-09-19 calendar) and copied exactly; nothing was scraped, inferred from a display name or recalled from memory. The 8.8 calendar is recorded here as its 23 event locators plus all 23 circuitIds it supplied: a circuitId inside a locator is only a locator component, so a circuit identity is always its own record with its own evidence. Every observed 2026 circuitId is now mapped, so the circuit portion of gap G-l is closed and no circuit is acknowledged below. Every entry must be mapped in provider-mappings.development.json or acknowledged below; validation fails otherwise. An acknowledgement is a temporary blocker, never a mapping: the runtime still resolves the identity as unmapped and the affected resource still fails closed.",
+  "note": "INTERNAL ONLY. The closed set of exact 2026 provider identities recorded in docs/technical/GridView_Provider_Evaluation.md section 8. Every value was observed through an explicitly authorized request recorded there (8.1 for 2026-08-19, 8.8 for the 2026-09-19 calendar, 8.9 for 2026-09-23 constructors) and copied exactly; nothing was scraped, inferred from a display name or recalled from memory. The 8.8 calendar is recorded as its 23 event locators plus all 23 circuitIds it supplied: a circuitId inside a locator is only a locator component, so a circuit identity is always its own record with its own evidence. Every observed 2026 circuitId is now mapped, so the circuit portion of gap G-l is closed and no circuit is acknowledged below. Every entry must be mapped in provider-mappings.development.json or acknowledged below; validation fails otherwise. An acknowledgement is a temporary blocker, never a mapping: the runtime still resolves it as unmapped and the affected resource fails closed.",
   "identities": [
     {
       "source": "jolpica",
@@ -33,6 +33,69 @@
       "providerField": "constructorId",
       "providerValue": "mercedes",
       "evidence": "GridView_Provider_Evaluation.md 8.4 - Jolpica constructorId slug example."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "alpine",
+      "evidence": "GridView_Provider_Evaluation.md 8.9 constructor alpine - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100 at 2026-09-23T18:33:16Z, HTTP 200, 11 of 11, SHA-256 bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "aston_martin",
+      "evidence": "GridView_Provider_Evaluation.md 8.9 constructor aston_martin - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100 at 2026-09-23T18:33:16Z, HTTP 200, 11 of 11, SHA-256 bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "audi",
+      "evidence": "GridView_Provider_Evaluation.md 8.9 constructor audi - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100 at 2026-09-23T18:33:16Z, HTTP 200, 11 of 11, SHA-256 bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "cadillac",
+      "evidence": "GridView_Provider_Evaluation.md 8.9 constructor cadillac - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100 at 2026-09-23T18:33:16Z, HTTP 200, 11 of 11, SHA-256 bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "ferrari",
+      "evidence": "GridView_Provider_Evaluation.md 8.9 constructor ferrari - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100 at 2026-09-23T18:33:16Z, HTTP 200, 11 of 11, SHA-256 bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "haas",
+      "evidence": "GridView_Provider_Evaluation.md 8.9 constructor haas - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100 at 2026-09-23T18:33:16Z, HTTP 200, 11 of 11, SHA-256 bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "rb",
+      "evidence": "GridView_Provider_Evaluation.md 8.9 constructor rb - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100 at 2026-09-23T18:33:16Z, HTTP 200, 11 of 11, SHA-256 bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "red_bull",
+      "evidence": "GridView_Provider_Evaluation.md 8.9 constructor red_bull - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100 at 2026-09-23T18:33:16Z, HTTP 200, 11 of 11, SHA-256 bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e."
+    },
+    {
+      "source": "jolpica",
+      "entity": "constructor",
+      "providerField": "constructorId",
+      "providerValue": "williams",
+      "evidence": "GridView_Provider_Evaluation.md 8.9 constructor williams - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100 at 2026-09-23T18:33:16Z, HTTP 200, 11 of 11, SHA-256 bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e."
     },
     {
       "source": "jolpica",
@@ -520,16 +583,16 @@
       "entity": "constructor",
       "providerField": "team_name",
       "providerValue": "Cadillac",
-      "reason": "no-canonical-gridview-identity",
-      "detail": "No canonical GridView constructor identity exists for Cadillac in content/registries/constructors.mock.json, which holds six constructors against the eleven on the recorded grid. One of the four recorded name disagreements; it stays unmapped and fails closed until a curated constructor identity is added by review."
+      "reason": "no-approved-provider-mapping",
+      "detail": "Since 2026-09-23 the canonical GridView constructor identity cadillac exists (Provider Evaluation 8.9), but no OpenF1 team_name mapping to it has been approved. One of the four recorded name disagreements (8.5); it stays unmapped and fails closed until a reviewed OpenF1 mapping decision is made."
     },
     {
       "source": "openf1",
       "entity": "constructor",
       "providerField": "team_name",
       "providerValue": "Racing Bulls",
-      "reason": "no-canonical-gridview-identity",
-      "detail": "No canonical GridView constructor identity exists for Racing Bulls in content/registries/constructors.mock.json. One of the four recorded name disagreements; it stays unmapped and fails closed until a curated constructor identity is added by review."
+      "reason": "no-approved-provider-mapping",
+      "detail": "Since 2026-09-23 the canonical GridView constructor identity racing-bulls exists (Provider Evaluation 8.9), but no OpenF1 team_name mapping to it has been approved. One of the four recorded name disagreements (8.5); it stays unmapped and fails closed until a reviewed OpenF1 mapping decision is made."
     }
   ]
 }
