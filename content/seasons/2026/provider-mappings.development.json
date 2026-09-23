@@ -17,6 +17,255 @@
     },
     {
       "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "albon",
+      "gridviewId": "alexander-albon",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver albon - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "alonso",
+      "gridviewId": "fernando-alonso",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver alonso - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "antonelli",
+      "gridviewId": "andrea-kimi-antonelli",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver antonelli - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743.",
+      "note": "Curator decision 2026-09-23: the canonical ID uses the provider-evidenced full given name Andrea Kimi. The OpenF1 driver_number 12 for the same competitor is not mapped by this record and stays acknowledged."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "paul_aron",
+      "gridviewId": "paul-aron",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver paul_aron - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "bearman",
+      "gridviewId": "oliver-bearman",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver bearman - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "dino_beganovic",
+      "gridviewId": "dino-beganovic",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver dino_beganovic - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "bortoleto",
+      "gridviewId": "gabriel-bortoleto",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver bortoleto - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "bottas",
+      "gridviewId": "valtteri-bottas",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver bottas - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "luke_browning",
+      "gridviewId": "luke-browning",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver luke_browning - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "colapinto",
+      "gridviewId": "franco-colapinto",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver colapinto - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "jak_crawford",
+      "gridviewId": "jak-crawford",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver jak_crawford - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "leonardo_fornaroli",
+      "gridviewId": "leonardo-fornaroli",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver leonardo_fornaroli - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "gasly",
+      "gridviewId": "pierre-gasly",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver gasly - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "hadjar",
+      "gridviewId": "isack-hadjar",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver hadjar - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "hamilton",
+      "gridviewId": "lewis-hamilton",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver hamilton - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "colton_herta",
+      "gridviewId": "colton-herta",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver colton_herta - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "ryo_hirakawa",
+      "gridviewId": "ryo-hirakawa",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver ryo_hirakawa - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "hulkenberg",
+      "gridviewId": "nico-hulkenberg",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver hulkenberg - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "ayumu_iwasa",
+      "gridviewId": "ayumu-iwasa",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver ayumu_iwasa - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "lawson",
+      "gridviewId": "liam-lawson",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver lawson - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "leclerc",
+      "gridviewId": "charles-leclerc",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver leclerc - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "arvid_lindblad",
+      "gridviewId": "arvid-lindblad",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver arvid_lindblad - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "ocon",
+      "gridviewId": "esteban-ocon",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver ocon - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "piastri",
+      "gridviewId": "oscar-piastri",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver piastri - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "perez",
+      "gridviewId": "sergio-perez",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver perez - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "russell",
+      "gridviewId": "george-russell",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver russell - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "sainz",
+      "gridviewId": "carlos-sainz",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver sainz - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "stroll",
+      "gridviewId": "lance-stroll",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver stroll - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "tsunoda",
+      "gridviewId": "yuki-tsunoda",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver tsunoda - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "max_verstappen",
+      "gridviewId": "max-verstappen",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver max_verstappen - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "frederik_vesti",
+      "gridviewId": "frederik-vesti",
+      "evidence": "GridView_Provider_Evaluation.md 8.10 driver frederik_vesti - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100 at 2026-09-23T18:33:12Z, HTTP 200, 32 of 32, SHA-256 2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743."
+    },
+    {
+      "source": "jolpica",
       "entity": "constructor",
       "providerField": "constructorId",
       "providerValue": "mclaren",

@@ -220,10 +220,42 @@ const EXPECTED_REGISTRY: readonly (readonly [string, string])[] = [
  * here only their count and their untouched evidence are asserted. The nine
  * Jolpica constructor mappings added by the 2026-09-23 constructor dataset
  * are pinned row for row, with their evidence, in
- * `constructor-dataset-2026.test.ts`.
+ * `constructor-dataset-2026.test.ts`, and the 31 Jolpica driver mappings added
+ * by the 2026-09-23 driver dataset in `driver-dataset-2026.test.ts`.
  */
 const OTHER_MAPPINGS: readonly (readonly [string, string, string, string])[] = [
   ['jolpica', 'driver', 'norris', 'lando-norris'],
+  ['jolpica', 'driver', 'albon', 'alexander-albon'],
+  ['jolpica', 'driver', 'alonso', 'fernando-alonso'],
+  ['jolpica', 'driver', 'antonelli', 'andrea-kimi-antonelli'],
+  ['jolpica', 'driver', 'arvid_lindblad', 'arvid-lindblad'],
+  ['jolpica', 'driver', 'ayumu_iwasa', 'ayumu-iwasa'],
+  ['jolpica', 'driver', 'bearman', 'oliver-bearman'],
+  ['jolpica', 'driver', 'bortoleto', 'gabriel-bortoleto'],
+  ['jolpica', 'driver', 'bottas', 'valtteri-bottas'],
+  ['jolpica', 'driver', 'colapinto', 'franco-colapinto'],
+  ['jolpica', 'driver', 'colton_herta', 'colton-herta'],
+  ['jolpica', 'driver', 'dino_beganovic', 'dino-beganovic'],
+  ['jolpica', 'driver', 'frederik_vesti', 'frederik-vesti'],
+  ['jolpica', 'driver', 'gasly', 'pierre-gasly'],
+  ['jolpica', 'driver', 'hadjar', 'isack-hadjar'],
+  ['jolpica', 'driver', 'hamilton', 'lewis-hamilton'],
+  ['jolpica', 'driver', 'hulkenberg', 'nico-hulkenberg'],
+  ['jolpica', 'driver', 'jak_crawford', 'jak-crawford'],
+  ['jolpica', 'driver', 'lawson', 'liam-lawson'],
+  ['jolpica', 'driver', 'leclerc', 'charles-leclerc'],
+  ['jolpica', 'driver', 'leonardo_fornaroli', 'leonardo-fornaroli'],
+  ['jolpica', 'driver', 'luke_browning', 'luke-browning'],
+  ['jolpica', 'driver', 'max_verstappen', 'max-verstappen'],
+  ['jolpica', 'driver', 'ocon', 'esteban-ocon'],
+  ['jolpica', 'driver', 'paul_aron', 'paul-aron'],
+  ['jolpica', 'driver', 'perez', 'sergio-perez'],
+  ['jolpica', 'driver', 'piastri', 'oscar-piastri'],
+  ['jolpica', 'driver', 'russell', 'george-russell'],
+  ['jolpica', 'driver', 'ryo_hirakawa', 'ryo-hirakawa'],
+  ['jolpica', 'driver', 'sainz', 'carlos-sainz'],
+  ['jolpica', 'driver', 'stroll', 'lance-stroll'],
+  ['jolpica', 'driver', 'tsunoda', 'yuki-tsunoda'],
   ['jolpica', 'constructor', 'mclaren', 'mclaren'],
   ['jolpica', 'constructor', 'mercedes', 'mercedes'],
   ['jolpica', 'constructor', 'alpine', 'alpine'],
@@ -242,12 +274,14 @@ const OTHER_MAPPINGS: readonly (readonly [string, string, string, string])[] = [
 ];
 
 /**
- * The four acknowledgements that survive this dataset, each with its closed
+ * The three acknowledgements that survive this dataset, each with its closed
  * reason. `hungaroring` is deliberately absent: it is mapped now, and an
  * acknowledgement is never allowed to coexist with a mapping. The two OpenF1
  * constructor reasons were corrected on 2026-09-23, when the canonical
  * `cadillac` and `racing-bulls` identities were curated without any OpenF1
- * mapping to them.
+ * mapping to them. The same day the 2026 driver dataset mapped Jolpica
+ * `antonelli`, removing its acknowledgement, and corrected the OpenF1 `12`
+ * reason in the same way.
  */
 const NON_CIRCUIT_ACKNOWLEDGEMENTS: readonly (readonly [
   string,
@@ -255,8 +289,7 @@ const NON_CIRCUIT_ACKNOWLEDGEMENTS: readonly (readonly [
   string,
   string,
 ])[] = [
-  ['jolpica', 'driver', 'antonelli', 'no-canonical-gridview-identity'],
-  ['openf1', 'driver', '12', 'no-canonical-gridview-identity'],
+  ['openf1', 'driver', '12', 'no-approved-provider-mapping'],
   ['openf1', 'constructor', 'Cadillac', 'no-approved-provider-mapping'],
   ['openf1', 'constructor', 'Racing Bulls', 'no-approved-provider-mapping'],
 ];
@@ -513,7 +546,7 @@ describe('the 2026 circuit evidence corpus', () => {
     expect(evidenceCorpus.acknowledgedUnmapped.filter(isCircuit)).toEqual([]);
   });
 
-  it('keeps exactly the four non-circuit acknowledgements', () => {
+  it('keeps exactly the three non-circuit acknowledgements', () => {
     expect(
       evidenceCorpus.acknowledgedUnmapped
         .map((record) => [
@@ -639,9 +672,9 @@ describe('nothing outside the circuit dataset moved', () => {
     expect(mappingDocument.mappings).toHaveLength(
       OTHER_MAPPINGS.length + ALL_ASSOCIATIONS.length + 23,
     );
-    expect(mappingDocument.mappings).toHaveLength(62);
-    expect(evidenceCorpus.identities).toHaveLength(66);
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(4);
+    expect(mappingDocument.mappings).toHaveLength(93);
+    expect(evidenceCorpus.identities).toHaveLength(96);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
   });
 
   it('keeps every stated mapping total in the Implementation Plan true', () => {
@@ -668,9 +701,9 @@ describe('nothing outside the circuit dataset moved', () => {
     ].map(([, word]) => word);
     expect(acknowledged.length).toBeGreaterThan(0);
     for (const word of acknowledged) {
-      expect(word).toBe('four');
+      expect(word).toBe('three');
     }
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(4);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
   });
 });
 

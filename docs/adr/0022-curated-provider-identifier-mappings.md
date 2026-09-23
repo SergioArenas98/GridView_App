@@ -845,6 +845,17 @@ shorten it.
 > and the three OpenF1 acknowledgements stay exactly as recorded above.
 > Participants remain unimplemented.
 >
+> **Note 2026-09-23 - 2026 driver dataset.** A later reviewed change (Provider
+> Evaluation §8.10) curated and mapped all 32 observed Jolpica `driverId`s.
+> Canonical driver IDs are curator-authored slugs of the complete recorded
+> given and family name, never a provider `driverId`: `antonelli` maps to the
+> new identity `andrea-kimi-antonelli`, and its acknowledgement is removed.
+> OpenF1 `driver_number` `12` stays unmapped under D7; its reason is now
+> `no-approved-provider-mapping`, because the identity exists but no OpenF1
+> mapping to it is approved. The season-2026 dataset holds 93 exact mappings,
+> 96 approved evidence identities and three acknowledgements, all OpenF1.
+> Participants remain unimplemented.
+>
 > **Provider requests, precisely.** The "none" statements in this ADR describe
 > its own work. Roughly 25 authorized research `GET`s were recorded on
 > 2026-08-19 (Provider Evaluation §8.1) and one authorized calendar-evidence

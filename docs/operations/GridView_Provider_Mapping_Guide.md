@@ -205,6 +205,15 @@ OpenF1 mapping decision. `antonelli` and `driver_number` `12` keep
 `no-canonical-gridview-identity`. **No Jolpica constructor is acknowledged**:
 all 11 observed season-2026 `constructorId`s are curated and mapped.
 
+**Update 2026-09-23 (drivers).** The 2026 driver dataset (Provider Evaluation
+§8.10) curated the canonical driver `andrea-kimi-antonelli` and mapped Jolpica
+`antonelli` to it, so that acknowledgement is gone. OpenF1 `driver_number` `12`
+refers to the same competitor but stays unmapped: its reason is now
+`no-approved-provider-mapping`, and mapping it needs a separate, reviewed
+OpenF1 decision. **Three identities are acknowledged today, all OpenF1**: `12`,
+`Cadillac` and `Racing Bulls`. **No Jolpica driver is acknowledged**: all 32
+observed season-2026 `driverId`s are curated and mapped.
+
 ---
 
 ## 6. Adding a mapping without changing a public ID
