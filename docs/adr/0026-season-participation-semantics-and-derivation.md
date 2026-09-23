@@ -12,7 +12,8 @@
   [0020](0020-provider-source-observation-and-reconciliation.md),
   [0022](0022-curated-provider-identifier-mappings.md),
   [0023](0023-multi-source-provider-coordination.md),
-  [0024](0024-deep-normalized-contract-validation.md)
+  [0024](0024-deep-normalized-contract-validation.md),
+  [0025](0025-season-publication-authority-and-rollback-republication.md)
 
 > **What "Accepted" means here.** This ADR records an **architecture
 > decision only**. None of the mechanism it describes exists in code: there is
@@ -52,9 +53,10 @@ The repository already forces several answers:
 4. **Every fetched provider row must resolve** (ADR 0022 D10), so the set of
    endpoints fetched defines the curation burden.
 5. **Last-known-good is snapshot-level.** Assembly publishes from one run's
-   selections and there is no per-resource carry-over (G9 is open). D14 does
-   not change this: it consults the authoritative snapshot only to refuse a
-   publication that would lose classified coverage, never to supply a row.
+   selections and there is no per-resource carry-over (G9 is open). D14 and
+   D15 do not change this: they consult the authoritative snapshot only to
+   refuse a publication that would lose classified coverage or a published
+   participation fact, never to supply a row.
 6. **Jolpica event status is `unknown`** (ADR 0022 A6), so the ADR 0023 D11
    status table never *requires* a classification for a Jolpica round. A rule
    that needs complete round accounting must state it itself.
@@ -202,10 +204,12 @@ Rules:
 
 Spans are a pure function of the complete selected classification set,
 **rebuilt from scratch on every run**. They are never patched field by field,
-so a provider correction is absorbed by rebuilding. No span, row or round is
-carried forward from an earlier run. Rebuilding from scratch **does not
-authorize historical truncation**: a rebuilt candidate that covers fewer
-classified rounds than the authoritative snapshot is withheld (D14).
+so a non-destructive provider correction, one that only adds participation
+facts, is absorbed by rebuilding. No span, row or round is carried forward
+from an earlier run. Rebuilding from scratch **does not authorize historical
+truncation**: a rebuilt candidate that covers fewer classified rounds than the
+authoritative snapshot is withheld (D14), and so is one that removes or
+reassigns an already published participation fact (D15).
 
 1. A driver's first selected classified race observation **starts** a span.
 2. The next **accounted** race round (skipping only curated cancellations)
@@ -217,6 +221,10 @@ classified rounds than the authoritative snapshot is withheld (D14).
    race round and **opens** a new span at the current round.
 4. A later accounted classified round in which the driver is **absent**
    **closes** the open span at the driver's previous observed race round.
+   That absence is an observation about the later round only. It is not the
+   deletion of the driver's participation fact from an earlier round, and it
+   does not trip the D15 guard, which compares each previously published
+   round with the same round in the candidate.
 5. A later return creates a **new** span, even with the same constructor as
    an earlier span.
 6. Two spans for one driver may not overlap (the existing
@@ -278,7 +286,10 @@ Consequences:
   **earlier** span: the earlier span takes its own ID, and no existing later
   span is renamed.
 - A correction that changes a span's accepted `startRound` may legitimately
-  change that span's ID, because the span boundary itself changed.
+  change that span's ID, because the span boundary itself changed. A
+  correction that moves the start **earlier** only adds participation facts.
+  One that moves it **later** removes an already published fact, so under D15
+  it is withheld until a separately accepted correction mechanism exists.
 - At most one span of a driver has a null `startRound` (only a span beginning
   at the season's first selected classified race round, D6), and two spans of
   one driver can never share a non-null `startRound` (D5 rule 6), so two
@@ -465,13 +476,30 @@ implemented by this decision:
     today: `season-assembly.ts` reads nothing from an earlier publication. If
     the guard relies on persisted coverage metadata rather than the active
     release itself, it depends on the open **G9** persistence gap. Neither is
-    implemented.
+    implemented. This guard alone is not sufficient: item 12 is also
+    required, and both must run as item 13 requires.
 11. **Global season-entry ID uniqueness (D7).** A closed validation over the
     complete derived `driverEntries` collection must reject the whole
     candidate on any duplicate entry ID, including a cross-driver collision
     between a base and a suffixed ID. No entry is dropped, merged or renamed.
     Item 4 alone does not satisfy this: a deterministic per-entry rule is not
     a uniqueness proof.
+12. **The participation-fact non-regression guard (D15).** Before publishing,
+    every canonical participation fact
+    `(season, round, canonicalDriverId, canonicalConstructorId)` of the
+    authoritative snapshot must exist unchanged in the candidate, and the
+    whole candidate is withheld otherwise. It needs the same read of the
+    authoritative snapshot, or of equivalent durable participation metadata,
+    as item 10, with the same possible **G9** dependency. Item 5 does not
+    satisfy it, because item 5 validates only the rows selected in the
+    current run. Not implemented.
+13. **Atomic comparison and publication (D16).** Items 10 and 12 must compare
+    against the same authoritative version that the candidate will replace,
+    serialized with publication for the season through the ADR 0025
+    publication authority or protected by an equivalent compare-and-swap on
+    the authoritative version. A candidate whose comparison version is no
+    longer authoritative at publication is stale and never publishes. Not
+    implemented.
 
 ### D13 - Requests and scheduling
 
@@ -517,13 +545,108 @@ in the currently authoritative season snapshot (the active release, ADR 0007).
 **Previous state is a guard, not an input.** D5 still derives spans only from
 the current run's selected rows, and no row, span or round is carried forward
 from an earlier run. The authoritative snapshot, or equivalent durable coverage
-metadata, is consulted only to compare classified-round sets and refuse a
-regressive publication. It never contributes a row or a span to the candidate.
+metadata, is consulted only to compare classified-round sets, and under D15
+participation facts, and refuse a regressive publication. It never contributes
+a row or a span to the candidate.
 
 The guard requires access to that snapshot or metadata, which season assembly
 does not have today. It is a D12 publication prerequisite (item 10), and where
 it depends on persisted coverage metadata it depends on the open G9 gap. It is
-not implemented.
+not implemented. It must execute atomically with publication (D16).
+
+> **Complemented 2026-09-23, during review and before this ADR was merged.**
+> Review found that round-level containment is necessary but not sufficient:
+> a still-`final` but truncated classification keeps its round present, so
+> this guard passes while D5 rebuilds from the reduced rows and closes or
+> drops a published driver's span. D15 adds a row-level guard, and D16
+> requires both guards to be atomic with publication. The round-level guard
+> above is unchanged and remains required. The earlier wording of the
+> paragraph above, which limited the consultation to classified-round sets,
+> is superseded by the version shown.
+
+### D15 - Published participation facts never regress
+
+Added 2026-09-23, during review and before this ADR was merged. Non-regression
+applies to the canonical participation facts **within** previously published
+rounds, not only to the set of covered rounds.
+
+A **canonical participation fact** is the tuple
+`(season, round, canonicalDriverId, canonicalConstructorId)`. Each selected
+classified race-result row (D3) contributes exactly one fact.
+
+- Before publication, the **authoritative fact set** is derived from the
+  currently authoritative snapshot, and the **candidate fact set** from the
+  newly selected classified results.
+- Every fact in the authoritative set must also exist, **unchanged**, in the
+  candidate set.
+- A candidate **may add** new participation facts.
+- A candidate **may not automatically remove** a previously published driver
+  from a round.
+- A candidate **may not automatically replace** that driver's constructor for
+  a previously published round. The changed constructor is a new fact while
+  the old fact disappears, so the candidate is withheld.
+- The comparison covers only the facts used to derive season spans. It does
+  **not** freeze unrelated race-result fields such as finishing position,
+  status, points or ordering.
+- If any authoritative fact is missing or replaced, the **complete** candidate
+  update is rejected and the previous snapshot stays live.
+- The missing row is **never** copied into the rebuilt candidate. The previous
+  snapshot is a publication guard, not an input or a row-level carry-over
+  source.
+- Rebuilding spans from scratch (D5) never authorizes the deletion or
+  reassignment of an already published participation fact.
+- A provider response alone cannot authorize a destructive historical
+  correction.
+- A genuine removal, constructor reassignment or other destructive correction
+  requires a separately accepted, reviewed correction mechanism. That
+  mechanism is **not** defined or implemented by this ADR. Until it exists,
+  ambiguous destructive corrections fail closed.
+
+**Absence in a later round is not deletion.** The guard compares each
+previously published round with **the same round** in the candidate. A later
+classified round in which a driver is absent still closes that driver's span
+normally (D5 rule 4); the earlier round's fact is still present in the
+candidate, so nothing regresses.
+
+D14 and D15 are both required. D14 alone passes a truncated round that stays
+present. D15 does not replace D14, because the coverage horizon (D4) and the
+pre-season rule (D9) are defined over classified rounds, not facts, and D14 is
+what keeps a previously published round accounted for. The guard needs the
+same read of the authoritative snapshot, or of equivalent durable
+participation metadata, as D14, with the same possible G9 dependency. It is a
+D12 publication prerequisite (item 12) and is not implemented.
+
+> **Superseded wording, 2026-09-23, during review and before this ADR was
+> merged.** Adding D15 replaced three earlier statements. D5 said that "a
+> provider correction is absorbed by rebuilding"; only a non-destructive
+> correction is. D5 and Context item 5 named classified coverage as the only
+> thing a rebuilt candidate could not lose; published participation facts are
+> now protected too. D14 limited the consultation of previous state to
+> classified-round sets; it now also covers participation facts. None of the
+> earlier wording reached a client or was implemented.
+
+### D16 - Comparison and publication are atomic
+
+Added 2026-09-23, during review and before this ADR was merged. The D14
+round-coverage check and the D15 participation-fact check must execute against
+**the same authoritative version** that the candidate will replace.
+
+- The comparison with the authoritative snapshot and the publication must be
+  serialized for the same season through the accepted
+  [ADR 0025](0025-season-publication-authority-and-rollback-republication.md)
+  publication authority, or protected by an equivalent compare-and-swap on the
+  authoritative version.
+- If the authoritative version changes after the comparison and before
+  publication, the candidate is **stale**.
+- A stale candidate is rejected, or rebuilt and checked again. It **never**
+  publishes on the strength of the earlier comparison.
+- Two overlapping runs must not both pass against the same old snapshot and
+  then let the narrower candidate overwrite the wider one.
+
+This is an implementation prerequisite (D12 item 13), **not** a claim that
+this serialization exists today. Reading the active release inside season
+assembly, outside the publication authority's commit, would leave a
+time-of-check to time-of-use gap and does not satisfy it.
 
 ## Resolved choices
 
@@ -583,6 +706,13 @@ The seven choices the decision pack left open are settled:
 - **Classified-coverage non-regression.** The D14 guard and the read of the
   authoritative snapshot or durable coverage metadata it needs are not
   implemented (D12 item 10), and may depend on G9.
+- **Participation-fact non-regression.** The D15 row-level guard is not
+  implemented (D12 item 12). No correction mechanism for a genuine removal or
+  constructor reassignment is defined, so such corrections fail closed.
+- **Atomic comparison and publication.** Binding the D14 and D15 comparisons
+  to the authoritative version the candidate replaces, through the ADR 0025
+  publication authority or an equivalent compare-and-swap, is not implemented
+  (D16, D12 item 13).
 - **Client "Full season" inference.** The Flutter client still renders
   null/null as "Full season". Removing that inference is a mandatory
   publication prerequisite (D12 item 3), and it is not implemented.
@@ -630,3 +760,5 @@ implemented.
 - [ADR 0022](0022-curated-provider-identifier-mappings.md) D2-D10, A6, A7, A9
 - [ADR 0023](0023-multi-source-provider-coordination.md) D1, D3, D4, D8, D10,
   D11
+- [ADR 0025](0025-season-publication-authority-and-rollback-republication.md)
+  (the per-season publication authority D16 relies on)
