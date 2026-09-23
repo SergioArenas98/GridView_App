@@ -52,7 +52,19 @@ export interface MockProviderOptions {
   contentVersion?: string;
 }
 
-type RegistryDriver = Omit<Driver, 'media'>;
+/**
+ * A curated driver registry row.
+ *
+ * Only `id` and `fullName` are curated for every driver. The descriptive facts
+ * are optional, because a curated identity may exist for a driver whose name
+ * parts, code, number, nationality, birth details or biography GridView does
+ * not own; the 2026 drivers curated for provider mapping include identity-only
+ * rows of exactly that kind. The normalized contract still requires each of
+ * those keys to be *present* as an explicit `null`, so `withDriverMedia`
+ * supplies them on the way out.
+ */
+type RegistryDriver = Pick<Driver, 'id' | 'fullName'> &
+  Partial<Omit<Driver, 'id' | 'fullName' | 'media'>>;
 
 /**
  * A curated constructor registry row.
@@ -467,9 +479,26 @@ function constructorStanding(
 }
 
 function withDriverMedia(drivers: RegistryDriver[]): Driver[] {
-  return drivers.map((driver) => ({
-    ...driver,
-    media: mediaFor('driver', driver.id),
+  // An absent descriptive fact becomes an explicit `null`, exactly as for
+  // constructors and circuits below. A row that carries the fact - including an
+  // authored `null` - keeps it, because the row is spread over these defaults.
+  // `id` and `fullName` lead, so a fully described row keeps its property order
+  // and its normalized output is unchanged. `media` is never a registry fact:
+  // it comes from the media content, and is `null` where none is recorded.
+  return drivers.map(({ id, fullName, ...facts }) => ({
+    id,
+    fullName,
+    givenName: null,
+    familyName: null,
+    shortCode: null,
+    permanentNumber: null,
+    nationality: null,
+    countryCode: null,
+    dateOfBirth: null,
+    placeOfBirth: null,
+    biography: null,
+    ...facts,
+    media: mediaFor('driver', id),
   }));
 }
 
