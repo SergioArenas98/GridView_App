@@ -25,6 +25,20 @@
 > `none`. The decision stays dormant until each prerequisite in
 > [What stays open](#what-stays-open) is separately implemented.
 
+> **Implementation note 2026-09-24.** The identity half of D2, D10 and D11
+> now exists as a dormant, fixture-tested Jolpica `season-participants`
+> port (Implementation Plan §14.0.21). It makes the two D13 requests in
+> sequence and returns the canonical drivers and constructors plus one
+> `ConstructorSeasonEntry` per constructor, all of which **the port owns**.
+> `driverEntries` is **always empty** there, because spans remain
+> assembly-owned (D3-D7, D11), and the port assigns no driver to a
+> constructor. Reporting both requests needed
+> [ADR 0023 amendment A1](0023-multi-source-provider-coordination.md#amendment-a1---ordered-attempts-and-interrupted-executions).
+> The port is not registered with any coordinator, is absent from every
+> Worker bundle and has never contacted the provider. Participation-span
+> derivation, the race-results port and every D12 publication prerequisite
+> remain unimplemented. This decision itself is unchanged.
+
 ## Context
 
 The coordinated `season-participants` resource is one payload carrying four
@@ -713,6 +727,12 @@ The seven choices the decision pack left open are settled:
 
 - **Ports.** The Jolpica drivers and constructors identity normalization and
   the race-results port are not implemented.
+
+  > **Note 2026-09-24.** The drivers and constructors identity normalization
+  > now exists as a dormant, unregistered `season-participants` port
+  > (Implementation Plan §14.0.21). The race-results port and everything
+  > else in this list remain open.
+
 - **Validation and fixes.** Assembly derivation and the new integrity
   relations are not implemented, nor is the driver-detail current-span fix.
 - **Split-span publication.** The contract and client change that lets the

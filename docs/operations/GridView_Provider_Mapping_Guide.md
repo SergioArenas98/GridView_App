@@ -13,10 +13,11 @@
   - [`../technical/GridView_Provider_Evaluation.md`](../technical/GridView_Provider_Evaluation.md) §8.5, §8.7
   - [`../technical/GridView_Domain_Model.md`](../technical/GridView_Domain_Model.md) §4.4
 
-> **The registry is dormant.** No provider adapter exists, `PROVIDER_MODE`
-> admits exactly `mock` and `none`, and nothing consumes the resolver yet. This
-> guide describes the procedure that becomes operational when an adapter and
-> the G4 coordinator exist. Following it today is a normal reviewed content
+> **The registry is dormant.** `PROVIDER_MODE` admits exactly `mock` and
+> `none`, and no deployed or application path consumes the resolver. Only the
+> dormant, fixture-tested Jolpica calendar, circuits and participants ports
+> resolve it, in tests. This guide describes the procedure that becomes
+> operational when a registered adapter and the G4 coordinator run. Following it today is a normal reviewed content
 > change and contacts nobody.
 
 ---

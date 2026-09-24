@@ -15,7 +15,7 @@ Operational documentation for GridView.
   genuinely new entity is handled, how wrong mappings are corrected through
   code review, why duplicate/ambiguous/dangling records fail closed, which
   checks must run, and why string similarity and slug minting are forbidden.
-  **Dormant:** no adapter consumes the registry yet.
+  **Dormant:** no deployed or application path consumes the registry.
 
 Planned:
 

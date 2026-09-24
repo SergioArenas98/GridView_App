@@ -1182,6 +1182,13 @@ G9.
 `PROVIDER_MODE` still admits exactly `mock` and `none`; staging is `mock`,
 production is `none`.
 
+> **Status 2026-09-24.** Three dormant, fixture-tested Jolpica ports now
+> implement the port - `season-calendar`, `season-circuits` and
+> `season-participants` (Implementation Plan §14.0.16, §14.0.17, §14.0.21).
+> None is registered with a coordinator, none is reachable from the Worker
+> entry point, and `SynchronizationService` is still not rewired. The first
+> paragraph above is retained for the record.
+
 #### Deep normalized-contract validation is an activation gate
 
 > **Amended by [ADR 0024](0024-deep-normalized-contract-validation.md)
@@ -1396,8 +1403,9 @@ once (D7).
 Implemented in `src/providers/coordination/port.ts` and `coordinator.ts`,
 together with the `interrupted` contribution status in `outcome.ts`. The
 single-request `season-calendar` and `season-circuits` ports now report a
-one-element collection, and their normalized payloads are unchanged. Direct
-accounting tests cover every row of A1.2 and every rejection
+one-element collection, and their normalized payloads are unchanged. The
+dormant Jolpica `season-participants` port (Implementation Plan §14.0.21) is
+the first multi-request producer. Direct accounting tests cover every row of A1.2 and every rejection
 in A1.5. Nothing is registered with a coordinator in production, and no
 provider was contacted.
 

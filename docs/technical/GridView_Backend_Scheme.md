@@ -710,7 +710,8 @@ Recommended JSON forms:
 > value in an internal diagnostic field only. It never becomes a guessed ID, an
 > empty result or a dropped row.
 >
-> The registry is **dormant**: no adapter consumes it, `PROVIDER_MODE` still
+> The registry is **dormant**: no deployed or application path consumes it
+> (only the dormant, fixture-tested Jolpica ports do, in tests), `PROVIDER_MODE` still
 > admits exactly `mock` and `none`, and the mock provider emits GridView-owned
 > identities so `mock` is not a valid mapping source at all. There is no admin
 > mutation endpoint and no KV, Durable Object or database store — an operator
@@ -1186,13 +1187,25 @@ The handler:
 > resource identity and nothing else, so provisional data can never overwrite
 > reconciled data.
 >
-> **It is dormant.** No adapter exists, so no port is registered anywhere; the
+> **It is dormant.** No port is registered anywhere; the
 > mock provider still serves the synchronization path unchanged, and
 > `PROVIDER_MODE` still admits exactly `mock` and `none`. The coordinator never
 > publishes and never writes an active pointer: publication stays all-or-nothing
 > through the existing publisher (§13.1), and a partial coordination run is
 > withheld with a bounded reason rather than replacing a complete active
 > release.
+>
+> **Ports and attempts (2026-09-24).** Three dormant, fixture-tested Jolpica
+> ports implement the port contract - `season-calendar`, `season-circuits`
+> and `season-participants` - and **none is registered** or reachable from
+> the Worker entry point. Since
+> [ADR 0023 amendment A1](../adr/0023-multi-source-provider-coordination.md#amendment-a1---ordered-attempts-and-interrupted-executions)
+> an outcome reports **every** provider request of its execution as an
+> ordered, non-empty `attempts` collection, so the two-request participants
+> resource is counted exactly. An execution stopped between two requests
+> by cancellation or the limiter is a closed, never-selectable
+> `interrupted` outcome carrying only the requests it made. `not-attempted`
+> still means that nothing was sent. No runtime wiring exists.
 >
 > **An answered outcome is the coordinator's own normalized copy.** The instant
 > an adapter's answer crosses the coordination boundary it is parsed rather than

@@ -291,8 +291,9 @@ provider quota.
 
 Phase 9B-2 added the per-provider rate limiter and the hardened outbound HTTP
 boundary ([ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
-**No provider adapter exists and no provider request is sent**; what exists is
-the seam every future adapter must use.
+**No provider request is sent**; what exists is the seam every adapter must
+use. *(2026-09-24: only dormant, fixture-tested Jolpica ports use it, in tests;
+none is registered or reachable from the Worker.)*
 
 Pacing is a **Cloudflare Durable Object, one identity per real source**
 (`jolpica`, `openf1`), reached with `idFromName(sourceId)`, so the budget is
@@ -310,8 +311,8 @@ escaping the serialized section would terminate and reset the shared limiter
 for every caller.
 
 Staging's namespace exists - the 2026-09-12 deployment provisioned it - but
-nothing reserves through it: no adapter exists and no production module
-constructs the hardened client. What keeps staging off the network is
+nothing reserves through it: no registered adapter exists and no production
+module constructs the hardened client. What keeps staging off the network is
 `PROVIDER_MODE = mock` plus the absence of any live adapter, not this binding.
 
 Persisted limiter state distinguishes **absent** from **invalid**. A missing
