@@ -87,7 +87,7 @@ function payloadPort(
     () =>
       ({
         outcome: 'candidate',
-        attempt: attempt('j-1', attemptOutcome),
+        attempts: [attempt('j-1', attemptOutcome)],
         payload,
       }) as ProviderResourceOutcome,
   );
@@ -325,7 +325,7 @@ describe('a season-scoped candidate is bound to the requested season', () => {
       (request) =>
         ({
           outcome: 'candidate',
-          attempt: attempt(`j-${request.resource.kind}`),
+          attempts: [attempt(`j-${request.resource.kind}`)],
           payload:
             request.resource.kind === 'driver-standings'
               ? {
@@ -356,7 +356,7 @@ describe('a season-scoped candidate is bound to the requested season', () => {
       (request) =>
         ({
           outcome: 'candidate',
-          attempt: attempt(`j-${request.resource.kind}`),
+          attempts: [attempt(`j-${request.resource.kind}`)],
           payload:
             request.resource.kind === 'season-participants'
               ? {
@@ -394,7 +394,7 @@ describe('a season-scoped candidate is bound to the requested season', () => {
       (request) =>
         ({
           outcome: 'candidate',
-          attempt: attempt(`j-${request.resource.kind}`),
+          attempts: [attempt(`j-${request.resource.kind}`)],
           payload:
             request.resource.kind === 'driver-standings'
               ? {
@@ -431,7 +431,7 @@ describe('a candidate requires a successful transport attempt', () => {
     expect(
       isWellFormedOutcome({
         outcome: 'candidate',
-        attempt: attempt('j-1', 'successful'),
+        attempts: [attempt('j-1', 'successful')],
         payload,
       }),
     ).toBe(true);
@@ -448,7 +448,7 @@ describe('a candidate requires a successful transport attempt', () => {
     expect(
       isWellFormedOutcome({
         outcome: 'candidate',
-        attempt: attempt('j-1', 'failed'),
+        attempts: [attempt('j-1', 'failed')],
         payload,
       }),
     ).toBe(false);
@@ -467,7 +467,7 @@ describe('a candidate requires a successful transport attempt', () => {
     expect(
       isWellFormedOutcome({
         outcome: 'candidate',
-        attempt: attempt('j-1', 'rate-limited'),
+        attempts: [attempt('j-1', 'rate-limited')],
         payload,
       }),
     ).toBe(false);
@@ -502,7 +502,7 @@ describe('a candidate requires a successful transport attempt', () => {
       expect(
         isWellFormedOutcome({
           outcome: 'candidate',
-          attempt: { reference: 'j-1', outcome },
+          attempts: [{ reference: 'j-1', outcome }],
           payload,
         }),
         `attempt outcome ${String(outcome)} must not admit a candidate`,
@@ -518,12 +518,14 @@ describe('a candidate requires a successful transport attempt', () => {
       (request) =>
         ({
           outcome: 'candidate',
-          attempt: attempt(
-            `j-${request.resource.kind}`,
-            request.resource.kind === 'season-circuits'
-              ? 'rate-limited'
-              : 'successful',
-          ),
+          attempts: [
+            attempt(
+              `j-${request.resource.kind}`,
+              request.resource.kind === 'season-circuits'
+                ? 'rate-limited'
+                : 'successful',
+            ),
+          ],
           payload: fixturePayload(source, request.resource),
         }) as ProviderResourceOutcome,
     );
@@ -550,7 +552,7 @@ describe('a candidate requires a successful transport attempt', () => {
   it('still classifies an ordinary failed outcome as an attempted failure', async () => {
     const port = new FakePort('jolpica', () => ({
       outcome: 'failed',
-      attempt: attempt('j-1', 'failed'),
+      attempts: [attempt('j-1', 'failed')],
       reason: 'provider-unavailable',
     }));
 
@@ -566,7 +568,7 @@ describe('a candidate requires a successful transport attempt', () => {
   it('still classifies an ordinary rate-limited outcome as an attempted failure', async () => {
     const port = new FakePort('jolpica', () => ({
       outcome: 'failed',
-      attempt: attempt('j-1', 'rate-limited'),
+      attempts: [attempt('j-1', 'rate-limited')],
       reason: 'provider-rate-limited',
       retryAfter: '2026-07-20T12:05:00.000Z',
     }));
@@ -622,7 +624,7 @@ describe('a candidate requires a successful transport attempt', () => {
     const source = await seasonFixture();
     const port = new FakePort('jolpica', (request) => ({
       outcome: 'candidate',
-      attempt: attempt('shared-reference'),
+      attempts: [attempt('shared-reference')],
       payload: fixturePayload(source, request.resource),
     }));
 
@@ -641,7 +643,7 @@ describe('a candidate requires a successful transport attempt', () => {
       () =>
         ({
           outcome: 'candidate',
-          attempt: attempt(hostile, 'failed'),
+          attempts: [attempt(hostile, 'failed')],
           payload: {
             kind: 'driver-standings',
             standings: [{ season: hostile }],
@@ -673,7 +675,7 @@ describe('a candidate requires a successful transport attempt', () => {
       await yielded();
       return {
         outcome: 'candidate',
-        attempt: attempt('j-1', 'failed'),
+        attempts: [attempt('j-1', 'failed')],
         payload: wrong,
       } as ProviderResourceOutcome;
     });
@@ -682,7 +684,7 @@ describe('a candidate requires a successful transport attempt', () => {
       () =>
         ({
           outcome: 'candidate',
-          attempt: attempt('o-1'),
+          attempts: [attempt('o-1')],
           payload: wrong,
         }) as unknown as ProviderResourceOutcome,
     );
@@ -743,7 +745,7 @@ describe('a failure reason agrees with its transport attempt', () => {
   ): Record<string, unknown> {
     return {
       outcome: 'failed',
-      attempt: { reference: 'j-1', outcome: attemptOutcome },
+      attempts: [{ reference: 'j-1', outcome: attemptOutcome }],
       reason,
     };
   }
@@ -881,14 +883,14 @@ describe('a failure reason agrees with its transport attempt', () => {
     expect(
       isWellFormedOutcome({
         outcome: 'mapping-failure',
-        attempt: attempt('j-1', 'successful'),
+        attempts: [attempt('j-1', 'successful')],
       }),
     ).toBe(true);
     for (const attemptOutcome of ['failed', 'rate-limited'] as const) {
       expect(
         isWellFormedOutcome({
           outcome: 'mapping-failure',
-          attempt: attempt('j-1', attemptOutcome),
+          attempts: [attempt('j-1', attemptOutcome)],
         }),
         attemptOutcome,
       ).toBe(false);
@@ -896,7 +898,7 @@ describe('a failure reason agrees with its transport attempt', () => {
 
     const port = new FakePort('jolpica', () => ({
       outcome: 'mapping-failure',
-      attempt: attempt('j-1', 'successful'),
+      attempts: [attempt('j-1', 'successful')],
     }));
     const run = await coordinate([port], [CALENDAR]);
     const contribution = run.resources[0]?.contributions[0];
@@ -920,7 +922,7 @@ describe('a failure reason agrees with its transport attempt', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt(`j-${request.resource.kind}`),
+        attempts: [attempt(`j-${request.resource.kind}`)],
         payload,
       } as ProviderResourceOutcome;
     });
@@ -950,7 +952,7 @@ describe('a failure reason agrees with its transport attempt', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt('shared'),
+        attempts: [attempt('shared')],
         payload,
       } as ProviderResourceOutcome;
     });
@@ -984,7 +986,7 @@ describe('a failure reason agrees with its transport attempt', () => {
       () =>
         ({
           outcome: 'failed',
-          attempt: { reference: hostile, outcome: 'successful' },
+          attempts: [{ reference: hostile, outcome: 'successful' }],
           reason: 'provider-rate-limited',
         }) as unknown as ProviderResourceOutcome,
     );

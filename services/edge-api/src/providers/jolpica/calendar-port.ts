@@ -159,7 +159,11 @@ export class JolpicaCalendarPort implements ProviderResourcePort {
         // A bounded closed code. No provider value, key or body fragment.
         failureCategory: decoded.problem,
       });
-      return { outcome: 'failed', attempt, reason: 'invalid-payload' };
+      return {
+        outcome: 'failed',
+        attempts: [attempt],
+        reason: 'invalid-payload',
+      };
     }
 
     const normalized = normalizeSeasonCalendar(
@@ -175,12 +179,12 @@ export class JolpicaCalendarPort implements ProviderResourcePort {
       for (const failure of normalized.failures) {
         this.logger.error(providerMappingFailureEvent(failure));
       }
-      return { outcome: 'mapping-failure', attempt };
+      return { outcome: 'mapping-failure', attempts: [attempt] };
     }
 
     return {
       outcome: 'candidate',
-      attempt,
+      attempts: [attempt],
       payload: { kind: 'season-calendar', events: normalized.events },
     };
   }
@@ -212,7 +216,7 @@ export class JolpicaCalendarPort implements ProviderResourcePort {
     if (failure.kind === 'provider-rate-limited') {
       return {
         outcome: 'failed',
-        attempt,
+        attempts: [attempt],
         reason: 'provider-rate-limited',
         ...(failure.retryAfter ? { retryAfter: failure.retryAfter } : {}),
       };
@@ -220,7 +224,11 @@ export class JolpicaCalendarPort implements ProviderResourcePort {
     // Every remaining attempted kind is a transport-level failure of a request
     // that did leave. There is no retry here and none anywhere in this
     // adapter: pacing and scheduling belong to G5, not to a port.
-    return { outcome: 'failed', attempt, reason: 'provider-unavailable' };
+    return {
+      outcome: 'failed',
+      attempts: [attempt],
+      reason: 'provider-unavailable',
+    };
   }
 }
 

@@ -211,13 +211,13 @@ export function completePort(
     if (payload === null) {
       return {
         outcome: 'failed',
-        attempt: attempt(`${referencePrefix}-${sequence}`, 'failed'),
+        attempts: [attempt(`${referencePrefix}-${sequence}`, 'failed')],
         reason: 'invalid-payload',
       };
     }
     return {
       outcome: 'candidate',
-      attempt: attempt(`${referencePrefix}-${sequence}`),
+      attempts: [attempt(`${referencePrefix}-${sequence}`)],
       payload,
     };
   });
@@ -235,10 +235,12 @@ export function failingPort(
     sequence += 1;
     return {
       outcome: 'failed',
-      attempt: attempt(
-        `${referencePrefix}-${sequence}`,
-        reason === 'provider-rate-limited' ? 'rate-limited' : 'failed',
-      ),
+      attempts: [
+        attempt(
+          `${referencePrefix}-${sequence}`,
+          reason === 'provider-rate-limited' ? 'rate-limited' : 'failed',
+        ),
+      ],
       reason,
     };
   });

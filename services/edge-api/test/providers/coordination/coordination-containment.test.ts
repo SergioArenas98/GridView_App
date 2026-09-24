@@ -134,7 +134,7 @@ describe('coordination signals are bounded', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt(hostile.slice(0, transportReferenceMaxLength)),
+        attempts: [attempt(hostile.slice(0, transportReferenceMaxLength))],
         payload,
       };
     });

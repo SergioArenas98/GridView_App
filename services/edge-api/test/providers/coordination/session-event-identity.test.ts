@@ -115,7 +115,7 @@ async function runWithSchedule(
     sequence += 1;
     return {
       outcome: 'candidate',
-      attempt: attempt(`${sourceId}-schedule-${sequence}`),
+      attempts: [attempt(`${sourceId}-schedule-${sequence}`)],
       payload: {
         kind: 'event-schedule',
         round: request.resource.round,

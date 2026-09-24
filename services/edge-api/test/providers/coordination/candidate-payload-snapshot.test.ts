@@ -94,7 +94,7 @@ function payloadPort(payload: unknown, reference = 'j-1'): FakePort {
     () =>
       ({
         outcome: 'candidate',
-        attempt: attempt(reference),
+        attempts: [attempt(reference)],
         payload,
       }) as ProviderResourceOutcome,
   );
@@ -290,7 +290,7 @@ describe('a reused adapter buffer cannot change an already-classified contributi
       );
       return {
         outcome: 'candidate',
-        attempt: attempt(`j-${sequence}`),
+        attempts: [attempt(`j-${sequence}`)],
         payload: { kind: request.resource.kind, standings: buffer },
       } as unknown as ProviderResourceOutcome;
     });
@@ -328,7 +328,7 @@ describe('a reused adapter buffer cannot change an already-classified contributi
       for (const row of shared.standings) row.season = OTHER_SEASON;
       return {
         outcome: 'candidate',
-        attempt: attempt('o-1'),
+        attempts: [attempt('o-1')],
         payload: shared,
       } as unknown as ProviderResourceOutcome;
     });
@@ -430,7 +430,7 @@ describe('a stateful accessor cannot answer one value to validation and another 
       request.resource.kind === 'driver-standings'
         ? ({
             outcome: 'candidate',
-            attempt: attempt('j-standings'),
+            attempts: [attempt('j-standings')],
             payload: standingsPayload,
           } as unknown as ProviderResourceOutcome)
         : complete.fetchResource(request),
@@ -527,7 +527,7 @@ describe('a candidate that cannot be detached fails closed', () => {
     const reconciled = payloadPort(undetachable, 'j-1');
     const provisional = new FakePort('openf1', () => ({
       outcome: 'candidate',
-      attempt: attempt('o-1'),
+      attempts: [attempt('o-1')],
       payload: deepCopy(fixturePayload(source, DRIVER_STANDINGS)),
     }));
 
@@ -553,7 +553,7 @@ describe('a candidate that cannot be detached fails closed', () => {
       request.resource.kind === 'constructor-standings'
         ? ({
             outcome: 'candidate',
-            attempt: attempt('j-constructors'),
+            attempts: [attempt('j-constructors')],
             payload: {
               ...(fixturePayload(source, CONSTRUCTOR_STANDINGS) as object),
               recompute: () => undefined,
@@ -713,7 +713,7 @@ describe('ordinary payloads survive detachment unchanged', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt('shared-reference'),
+        attempts: [attempt('shared-reference')],
         payload,
       } as unknown as ProviderResourceOutcome;
     });
@@ -760,12 +760,12 @@ describe('ordinary payloads survive detachment unchanged', () => {
       return sequence === 1
         ? ({
             outcome: 'candidate',
-            attempt: attempt('same-reference', 'successful'),
+            attempts: [attempt('same-reference', 'successful')],
             payload,
           } as unknown as ProviderResourceOutcome)
         : ({
             outcome: 'failed',
-            attempt: attempt('same-reference', 'failed'),
+            attempts: [attempt('same-reference', 'failed')],
             reason: 'provider-unavailable',
           } as unknown as ProviderResourceOutcome);
     });

@@ -103,7 +103,7 @@ describe('an attempted request is counted exactly once', () => {
     const source = await seasonFixture();
     const jolpica = new FakePort('jolpica', (request) => ({
       outcome: 'candidate',
-      attempt: attempt('j-1'),
+      attempts: [attempt('j-1')],
       payload: payloadFor(source, request.resource) ?? {
         kind: 'season-circuits',
         circuits: [],
@@ -111,7 +111,7 @@ describe('an attempted request is counted exactly once', () => {
     }));
     const openf1 = new FakePort('openf1', () => ({
       outcome: 'failed',
-      attempt: attempt('o-1', 'rate-limited'),
+      attempts: [attempt('o-1', 'rate-limited')],
       reason: 'provider-rate-limited',
       retryAfter: '2026-07-20T12:01:00.000Z',
     }));
@@ -150,7 +150,7 @@ describe('an attempted request is counted exactly once', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt(`j-${sequence}`),
+        attempts: [attempt(`j-${sequence}`)],
         payload,
       };
     });
@@ -174,7 +174,7 @@ describe('an attempted request is counted exactly once', () => {
     const port = new FakePort('jolpica', (request) => {
       const payload = payloadFor(source, request.resource);
       if (payload === null) throw new Error('fixture gap');
-      return { outcome: 'candidate', attempt: attempt('shared'), payload };
+      return { outcome: 'candidate', attempts: [attempt('shared')], payload };
     });
 
     const run = await coordinate([port], [RACE, STANDINGS]);
@@ -211,12 +211,12 @@ describe('an attempted request is counted exactly once', () => {
     // conflict - two real requests, counted twice and attributed separately.
     const jolpica = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('shared'),
+      attempts: [attempt('shared')],
       payload,
     }));
     const openf1 = new FakePort('openf1', () => ({
       outcome: 'candidate',
-      attempt: attempt('shared'),
+      attempts: [attempt('shared')],
       payload,
     }));
 
@@ -260,7 +260,7 @@ describe('an attempted request is counted exactly once', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt(issued === 1 ? 'j-1' : 'collision'),
+        attempts: [attempt(issued === 1 ? 'j-1' : 'collision')],
         payload,
       };
     });
@@ -271,7 +271,7 @@ describe('an attempted request is counted exactly once', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt(provisionalIssued === 1 ? 'collision' : 'o-2'),
+        attempts: [attempt(provisionalIssued === 1 ? 'collision' : 'o-2')],
         payload,
       };
     });
@@ -309,10 +309,10 @@ describe('an attempted request is counted exactly once', () => {
     const jolpica = new FakePort('jolpica', () => {
       call += 1;
       return call === 1
-        ? { outcome: 'candidate', attempt: attempt('one'), payload }
+        ? { outcome: 'candidate', attempts: [attempt('one')], payload }
         : {
             outcome: 'failed',
-            attempt: attempt('one', 'failed'),
+            attempts: [attempt('one', 'failed')],
             reason: 'provider-unavailable',
           };
     });

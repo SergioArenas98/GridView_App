@@ -364,7 +364,7 @@ describe('normalization of a calendar', () => {
     expect(outcome.outcome).toBe('failed');
     if (outcome.outcome !== 'failed') throw new Error('unreachable');
     expect(outcome.reason).toBe('invalid-payload');
-    expect(outcome.attempt.outcome).toBe('successful');
+    expect(outcome.attempts[0].outcome).toBe('successful');
   });
 
   it('fails the resource when the race itself has no time', async () => {
@@ -891,7 +891,7 @@ describe('untrusted payload validation', () => {
       if (outcome.outcome !== 'failed') throw new Error('unreachable');
       expect(outcome.reason).toBe('invalid-payload');
       // The response was read, so the request is still counted exactly once.
-      expect(outcome.attempt.outcome).toBe('successful');
+      expect(outcome.attempts[0].outcome).toBe('successful');
     });
   }
 
@@ -943,7 +943,7 @@ describe('identity resolution', () => {
 
     expect(outcome.outcome).toBe('mapping-failure');
     if (outcome.outcome !== 'mapping-failure') throw new Error('unreachable');
-    expect(outcome.attempt.outcome).toBe('successful');
+    expect(outcome.attempts[0].outcome).toBe('successful');
     // No partial payload of any kind.
     expect(JSON.stringify(outcome)).not.toContain('events');
   });
@@ -1063,7 +1063,7 @@ describe('attempt and limiter accounting', () => {
       if (outcome.outcome !== 'not-attempted') throw new Error('unreachable');
       expect(outcome.reason).toBe('resource-unsupported');
       // No attempt field at all, so it cannot be miscounted as a request.
-      expect('attempt' in outcome).toBe(false);
+      expect('attempts' in outcome).toBe(false);
       expect(reserved).toBe(0);
       expect(calls).toHaveLength(0);
     });
@@ -1095,7 +1095,7 @@ describe('attempt and limiter accounting', () => {
     expect(outcome.outcome).toBe('not-attempted');
     if (outcome.outcome !== 'not-attempted') throw new Error('unreachable');
     expect(outcome.reason).toBe('cancelled');
-    expect('attempt' in outcome).toBe(false);
+    expect('attempts' in outcome).toBe(false);
     expect(reserved).toBe(0);
     expect(calls).toHaveLength(0);
   });
@@ -1116,7 +1116,7 @@ describe('attempt and limiter accounting', () => {
     if (outcome.outcome !== 'not-attempted') throw new Error('unreachable');
     expect(outcome.reason).toBe('rate-limit-deferred');
     expect(outcome.retryAt).toBe(retryAt);
-    expect('attempt' in outcome).toBe(false);
+    expect('attempts' in outcome).toBe(false);
     expect(calls).toHaveLength(0);
   });
 
@@ -1149,10 +1149,10 @@ describe('attempt and limiter accounting', () => {
     expect(calls).toHaveLength(1);
     expect(outcome.outcome).toBe('candidate');
     if (outcome.outcome !== 'candidate') throw new Error('unreachable');
-    expect(outcome.attempt.reference).toHaveLength(
-      outcome.attempt.reference.length,
+    expect(outcome.attempts[0].reference).toHaveLength(
+      outcome.attempts[0].reference.length,
     );
-    expect(outcome.attempt.outcome).toBe('successful');
+    expect(outcome.attempts[0].outcome).toBe('successful');
   });
 
   it('counts one provider failure exactly once and never retries', async () => {
@@ -1167,7 +1167,7 @@ describe('attempt and limiter accounting', () => {
     expect(outcome.outcome).toBe('failed');
     if (outcome.outcome !== 'failed') throw new Error('unreachable');
     expect(outcome.reason).toBe('provider-unavailable');
-    expect(outcome.attempt.outcome).toBe('failed');
+    expect(outcome.attempts[0].outcome).toBe('failed');
   });
 
   it('records an upstream 429 as the rate-limited attempt it was', async () => {
@@ -1182,7 +1182,7 @@ describe('attempt and limiter accounting', () => {
     expect(outcome.outcome).toBe('failed');
     if (outcome.outcome !== 'failed') throw new Error('unreachable');
     expect(outcome.reason).toBe('provider-rate-limited');
-    expect(outcome.attempt.outcome).toBe('rate-limited');
+    expect(outcome.attempts[0].outcome).toBe('rate-limited');
     expect(outcome.retryAfter).toBeDefined();
   });
 
@@ -1202,7 +1202,7 @@ describe('attempt and limiter accounting', () => {
     expect(outcome.reason).toBe('provider-unavailable');
     // The request left and was answered, so it is a successful attempt even
     // though GridView's own policy rejected the response.
-    expect(outcome.attempt.outcome).toBe('successful');
+    expect(outcome.attempts[0].outcome).toBe('successful');
   });
 
   it('counts an HTTP error status once as a failed attempt', async () => {
@@ -1216,7 +1216,7 @@ describe('attempt and limiter accounting', () => {
     expect(calls).toHaveLength(1);
     expect(outcome.outcome).toBe('failed');
     if (outcome.outcome !== 'failed') throw new Error('unreachable');
-    expect(outcome.attempt.outcome).toBe('failed');
+    expect(outcome.attempts[0].outcome).toBe('failed');
   });
 
   it('gives each request its own transport reference', async () => {
@@ -1237,7 +1237,7 @@ describe('attempt and limiter accounting', () => {
     if (first.outcome !== 'candidate' || second.outcome !== 'candidate') {
       throw new Error('unreachable');
     }
-    expect(first.attempt.reference).not.toBe(second.attempt.reference);
+    expect(first.attempts[0].reference).not.toBe(second.attempts[0].reference);
   });
 
   it('never throws out of the port', async () => {
@@ -1267,7 +1267,7 @@ describe('attempt and limiter accounting', () => {
     expect(outcome.reason).toBe('invalid-payload');
     // The request left and was answered before the body was read, so it stays
     // the one successful attempt the accounting already owes.
-    expect(outcome.attempt.outcome).toBe('successful');
+    expect(outcome.attempts[0].outcome).toBe('successful');
     // Read once, sent once: the guard adds no retry and no second reservation.
     expect(reservations).toHaveLength(1);
     expect(calls).toHaveLength(1);

@@ -45,7 +45,7 @@ function candidatePort(
     if (pause > 0) await delay(pause);
     const payload = payloadFor(source, request.resource);
     if (payload === null) throw new Error('fixture gap');
-    return { outcome: 'candidate', attempt: attempt(reference), payload };
+    return { outcome: 'candidate', attempts: [attempt(reference)], payload };
   });
 }
 
@@ -90,21 +90,21 @@ function provisionalTerminalOutcomes(): ProviderResourceOutcome[] {
     { outcome: 'not-attempted', reason: 'source-unavailable' },
     {
       outcome: 'failed',
-      attempt: attempt('p-1', 'failed'),
+      attempts: [attempt('p-1', 'failed')],
       reason: 'provider-unavailable',
     },
     {
       outcome: 'failed',
-      attempt: attempt('p-2', 'failed'),
+      attempts: [attempt('p-2', 'failed')],
       reason: 'invalid-payload',
     },
     {
       outcome: 'failed',
-      attempt: attempt('p-3', 'rate-limited'),
+      attempts: [attempt('p-3', 'rate-limited')],
       reason: 'provider-rate-limited',
       retryAfter: '2026-07-20T12:01:00.000Z',
     },
-    { outcome: 'mapping-failure', attempt: attempt('p-4') },
+    { outcome: 'mapping-failure', attempts: [attempt('p-4')] },
   ];
 }
 
@@ -137,7 +137,7 @@ describe('selection uses declared role and typed identity only', () => {
     };
     const provisional = new FakePort('openf1', () => ({
       outcome: 'candidate',
-      attempt: attempt('o-1'),
+      attempts: [attempt('o-1')],
       payload: { kind: 'session-classification', result: provisionalResult },
     }));
 
@@ -198,7 +198,7 @@ describe('selection uses declared role and typed identity only', () => {
       [
         outcomePort('jolpica', {
           outcome: 'failed',
-          attempt: attempt('j-1', 'failed'),
+          attempts: [attempt('j-1', 'failed')],
           reason: 'provider-unavailable',
         }),
         candidatePort('openf1', source, 'o-1'),
@@ -225,7 +225,7 @@ describe('selection uses declared role and typed identity only', () => {
       [
         outcomePort('jolpica', {
           outcome: 'failed',
-          attempt: attempt('j-1', 'failed'),
+          attempts: [attempt('j-1', 'failed')],
           reason: 'provider-unavailable',
         }),
         provisional,
@@ -266,7 +266,7 @@ describe('selection uses declared role and typed identity only', () => {
       [
         outcomePort('jolpica', {
           outcome: 'failed',
-          attempt: attempt('j-1', 'failed'),
+          attempts: [attempt('j-1', 'failed')],
           reason: 'provider-unavailable',
         }),
         outcomePort('openf1', {

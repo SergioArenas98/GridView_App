@@ -64,8 +64,10 @@ export type {
 export {
   attemptOutcomesForFailureReason,
   attemptedFailureReasons,
+  interruptionReasons,
   isInstant,
   isWellFormedOutcome,
+  maxTransportAttemptsPerOutcome,
   notAttemptedReasons,
   readProviderOutcome,
   transportReferenceMaxLength,
@@ -73,6 +75,8 @@ export {
 export type {
   AttemptedFailureReason,
   CandidatePayloadSnapshot,
+  InterruptionReason,
+  NonEmptyAttempts,
   NormalizedProviderOutcome,
   NormalizedTransportAttempt,
   NotAttemptedReason,
@@ -80,6 +84,7 @@ export type {
   ProviderResourcePort,
   ProviderResourceRequest,
   ProviderTransportAttempt,
+  ProviderTransportAttempts,
 } from './port';
 
 export { validateCoordinatedPayload } from './payload-contract';

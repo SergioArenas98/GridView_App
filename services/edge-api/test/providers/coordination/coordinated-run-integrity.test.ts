@@ -258,13 +258,13 @@ describe('a same-source transport contradiction taints the whole run', () => {
         if (payload === null) throw new Error('fixture gap');
         return {
           outcome: 'candidate',
-          attempt: attempt('shared-token', 'successful'),
+          attempts: [attempt('shared-token', 'successful')],
           payload,
         };
       }
       return {
         outcome: 'failed',
-        attempt: attempt('shared-token', ending),
+        attempts: [attempt('shared-token', ending)],
         reason:
           ending === 'rate-limited'
             ? 'provider-rate-limited'
@@ -283,7 +283,7 @@ describe('a same-source transport contradiction taints the whole run', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt(`j-${request.resource.kind}`),
+        attempts: [attempt(`j-${request.resource.kind}`)],
         payload,
       };
     });
@@ -362,7 +362,7 @@ describe('a same-source transport contradiction taints the whole run', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt('one-request', 'successful'),
+        attempts: [attempt('one-request', 'successful')],
         payload,
       };
     });
@@ -423,7 +423,7 @@ describe('a same-source transport contradiction taints the whole run', () => {
         .constructor as typeof import('./support').FakePort
     )('openf1', () => ({
       outcome: 'failed',
-      attempt: attempt('o-1', 'failed'),
+      attempts: [attempt('o-1', 'failed')],
       reason: 'provider-unavailable',
     }));
 
