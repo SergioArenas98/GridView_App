@@ -126,16 +126,20 @@ function expectInvalidPayload(outcome: ProviderResourceOutcome): void {
   if (outcome.outcome !== 'failed') throw new Error('unreachable');
   expect(outcome.reason).toBe('invalid-payload');
   // The response was read, so the request is still counted exactly once.
-  expect(outcome.attempt.outcome).toBe('successful');
-  expect(Object.keys(outcome).sort()).toEqual(['attempt', 'outcome', 'reason']);
+  expect(outcome.attempts[0].outcome).toBe('successful');
+  expect(Object.keys(outcome).sort()).toEqual([
+    'attempts',
+    'outcome',
+    'reason',
+  ]);
 }
 
 function expectMappingFailure(outcome: ProviderResourceOutcome): void {
   expect(outcome.outcome).toBe('mapping-failure');
   if (outcome.outcome !== 'mapping-failure') throw new Error('unreachable');
-  expect(outcome.attempt.outcome).toBe('successful');
+  expect(outcome.attempts[0].outcome).toBe('successful');
   // No partial payload of any kind.
-  expect(Object.keys(outcome).sort()).toEqual(['attempt', 'outcome']);
+  expect(Object.keys(outcome).sort()).toEqual(['attempts', 'outcome']);
 }
 
 /** A mapping registry over the real canonical registries plus `extra`. */
@@ -783,7 +787,7 @@ describe('attempt and limiter accounting', () => {
       expect(outcome.outcome).toBe('not-attempted');
       if (outcome.outcome !== 'not-attempted') throw new Error('unreachable');
       expect(outcome.reason).toBe('resource-unsupported');
-      expect('attempt' in outcome).toBe(false);
+      expect('attempts' in outcome).toBe(false);
       expect(reservations).toHaveLength(0);
       expect(calls).toHaveLength(0);
     });
@@ -809,7 +813,7 @@ describe('attempt and limiter accounting', () => {
     expect(outcome.outcome).toBe('not-attempted');
     if (outcome.outcome !== 'not-attempted') throw new Error('unreachable');
     expect(outcome.reason).toBe('cancelled');
-    expect('attempt' in outcome).toBe(false);
+    expect('attempts' in outcome).toBe(false);
     expect(reservations).toHaveLength(0);
     expect(calls).toHaveLength(0);
   });
@@ -832,7 +836,7 @@ describe('attempt and limiter accounting', () => {
     if (outcome.outcome !== 'not-attempted') throw new Error('unreachable');
     expect(outcome.reason).toBe('rate-limit-deferred');
     expect(outcome.retryAt).toBe(retryAt);
-    expect('attempt' in outcome).toBe(false);
+    expect('attempts' in outcome).toBe(false);
     expect(calls).toHaveLength(0);
   });
 
@@ -869,7 +873,7 @@ describe('attempt and limiter accounting', () => {
 
     expect(outcome.outcome).toBe('candidate');
     if (outcome.outcome !== 'candidate') throw new Error('unreachable');
-    expect(outcome.attempt.outcome).toBe('successful');
+    expect(outcome.attempts[0].outcome).toBe('successful');
     expect(reservations).toEqual(['jolpica']);
     expect(calls).toHaveLength(1);
   });
@@ -888,7 +892,7 @@ describe('attempt and limiter accounting', () => {
     expect(outcome.outcome).toBe('failed');
     if (outcome.outcome !== 'failed') throw new Error('unreachable');
     expect(outcome.reason).toBe('provider-unavailable');
-    expect(outcome.attempt.outcome).toBe('failed');
+    expect(outcome.attempts[0].outcome).toBe('failed');
   });
 
   it('records an upstream 429 as the rate-limited attempt it was', async () => {
@@ -907,7 +911,7 @@ describe('attempt and limiter accounting', () => {
     expect(outcome.outcome).toBe('failed');
     if (outcome.outcome !== 'failed') throw new Error('unreachable');
     expect(outcome.reason).toBe('provider-rate-limited');
-    expect(outcome.attempt.outcome).toBe('rate-limited');
+    expect(outcome.attempts[0].outcome).toBe('rate-limited');
     expect(outcome.retryAfter).toBeDefined();
   });
 
@@ -928,7 +932,7 @@ describe('attempt and limiter accounting', () => {
     if (first.outcome !== 'candidate' || second.outcome !== 'candidate') {
       throw new Error('expected two candidates');
     }
-    expect(first.attempt.reference).not.toBe(second.attempt.reference);
+    expect(first.attempts[0].reference).not.toBe(second.attempts[0].reference);
   });
 });
 

@@ -61,7 +61,7 @@ describe('an invalid payload is an attempted, contained failure', () => {
     const logger = new CapturingLogger();
     const port = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('jolpica-1'),
+      attempts: [attempt('jolpica-1')],
       payload: corruptCalendar([{ ...source.calendar[0]!, round: 0 }]),
     }));
 
@@ -82,7 +82,7 @@ describe('an invalid payload is an attempted, contained failure', () => {
     const logger = new CapturingLogger();
     const port = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('jolpica-1'),
+      attempts: [attempt('jolpica-1')],
       payload: corruptCalendar([{ ...source.calendar[0]!, round: 0 }]),
     }));
 
@@ -100,7 +100,7 @@ describe('an invalid payload is an attempted, contained failure', () => {
     const logger = new CapturingLogger();
     const port = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('jolpica-shared'),
+      attempts: [attempt('jolpica-shared')],
       payload: corruptCalendar([{ ...source.calendar[0]!, round: 0 }]),
     }));
 
@@ -116,7 +116,7 @@ describe('an invalid payload is an attempted, contained failure', () => {
     const logger = new CapturingLogger();
     const port = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('jolpica-1'),
+      attempts: [attempt('jolpica-1')],
       payload: corruptCalendar([{ ...source.calendar[0]!, round: 0 }]),
     }));
 
@@ -140,12 +140,12 @@ describe('an invalid payload is an attempted, contained failure', () => {
       return payload === null
         ? {
             outcome: 'failed',
-            attempt: attempt('x', 'failed'),
+            attempts: [attempt('x', 'failed')],
             reason: 'invalid-payload',
           }
         : {
             outcome: 'candidate',
-            attempt: attempt(`ref-${request.resource.kind}`),
+            attempts: [attempt(`ref-${request.resource.kind}`)],
             payload,
           };
     });
@@ -166,7 +166,7 @@ describe('an invalid payload is an attempted, contained failure', () => {
     const logger = new CapturingLogger();
     const port = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('jolpica-1'),
+      attempts: [attempt('jolpica-1')],
       payload: corruptCalendar([
         { ...source.calendar[0]!, round: 0, name: 'SECRET-UPSTREAM-VALUE' },
       ]),
@@ -189,7 +189,7 @@ describe('containment does not spread', () => {
     const logger = new CapturingLogger();
     const broken = new FakePort('openf1', () => ({
       outcome: 'candidate',
-      attempt: attempt('openf1-1'),
+      attempts: [attempt('openf1-1')],
       payload: {
         kind: 'driver-standings',
         standings: [{ ...source.driverStandings[0]!, position: 0 }],
@@ -220,7 +220,7 @@ describe('containment does not spread', () => {
     const logger = new CapturingLogger();
     const broken = new FakePort('openf1', () => ({
       outcome: 'candidate',
-      attempt: attempt('openf1-1'),
+      attempts: [attempt('openf1-1')],
       payload: {
         kind: 'driver-standings',
         standings: [{ ...source.driverStandings[0]!, points: Number.NaN }],
@@ -253,7 +253,7 @@ describe('containment does not spread', () => {
       if (request.resource.kind === 'season-calendar') {
         return {
           outcome: 'candidate',
-          attempt: attempt('bad'),
+          attempts: [attempt('bad')],
           payload: corruptCalendar([{ ...source.calendar[0]!, round: 0 }]),
         };
       }
@@ -261,12 +261,12 @@ describe('containment does not spread', () => {
       return payload === null
         ? {
             outcome: 'failed',
-            attempt: attempt('n', 'failed'),
+            attempts: [attempt('n', 'failed')],
             reason: 'invalid-payload',
           }
         : {
             outcome: 'candidate',
-            attempt: attempt(`ok-${request.resource.kind}`),
+            attempts: [attempt(`ok-${request.resource.kind}`)],
             payload,
           };
     });
@@ -292,7 +292,7 @@ describe('containment does not spread', () => {
     const logger = new CapturingLogger();
     const port = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('jolpica-1'),
+      attempts: [attempt('jolpica-1')],
       payload: corruptCalendar([{ ...source.calendar[0]!, round: 0 }]),
     }));
 
@@ -315,7 +315,7 @@ describe('validation happens on the value that would be published', () => {
     const events: Record<string, unknown>[] = [{ ...source.calendar[0]! }];
     const port = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('jolpica-1'),
+      attempts: [attempt('jolpica-1')],
       payload: {
         kind: 'season-calendar',
         events,
@@ -343,7 +343,7 @@ describe('validation happens on the value that would be published', () => {
     // corruption present at the boundary is caught rather than assumed away.
     const port = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('jolpica-1'),
+      attempts: [attempt('jolpica-1')],
       payload: corruptCalendar([{ ...source.calendar[0]!, round: 0 }]),
     }));
 
@@ -361,7 +361,7 @@ describe('validation happens on the value that would be published', () => {
     const logger = new CapturingLogger();
     const port = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('jolpica-1'),
+      attempts: [attempt('jolpica-1')],
       // Answers the wrong question *and* breaks the contract. Binding decides
       // first, so the reported reason stays the established one.
       payload: {

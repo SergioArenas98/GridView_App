@@ -466,6 +466,58 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
   });
 
   /**
+   * The season-participants port, named module by module, on exactly the
+   * circuits port's terms: rooted at the port, the bundler reaches every
+   * participants module, and none of them is in the Worker entry point's graph.
+   */
+  it('keeps the season-participants port out of the Worker graph', async () => {
+    const participantsModules = [
+      `${dormantDir}participants-port.ts`,
+      `${dormantDir}participants-payload.ts`,
+      `${dormantDir}participants-normalizer.ts`,
+      `${dormantDir}curated-participants.ts`,
+    ];
+
+    const own = await moduleGraph(edgeApiRoot, [
+      participantsModules[0] as string,
+    ]);
+    for (const module of participantsModules) {
+      expect(Object.keys(own.inputs)).toContain(module);
+    }
+
+    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
+    for (const module of participantsModules) {
+      expect(Object.keys(worker.inputs)).not.toContain(module);
+    }
+  });
+
+  /**
+   * The coordination seam the ports answer to is dormant too, and the
+   * multi-request amendment (ADR 0023 A1) changed only modules inside it. So
+   * no coordination module may be in the Worker entry point's graph either:
+   * that is what lets the amendment leave the deployed bundle unchanged.
+   */
+  it('keeps the coordination seam out of the Worker graph', async () => {
+    const coordinationModules = [
+      'src/providers/coordination/port.ts',
+      'src/providers/coordination/coordinator.ts',
+      'src/providers/coordination/outcome.ts',
+    ];
+
+    const own = await moduleGraph(edgeApiRoot, [
+      'src/providers/coordination/index.ts',
+    ]);
+    for (const module of coordinationModules) {
+      expect(Object.keys(own.inputs)).toContain(module);
+    }
+
+    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
+    for (const module of coordinationModules) {
+      expect(Object.keys(worker.inputs)).not.toContain(module);
+    }
+  });
+
+  /**
    * Non-vacuity for both boundaries above, in the four shapes a reachable
    * adapter could take.
    *
@@ -631,6 +683,7 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     const files = sourceFiles(join(repoRoot, 'services', 'edge-api', 'src'));
     expect(files).toContain('providers/jolpica/calendar-port.ts');
     expect(files).toContain('providers/jolpica/circuits-port.ts');
+    expect(files).toContain('providers/jolpica/participants-port.ts');
     expect(files).toContain('index.ts');
   });
 
@@ -691,6 +744,7 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
       const contents = readFileSync(join(sourceDir, file), 'utf8');
       expect(contents).not.toContain('JolpicaCalendarPort');
       expect(contents).not.toContain('JolpicaCircuitsPort');
+      expect(contents).not.toContain('JolpicaParticipantsPort');
       // The coordinator that would drive a port is itself still unconstructed
       // outside its own dormant scope.
       expect(contents).not.toContain('new MultiSourceCoordinator');

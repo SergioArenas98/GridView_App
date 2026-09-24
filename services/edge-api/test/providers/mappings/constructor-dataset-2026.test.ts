@@ -20,8 +20,10 @@
  * association or any canonical name means changing it here in the same
  * reviewed commit. Drivers are not part of this dataset and stay incomplete.
  *
- * A complete constructor dataset is not a port. Nothing consumes any of this:
- * no drivers, constructors or participants port exists.
+ * A complete constructor dataset is not a port. When it merged nothing
+ * consumed it and no drivers, constructors or participants port existed; the
+ * dormant, fixture-tested participants port added later (Implementation Plan
+ * §14.0.21) now resolves these mappings, and is registered nowhere.
  *
  * Runs from a clean checkout. The raw Jolpica capture is held outside the
  * repository and is never read here: §8.9 is the repository-owned record of

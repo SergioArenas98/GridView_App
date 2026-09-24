@@ -69,7 +69,7 @@ function validOutcomes(payload: unknown): Record<string, unknown> {
   return {
     candidate: {
       outcome: 'candidate',
-      attempt: attempt('ref-1'),
+      attempts: [attempt('ref-1')],
       payload,
     },
     'not-attempted': {
@@ -78,12 +78,17 @@ function validOutcomes(payload: unknown): Record<string, unknown> {
     },
     failed: {
       outcome: 'failed',
-      attempt: attempt('ref-2', 'failed'),
+      attempts: [attempt('ref-2', 'failed')],
       reason: 'provider-unavailable',
     },
     'mapping-failure': {
       outcome: 'mapping-failure',
-      attempt: attempt('ref-3'),
+      attempts: [attempt('ref-3')],
+    },
+    interrupted: {
+      outcome: 'interrupted',
+      attempts: [attempt('ref-4')],
+      reason: 'rate-limit-deferred',
     },
   };
 }
@@ -119,7 +124,7 @@ describe('every declared outcome variant is accepted', () => {
         expect(
           isWellFormedOutcome({
             outcome: 'failed',
-            attempt: attempt('r', outcome),
+            attempts: [attempt('r', outcome)],
             reason,
           }),
           `${reason}/${outcome}`,
@@ -127,7 +132,7 @@ describe('every declared outcome variant is accepted', () => {
         expect(
           isWellFormedOutcome({
             outcome: 'failed',
-            attempt: attempt('r', outcome),
+            attempts: [attempt('r', outcome)],
             reason,
             retryAfter: RETRY_AT,
           }),
@@ -142,10 +147,11 @@ describe('a required field is never optional', () => {
   it('rejects each variant with one declared required field removed', async () => {
     const source = await seasonFixture();
     const required: Record<string, readonly string[]> = {
-      candidate: ['outcome', 'attempt', 'payload'],
+      candidate: ['outcome', 'attempts', 'payload'],
       'not-attempted': ['outcome', 'reason'],
-      failed: ['outcome', 'attempt', 'reason'],
-      'mapping-failure': ['outcome', 'attempt'],
+      failed: ['outcome', 'attempts', 'reason'],
+      'mapping-failure': ['outcome', 'attempts'],
+      interrupted: ['outcome', 'attempts', 'reason'],
     };
     const valid = validOutcomes(payloadFor(source, RACE));
     for (const [name, keys] of Object.entries(required)) {
@@ -173,7 +179,7 @@ describe('not-attempted cannot carry an attempt', () => {
         isWellFormedOutcome({
           outcome: 'not-attempted',
           reason: 'rate-limit-deferred',
-          attempt: attempt('smuggled', outcome),
+          attempts: [attempt('smuggled', outcome)],
         }),
       ).toBe(false);
     });
@@ -187,16 +193,15 @@ describe('not-attempted cannot carry an attempt', () => {
       isWellFormedOutcome({
         outcome: 'not-attempted',
         reason: 'source-unavailable',
-        attempt: undefined,
+        attempts: [undefined],
       }),
     ).toBe(false);
   });
 
   it('rejects an attempt reachable only through the prototype', () => {
-    const hostile = Object.create({ attempt: attempt('inherited') }) as Record<
-      string,
-      unknown
-    >;
+    const hostile = Object.create({
+      attempts: [attempt('inherited')],
+    }) as Record<string, unknown>;
     hostile.outcome = 'not-attempted';
     hostile.reason = 'cancelled';
     expect(isWellFormedOutcome(hostile)).toBe(false);
@@ -247,7 +252,7 @@ describe('a malformed outcome produces no accounting', () => {
     const run = await coordinateOutcome(() => ({
       outcome: 'not-attempted',
       reason: 'rate-limit-deferred',
-      attempt: attempt('hidden'),
+      attempts: [attempt('hidden')],
       retryAt: RETRY_AT,
     }));
     const contribution = coordinationFor(run, RACE)?.contributions[0];
@@ -271,7 +276,7 @@ describe('a malformed outcome produces no accounting', () => {
         outcome: 'not-attempted',
         reason: 'limiter-unavailable',
       };
-      Object.defineProperty(hostile, 'attempt', {
+      Object.defineProperty(hostile, 'attempts', {
         enumerable: true,
         get() {
           throw new Error('hostile accessor');
@@ -314,7 +319,7 @@ describe('a malformed outcome produces no accounting', () => {
     const source = await seasonFixture();
     const run = await coordinateOutcome(() => ({
       outcome: 'candidate',
-      attempt: attempt('ref'),
+      attempts: [attempt('ref')],
       payload: payloadFor(source, RACE),
       smuggled: true,
     }));
@@ -332,7 +337,7 @@ describe('a malformed outcome produces no accounting', () => {
     const port = new FakePort('jolpica', () => ({
       outcome: 'not-attempted',
       reason: 'rate-limit-deferred',
-      attempt: attempt('smuggled-reference'),
+      attempts: [attempt('smuggled-reference')],
     }));
     await new MultiSourceCoordinator({ ports: [port], logger }).coordinate({
       plan: { season: SEASON, resources: [RACE] },
@@ -354,7 +359,7 @@ describe('valid accounting is unchanged by the shape closure', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt(`j-${sequence}`),
+        attempts: [attempt(`j-${sequence}`)],
         payload,
       };
     });
@@ -375,7 +380,7 @@ describe('valid accounting is unchanged by the shape closure', () => {
     const port = new FakePort('jolpica', (request) => {
       const payload = payloadFor(source, request.resource);
       if (payload === null) throw new Error('fixture gap');
-      return { outcome: 'candidate', attempt: attempt('shared'), payload };
+      return { outcome: 'candidate', attempts: [attempt('shared')], payload };
     });
 
     const run = await coordinate([port], [RACE, STANDINGS]);

@@ -81,7 +81,8 @@ See `../docs/technical/GridView_Media.md`.
 `seasons/<year>/provider-mappings.development.json` (`kind: provider-mappings`)
 maps an **exact** provider identifier to a GridView public ID that already
 exists in one of the curated registries. It is **internal**, and it is
-**dormant**: no provider adapter exists, so nothing consumes it at runtime.
+**dormant**: nothing consumes it at runtime. Only the dormant, fixture-tested
+Jolpica ports resolve it, in tests.
 
 A mapping is keyed on five things together — season, source (`jolpica` or
 `openf1`), entity kind, exact provider field and exact provider value — and is
@@ -111,7 +112,8 @@ Jolpica publishes none: the complete tuple of the file's season plus `round`,
 exact `raceName` and exact `circuitId`. A record never repeats its season, so a
 locator can never disagree with its own file. Every component must match
 exactly; no subset, fuzzy or normalized match exists. Season 2026 carries 23
-event mappings, one per observed locator. No adapter consumes them yet.
+event mappings, one per observed locator. No deployed or application path
+consumes them.
 
 `seasons/<year>/provider-evidence.development.json` (`kind: provider-evidence`)
 records every provider identity this repository already has evidence for.

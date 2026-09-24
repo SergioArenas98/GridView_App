@@ -287,8 +287,9 @@ integers and can be added later under the same model if a contract requires it.
   **season-calendar port implemented, fixture-tested and dormant on
   2026-09-20** with the A9 test replacement made in the same change. A
   **season-circuits port** followed on **2026-09-22**, equally dormant
-  (Implementation Plan §14.0.17). Every other Jolpica resource and the A7
-  assembly change are still outstanding
+  (Implementation Plan §14.0.17). *A **season-participants** port followed on
+  **2026-09-24**, equally dormant (Implementation Plan §14.0.21).* Every other
+  Jolpica resource and the A7 assembly change are still outstanding
 - Date: 2026-09-16
 - Phase: 9B, recorded before the first Jolpica calendar adapter slice
 - Amends: this ADR's [scope note](#scope-note), and — for coordinated season
@@ -799,7 +800,8 @@ a future adapter must satisfy.
 | Jolpica **season-calendar** port              | **Implemented, fixture-tested and dormant** (2026-09-20); not registered, not constructed by any production composition and absent from the Worker bundle |
 | Weekend-format rule (A10)                     | **Decided and implemented** (2026-09-20), in the same change that records it. Three-way evidence rule; no enum, contract or runtime change |
 | Jolpica **season-circuits** port             | **Implemented, fixture-tested and dormant** (2026-09-22, Implementation Plan §14.0.17); a separate port that answers only `season-circuits`, resolving every `circuitId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |
-| Jolpica adapter, for every other resource     | **Not implemented.** Participants, event schedules, classifications and standings are refused as `resource-unsupported`; this is not a working full adapter |
+| Jolpica **season-participants** port         | **Implemented, fixture-tested and dormant** (2026-09-24, Implementation Plan §14.0.21); two sequential requests resolving every `driverId` and `constructorId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |
+| Jolpica adapter, for every other resource     | **Not implemented.** Event schedules, classifications and standings are refused as `resource-unsupported`; this is not a working full adapter. *Participants removed from this row 2026-09-24: see the row above.* |
 | `provider-neutrality.test.ts`                | **Replaced** (2026-09-20), in the same change that added the adapter: composition, dependency and configuration dormancy assertions in place of the Jolpica file-name assertion (A9) |
 | G1 (live provider mode)                      | **Open**                                                                 |
 | G5 (event-aware scheduling), G9 (provenance) | **Open**                                                                 |

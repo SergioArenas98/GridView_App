@@ -8,9 +8,10 @@
  * (GridView_Provider_Evaluation.md §10.10) true by construction rather than by
  * convention.
  *
- * No adapter implements this yet. It is the seam a Jolpica adapter and a
- * fixture-only OpenF1 adapter will implement, and the only thing the
- * coordinator drives.
+ * Only dormant, fixture-tested Jolpica ports implement it, and none is
+ * registered with a coordinator in production. It is the seam every Jolpica
+ * port and a future fixture-only OpenF1 adapter implement, and the only thing
+ * the coordinator drives.
  */
 
 import type { ProviderAttemptOutcome } from '../provider-metrics';
@@ -35,7 +36,8 @@ export interface ProviderResourceRequest {
 export const transportReferenceMaxLength = 64;
 
 /**
- * The one outbound request an outcome was derived from.
+ * One outbound request an outcome was derived from. An outcome carries every
+ * request its execution made, in order (`ProviderTransportAttempts`).
  *
  * **Why a reference and not a boolean.** One Jolpica read can legitimately
  * serve more than one logical resource - a single classification response
@@ -44,11 +46,11 @@ export const transportReferenceMaxLength = 64;
  * Two outcomes that share a reference are therefore counted once, and the
  * coordinator - not the adapter - is what enforces that.
  *
- * A `not-attempted` outcome has no attempt field at all, so "not attempted"
+ * A `not-attempted` outcome has no attempts field at all, so "not attempted"
  * can never be miscounted as an attempt. That is enforced at runtime, not only
  * in the type: `isWellFormedOutcome` validates the union as a **closed** set of
- * shapes, so an adapter that hands back `not-attempted` carrying an `attempt`
- * is rejected as malformed rather than silently accounted as a skip.
+ * shapes, so an adapter that hands back `not-attempted` carrying `attempts` is
+ * rejected as malformed rather than silently accounted as a skip.
  */
 export interface ProviderTransportAttempt {
   /** Correlates outcomes that came from the same physical request. */
@@ -60,6 +62,31 @@ export interface ProviderTransportAttempt {
    */
   readonly outcome: ProviderAttemptOutcome;
 }
+
+/**
+ * Every real transport request one resource execution made, in the order the
+ * requests were sent (ADR 0023 amendment A1).
+ *
+ * A resource may need more than one request - the Jolpica season participants
+ * are two endpoints - and every one of them left GridView, consumed window
+ * capacity and must be counted. So the collection is **non-empty and ordered**,
+ * every reference in it is distinct, and nothing is omitted because a later
+ * request decided the outcome. A reservation that never reached transport is
+ * not an attempt and never appears here.
+ */
+export type ProviderTransportAttempts = readonly [
+  ProviderTransportAttempt,
+  ...ProviderTransportAttempt[],
+];
+
+/**
+ * Upper bound on the attempts one outcome may report.
+ *
+ * No resource needs more than two sequential requests today. The bound exists
+ * so an adapter-supplied collection cannot decide how much work this boundary
+ * performs, not as a statement about any provider.
+ */
+export const maxTransportAttemptsPerOutcome = 8;
 
 /**
  * Reasons GridView did **not** send anything.
@@ -85,9 +112,30 @@ export const notAttemptedReasons = [
 export type NotAttemptedReason = (typeof notAttemptedReasons)[number];
 
 /**
+ * Why a resource execution **stopped after** one or more real requests,
+ * without sending the next one (ADR 0023 amendment A1).
+ *
+ * Exactly the not-attempted reasons that can arise *between* two requests of
+ * one execution: the caller cancelled, or the limiter deferred or could not
+ * answer for the next reservation. The refused step is not an attempt. Policy
+ * reasons (`source-locked`, `source-unavailable`, `resource-unsupported`) are
+ * decided before any request and can never interrupt one, and a provider or
+ * adapter error is never an interruption.
+ */
+export const interruptionReasons = [
+  'cancelled',
+  'rate-limit-deferred',
+  'limiter-unavailable',
+] as const satisfies readonly NotAttemptedReason[];
+
+export type InterruptionReason = (typeof interruptionReasons)[number];
+
+/**
  * Reasons a request that **was** sent did not yield a usable candidate.
  *
- * Every member implies exactly one attempted provider request.
+ * Every member describes the **final** attempt of the outcome that carries it.
+ * Earlier attempts of the same execution succeeded, or it would have stopped
+ * there.
  */
 export const attemptedFailureReasons = [
   /** Upstream answered 429 after the request was attempted. */
@@ -164,10 +212,12 @@ function isAttemptedFailureReason(
 export type ProviderResourceOutcome =
   | {
       readonly outcome: 'candidate';
-      readonly attempt: ProviderTransportAttempt;
+      /** Every request the execution made; each one succeeded. */
+      readonly attempts: ProviderTransportAttempts;
       readonly payload: CoordinatedPayload;
     }
   | {
+      /** Zero requests were made. Carries no attempts at all. */
       readonly outcome: 'not-attempted';
       readonly reason: NotAttemptedReason;
       /** Local pacing hint. Carried as data only; G5 owns scheduling. */
@@ -175,7 +225,11 @@ export type ProviderResourceOutcome =
     }
   | {
       readonly outcome: 'failed';
-      readonly attempt: ProviderTransportAttempt;
+      /**
+       * Every request the execution made. All but the last succeeded; the last
+       * is the one `reason` describes.
+       */
+      readonly attempts: ProviderTransportAttempts;
       readonly reason: AttemptedFailureReason;
       /** Upstream 429 instruction, already parsed to an absolute instant. */
       readonly retryAfter?: string;
@@ -189,7 +243,24 @@ export type ProviderResourceOutcome =
        * the coordinator must contain the failure, not re-report it.
        */
       readonly outcome: 'mapping-failure';
-      readonly attempt: ProviderTransportAttempt;
+      /** Every request the execution made; each one was answered. */
+      readonly attempts: ProviderTransportAttempts;
+    }
+  | {
+      /**
+       * The execution made one or more requests and then stopped **before**
+       * sending the next one, for a reason that is not a provider answer.
+       *
+       * It carries no payload and is never selectable: a resource that needed
+       * the refused request has no usable candidate. The refused step is not
+       * an attempt and appears nowhere in `attempts`.
+       */
+      readonly outcome: 'interrupted';
+      /** Every request made before the interruption; each one succeeded. */
+      readonly attempts: ProviderTransportAttempts;
+      readonly reason: InterruptionReason;
+      /** Local pacing hint for a deferral. Carried as data only. */
+      readonly retryAt?: string;
     };
 
 /**
@@ -276,10 +347,7 @@ const attemptKeys = ['reference', 'outcome'] as const;
  * attempt, and a throwing accessor is contained here rather than escaping into
  * attribution.
  */
-function readAttempt(outcome: object): NormalizedTransportAttempt | null {
-  const field = ownDataProperty(outcome, 'attempt');
-  if (field === null) return null;
-  const value = field.value;
+function readAttemptRecord(value: unknown): NormalizedTransportAttempt | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return null;
   }
@@ -295,6 +363,101 @@ function readAttempt(outcome: object): NormalizedTransportAttempt | null {
   if (!isBoundedReference(reference.value)) return null;
   if (!isAttemptOutcome(attemptOutcome.value)) return null;
   return { reference: reference.value, outcome: attemptOutcome.value };
+}
+
+/** A canonical array index: `0`, or a decimal with no leading zero. */
+const arrayIndexPattern = /^(?:0|[1-9][0-9]*)$/;
+
+/**
+ * The ordered attempt collection, as the coordinator's own copies.
+ *
+ * The collection is a closed runtime shape too, for the same reason each
+ * attempt is: it is what the run's accounting is keyed by. So it must be a
+ * real array whose own keys are exactly its indices and `length` - no hole, no
+ * extra, symbol-keyed or non-enumerable property - with a bounded,
+ * non-empty length. Each element is read once as an own data property and is
+ * itself a closed attempt, and every reference is distinct: two elements of
+ * one execution naming the same request would either count it twice or hide a
+ * second request behind the first.
+ *
+ * The length is decided before anything is walked, so an adapter cannot make
+ * this boundary do unbounded work. Order is preserved exactly as given: it is
+ * the transport order, and accounting never reorders it.
+ */
+function readAttempts(
+  outcome: object,
+): NonEmptyAttempts<NormalizedTransportAttempt> | null {
+  const field = ownDataProperty(outcome, 'attempts');
+  if (field === null) return null;
+  const collection = field.value;
+  if (!Array.isArray(collection)) return null;
+  const lengthField = ownDataProperty(collection, 'length');
+  if (lengthField === null) return null;
+  const count = lengthField.value;
+  if (
+    typeof count !== 'number' ||
+    !Number.isSafeInteger(count) ||
+    count < 1 ||
+    count > maxTransportAttemptsPerOutcome
+  ) {
+    return null;
+  }
+  const keys = Reflect.ownKeys(collection);
+  if (keys.length !== count + 1) return null;
+  for (const key of keys) {
+    if (typeof key !== 'string') return null;
+    if (key === 'length') continue;
+    if (!arrayIndexPattern.test(key) || Number(key) >= count) return null;
+  }
+
+  const attempts: NormalizedTransportAttempt[] = [];
+  const references = new Set<string>();
+  for (let index = 0; index < count; index += 1) {
+    const element = ownDataProperty(collection, String(index));
+    if (element === null) return null;
+    const attempt = readAttemptRecord(element.value);
+    if (attempt === null) return null;
+    if (references.has(attempt.reference)) return null;
+    references.add(attempt.reference);
+    attempts.push(attempt);
+  }
+  const [first, ...rest] = attempts;
+  return first === undefined ? null : [first, ...rest];
+}
+
+/**
+ * Whether every attempt of an execution succeeded at the transport layer.
+ *
+ * True of a `candidate` (usable data rests on answered requests), a
+ * `mapping-failure` (the mapping boundary runs on responses that were read)
+ * and an `interrupted` execution (it stopped *before* a request, so every
+ * request it did make was answered - a failed one would have ended it as
+ * `failed` instead).
+ */
+function allSuccessful(
+  attempts: readonly NormalizedTransportAttempt[],
+): boolean {
+  return attempts.every((attempt) => attempt.outcome === 'successful');
+}
+
+/**
+ * Whether an attempted failure's attempts describe a possible fail-fast
+ * execution: every request before the last succeeded, and the last one pairs
+ * with `reason` as `attemptOutcomesForFailureReason` allows.
+ *
+ * The per-attempt `outcome` each attempt already carries is the accounting
+ * classification; this only refuses a combination no real execution produces.
+ */
+function isConsistentFailure(
+  attempts: NonEmptyAttempts<NormalizedTransportAttempt>,
+  reason: AttemptedFailureReason,
+): boolean {
+  const last = attempts[attempts.length - 1];
+  if (last === undefined) return false;
+  return (
+    allSuccessful(attempts.slice(0, -1)) &&
+    attemptOutcomesForFailureReason(reason).includes(last.outcome)
+  );
 }
 
 function isAttemptOutcome(value: unknown): value is ProviderAttemptOutcome {
@@ -318,27 +481,27 @@ function isCandidatePayload(value: unknown): boolean {
 }
 
 /**
- * A `candidate` may only rest on an attempt that says the transport
- * **succeeded**.
+ * A `candidate` may only rest on attempts that say the transport
+ * **succeeded**, every one of them.
  *
- * The two halves of a candidate are claims about the same request: the payload
- * says "here is usable data" and the attempt says how the request that
- * produced it ended. `candidate` with a `failed` or `rate-limited` attempt
- * describes no possible run - a request that failed returned nothing to
- * normalize, and a rate-limited one was refused - so believing either half
+ * The two halves of a candidate are claims about the same requests: the
+ * payload says "here is usable data" and the attempts say how the requests
+ * that produced it ended. `candidate` with a `failed` or `rate-limited`
+ * attempt describes no possible run - a request that failed returned nothing
+ * to normalize, and a rate-limited one was refused - so believing either half
  * would mean selecting, and possibly publishing, a payload while the run's own
- * accounting simultaneously recorded that its request did not succeed.
+ * accounting simultaneously recorded that a request did not succeed.
  *
  * A response that arrived and then failed *after* transport is already
  * expressible without this contradiction: `failed` with `invalid-payload`, or
- * `mapping-failure`, both of which keep their `successful` attempt and are
- * counted as the request they were.
+ * `mapping-failure`, both of which keep their `successful` attempts and are
+ * counted as the requests they were.
  */
-function readSuccessfulAttempt(
+function readSuccessfulAttempts(
   outcome: object,
-): NormalizedTransportAttempt | null {
-  const attempt = readAttempt(outcome);
-  return attempt !== null && attempt.outcome === 'successful' ? attempt : null;
+): NonEmptyAttempts<NormalizedTransportAttempt> | null {
+  const attempts = readAttempts(outcome);
+  return attempts !== null && allSuccessful(attempts) ? attempts : null;
 }
 
 /**
@@ -393,7 +556,7 @@ type ProviderOutcomeVariant = ProviderResourceOutcome['outcome'];
  */
 const declaredOutcomeKeys = [
   'outcome',
-  'attempt',
+  'attempts',
   'payload',
   'reason',
   'retryAt',
@@ -415,13 +578,17 @@ interface OutcomeShape {
  * unvalidated branch.
  */
 const outcomeShapes: Record<ProviderOutcomeVariant, OutcomeShape> = {
-  candidate: { required: ['outcome', 'attempt', 'payload'], optional: [] },
+  candidate: { required: ['outcome', 'attempts', 'payload'], optional: [] },
   'not-attempted': { required: ['outcome', 'reason'], optional: ['retryAt'] },
   failed: {
-    required: ['outcome', 'attempt', 'reason'],
+    required: ['outcome', 'attempts', 'reason'],
     optional: ['retryAfter'],
   },
-  'mapping-failure': { required: ['outcome', 'attempt'], optional: [] },
+  'mapping-failure': { required: ['outcome', 'attempts'], optional: [] },
+  interrupted: {
+    required: ['outcome', 'attempts', 'reason'],
+    optional: ['retryAt'],
+  },
 };
 
 function isOutcomeVariant(value: unknown): value is ProviderOutcomeVariant {
@@ -441,11 +608,11 @@ function isOutcomeVariant(value: unknown): value is ProviderOutcomeVariant {
  * - **Every required key is an own property.** A required field inherited from
  *   a prototype is not this variant either.
  * - **No key another variant declares is reachable at all.** `in` walks the
- *   prototype chain, which is what makes an `attempt` planted on a prototype
+ *   prototype chain, which is what makes an `attempts` planted on a prototype
  *   fail closed on `not-attempted` rather than being read later.
  *
- * Presence is decided structurally, never by value: `attempt: undefined` is an
- * own property and is therefore still an attempt-bearing outcome.
+ * Presence is decided structurally, never by value: `attempts: undefined` is
+ * an own property and is therefore still an attempt-bearing outcome.
  *
  * Nothing here reads a property's *value*, so a throwing accessor cannot fire
  * from this function. A hostile proxy can still throw from `ownKeys` or `has`;
@@ -476,6 +643,9 @@ export interface NormalizedTransportAttempt {
   readonly outcome: ProviderAttemptOutcome;
 }
 
+/** A non-empty, ordered attempt collection. */
+export type NonEmptyAttempts<T> = readonly [T, ...T[]];
+
 /**
  * The coordinator's detached copy of one candidate payload.
  *
@@ -499,7 +669,7 @@ export type CandidatePayloadSnapshot =
 export type NormalizedProviderOutcome =
   | {
       readonly outcome: 'candidate';
-      readonly attempt: NormalizedTransportAttempt;
+      readonly attempts: NonEmptyAttempts<NormalizedTransportAttempt>;
       readonly payload: CandidatePayloadSnapshot;
     }
   | {
@@ -509,13 +679,19 @@ export type NormalizedProviderOutcome =
     }
   | {
       readonly outcome: 'failed';
-      readonly attempt: NormalizedTransportAttempt;
+      readonly attempts: NonEmptyAttempts<NormalizedTransportAttempt>;
       readonly reason: AttemptedFailureReason;
       readonly retryAfter: string | null;
     }
   | {
       readonly outcome: 'mapping-failure';
-      readonly attempt: NormalizedTransportAttempt;
+      readonly attempts: NonEmptyAttempts<NormalizedTransportAttempt>;
+    }
+  | {
+      readonly outcome: 'interrupted';
+      readonly attempts: NonEmptyAttempts<NormalizedTransportAttempt>;
+      readonly reason: InterruptionReason;
+      readonly retryAt: string | null;
     };
 
 /**
@@ -582,11 +758,13 @@ function detachPayload(payload: unknown): CandidatePayloadSnapshot {
  * 4. **Each declared field, once, as an own data property.** An inherited or
  *    accessor-backed declared field is not this variant either.
  * 5. **Value validation of what was taken** - never of a second read.
- * 6. **Internal consistency.** A `candidate` and a `mapping-failure` require a
- *    `successful` attempt, and an attempted failure must pair its reason with
- *    an attempt outcome `attemptOutcomesForFailureReason` allows. An outcome
- *    claiming usable data while reporting failed transport, or a `429` reason
- *    over a successful transport, describes no possible run.
+ * 6. **Internal consistency.** A `candidate`, a `mapping-failure` and an
+ *    `interrupted` execution require every attempt to be `successful`. An
+ *    attempted failure requires every attempt but the last to be
+ *    `successful`, and pairs its reason with a final attempt outcome
+ *    `attemptOutcomesForFailureReason` allows. An outcome claiming usable data
+ *    while reporting failed transport, or a `429` reason over a successful
+ *    transport, describes no possible run.
  * 7. **Detachment of the payload**, so the value bound to the resource is the
  *    value published.
  *
@@ -615,14 +793,14 @@ export function readProviderOutcome(
       case 'candidate': {
         // A contradictory candidate is a coordination failure, not an
         // attempted one: nothing it claims can be believed, including its own
-        // attempt record, so no request activity is invented from it either.
-        const attempt = readSuccessfulAttempt(value);
-        if (attempt === null) return null;
+        // attempt records, so no request activity is invented from it either.
+        const attempts = readSuccessfulAttempts(value);
+        if (attempts === null) return null;
         const payload = ownDataProperty(value, 'payload');
         if (payload === null || !isCandidatePayload(payload.value)) return null;
         return {
           outcome: 'candidate',
-          attempt,
+          attempts,
           payload: detachPayload(payload.value),
         };
       }
@@ -643,36 +821,53 @@ export function readProviderOutcome(
         };
       }
       case 'failed': {
-        const attempt = readAttempt(value);
-        if (attempt === null) return null;
+        const attempts = readAttempts(value);
+        if (attempts === null) return null;
         const reason = ownDataProperty(value, 'reason');
         if (reason === null || !isAttemptedFailureReason(reason.value)) {
           return null;
         }
-        if (
-          !attemptOutcomesForFailureReason(reason.value).includes(
-            attempt.outcome,
-          )
-        ) {
-          return null;
-        }
+        if (!isConsistentFailure(attempts, reason.value)) return null;
         const retryAfter = readOptionalInstant(value, 'retryAfter');
         if (retryAfter === null) return null;
         return {
           outcome: 'failed',
-          attempt,
+          attempts,
           reason: reason.value,
           retryAfter: retryAfter.value,
         };
       }
       case 'mapping-failure': {
-        // The mapping boundary runs on a response that was read, so the
-        // request behind it always succeeded (see
-        // `ProviderTransportAttempt.outcome`).
-        const attempt = readSuccessfulAttempt(value);
-        return attempt === null
+        // The mapping boundary runs on responses that were read, so every
+        // request behind it succeeded (see `ProviderTransportAttempt.outcome`).
+        const attempts = readSuccessfulAttempts(value);
+        return attempts === null
           ? null
-          : { outcome: 'mapping-failure', attempt };
+          : { outcome: 'mapping-failure', attempts };
+      }
+      case 'interrupted': {
+        // Stopped before a request, so every request it did make was
+        // answered. The refused step is carried as `reason`, never as an
+        // attempt, and an interruption with nothing before it is simply
+        // `not-attempted` - so an empty collection is refused by
+        // `readAttempts` rather than admitted as a second way to say that.
+        const attempts = readSuccessfulAttempts(value);
+        if (attempts === null) return null;
+        const reason = ownDataProperty(value, 'reason');
+        if (
+          reason === null ||
+          !(interruptionReasons as readonly unknown[]).includes(reason.value)
+        ) {
+          return null;
+        }
+        const retryAt = readOptionalInstant(value, 'retryAt');
+        if (retryAt === null) return null;
+        return {
+          outcome: 'interrupted',
+          attempts,
+          reason: reason.value as InterruptionReason,
+          retryAt: retryAt.value,
+        };
       }
     }
   } catch {

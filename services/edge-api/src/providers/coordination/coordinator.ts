@@ -441,12 +441,27 @@ export class MultiSourceCoordinator {
       });
     }
 
-    // Every remaining variant carries an attempt, so it is registered before
-    // the contribution is classified. A conflicting re-use of one reference is
-    // an invariant violation and fails the *later* contribution closed.
-    const conflict = registerTransport(transports, operation, outcome.attempt);
+    // Every remaining variant carries its ordered attempts, so all of them are
+    // registered before the contribution is classified - each exactly once, in
+    // transport order. A conflicting re-use of one reference is an invariant
+    // violation and fails the *later* contribution closed.
+    const conflict = registerTransports(
+      transports,
+      operation,
+      outcome.attempts,
+    );
     if (conflict) {
       return contribution(operation, 'failed', false, 'coordination-invariant');
+    }
+
+    if (outcome.outcome === 'interrupted') {
+      // Requests left GridView and are counted above, then the execution
+      // stopped before its next one. Nothing usable exists: no payload is
+      // carried, so it can never be selected, and the resource falls back to
+      // whatever another source contributed or becomes unavailable.
+      return contribution(operation, 'interrupted', true, outcome.reason, {
+        retryAt: outcome.retryAt,
+      });
     }
 
     if (outcome.outcome === 'failed') {
@@ -584,8 +599,8 @@ function transportKey(source: CoordinatedSourceId, reference: string): string {
 }
 
 /**
- * Registers one transport attempt, returning `true` when the claim conflicts
- * with an already-registered one **from the same source**.
+ * Registers every transport attempt of one outcome, returning `true` when any
+ * claim conflicts with an already-registered one **from the same source**.
  *
  * A repeated reference from the same source with the same outcome is
  * legitimate: one request served more than one derived resource, and it is
@@ -593,29 +608,42 @@ function transportKey(source: CoordinatedSourceId, reference: string): string {
  * same reference claiming a different outcome cannot describe one request, so
  * the later claim fails closed.
  *
+ * **All or nothing.** Every attempt is checked before any is registered, so an
+ * outcome that conflicts anywhere registers none of its attempts - exactly as a
+ * single conflicting attempt was never registered. An outcome's own references
+ * are already distinct (`readProviderOutcome`), so no attempt of one execution
+ * can be deduplicated against another attempt of the same execution.
+ *
  * The same reference from a *different* source is never deduplicated and never
  * treated as a conflict: they are two independent physical requests, each
  * counted and attributed in full.
  */
-function registerTransport(
+function registerTransports(
   transports: Map<string, TransportRecord>,
   operation: Operation,
-  attempt: NormalizedTransportAttempt,
+  attempts: readonly NormalizedTransportAttempt[],
 ): boolean {
-  const key = transportKey(operation.source, attempt.reference);
-  const existing = transports.get(key);
-  if (existing === undefined) {
-    transports.set(key, {
-      source: operation.source,
-      outcome: attempt.outcome,
-      jobCategories: new Set([operation.jobCategory]),
-    });
-    return false;
+  for (const attempt of attempts) {
+    const existing = transports.get(
+      transportKey(operation.source, attempt.reference),
+    );
+    if (existing !== undefined && existing.outcome !== attempt.outcome) {
+      return true;
+    }
   }
-  if (existing.outcome !== attempt.outcome) {
-    return true;
+  for (const attempt of attempts) {
+    const key = transportKey(operation.source, attempt.reference);
+    const existing = transports.get(key);
+    if (existing === undefined) {
+      transports.set(key, {
+        source: operation.source,
+        outcome: attempt.outcome,
+        jobCategories: new Set([operation.jobCategory]),
+      });
+    } else {
+      existing.jobCategories.add(operation.jobCategory);
+    }
   }
-  existing.jobCategories.add(operation.jobCategory);
   return false;
 }
 

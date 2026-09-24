@@ -110,7 +110,7 @@ describe('a complete run publishes exactly once', () => {
       if (request.resource.kind === 'event-schedule') {
         return {
           outcome: 'candidate',
-          attempt: attempt('j-schedule'),
+          attempts: [attempt('j-schedule')],
           payload: replacement,
         };
       }
@@ -118,9 +118,11 @@ describe('a complete run publishes exactly once', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt(
-          `j-${request.resource.kind}-${'round' in request.resource ? request.resource.round : 0}`,
-        ),
+        attempts: [
+          attempt(
+            `j-${request.resource.kind}-${'round' in request.resource ? request.resource.round : 0}`,
+          ),
+        ],
         payload,
       };
     });
@@ -166,12 +168,12 @@ describe('an incomplete run never reaches the publisher', () => {
           request.resource.kind === 'driver-standings'
             ? ({
                 outcome: 'failed',
-                attempt: attempt('j-fail', 'failed'),
+                attempts: [attempt('j-fail', 'failed')],
                 reason: 'provider-unavailable',
               } satisfies ProviderResourceOutcome)
             : ({
                 outcome: 'candidate',
-                attempt: attempt(`j-${request.resource.kind}`),
+                attempts: [attempt(`j-${request.resource.kind}`)],
                 payload: payloadFor(source, request.resource) ?? {
                   kind: 'season-circuits',
                   circuits: [],
@@ -233,7 +235,7 @@ describe('an incomplete run never reaches the publisher', () => {
       [
         new FakePort('jolpica', () => ({
           outcome: 'failed',
-          attempt: attempt('j-fail', 'failed'),
+          attempts: [attempt('j-fail', 'failed')],
           reason: 'provider-unavailable',
         })),
       ],
@@ -376,20 +378,20 @@ describe('last-known-good survives every failure', () => {
       { outcome: 'not-attempted', reason: 'cancelled' },
       {
         outcome: 'failed',
-        attempt: attempt('f-1', 'failed'),
+        attempts: [attempt('f-1', 'failed')],
         reason: 'provider-unavailable',
       },
       {
         outcome: 'failed',
-        attempt: attempt('f-2', 'rate-limited'),
+        attempts: [attempt('f-2', 'rate-limited')],
         reason: 'provider-rate-limited',
       },
       {
         outcome: 'failed',
-        attempt: attempt('f-3', 'failed'),
+        attempts: [attempt('f-3', 'failed')],
         reason: 'invalid-payload',
       },
-      { outcome: 'mapping-failure', attempt: attempt('f-4') },
+      { outcome: 'mapping-failure', attempts: [attempt('f-4')] },
     ];
 
     for (const jolpicaOutcome of failures) {

@@ -11,6 +11,8 @@
   [0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md),
   [0022](0022-curated-provider-identifier-mappings.md),
   [0007](0007-versioned-kv-publication-active-pointer.md)
+- Amended: [A1](#amendment-a1---ordered-attempts-and-interrupted-executions)
+  (2026-09-24) - ordered multi-request attempts and the `interrupted` outcome
 
 ## Context
 
@@ -221,6 +223,15 @@ belongs to the Durable Object reservation ledger
 ([ADR 0021](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)) —
 it already holds any slot a real request consumed — and these counts are
 reporting, not admission control.
+
+> **Amended 2026-09-24 by
+> [A1](#amendment-a1---ordered-attempts-and-interrupted-executions).** The
+> singular `attempt` field in the shape and pairing tables above is now an
+> ordered, non-empty `attempts` collection, and a fifth variant,
+> `interrupted`, records an execution that stopped after one or more requests.
+> The pairing table still decides the **final** attempt of a `failed`
+> outcome; every earlier attempt must be `successful`. The text above is
+> retained for the record.
 
 #### The plan and the attempt are runtime boundaries too
 
@@ -497,6 +508,13 @@ otherwise one source's choice of token could discard the other's candidate.
 
 The reference is never logged. It is a correlation token, bounded at 64 code
 points, and it exists only inside one run.
+
+> **Amended 2026-09-24 by
+> [A1](#amendment-a1---ordered-attempts-and-interrupted-executions).** An
+> outcome may now carry several references, one per real request in
+> transport order, each unique within the outcome. Every one is registered
+> under this section's rules, all or nothing: an outcome that conflicts
+> anywhere registers none of its attempts.
 
 ### D8 - Selection is decided by declared role, and by nothing else
 
@@ -1164,6 +1182,13 @@ G9.
 `PROVIDER_MODE` still admits exactly `mock` and `none`; staging is `mock`,
 production is `none`.
 
+> **Status 2026-09-24.** Three dormant, fixture-tested Jolpica ports now
+> implement the port - `season-calendar`, `season-circuits` and
+> `season-participants` (Implementation Plan §14.0.16, §14.0.17, §14.0.21).
+> None is registered with a coordinator, none is reachable from the Worker
+> entry point, and `SynchronizationService` is still not rewired. The first
+> paragraph above is retained for the record.
+
 #### Deep normalized-contract validation is an activation gate
 
 > **Amended by [ADR 0024](0024-deep-normalized-contract-validation.md)
@@ -1218,6 +1243,171 @@ activation**, not as evidence of reconciliation running today:
   path unchanged.
 - The gate belongs to **G1** (live provider mode) and to the adapter work, and
   is open alongside them.
+
+## Amendment A1 - Ordered attempts and interrupted executions
+
+- Date: 2026-09-24
+- Status: Accepted and implemented in the dormant seam
+- Amends: D6 (outcome shapes, allowed pairings), D7 (what is registered per
+  outcome)
+
+### Why
+
+D6 and D7 assumed that one resource execution makes **exactly one**
+provider request. The Jolpica `season-participants` resource does not: under
+[ADR 0026](0026-season-participation-semantics-and-derivation.md) D2 and D13 it
+needs `GET /ergast/f1/{season}/drivers/?limit=100` **and**
+`GET /ergast/f1/{season}/constructors/?limit=100`. A singular `attempt` field can
+report only one of them. Every alternative that kept it was wrong in a
+different way. Reporting only the last request under-counts a request that
+really left GridView. Folding two requests into one reference hides the
+second. Reporting a `failed` attempt for a request that was never sent because
+the limiter deferred it invents a provider request. Returning `not-attempted`
+after the first request succeeded loses that request from accounting. This
+amendment makes every real request representable, exactly once, in transport
+order, without adding a provider request class or changing any public
+contract.
+
+### A1.1 - Ordered attempts
+
+`candidate`, `failed`, `mapping-failure` and the new `interrupted` outcome
+carry `attempts`, an **ordered, non-empty** collection, in place of the
+singular `attempt`.
+
+- Every element is one real transport request: it left GridView through the
+  hardened boundary and was answered, refused with a `429` or failed in
+  transport.
+- Order is transport order. The first element is the first request sent.
+- Every reference is unique within the outcome, and a reference remains scoped
+  to its source (D7).
+- A reservation or step that never reached transport is **not** an attempt and
+  never appears: a limiter deferral, a limiter that could not answer, a
+  cancellation, a capability refusal or a request the adapter chose not to
+  send.
+- No request is omitted because a later request decided the outcome.
+- The collection is bounded at 8 elements. That bound limits the work the
+  boundary does, and says nothing about any provider.
+
+The TypeScript type is a non-empty tuple, `readonly [ProviderTransportAttempt,
+...ProviderTransportAttempt[]]`, so a candidate with no attempts is a compile
+error as well as a runtime rejection.
+
+### A1.2 - Accounting classification
+
+**The per-attempt `outcome` is the classification.** Every attempt already
+carries its own `ProviderAttemptOutcome` (`successful`, `failed` or
+`rate-limited`). The coordinator counts each attempt under exactly that value.
+It infers nothing from the outer outcome and duplicates nothing, so no two
+coordinator paths can classify the same request differently. The outer
+outcome only constrains which per-attempt values describe a possible
+fail-fast sequential execution:
+
+| Outcome / reason                   | Every attempt but the last | Last attempt                 |
+| ---------------------------------- | -------------------------- | ---------------------------- |
+| `candidate`                        | `successful`               | `successful`                 |
+| `mapping-failure`                  | `successful`               | `successful`                 |
+| `interrupted`                      | `successful`               | `successful`                 |
+| `failed` + `provider-rate-limited` | `successful`               | `rate-limited`               |
+| `failed` + `invalid-payload`       | `successful`               | `successful`                 |
+| `failed` + `provider-unavailable`  | `successful`               | `failed` **or** `successful` |
+
+The final-attempt column is D6's existing pairing table, unchanged. A response
+that arrived and was then refused by GridView's own validation or content
+policy is still a `successful` transport attempt, as D6 already records. So a
+single-request resource keeps exactly the totals it had before this amendment.
+An outcome whose attempts contradict this table is `malformed-outcome` and
+counts nothing (D6).
+
+A mapping failure is still a separate coordination failure
+(`mapping-unresolved`). Its requests are counted as the successful requests
+they were.
+
+### A1.3 - `not-attempted` stays zero requests
+
+`not-attempted` still means that **zero** requests left GridView. It carries no
+`attempts` property. An outcome declaring one, even an empty one, is
+malformed. `resource-unsupported`, cancellation before the first request, and
+a limiter deferral or unavailability for the first request all remain
+`not-attempted`.
+
+### A1.4 - The `interrupted` outcome
+
+`interrupted` describes an execution that made **one or more** requests and
+then stopped **before** sending the next one, for a reason that is not a
+provider answer:
+
+| Field      | Rule                                                                           |
+| ---------- | ------------------------------------------------------------------------------ |
+| `attempts` | Required, non-empty, every element `successful`                                |
+| `reason`   | Required: exactly `cancelled`, `rate-limit-deferred` or `limiter-unavailable`  |
+| `retryAt`  | Optional validated UTC instant, carried as data only, as for `not-attempted`   |
+| `payload`  | **Forbidden**                                                                  |
+
+- It is attributed as an `interrupted` contribution with `attempted: true`.
+  Its reason is the refused step.
+- It carries no payload, so it is **never selectable** and never assembled or
+  published. The resource falls back to another source's candidate or becomes
+  `unavailable`, and last-known-good is preserved (D9, D11).
+- The port does not retry the refused step. Pacing and scheduling stay with G5.
+- The earlier attempts are recorded exactly once. The refused step is recorded
+  nowhere and increments no provider-request counter.
+- A request that reached transport and failed is **not** an interruption. It is
+  `failed` with every attempt recorded. An adapter or provider error is never
+  an interruption.
+- A zero-attempt interruption does not exist. Refusing it keeps
+  `not-attempted` the only way to say that nothing was sent.
+
+### A1.5 - Runtime validation
+
+The closed-shape parser (`readProviderOutcome`) now refuses all of the
+following as `malformed-outcome`:
+
+- an empty or oversized collection;
+- a value that is not a real array;
+- a collection with a hole, an extra own property, or a symbol-keyed or
+  accessor-backed element;
+- an element inherited from the prototype;
+- a malformed or undeclared-field attempt;
+- a duplicate reference;
+- `attempts` on `not-attempted`;
+- the legacy singular `attempt` key on any variant;
+- an interruption with zero attempts, a payload, a non-successful attempt, an
+  unsupported reason or an invalid `retryAt`;
+- any per-attempt value the table in A1.2 does not admit.
+
+Every check is bounded and deterministic. The length is decided before
+anything is walked, and each element is taken once as an own data property.
+The coordinator keeps its own detached copy, in the given order, so an adapter
+that reorders or extends its array after answering changes nothing.
+
+**Registration is all or nothing per outcome.** Every attempt is checked
+against the run's already-registered transports before any is registered. If
+any attempt conflicts (D7), none of the outcome's attempts is registered, the
+contribution is `coordination-invariant` and the run is `invariant-violated`.
+That matches the single-attempt behaviour exactly. A reference shared with an
+earlier outcome from the same source with the same ending is still counted
+once (D7).
+
+### A1.6 - What does not change
+
+- Role selection, source capability policy, mapping policy, publication rules,
+  normalized-payload validation, source ordering, source IDs and retry policy.
+- The public API, OpenAPI, the normalized domain DTOs and the Flutter client.
+- `ProviderRequestMetrics`: the same `successful`, `failed` and `rate-limited`
+  counters, fed one attempt at a time.
+- Dormancy (D14). The coordination package and every Jolpica port remain
+  unreachable from the Worker entry point.
+
+### Implementation status (2026-09-24)
+
+Implemented in `src/providers/coordination/port.ts` and `coordinator.ts`,
+together with the `interrupted` contribution status in `outcome.ts`. The
+single-request `season-calendar` and `season-circuits` ports now report a
+one-element collection, and their normalized payloads are unchanged. The
+dormant Jolpica `season-participants` port (Implementation Plan §14.0.21) is
+the first multi-request producer. Direct accounting tests cover every row of A1.2 and every rejection
+in A1.5. Nothing is registered with a coordinator in production, and no
+provider was contacted.
 
 ## Consequences
 

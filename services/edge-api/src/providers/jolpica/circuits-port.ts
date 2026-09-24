@@ -163,7 +163,7 @@ export class JolpicaCircuitsPort implements ProviderResourcePort {
         for (const failure of normalized.failures) {
           this.logger.error(providerMappingFailureEvent(failure));
         }
-        return { outcome: 'mapping-failure', attempt };
+        return { outcome: 'mapping-failure', attempts: [attempt] };
       }
       if (normalized.problem === 'curated-circuit-missing') {
         // A resolved identity with no curated content is GridView's own gap,
@@ -175,14 +175,14 @@ export class JolpicaCircuitsPort implements ProviderResourcePort {
           season,
           failureCategory: normalized.problem,
         });
-        return { outcome: 'mapping-failure', attempt };
+        return { outcome: 'mapping-failure', attempts: [attempt] };
       }
       return this.invalidPayload(attempt, season, normalized.problem);
     }
 
     return {
       outcome: 'candidate',
-      attempt,
+      attempts: [attempt],
       payload: { kind: 'season-circuits', circuits: normalized.circuits },
     };
   }
@@ -204,7 +204,11 @@ export class JolpicaCircuitsPort implements ProviderResourcePort {
       season,
       failureCategory,
     });
-    return { outcome: 'failed', attempt, reason: 'invalid-payload' };
+    return {
+      outcome: 'failed',
+      attempts: [attempt],
+      reason: 'invalid-payload',
+    };
   }
 
   /**
@@ -233,14 +237,18 @@ export class JolpicaCircuitsPort implements ProviderResourcePort {
     if (failure.kind === 'provider-rate-limited') {
       return {
         outcome: 'failed',
-        attempt,
+        attempts: [attempt],
         reason: 'provider-rate-limited',
         ...(failure.retryAfter ? { retryAfter: failure.retryAfter } : {}),
       };
     }
     // No retry here and none anywhere in this adapter: pacing and scheduling
     // belong to G5, not to a port.
-    return { outcome: 'failed', attempt, reason: 'provider-unavailable' };
+    return {
+      outcome: 'failed',
+      attempts: [attempt],
+      reason: 'provider-unavailable',
+    };
   }
 }
 

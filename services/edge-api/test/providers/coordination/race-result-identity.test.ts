@@ -119,7 +119,7 @@ async function runWithClassification(
     sequence += 1;
     return {
       outcome: 'candidate',
-      attempt: attempt(`jolpica-classification-${sequence}`),
+      attempts: [attempt(`jolpica-classification-${sequence}`)],
       payload: { kind: 'session-classification', result },
     } as unknown as ProviderResourceOutcome;
   });

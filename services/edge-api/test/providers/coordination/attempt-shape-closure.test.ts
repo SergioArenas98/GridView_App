@@ -32,7 +32,7 @@ const resource: CoordinatedResource = {
 function candidateWith(attempt: unknown): unknown {
   return {
     outcome: 'candidate',
-    attempt,
+    attempts: [attempt],
     payload: { kind: 'season-calendar', events: [] },
   };
 }
@@ -172,20 +172,20 @@ describe('a transport attempt is a closed runtime shape', () => {
     expect(
       isWellFormedOutcome({
         outcome: 'failed',
-        attempt,
+        attempts: [attempt],
         reason: 'invalid-payload',
       }),
     ).toBe(true);
     expect(
       isWellFormedOutcome({
         outcome: 'failed',
-        attempt: { reference: 'a-2', outcome: 'rate-limited' },
+        attempts: [{ reference: 'a-2', outcome: 'rate-limited' }],
         reason: 'provider-rate-limited',
       }),
     ).toBe(true);
-    expect(isWellFormedOutcome({ outcome: 'mapping-failure', attempt })).toBe(
-      true,
-    );
+    expect(
+      isWellFormedOutcome({ outcome: 'mapping-failure', attempts: [attempt] }),
+    ).toBe(true);
   });
 });
 
@@ -194,7 +194,7 @@ describe('a candidate payload must be an object before resource validation', () 
     expect(
       isWellFormedOutcome({
         outcome: 'candidate',
-        attempt: { reference: 'a-1', outcome: 'successful' },
+        attempts: [{ reference: 'a-1', outcome: 'successful' }],
         payload: null,
       }),
     ).toBe(false);
@@ -204,7 +204,7 @@ describe('a candidate payload must be an object before resource validation', () 
     expect(
       isWellFormedOutcome({
         outcome: 'candidate',
-        attempt: { reference: 'a-1', outcome: 'successful' },
+        attempts: [{ reference: 'a-1', outcome: 'successful' }],
         payload: [],
       }),
     ).toBe(false);

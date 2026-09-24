@@ -54,7 +54,7 @@ function candidateFor(
 ): ProviderResourceOutcome {
   const payload = payloadFor(source, resource);
   if (payload === null) throw new Error('fixture gap');
-  return { outcome: 'candidate', attempt: attempt(reference), payload };
+  return { outcome: 'candidate', attempts: [attempt(reference)], payload };
 }
 
 describe('a failing resource never blocks an independent one', () => {
@@ -67,7 +67,7 @@ describe('a failing resource never blocks an independent one', () => {
       if (request.resource.kind === 'session-classification') {
         return {
           outcome: 'failed',
-          attempt: attempt(`j-${sequence}`, 'failed'),
+          attempts: [attempt(`j-${sequence}`, 'failed')],
           reason: 'provider-unavailable',
         };
       }
@@ -127,7 +127,7 @@ describe('the real mapping boundary contains its own failure', () => {
       if (resolution.outcome !== 'resolved') {
         return {
           outcome: 'mapping-failure',
-          attempt: attempt(`j-${sequence}`),
+          attempts: [attempt(`j-${sequence}`)],
         };
       }
       return candidateFor(source, request.resource, `j-${sequence}`);
@@ -280,16 +280,16 @@ describe('a defective adapter fails closed instead of throwing', () => {
       { outcome: 'candidate' },
       {
         outcome: 'candidate',
-        attempt: { reference: '', outcome: 'successful' },
+        attempts: [{ reference: '', outcome: 'successful' }],
       },
       {
         outcome: 'candidate',
-        attempt: { reference: 'x'.repeat(65), outcome: 'successful' },
+        attempts: [{ reference: 'x'.repeat(65), outcome: 'successful' }],
         payload: { kind: 'season-calendar', events: [] },
       },
       {
         outcome: 'candidate',
-        attempt: { reference: 'r', outcome: 'exploded' },
+        attempts: [{ reference: 'r', outcome: 'exploded' }],
         payload: { kind: 'season-calendar', events: [] },
       },
       { outcome: 'not-attempted', reason: 'because-i-said-so' },
@@ -298,11 +298,11 @@ describe('a defective adapter fails closed instead of throwing', () => {
         reason: 'rate-limit-deferred',
         retryAt: 'soon',
       },
-      { outcome: 'failed', attempt: { reference: 'r', outcome: 'failed' } },
+      { outcome: 'failed', attempts: [{ reference: 'r', outcome: 'failed' }] },
       { outcome: 'mapping-failure' },
       {
         outcome: 'brand-new-variant',
-        attempt: { reference: 'r', outcome: 'failed' },
+        attempts: [{ reference: 'r', outcome: 'failed' }],
       },
     ];
 
@@ -333,7 +333,7 @@ describe('a defective adapter fails closed instead of throwing', () => {
       [
         {
           outcome: 'candidate',
-          attempt: { reference: 'r', outcome: 'successful' },
+          attempts: [{ reference: 'r', outcome: 'successful' }],
           get payload() {
             throw new Error('hostile payload accessor');
           },
@@ -384,7 +384,7 @@ describe('a defective adapter fails closed instead of throwing', () => {
       if (request.resource.kind === 'season-calendar') {
         return {
           outcome: 'candidate',
-          attempt: { reference: 'r', outcome: 'successful' },
+          attempts: [{ reference: 'r', outcome: 'successful' }],
           get payload(): never {
             throw new Error('hostile payload accessor');
           },
@@ -392,7 +392,7 @@ describe('a defective adapter fails closed instead of throwing', () => {
       }
       const payload = payloadFor(source, request.resource);
       if (payload === null) throw new Error('fixture gap');
-      return { outcome: 'candidate', attempt: attempt('j-2'), payload };
+      return { outcome: 'candidate', attempts: [attempt('j-2')], payload };
     });
 
     const run = await coordinate([port], [CALENDAR, raceResource(12)]);
@@ -409,7 +409,7 @@ describe('a defective adapter fails closed instead of throwing', () => {
     const source = await seasonFixture();
     const wrongResource = new FakePort('jolpica', () => ({
       outcome: 'candidate',
-      attempt: attempt('j-1'),
+      attempts: [attempt('j-1')],
       // Structurally a valid candidate, but for the wrong round.
       payload: payloadFor(source, raceResource(13)) ?? {
         kind: 'season-circuits',
@@ -462,7 +462,7 @@ describe('a defective adapter fails closed instead of throwing', () => {
       }
       return {
         outcome: 'failed',
-        attempt: attempt('shared', 'failed'),
+        attempts: [attempt('shared', 'failed')],
         reason: 'provider-unavailable',
       };
     });

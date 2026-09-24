@@ -134,7 +134,7 @@ describe('coordination signals are bounded', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt(hostile.slice(0, transportReferenceMaxLength)),
+        attempts: [attempt(hostile.slice(0, transportReferenceMaxLength))],
         payload,
       };
     });
@@ -282,7 +282,7 @@ describe('the coordination seam is dormant', () => {
         );
       });
 
-    // No adapter exists, so nothing may drive the coordinator yet. The mock
+    // No port is registered, so nothing may drive the coordinator yet. The mock
     // provider remains the whole-season double the synchronization service
     // uses, and `PROVIDER_MODE` still admits exactly `mock | none`.
     expect(offenders).toEqual([]);
@@ -295,7 +295,7 @@ describe('the coordination seam is dormant', () => {
 
     expect(providerFiles.some((name) => name.includes('openf1'))).toBe(false);
     // The Jolpica file-name assertion that stood beside this one is gone: a
-    // calendar-only Jolpica adapter now exists at `src/providers/jolpica/`,
+    // dormant Jolpica package now exists at `src/providers/jolpica/`,
     // honestly named, and its dormancy is proven by composition and
     // dependency boundaries instead (ADR 0022 amendment A9). Those assertions
     // live in `test/providers/provider-neutrality.test.ts`.

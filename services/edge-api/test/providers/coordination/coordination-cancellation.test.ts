@@ -60,7 +60,7 @@ function candidatePort(
     if (pause > 0) await delay(pause);
     const payload = payloadFor(source, request.resource);
     if (payload === null) throw new Error('fixture gap');
-    return { outcome: 'candidate', attempt: attempt(`j-${calls}`), payload };
+    return { outcome: 'candidate', attempts: [attempt(`j-${calls}`)], payload };
   });
 }
 
@@ -163,7 +163,7 @@ describe('cancellation performs and publishes nothing', () => {
       if (payload === null) throw new Error('fixture gap');
       return {
         outcome: 'candidate',
-        attempt: attempt(`j-${sequence}`),
+        attempts: [attempt(`j-${sequence}`)],
         payload,
       };
     });

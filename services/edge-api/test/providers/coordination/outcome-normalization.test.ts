@@ -214,7 +214,7 @@ describe('a stateful accessor cannot answer one value to validation and another 
       [
         port(() => ({
           outcome: 'candidate',
-          attempt: attempt('j-1'),
+          attempts: [attempt('j-1')],
           get payload() {
             return standings('driver-standings');
           },
@@ -264,7 +264,7 @@ describe('a stateful accessor cannot answer one value to validation and another 
             payload: standings('driver-standings'),
           }) as Record<string, unknown>;
           answer.outcome = 'candidate';
-          answer.attempt = attempt('j-1');
+          answer.attempts = [attempt('j-1')];
           return answer;
         }),
       ],
@@ -290,7 +290,7 @@ describe('a reused adapter object cannot rewrite an answer already given', () =>
           shared.reference = `j-${sequence}`;
           return {
             outcome: 'candidate',
-            attempt: shared,
+            attempts: [shared],
             payload: standings(request.resource.kind),
           };
         }),
@@ -310,7 +310,7 @@ describe('a reused adapter object cannot rewrite an answer already given', () =>
   it('counts two real requests behind one reused outcome object', async () => {
     const shared: Record<string, unknown> = {
       outcome: 'candidate',
-      attempt: attempt('j-0'),
+      attempts: [attempt('j-0')],
       payload: standings('driver-standings'),
     };
     let sequence = 0;
@@ -318,7 +318,7 @@ describe('a reused adapter object cannot rewrite an answer already given', () =>
       [
         port((request) => {
           sequence += 1;
-          shared.attempt = attempt(`j-${sequence}`);
+          shared.attempts = [attempt(`j-${sequence}`)];
           shared.payload = standings(request.resource.kind);
           return shared;
         }),
@@ -340,7 +340,7 @@ describe('a reused adapter object cannot rewrite an answer already given', () =>
           sequence += 1;
           const answer: Record<string, unknown> = {
             outcome: 'candidate',
-            attempt: attempt(`j-${sequence}`),
+            attempts: [attempt(`j-${sequence}`)],
             payload: standings(request.resource.kind),
           };
           held.push(answer);
@@ -349,7 +349,7 @@ describe('a reused adapter object cannot rewrite an answer already given', () =>
             delete first.payload;
             first.outcome = 'failed';
             first.reason = 'provider-unavailable';
-            first.attempt = attempt('j-1', 'failed');
+            first.attempts = [attempt('j-1', 'failed')];
           }
           return answer;
         }),
@@ -373,7 +373,7 @@ describe('a reused adapter object cannot rewrite an answer already given', () =>
           sequence += 1;
           const answer: Record<string, unknown> = {
             outcome: 'failed',
-            attempt: attempt(`j-${sequence}`, 'failed'),
+            attempts: [attempt(`j-${sequence}`, 'failed')],
             reason: 'provider-unavailable',
           };
           held.push(answer);
@@ -381,7 +381,7 @@ describe('a reused adapter object cannot rewrite an answer already given', () =>
             const first = held[0] as Record<string, unknown>;
             delete first.reason;
             first.outcome = 'candidate';
-            first.attempt = attempt('j-1', 'successful');
+            first.attempts = [attempt('j-1', 'successful')];
             first.payload = standings(request.resource.kind);
           }
           return answer;
@@ -427,7 +427,7 @@ describe('a reused adapter object cannot rewrite an answer already given', () =>
           shared.reference = `j-${sequence}`;
           return {
             outcome: 'candidate',
-            attempt: shared,
+            attempts: [shared],
             payload: standings(request.resource.kind),
           };
         }),
@@ -463,7 +463,7 @@ describe('a reused adapter object cannot rewrite an answer already given', () =>
             shared.reference = `j-${sequence}`;
             return {
               outcome: 'candidate',
-              attempt: shared,
+              attempts: [shared],
               payload: standings(request.resource.kind),
             };
           }),
@@ -521,7 +521,7 @@ describe('retry metadata is a validated, coordinator-owned instant', () => {
       [
         port(() => ({
           outcome: 'failed',
-          attempt: attempt('j-1', 'rate-limited'),
+          attempts: [attempt('j-1', 'rate-limited')],
           reason: 'provider-rate-limited',
           get retryAfter() {
             reads += 1;
@@ -558,7 +558,7 @@ describe('retry metadata is a validated, coordinator-owned instant', () => {
       [
         port(() => ({
           outcome: 'failed',
-          attempt: attempt('j-1', 'rate-limited'),
+          attempts: [attempt('j-1', 'rate-limited')],
           reason: 'provider-rate-limited',
           retryAfter: INSTANT,
         })),
@@ -577,7 +577,7 @@ describe('ordinary outcomes are unchanged by normalization', () => {
       [
         port(() => ({
           outcome: 'candidate',
-          attempt: attempt('j-1'),
+          attempts: [attempt('j-1')],
           payload: standings('driver-standings'),
         })),
       ],
@@ -603,7 +603,7 @@ describe('ordinary outcomes are unchanged by normalization', () => {
       [
         port(() => ({
           outcome: 'failed',
-          attempt: attempt('j-1', 'failed'),
+          attempts: [attempt('j-1', 'failed')],
           reason: 'provider-unavailable',
         })),
       ],
@@ -613,7 +613,12 @@ describe('ordinary outcomes are unchanged by normalization', () => {
     expect(failed.accounting.lifetime.failed).toBe(1);
 
     const mapping = await coordinate(
-      [port(() => ({ outcome: 'mapping-failure', attempt: attempt('j-1') }))],
+      [
+        port(() => ({
+          outcome: 'mapping-failure',
+          attempts: [attempt('j-1')],
+        })),
+      ],
       [DRIVER_STANDINGS],
     );
     expect(jolpica(mapping)?.reason).toBe('mapping-unresolved');
@@ -629,7 +634,7 @@ describe('ordinary outcomes are unchanged by normalization', () => {
       [
         port((request) => ({
           outcome: 'candidate',
-          attempt: attempt('shared-1'),
+          attempts: [attempt('shared-1')],
           payload: standings(request.resource.kind),
         })),
       ],
@@ -650,12 +655,12 @@ describe('ordinary outcomes are unchanged by normalization', () => {
           return sequence === 1
             ? {
                 outcome: 'candidate',
-                attempt: attempt('shared-1', 'successful'),
+                attempts: [attempt('shared-1', 'successful')],
                 payload: standings(request.resource.kind),
               }
             : {
                 outcome: 'failed',
-                attempt: attempt('shared-1', 'failed'),
+                attempts: [attempt('shared-1', 'failed')],
                 reason: 'provider-unavailable',
               };
         }),
@@ -673,7 +678,7 @@ describe('ordinary outcomes are unchanged by normalization', () => {
       [
         port(() => ({
           outcome: 'candidate',
-          attempt: attempt('j-1'),
+          attempts: [attempt('j-1')],
           payload: {
             ...standings('driver-standings'),
             notify: () => undefined,
@@ -713,7 +718,7 @@ describe('ordinary outcomes are unchanged by normalization', () => {
       () =>
         ({
           outcome: 'candidate',
-          attempt: attempt('o-1'),
+          attempts: [attempt('o-1')],
           payload: {
             kind: 'driver-standings',
             standings: source.driverStandings,
@@ -742,7 +747,7 @@ describe('hidden and hostile properties stay contained', () => {
         port(() => {
           const answer: Record<string | symbol, unknown> = {
             outcome: 'candidate',
-            attempt: attempt('j-1'),
+            attempts: [attempt('j-1')],
             payload: standings('driver-standings'),
           };
           answer[Symbol('smuggled')] = HOSTILE;
@@ -760,7 +765,7 @@ describe('hidden and hostile properties stay contained', () => {
           Object.defineProperty(
             {
               outcome: 'candidate',
-              attempt: attempt('j-1'),
+              attempts: [attempt('j-1')],
               payload: standings('driver-standings'),
             },
             'url',
@@ -808,7 +813,7 @@ describe('hidden and hostile properties stay contained', () => {
             new Proxy(
               {
                 outcome: 'candidate',
-                attempt: attempt('j-1'),
+                attempts: [attempt('j-1')],
                 payload: standings('driver-standings'),
               },
               {
@@ -834,7 +839,7 @@ describe('hidden and hostile properties stay contained', () => {
       [
         port(() => ({
           outcome: 'candidate',
-          attempt: attempt('reference-must-not-be-logged'),
+          attempts: [attempt('reference-must-not-be-logged')],
           payload: {
             kind: 'driver-standings',
             standings: [{ season: SEASON, note: HOSTILE }],
@@ -863,12 +868,12 @@ describe('cancellation and unexecuted operations are unaffected', () => {
           (request) =>
             ({
               outcome: 'candidate',
-              attempt: attempt('j-1'),
+              attempts: [attempt('j-1')],
               payload: standings(
                 (called.push(request.resource.kind),
                 request.resource.kind) as string,
               ),
-            }) as ProviderResourceOutcome,
+            }) as unknown as ProviderResourceOutcome,
         ),
       ],
       logger: new CapturingLogger(),

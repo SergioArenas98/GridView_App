@@ -67,9 +67,14 @@ export type CoordinationOutcomeReason =
  * different: a deferral is the global limiter pacing GridView and carries a
  * `retryAt`, while a skip is a policy or capability decision that no amount of
  * waiting changes. Neither is an attempt.
+ *
+ * `interrupted` is a multi-request execution that made one or more requests
+ * and then stopped before the next one - cancelled, deferred or refused by the
+ * limiter (ADR 0023 amendment A1). It **is** attempted, its `reason` names the
+ * refused step, and it carries no payload, so it is never selectable.
  */
 export type ContributionStatus =
-  'candidate' | 'skipped' | 'deferred' | 'failed';
+  'candidate' | 'skipped' | 'deferred' | 'failed' | 'interrupted';
 
 /** What exactly one source did for exactly one resource. */
 export interface SourceContribution {
