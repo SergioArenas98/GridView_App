@@ -21,8 +21,8 @@
  * or payload ownership.
  *
  * This file pins both scopes so neither claim can drift, and pins the dormancy
- * the remaining gate rests on: no adapter exists, no provider port is
- * registered in production wiring, and `SynchronizationService` is not rewired
+ * the remaining gate rests on: only dormant, fixture-tested Jolpica ports
+ * exist, no provider port is registered in production wiring, and `SynchronizationService` is not rewired
  * for coordination.
  */
 
