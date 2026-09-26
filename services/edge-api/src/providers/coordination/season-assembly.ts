@@ -31,7 +31,9 @@ import type {
 } from '../../contract/types';
 import type { EventStatus } from '../../contract/enums';
 import type { ProviderSeasonSource } from '../formula-one-provider';
+import { deriveDriverSeasonEntries } from './driver-span-derivation';
 import type { CoordinationRun, ResourceCoordination } from './outcome';
+import type { CoordinatedSourceId } from './source-policy';
 import {
   isClassifiedResult,
   validateSeasonReferences,
@@ -67,7 +69,11 @@ export const assemblyGaps = [
   'resource-unavailable',
   /** A resource the season snapshot requires was not planned at all. */
   'missing-required-resource',
-  /** A calendar round has no selected race classification. */
+  /**
+   * A calendar round has no selected race classification: a `completed` round,
+   * or any round at or before the latest classified race round, which span
+   * derivation would otherwise bridge (ADR 0026 D4).
+   */
   'missing-round-classification',
   /**
    * The selected payloads are individually valid but mutually inconsistent:
@@ -164,6 +170,20 @@ const raceClassificationRequiredByStatus: Record<EventStatus, boolean> = {
  */
 export function requiresRaceClassification(status: EventStatus): boolean {
   return raceClassificationRequiredByStatus[status] === true;
+}
+
+/**
+ * The sources whose selected race rows create participation (ADR 0026 D3).
+ * OpenF1 participation stays blocked until a separate decision (D12 item 7).
+ */
+const participationSources: ReadonlySet<CoordinatedSourceId> = new Set([
+  'jolpica',
+]);
+
+function sourceOf(resource: ResourceCoordination): CoordinatedSourceId | null {
+  return resource.selection.outcome === 'selected'
+    ? resource.selection.source
+    : null;
 }
 
 function payloadOf<K extends CoordinatedResourceKind>(
@@ -288,12 +308,17 @@ export function assembleSeasonSource(
   // first is what gets published.
   const classifications: RaceResult[] = [];
   const classifiedRounds = new Set<number>();
+  let nonParticipatingClassification = false;
   for (const entry of selectedPayloads(run, 'session-classification')) {
     if (entry.payload.kind !== 'session-classification') continue;
     if (entry.payload.result.sessionType !== 'race') continue;
     classifications.push(entry.payload.result);
     if (isClassifiedResult(entry.payload.result.status)) {
       classifiedRounds.add(entry.payload.result.round);
+      const source = sourceOf(entry.resource);
+      if (source === null || !participationSources.has(source)) {
+        nonParticipatingClassification = true;
+      }
     }
   }
 
@@ -333,6 +358,48 @@ export function assembleSeasonSource(
     };
   }
 
+  // Only Jolpica race rows create participation (ADR 0026 D3). A classified
+  // race selected from any other source - today only a provisional OpenF1
+  // fallback, which production policy keeps locked - produces no span, so its
+  // rows cannot be placed in one and the candidate is withheld. It is refused
+  // here rather than left to the preflight: rows that agree with the Jolpica
+  // seats would otherwise fall inside their open spans and pass.
+  if (nonParticipatingClassification) {
+    return {
+      complete: false,
+      gap: 'inconsistent-references',
+      missing: [],
+      relations: ['result-entry-span'],
+    };
+  }
+
+  // Participation is derived here, from the classifications selected above
+  // (ADR 0026 D11). A calendar round at or before the latest classified race
+  // round without a classification of its own is unaccounted (D4): deriving
+  // across it would bridge an unobserved round, so the season is withheld
+  // under the same gap as any other missing race classification.
+  const derivation = deriveDriverSeasonEntries(
+    run.season,
+    calendar.map((event) => event.round),
+    classifications,
+  );
+  if (derivation.outcome === 'unaccounted-rounds') {
+    return {
+      complete: false,
+      gap: 'missing-round-classification',
+      missing: derivation.rounds.map(
+        (round) =>
+          ({
+            kind: 'session-classification',
+            season: run.season,
+            round,
+            sessionType: 'race',
+          }) as CoordinatedResource,
+      ),
+      relations: [],
+    };
+  }
+
   // Every member is a race classification for a distinct round, so round
   // order is a total order and no session tiebreak is reachable.
   const results = classifications
@@ -351,7 +418,17 @@ export function assembleSeasonSource(
     drivers: [...participants.drivers] as Driver[],
     constructors: [...participants.constructors] as Constructor[],
     circuits: [...circuitsPayload.circuits] as Circuit[],
-    driverEntries: [...participants.driverEntries] as DriverSeasonEntry[],
+    // The contribution carries no participation evidence (ADR 0026 D11): the
+    // participants port contributes an empty list, and the derived spans
+    // follow it. Nothing contributed is dropped, merged or renamed. A
+    // non-empty contribution cannot pass the preflight below: an entry not
+    // observed at its own opening round fails `driver-entry-support`, and one
+    // that is observed there overlaps the derived span of that same
+    // observation, failing `driver-entry-span`.
+    driverEntries: [
+      ...participants.driverEntries,
+      ...derivation.entries,
+    ] as DriverSeasonEntry[],
     constructorEntries: [
       ...participants.constructorEntries,
     ] as ConstructorSeasonEntry[],

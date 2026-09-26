@@ -655,6 +655,17 @@ keeps publishing that same absence document exactly as before. The
 > this is a derivation, not a repair, and until it is implemented the code
 > behaves as this section describes.
 
+> **Implemented 2026-09-26** (Implementation Plan §14.0.24). Season assembly
+> derives every `DriverSeasonEntry` from the race classifications it
+> selected. It also withholds the season as `missing-round-classification`
+> when a calendar round at or before the latest selected classified race
+> round has no classification, whatever that round's status says, because
+> deriving across it would bridge an unobserved round. The participants
+> contribution's `driverEntries` is empty, and the two relations are
+> `result-entry-span` and `driver-entry-support` (§14.0.23). The A7
+> `hasResults` derivation is still not implemented, and the coordination
+> path stays dormant.
+
 **This is publication completeness, not scheduling.** The predicate reads one
 field of data the source supplied. No clock, event offset, session duration,
 cadence or due-job calculation is involved, and G5 remains untouched. A

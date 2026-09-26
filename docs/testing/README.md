@@ -1656,6 +1656,31 @@ Coverage:
   under distinct ids, idempotent and replacing refreshes, one card per driver,
   current-span detail and line-ups; `participation_span_wording_test.dart`
   covers the four bound wordings in every supported locale.
+- **Assembly span derivation (ADR 0026 D3-D8, D11, D12 item 11, 2026-09-26)** -
+  `driver-span-derivation.test.ts` drives `deriveDriverSeasonEntries` with
+  hand-written classifications: one open seat from the season start, a direct
+  constructor change, a disappearance, a mid-season first appearance, a
+  same-constructor return, did-not-start and other finishing statuses,
+  sprint, qualifying and unavailable classifications ignored, a provisional
+  classification counted, the pre-season case, open spans on a completed
+  calendar, future rounds, unaccounted-round refusal, row-order independence,
+  contradictory rows left for the preflight, and frozen inputs. Its
+  production-path half runs the real coordinator, `assembleSeasonSource` and
+  publisher over the split season: exact D7 entries, identity-only drivers
+  without an entry, a DNS-only round, a return, reversed rows, an
+  unaccounted round withheld as `missing-round-classification` even when
+  `cancelled`, a derived cross-driver ID collision withheld as
+  `duplicate-identity`, a non-empty participants contribution withheld, a
+  provisional OpenF1 race withheld even when its rows agree with the Jolpica
+  seats (ADR 0026 D3), unmutated selections, and a candidate that passes
+  `validateDriverSeasonEntry`, the full preflight and publication. Since this
+  change the coordination fixtures contribute an empty `driverEntries`, like
+  the Jolpica participants port, and `seasonFixture` writes out the D8-shaped
+  spans assembly derives (null race number and short code, driver order).
+  Six negative controls - a flattened constructor change, a bridged absence,
+  a non-null end at the latest round, a span for an identity-only driver, an
+  unsuffixed mid-season ID and an accepted ID collision - each made tests
+  fail and were restored byte for byte.
 - **Non-vacuity** - the curated mock season and every production public fixture
   validate clean, and the season is asserted non-empty and to carry media, so
   the control cannot pass by having nothing to check.

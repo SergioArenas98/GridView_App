@@ -305,17 +305,34 @@ describe('cross-resource references are checked before generation', () => {
   });
 
   it('withholds when a driver entry names an absent constructor', async () => {
+    // Assembly derives every span from a classified row (ADR 0026 D11), so the
+    // only way a span can name an absent constructor is a row that does.
     const base = await seasonFixture();
-    const first = base.driverEntries[0];
-    if (first === undefined) throw new Error('fixture gap');
+    const race = base.results.find(
+      (result) => result.sessionType === 'race' && result.entries.length > 0,
+    );
+    const first = race?.entries[0];
+    if (race === undefined || first === undefined) {
+      throw new Error('fixture gap');
+    }
     const { harness, outcome } = await withheldFor({
-      driverEntries: [
-        { ...first, constructorId: 'no-such-constructor' },
-        ...base.driverEntries.slice(1),
-      ],
+      results: base.results.map((result) =>
+        result === race
+          ? {
+              ...result,
+              entries: [
+                { ...first, constructorId: 'no-such-constructor' },
+                ...result.entries.slice(1),
+              ],
+            }
+          : result,
+      ),
     });
 
     expect(outcome.outcome).toBe('withheld');
+    if (outcome.outcome === 'withheld') {
+      expect(outcome.relations).toContain('driver-entry-constructor');
+    }
     expect(harness.publishCalls).toBe(0);
   });
 
