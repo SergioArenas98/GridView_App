@@ -186,18 +186,23 @@ export const seasonRelations = [
   /**
    * Span to classification (ADR 0026 D5 rules 1-7, D6, D8, D12 item 5).
    *
-   * Every span must be backed by the participation facts it claims, for its
-   * own driver and constructor, at both of its boundaries:
+   * Every span must agree with the selected, classified race rounds for its
+   * own driver and constructor:
    *
-   * - its opening round: `startRound`, or the season's first classified race
-   *   round when `startRound` is null. A non-null `startRound` equal to that
-   *   first round is refused, because D8 spells that boundary as null;
-   * - its closing round: `endRound`, or the latest classified race round when
-   *   `endRound` is null, since a later classified round without the driver
-   *   for this constructor would have established an exit.
+   * - it is observed at its opening round: `startRound`, or the season's first
+   *   classified race round when `startRound` is null. A non-null `startRound`
+   *   equal to that first round is refused, because D8 spells it null;
+   * - it is observed at its closing round: `endRound`, or the latest
+   *   classified race round when `endRound` is null, since a later classified
+   *   round without the driver for this constructor would establish an exit;
+   * - it is observed at **every** classified race round in between: an
+   *   absence closes a span, and a return is a new span (D5 rules 4, 5);
+   * - it is **not** observed at the classified race round just before or just
+   *   after it: the same seat there would have extended it (D5 rule 2).
    *
    * A span with no supporting fact therefore fails, and before the first
-   * classified race no span can exist at all (D9).
+   * classified race no span can exist at all (D9). Rounds with no selected
+   * classification are not observations and are not judged here.
    */
   'driver-entry-support',
   /** Two payloads claiming one identity that storage keys a single row on. */
@@ -274,21 +279,24 @@ interface ParticipationFact {
   readonly constructorId: string;
 }
 
+/** The selected, classified race classifications: the only observations. */
+function classifiedRaces(source: ProviderSeasonSource) {
+  return source.results.filter(
+    (result) =>
+      result.sessionType === 'race' && isClassifiedResult(result.status),
+  );
+}
+
 function participationFacts(
   source: ProviderSeasonSource,
 ): readonly ParticipationFact[] {
-  return source.results
-    .filter(
-      (result) =>
-        result.sessionType === 'race' && isClassifiedResult(result.status),
-    )
-    .flatMap((result) =>
-      result.entries.map((entry) => ({
-        round: result.round,
-        driverId: entry.driverId,
-        constructorId: entry.constructorId,
-      })),
-    );
+  return classifiedRaces(source).flatMap((result) =>
+    result.entries.map((entry) => ({
+      round: result.round,
+      driverId: entry.driverId,
+      constructorId: entry.constructorId,
+    })),
+  );
 }
 
 /** Whether `round` lies inside a span, null bounds being unbounded. */
@@ -319,18 +327,23 @@ function hasUnplacedParticipation(
 }
 
 /**
- * Whether any span is not backed by the facts at its own boundaries
+ * Whether any span disagrees with the classified race rounds
  * (`driver-entry-support`). See the relation for the exact rule.
+ *
+ * `rounds` is the ascending set of selected, classified race rounds. Rounds
+ * without such a classification are not observations at all, so they neither
+ * support nor interrupt a span here; accounting for them is span derivation's
+ * business (ADR 0026 D4).
  */
 function hasUnsupportedSpan(
   entries: readonly DriverSeasonEntry[],
   facts: readonly ParticipationFact[],
+  rounds: readonly number[],
 ): boolean {
   if (entries.length === 0) return false;
-  if (facts.length === 0) return true;
-  const rounds = facts.map((fact) => fact.round);
-  const firstRound = Math.min(...rounds);
-  const latestRound = Math.max(...rounds);
+  if (rounds.length === 0) return true;
+  const firstRound = rounds[0]!;
+  const latestRound = rounds.at(-1)!;
   const observed = (entry: DriverSeasonEntry, round: number): boolean =>
     facts.some(
       (fact) =>
@@ -338,12 +351,32 @@ function hasUnsupportedSpan(
         fact.driverId === entry.driverId &&
         fact.constructorId === entry.constructorId,
     );
-  return entries.some(
-    (entry) =>
-      entry.startRound === firstRound ||
-      !observed(entry, entry.startRound ?? firstRound) ||
-      !observed(entry, entry.endRound ?? latestRound),
-  );
+  return entries.some((entry) => {
+    // D8 spells a span that begins at the first classified round as null.
+    if (entry.startRound === firstRound) return true;
+    const opening = entry.startRound ?? firstRound;
+    const closing = entry.endRound ?? latestRound;
+    // Observed at both of its own boundaries (D5 rules 1, 3, 4; D6).
+    if (!observed(entry, opening) || !observed(entry, closing)) return true;
+    // Continuous: a classified round inside the span without the driver for
+    // this constructor would have closed it (D5 rules 2, 4, 5).
+    if (
+      rounds.some(
+        (round) =>
+          round > opening && round < closing && !observed(entry, round),
+      )
+    ) {
+      return true;
+    }
+    // Maximal: the neighbouring classified rounds must not observe the same
+    // seat, or the span would have been extended instead (D5 rule 2).
+    const before = rounds.filter((round) => round < opening).at(-1);
+    const after = rounds.find((round) => round > closing);
+    return (
+      (before !== undefined && observed(entry, before)) ||
+      (after !== undefined && observed(entry, after))
+    );
+  });
 }
 
 /** True when a collection contains the same identity twice. */
@@ -612,10 +645,13 @@ export function validateSeasonReferences(
   // both directions (ADR 0026 D12 item 5). Neither side is repaired: no span is
   // derived, extended or dropped here, and no row is discarded.
   const facts = participationFacts(source);
+  const raceRounds = [
+    ...new Set(classifiedRaces(source).map((result) => result.round)),
+  ].sort((left, right) => left - right);
   if (hasUnplacedParticipation(source.driverEntries, facts)) {
     fail('result-entry-span');
   }
-  if (hasUnsupportedSpan(source.driverEntries, facts)) {
+  if (hasUnsupportedSpan(source.driverEntries, facts, raceRounds)) {
     fail('driver-entry-support');
   }
 

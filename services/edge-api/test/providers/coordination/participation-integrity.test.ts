@@ -181,7 +181,12 @@ describe('classification to span', () => {
       ),
     );
 
-    expect(validateSeasonReferences(source)).toEqual(['result-entry-span']);
+    // The row leaves every span, and Verstappen's red-bull span loses an
+    // interior round.
+    expect(validateSeasonReferences(source)).toEqual([
+      'result-entry-span',
+      'driver-entry-support',
+    ]);
   });
 
   it('fails a row that two overlapping spans both cover', async () => {
@@ -289,8 +294,51 @@ describe('span to classification', () => {
       splitEntry('yuki-tsunoda', 'racing-bulls', 13, null),
     ]);
 
-    // Round 12's Tsunoda row is then outside every span.
-    expect(validateSeasonReferences(source)).toEqual(['result-entry-span']);
+    // Round 12's Tsunoda row is then outside every span, and the span should
+    // have been extended back over it.
+    expect(validateSeasonReferences(source)).toEqual([
+      'result-entry-span',
+      'driver-entry-support',
+    ]);
+  });
+
+  it('fails one span bridging a classified round the driver missed', async () => {
+    // Hadjar returns for red-bull at round 13 after missing round 12.
+    const returned = withRoundRows(await splitSeasonFixture(), 13, (rows) => [
+      ...rows,
+      splitRow('isack-hadjar', 'red-bull', rows.length + 1),
+    ]);
+    const bridged = replacingDriver(returned, 'isack-hadjar', [
+      splitEntry('isack-hadjar', 'red-bull', null, null),
+    ]);
+
+    expect(validateSeasonReferences(bridged)).toEqual(['driver-entry-support']);
+  });
+
+  it('accepts the same return as a new span after the absence', async () => {
+    const returned = withRoundRows(await splitSeasonFixture(), 13, (rows) => [
+      ...rows,
+      splitRow('isack-hadjar', 'red-bull', rows.length + 1),
+    ]);
+    const source = replacingDriver(returned, 'isack-hadjar', [
+      splitEntry('isack-hadjar', 'red-bull', null, 11),
+      splitEntry('isack-hadjar', 'red-bull', 13, null),
+    ]);
+
+    expect(validateSeasonReferences(source)).toEqual([]);
+  });
+
+  it('fails a continuous stint split into two spans for one constructor', async () => {
+    const source = replacingDriver(
+      await splitSeasonFixture(),
+      'max-verstappen',
+      [
+        splitEntry('max-verstappen', 'red-bull', null, 11),
+        splitEntry('max-verstappen', 'red-bull', 12, null),
+      ],
+    );
+
+    expect(validateSeasonReferences(source)).toEqual(['driver-entry-support']);
   });
 
   it('fails a non-null start at the first classified round, which D8 spells null', async () => {

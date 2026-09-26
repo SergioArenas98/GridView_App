@@ -1640,8 +1640,10 @@ Coverage:
   (`split-participation-support.ts`: Lawson at racing-bulls to round 11 and at
   red-bull from round 12, Tsunoda from round 12, Hadjar to round 11), including
   a row outside every span, a constructor mismatch, overlapping spans, an
-  unsupported span, a dropped or flattened Lawson span, boundary rows, the
-  pre-season case and a cross-driver D7 collision. `season-driver-summary.test.ts`
+  unsupported span, a dropped or flattened Lawson span, boundary rows, a span
+  bridging a missed classified round, a valid return as a new span, a
+  continuous stint split in two, the pre-season case and a cross-driver D7
+  collision. `season-driver-summary.test.ts`
   pins the eleven-key `SeasonDriverSummary`, one row per entry, ordering,
   constructor provenance, the canonical revision fields, the current-span
   driver detail and the generator-derived `drivers/season-drivers-split.json`

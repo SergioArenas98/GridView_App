@@ -594,7 +594,9 @@ spans differ. A `startRound`/`endRound` of `null` means "from the season start"
 >   N", N/null as "From round N" and N/M as "Rounds N–M", never "Full season".
 > - Every selected classified race row must lie in exactly one span of its
 >   driver naming its constructor (`result-entry-span`), and every span must
->   be observed at its own boundaries (`driver-entry-support`).
+>   be observed at its own boundaries and at every classified race round
+>   between them, and not at the classified round just outside either
+>   boundary (`driver-entry-support`).
 
 ### 6.8 ConstructorSeasonEntry
 

@@ -564,9 +564,11 @@ implemented by this decision:
 > 5. `result-entry-span` (every selected classified race row lies in exactly
 >    one span of its driver naming its constructor) and `driver-entry-support`
 >    (every span is observed at its opening round, its `startRound` or the
->    first classified round when null, and at its closing round, its
->    `endRound` or the latest classified round when null; a non-null start at
->    the first classified round is refused because D8 spells it null).
+>    first classified round when null, at its closing round, its `endRound`
+>    or the latest classified round when null, and at every classified race
+>    round in between, and is not observed at the classified race round just
+>    before or after it; a non-null start at the first classified round is
+>    refused because D8 spells it null).
 >
 > The collection-wide uniqueness check item 11 asks for is the existing
 > `duplicate-identity` category `driver-season-entry-id`, now tested against a
