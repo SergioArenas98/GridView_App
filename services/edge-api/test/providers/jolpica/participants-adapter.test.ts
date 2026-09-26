@@ -23,8 +23,14 @@ import {
   type CoordinatedResource,
   type ProviderResourceOutcome,
 } from '../../../src/providers/coordination';
-import { gridViewUserAgent } from '../../../src/providers/http/provider-http-client';
 import {
+  ProviderHttpClient,
+  gridViewUserAgent,
+  type ProviderHttpResult,
+  type ProviderRequest,
+} from '../../../src/providers/http/provider-http-client';
+import {
+  JolpicaParticipantsPort,
   curatedParticipants,
   curatedParticipantsFrom,
   participantsPageLimit,
@@ -55,6 +61,8 @@ import {
   mappingDocument,
   participantsHarness,
   registryRows,
+  scriptedLimiter,
+  scriptedTransport,
   syntheticMarkers,
   type EnvelopeOptions,
   type ParticipantsHarnessOptions,
@@ -698,6 +706,54 @@ describe('resource refusal and request control', () => {
       steps: [{ kind: 'network' }, { kind: 'network' }, { kind: 'network' }],
     });
     expect(failing.calls).toHaveLength(1);
+  });
+
+  it('fails provider-unavailable when the client refuses the second URL before transport', async () => {
+    // The port proves both paths buildable before the first request, so this
+    // branch needs a client whose refusal of the constructors request is not
+    // a pure function of the path. It answers exactly as the hardened
+    // boundary does for a path it will not build: nothing sent, nothing
+    // reserved.
+    class RefusingSecondClient extends ProviderHttpClient {
+      override async getJson<T = unknown>(
+        request: ProviderRequest,
+      ): Promise<ProviderHttpResult<T>> {
+        if (request.path.endsWith('/constructors/')) {
+          return {
+            ok: false,
+            sourceId: 'jolpica',
+            kind: 'invalid-request',
+            requestAttempted: false,
+          };
+        }
+        return super.getJson<T>(request);
+      }
+    }
+    const scripted = scriptedTransport(completeScript());
+    const limiter = scriptedLimiter();
+    const logger = new CapturingLogger();
+    const port = new JolpicaParticipantsPort({
+      client: new RefusingSecondClient({
+        transport: scripted.transport,
+        limiter: limiter.limiter,
+        logger,
+      }),
+      logger,
+    });
+
+    const outcome = await port.fetchResource({
+      source: 'jolpica',
+      resource: PARTICIPANTS,
+    });
+
+    expect(outcome).toEqual({
+      outcome: 'failed',
+      attempts: [expect.objectContaining({ outcome: 'successful' })],
+      reason: 'provider-unavailable',
+    });
+    expect(isWellFormedOutcome(outcome)).toBe(true);
+    expect(scripted.calls.map((call) => call.url)).toEqual([DRIVERS_URL]);
+    expect(limiter.reservations).toHaveLength(1);
   });
 
   it('counts an interrupted and a failed second request exactly through the coordinator', async () => {
