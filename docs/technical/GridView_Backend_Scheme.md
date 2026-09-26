@@ -1207,6 +1207,14 @@ The handler:
 > `interrupted` outcome carrying only the requests it made. `not-attempted`
 > still means that nothing was sent. No runtime wiring exists.
 >
+> **Race classification (2026-09-26).** A fourth dormant, fixture-tested
+> Jolpica port answers the race `session-classification` with one request
+> per round, under the curator decisions of
+> [ADR 0023 amendment A2](../adr/0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization).
+> It returns one normalized `RaceResult` and no participation span. Like the
+> other three, it is **not registered** and is unreachable from the Worker
+> entry point.
+>
 > **An answered outcome is the coordinator's own normalized copy.** The instant
 > an adapter's answer crosses the coordination boundary it is parsed rather than
 > merely validated: its shape is closed against the variant it declares, each

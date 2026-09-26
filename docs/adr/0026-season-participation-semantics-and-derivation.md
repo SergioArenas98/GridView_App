@@ -39,6 +39,17 @@
 > derivation, the race-results port and every D12 publication prerequisite
 > remain unimplemented. This decision itself is unchanged.
 
+> **Implementation note 2026-09-26.** The race-classification half of D11
+> now exists as a dormant, fixture-tested Jolpica race-results port
+> ([ADR 0023 amendment A2](0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization),
+> Implementation Plan §14.0.22). It returns one normalized `RaceResult` per
+> round with every row, DNS and retired rows included, and it produces **no**
+> span, season entry or `hasResults` value. It is not registered with any
+> coordinator, is absent from every Worker bundle and was not used to
+> contact the provider. Span derivation in season assembly, the A7
+> `hasResults` correction, D12 items 1-13 and the D14-D16 guards remain
+> unimplemented. This decision itself is unchanged.
+
 ## Context
 
 The coordinated `season-participants` resource is one payload carrying four
@@ -173,6 +184,14 @@ and one round. A row is participation whatever its finishing status: finished,
 retired, not classified, disqualified or not started, **if the row is
 present**. Whether Jolpica lists non-starters in 2026 race results is
 unrecorded and must be established by evidence before implementation.
+
+> **Evidence note 2026-09-26.** The private capture of the 2026 rounds 1-14
+> race results (Provider Evaluation §8.11; hashes in
+> [ADR 0023 A2.2](0023-multi-source-provider-coordination.md#a22---evidence))
+> answers this. Jolpica lists non-starters as `Did not start` with
+> `positionText "W"`: seven rows in rounds 1, 2 and 5. Each is a present row
+> and therefore a participation fact, and the race-results port keeps every
+> one (A2 C-6).
 
 ### D4 - Round accounting
 
@@ -725,6 +744,14 @@ The seven choices the decision pack left open are settled:
   > no span is derived, the per-round race results are still not preserved,
   > and every other item in this list stays open.
 
+  > **Note 2026-09-26 (race results).** The race results of 2026 rounds 1-14
+  > were captured on 2026-09-24 under separate authorisation and are
+  > preserved privately, not committed (Provider Evaluation §8.11). They hold
+  > 308 rows naming 23 drivers and 11 constructors, and every one maps. Seven
+  > rows are non-starters (D3), and results carry a car number that no
+  > contract field uses (D8). The nine identity-only drivers without a race
+  > did not race in rounds 1-14.
+
 - **Ports.** The Jolpica drivers and constructors identity normalization and
   the race-results port are not implemented.
 
@@ -733,10 +760,22 @@ The seven choices the decision pack left open are settled:
   > (Implementation Plan §14.0.21). The race-results port and everything
   > else in this list remain open.
 
+  > **Note 2026-09-26.** The race-results port now exists as a dormant,
+  > unregistered port (Implementation Plan §14.0.22). Everything else in this
+  > list remains open.
+
 - **Validation and fixes.** Assembly derivation and the new integrity
   relations are not implemented, nor is the driver-detail current-span fix.
 - **Split-span publication.** The contract and client change that lets the
   season Drivers collection carry split spans is undecided (D12).
+
+  > **Note 2026-09-26.** Real evidence now triggers D12 item 1. Applying D5
+  > privately to the rounds 1-14 rows gives 24 spans for 23 drivers:
+  > `liam-lawson` drove for `racing-bulls` in rounds 1-11 and for `red-bull`
+  > from round 12, when `yuki-tsunoda` joined `racing-bulls` and
+  > `isack-hadjar` stopped appearing. Those spans are evidence only, not
+  > published or committed content, and any candidate carrying the two
+  > `liam-lawson` spans stays unpublishable until item 1 is implemented.
 - **Provisional-source participation.** Whether a selected OpenF1 race
   classification may create participation is undecided, and must be settled
   before OpenF1 is unlocked (D3).

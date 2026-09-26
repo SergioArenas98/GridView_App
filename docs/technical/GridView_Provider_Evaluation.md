@@ -42,6 +42,7 @@
 | 1.9 | 2026-09-23 | **Phase 9B: the 2026 constructor identity dataset is complete; drivers are not** (§8.9). One separately authorised public `GET` of `https://api.jolpi.ca/ergast/f1/2026/constructors/?limit=100` at 2026-09-23T18:33:16Z returned HTTP 200 with 11 of 11 rows (SHA-256 `bbf4c76a4d5ad9e519e26e73af9641fcee7cd97942185866d5c30f82ab2c988e`). The raw response is not committed. A curator approved a mapping for every observed `constructorId`. `audi` continues the stable `sauber` identity, whose current canonical name and short name are now `Audi` by curator decision (Domain Model §6.3 naming layers; the 2026 entrant name stays season-scoped), and no `audi` identity exists. `rb` maps to the curator-authored `racing-bulls` and is never an ID. `aston-martin`, `cadillac`, `haas`, `racing-bulls` and `williams` are new identity-only rows. The constructor registry holds **11** identities, the season-2026 dataset **62 exact mappings**, **66 approved evidence identities** and **four acknowledgements**. The OpenF1 `Cadillac` and `Racing Bulls` acknowledgements stay unmapped with the corrected reason `no-approved-provider-mapping`. **Driver identity coverage remains incomplete**, participant identities as a whole are not complete, and no drivers, constructors or participants port exists. The two Jolpica ports remain dormant, and the ADR 0026 implementation prerequisites remain open. `PROVIDER_MODE` still admits exactly `mock` and `none`, no live provider mode has been enabled, nothing was deployed, no cutover occurred, and no licensing conclusion changes. G1, G5, G9 and G-l remain open. |
 | 1.11 | 2026-09-24 | **Phase 9B: a dormant Jolpica `season-participants` port exists** (Implementation Plan §14.0.21; §10.1). It makes two sequential requests, `/{season}/drivers/?limit=100` then `/{season}/constructors/?limit=100`, and returns the canonical drivers and constructors, one constructor season entry per constructor, and no driver entry. [ADR 0023 amendment A1](../adr/0023-multi-source-provider-coordination.md#amendment-a1---ordered-attempts-and-interrupted-executions) lets one outcome report every request it made. It is fixture-tested only, has never contacted Jolpica, is registered nowhere and is absent from every Worker bundle. This supersedes the "only two dormant ports" statements in §8.8.1, §10.1, §11.4, §11.5 and §15.1. The earlier dated rows and the §8.9 and §8.10 records are left unrewritten. Participation spans, race-result derivation, publication and G1, G5, G9 and G-l remain open. |
 | 1.10 | 2026-09-23 | **Phase 9B: the 2026 driver identity dataset is complete** (§8.10). The driver response of the same separately authorised capture, `GET https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100` at 2026-09-23T18:33:12Z, returned HTTP 200 with 32 of 32 rows (SHA-256 `2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743`). The raw response is not committed. A curator approved a mapping for every observed `driverId`, with curator-authored canonical IDs built from the complete recorded given and family name (`antonelli` maps to `andrea-kimi-antonelli`) and display names that keep their diacritics. 25 identity-only rows were added, nine of them from name-only provider rows, and no provider descriptive field was imported. `max-verstappen` and `lando-norris` lost their unreliable `permanentNumber`. The driver registry holds **33** identities, the season-2026 dataset **93 exact mappings**, **96 approved evidence identities** and **three acknowledgements**, all OpenF1: `driver_number` `12` stays unmapped with the reason `no-approved-provider-mapping`. No participants port exists, the two Jolpica ports remain dormant, and the ADR 0026 implementation prerequisites remain open. `PROVIDER_MODE` still admits exactly `mock` and `none`, no live provider mode has been enabled, nothing was deployed, no cutover occurred, and no licensing conclusion changes. G1, G5, G9 and G-l remain open. |
+| 1.12 | 2026-09-26 | **Phase 9B: the 2026 rounds 1-14 race results are observed, and a dormant Jolpica race-results port exists** (§8.11; Implementation Plan §14.0.22; §10.1). A separately authorised capture on 2026-09-24 made 14 requests, `GET https://api.jolpi.ca/ergast/f1/2026/{round}/results/?limit=100` for rounds 1-14. Every one returned HTTP 200 with one race and 22 rows, 308 rows in all, naming 23 drivers and 11 constructors, and every identity maps. The raw responses are not committed. Their SHA-256 values and the curator decisions C-1 to C-9 are recorded in [ADR 0023 amendment A2](../adr/0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization). Non-starters are listed (seven rows), which answers ADR 0026 D3. The `liam-lawson` change at round 12 makes ADR 0026 D12 item 1 a real blocker. The port answers the race `session-classification` only, with one request, and returns one `final` `RaceResult` per round. It produces no span or season entry and derives no `hasResults`. It is fixture-tested only, was not used to contact Jolpica, is registered nowhere and is absent from every Worker bundle. This supersedes the "three dormant ports" statements in §8.8.1, §10.1, §11.4, §11.5 and §15.1. Span derivation, A7, publication and G1, G5, G9 and G-l stay open. |
 
 ---
 
@@ -1199,7 +1200,9 @@ and above is unchanged.
   (v1.6, Implementation Plan §14.0.16) and `season-circuits` (v1.7,
   Implementation Plan §14.0.17) - *superseded 2026-09-24 (v1.11): a third,
   `season-participants` (Implementation Plan §14.0.21), exists on the same
-  terms* - outside the runtime composition and
+  terms, and since 2026-09-26 (v1.12) a fourth, the race
+  `session-classification` port (Implementation Plan §14.0.22)* - outside
+  the runtime composition and
   the Worker entry point's import closure, not selectable through
   `PROVIDER_MODE`, invoked by no production coordinator or event-aware
   scheduler. **The complete Jolpica adapter is unimplemented**, and the
@@ -1477,6 +1480,11 @@ snapshot and is cutover-sensitive.
 > constructor mappings (Implementation Plan §14.0.21, §10.1 below). It is
 > registered nowhere, derives no span and has never contacted the provider.
 
+> **Note 2026-09-26 (v1.12).** A dormant race-results port now resolves
+> these driver and constructor mappings and the event mappings for each
+> round (Implementation Plan §14.0.22). The race results it was designed
+> from are recorded in §8.11.
+
 **No additional provider request was made** for this dataset. Every value was
 read from the single driver response above. No provider, service or device was
 contacted.
@@ -1485,6 +1493,71 @@ contacted.
 2026-09-23. A driver added or re-keyed later produces a `driverId` that no
 record matches, and the identity resource fails closed until another reviewed
 update lands on new, separately authorised evidence.
+
+### 8.11 2026 race-results observation, rounds 1-14 (2026-09-24)
+
+**Source and licence.** Jolpica F1 (`https://api.jolpi.ca/ergast/f1/`), used
+under its published CC BY-NC-SA 4.0 licence with the attribution recorded in
+§7.2, §7.3 and [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
+
+**Requests.** 14 separately authorised, sequential public requests,
+`GET https://api.jolpi.ca/ergast/f1/2026/{round}/results/?limit=100` for
+rounds 1-14, from 2026-09-24T19:52:18.561Z to 19:53:04.407Z. The capture
+included exactly the rounds whose scheduled race start preceded it; rounds
+15-23 were future and were not requested. Every response was HTTP 200 with
+exactly one race, `limit "100"`, `offset "0"`, `total "22"` and 22 rows, and
+no request was retried or redirected. The raw responses are preserved
+privately and are **not** committed. Their SHA-256 values are recorded in
+[ADR 0023 amendment A2](../adr/0023-multi-source-provider-coordination.md#a22---evidence),
+together with the hashes of the private evidence record, manifest, analysis
+and decision pack.
+
+**What was observed.**
+
+- **308 rows, 23 drivers, 11 constructors, all mapped.** Every `driverId` and
+  `constructorId` resolves through the committed curated mappings, and every
+  round's `(round, raceName, circuitId)` locator resolves to exactly one
+  curated event. No mapping, evidence or registry change was needed. The nine
+  identity-only drivers without a race in rounds 1-14 are unaffected.
+- **Non-starters are listed.** Seven rows are `Did not start` with
+  `positionText "W"`: `oscar-piastri` and `nico-hulkenberg` in round 1,
+  `oscar-piastri`, `lando-norris`, `gabriel-bortoleto` and `alexander-albon`
+  in round 2, and `arvid-lindblad` in round 5. Each carries a positive grid
+  slot. This answers the open question in ADR 0026 D3, so each of these rows
+  is a participation fact.
+- **Six status / `positionText` pairs**, and no others: `Finished` (143),
+  `Lapped` (99), `Lapped` with `R` (2: `lance-stroll` round 1, `alexander-albon`
+  round 7), `Retired` with a numeric position (6), `Retired` with `R` (51) and
+  `Did not start` with `W` (7). No disqualified, excluded, non-qualified or
+  not-classified row was observed.
+- **Timing traps.** On a `Lapped` row, `Time.time "+x"` is the car's own total
+  minus the winner's, over fewer laps, so it is not a gap. The six classified
+  retirements carry an empty `Time.time` with `millis` present. `FastestLap`
+  carries only `m:ss.sss` text, with no millis, and exactly one rank-1 lap per
+  round. `MRData.total` counts result rows, not races.
+- **Round 12 line-up change.** `liam-lawson` drove for `racing-bulls` in
+  rounds 1-11 and for `red-bull` in rounds 12-14. `yuki-tsunoda` first appears
+  in round 12, for `racing-bulls`. `isack-hadjar` drove for `red-bull` in
+  rounds 1-11 and is absent from rounds 12-14.
+- **Simulated spans, evidence only.** Applying the ADR 0026 D5 rules to these
+  rows privately yields 24 spans for the 23 drivers, with `liam-lawson` the
+  only driver with two. These spans are **not** published content, not
+  committed data and not a derivation GridView performs. The two-span case
+  makes ADR 0026 D12 item 1 a real, evidenced publication blocker.
+
+**Curator decisions.** C-1 to C-9, approved on these observations, are
+recorded in ADR 0023 amendment A2. A dormant race-results port applies them
+(Implementation Plan §14.0.22, §10.1).
+
+**No additional provider request was made** while the port was implemented,
+and its tests replay small synthetic fixtures only.
+
+**Limits of this evidence.** It is a point-in-time observation of rounds
+1-14 on 2026-09-24. No empty-result body, no disqualification, exclusion or
+not-classified row, no pit-lane start, no fractional points and no post-race
+correction was observed. Sprint results were deliberately not captured. A
+later correction or an unobserved status produces a response the port refuses
+until a reviewed change on new, separately authorised evidence.
 
 ---
 
@@ -1571,10 +1644,11 @@ provider mode, binding or route was created or changed.**
 > justified upper bound on the actual session end existing. **None is recorded
 > today**, so as things stand the skip rule applies to every session and
 > Jolpica is the source for everything. No OpenF1 adapter exists, and on the
-> Jolpica side only three **dormant, fixture-tested ports** do - `season-calendar`
+> Jolpica side only four **dormant, fixture-tested ports** do - `season-calendar`
 > (v1.6, Implementation Plan §14.0.16), `season-circuits` (v1.7,
-> Implementation Plan §14.0.17) and `season-participants` (v1.11,
-> Implementation Plan §14.0.21) - outside the runtime composition and
+> Implementation Plan §14.0.17), `season-participants` (v1.11,
+> Implementation Plan §14.0.21) and the race `session-classification` port
+> (v1.12, Implementation Plan §14.0.22) - outside the runtime composition and
 > the Worker entry point's import closure, not selectable through
 > `PROVIDER_MODE`, invoked by no production coordinator or event-aware
 > scheduler - so **nothing is running**: the provisional path is designed and
@@ -1601,6 +1675,21 @@ provider mode, binding or route was created or changed.**
 > mappings, and the port has never contacted Jolpica. It is dormant,
 > registered with no coordinator, and absent from every Worker bundle. Race
 > results, participation spans and a weekly schedule do not exist.
+
+> **The race-results resource (v1.12, 2026-09-26).** A race-results port now
+> answers `session-classification` for `race` only, with **one request** per
+> round, `GET /ergast/f1/{season}/{round}/results/?limit=100`, through the
+> hardened boundary and the Jolpica limiter. One outcome reports one attempt.
+> It normalizes the classification under the curator decisions C-1 to C-9 of
+> [ADR 0023 amendment A2](../adr/0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization):
+> a closed status table, every row kept, gaps always `null`, and an empty
+> answer reported as `provider-unavailable` rather than an empty result. It
+> produces no participation span and no `hasResults`. **The evidence behind
+> it is the private §8.11 capture, and its tests are fixture-only.** It is
+> dormant, registered with no coordinator and absent from every Worker
+> bundle. The previous note's "race results do not exist" is superseded for
+> the port only. Participation spans and a weekly schedule still do not
+> exist.
 
 Every stored record is in exactly one of two states: **provisional** (last
 written from OpenF1) or **reconciled** (last written from Jolpica). The public
@@ -2877,9 +2966,10 @@ budget per source rather than a per-isolate or per-location approximation
 ([ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
 It reserves across every published window at once, all-or-nothing, and defers
 with a deterministic `retryAt`. **The only ports that reserve through it are the
-dormant, fixture-tested Jolpica `season-calendar`, `season-circuits` and
-`season-participants` ports** (v1.6, v1.7 and v1.11, Implementation Plan
-§14.0.16, §14.0.17 and §14.0.21), and only when
+dormant, fixture-tested Jolpica `season-calendar`, `season-circuits`,
+`season-participants` and race `session-classification` ports** (v1.6, v1.7,
+v1.11 and v1.12, Implementation Plan §14.0.16, §14.0.17, §14.0.21 and
+§14.0.22), and only when
 exercised directly by tests, so **nothing is
 paced in production and no provider request is sent.** Acting on `retryAt` is
 G5 event-aware scheduling, which remains open.
@@ -2910,9 +3000,10 @@ first successful check (§11.3.1); the corrected Jolpica-only figures are
 ≈ 313 per month ordinary and ≈ 469 at the §10.4.1 ceiling.
 **Actual traffic today is zero**:
 no complete adapter is built - only the dormant, fixture-tested Jolpica
-`season-calendar`, `season-circuits` and `season-participants` ports, which no
-deployed or application path reaches (v1.6, v1.7 and v1.11, Implementation Plan
-§14.0.16, §14.0.17 and §14.0.21) -
+`season-calendar`, `season-circuits`, `season-participants` and race
+`session-classification` ports, which no deployed or application path reaches
+(v1.6, v1.7, v1.11 and v1.12, Implementation Plan §14.0.16, §14.0.17, §14.0.21
+and §14.0.22) -
 production remains `PROVIDER_MODE = "none"` and
 no production cron exists, so nothing fetches from either source. Once the
 complete Jolpica adapter exists and while the OpenF1 path stays locked (§10.2),
@@ -3159,7 +3250,7 @@ under the public CC BY-NC-SA 4.0 licence that OpenF1 and Jolpica each publish.**
 
 **As things stand the OpenF1 path is specified but not unlocked**, so Jolpica is
 the source for everything and the C6 objective is not met by any implemented
-mechanism — nor, since only the **dormant, fixture-tested Jolpica `season-calendar`, `season-circuits` and `season-participants` ports** exist (v1.6, v1.7 and v1.11, Implementation Plan §14.0.16, §14.0.17 and §14.0.21) and no deployed or application path reaches them, is any other objective met by an implemented, running mechanism. Recording a bound is the first Phase 9B item on this path.
+mechanism — nor, since only the **dormant, fixture-tested Jolpica `season-calendar`, `season-circuits`, `season-participants` and race `session-classification` ports** exist (v1.6, v1.7, v1.11 and v1.12, Implementation Plan §14.0.16, §14.0.17, §14.0.21 and §14.0.22) and no deployed or application path reaches them, is any other objective met by an implemented, running mechanism. Recording a bound is the first Phase 9B item on this path.
 
 **Individual provider replies are not required and are not awaited.** Outreach
 remains available as an optional courtesy or clarification channel (Appendices A

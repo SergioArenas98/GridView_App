@@ -15,7 +15,8 @@
 
 > **The registry is dormant.** `PROVIDER_MODE` admits exactly `mock` and
 > `none`, and no deployed or application path consumes the resolver. Only the
-> dormant, fixture-tested Jolpica calendar, circuits and participants ports
+> dormant, fixture-tested Jolpica calendar, circuits, participants and
+> race-results ports
 > resolve it, in tests. This guide describes the procedure that becomes
 > operational when a registered adapter and the G4 coordinator run. Following it today is a normal reviewed content
 > change and contacts nobody.
