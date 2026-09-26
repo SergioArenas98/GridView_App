@@ -4,9 +4,10 @@
  * **Dormant by design.** No runtime module outside this directory imports it,
  * `src/index.ts` cannot reach it, no production composition constructs it, and
  * `PROVIDER_MODE` still admits exactly `mock | none`. It implements exactly
- * three coordinated resources, each in its own port - the season calendar,
- * the season circuits and the season participants - and each port refuses
- * every other resource before reserving capacity or touching transport.
+ * four coordinated resources, each in its own port - the season calendar,
+ * the season circuits, the season participants and the race classification -
+ * and each port refuses every other resource before reserving capacity or
+ * touching transport.
  */
 
 export { JolpicaCalendarPort, calendarPageLimit } from './calendar-port';
@@ -93,3 +94,27 @@ export type {
   CuratedDriverRow,
   CuratedParticipants,
 } from './curated-participants';
+
+export { JolpicaResultsPort, resultsPageLimit } from './results-port';
+export type { JolpicaResultsPortOptions } from './results-port';
+
+export {
+  decodeRaceResults,
+  parseFastestLapTime,
+  resultStatusTable,
+  resultsDecodeProblems,
+} from './results-payload';
+export type {
+  DecodedFastestLap,
+  DecodedRaceResult,
+  DecodedResultRow,
+  ResultRowClass,
+  ResultsDecodeProblem,
+  ResultsDecodeResult,
+} from './results-payload';
+
+export { normalizeRaceResults } from './results-normalizer';
+export type {
+  ResultsNormalization,
+  ResultsNormalizationProblem,
+} from './results-normalizer';

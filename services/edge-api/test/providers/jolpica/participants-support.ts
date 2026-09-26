@@ -356,7 +356,7 @@ export function scriptedLimiter(
  * caller *between* the two requests. The limiter, the transport and every
  * response check still run exactly once, unchanged.
  */
-class SeamedClient extends ProviderHttpClient {
+export class SeamedClient extends ProviderHttpClient {
   private index = 0;
 
   constructor(

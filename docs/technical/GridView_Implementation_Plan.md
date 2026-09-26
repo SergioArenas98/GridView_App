@@ -1287,14 +1287,23 @@ canonical drivers and constructors, one constructor season entry per
 constructor and no driver entry. It needed [ADR 0023 amendment A1](../adr/0023-multi-source-provider-coordination.md#amendment-a1---ordered-attempts-and-interrupted-executions)
 (ordered multi-request attempts and an `interrupted` outcome). It is not
 registered, not reachable from the Worker and was never used for a provider
-request, and the dry-run bundle is byte-identical. Everything else remains open:
-**no complete Jolpica adapter - participation spans, event schedules, session
-classifications and standings are unimplemented - and no event-aware scheduler,
+request, and the dry-run bundle is byte-identical. **Phase 9B (2026-09-26)
+added a fourth, equally dormant race-results port** (§14.0.22) for the race
+`session-classification` only, under the curator decisions of
+[ADR 0023 amendment A2](../adr/0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization).
+It derives no span, is not registered and was not used for a provider
+request, and the dry-run bundle is byte-identical. Everything else remains
+open: **no complete Jolpica adapter - participation spans, event schedules,
+non-race session classifications and standings are unimplemented - and no
+event-aware scheduler,
 reconciliation or provenance state machine, live provider mode, production cron
 or provider request exists**. GridView's application code, the Worker provider
 client and the rate limiter have made no provider request; the only requests on
 record are authorized research requests - roughly 25 on 2026-08-19 and one
 calendar-evidence request on 2026-09-19 (Provider Evaluation §8.1, §8.8).
+*Since then, two more separately authorized captures ran: the participant
+identity lists on 2026-09-23 (Provider Evaluation §8.9, §8.10) and 14
+race-results requests on 2026-09-24 (Provider Evaluation §8.11).*
 `PROVIDER_MODE` still admits exactly `mock | none` and production remains
 `"none"`. See §14.0 and §14.0.5-§14.0.9.
 
@@ -1331,6 +1340,7 @@ architecture and product-risk decision, not as provider approval).
 | Phase 9B 2026 constructor identity dataset | **Curated 2026-09-23** (§14.0.19, Provider Evaluation §8.9): all 11 observed Jolpica `constructorId`s are mapped to 11 curated constructors, from one separately authorized constructor-list request that day. `audi` continues `sauber` (current canonical name and short name now `Audi` by curator decision; season entrant names stay season-scoped), and `rb` maps to `racing-bulls`. Five new identity-only rows were added. **Driver identity coverage remains incomplete**, participant identities as a whole are not complete, and no drivers, constructors or participants port exists. Dormant, nothing deployed. |
 | Phase 9B 2026 driver identity dataset | **Curated 2026-09-23** (§14.0.20, Provider Evaluation §8.10): all 32 observed Jolpica `driverId`s are mapped to curated drivers, from the driver-list response of the same separately authorized capture. 25 identity-only rows were added (nine from name-only provider rows), so the registry holds 33 drivers; `antonelli` maps to `andrea-kimi-antonelli`, and `max-verstappen` and `lando-norris` lost their unreliable `permanentNumber`. OpenF1 `driver_number` `12` stays acknowledged and unmapped. **Participant identity coverage is complete at 32 of 32 drivers and 11 of 11 constructors, but no drivers, constructors or participants port exists** and the ADR 0026 implementation prerequisites remain open. Dormant, nothing deployed. *Superseded in part 2026-09-24 (§14.0.21): a dormant participants port now exists.* |
 | Phase 9B Jolpica season-participants port | **Implemented 2026-09-24** (§14.0.21), fixture-tested and **dormant**. A third Jolpica port answers `season-participants` only, with two sequential requests (`/{season}/drivers/?limit=100`, then `/{season}/constructors/?limit=100`). It returns the 32 canonical drivers, the 11 canonical constructors, one `ConstructorSeasonEntry` per constructor and an empty `driverEntries` (ADR 0026 D10, D11). [ADR 0023 amendment A1](../adr/0023-multi-source-provider-coordination.md#amendment-a1---ordered-attempts-and-interrupted-executions) lets an outcome report every request it made, in order, and adds a closed `interrupted` outcome. The port is not registered with any coordinator, is absent from every Worker bundle and has never contacted the provider. **No participation span, race-result derivation or publication path exists**, and the ADR 0026 publication prerequisites remain open. Nothing deployed. |
+| Phase 9B Jolpica race-results port | **Implemented 2026-09-26** (§14.0.22), fixture-tested and **dormant**. A fourth Jolpica port answers the race `session-classification` only, with one request (`/{season}/{round}/results/?limit=100`), and returns one `final` `RaceResult` with every row, under the curator decisions C-1 to C-9 of [ADR 0023 amendment A2](../adr/0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization). It was designed from the private capture of 2026 rounds 1-14 (Provider Evaluation §8.11), in which every identity maps and the `liam-lawson` change at round 12 makes ADR 0026 D12 item 1 a real blocker. The port is not registered with any coordinator, is absent from every Worker bundle and was not used to contact the provider. **No participation span, `hasResults` derivation or publication path exists**, and the ADR 0026 publication prerequisites remain open. Nothing deployed. |
 | Next action | **A separate production-readiness assessment and an explicit operator decision** (§14.0.11 item 3); the season-2026 staging cutover it follows is **complete (2026-09-16)** and needs no further operator procedure. Staging provisioning is **done** (2026-09-12): the sequencer and rate-limiter bindings and namespaces are live in staging. Since 2026-09-15 the sequencer is looked up, and since the 2026-09-16 activation season 2026 is active and authoritative there, so the legacy KV pointers are no longer authoritative for it. Admission closure for season 2026 is **done** (2026-09-12): a separately authorized `wrangler deploy --env staging` uploaded `SEASON_PUBLICATION_CUTOVER_CONTROL = "seed:2026"` from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93`, replacing staging version `985115b7-…` with `00012c06-6c09-4b2f-b24c-02d6e51ec08d` at 100% traffic; season 2026's legacy publication and rollback admission is now closed. **Inventory recovery executed (2026-09-13):** no retained season-2026 version recorded an exact `__inventory`, so a separately authorized recovery window ran (§14.0.11 item 3). It reopened admission as version `38b5169a-…` from `master` `d50ef2f…`, made exactly one publication (`20260913183106443-4f683541`, with its exact `__inventory`), and re-closed admission as version `c35f99c0-…` from `549bb5f…` with `seed:2026`. The reclosure configuration is merged (PR #24, `ca5142a`). **Client baseline recorded (2026-09-14)** through `authorized-client-baseline-reset` ([ADR 0025 D12, "What the authorized client-baseline reset supplies (2026-09-14)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-authorized-client-baseline-reset-supplies-2026-09-14)). The eligible clients are the `gv_phase8c2_verify` emulator and the reference phone, the HONOR DNP-NX9, which is the operator's Honor 400 Pro. Its 2026-09-13 decommissioning record was invalidated when it was reintroduced. The evidence PR merged (PR #28), the checkpoint audit re-ran and passed, and the operator approved the exact checkpoint on 2026-09-15. **Seed authority deployed and season 2026 seeded (2026-09-15):** staging version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` made `SEASON_PUBLICATION_AUTHORITY = "sequencer"` live with `seed:2026`. One authenticated seed request then committed season 2026 as `seeded` on its first attempt; it is not authoritative and not active ([ADR 0025 D12, "What the season-2026 seed supplies (2026-09-15)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-season-2026-seed-supplies-2026-09-15)). **Staging cutover complete (2026-09-16).** A separately authorized, cutover-sensitive deployment of `master` `36b0fd21c31c78a7b213f5c542f4367f8471c1e0` replaced version `cccdcf11-…` with `c297d260-c81b-4110-bdf2-7572e1206af3` at 100% traffic (between `2026-09-16T16:02:49.010Z` and `16:03:09.042Z` UTC; version created `16:03:01.459Z`), moving the control from `seed:2026` to `activate:2026` with `sequencer` unchanged and no other intended change. **It activated nothing and needed no rollback**: immediately afterwards season 2026 was still seeded, non-authoritative and admission-closed. Under a further authorization, exactly one authenticated activation `POST` (request `48bc9ea7-87bf-42a6-ae1e-da45e3dbf9fa`, 481-byte body, SHA-256 `ca3766731417914103aff9b9801bcffb8e2c6d9d89b6b67064541bc5707f0fa7`, HTTP `200`, `no-store`) committed the `seeded → active` transition under the approved fingerprint, so `admissionClosed` became `false` and **the activation alone resumed the mutators, with no third deployment** ([ADR 0025 D12, "What the season-2026 activation supplies (2026-09-16)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-season-2026-activation-supplies-2026-09-16)). `CutoverActivationReceipt` is the HTTP response shape; **no durable receipt object or KV receipt key exists**, and the durable proof is the authority record itself. Post-activation verification passed read-only the same day: the official smoke ran once unmodified for **41 checks and exit code 0**, correct ETag/`HEAD`/`304` behaviour on three routes, **twelve concurrent `200`s with no `429` or `5xx`**, combined **p95 94.7 ms** against the internal cached-public-API target of p95 at most 300 ms, and **163 local fallback tests** across eleven files; the live state was byte-identical to its baseline and the KV key set identical by name (2328 keys: 2321 snapshot, 7 non-snapshot) ([ADR 0025 D12, "What the post-activation verification supplies (2026-09-16)"](../adr/0025-season-publication-authority-and-rollback-republication.md#what-the-post-activation-verification-supplies-2026-09-16)). **The Phase 9B-6 staging observation-clock dependency is closed to the extent D12 establishes: the season-2026 staging cutover is complete.** Both halves of G-i stay open — no publication has run through the sequencer since activation, so `snapshotRevision` still has no production caller, and the resource-level `sourceObservedAt` half is unimplemented. **The next step is a separate production-readiness assessment and an explicit operator decision, not an automatic production rollout.** Production has no Worker, KV namespace, sequencer binding, admin token or provider configuration; no real provider was exercised; the provisional 60 requests-per-minute limit is not enforced in Worker code; no monthly availability was demonstrated; no live fallback failure was injected; no legacy pointer was deleted; and no phone or emulator participated in this verification. It is **not** production activation and **not** a provider adapter. Independently, **continue Phase 9B implementation** (§14.3-§14.7) from the Jolpica adapter, which the coordination seam is still missing. **Amended 2026-09-16:** no Jolpica resource that produces a `GrandPrix` or `Session` can start until the curated event registry, the `event` mapping support and curated event mapping data for its season exist (§14.0.12). **Amended 2026-09-19:** the registry and `event` mapping **mechanism** now exist and are dormant (§14.0.13), but the curated event **dataset** does not - the registry is committed empty and no complete locator is recorded anywhere - so those resources stay blocked. The next Phase 9B task is **creation and review of the curated event dataset from separately authorized evidence, not adapter registration.** **Amended again 2026-09-19:** the 2026 event dataset now exists (§14.0.14), so event identity no longer blocks those resources for 2026; **circuit coverage did** - after the five mappings approved on 2026-09-19 (Provider Evaluation §8.8.1), 17 of the 23 observed Jolpica circuit identifiers still had no curated circuit mapping. **Amended 2026-09-20:** that gap is closed (§14.0.15, Provider Evaluation §8.8.1) - all 23 observed circuits are curated and mapped - so **no dataset blocks a Jolpica calendar resource for 2026 any more**. **The remaining next steps are the Jolpica adapter itself and the A7 `hasResults` assembly change, both still unimplemented**, not more curation. The OpenF1 real-network path stays locked until a justified session-end bound is recorded with its official source and access date. **Amended 2026-09-23:** constructor identity coverage for 2026 is complete at 11 of 11 (§14.0.19), but driver identity coverage is not, so ADR 0026 participants work stays blocked on the driver dataset and the ADR 0026 implementation prerequisites (§14.0.18). **Amended again 2026-09-23:** driver identity coverage for 2026 is complete too, at 32 of 32 (§14.0.20), so no identity dataset blocks ADR 0026 participants work for 2026 any more. **The participants port and the ADR 0026 implementation prerequisites (§14.0.18) remain unimplemented**, and a deploy of a `master` containing the new driver identities changes the staging mock snapshot, so it is cutover-sensitive. *Amended 2026-09-24:* the dormant, fixture-tested participants identity port now exists (§14.0.21). It is not registered, and every other ADR 0026 implementation and publication prerequisite remains open. |
 
 **Implementation-time versus current staging state.** In the Phase 9B-1 to
@@ -1401,9 +1411,9 @@ Consequently:
 - the skip rule applies to **every** session;
 - **Jolpica is the source for all data**, including session schedules — once its
   complete adapter is built. Today only the **dormant, fixture-tested Jolpica
-  `season-calendar`, `season-circuits` and `season-participants` ports** exist
-  (§14.0.16, §14.0.17, §14.0.21) and **no OpenF1 adapter exists at all**; all
-  three ports are absent from the
+  `season-calendar`, `season-circuits` and `season-participants` ports and
+  the race-results port** exist (§14.0.16, §14.0.17, §14.0.21, §14.0.22) and
+  **no OpenF1 adapter exists at all**; all four ports are absent from the
   runtime composition and import closure, are not registered or selectable
   through `PROVIDER_MODE`, and no production coordinator or event-aware
   scheduler invokes them, so no deployed or application path consumes them,
@@ -2212,9 +2222,9 @@ nothing was deployed.**
 | Split-span ID stability | **Decided (revised during review, 2026-09-23).** The start-boundary rule above replaced a draft "first or only span keeps the base ID" rule, which would have renamed a published later span when a correction inserted an earlier one (D7). |
 | Client "Full season" inference | **Known defect, not fixed.** `EntityFormatter.participationSpan` and the `isFullSeason` getters treat `startRound == null && endRound == null` as "Full season". Under D6 that value proves only participation from the observed season start with no observed exit. The Flutter client must stop inferring "Full season" from it, using non-predictive wording until completed-season evidence exists, before any ADR 0026-derived span reaches a client (D12). |
 | `hasResults` derivation (A7) | **Still not implemented.** It remains a separate required assembly change. |
-| Provider captures | **Missing.** The season drivers and constructors responses and the per-round race results are not preserved. 29 of 31 driver and 9 of 11 constructor Jolpica identifiers are unrecorded. *Superseded in part 2026-09-23 (§14.0.19): the season constructor list was captured and all 11 constructor identifiers are recorded and mapped. The drivers response was captured too, but its identifiers are not curated yet.* *Superseded again 2026-09-23 (§14.0.20): all 32 driver identifiers are recorded and mapped. The per-round race results are still not preserved.* |
+| Provider captures | **Missing.** The season drivers and constructors responses and the per-round race results are not preserved. 29 of 31 driver and 9 of 11 constructor Jolpica identifiers are unrecorded. *Superseded in part 2026-09-23 (§14.0.19): the season constructor list was captured and all 11 constructor identifiers are recorded and mapped. The drivers response was captured too, but its identifiers are not curated yet.* *Superseded again 2026-09-23 (§14.0.20): all 32 driver identifiers are recorded and mapped. The per-round race results are still not preserved.* *Superseded again 2026-09-26 (§14.0.22, Provider Evaluation §8.11): the race results of rounds 1-14 were captured on 2026-09-24 and are preserved privately. Rounds 15-23 had not been run.* |
 | Identities and mappings | **Incomplete.** The registries are still `status: mock`. `antonelli` still blocks; OpenF1 `12`, `Cadillac` and `Racing Bulls` are unchanged. *Superseded in part 2026-09-23 (§14.0.19): constructor identities and Jolpica constructor mappings are complete at 11 of 11. `Cadillac` and `Racing Bulls` remain OpenF1 acknowledgements, now with the reason `no-approved-provider-mapping`. Driver identities and mappings remain incomplete.* *Superseded again 2026-09-23 (§14.0.20): driver identities and Jolpica driver mappings are complete at 32 of 32, and `antonelli` no longer blocks. OpenF1 `12` stays acknowledged, now with the reason `no-approved-provider-mapping`. The registries keep `status: mock`.* |
-| Drivers and constructors identity port, race-results port, assembly derivation | **Not implemented.** *Superseded in part 2026-09-24 (§14.0.21): the drivers and constructors identity normalization exists as a dormant, fixture-tested `season-participants` port. The race-results port and assembly derivation remain unimplemented.* |
+| Drivers and constructors identity port, race-results port, assembly derivation | **Not implemented.** *Superseded in part 2026-09-24 (§14.0.21): the drivers and constructors identity normalization exists as a dormant, fixture-tested `season-participants` port. The race-results port and assembly derivation remain unimplemented.* *Superseded again 2026-09-26 (§14.0.22): the race-results port exists, dormant and unregistered. Assembly derivation remains unimplemented.* |
 | Request budget | **Reconciliation outstanding.** The Provider Evaluation §11.2 weekly participants line must be counted at the actual owning resources before runtime wiring. No volume has been measured. |
 | **G1, G5, G9, G-l** | **Open.** No runtime wiring and no provider activation. `PROVIDER_MODE` admits exactly `mock` and `none`. |
 
@@ -2301,6 +2311,33 @@ change, no provider request and nothing deployed.**
 | Mapping data, registries, evidence | **Unchanged**: 93 mappings, 96 evidence identities, three OpenF1 acknowledgements, which remain unresolved. |
 | ADR 0026 | **Identity half implemented, dormant.** Participation-span derivation, the race-results port, the new integrity relations, the D14/D15/D16 guards, the split-span contract and client changes, and the other D12 publication prerequisites are **not** implemented (§14.3). No participant can be published through coordination. |
 | **G1, G5, G9, G-l** | **Open.** No coordinator registers the port, no weekly schedule exists, `PROVIDER_MODE` admits exactly `mock` and `none`, and staging and production are unchanged. |
+
+### 14.0.22 Phase 9B Jolpica race-results port - implemented, fixture-tested, dormant
+
+Implemented on **2026-09-26** under ADR 0023 as amended by
+[A2](../adr/0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization)
+(curator decisions C-1 to C-9), ADR 0022 D2-D10 and amendment A9, and ADR 0026
+D3 and D11. **Code, tests and documentation only: no runtime wiring, no
+configuration change, no provider request and nothing deployed.**
+
+| Item | Status |
+|---|---|
+| What exists | The **Jolpica race-results port** (`JolpicaResultsPort`) at `services/edge-api/src/providers/jolpica/` (`results-port.ts`, `results-payload.ts`, `results-normalizer.ts`), beside the calendar, circuits and participants ports. |
+| Supported resource | **`session-classification` with `sessionType: 'race'` only.** Every other resource, and qualifying, sprint and sprint-qualifying classifications, return `resource-unsupported` before reserving limiter capacity, building a request, invoking transport or counting an attempt. Cancellation is checked before reservation. |
+| Request | Exactly one `GET /ergast/f1/{season}/{round}/results/?limit=100` through the hardened boundary and the Jolpica limiter. One attempt, no retry, no second page. |
+| Evidence | The private capture of 2026 rounds 1-14 on 2026-09-24 (14 requests, 308 rows, 23 drivers, 11 constructors, all mapped; Provider Evaluation §8.11). Hashes are recorded in ADR 0023 A2.2. No captured response or row is committed. |
+| Decoding | Strict integer-string pagination; `offset` 0, `limit` 100, `total` equal to the row count; one race whose season and round restate the request. Only the event locator, the two identities and the contract's classification facts are read, as own data properties. The car number and every descriptive field are ignored. |
+| Status table | Closed to the six observed pairs (ADR 0023 A2.4). Anything else, including a disqualification, exclusion, non-qualification or not-classified code, is `invalid-payload` for the whole resource (C-5). |
+| Normalization | One `final` `RaceResult` (C-1) per round with all rows in provider order, including DNS and retired rows. A `Lapped` row displayed as `R` stays classified and lapped (C-2). `lapsBehind` is `winnerLaps - laps` for classified lapped rows only (C-3). A classified retirement keeps its position as `dnf` (C-4). The grid slot is positive or `null` (C-6). The fastest-lap time is parsed exactly or `null` (C-7). Every gap and `gapText` is `null` (C-8). Only the winner carries `elapsedTimeMillis`. |
+| Failure outcomes | An unmapped event, driver or constructor is `mapping-failure`. A structural, pagination, status, duplicate or cross-row contradiction is `invalid-payload`. An empty race list is `provider-unavailable` over one successful attempt (C-9). Every one reports the single attempt, and no row is ever dropped. |
+| Not produced | No participation span, no `DriverSeasonEntry` or `ConstructorSeasonEntry`, and no `hasResults`. ADR 0026 D3-D7 derivation, the A7 correction, D12 items 1-13 and the D14-D16 guards are unimplemented. |
+| Proof | `test/providers/jolpica/results-adapter.test.ts` (106 tests) with the production coordinated-payload and race-result validators and the real coordinator's accounting. Negative controls: an admitted unknown status, a lapped time turned into a gap, a dropped DNS row, and a runtime import and construction of the port. Each made its tests fail and was restored byte for byte. The same code was also run privately against the 14 captured responses: every round produced a valid `final` candidate with no validator issue. |
+| PR #43 carry-over | One participants-adapter test now covers the client refusing the second (constructors) URL before transport after a successful drivers request: `failed` / `provider-unavailable` with only the first attempt, one reservation and no further request. No production change was needed. |
+| Dormancy | **Proven by composition, per A9.** The esbuild-metafile tests cover the results modules one by one, and check that nothing outside the package constructs the port. The Wrangler dry-run `index.js` for default, staging and production is **byte-identical** to the `aa4f162` baseline (`b6c85e746502590b4fe9de1196a274ebaa1d27ce81d8866d117ad23eb0981d5e`, all three) and contains none of the port's symbols. |
+| Provider access | **None** during implementation. Every test uses an in-memory transport. |
+| Mapping data, registries, evidence | **Unchanged**: 93 mappings, 96 evidence identities, three OpenF1 acknowledgements. |
+| ADR 0026 | The race-results half of D11 now exists as a dormant port. The capture answers D3 (non-starters are listed) and makes D12 item 1 a real blocker, because `liam-lawson` has two spans from round 12. Span derivation and every publication prerequisite remain open (§14.3). |
+| **G1, G5, G9, G-l** | **Open.** No coordinator registers the port, no schedule exists, `PROVIDER_MODE` admits exactly `mock` and `none`, and staging and production are unchanged. |
 
 ## 14.1 Objective
 
@@ -2407,16 +2444,22 @@ another source rather than bypassing the requirement.
   remains unimplemented** and no deployed or application path consumes it.
   Since 2026-09-24 the equally dormant **`season-participants` port**
   (§14.0.21) consumes the driver and constructor mappings on the same terms.
+  Since 2026-09-26 the equally dormant **race-results port** (§14.0.22)
+  consumes the event, driver and constructor mappings on the same terms.
 - Derive `hasResults` in season assembly from selected, classified race
   results before the preflight, leaving `event-has-results` unchanged (A7).
 - Implement [ADR 0026](../adr/0026-season-participation-semantics-and-derivation.md)
   (§14.0.18). Each item below is outstanding:
-  - capture the season drivers and constructors responses and the per-round
-    race results under separate authorization;
-  - curate the identities and mappings;
+  - ~~capture the season drivers and constructors responses and the per-round
+    race results under separate authorization~~ **done**: the season lists on
+    2026-09-23 (§14.0.19, §14.0.20) and rounds 1-14 on 2026-09-24
+    (§14.0.22); later rounds need later captures;
+  - ~~curate the identities and mappings~~ **done 2026-09-23** (§14.0.19,
+    §14.0.20);
   - ~~build the drivers and constructors identity normalization with explicit
     `limit=100`~~ **done 2026-09-24 as a dormant, unregistered port**
-    (§14.0.21); build the race-results port;
+    (§14.0.21); ~~build the race-results port~~ **done 2026-09-26 as a
+    dormant, unregistered port** (§14.0.22);
   - derive participation spans in season assembly from the selected
     classifications;
   - add the two new closed integrity relations;
@@ -2480,8 +2523,8 @@ another source rather than bypassing the requirement.
   a Durable Object with one identity per real source performing exact
   sliding-window reservations across every published window. Nothing is paced
   yet: the only ports that reserve through it are the dormant, fixture-tested
-  `season-calendar`, `season-circuits` and `season-participants` ports
-  (§14.0.16, §14.0.17, §14.0.21), which do
+  `season-calendar`, `season-circuits` and `season-participants` ports and
+  the race-results port (§14.0.16, §14.0.17, §14.0.21, §14.0.22), which do
   so only when exercised directly by tests against an injected transport, and
   no deployed or application path reaches them.
 - Implement provider-specific error mapping.
@@ -2580,7 +2623,9 @@ these are the implementation tasks.
   `season-calendar` port** (§14.0.16) consumes the curated event and circuit
   mappings, and the equally dormant **`season-circuits` port** (§14.0.17) the
   circuit mappings, and the equally dormant **`season-participants` port**
-  (§14.0.21) the driver and constructor mappings, **only when exercised
+  (§14.0.21) the driver and constructor mappings, and the equally dormant
+  **race-results port** (§14.0.22) the event, driver and constructor
+  mappings, **only when exercised
   directly by tests**; the **complete Jolpica adapter is still unimplemented**,
   and no deployed or application path consumes the registry.
 - Locally modelled quota monitoring (Phase 9B-1) and a per-provider rate

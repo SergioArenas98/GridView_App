@@ -13,6 +13,9 @@
   [0007](0007-versioned-kv-publication-active-pointer.md)
 - Amended: [A1](#amendment-a1---ordered-attempts-and-interrupted-executions)
   (2026-09-24) - ordered multi-request attempts and the `interrupted` outcome
+- Amended: [A2](#amendment-a2---jolpica-race-result-normalization)
+  (2026-09-26) - Jolpica race-result normalization and curator decisions C-1
+  to C-9
 
 ## Context
 
@@ -1189,6 +1192,13 @@ production is `none`.
 > entry point, and `SynchronizationService` is still not rewired. The first
 > paragraph above is retained for the record.
 
+> **Status 2026-09-26.** A fourth dormant, fixture-tested Jolpica port now
+> implements the port: the race `session-classification` port
+> ([A2](#amendment-a2---jolpica-race-result-normalization), Implementation
+> Plan §14.0.22). Like the other three, it is registered with no coordinator
+> and unreachable from the Worker entry point. The notes above are retained
+> for the record.
+
 #### Deep normalized-contract validation is an activation gate
 
 > **Amended by [ADR 0024](0024-deep-normalized-contract-validation.md)
@@ -1408,6 +1418,170 @@ dormant Jolpica `season-participants` port (Implementation Plan §14.0.21) is
 the first multi-request producer. Direct accounting tests cover every row of A1.2 and every rejection
 in A1.5. Nothing is registered with a coordinator in production, and no
 provider was contacted.
+
+## Amendment A2 - Jolpica race-result normalization
+
+- Date: 2026-09-26
+- Status: Accepted and implemented in a dormant port
+- Amends: nothing in D1-D14 or A1. It records the curator decisions C-1 to
+  C-9 that a `session-classification` adapter needs and that no accepted
+  document settled, and the adapter rules that follow from them.
+
+### Why
+
+The coordinated `session-classification` resource and its `RaceResult`
+payload already existed (D3, `coordination/resource.ts`), but nothing decided
+how a Jolpica race classification becomes one. A private capture of the 2026
+rounds 1-14 race results (A2.2) showed that the provider's rows are not
+self-explanatory. A `Lapped` row can display `R`. A retirement can keep a
+numeric position with an empty time. The `+x` time text on a lapped row is the
+car's own total minus the winner's, over fewer laps, so it is not a gap. The
+fastest-lap time exists only as text. Each needed an explicit curator decision
+before an adapter could normalize it without guessing.
+
+### A2.1 - Resource and request
+
+- **Scope.** `session-classification` with `sessionType: 'race'` only. Every
+  other resource, and `qualifying`, `sprint` and `sprint_qualifying`, is
+  `not-attempted` / `resource-unsupported` before any reservation, request or
+  attempt.
+- **Request.** Exactly one
+  `GET /ergast/f1/{season}/{round}/results/?limit=100` through the hardened
+  boundary and the Jolpica limiter. Cancellation is checked before
+  reservation. One attempt, no retry and no second page. A1 applies
+  unchanged: the outcome carries a one-element `attempts`.
+- **Structure.** `limit`, `offset` and `total` are strict integer strings,
+  `offset` is 0, the echoed limit is 100, and `total` - which counts **result
+  rows** on this endpoint - equals the returned row count. The table's season
+  and round and the race's own season and round must equal the request.
+  Exactly one race is required when a result exists.
+- **Identity.** The event is resolved from the response's own locator
+  `(round, raceName, circuitId)` through the curated `eventLocator` mapping.
+  Every `driverId` and `constructorId` is resolved through the curated
+  mappings only. An unresolved identity is `mapping-failure` for the whole
+  resource, and no row is dropped (ADR 0022 D10).
+
+### A2.2 - Evidence
+
+Jolpica F1 data is used under its published CC BY-NC-SA 4.0 licence, with the
+attribution [ADR 0019](0019-formula-one-provider-legal-gate.md) already
+requires. The provider was contacted only by the separately authorised capture
+below, and **not** while this port was implemented.
+
+On 2026-09-24, 14 sequential
+`GET https://api.jolpi.ca/ergast/f1/2026/{round}/results/?limit=100` requests,
+one per round 1-14 (the rounds whose scheduled race start preceded the
+capture), ran from 19:52:18.561Z to 19:53:04.407Z. Every one returned HTTP 200
+with exactly one race, `limit "100"`, `offset "0"`, `total "22"` and 22 rows.
+No retry and no redirect occurred. The raw responses are preserved privately
+and are **not** committed. They are cited by SHA-256 only:
+
+| Round | Bytes | SHA-256 |
+|---|---|---|
+| 1 | 12845 | `5633e5f50de5ed38b1e3d1b757e3c9b7d6e1327a40b2db1ade1e837b049ecef1` |
+| 2 | 12691 | `063cefbd1ee60f5c85bf2ff2abde072f2df49eeaa6931162417812ea301774d4` |
+| 3 | 13161 | `2851253f571e453fed5fbc85c0b1c31df8427972438eb46165e32dc398ecd1aa` |
+| 4 | 13058 | `ef7c159114513a28e46ea1e2cfe3ba65b8624d35d40f04ee8f28a9924befeeb1` |
+| 5 | 12898 | `9cfd5a9078a3c6af7d95daa2f561a7ade6f01992fa109773de812af69b2295f6` |
+| 6 | 12886 | `ff00d2cf93c775c0c92bfbe0a0db6d563767b9cd47e813fad4eafe66de7e27f6` |
+| 7 | 12996 | `b109d06a18ce974a4a5c041951ebebe6bd5ade37d11495aaa74185650f76e607` |
+| 8 | 12971 | `bc199c5a9cb2a2eb8a3411133b6a04c8fb6248f03722e1eb77bce85f5288c23b` |
+| 9 | 13126 | `8c0cb08ef31b197211cd987da1c63e03730255b18855a36aa45a314b9a32db0b` |
+| 10 | 13067 | `1fba41b73988b0f5bbfd1d0d99bdac07ab5628b58930044283c94bdc79629380` |
+| 11 | 13081 | `8cb0c878f0deea5b49c5a0b9e6f930fbc13e533d2e2fb13757dc5dcb9516bc82` |
+| 12 | 12875 | `36260f0c1d851b43268dbe347ec69be0664a07f033123fde5f4c0f5fd1a5cbd2` |
+| 13 | 13046 | `504a8776105f5309721ef3bd9071c473fff248408628f8dca45776160257fbf4` |
+| 14 | 13030 | `7056dbc4a7411a3f9e479ecb58d4aa8db7665a1b95de53890536aa977f33e911` |
+
+The capture's private record set is `00-EVIDENCE.md`
+(`ecfa8033bff7eb081c92901ac15fed7680b59bee3922d2f867da608cb69e73f9`),
+`capture-manifest.json`
+(`e762b92961e133228a26a9894266dcb611eeb5a053e47d4183e30e06127c491c`),
+`analysis-report.md`
+(`e1b125c748ca0f8aa7f5b8fea73eb96eeadb96bd161b3d3d64a8f259a162067e`) and
+`decision-pack.md`
+(`c8068c9f94093d6c04fb1e1a40664b79ca6620086ff0c9fd88ad4a5ad4b562a4`).
+
+The 308 rows name 23 distinct drivers and 11 distinct constructors. Every one
+resolves through the committed curated mappings, and every round's locator
+resolves to exactly one curated event. The observed `status` / `positionText`
+pairs are exactly the six in A2.4. What this evidence means for participation
+is recorded in
+[ADR 0026](0026-season-participation-semantics-and-derivation.md) (evidence
+note 2026-09-26).
+
+### A2.3 - Curator decisions
+
+| # | Decision |
+|---|---|
+| C-1 | A correctly decoded Jolpica race classification is normalized with the existing `final` status. This rests on Jolpica's accepted reconciled role (D4). The payload carries **no** legal finality marker, and later corrections are not claimed to be impossible. `provisional` is never used merely to avoid `hasResults` integrity checks. |
+| C-2 | The structured `status` governs over presentation tokens such as `positionText`. A `Lapped` row displayed as `R` is classified and `lapped`, keeps its valid numeric `position`, and is never normalized as retired. The display token is not copied into the contract. |
+| C-3 | `lapsBehind` already exists, so it is `winnerLaps - laps` for classified lapped rows only, and must be a positive integer. An incoherent difference invalidates the payload. No contract field is added, and a car's elapsed time is never converted into a gap. |
+| C-4 | A retirement that the provider still classifies keeps its position and its `dnf` status, with time and gap `null`, and stays a participation fact. |
+| C-5 | The status table is closed to the pairs observed in rounds 1-14 (A2.4). An unobserved or unapproved code - disqualified, excluded, did-not-qualify or not-classified, should one appear - is `invalid-payload` for the whole resource. Nothing is guessed and no row is dropped. |
+| C-6 | A DNS row stays in the classification and in participation (ADR 0026 D3). A positive provider grid slot is preserved. `0`, an empty string or an absent value is `null`, which is not read as a pit-lane start, and no slot is invented. |
+| C-7 | A present fastest-lap time is parsed strictly by the one observed grammar, `m:ss.sss` (one minute digit, seconds below 60, three millisecond digits), and converted to exact milliseconds without rounding. No existing parser enforced exactly this rule, so a new one was added. A present but malformed time is `invalid-payload`. A `FastestLap` block without a time keeps its lap and driver with `timeMillis: null`. |
+| C-8 | Every temporal gap to the leader is `null`. The `Time` text is never copied, no gap is derived for lapped rows, and a total time over fewer laps is never converted into a difference from the winner. `gapText` is `null`. |
+| C-9 | A structurally valid response with no race - an empty race list with `total "0"` - produces no classification. The outcome is `failed` / `provider-unavailable` over one `successful` attempt: no result ID is invented, no empty candidate is published and no outcome type is added. A race listed with no rows is `invalid-payload`. |
+
+### A2.4 - The closed status table
+
+| `status` | `positionText` | Rows in R1-14 | Normalized `status` | `position` |
+|---|---|---|---|---|
+| `Finished` | numeric, equal to `position` | 143 | `finished` | the position |
+| `Lapped` | numeric, equal to `position` | 99 | `lapped` | the position |
+| `Lapped` | `R` (C-2) | 2 | `lapped` | the numeric `position` |
+| `Retired` | numeric, equal to `position` (C-4) | 6 | `dnf` | the position |
+| `Retired` | `R` | 51 | `dnf` | `null` |
+| `Did not start` | `W` | 7 | `dns` | `null` |
+
+Any other pair fails the whole resource (C-5).
+
+### A2.5 - Field rules
+
+- `id` is `canonicalRaceResultId(canonicalGrandPrixId(season, eventSlug), 'race')`,
+  and `season`, `round` and `sessionType` restate the request.
+- `points` is the provider's non-negative decimal (fractions are valid
+  contract values). `laps` is its non-negative integer.
+- `elapsedTimeMillis` is the winner's `Time.millis` only. Every other row is
+  `null` (C-3, C-4, C-8), as in the mock provider's convention.
+- Row `fastestLap` is `true` for the rank-1 block only. It is `false` for the
+  other rows when the document carries any `FastestLap` block, and `null` when
+  it carries none. The result-level `fastestLap` is the rank-1 driver, lap and
+  C-7 time, or `null`.
+- `dnfReason` and `gapText` are always `null`. The car number and every
+  descriptive provider field are never read.
+- Cross-row contradictions fail the whole resource: a repeated driver,
+  position or fastest-lap rank; positions that are not exactly `1..n`; a
+  classified row ranked below an unclassified one; a winner that is not a
+  timed `finished` row; a `finished` row off the winner's lap count; a lapped
+  row on or beyond it; any row beyond it; a `Time` block on an unclassified
+  row; a `FastestLap` block on a DNS row or on a lap beyond the row's laps;
+  fastest-lap blocks with no rank-1 lap; and two provider drivers resolving
+  to one canonical driver.
+
+### A2.6 - What does not change
+
+- The coordination contract, the outcome shapes, the normalized contract,
+  OpenAPI, the public schemas, `content/`, mappings, evidence and registries,
+  season assembly, the coordinator, `src/index.ts`, `wrangler.toml`,
+  `PROVIDER_MODE` and Flutter.
+- The port produces **no** participation span, `DriverSeasonEntry` or
+  `ConstructorSeasonEntry`, and derives no `hasResults`. Span derivation
+  (ADR 0026 D3-D7, D11), the A7 `hasResults` correction, the ADR 0026 D12
+  publication prerequisites 1-13 and the D14-D16 guards remain unimplemented.
+- Dormancy (D14): the port is registered with no coordinator and is absent
+  from the Worker bundle.
+
+### Implementation status (2026-09-26)
+
+Implemented as the dormant `JolpicaResultsPort`
+(`src/providers/jolpica/results-port.ts`, `results-payload.ts` and
+`results-normalizer.ts`; Implementation Plan §14.0.22). Its tests use small
+synthetic fixtures whose shapes are traceable to the capture. No captured
+response or row is committed. Every candidate passes the production
+validators. Nothing is registered with a coordinator in production, and no
+provider was contacted during implementation.
 
 ## Consequences
 
