@@ -33,6 +33,7 @@ import type { EventStatus } from '../../contract/enums';
 import type { ProviderSeasonSource } from '../formula-one-provider';
 import { deriveDriverSeasonEntries } from './driver-span-derivation';
 import type { CoordinationRun, ResourceCoordination } from './outcome';
+import type { CoordinatedSourceId } from './source-policy';
 import {
   isClassifiedResult,
   validateSeasonReferences,
@@ -171,6 +172,20 @@ export function requiresRaceClassification(status: EventStatus): boolean {
   return raceClassificationRequiredByStatus[status] === true;
 }
 
+/**
+ * The sources whose selected race rows create participation (ADR 0026 D3).
+ * OpenF1 participation stays blocked until a separate decision (D12 item 7).
+ */
+const participationSources: ReadonlySet<CoordinatedSourceId> = new Set([
+  'jolpica',
+]);
+
+function sourceOf(resource: ResourceCoordination): CoordinatedSourceId | null {
+  return resource.selection.outcome === 'selected'
+    ? resource.selection.source
+    : null;
+}
+
 function payloadOf<K extends CoordinatedResourceKind>(
   run: CoordinationRun,
   kind: K,
@@ -293,12 +308,17 @@ export function assembleSeasonSource(
   // first is what gets published.
   const classifications: RaceResult[] = [];
   const classifiedRounds = new Set<number>();
+  let nonParticipatingClassification = false;
   for (const entry of selectedPayloads(run, 'session-classification')) {
     if (entry.payload.kind !== 'session-classification') continue;
     if (entry.payload.result.sessionType !== 'race') continue;
     classifications.push(entry.payload.result);
     if (isClassifiedResult(entry.payload.result.status)) {
       classifiedRounds.add(entry.payload.result.round);
+      const source = sourceOf(entry.resource);
+      if (source === null || !participationSources.has(source)) {
+        nonParticipatingClassification = true;
+      }
     }
   }
 
@@ -335,6 +355,21 @@ export function assembleSeasonSource(
       gap: 'missing-round-classification',
       missing: missingClassifications,
       relations: [],
+    };
+  }
+
+  // Only Jolpica race rows create participation (ADR 0026 D3). A classified
+  // race selected from any other source - today only a provisional OpenF1
+  // fallback, which production policy keeps locked - produces no span, so its
+  // rows cannot be placed in one and the candidate is withheld. It is refused
+  // here rather than left to the preflight: rows that agree with the Jolpica
+  // seats would otherwise fall inside their open spans and pass.
+  if (nonParticipatingClassification) {
+    return {
+      complete: false,
+      gap: 'inconsistent-references',
+      missing: [],
+      relations: ['result-entry-span'],
     };
   }
 

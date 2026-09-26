@@ -43,6 +43,7 @@ import {
   metadataFor,
   payloadFor,
   publicationHarness,
+  testOnlyProvisionalBound,
 } from './support';
 import {
   splitEntry,
@@ -643,6 +644,63 @@ describe('season assembly derives the driver entries', () => {
       expect(assembly.gap).toBe('inconsistent-references');
       expect(assembly.relations).toContain('driver-entry-span');
     }
+  });
+
+  it('withholds a classified race selected from a source other than Jolpica', async () => {
+    // ADR 0026 D3: only Jolpica rows create participation. Round 13 is
+    // selected from a provisional OpenF1 fallback whose rows agree exactly
+    // with the Jolpica seats, so without the refusal they would sit inside the
+    // open spans and the preflight would pass.
+    const source = await splitSeasonFixture();
+    const round13 = source.results.find((result) => result.round === 13)!;
+    const jolpica = completePort('jolpica', source);
+    const reconciled = new FakePort('jolpica', (request) =>
+      request.resource.kind === 'session-classification' &&
+      request.resource.round === 13
+        ? {
+            outcome: 'failed',
+            attempts: [attempt('j-13', 'failed')],
+            reason: 'provider-unavailable',
+          }
+        : jolpica.fetchResource(request),
+    );
+    const openf1 = new FakePort('openf1', (request) =>
+      request.resource.kind === 'session-classification' &&
+      request.resource.round === 13
+        ? {
+            outcome: 'candidate',
+            attempts: [attempt('o-13')],
+            payload: {
+              kind: 'session-classification',
+              result: { ...round13, status: 'provisional' },
+            },
+          }
+        : {
+            outcome: 'failed',
+            attempts: [attempt(`o-${request.resource.kind}`, 'failed')],
+            reason: 'provider-unavailable',
+          },
+    );
+    const run = await new MultiSourceCoordinator({
+      ports: [reconciled, openf1],
+      logger: new CapturingLogger(),
+      provisionalSessionEndBound: testOnlyProvisionalBound,
+    }).coordinate({ plan: fullPlan(source) });
+    const selection = run.resources.find(
+      (resource) =>
+        resource.resource.kind === 'session-classification' &&
+        resource.resource.round === 13,
+    )?.selection;
+    expect(selection).toMatchObject({ outcome: 'selected', source: 'openf1' });
+
+    const assembly = assembleSeasonSource(run, metadataFor(source));
+
+    expect(assembly).toEqual({
+      complete: false,
+      gap: 'inconsistent-references',
+      missing: [],
+      relations: ['result-entry-span'],
+    });
   });
 
   it('does not mutate the selected payloads', async () => {
