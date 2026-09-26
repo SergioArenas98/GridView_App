@@ -1050,9 +1050,9 @@
   "@fieldTeam": {
     "description": "Field label for a team association."
   },
-  "participationFullSeason": "Full season",
-  "@participationFullSeason": {
-    "description": "A participation span covering the whole season."
+  "participationFromSeasonStart": "From season start",
+  "@participationFromSeasonStart": {
+    "description": "A participation span already in effect at the start of the season's observed scope, with no exit observed yet. Never a claim that the driver raced the whole season."
   },
   "participationFromRound": "From round {round}",
   "@participationFromRound": {

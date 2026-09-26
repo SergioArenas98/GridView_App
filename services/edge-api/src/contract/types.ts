@@ -261,7 +261,12 @@ export interface CircuitSummary {
   countryCode: CountryCode | null;
 }
 
+/**
+ * One row per `DriverSeasonEntry`, not one per driver: a driver with two spans
+ * appears twice, with the same `driverId` and different `entryId`s.
+ */
 export interface SeasonDriverSummary {
+  entryId: GridViewId;
   driverId: Slug;
   fullName: string;
   shortCode: string | null;
@@ -270,6 +275,8 @@ export interface SeasonDriverSummary {
   countryCode: CountryCode | null;
   constructorId: Slug;
   role: DriverRole | null;
+  startRound: number | null;
+  endRound: number | null;
 }
 
 export interface SeasonConstructorSummary {

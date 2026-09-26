@@ -11,9 +11,16 @@
  * The rule mirrors `CompetitorDao._validateDriverSpans()`
  * (`lib/core/database/daos/competitor_dao.dart`) exactly, including its
  * null-bound semantics: a null `startRound` means "from the season start" and
- * a null `endRound` "until the season end", i.e. -infinity and +infinity for
+ * a null `endRound` "no exit observed", i.e. -infinity and +infinity for
  * comparison. Touching spans overlap, because the shared round belongs to
  * both. Nothing in Flutter or Drift is modified by this suite.
+ *
+ * The spans here are **shapes**, not observations: most claim rounds the
+ * fixture's calendar never classified. The two classification relations
+ * (`result-entry-span`, `driver-entry-support`) therefore fail on them by
+ * design and are proven in `participation-integrity.test.ts`; this suite
+ * asserts every other relation. Each span carries its ADR 0026 D7 identity, so
+ * `driver-entry-identity` stays silent.
  *
  * Recorded as a non-blocking backlog observation on PR #12 and deferred to the
  * adapter-registration / G4-activation gate; this suite closes it there.
@@ -23,27 +30,35 @@ import { describe, expect, it } from 'vitest';
 
 import type { DriverSeasonEntry } from '../../../src/contract/types';
 import type { ProviderSeasonSource } from '../../../src/providers/formula-one-provider';
-import { validateSeasonReferences } from '../../../src/providers/coordination';
+import { canonicalDriverSeasonEntryId } from '../../../src/contract/identity';
+import {
+  validateSeasonReferences,
+  type SeasonRelation,
+} from '../../../src/providers/coordination';
 import { seasonFixture } from './support';
+
+/** Every relation except the two that compare spans with classifications. */
+function shapeRelations(source: ProviderSeasonSource): SeasonRelation[] {
+  return validateSeasonReferences(source).filter(
+    (relation) =>
+      relation !== 'result-entry-span' && relation !== 'driver-entry-support',
+  );
+}
 
 /** Replaces one driver's entries, leaving every other participant untouched. */
 function withSpansFor(
   source: ProviderSeasonSource,
   driverId: string,
-  spans: readonly {
-    start: number | null;
-    end: number | null;
-    suffix?: string;
-  }[],
+  spans: readonly { start: number | null; end: number | null }[],
 ): ProviderSeasonSource {
   const template = source.driverEntries.find(
     (entry) => entry.driverId === driverId,
   );
   if (template === undefined)
     throw new Error(`no curated entry for ${driverId}`);
-  const replacements: DriverSeasonEntry[] = spans.map((span, index) => ({
+  const replacements: DriverSeasonEntry[] = spans.map((span) => ({
     ...template,
-    id: `${template.season}-${driverId}${span.suffix ?? (index === 0 ? '' : `-${index}`)}`,
+    id: canonicalDriverSeasonEntryId(template.season, driverId, span.start),
     startRound: span.start,
     endRound: span.end,
   }));
@@ -59,23 +74,17 @@ function withSpansFor(
 const SOLO = 'max-verstappen';
 
 describe('valid participation is preserved', () => {
-  it('accepts the curated season, which already contains a real split seat', async () => {
+  it('accepts the curated season', async () => {
     const source = await seasonFixture();
-    const alpine = source.driverEntries.filter(
-      (entry) => entry.constructorId === 'alpine',
-    );
 
-    expect(alpine.length).toBeGreaterThan(1);
     expect(validateSeasonReferences(source)).toEqual([]);
   });
 
-  it('accepts one open-ended full-season span', async () => {
+  it('accepts one span with no observed boundary', async () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
-        withSpansFor(source, SOLO, [{ start: null, end: null }]),
-      ),
+      shapeRelations(withSpansFor(source, SOLO, [{ start: null, end: null }])),
     ).toEqual([]);
   });
 
@@ -83,10 +92,10 @@ describe('valid participation is preserved', () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
+      shapeRelations(
         withSpansFor(source, SOLO, [
           { start: 1, end: 9 },
-          { start: 10, end: null, suffix: '-10' },
+          { start: 10, end: null },
         ]),
       ),
     ).toEqual([]);
@@ -96,11 +105,11 @@ describe('valid participation is preserved', () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
+      shapeRelations(
         withSpansFor(source, SOLO, [
           { start: 1, end: 5 },
-          { start: 6, end: 9, suffix: '-6' },
-          { start: 10, end: 20, suffix: '-10' },
+          { start: 6, end: 9 },
+          { start: 10, end: 20 },
         ]),
       ),
     ).toEqual([]);
@@ -110,10 +119,10 @@ describe('valid participation is preserved', () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
+      shapeRelations(
         withSpansFor(source, SOLO, [
           { start: null, end: 9 },
-          { start: 10, end: 20, suffix: '-10' },
+          { start: 10, end: 20 },
         ]),
       ),
     ).toEqual([]);
@@ -123,9 +132,7 @@ describe('valid participation is preserved', () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
-        withSpansFor(source, SOLO, [{ start: 7, end: 7 }]),
-      ),
+      shapeRelations(withSpansFor(source, SOLO, [{ start: 7, end: 7 }])),
     ).toEqual([]);
   });
 
@@ -137,7 +144,7 @@ describe('valid participation is preserved', () => {
       [{ start: 1, end: 20 }],
     );
 
-    expect(validateSeasonReferences(overlapping)).toEqual([]);
+    expect(shapeRelations(overlapping)).toEqual([]);
   });
 });
 
@@ -149,7 +156,7 @@ describe('inverted spans are rejected', () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(withSpansFor(source, SOLO, [{ start, end }])),
+      shapeRelations(withSpansFor(source, SOLO, [{ start, end }])),
     ).toContain('driver-entry-span');
   });
 
@@ -157,19 +164,15 @@ describe('inverted spans are rejected', () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
-        withSpansFor(source, SOLO, [{ start: null, end: 1 }]),
-      ),
+      shapeRelations(withSpansFor(source, SOLO, [{ start: null, end: 1 }])),
     ).toEqual([]);
   });
 
-  it('treats a null end as the season end, so it can never invert', async () => {
+  it('treats a null end as unbounded, so it can never invert', async () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
-        withSpansFor(source, SOLO, [{ start: 24, end: null }]),
-      ),
+      shapeRelations(withSpansFor(source, SOLO, [{ start: 24, end: null }])),
     ).toEqual([]);
   });
 });
@@ -186,10 +189,10 @@ describe('overlapping spans for one driver are rejected', () => {
       const source = await seasonFixture();
 
       expect(
-        validateSeasonReferences(
+        shapeRelations(
           withSpansFor(source, SOLO, [
             { start: firstStart, end: firstEnd },
-            { start: secondStart, end: secondEnd, suffix: '-b' },
+            { start: secondStart, end: secondEnd },
           ]),
         ),
       ).toContain('driver-entry-span');
@@ -200,10 +203,10 @@ describe('overlapping spans for one driver are rejected', () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
+      shapeRelations(
         withSpansFor(source, SOLO, [
           { start: 1, end: null },
-          { start: 10, end: 20, suffix: '-b' },
+          { start: 10, end: 20 },
         ]),
       ),
     ).toContain('driver-entry-span');
@@ -213,10 +216,10 @@ describe('overlapping spans for one driver are rejected', () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
+      shapeRelations(
         withSpansFor(source, SOLO, [
           { start: 5, end: 9 },
-          { start: null, end: 20, suffix: '-b' },
+          { start: null, end: 20 },
         ]),
       ),
     ).toContain('driver-entry-span');
@@ -226,10 +229,10 @@ describe('overlapping spans for one driver are rejected', () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
+      shapeRelations(
         withSpansFor(source, SOLO, [
           { start: null, end: null },
-          { start: null, end: null, suffix: '-b' },
+          { start: null, end: null },
         ]),
       ),
     ).toContain('driver-entry-span');
@@ -239,17 +242,15 @@ describe('overlapping spans for one driver are rejected', () => {
     const source = await seasonFixture();
     const overlapping = withSpansFor(source, SOLO, [
       { start: 10, end: 20 },
-      { start: 1, end: 12, suffix: '-b' },
+      { start: 1, end: 12 },
     ]);
     const reversed: ProviderSeasonSource = {
       ...overlapping,
       driverEntries: [...overlapping.driverEntries].reverse(),
     };
 
-    expect(validateSeasonReferences(overlapping)).toContain(
-      'driver-entry-span',
-    );
-    expect(validateSeasonReferences(reversed)).toContain('driver-entry-span');
+    expect(shapeRelations(overlapping)).toContain('driver-entry-span');
+    expect(shapeRelations(reversed)).toContain('driver-entry-span');
   });
 });
 
@@ -258,10 +259,10 @@ describe('the relation is independent of every neighbouring rule', () => {
     const source = await seasonFixture();
 
     expect(
-      validateSeasonReferences(
+      shapeRelations(
         withSpansFor(source, SOLO, [
           { start: 1, end: 9 },
-          { start: 5, end: 12, suffix: '-b' },
+          { start: 5, end: 12 },
         ]),
       ),
     ).toEqual(['driver-entry-span']);
@@ -269,10 +270,10 @@ describe('the relation is independent of every neighbouring rule', () => {
 
   it('is distinct from duplicate-identity, which two distinct ids never trigger', async () => {
     const source = await seasonFixture();
-    const relations = validateSeasonReferences(
+    const relations = shapeRelations(
       withSpansFor(source, SOLO, [
         { start: 1, end: 9 },
-        { start: 5, end: 12, suffix: '-b' },
+        { start: 5, end: 12 },
       ]),
     );
 
@@ -288,7 +289,7 @@ describe('the relation is independent of every neighbouring rule', () => {
       ),
     };
 
-    const relations = validateSeasonReferences(corrupted);
+    const relations = shapeRelations(corrupted);
 
     expect(relations).toContain('driver-entry-driver');
     expect(relations).not.toContain('driver-entry-span');
@@ -298,9 +299,9 @@ describe('the relation is independent of every neighbouring rule', () => {
     const source = await seasonFixture();
     const overlapping = withSpansFor(source, SOLO, [
       { start: 1, end: 9 },
-      { start: 5, end: 12, suffix: '-b' },
+      { start: 5, end: 12 },
     ]);
-    const relations = validateSeasonReferences({
+    const relations = shapeRelations({
       ...overlapping,
       constructorEntries: overlapping.constructorEntries.map((entry, index) =>
         index === 0 ? { ...entry, id: '2026-entry-x' } : entry,

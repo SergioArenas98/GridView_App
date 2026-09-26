@@ -107,10 +107,12 @@ class SeasonDriverCard {
   bool get hasMultipleSpans => spanCount > 1;
 }
 
-/// One driver of a team's season line-up, derived from the season's
-/// participation entries — never from a stored or guessed list.
+/// One participation span of a team's season line-up, derived from the
+/// season's participation entries — never from a stored or guessed list. A
+/// driver who left and returned is one member per span.
 class TeamLineupMember {
   const TeamLineupMember({
+    required this.entryId,
     required this.driverId,
     required this.name,
     this.shortCode,
@@ -119,6 +121,10 @@ class TeamLineupMember {
     this.startRound,
     this.endRound,
   });
+
+  /// The participation entry this member is. Unique within the line-up, so it
+  /// keys the row; a driver id alone is not unique once a driver returns.
+  final String entryId;
 
   /// Stable identifier, for navigation only.
   final String driverId;
@@ -131,13 +137,18 @@ class TeamLineupMember {
   final int? raceNumber;
   final DriverRole? role;
 
-  /// The participation span. `null` bounds mean "from the season start" /
-  /// "until the season end"; a bounded span is a mid-season arrival or exit and
-  /// stays representable rather than being flattened away.
+  /// The participation span. A `null` start means participation was already in
+  /// effect at the start of the season's observed scope; a `null` end means no
+  /// exit has been observed yet. Neither is a claim about the whole season. A
+  /// bounded span is a mid-season arrival or exit and stays representable
+  /// rather than being flattened away.
   final int? startRound;
   final int? endRound;
 
-  bool get isFullSeason => startRound == null && endRound == null;
+  /// Whether an arrival or an exit has been observed for this span. `false`
+  /// only means neither boundary is known — never that the driver raced the
+  /// whole season.
+  bool get hasObservedBoundary => startRound != null || endRound != null;
 }
 
 /// One team in a season's Explore list.

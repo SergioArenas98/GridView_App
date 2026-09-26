@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { validateSeasonReferences } from '../../../src/providers/coordination';
 import type { ProviderSeasonSource } from '../../../src/providers/formula-one-provider';
 import { seasonFixture } from './support';
+import { splitSeasonFixture } from './split-participation-support';
 
 function sourceWith(
   base: ProviderSeasonSource,
@@ -80,21 +81,18 @@ describe('constructor season entry identity is checked on both keys', () => {
   });
 
   it('keeps split driver participation spans accepted', async () => {
-    const base = await seasonFixture();
-    const first = base.driverEntries[0];
-    if (first === undefined) throw new Error('fixture gap');
-    // A real split closes the first span before the second opens. Leaving the
-    // first open-ended would be two seats covering round 14 for one driver,
-    // which the local write rejects (`driver-entry-span`).
-    const split = sourceWith(base, {
-      driverEntries: [
-        ...base.driverEntries.map((entry) =>
-          entry === first ? { ...entry, startRound: 1, endRound: 13 } : entry,
-        ),
-        { ...first, id: `${first.id}-second-span`, startRound: 14 },
-      ],
-    });
+    // A real split closes the first span before the second opens, each span
+    // carries its own ADR 0026 D7 identity, and the selected race rows back
+    // both spans (`liam-lawson` at `racing-bulls`, then at `red-bull`).
+    const split = await splitSeasonFixture();
+    const lawson = split.driverEntries.filter(
+      (entry) => entry.driverId === 'liam-lawson',
+    );
 
+    expect(lawson.map((entry) => entry.id)).toEqual([
+      '2026-liam-lawson',
+      '2026-liam-lawson-12',
+    ]);
     expect(validateSeasonReferences(split)).toEqual([]);
   });
 

@@ -31,7 +31,7 @@ Map<String, dynamic> bootstrapEnvelope({
     'data': <String, dynamic>{
       'season': seasonJson(season, isCurrent: isCurrent),
       'calendar': calendar ?? calendarJson(season),
-      'drivers': drivers ?? driversJson(),
+      'drivers': drivers ?? driversJson(season),
       'constructors': constructors ?? constructorsJson(),
       'circuits': circuits ?? circuitSummariesJson(),
       'driverStandings': driverStandings ?? driverStandingsJson(season),
@@ -87,8 +87,21 @@ List<dynamic> calendarJson(int season) {
   ];
 }
 
-List<dynamic> driversJson() =>
-    loadFixture('drivers/season-drivers.json')['data'] as List<dynamic>;
+/// The shared season-driver summaries for [season]. Each `entryId` is the one a
+/// server publishing that season would carry (ADR 0026 D7: `{season}-{driverId}`
+/// or `{season}-{driverId}-{startRound}`), so two seasons never share a
+/// participation id.
+List<dynamic> driversJson([int season = 2026]) {
+  final List<dynamic> drivers =
+      loadFixture('drivers/season-drivers.json')['data'] as List<dynamic>;
+  return <dynamic>[
+    for (final Map<String, dynamic> row in drivers.cast<Map<String, dynamic>>())
+      Map<String, dynamic>.from(row)
+        ..['entryId'] = row['startRound'] == null
+            ? '$season-${row['driverId']}'
+            : '$season-${row['driverId']}-${row['startRound']}',
+  ];
+}
 
 List<dynamic> constructorsJson() =>
     loadFixture('constructors/season-constructors.json')['data']

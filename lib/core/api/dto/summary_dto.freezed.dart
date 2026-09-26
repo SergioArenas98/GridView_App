@@ -834,7 +834,7 @@ as String?,
 /// @nodoc
 mixin _$SeasonDriverSummaryDto {
 
- String get driverId; String get fullName; String? get shortCode; int? get permanentNumber; int? get raceNumber; String? get countryCode; String get constructorId; String? get role;
+ String get entryId; String get driverId; String get fullName; String? get shortCode; int? get permanentNumber; int? get raceNumber; String? get countryCode; String get constructorId; String? get role; int? get startRound; int? get endRound;
 /// Create a copy of SeasonDriverSummaryDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -847,16 +847,16 @@ $SeasonDriverSummaryDtoCopyWith<SeasonDriverSummaryDto> get copyWith => _$Season
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SeasonDriverSummaryDto&&(identical(other.driverId, driverId) || other.driverId == driverId)&&(identical(other.fullName, fullName) || other.fullName == fullName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&(identical(other.permanentNumber, permanentNumber) || other.permanentNumber == permanentNumber)&&(identical(other.raceNumber, raceNumber) || other.raceNumber == raceNumber)&&(identical(other.countryCode, countryCode) || other.countryCode == countryCode)&&(identical(other.constructorId, constructorId) || other.constructorId == constructorId)&&(identical(other.role, role) || other.role == role));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SeasonDriverSummaryDto&&(identical(other.entryId, entryId) || other.entryId == entryId)&&(identical(other.driverId, driverId) || other.driverId == driverId)&&(identical(other.fullName, fullName) || other.fullName == fullName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&(identical(other.permanentNumber, permanentNumber) || other.permanentNumber == permanentNumber)&&(identical(other.raceNumber, raceNumber) || other.raceNumber == raceNumber)&&(identical(other.countryCode, countryCode) || other.countryCode == countryCode)&&(identical(other.constructorId, constructorId) || other.constructorId == constructorId)&&(identical(other.role, role) || other.role == role)&&(identical(other.startRound, startRound) || other.startRound == startRound)&&(identical(other.endRound, endRound) || other.endRound == endRound));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,driverId,fullName,shortCode,permanentNumber,raceNumber,countryCode,constructorId,role);
+int get hashCode => Object.hash(runtimeType,entryId,driverId,fullName,shortCode,permanentNumber,raceNumber,countryCode,constructorId,role,startRound,endRound);
 
 @override
 String toString() {
-  return 'SeasonDriverSummaryDto(driverId: $driverId, fullName: $fullName, shortCode: $shortCode, permanentNumber: $permanentNumber, raceNumber: $raceNumber, countryCode: $countryCode, constructorId: $constructorId, role: $role)';
+  return 'SeasonDriverSummaryDto(entryId: $entryId, driverId: $driverId, fullName: $fullName, shortCode: $shortCode, permanentNumber: $permanentNumber, raceNumber: $raceNumber, countryCode: $countryCode, constructorId: $constructorId, role: $role, startRound: $startRound, endRound: $endRound)';
 }
 
 
@@ -867,7 +867,7 @@ abstract mixin class $SeasonDriverSummaryDtoCopyWith<$Res>  {
   factory $SeasonDriverSummaryDtoCopyWith(SeasonDriverSummaryDto value, $Res Function(SeasonDriverSummaryDto) _then) = _$SeasonDriverSummaryDtoCopyWithImpl;
 @useResult
 $Res call({
- String driverId, String fullName, String? shortCode, int? permanentNumber, int? raceNumber, String? countryCode, String constructorId, String? role
+ String entryId, String driverId, String fullName, String? shortCode, int? permanentNumber, int? raceNumber, String? countryCode, String constructorId, String? role, int? startRound, int? endRound
 });
 
 
@@ -884,9 +884,10 @@ class _$SeasonDriverSummaryDtoCopyWithImpl<$Res>
 
 /// Create a copy of SeasonDriverSummaryDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? driverId = null,Object? fullName = null,Object? shortCode = freezed,Object? permanentNumber = freezed,Object? raceNumber = freezed,Object? countryCode = freezed,Object? constructorId = null,Object? role = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? entryId = null,Object? driverId = null,Object? fullName = null,Object? shortCode = freezed,Object? permanentNumber = freezed,Object? raceNumber = freezed,Object? countryCode = freezed,Object? constructorId = null,Object? role = freezed,Object? startRound = freezed,Object? endRound = freezed,}) {
   return _then(_self.copyWith(
-driverId: null == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
+entryId: null == entryId ? _self.entryId : entryId // ignore: cast_nullable_to_non_nullable
+as String,driverId: null == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
 as String,fullName: null == fullName ? _self.fullName : fullName // ignore: cast_nullable_to_non_nullable
 as String,shortCode: freezed == shortCode ? _self.shortCode : shortCode // ignore: cast_nullable_to_non_nullable
 as String?,permanentNumber: freezed == permanentNumber ? _self.permanentNumber : permanentNumber // ignore: cast_nullable_to_non_nullable
@@ -894,7 +895,9 @@ as int?,raceNumber: freezed == raceNumber ? _self.raceNumber : raceNumber // ign
 as int?,countryCode: freezed == countryCode ? _self.countryCode : countryCode // ignore: cast_nullable_to_non_nullable
 as String?,constructorId: null == constructorId ? _self.constructorId : constructorId // ignore: cast_nullable_to_non_nullable
 as String,role: freezed == role ? _self.role : role // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,startRound: freezed == startRound ? _self.startRound : startRound // ignore: cast_nullable_to_non_nullable
+as int?,endRound: freezed == endRound ? _self.endRound : endRound // ignore: cast_nullable_to_non_nullable
+as int?,
   ));
 }
 
@@ -979,10 +982,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String driverId,  String fullName,  String? shortCode,  int? permanentNumber,  int? raceNumber,  String? countryCode,  String constructorId,  String? role)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String entryId,  String driverId,  String fullName,  String? shortCode,  int? permanentNumber,  int? raceNumber,  String? countryCode,  String constructorId,  String? role,  int? startRound,  int? endRound)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SeasonDriverSummaryDto() when $default != null:
-return $default(_that.driverId,_that.fullName,_that.shortCode,_that.permanentNumber,_that.raceNumber,_that.countryCode,_that.constructorId,_that.role);case _:
+return $default(_that.entryId,_that.driverId,_that.fullName,_that.shortCode,_that.permanentNumber,_that.raceNumber,_that.countryCode,_that.constructorId,_that.role,_that.startRound,_that.endRound);case _:
   return orElse();
 
 }
@@ -1000,10 +1003,10 @@ return $default(_that.driverId,_that.fullName,_that.shortCode,_that.permanentNum
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String driverId,  String fullName,  String? shortCode,  int? permanentNumber,  int? raceNumber,  String? countryCode,  String constructorId,  String? role)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String entryId,  String driverId,  String fullName,  String? shortCode,  int? permanentNumber,  int? raceNumber,  String? countryCode,  String constructorId,  String? role,  int? startRound,  int? endRound)  $default,) {final _that = this;
 switch (_that) {
 case _SeasonDriverSummaryDto():
-return $default(_that.driverId,_that.fullName,_that.shortCode,_that.permanentNumber,_that.raceNumber,_that.countryCode,_that.constructorId,_that.role);case _:
+return $default(_that.entryId,_that.driverId,_that.fullName,_that.shortCode,_that.permanentNumber,_that.raceNumber,_that.countryCode,_that.constructorId,_that.role,_that.startRound,_that.endRound);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -1020,10 +1023,10 @@ return $default(_that.driverId,_that.fullName,_that.shortCode,_that.permanentNum
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String driverId,  String fullName,  String? shortCode,  int? permanentNumber,  int? raceNumber,  String? countryCode,  String constructorId,  String? role)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String entryId,  String driverId,  String fullName,  String? shortCode,  int? permanentNumber,  int? raceNumber,  String? countryCode,  String constructorId,  String? role,  int? startRound,  int? endRound)?  $default,) {final _that = this;
 switch (_that) {
 case _SeasonDriverSummaryDto() when $default != null:
-return $default(_that.driverId,_that.fullName,_that.shortCode,_that.permanentNumber,_that.raceNumber,_that.countryCode,_that.constructorId,_that.role);case _:
+return $default(_that.entryId,_that.driverId,_that.fullName,_that.shortCode,_that.permanentNumber,_that.raceNumber,_that.countryCode,_that.constructorId,_that.role,_that.startRound,_that.endRound);case _:
   return null;
 
 }
@@ -1035,9 +1038,10 @@ return $default(_that.driverId,_that.fullName,_that.shortCode,_that.permanentNum
 @JsonSerializable()
 
 class _SeasonDriverSummaryDto implements SeasonDriverSummaryDto {
-  const _SeasonDriverSummaryDto({required this.driverId, required this.fullName, this.shortCode, this.permanentNumber, this.raceNumber, this.countryCode, required this.constructorId, this.role});
+  const _SeasonDriverSummaryDto({required this.entryId, required this.driverId, required this.fullName, this.shortCode, this.permanentNumber, this.raceNumber, this.countryCode, required this.constructorId, this.role, this.startRound, this.endRound});
   factory _SeasonDriverSummaryDto.fromJson(Map<String, dynamic> json) => _$SeasonDriverSummaryDtoFromJson(json);
 
+@override final  String entryId;
 @override final  String driverId;
 @override final  String fullName;
 @override final  String? shortCode;
@@ -1046,6 +1050,8 @@ class _SeasonDriverSummaryDto implements SeasonDriverSummaryDto {
 @override final  String? countryCode;
 @override final  String constructorId;
 @override final  String? role;
+@override final  int? startRound;
+@override final  int? endRound;
 
 /// Create a copy of SeasonDriverSummaryDto
 /// with the given fields replaced by the non-null parameter values.
@@ -1060,16 +1066,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SeasonDriverSummaryDto&&(identical(other.driverId, driverId) || other.driverId == driverId)&&(identical(other.fullName, fullName) || other.fullName == fullName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&(identical(other.permanentNumber, permanentNumber) || other.permanentNumber == permanentNumber)&&(identical(other.raceNumber, raceNumber) || other.raceNumber == raceNumber)&&(identical(other.countryCode, countryCode) || other.countryCode == countryCode)&&(identical(other.constructorId, constructorId) || other.constructorId == constructorId)&&(identical(other.role, role) || other.role == role));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SeasonDriverSummaryDto&&(identical(other.entryId, entryId) || other.entryId == entryId)&&(identical(other.driverId, driverId) || other.driverId == driverId)&&(identical(other.fullName, fullName) || other.fullName == fullName)&&(identical(other.shortCode, shortCode) || other.shortCode == shortCode)&&(identical(other.permanentNumber, permanentNumber) || other.permanentNumber == permanentNumber)&&(identical(other.raceNumber, raceNumber) || other.raceNumber == raceNumber)&&(identical(other.countryCode, countryCode) || other.countryCode == countryCode)&&(identical(other.constructorId, constructorId) || other.constructorId == constructorId)&&(identical(other.role, role) || other.role == role)&&(identical(other.startRound, startRound) || other.startRound == startRound)&&(identical(other.endRound, endRound) || other.endRound == endRound));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,driverId,fullName,shortCode,permanentNumber,raceNumber,countryCode,constructorId,role);
+int get hashCode => Object.hash(runtimeType,entryId,driverId,fullName,shortCode,permanentNumber,raceNumber,countryCode,constructorId,role,startRound,endRound);
 
 @override
 String toString() {
-  return 'SeasonDriverSummaryDto(driverId: $driverId, fullName: $fullName, shortCode: $shortCode, permanentNumber: $permanentNumber, raceNumber: $raceNumber, countryCode: $countryCode, constructorId: $constructorId, role: $role)';
+  return 'SeasonDriverSummaryDto(entryId: $entryId, driverId: $driverId, fullName: $fullName, shortCode: $shortCode, permanentNumber: $permanentNumber, raceNumber: $raceNumber, countryCode: $countryCode, constructorId: $constructorId, role: $role, startRound: $startRound, endRound: $endRound)';
 }
 
 
@@ -1080,7 +1086,7 @@ abstract mixin class _$SeasonDriverSummaryDtoCopyWith<$Res> implements $SeasonDr
   factory _$SeasonDriverSummaryDtoCopyWith(_SeasonDriverSummaryDto value, $Res Function(_SeasonDriverSummaryDto) _then) = __$SeasonDriverSummaryDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String driverId, String fullName, String? shortCode, int? permanentNumber, int? raceNumber, String? countryCode, String constructorId, String? role
+ String entryId, String driverId, String fullName, String? shortCode, int? permanentNumber, int? raceNumber, String? countryCode, String constructorId, String? role, int? startRound, int? endRound
 });
 
 
@@ -1097,9 +1103,10 @@ class __$SeasonDriverSummaryDtoCopyWithImpl<$Res>
 
 /// Create a copy of SeasonDriverSummaryDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? driverId = null,Object? fullName = null,Object? shortCode = freezed,Object? permanentNumber = freezed,Object? raceNumber = freezed,Object? countryCode = freezed,Object? constructorId = null,Object? role = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? entryId = null,Object? driverId = null,Object? fullName = null,Object? shortCode = freezed,Object? permanentNumber = freezed,Object? raceNumber = freezed,Object? countryCode = freezed,Object? constructorId = null,Object? role = freezed,Object? startRound = freezed,Object? endRound = freezed,}) {
   return _then(_SeasonDriverSummaryDto(
-driverId: null == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
+entryId: null == entryId ? _self.entryId : entryId // ignore: cast_nullable_to_non_nullable
+as String,driverId: null == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
 as String,fullName: null == fullName ? _self.fullName : fullName // ignore: cast_nullable_to_non_nullable
 as String,shortCode: freezed == shortCode ? _self.shortCode : shortCode // ignore: cast_nullable_to_non_nullable
 as String?,permanentNumber: freezed == permanentNumber ? _self.permanentNumber : permanentNumber // ignore: cast_nullable_to_non_nullable
@@ -1107,7 +1114,9 @@ as int?,raceNumber: freezed == raceNumber ? _self.raceNumber : raceNumber // ign
 as int?,countryCode: freezed == countryCode ? _self.countryCode : countryCode // ignore: cast_nullable_to_non_nullable
 as String?,constructorId: null == constructorId ? _self.constructorId : constructorId // ignore: cast_nullable_to_non_nullable
 as String,role: freezed == role ? _self.role : role // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,startRound: freezed == startRound ? _self.startRound : startRound // ignore: cast_nullable_to_non_nullable
+as int?,endRound: freezed == endRound ? _self.endRound : endRound // ignore: cast_nullable_to_non_nullable
+as int?,
   ));
 }
 

@@ -261,7 +261,7 @@ void main() {
         // Re-opening the driver that is directly below returns to it instead of
         // pushing a duplicate.
         await tester.tap(
-          find.byKey(const ValueKey<String>('team-lineup-b-racer')),
+          find.byKey(const ValueKey<String>('team-lineup-2026-b-racer')),
         );
         await tester.pumpAndSettle();
         expect(find.byType(ConstructorDetailScreen), findsNothing);

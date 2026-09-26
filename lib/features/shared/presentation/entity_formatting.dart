@@ -66,12 +66,14 @@ class EntityFormatter {
     CircuitDirection.unknown || null => l10n.circuitDirectionUnknown,
   };
 
-  /// A participation span. Both bounds absent means the whole season; one bound
-  /// means a mid-season arrival or exit; both means an exact range. A span is
-  /// never flattened into a false "current" statement.
+  /// A participation span, worded only from what has been observed (ADR 0026
+  /// D6): a null start is "from the season start", a null end is no observed
+  /// exit. Null/null is therefore "From season start" — never "Full season",
+  /// which would predict the rest of the season. A span is never flattened into
+  /// a false "current" statement.
   String participationSpan({int? startRound, int? endRound}) {
     if (startRound == null && endRound == null) {
-      return l10n.participationFullSeason;
+      return l10n.participationFromSeasonStart;
     }
     if (startRound != null && endRound != null) {
       return l10n.participationRoundRange(startRound, endRound);

@@ -10,6 +10,7 @@ import '../../../features/shared/domain/entities/season_card.dart';
 import '../../../features/shared/domain/entities/season_entry.dart';
 import '../../../features/shared/domain/entities/standing.dart';
 import '../../../features/shared/domain/media/media_presentation.dart';
+import '../../../features/shared/domain/participation_span.dart';
 import '../competitor_tables.dart';
 import '../entity_validation.dart';
 import '../gridview_database.dart';
@@ -162,9 +163,9 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
 
   /// Validates driver participation spans for a season batch. Throws an
   /// [InvalidSeasonEntriesException] when a span is inverted (`startRound >
-  /// endRound`) or when two stints for the same driver overlap. A `null`
-  /// `startRound`/`endRound` means "from the season start" / "until the season
-  /// end" (±infinity) for overlap purposes.
+  /// endRound`) or when two stints for the same driver overlap. For overlap
+  /// purposes a `null` `startRound` is the season start and a `null` `endRound`
+  /// is unbounded (no exit observed) — ±infinity, never a full-season claim.
   void _validateDriverSpans(List<DriverSeasonEntry> entries) {
     final Map<String, List<DriverSeasonEntry>> byDriver =
         <String, List<DriverSeasonEntry>>{};
@@ -230,8 +231,10 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
   // List reads
   // ---------------------------------------------------------------------------
 
-  /// The season roster: each participating driver paired with its season entry,
-  /// ordered by race number (unnumbered last) then full name.
+  /// The season roster: one element per participation **span**, each paired
+  /// with its driver, so a driver with a mid-season move appears once per span.
+  /// Ordered by race number (unnumbered last) then full name. Screens that need
+  /// one row per driver use [seasonDriverCards].
   Future<List<SeasonDriver>> driversForSeason(int season) async {
     final List<DriverSeasonEntryRow> entryRows = await (select(
       driverSeasonEntries,
@@ -691,6 +694,7 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     for (final (DriverRow identity, DriverSeasonEntryRow entry) in members) {
       (byTeam[entry.constructorId] ??= <TeamLineupMember>[]).add(
         TeamLineupMember(
+          entryId: entry.id,
           driverId: identity.id,
           name: identity.fullName,
           shortCode: entry.shortCode ?? identity.shortCode,
@@ -721,20 +725,14 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     };
   }
 
-  /// A driver's spans in relevance order: the open span (`endRound == null`)
-  /// first, then the latest by `startRound`.
-  List<DriverSeasonEntryRow> _sortedSpans(List<DriverSeasonEntryRow> rows) {
-    final List<DriverSeasonEntryRow> sorted = List<DriverSeasonEntryRow>.of(
-      rows,
-    );
-    sorted.sort((DriverSeasonEntryRow a, DriverSeasonEntryRow b) {
-      if ((a.endRound == null) != (b.endRound == null)) {
-        return a.endRound == null ? -1 : 1;
-      }
-      return (b.startRound ?? 0).compareTo(a.startRound ?? 0);
-    });
-    return sorted;
-  }
+  /// A driver's spans in relevance order (see [sortBySpanRelevance]): the open
+  /// span first, then the latest effective start. The first is the current span.
+  List<DriverSeasonEntryRow> _sortedSpans(List<DriverSeasonEntryRow> rows) =>
+      sortBySpanRelevance<DriverSeasonEntryRow>(
+        rows,
+        startRound: (DriverSeasonEntryRow r) => r.startRound,
+        endRound: (DriverSeasonEntryRow r) => r.endRound,
+      );
 
   /// The roster's authoritative order: race number ascending (unnumbered last),
   /// then the stable display name. Deterministic and independent of row
@@ -919,8 +917,9 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
     };
   }
 
-  /// Picks the participation entry in force for a (season, driver): the open
-  /// span (`endRound == null`) if any, else the latest by `startRound`.
+  /// Picks the participation entry in force for a (season, driver): the
+  /// current span under [sortBySpanRelevance], never whichever row the query
+  /// happens to return first.
   Future<DriverSeasonEntryRow?> _currentDriverEntry(
     int season,
     String driverId,
@@ -932,26 +931,23 @@ class CompetitorDao extends DatabaseAccessor<GridViewDatabase>
             ))
             .get();
     if (rows.isEmpty) return null;
-    rows.sort((DriverSeasonEntryRow a, DriverSeasonEntryRow b) {
-      if ((a.endRound == null) != (b.endRound == null)) {
-        return a.endRound == null ? -1 : 1;
-      }
-      return (b.startRound ?? 0).compareTo(a.startRound ?? 0);
-    });
-    return rows.first;
+    return _sortedSpans(rows).first;
   }
 
   /// The constructor's season line-up, derived from the season's driver entries
   /// (the single source of truth for membership), ordered like the season
-  /// roster (race number, unnumbered last, then full name).
+  /// roster (race number, unnumbered last, then full name). A driver who holds
+  /// two spans for the same team (a return) is listed once.
   Future<List<Driver>> _lineupForConstructor(
     int season,
     String constructorId,
   ) async {
     final List<SeasonDriver> roster = await driversForSeason(season);
+    final Set<String> seen = <String>{};
     return roster
         .where((SeasonDriver s) => s.entry.constructorId == constructorId)
         .map((SeasonDriver s) => s.driver)
+        .where((Driver d) => seen.add(d.id))
         .toList(growable: false);
   }
 

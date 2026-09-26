@@ -35,17 +35,38 @@ export function canonicalGrandPrixId(
 /**
  * The canonical identity of one constructor season entry:
  * `{season}-{constructorId}` (GridView_Domain_Model.md §4.2, §6.9).
- *
- * The **driver** season entry is deliberately not given a partner to this
- * function: the model appends a start round for a split seat (§6.7), so its
- * identity is not a strict function of the payload and nothing could compare a
- * supplied value against a single derived one.
  */
 export function canonicalConstructorSeasonEntryId(
   season: number,
   constructorId: string,
 ): string {
   return `${season}-${constructorId}`;
+}
+
+/**
+ * The canonical identity of one driver season entry (ADR 0026 D7):
+ * `{season}-{driverId}` when `startRound` is null, otherwise
+ * `{season}-{driverId}-{startRound}`.
+ *
+ * The identity is a strict function of the span's **own** start boundary,
+ * never of its position among the driver's spans, so a first, only, returning
+ * or later span all follow the same rule and inserting an earlier span renames
+ * nothing. No provider identifier ever takes part.
+ *
+ * The rule is deterministic but **not globally injective**: the base entry of a
+ * driver `foo-7` and the round-7 entry of a driver `foo` both render as
+ * `{season}-foo-7`. Uniqueness across a season's complete entry collection is
+ * therefore a separate check (`duplicate-identity` in `season-integrity.ts`),
+ * and a collision fails the candidate rather than renaming either entry.
+ */
+export function canonicalDriverSeasonEntryId(
+  season: number,
+  driverId: string,
+  startRound: number | null,
+): string {
+  return startRound === null
+    ? `${season}-${driverId}`
+    : `${season}-${driverId}-${startRound}`;
 }
 
 /**

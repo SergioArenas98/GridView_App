@@ -10,6 +10,7 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 
 import { heading, printAjvErrors, summarize } from './lib/report.mjs';
+import { validateDriverSeasonEntries } from './lib/driver-entry-rules.mjs';
 import {
   validateEvidenceCoverage,
   validateMappingDocument,
@@ -198,6 +199,21 @@ if (registryProblems.length === 0 && structureProblems.length === 0) {
 
 if (semanticChecks === 0) {
   console.log('ok   no provider mapping content present');
+}
+
+// ADR 0026 D7 identity, collection-wide id uniqueness and span consistency for
+// every curated driver season entry document.
+heading('driver season entry semantics');
+for (const { label, data } of parsedByKind.get('driver-season-entries') ?? []) {
+  semanticChecks += 1;
+  const problems = validateDriverSeasonEntries(data);
+  if (problems.length === 0) {
+    console.log(`ok   ${label}  (${data.entries.length} entries)`);
+  } else {
+    console.error(`FAIL ${label}`);
+    for (const problem of problems) console.error(`  - ${problem}`);
+    failures += 1;
+  }
 }
 
 process.exit(

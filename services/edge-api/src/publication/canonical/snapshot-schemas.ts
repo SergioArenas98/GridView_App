@@ -315,6 +315,7 @@ const circuitSummary = object([
 ]);
 
 const seasonDriverSummary = object([
+  { key: 'entryId', spec: text() },
   { key: 'driverId', spec: text() },
   { key: 'fullName', spec: text() },
   { key: 'shortCode', spec: nullableText() },
@@ -323,6 +324,8 @@ const seasonDriverSummary = object([
   { key: 'countryCode', spec: nullableText() },
   { key: 'constructorId', spec: text() },
   { key: 'role', spec: nullableText() },
+  { key: 'startRound', spec: nullableNumeric() },
+  { key: 'endRound', spec: nullableNumeric() },
 ]);
 
 const seasonConstructorSummary = object([

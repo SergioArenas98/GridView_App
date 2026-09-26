@@ -30,6 +30,7 @@
 import type { ResultStatus } from '../../contract/enums';
 import {
   canonicalConstructorSeasonEntryId,
+  canonicalDriverSeasonEntryId,
   canonicalGrandPrixId,
   canonicalRaceResultId,
   canonicalSessionId,
@@ -96,12 +97,25 @@ export const seasonRelations = [
    * client's roster refresh transaction and leaves users on stale data with no
    * server-side signal that anything went wrong.
    *
-   * Null bounds carry the meaning the local rule gives them: a null
-   * `startRound` is the season start and a null `endRound` the season end, so
-   * neither can invert. Touching spans overlap, because the shared round would
-   * belong to both.
+   * Null bounds carry the meaning the local rule gives them for overlap: a
+   * null `startRound` is the season start and a null `endRound` extends
+   * without limit (no exit has been observed, ADR 0026 D6 - which is not a
+   * claim about the rest of the season), so neither can invert. Touching spans
+   * overlap, because the shared round would belong to both.
    */
   'driver-entry-span',
+  /**
+   * `driverEntries[].id` must be the entry's own canonical identity under
+   * ADR 0026 D7: `{season}-{driverId}` when `startRound` is null, otherwise
+   * `{season}-{driverId}-{startRound}`.
+   *
+   * The client keys every span by this id, so an arbitrary unique id passes
+   * `duplicate-identity` and still publishes a row a later corrected id would
+   * duplicate instead of replace. Global uniqueness is a separate question:
+   * the rule is not injective across drivers (`foo-7`'s base entry equals
+   * `foo`'s round-7 entry), and that collision is `duplicate-identity`'s.
+   */
+  'driver-entry-identity',
   /** `constructorEntries[].constructorId` must resolve. `requireOne` throws. */
   'constructor-entry-constructor',
   /**
@@ -111,11 +125,8 @@ export const seasonRelations = [
    * (GridView_Domain_Model.md §4.2), and both components are on the payload.
    * `constructor-entry-constructor` asks only whether `constructorId` resolves,
    * and `duplicate-identity` needs a collision, so an arbitrary unique id
-   * passes both and reaches the published constructor documents.
-   *
-   * There is no symmetric relation for a *driver* season entry: §6.7 appends a
-   * start round for a split seat, so its identity is not a strict function of
-   * the payload and demanding one would reject a correct season.
+   * passes both and reaches the published constructor documents. The driver
+   * season entry's counterpart is `driver-entry-identity`.
    */
   'constructor-entry-identity',
   /** `constructorEntries[].driverLineup[]` must resolve. `requireOne` throws. */
@@ -162,6 +173,40 @@ export const seasonRelations = [
   'result-entry-constructor',
   /** `results[].fastestLap.driverId`, when present, is published verbatim. */
   'result-fastest-lap-driver',
+  /**
+   * Classification to span (ADR 0026 D5 rule 8, D12 item 5).
+   *
+   * Every row of a selected, classified race classification - a participation
+   * fact (D3) - must fall inside **exactly one** span of the same driver, and
+   * that span must name the row's constructor. No span, two covering spans or
+   * a span for another constructor all mean published participation and
+   * published results disagree.
+   */
+  'result-entry-span',
+  /**
+   * Span to classification (ADR 0026 D5 rules 1-7, D6, D8, D12 item 5).
+   *
+   * Every span must agree with the selected, classified race rounds for its
+   * own driver and constructor:
+   *
+   * - it is observed at its opening round: `startRound`, or the season's first
+   *   classified race round when `startRound` is null. A non-null `startRound`
+   *   equal to that first round is refused, because D8 spells it null;
+   * - it is observed at its closing round: `endRound`, or the latest
+   *   classified race round when `endRound` is null, since a later classified
+   *   round without the driver for this constructor would establish an exit.
+   *   A non-null `endRound` equal to that latest round is refused: no later
+   *   round has established the exit, even when the calendar is complete;
+   * - it is observed at **every** classified race round in between: an
+   *   absence closes a span, and a return is a new span (D5 rules 4, 5);
+   * - it is **not** observed at the classified race round just before or just
+   *   after it: the same seat there would have extended it (D5 rule 2).
+   *
+   * A span with no supporting fact therefore fails, and before the first
+   * classified race no span can exist at all (D9). Rounds with no selected
+   * classification are not observations and are not judged here.
+   */
+  'driver-entry-support',
   /** Two payloads claiming one identity that storage keys a single row on. */
   'duplicate-identity',
 ] as const;
@@ -194,7 +239,7 @@ function idSet(values: readonly { readonly id: string }[]): Set<string> {
  * Mirrors `CompetitorDao._validateDriverSpans()` in the Flutter client, which
  * is the rule that would actually reject the write, including its null-bound
  * semantics: an absent `startRound` is the season start and an absent
- * `endRound` the season end. `Number.NEGATIVE_INFINITY` and
+ * `endRound` is unbounded. `Number.NEGATIVE_INFINITY` and
  * `Number.POSITIVE_INFINITY` express those directly rather than reusing the
  * client's sentinel integers, which exist only because Dart lacks a
  * double-typed round.
@@ -223,6 +268,121 @@ function hasInvalidDriverSpans(entries: readonly DriverSeasonEntry[]): boolean {
     }
   }
   return false;
+}
+
+/**
+ * One canonical participation fact (ADR 0026 D3, D15): a row of a selected,
+ * classified **race** classification. Sprint, qualifying and unavailable
+ * classifications contribute none.
+ */
+interface ParticipationFact {
+  readonly round: number;
+  readonly driverId: string;
+  readonly constructorId: string;
+}
+
+/** The selected, classified race classifications: the only observations. */
+function classifiedRaces(source: ProviderSeasonSource) {
+  return source.results.filter(
+    (result) =>
+      result.sessionType === 'race' && isClassifiedResult(result.status),
+  );
+}
+
+function participationFacts(
+  source: ProviderSeasonSource,
+): readonly ParticipationFact[] {
+  return classifiedRaces(source).flatMap((result) =>
+    result.entries.map((entry) => ({
+      round: result.round,
+      driverId: entry.driverId,
+      constructorId: entry.constructorId,
+    })),
+  );
+}
+
+/** Whether `round` lies inside a span, null bounds being unbounded. */
+function spanContains(entry: DriverSeasonEntry, round: number): boolean {
+  return (
+    (entry.startRound ?? Number.NEGATIVE_INFINITY) <= round &&
+    round <= (entry.endRound ?? Number.POSITIVE_INFINITY)
+  );
+}
+
+/**
+ * Whether any participation fact is not placed in exactly one span of its
+ * driver that names its constructor (`result-entry-span`).
+ */
+function hasUnplacedParticipation(
+  entries: readonly DriverSeasonEntry[],
+  facts: readonly ParticipationFact[],
+): boolean {
+  return facts.some((fact) => {
+    const covering = entries.filter(
+      (entry) =>
+        entry.driverId === fact.driverId && spanContains(entry, fact.round),
+    );
+    return (
+      covering.length !== 1 || covering[0]!.constructorId !== fact.constructorId
+    );
+  });
+}
+
+/**
+ * Whether any span disagrees with the classified race rounds
+ * (`driver-entry-support`). See the relation for the exact rule.
+ *
+ * `rounds` is the ascending set of selected, classified race rounds. Rounds
+ * without such a classification are not observations at all, so they neither
+ * support nor interrupt a span here; accounting for them is span derivation's
+ * business (ADR 0026 D4).
+ */
+function hasUnsupportedSpan(
+  entries: readonly DriverSeasonEntry[],
+  facts: readonly ParticipationFact[],
+  rounds: readonly number[],
+): boolean {
+  if (entries.length === 0) return false;
+  if (rounds.length === 0) return true;
+  const firstRound = rounds[0]!;
+  const latestRound = rounds.at(-1)!;
+  const observed = (entry: DriverSeasonEntry, round: number): boolean =>
+    facts.some(
+      (fact) =>
+        fact.round === round &&
+        fact.driverId === entry.driverId &&
+        fact.constructorId === entry.constructorId,
+    );
+  return entries.some((entry) => {
+    // D8 spells a span that begins at the first classified round as null.
+    if (entry.startRound === firstRound) return true;
+    // Only a later classified round without this seat establishes an exit
+    // (D5, D6). None exists after the latest one, however complete the
+    // calendar, so a span still observed there stays open: its end is null.
+    if (entry.endRound === latestRound) return true;
+    const opening = entry.startRound ?? firstRound;
+    const closing = entry.endRound ?? latestRound;
+    // Observed at both of its own boundaries (D5 rules 1, 3, 4; D6).
+    if (!observed(entry, opening) || !observed(entry, closing)) return true;
+    // Continuous: a classified round inside the span without the driver for
+    // this constructor would have closed it (D5 rules 2, 4, 5).
+    if (
+      rounds.some(
+        (round) =>
+          round > opening && round < closing && !observed(entry, round),
+      )
+    ) {
+      return true;
+    }
+    // Maximal: the neighbouring classified rounds must not observe the same
+    // seat, or the span would have been extended instead (D5 rule 2).
+    const before = rounds.filter((round) => round < opening).at(-1);
+    const after = rounds.find((round) => round > closing);
+    return (
+      (before !== undefined && observed(entry, before)) ||
+      (after !== undefined && observed(entry, after))
+    );
+  });
 }
 
 /** True when a collection contains the same identity twice. */
@@ -393,6 +553,18 @@ export function validateSeasonReferences(
     if (!constructors.has(entry.constructorId)) {
       fail('driver-entry-constructor');
     }
+    // Exact equality against the ADR 0026 D7 identity, built by the one shared
+    // constructor. Nothing is renamed: a mismatch withholds the candidate.
+    if (
+      entry.id !==
+      canonicalDriverSeasonEntryId(
+        entry.season,
+        entry.driverId,
+        entry.startRound,
+      )
+    ) {
+      fail('driver-entry-identity');
+    }
   }
   if (hasInvalidDriverSpans(source.driverEntries)) fail('driver-entry-span');
   for (const entry of source.constructorEntries) {
@@ -473,6 +645,20 @@ export function validateSeasonReferences(
     if (event.hasResults !== classifiedRounds.has(event.round)) {
       fail('event-has-results');
     }
+  }
+
+  // Published participation and published race classifications must agree in
+  // both directions (ADR 0026 D12 item 5). Neither side is repaired: no span is
+  // derived, extended or dropped here, and no row is discarded.
+  const facts = participationFacts(source);
+  const raceRounds = [
+    ...new Set(classifiedRaces(source).map((result) => result.round)),
+  ].sort((left, right) => left - right);
+  if (hasUnplacedParticipation(source.driverEntries, facts)) {
+    fail('result-entry-span');
+  }
+  if (hasUnsupportedSpan(source.driverEntries, facts, raceRounds)) {
+    fail('driver-entry-support');
   }
 
   // One mechanism over a closed set of stored identities.

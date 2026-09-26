@@ -40,6 +40,7 @@ import {
   seasonResources,
   type PublicationHarness,
 } from './support';
+import { splitSeasonFixture } from './split-participation-support';
 
 const VERSION = 'v1';
 
@@ -386,23 +387,20 @@ describe('stable identities are unique where persistence keys on them', () => {
   });
 
   it('keeps documented valid multiplicity accepted', async () => {
-    const base = await seasonFixture();
-    const first = base.driverEntries[0];
-    if (first === undefined) throw new Error('fixture gap');
     // Mid-season participation is modelled as split spans: one driver may hold
     // several entries, as long as each entry has its own identity.
-    // A real split closes the first span before the second opens. Leaving the
-    // first open-ended would be two seats covering round 14 for one driver,
-    // which the local write rejects (`driver-entry-span`).
-    const split = sourceWith(base, {
-      driverEntries: [
-        ...base.driverEntries.map((entry) =>
-          entry === first ? { ...entry, startRound: 1, endRound: 13 } : entry,
-        ),
-        { ...first, id: `${first.id}-second-span`, startRound: 14 },
-      ],
-    });
+    // A real split closes the first span before the second opens, each span
+    // carries its own ADR 0026 D7 identity, and the selected race rows back
+    // both spans (`liam-lawson` at `racing-bulls`, then at `red-bull`).
+    const split = await splitSeasonFixture();
+    const lawson = split.driverEntries.filter(
+      (entry) => entry.driverId === 'liam-lawson',
+    );
 
+    expect(lawson.map((entry) => entry.id)).toEqual([
+      '2026-liam-lawson',
+      '2026-liam-lawson-12',
+    ]);
     expect(validateSeasonReferences(split)).toEqual([]);
   });
 

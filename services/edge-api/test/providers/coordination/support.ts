@@ -33,14 +33,42 @@ import type { ProviderAttemptOutcome } from '../../../src/providers/provider-met
 export const SEASON = 2026;
 export const FIXED_NOW = '2026-07-20T12:00:00.000Z';
 
-/** The curated season, read through the production mock provider. */
+/**
+ * The curated season, read through the production mock provider, with its
+ * participation restricted to the spans its own classification supports.
+ *
+ * The mock line-up is authored, not derived from results (ADR 0026,
+ * "Non-conforming development data"): it holds spans - Russell's, and the
+ * round 1-9 and round 10+ alpine seats - that no classified race row in this
+ * calendar observes. A coordinated candidate must prove participation against
+ * its selected classifications in both directions (`result-entry-span`,
+ * `driver-entry-support`), so the fixture keeps exactly the entries whose
+ * driver has a row in a classified race, and nothing is invented. The public
+ * mock snapshots are unaffected: they are generated from the provider source
+ * directly.
+ */
 export async function seasonFixture(): Promise<ProviderSeasonSource> {
   const provider = new MockFormulaOneProvider({
     clock: new FixedClock(new Date(FIXED_NOW)),
     sourceUpdatedAt: '2026-07-18T11:55:00.000Z',
     contentVersion: '2026.07.18.1',
   });
-  return provider.fetchSeasonSource(SEASON, ['season-calendar']);
+  const source = await provider.fetchSeasonSource(SEASON, ['season-calendar']);
+  const classified = new Set(
+    source.results
+      .filter(
+        (result) =>
+          result.sessionType === 'race' &&
+          (result.status === 'final' || result.status === 'provisional'),
+      )
+      .flatMap((result) => result.entries.map((entry) => entry.driverId)),
+  );
+  return {
+    ...source,
+    driverEntries: source.driverEntries.filter((entry) =>
+      classified.has(entry.driverId),
+    ),
+  };
 }
 
 /** The publication metadata a caller supplies. Never derived by coordination. */

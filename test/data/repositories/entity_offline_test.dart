@@ -50,11 +50,14 @@ void main() {
       modifiedListFromJson<SeasonDriverSummaryDto>(
         envelope(<Map<String, dynamic>>[
           <String, dynamic>{
+            'entryId': '2026-max-verstappen',
             'driverId': 'max-verstappen',
             'fullName': 'Max Verstappen',
             'shortCode': 'VER',
             'raceNumber': 1,
             'constructorId': 'red-bull',
+            'startRound': null,
+            'endRound': null,
           },
         ]),
         SeasonDriverSummaryDto.fromJson,

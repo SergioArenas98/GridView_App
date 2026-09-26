@@ -1,0 +1,79 @@
+{
+  "data": [
+    {
+      "entryId": "2026-max-verstappen",
+      "driverId": "max-verstappen",
+      "fullName": "Max Verstappen",
+      "shortCode": "VER",
+      "permanentNumber": null,
+      "raceNumber": null,
+      "countryCode": "NL",
+      "constructorId": "red-bull",
+      "role": "race",
+      "startRound": null,
+      "endRound": null
+    },
+    {
+      "entryId": "2026-isack-hadjar",
+      "driverId": "isack-hadjar",
+      "fullName": "Isack Hadjar",
+      "shortCode": null,
+      "permanentNumber": null,
+      "raceNumber": null,
+      "countryCode": null,
+      "constructorId": "red-bull",
+      "role": "race",
+      "startRound": null,
+      "endRound": 11
+    },
+    {
+      "entryId": "2026-liam-lawson",
+      "driverId": "liam-lawson",
+      "fullName": "Liam Lawson",
+      "shortCode": null,
+      "permanentNumber": null,
+      "raceNumber": null,
+      "countryCode": null,
+      "constructorId": "racing-bulls",
+      "role": "race",
+      "startRound": null,
+      "endRound": 11
+    },
+    {
+      "entryId": "2026-liam-lawson-12",
+      "driverId": "liam-lawson",
+      "fullName": "Liam Lawson",
+      "shortCode": null,
+      "permanentNumber": null,
+      "raceNumber": null,
+      "countryCode": null,
+      "constructorId": "red-bull",
+      "role": "race",
+      "startRound": 12,
+      "endRound": null
+    },
+    {
+      "entryId": "2026-yuki-tsunoda-12",
+      "driverId": "yuki-tsunoda",
+      "fullName": "Yuki Tsunoda",
+      "shortCode": null,
+      "permanentNumber": null,
+      "raceNumber": null,
+      "countryCode": null,
+      "constructorId": "racing-bulls",
+      "role": "race",
+      "startRound": 12,
+      "endRound": null
+    }
+  ],
+  "meta": {
+    "apiVersion": "1",
+    "schemaVersion": 1,
+    "season": 2026,
+    "generatedAt": "2026-07-18T12:00:00Z",
+    "sourceUpdatedAt": "2026-07-18T11:55:00Z",
+    "staleAfter": "2026-07-18T12:15:00Z",
+    "contentVersion": "2026.07.18.1",
+    "requestId": "req-mock-0001"
+  }
+}

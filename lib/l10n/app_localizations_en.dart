@@ -778,7 +778,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fieldTeam => 'Team';
 
   @override
-  String get participationFullSeason => 'Full season';
+  String get participationFromSeasonStart => 'From season start';
 
   @override
   String participationFromRound(int round) {

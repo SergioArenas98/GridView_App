@@ -45,7 +45,10 @@ abstract class CircuitSummaryDto with _$CircuitSummaryDto {
 
 @freezed
 abstract class SeasonDriverSummaryDto with _$SeasonDriverSummaryDto {
+  /// One season participation span, not one driver: a driver with a
+  /// mid-season move arrives once per span, each under its own [entryId].
   const factory SeasonDriverSummaryDto({
+    required String entryId,
     required String driverId,
     required String fullName,
     String? shortCode,
@@ -54,6 +57,8 @@ abstract class SeasonDriverSummaryDto with _$SeasonDriverSummaryDto {
     String? countryCode,
     required String constructorId,
     String? role,
+    int? startRound,
+    int? endRound,
   }) = _SeasonDriverSummaryDto;
 
   factory SeasonDriverSummaryDto.fromJson(Map<String, dynamic> json) =>
