@@ -492,6 +492,30 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
   });
 
   /**
+   * The race-results port, named module by module, on exactly the circuits
+   * and participants ports' terms: rooted at the port, the bundler reaches
+   * every results module, and none of them is in the Worker entry point's
+   * graph.
+   */
+  it('keeps the race-results port out of the Worker graph', async () => {
+    const resultsModules = [
+      `${dormantDir}results-port.ts`,
+      `${dormantDir}results-payload.ts`,
+      `${dormantDir}results-normalizer.ts`,
+    ];
+
+    const own = await moduleGraph(edgeApiRoot, [resultsModules[0] as string]);
+    for (const module of resultsModules) {
+      expect(Object.keys(own.inputs)).toContain(module);
+    }
+
+    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
+    for (const module of resultsModules) {
+      expect(Object.keys(worker.inputs)).not.toContain(module);
+    }
+  });
+
+  /**
    * The coordination seam the ports answer to is dormant too, and the
    * multi-request amendment (ADR 0023 A1) changed only modules inside it. So
    * no coordination module may be in the Worker entry point's graph either:
@@ -684,6 +708,7 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     expect(files).toContain('providers/jolpica/calendar-port.ts');
     expect(files).toContain('providers/jolpica/circuits-port.ts');
     expect(files).toContain('providers/jolpica/participants-port.ts');
+    expect(files).toContain('providers/jolpica/results-port.ts');
     expect(files).toContain('index.ts');
   });
 
@@ -745,6 +770,7 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
       expect(contents).not.toContain('JolpicaCalendarPort');
       expect(contents).not.toContain('JolpicaCircuitsPort');
       expect(contents).not.toContain('JolpicaParticipantsPort');
+      expect(contents).not.toContain('JolpicaResultsPort');
       // The coordinator that would drive a port is itself still unconstructed
       // outside its own dormant scope.
       expect(contents).not.toContain('new MultiSourceCoordinator');
