@@ -291,7 +291,10 @@ integers and can be added later under the same model if a contract requires it.
   **2026-09-24**, equally dormant (Implementation Plan §14.0.21).* *A race
   **session-classification** port followed on **2026-09-26**, equally
   dormant (Implementation Plan §14.0.22).* Every other Jolpica resource and
-  the A7 assembly change are still outstanding
+  the A7 assembly change are still outstanding. *The **A7 assembly change**
+  followed on **2026-09-26**, in the equally dormant season assembly
+  (Implementation Plan §14.0.25); every other Jolpica resource is still
+  outstanding.*
 - Date: 2026-09-16
 - Phase: 9B, recorded before the first Jolpica calendar adapter slice
 - Amends: this ADR's [scope note](#scope-note), and — for coordinated season
@@ -605,6 +608,28 @@ in this amendment):
    classifications; it is not **repaired**. No classification is fabricated,
    discarded or invented to justify `true`.
 
+> **Implemented 2026-09-26** (Implementation Plan §14.0.25), in the dormant
+> coordination path, exactly as items 1 to 4 require.
+> `assembleSeasonSource` sets every assembled event's `hasResults` to
+> `classifiedRounds.has(event.round)`, where `classifiedRounds` is the set it
+> already computed: rounds with a **selected** `session-classification`
+> resource whose session type is `race` and whose status is `final` or
+> `provisional`. The contribution's value is never read. A selected
+> `unavailable` or `unknown` document yields `false` and is still published
+> unchanged. Sprint, sprint-qualifying, qualifying and practice
+> classifications, a candidate that was considered but not selected, the
+> calendar status, provider status text, dates and the clock never make it
+> `true`. `event-has-results` and `result-event` are unchanged, and no
+> relation or failure category was added. The first now holds by
+> construction and still rejects an assembled candidate mutated in either
+> direction. The Jolpica-only participation restriction (Implementation Plan
+> §14.0.24) is untouched: a classified race selected from another source
+> still withholds the whole season. Over the preserved 2026 evidence,
+> assembly now derives `true` for rounds 1-14 and `false` for rounds 15-23
+> from a calendar whose statuses are all `unknown` and whose contributed
+> flags are all `false`. No provider was contacted, and no runtime mode,
+> scheduling or deployment was enabled.
+
 ### A8 - Missing dates and times are never manufactured
 
 - **No midnight, end-of-day or other timestamp is manufactured**, and fetch time
@@ -798,7 +823,7 @@ a future adapter must satisfy.
 | Event identity decision                      | **Accepted** (2026-09-16)                                                |
 | Event registry and `event` mapping support   | **Implemented as a mechanism** (2026-09-19); dormant and unbundled (A5)  |
 | Event mapping dataset                        | **Created for 2026** (2026-09-19): 23 identities, 23 locators (A4)       |
-| `hasResults` derivation in assembly          | **Not implemented**; the preflight and assembly are unchanged (A7)       |
+| `hasResults` derivation in assembly          | **Not implemented**; the preflight and assembly are unchanged (A7). *Implemented 2026-09-26 (Implementation Plan §14.0.25) in dormant season assembly; the preflight is unchanged.* |
 | Jolpica **season-calendar** port              | **Implemented, fixture-tested and dormant** (2026-09-20); not registered, not constructed by any production composition and absent from the Worker bundle |
 | Weekend-format rule (A10)                     | **Decided and implemented** (2026-09-20), in the same change that records it. Three-way evidence rule; no enum, contract or runtime change |
 | Jolpica **season-circuits** port             | **Implemented, fixture-tested and dormant** (2026-09-22, Implementation Plan §14.0.17); a separate port that answers only `season-circuits`, resolving every `circuitId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |
@@ -860,6 +885,13 @@ shorten it.
 > mapping to it is approved. The season-2026 dataset holds 93 exact mappings,
 > 96 approved evidence identities and three acknowledgements, all OpenF1.
 > Participants remain unimplemented.
+>
+> **Status on 2026-09-26 (A7).** Season assembly now derives `hasResults`
+> from its selected, classified race classifications (A7; Implementation
+> Plan §14.0.25). The coordination path and all four Jolpica ports stay
+> dormant and unregistered, the Worker bundle is byte-identical, and no
+> provider was contacted. Event schedules, non-race classifications and
+> standings remain unimplemented.
 >
 > **Provider requests, precisely.** The "none" statements in this ADR describe
 > its own work. Roughly 25 authorized research `GET`s were recorded on

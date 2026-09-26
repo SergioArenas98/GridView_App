@@ -7,7 +7,10 @@
  *    whether a round's classification exists, and the results collection either
  *    contains it or does not. Those are selected independently, so they can
  *    disagree - and the disagreement is not cosmetic: the client uses the flag
- *    to decide whether to request the classification at all.
+ *    to decide whether to request the classification at all. Coordinated
+ *    season assembly derives the flag from its selected classifications
+ *    (ADR 0022 A7), so a contribution's value never reaches the preflight;
+ *    `event-has-results` stays as the guard on the assembled candidate.
  * 2. **A stable identity backs a stored row.** Where the domain model defines an
  *    identity and persistence keys on it, two payloads sharing that identity
  *    means one silently overwrites the other. Which one wins would be an
@@ -16,6 +19,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { canonicalRaceResultId } from '../../../src/contract/identity';
 import { CapturingLogger } from '../../../src/logging/logger';
 import {
   CoordinatedSeasonPublication,
@@ -123,13 +127,25 @@ describe('hasResults matches the selected race result exactly', () => {
 
     expect(validateSeasonReferences(source)).toContain('event-has-results');
 
-    const harness = publicationHarness();
+    // Through coordination the contributed `false` is evidence of nothing:
+    // assembly derives `true`, and the relation still refuses the assembled
+    // candidate if that flag is broken afterwards.
     const run = await coordinate(source, fullPlan(base).resources);
-    const outcome = await publish(harness, run, source);
-
-    expect(outcome.outcome).toBe('withheld');
-    expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    const assembled = assembleSeasonSource(run, metadataFor(source));
+    if (!assembled.complete) throw new Error('not assembled');
+    expect(
+      assembled.source.calendar.find((event) => event.round === round)
+        ?.hasResults,
+    ).toBe(true);
+    expect(
+      validateSeasonReferences(
+        sourceWith(assembled.source, {
+          calendar: assembled.source.calendar.map((event) =>
+            event.round === round ? { ...event, hasResults: false } : event,
+          ),
+        }),
+      ),
+    ).toContain('event-has-results');
   });
 
   it('rejects an event flagged true with no classification', async () => {
@@ -152,12 +168,25 @@ describe('hasResults matches the selected race result exactly', () => {
     });
     expect(validateSeasonReferences(absent)).toContain('event-has-results');
 
-    const harness = publicationHarness();
+    // Through coordination assembly derives `false` from the absence
+    // document, and the relation still refuses the assembled candidate if
+    // that flag is broken afterwards.
     const run = await coordinate(advertised, fullPlan(base).resources);
-    const outcome = await publish(harness, run, advertised);
-
-    expect(outcome.outcome).toBe('withheld');
-    expect(harness.publishCalls).toBe(0);
+    const assembled = assembleSeasonSource(run, metadataFor(advertised));
+    if (!assembled.complete) throw new Error('not assembled');
+    expect(
+      assembled.source.calendar.find((event) => event.round === round)
+        ?.hasResults,
+    ).toBe(false);
+    expect(
+      validateSeasonReferences(
+        sourceWith(assembled.source, {
+          calendar: assembled.source.calendar.map((event) =>
+            event.round === round ? { ...event, hasResults: true } : event,
+          ),
+        }),
+      ),
+    ).toContain('event-has-results');
   });
 
   it('treats an unavailable result as no classification, not as one', async () => {
@@ -212,7 +241,10 @@ describe('hasResults matches the selected race result exactly', () => {
     expect(outcome.outcome).toBe('published');
   });
 
-  it('leaves the prior release serving when the flags disagree', async () => {
+  it('publishes the derived flag, not a contribution that disagrees', async () => {
+    // Before ADR 0022 A7 a disagreeing contribution withheld the season. The
+    // contribution is now evidence in neither direction: assembly derives the
+    // flag, so the next release carries the classification's true flag.
     const base = await seasonFixture();
     const harness = publicationHarness();
     const healthy = await coordinate(base, fullPlan(base).resources);
@@ -220,34 +252,50 @@ describe('hasResults matches the selected race result exactly', () => {
     expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
 
     const round = classifiedRound(base);
-    const broken = sourceWith(base, {
+    const disagreeing = sourceWith(base, {
       calendar: base.calendar.map((event) =>
         event.round === round ? { ...event, hasResults: false } : event,
       ),
     });
-    const run = await coordinate(broken, fullPlan(base).resources);
-    const outcome = await publish(harness, run, broken, 'v2');
+    const run = await coordinate(disagreeing, fullPlan(base).resources);
+    const assembled = assembleSeasonSource(run, metadataFor(disagreeing));
+    const outcome = await publish(harness, run, disagreeing, 'v2');
 
-    expect(outcome.outcome).toBe('withheld');
-    expect(harness.publishCalls).toBe(1);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(assembled.complete).toBe(true);
+    if (assembled.complete) {
+      expect(assembled.source.calendar).toEqual(base.calendar);
+    }
+    expect(outcome.outcome).toBe('published');
+    expect(await harness.storage.getActiveVersion(SEASON)).toBe('v2');
   });
 
   it('reports only a bounded relation name', async () => {
+    // A disagreeing flag no longer reaches the preflight through coordination
+    // (A7), so the cross-resource refusal is exercised through `result-event`:
+    // a classification filed under an event that is not the one at its round.
     const base = await seasonFixture();
     const round = classifiedRound(base);
+    const elsewhere = 'season-2026-atlantis-grand-prix';
     const source = sourceWith(base, {
-      calendar: base.calendar.map((event) =>
-        event.round === round ? { ...event, hasResults: false } : event,
+      results: base.results.map((result) =>
+        result.round === round
+          ? {
+              ...result,
+              grandPrixId: elsewhere,
+              id: canonicalRaceResultId(elsewhere, result.sessionType),
+            }
+          : result,
       ),
     });
     const harness = publicationHarness();
     const run = await coordinate(source, fullPlan(base).resources);
     const assembly = assembleSeasonSource(run, metadataFor(source));
-    await publish(harness, run, source);
+    const outcome = await publish(harness, run, source);
 
+    expect(outcome.outcome).toBe('withheld');
     expect(assembly.complete).toBe(false);
     if (!assembly.complete) {
+      expect(assembly.relations).toContain('result-event');
       for (const relation of assembly.relations) {
         expect(seasonRelations as readonly string[]).toContain(relation);
       }
@@ -255,6 +303,7 @@ describe('hasResults matches the selected race result exactly', () => {
     const serialized = harness.logger.serialized();
     const event = source.calendar.find((item) => item.round === round);
     expect(serialized).not.toContain(event?.id ?? 'unreachable');
+    expect(serialized).not.toContain(elsewhere);
   });
 });
 

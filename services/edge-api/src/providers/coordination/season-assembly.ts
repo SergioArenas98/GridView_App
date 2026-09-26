@@ -322,15 +322,23 @@ export function assembleSeasonSource(
     }
   }
 
+  // `hasResults` is owned here (ADR 0022 A7). The contribution's value is
+  // provisional and evidence in neither direction, so it is derived, not
+  // repaired: `true` exactly when the round has a selected race classification
+  // carrying `final` or `provisional`. An `unavailable` or `unknown` document,
+  // any non-race classification, the calendar status and the clock establish
+  // nothing. Nothing is fabricated or discarded to make the flag hold, and the
+  // unchanged `event-has-results` relation still checks it below.
   const calendar: GrandPrix[] = [...calendarPayload.events]
     .map((event) => {
       const sessions = schedules.get(event.round);
+      const hasResults = classifiedRounds.has(event.round);
       // A refreshed schedule replaces the event's sessions wholesale, never
       // field by field: a merged session list could leave an event internally
       // inconsistent (GridView_Provider_Evaluation.md §10.9 rule 3).
       return sessions === undefined
-        ? { ...event, sessions: [...event.sessions] }
-        : { ...event, sessions: [...sessions] };
+        ? { ...event, sessions: [...event.sessions], hasResults }
+        : { ...event, sessions: [...sessions], hasResults };
     })
     .sort((left, right) => left.round - right.round);
 

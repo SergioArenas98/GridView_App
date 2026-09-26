@@ -82,6 +82,18 @@
 > Worker bundle, no provider was contacted, and nothing was deployed. This
 > decision itself is unchanged.
 
+> **Implementation note 2026-09-26 (A7).** D12 item 6 is implemented
+> (Implementation Plan §14.0.25). Season assembly derives `hasResults` from
+> the same classified-round set that D3 uses: `true` exactly for a round
+> whose selected race classification is `final` or `provisional`. The
+> calendar value, calendar status and clock establish nothing, and
+> `unavailable` and `unknown` yield `false`. The Jolpica-only participation
+> restriction is untouched. D12 items 7 to 10, 12 and 13 and D14 to D16
+> remain **unimplemented**. The coordination path and all four Jolpica ports
+> stay dormant and unregistered and are absent from every Worker bundle, no
+> provider was contacted, and nothing was deployed. This decision itself is
+> unchanged.
+
 ## Context
 
 The coordinated `season-participants` resource is one payload carrying four
@@ -613,6 +625,15 @@ implemented by this decision:
 > `yuki-tsunoda` span and is withheld; a negative control that empties the
 > category makes it fail. Items 6 to 10, 12 and 13 remain unimplemented.
 
+> **Implementation note 2026-09-26 (A7).** Item 6 is implemented (ADR 0022
+> A7, Implementation Plan §14.0.25). Assembly sets each event's
+> `hasResults` to whether its round has a selected `final` or `provisional`
+> race classification, before the preflight. `event-has-results` and
+> `result-event` are unchanged. A classified race selected from a source
+> other than Jolpica still withholds the whole season as
+> `inconsistent-references` with `result-entry-span` (item 7 is still open).
+> Items 7 to 10, 12 and 13 remain unimplemented.
+
 ### D13 - Requests and scheduling
 
 - Identity refresh requires `GET /ergast/f1/{season}/drivers/?limit=100` and
@@ -876,6 +897,13 @@ The seven choices the decision pack left open are settled:
   > (`racing-bulls`) open from round 12. The nine identity-only drivers get
   > none. A split candidate still cannot publish through coordination,
   > because A7 and items 6 to 10, 12 and 13 are open.
+
+  > **Note 2026-09-26 (A7).** A7 and item 6 are implemented (§14.0.25). The
+  > same private run now derives `hasResults: true` for rounds 1-14 and
+  > `false` for rounds 15-23, produces the same 24 spans, and assembles a
+  > candidate that passes the normalized-contract validators and the full
+  > preflight. A split candidate still cannot publish through coordination,
+  > because items 7 to 10, 12 and 13 are open.
 - **Provisional-source participation.** Whether a selected OpenF1 race
   classification may create participation is undecided, and must be settled
   before OpenF1 is unlocked (D3).
@@ -920,6 +948,9 @@ The seven choices the decision pack left open are settled:
   > round without a classification, whatever its calendar status, `cancelled`
   > included (D4, §14.0.24).
 - **A7** `hasResults` is not implemented.
+
+  > **Note 2026-09-26.** Implemented in season assembly (D12 item 6,
+  > §14.0.25).
 - **Runtime.** Runtime wiring, G1 (live provider mode) and provider activation
   do not exist.
 - **Quota.** Reconciliation of the weekly participants budget line is
