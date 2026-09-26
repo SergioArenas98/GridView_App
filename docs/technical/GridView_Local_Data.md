@@ -440,6 +440,21 @@ different `start_round`/`end_round` spans; the driver identity never changes.
   `DriverStanding.constructorId`: a standing describes the championship table,
   not participation history.
 
+> **Since 2026-09-26** (ADR 0026 D12 items 1 to 3). The season Drivers
+> collection and bootstrap deliver one summary per span with its published
+> `entryId`, `startRound` and `endRound`. The summary mapper stores that
+> `entryId` verbatim and never rebuilds `{season}-{driverId}`, so every span
+> persists under its own primary key and `replaceDriverSeasonEntries` replaces
+> the season's complete set in one transaction. Grouping into one card per
+> driver happens only on read, after every span is stored. One rule,
+> `sortBySpanRelevance` (`participation_span.dart`), orders spans for the card,
+> `driverProfile` and `driverDetail`: the open span, else the latest effective
+> start, a null `start_round` being the season start. It is the rule the edge
+> API applies to `DriverDetail.seasonEntry`. Presentation words null bounds
+> only by what was observed: null/null is "From season start", never "Full
+> season". No schema change or migration was needed: `driver_season_entries`
+> already keyed each span by its own `id`.
+
 ### 10.3 Team rebranding and line-up
 
 - Stable identity lives in `constructors`; season branding lives in
@@ -454,6 +469,9 @@ different `start_round`/`end_round` spans; the driver identity never changes.
   consulted (see §2), so the relational source can never be contradicted.
 - Each span is its own line-up member, so a mid-season arrival and exit are both
   representable and are never flattened into a false simultaneous line-up.
+  Since 2026-09-26 a member carries its `entryId`, which keys its row, so a
+  driver who returns to the same team is two members without a key collision;
+  the legacy `TeamDetailView.lineup` lists such a driver once.
 
 ### 10.4 Circuit identity versus event properties
 

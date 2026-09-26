@@ -50,6 +50,22 @@
 > `hasResults` correction, D12 items 1-13 and the D14-D16 guards remain
 > unimplemented. This decision itself is unchanged.
 
+> **Implementation note 2026-09-26 (split participation).** D12 items 1 to 5
+> are implemented and tested (Implementation Plan §14.0.23). The public
+> `SeasonDriverSummary` gains the required `entryId`, `startRound` and
+> `endRound`, and `GET /v1/seasons/{season}/drivers` publishes one row per
+> `DriverSeasonEntry` (item 1). Driver detail selects the open span, else the
+> latest effective start, on the server and in the client (item 2). The
+> client renders null/null as "From season start" and never as "Full season"
+> (item 3). `canonicalDriverSeasonEntryId` implements D7 and the closed
+> `driver-entry-identity` relation enforces it (item 4). The closed
+> `result-entry-span` and `driver-entry-support` relations prove
+> classification-to-span and span-to-classification integrity (item 5). Items
+> 6 to 13, span derivation in season assembly, A7 and D14 to D16 remain
+> **unimplemented**. All four Jolpica ports stay dormant and unregistered, no
+> provider was contacted, and nothing was deployed. This decision itself is
+> unchanged.
+
 ## Context
 
 The coordinated `season-participants` resource is one payload carrying four
@@ -534,6 +550,30 @@ implemented by this decision:
     longer authoritative at publication is stale and never publishes. Not
     implemented.
 
+> **Implementation note 2026-09-26.** Items 1 to 5 are implemented
+> (Implementation Plan §14.0.23):
+>
+> 1. `SeasonDriverSummary` carries `entryId`, `startRound` and `endRound`; the
+>    generator emits one row per entry, drivers in first-entry order and each
+>    driver's spans chronologically, and the client stores `entryId` verbatim.
+> 2. `selectCurrentDriverEntry` (server) and `sortBySpanRelevance` (client)
+>    pick the open span, else the latest effective start.
+> 3. `participationFullSeason` and both `isFullSeason` getters are removed;
+>    null/null reads "From season start" / "Desde el inicio de la temporada".
+> 4. `canonicalDriverSeasonEntryId` and the `driver-entry-identity` relation.
+> 5. `result-entry-span` (every selected classified race row lies in exactly
+>    one span of its driver naming its constructor) and `driver-entry-support`
+>    (every span is observed at its opening round, its `startRound` or the
+>    first classified round when null, and at its closing round, its
+>    `endRound` or the latest classified round when null; a non-null start at
+>    the first classified round is refused because D8 spells it null).
+>
+> The collection-wide uniqueness check item 11 asks for is the existing
+> `duplicate-identity` category `driver-season-entry-id`, now tested against a
+> cross-driver D7 collision. Item 11 still stays open as a prerequisite,
+> because no derived `driverEntries` collection exists yet for it to run on.
+> Items 6 to 13 are unimplemented.
+
 ### D13 - Requests and scheduling
 
 - Identity refresh requires `GET /ergast/f1/{season}/drivers/?limit=100` and
@@ -766,6 +806,9 @@ The seven choices the decision pack left open are settled:
 
 - **Validation and fixes.** Assembly derivation and the new integrity
   relations are not implemented, nor is the driver-detail current-span fix.
+
+  > **Note 2026-09-26.** The integrity relations and the driver-detail fix
+  > are implemented (§14.0.23). Assembly derivation is still not.
 - **Split-span publication.** The contract and client change that lets the
   season Drivers collection carry split spans is undecided (D12).
 
@@ -776,15 +819,28 @@ The seven choices the decision pack left open are settled:
   > `isack-hadjar` stopped appearing. Those spans are evidence only, not
   > published or committed content, and any candidate carrying the two
   > `liam-lawson` spans stays unpublishable until item 1 is implemented.
+
+  > **Note 2026-09-26.** Item 1 is implemented: the season Drivers
+  > collection carries one row per span (§14.0.23). A candidate with split
+  > spans still cannot publish through coordination, because derivation,
+  > A7 and items 6 to 13 are open.
 - **Provisional-source participation.** Whether a selected OpenF1 race
   classification may create participation is undecided, and must be settled
   before OpenF1 is unlocked (D3).
 - **Split-span ID rule implementation.** The start-boundary ID rule is
   decided (D7) but not implemented.
+
+  > **Note 2026-09-26.** Implemented and enforced by `driver-entry-identity`
+  > (§14.0.23).
 - **Global entry-ID uniqueness.** The rule is not injective across drivers.
   The cross-collection uniqueness validation (D12 item 11) is not
   implemented, and a real collision would need a curator and contract
   decision.
+
+  > **Note 2026-09-26.** The existing `duplicate-identity` check covers every
+  > `driverEntries` id and is now tested against a cross-driver D7
+  > collision (§14.0.23). Item 11 stays open until it runs over a derived
+  > collection.
 - **Classified-coverage non-regression.** The D14 guard and the read of the
   authoritative snapshot or durable coverage metadata it needs are not
   implemented (D12 item 10), and may depend on G9.
@@ -798,6 +854,9 @@ The seven choices the decision pack left open are settled:
 - **Client "Full season" inference.** The Flutter client still renders
   null/null as "Full season". Removing that inference is a mandatory
   publication prerequisite (D12 item 3), and it is not implemented.
+
+  > **Note 2026-09-26.** Implemented: null/null reads "From season start"
+  > in every supported locale (§14.0.23).
 - **Cancelled rounds.** There is no curated cancelled-round record or schema.
 - **A7** `hasResults` is not implemented.
 - **Runtime.** Runtime wiring, G1 (live provider mode) and provider activation
@@ -820,6 +879,13 @@ Their single-span, mid-season entry `2026-franco-colapinto-10` with
 They are `NON-AUTHORITATIVE` and remain valid against the schema. This decision
 does not change them. They are to be brought into line when the derivation is
 implemented.
+
+> **Note 2026-09-26.** The `2026-jack-doohan` span now has `startRound: null`
+> (was `1`) in the mock content and in the two contract fixtures derived from
+> it, so its existing ID is the D7 one (§14.0.23). The mock line-up remains
+> authored rather than derived, so it is not participation-consistent with
+> the mock classification; it is published only through the mock path, which
+> does not run the coordinated integrity gate.
 
 ## Alternatives considered
 

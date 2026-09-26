@@ -212,6 +212,13 @@ driver, matching the local write rule exactly.
 > publication prerequisite. The OpenAPI example `2026-franco-colapinto-7`
 > already follows this rule.
 
+> **Implemented 2026-09-26** (ADR 0026 D12 item 4). The exclusion above is
+> superseded: `canonicalDriverSeasonEntryId` in `contract/identity.ts` builds
+> the D7 identity and the `driver-entry-identity` relation compares by exact
+> equality. Collection-wide uniqueness stays with `duplicate-identity`, which
+> rejects a cross-driver collision (`foo-7`'s base entry and `foo`'s round-7
+> entry) without renaming either entry.
+
 A **Grand Prix edition ID embeds the season year** because an event edition is
 season-specific: the same `eventSlug` (`belgian-grand-prix`, `monaco-grand-prix`)
 recurs every season, while `round` numbers are not stable across seasons.
@@ -576,6 +583,19 @@ spans differ. A `startRound`/`endRound` of `null` means "from the season start"
 > The client's current rendering of null/null as "Full season" must be removed
 > before any ADR 0026-derived span reaches a client (ADR 0026 D12).
 
+> **Implemented 2026-09-26** (ADR 0026 D12 items 1 to 5).
+>
+> - `GET /v1/seasons/{season}/drivers` publishes one `SeasonDriverSummary` per
+>   `DriverSeasonEntry`, carrying its `entryId`, `startRound` and `endRound`,
+>   so a split driver appears once per span.
+> - `DriverDetail.seasonEntry` is the open span, else the latest effective
+>   start (a null `startRound` is the season start); `constructor` follows it.
+> - The client words null/null as "From season start", null/N as "Until round
+>   N", N/null as "From round N" and N/M as "Rounds N–M", never "Full season".
+> - Every selected classified race row must lie in exactly one span of its
+>   driver naming its constructor (`result-entry-span`), and every span must
+>   be observed at its own boundaries (`driver-entry-support`).
+
 ### 6.8 ConstructorSeasonEntry
 
 Identity: `id` (`{season}-{constructorId}`). A team's season-specific branding
@@ -828,8 +848,8 @@ and secrets are never returned. `requestId` correlates with server logs.
 | `GET /v1/seasons/{season}/grand-prix/{round}/results` | `RaceResult` |
 | `GET /v1/seasons/{season}/standings/drivers` | `DriverStanding[]` |
 | `GET /v1/seasons/{season}/standings/constructors` | `ConstructorStanding[]` |
-| `GET /v1/seasons/{season}/drivers` | `DriverSeasonEntry[]` + driver summaries |
-| `GET /v1/drivers/{driverId}` | `Driver` + current `DriverSeasonEntry` + standing |
+| `GET /v1/seasons/{season}/drivers` | `SeasonDriverSummary[]`, one per `DriverSeasonEntry` (driver identity fields plus that entry's `entryId`, constructor and bounds) |
+| `GET /v1/drivers/{driverId}` | `Driver` + current `DriverSeasonEntry` (open span, else latest start) + standing |
 | `GET /v1/seasons/{season}/constructors` | `ConstructorSeasonEntry[]` + summaries |
 | `GET /v1/constructors/{constructorId}` | `Constructor` + season entry + line-up |
 | `GET /v1/seasons/{season}/circuits` | `Circuit[]` |

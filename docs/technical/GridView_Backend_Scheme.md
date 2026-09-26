@@ -926,7 +926,16 @@ Returns:
 
 ### `GET /v1/seasons/{season}/drivers`
 
-Returns season-specific driver summaries.
+Returns season-specific driver summaries: one `SeasonDriverSummary` per
+`DriverSeasonEntry`, not one per driver (ADR 0026 D12 item 1, since
+2026-09-26). Each row carries the stable identity fields of its driver and,
+from that exact entry, the required `entryId`, `constructorId`, `raceNumber`,
+`role`, `startRound` and `endRound` (both bound keys always present, nullable).
+A driver with a mid-season split appears once per span; nothing is grouped,
+flattened or deduplicated. Rows keep the season's driver order (first entry)
+and one driver's spans are chronological, a null `startRound` first. A driver
+identity with no entry is absent. The constructor is never taken from a
+standing.
 
 ### `GET /v1/drivers/{driverId}?season={season}`
 
@@ -934,7 +943,10 @@ Returns:
 
 - Stable driver identity.
 - Biography.
-- Current-season entry.
+- Current-season entry: the open span (`endRound` null), otherwise the span
+  with the latest effective start (a null `startRound` is the season start).
+  The constructor summary is that span's constructor. Overlapping or
+  ambiguous spans are refused before publication.
 - Constructor summary.
 - Standing summary.
 - Available statistics.

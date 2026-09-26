@@ -1630,6 +1630,30 @@ Coverage:
   involving an open start or open end, order independence, and preserves one
   full-season span, a real mid-season substitution, three non-overlapping spans,
   a single-round span and two drivers sharing a round.
+  *Since 2026-09-26 the "full-season" case reads "one span with no observed
+  boundary" (ADR 0026 D6), each span carries its D7 identity, and the suite
+  asserts every relation except the two classification relations, which have
+  their own suite (below).*
+- **Split participation (ADR 0026 D12 items 1-5, 2026-09-26)** -
+  `participation-integrity.test.ts` proves `driver-entry-identity`,
+  `result-entry-span` and `driver-entry-support` on an authored split season
+  (`split-participation-support.ts`: Lawson at racing-bulls to round 11 and at
+  red-bull from round 12, Tsunoda from round 12, Hadjar to round 11), including
+  a row outside every span, a constructor mismatch, overlapping spans, an
+  unsupported span, a dropped or flattened Lawson span, boundary rows, the
+  pre-season case and a cross-driver D7 collision. `season-driver-summary.test.ts`
+  pins the eleven-key `SeasonDriverSummary`, one row per entry, ordering,
+  constructor provenance, the canonical revision fields, the current-span
+  driver detail and the generator-derived `drivers/season-drivers-split.json`
+  fixture. `test/scripts/season-driver-summary-contract.test.mjs` validates the
+  OpenAPI schema and example, and `test/scripts/driver-entry-rules.test.mjs`
+  the `validate:content` D7 rules. The coordination `seasonFixture` keeps only
+  the curated spans its own classification supports, because the mock line-up
+  is authored rather than derived; the public mock snapshots are unaffected.
+  On the client, `split_participation_test.dart` covers decode, persistence
+  under distinct ids, idempotent and replacing refreshes, one card per driver,
+  current-span detail and line-ups; `participation_span_wording_test.dart`
+  covers the four bound wordings in every supported locale.
 - **Non-vacuity** - the curated mock season and every production public fixture
   validate clean, and the season is asserted non-empty and to carry media, so
   the control cannot pass by having nothing to check.

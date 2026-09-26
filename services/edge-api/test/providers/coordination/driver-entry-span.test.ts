@@ -80,7 +80,7 @@ describe('valid participation is preserved', () => {
     expect(validateSeasonReferences(source)).toEqual([]);
   });
 
-  it('accepts one open-ended full-season span', async () => {
+  it('accepts one span with no observed boundary', async () => {
     const source = await seasonFixture();
 
     expect(
