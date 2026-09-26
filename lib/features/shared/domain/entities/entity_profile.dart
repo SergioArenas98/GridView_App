@@ -42,8 +42,6 @@ class DriverParticipation {
   DriverRole? get role => entry.role;
   int? get startRound => entry.startRound;
   int? get endRound => entry.endRound;
-
-  bool get isFullSeason => entry.startRound == null && entry.endRound == null;
 }
 
 /// Driver detail: the stable identity plus everything the local database knows

@@ -5,11 +5,11 @@ import '../../domain/entities/driver.dart';
 import '../../domain/entities/enums.dart';
 import '../../domain/entities/season_entry.dart';
 
-// Maps the season-collection *summary* DTOs to the domain. Summaries carry a
-// competitor's stable identity fields plus their season participation, but no
-// composite entry id, so the participation id is synthesised deterministically
-// from the season and stable id (`<season>-<slug>`) — stable across syncs and
-// unique within the season (one summary per competitor per season).
+// Maps the season-collection *summary* DTOs to the domain. A driver summary is
+// one season participation span carrying its own entry id and bounds, so a
+// driver with a mid-season move maps to several entries and nothing is
+// synthesised. A constructor summary carries no entry id; its id is the
+// canonical `<season>-<constructorId>` (one entry per team per season).
 
 /// The compact circuit identity carried by a `CircuitSummary` (id, name and,
 /// when present, locality/country code). The physical facts, lap record and
@@ -32,19 +32,23 @@ Driver driverIdentityFromSeasonSummary(SeasonDriverSummaryDto dto) => Driver(
   countryCode: dto.countryCode,
 );
 
-/// The driver's season participation from a summary. `startRound`/`endRound` are
-/// null (whole season); a mid-season split is expressed by the detail sync.
+/// Exactly the participation span a summary carries: its `entryId` verbatim —
+/// never rebuilt from the season and driver — and its own `startRound` and
+/// `endRound`. Null bounds stay null: they describe what has been observed,
+/// never a whole season.
 DriverSeasonEntry driverSeasonEntryFromSeasonSummary(
   SeasonDriverSummaryDto dto,
   int season,
 ) => DriverSeasonEntry(
-  id: '$season-${dto.driverId}',
+  id: dto.entryId,
   season: season,
   driverId: dto.driverId,
   constructorId: dto.constructorId,
   raceNumber: dto.raceNumber,
   role: dto.role == null ? null : DriverRole.fromWire(dto.role!),
   shortCode: dto.shortCode,
+  startRound: dto.startRound,
+  endRound: dto.endRound,
 );
 
 /// The stable constructor identity carried by a season-constructor summary

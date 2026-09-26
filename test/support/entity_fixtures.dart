@@ -121,15 +121,24 @@ List<SeasonDriverCard> seasonDriverCardsFixture({int season = 2026}) =>
       ),
     ];
 
+/// A line-up member whose entry id follows the ADR 0026 D7 rule unless one is
+/// given: `{season}-{driverId}`, suffixed with `startRound` when it is set.
 TeamLineupMember lineupMember({
   required String driverId,
   required String name,
+  String? entryId,
+  int season = 2026,
   String? shortCode,
   int? raceNumber,
   DriverRole? role = DriverRole.race,
   int? startRound,
   int? endRound,
 }) => TeamLineupMember(
+  entryId:
+      entryId ??
+      (startRound == null
+          ? '$season-$driverId'
+          : '$season-$driverId-$startRound'),
   driverId: driverId,
   name: name,
   shortCode: shortCode,

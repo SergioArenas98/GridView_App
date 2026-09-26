@@ -61,6 +61,7 @@ Map<String, dynamic> _$CircuitSummaryDtoToJson(_CircuitSummaryDto instance) =>
 _SeasonDriverSummaryDto _$SeasonDriverSummaryDtoFromJson(
   Map<String, dynamic> json,
 ) => _SeasonDriverSummaryDto(
+  entryId: json['entryId'] as String,
   driverId: json['driverId'] as String,
   fullName: json['fullName'] as String,
   shortCode: json['shortCode'] as String?,
@@ -69,11 +70,14 @@ _SeasonDriverSummaryDto _$SeasonDriverSummaryDtoFromJson(
   countryCode: json['countryCode'] as String?,
   constructorId: json['constructorId'] as String,
   role: json['role'] as String?,
+  startRound: (json['startRound'] as num?)?.toInt(),
+  endRound: (json['endRound'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$SeasonDriverSummaryDtoToJson(
   _SeasonDriverSummaryDto instance,
 ) => <String, dynamic>{
+  'entryId': instance.entryId,
   'driverId': instance.driverId,
   'fullName': instance.fullName,
   'shortCode': instance.shortCode,
@@ -82,6 +86,8 @@ Map<String, dynamic> _$SeasonDriverSummaryDtoToJson(
   'countryCode': instance.countryCode,
   'constructorId': instance.constructorId,
   'role': instance.role,
+  'startRound': instance.startRound,
+  'endRound': instance.endRound,
 };
 
 _SeasonConstructorSummaryDto _$SeasonConstructorSummaryDtoFromJson(

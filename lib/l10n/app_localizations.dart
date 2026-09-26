@@ -1490,11 +1490,11 @@ abstract class AppLocalizations {
   /// **'Team'**
   String get fieldTeam;
 
-  /// A participation span covering the whole season.
+  /// A participation span already in effect at the start of the season's observed scope, with no exit observed yet. Never a claim that the driver raced the whole season.
   ///
   /// In en, this message translates to:
-  /// **'Full season'**
-  String get participationFullSeason;
+  /// **'From season start'**
+  String get participationFromSeasonStart;
 
   /// A participation span that starts mid-season.
   ///

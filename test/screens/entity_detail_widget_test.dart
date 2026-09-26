@@ -175,6 +175,36 @@ void main() {
       expect(find.text('Until round 6'), findsOneWidget);
     });
 
+    testWidgets(
+      'a span with no observed boundary never reads as a full season',
+      (WidgetTester tester) async {
+        await pumpApp(
+          tester,
+          initialLocation: '/drivers/max-verstappen',
+          surfaceSize: _tallSurface,
+          drivers: FakeDriverRepository(
+            profile: (int s, String id) => driverProfileFixture(
+              season: s,
+              driverId: id,
+              name: 'Max Verstappen',
+              participations: <DriverParticipation>[
+                participation(
+                  season: s,
+                  driverId: id,
+                  constructorId: 'red-bull',
+                  teamName: 'Oracle Red Bull Racing',
+                ),
+              ],
+              withStanding: false,
+            ),
+          ),
+        );
+
+        expect(find.text('From season start'), findsOneWidget);
+        expect(find.textContaining('Full season'), findsNothing);
+      },
+    );
+
     testWidgets('a reserve role reads as a localized role, never blank', (
       WidgetTester tester,
     ) async {
@@ -416,6 +446,47 @@ void main() {
       );
       expect(find.text('Drivers'), findsNothing);
       expect(find.textContaining('Not Synced'), findsNothing);
+    });
+
+    testWidgets('a driver who returns to the team keeps one row per span', (
+      WidgetTester tester,
+    ) async {
+      await pumpApp(
+        tester,
+        initialLocation: '/constructors/alpine',
+        surfaceSize: _tallSurface,
+        constructors: FakeConstructorRepository(
+          profile: (int s, String id) => teamProfileFixture(
+            season: s,
+            constructorId: id,
+            lineup: <TeamLineupMember>[
+              lineupMember(
+                driverId: 'jack-doohan',
+                name: 'Jack Doohan',
+                endRound: 6,
+              ),
+              lineupMember(
+                driverId: 'jack-doohan',
+                name: 'Jack Doohan',
+                startRound: 12,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Jack Doohan'), findsNWidgets(2));
+      expect(
+        find.byKey(const ValueKey<String>('team-lineup-2026-jack-doohan')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('team-lineup-2026-jack-doohan-12')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Until round 6'), findsOneWidget);
+      expect(find.textContaining('From round 12'), findsOneWidget);
     });
 
     testWidgets('a line-up row opens the driver by stable id', (

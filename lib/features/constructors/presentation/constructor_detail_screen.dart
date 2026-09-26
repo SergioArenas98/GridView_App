@@ -147,16 +147,16 @@ class ConstructorDetailScreen extends ConsumerWidget {
           children: <Widget>[
             for (final TeamLineupMember m in lineup)
               GvDriverRow(
-                key: ValueKey<String>('team-lineup-${m.driverId}'),
+                key: ValueKey<String>('team-lineup-${m.entryId}'),
                 name: m.name,
                 subtitle: EntityFormatter.joinDetails(<String?>[
                   fmt.role(m.role),
-                  m.isFullSeason
-                      ? null
-                      : fmt.participationSpan(
+                  m.hasObservedBoundary
+                      ? fmt.participationSpan(
                           startRound: m.startRound,
                           endRound: m.endRound,
-                        ),
+                        )
+                      : null,
                 ]),
                 number: fmt.count(m.raceNumber),
                 shortCode: m.shortCode,

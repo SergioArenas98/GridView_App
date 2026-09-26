@@ -410,7 +410,7 @@ void main() {
       expect(alpine.lineup.first.endRound, 6);
       expect(alpine.lineup.last.startRound, 7);
       expect(
-        alpine.lineup.every((TeamLineupMember m) => !m.isFullSeason),
+        alpine.lineup.every((TeamLineupMember m) => m.hasObservedBoundary),
         isTrue,
       );
     });
