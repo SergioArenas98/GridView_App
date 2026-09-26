@@ -1670,8 +1670,9 @@ Coverage:
   without an entry, a DNS-only round, a return, reversed rows, an
   unaccounted round withheld as `missing-round-classification` even when
   `cancelled`, a derived cross-driver ID collision withheld as
-  `duplicate-identity`, a non-empty participants contribution withheld,
-  unmutated selections, and a candidate that passes
+  `duplicate-identity`, a non-empty participants contribution withheld, a
+  provisional OpenF1 race withheld even when its rows agree with the Jolpica
+  seats (ADR 0026 D3), unmutated selections, and a candidate that passes
   `validateDriverSeasonEntry`, the full preflight and publication. Since this
   change the coordination fixtures contribute an empty `driverEntries`, like
   the Jolpica participants port, and `seasonFixture` writes out the D8-shaped

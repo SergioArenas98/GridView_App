@@ -225,6 +225,14 @@ unrecorded and must be established by evidence before implementation.
 > and therefore a participation fact, and the race-results port keeps every
 > one (A2 C-6).
 
+> **Implementation note 2026-09-26 (span derivation).** Season assembly
+> enforces the Jolpica-only rule explicitly (Implementation Plan §14.0.24):
+> a classified race selected from any other source withholds the candidate
+> as `inconsistent-references` with `result-entry-span`, before any span is
+> derived. Leaving it to the preflight alone is not enough, because rows that
+> agree with the Jolpica seats would fall inside their open spans and pass.
+> OpenF1 stays locked and item 7 stays open.
+
 ### D4 - Round accounting
 
 Every calendar round is in exactly one of these states:
