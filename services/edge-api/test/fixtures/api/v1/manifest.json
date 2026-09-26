@@ -141,6 +141,14 @@
     "meta": "SeasonSnapshotMeta"
   },
   {
+    "file": "drivers/season-drivers-split.json",
+    "type": "envelope",
+    "data": "SeasonDriverSummary",
+    "dataKind": "array",
+    "meta": "SeasonSnapshotMeta",
+    "note": "one row per season entry: a synthetic mid-season split (Lawson, Tsunoda, Hadjar)"
+  },
+  {
     "file": "drivers/detail-full.json",
     "type": "envelope",
     "data": "DriverDetail",

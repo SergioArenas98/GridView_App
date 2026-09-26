@@ -359,7 +359,13 @@ paths:
       operationId: getSeasonDrivers
       tags: [Drivers]
       summary: Season driver entries
-      description: Returns season-specific driver summaries (identity plus season entry).
+      description: >
+        Returns one season-specific driver summary per `DriverSeasonEntry`
+        (identity plus that entry), not one per driver. A driver with a
+        mid-season split appears once per span, with the same `driverId` and
+        different `entryId`s. A driver identity with no season entry is absent.
+        Rows keep the season's driver order, and one driver's spans are listed
+        chronologically (a null `startRound` first).
       parameters:
         - $ref: '#/components/parameters/SeasonPath'
       responses:
@@ -392,7 +398,10 @@ paths:
       description: >
         Returns stable driver identity, biography, the current-season entry, the
         constructor summary and the standing summary. Optional sections are null
-        when absent.
+        when absent. When the driver has several spans in the season, the
+        current entry is the one span whose `endRound` is null, otherwise the
+        span with the latest start (a null `startRound` is the season start),
+        and `constructor` is that span's constructor.
       parameters:
         - $ref: '#/components/parameters/DriverIdPath'
         - $ref: '#/components/parameters/SeasonQuery'
@@ -1245,8 +1254,11 @@ components:
         id:
           $ref: '#/components/schemas/GridViewId'
           description: >
-            Composite participation ID, e.g. `2026-max-verstappen`. A split-season
-            seat appends the start round, e.g. `2026-franco-colapinto-7`.
+            Composite participation ID, determined by the span's own start
+            boundary: `{season}-{driverId}` when `startRound` is null, e.g.
+            `2026-max-verstappen`, otherwise `{season}-{driverId}-{startRound}`,
+            e.g. `2026-franco-colapinto-7`, whether it is the driver's first,
+            only or a later span. Unique across the season's entries.
         season:
           type: integer
         driverId: { $ref: '#/components/schemas/Slug' }
@@ -1463,8 +1475,20 @@ components:
 
     SeasonDriverSummary:
       type: object
-      required: [driverId, fullName, constructorId]
+      description: >
+        One `DriverSeasonEntry` of the season with the stable identity fields of
+        its driver. `entryId`, `constructorId`, `raceNumber`, `role`,
+        `startRound` and `endRound` come from that exact entry. A null
+        `startRound` means participation was already in effect at the start of
+        the season's observed scope; a null `endRound` means no exit has been
+        observed yet. Null bounds never assert participation for the whole
+        season.
+      required:
+        [entryId, driverId, fullName, constructorId, startRound, endRound]
       properties:
+        entryId:
+          $ref: '#/components/schemas/GridViewId'
+          description: The exact `DriverSeasonEntry.id` this row represents.
         driverId: { $ref: '#/components/schemas/Slug' }
         fullName:
           type: string
@@ -1483,6 +1507,26 @@ components:
           anyOf:
             - $ref: '#/components/schemas/DriverRole'
             - type: "null"
+        startRound:
+          type: [integer, "null"]
+          minimum: 1
+          description: First round of the span, or null from the season start.
+        endRound:
+          type: [integer, "null"]
+          minimum: 1
+          description: Last observed round of the span, or null while no exit is observed.
+      example:
+        entryId: 2026-liam-lawson-12
+        driverId: liam-lawson
+        fullName: Liam Lawson
+        shortCode: null
+        permanentNumber: null
+        raceNumber: null
+        countryCode: null
+        constructorId: red-bull
+        role: race
+        startRound: 12
+        endRound: null
 
     SeasonConstructorSummary:
       type: object

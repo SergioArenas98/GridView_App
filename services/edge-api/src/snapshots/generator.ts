@@ -18,6 +18,10 @@ import type {
   SeasonConstructorSummary,
   SeasonDriverSummary,
 } from '../contract/types';
+import {
+  orderSeasonDriverEntries,
+  selectCurrentDriverEntry,
+} from '../contract/participation';
 import { addSeconds } from '../runtime/clock';
 import type { ProviderSeasonSource } from '../providers/formula-one-provider';
 import type {
@@ -44,19 +48,27 @@ export function generateSnapshotSet(
   const calendar = source.calendar.map((event) =>
     summaryForEvent(event, source),
   );
-  const drivers = source.driverEntries.map((entry) => {
-    const driver = requireOne(source.drivers, entry.driverId, 'driver');
-    return {
-      driverId: driver.id,
-      fullName: driver.fullName,
-      shortCode: entry.shortCode ?? driver.shortCode,
-      permanentNumber: driver.permanentNumber,
-      raceNumber: entry.raceNumber,
-      countryCode: driver.countryCode,
-      constructorId: entry.constructorId,
-      role: entry.role,
-    } satisfies SeasonDriverSummary;
-  });
+  // One summary per season entry, never per driver: split spans are separate
+  // rows. Identity fields come from the stable driver, participation fields
+  // (entry id, constructor, bounds) from that exact entry.
+  const drivers = orderSeasonDriverEntries(source.driverEntries).map(
+    (entry) => {
+      const driver = requireOne(source.drivers, entry.driverId, 'driver');
+      return {
+        entryId: entry.id,
+        driverId: driver.id,
+        fullName: driver.fullName,
+        shortCode: entry.shortCode ?? driver.shortCode,
+        permanentNumber: driver.permanentNumber,
+        raceNumber: entry.raceNumber,
+        countryCode: driver.countryCode,
+        constructorId: entry.constructorId,
+        role: entry.role,
+        startRound: entry.startRound,
+        endRound: entry.endRound,
+      } satisfies SeasonDriverSummary;
+    },
+  );
   const constructors = source.constructorEntries.map((entry) => {
     const constructor = requireOne(
       source.constructors,
@@ -281,8 +293,9 @@ function driverDetail(
   driver: Driver,
   source: ProviderSeasonSource,
 ): DriverDetail {
-  const seasonEntry =
-    source.driverEntries.find((entry) => entry.driverId === driver.id) ?? null;
+  // The current span (open, else latest start), never whichever entry happens
+  // to come first; the constructor is the one that exact span names.
+  const seasonEntry = selectCurrentDriverEntry(source.driverEntries, driver.id);
   const constructor = seasonEntry
     ? source.constructors.find((item) => item.id === seasonEntry.constructorId)
     : null;

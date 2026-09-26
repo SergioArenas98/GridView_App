@@ -24,6 +24,7 @@ import { describe, expect, it } from 'vitest';
 import type { ProviderSeasonSource } from '../../../src/providers/formula-one-provider';
 import { validateSeasonReferences } from '../../../src/providers/coordination';
 import { seasonFixture } from './support';
+import { splitSeasonFixture } from './split-participation-support';
 
 function withEntryId(
   source: ProviderSeasonSource,
@@ -154,11 +155,10 @@ describe('the relation is independent of every neighbouring rule', () => {
     expect(relations).not.toContain('constructor-entry-identity');
   });
 
-  it('leaves the driver season entry identity unconstrained, as the model requires', async () => {
-    const source = await seasonFixture();
-    // A split seat appends its start round, so this id is legitimately *not*
-    // `{season}-{driverId}`. Adding a symmetric relation for driver entries
-    // would reject the curated season, which is why none is added.
+  it('leaves the driver season entry identity to its own D7 relation', async () => {
+    const source = await splitSeasonFixture();
+    // A split seat appends its start round (ADR 0026 D7), so this id is
+    // legitimately *not* `{season}-{driverId}` and the season is accepted.
     const split = source.driverEntries.find(
       (entry) => entry.id !== `${entry.season}-${entry.driverId}`,
     );
@@ -166,5 +166,15 @@ describe('the relation is independent of every neighbouring rule', () => {
     expect(split).toBeDefined();
     expect(split?.startRound).not.toBeNull();
     expect(validateSeasonReferences(source)).toEqual([]);
+
+    // A wrong driver entry id is `driver-entry-identity`'s, never this one's.
+    const relations = validateSeasonReferences({
+      ...source,
+      driverEntries: source.driverEntries.map((entry) =>
+        entry === split ? { ...entry, id: `${entry.id}-x` } : entry,
+      ),
+    });
+    expect(relations).toContain('driver-entry-identity');
+    expect(relations).not.toContain('constructor-entry-identity');
   });
 });

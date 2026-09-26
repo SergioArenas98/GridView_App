@@ -1,6 +1,7 @@
 {
   "data": [
     {
+      "entryId": "2026-max-verstappen",
       "driverId": "max-verstappen",
       "fullName": "Max Verstappen",
       "shortCode": "VER",
@@ -8,9 +9,12 @@
       "raceNumber": 1,
       "countryCode": "NL",
       "constructorId": "red-bull",
-      "role": "race"
+      "role": "race",
+      "startRound": null,
+      "endRound": null
     },
     {
+      "entryId": "2026-george-russell",
       "driverId": "george-russell",
       "fullName": "George Russell",
       "shortCode": "RUS",
@@ -18,9 +22,12 @@
       "raceNumber": 63,
       "countryCode": "GB",
       "constructorId": "mercedes",
-      "role": "race"
+      "role": "race",
+      "startRound": null,
+      "endRound": null
     },
     {
+      "entryId": "2026-charles-leclerc",
       "driverId": "charles-leclerc",
       "fullName": "Charles Leclerc",
       "shortCode": "LEC",
@@ -28,9 +35,12 @@
       "raceNumber": 16,
       "countryCode": "MC",
       "constructorId": "ferrari",
-      "role": "race"
+      "role": "race",
+      "startRound": null,
+      "endRound": null
     },
     {
+      "entryId": "2026-lewis-hamilton",
       "driverId": "lewis-hamilton",
       "fullName": "Lewis Hamilton",
       "shortCode": "HAM",
@@ -38,9 +48,12 @@
       "raceNumber": 44,
       "countryCode": "GB",
       "constructorId": "ferrari",
-      "role": "race"
+      "role": "race",
+      "startRound": null,
+      "endRound": null
     },
     {
+      "entryId": "2026-lando-norris",
       "driverId": "lando-norris",
       "fullName": "Lando Norris",
       "shortCode": "NOR",
@@ -48,9 +61,12 @@
       "raceNumber": 4,
       "countryCode": "GB",
       "constructorId": "mclaren",
-      "role": "race"
+      "role": "race",
+      "startRound": null,
+      "endRound": null
     },
     {
+      "entryId": "2026-oscar-piastri",
       "driverId": "oscar-piastri",
       "fullName": "Oscar Piastri",
       "shortCode": "PIA",
@@ -58,9 +74,12 @@
       "raceNumber": 81,
       "countryCode": "AU",
       "constructorId": "mclaren",
-      "role": "race"
+      "role": "race",
+      "startRound": null,
+      "endRound": null
     },
     {
+      "entryId": "2026-jack-doohan",
       "driverId": "jack-doohan",
       "fullName": "Jack Doohan",
       "shortCode": "DOO",
@@ -68,9 +87,12 @@
       "raceNumber": 7,
       "countryCode": "AU",
       "constructorId": "alpine",
-      "role": "race"
+      "role": "race",
+      "startRound": null,
+      "endRound": 9
     },
     {
+      "entryId": "2026-franco-colapinto-10",
       "driverId": "franco-colapinto",
       "fullName": "Franco Colapinto",
       "shortCode": "COL",
@@ -78,7 +100,9 @@
       "raceNumber": 43,
       "countryCode": "AR",
       "constructorId": "alpine",
-      "role": "race"
+      "role": "race",
+      "startRound": 10,
+      "endRound": null
     }
   ],
   "meta": {
