@@ -568,7 +568,9 @@ implemented by this decision:
 >    or the latest classified round when null, and at every classified race
 >    round in between, and is not observed at the classified race round just
 >    before or after it; a non-null start at the first classified round is
->    refused because D8 spells it null).
+>    refused because D8 spells it null, and a non-null end at the latest
+>    classified round is refused because no later round has established the
+>    exit, even once the calendar is complete).
 >
 > The collection-wide uniqueness check item 11 asks for is the existing
 > `duplicate-identity` category `driver-season-entry-id`, now tested against a

@@ -194,7 +194,9 @@ export const seasonRelations = [
    *   equal to that first round is refused, because D8 spells it null;
    * - it is observed at its closing round: `endRound`, or the latest
    *   classified race round when `endRound` is null, since a later classified
-   *   round without the driver for this constructor would establish an exit;
+   *   round without the driver for this constructor would establish an exit.
+   *   A non-null `endRound` equal to that latest round is refused: no later
+   *   round has established the exit, even when the calendar is complete;
    * - it is observed at **every** classified race round in between: an
    *   absence closes a span, and a return is a new span (D5 rules 4, 5);
    * - it is **not** observed at the classified race round just before or just
@@ -354,6 +356,10 @@ function hasUnsupportedSpan(
   return entries.some((entry) => {
     // D8 spells a span that begins at the first classified round as null.
     if (entry.startRound === firstRound) return true;
+    // Only a later classified round without this seat establishes an exit
+    // (D5, D6). None exists after the latest one, however complete the
+    // calendar, so a span still observed there stays open: its end is null.
+    if (entry.endRound === latestRound) return true;
     const opening = entry.startRound ?? firstRound;
     const closing = entry.endRound ?? latestRound;
     // Observed at both of its own boundaries (D5 rules 1, 3, 4; D6).

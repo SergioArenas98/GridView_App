@@ -374,3 +374,97 @@ describe('span to classification', () => {
     );
   });
 });
+
+/**
+ * The synthetic season with its last calendar round, 14, also completed and
+ * classified: the same line-up as round 13, so no span changes hands.
+ */
+function completedCalendar(source: ProviderSeasonSource): ProviderSeasonSource {
+  const round13 = source.results.find(
+    (result) => result.round === 13 && result.sessionType === 'race',
+  )!;
+  return {
+    ...source,
+    calendar: source.calendar.map((event) =>
+      event.round === 14
+        ? { ...event, status: 'completed', hasResults: true }
+        : event,
+    ),
+    results: source.results.map((result) =>
+      result.round === 14 && result.sessionType === 'race'
+        ? { ...result, status: 'final', entries: [...round13.entries] }
+        : result,
+    ),
+  };
+}
+
+describe('classification horizon', () => {
+  // Round 13 is the latest classified round; round 14 is scheduled but has no
+  // classification, so it neither supports nor closes anything.
+  const HORIZON = 13;
+
+  it('fails a span still observed at the latest classified round that ends there', async () => {
+    const source = replacingDriver(await splitSeasonFixture(), LAWSON, [
+      splitEntry(LAWSON, 'racing-bulls', null, 11),
+      splitEntry(LAWSON, 'red-bull', 12, HORIZON),
+    ]);
+
+    expect(validateSeasonReferences(source)).toEqual(['driver-entry-support']);
+  });
+
+  it('fails a null-started span that ends at the latest classified round', async () => {
+    const source = replacingDriver(
+      await splitSeasonFixture(),
+      'max-verstappen',
+      [splitEntry('max-verstappen', 'red-bull', null, HORIZON)],
+    );
+
+    expect(validateSeasonReferences(source)).toEqual(['driver-entry-support']);
+  });
+
+  it('accepts the same span with a null end', async () => {
+    const source = replacingDriver(await splitSeasonFixture(), LAWSON, [
+      splitEntry(LAWSON, 'racing-bulls', null, 11),
+      splitEntry(LAWSON, 'red-bull', 12, null),
+    ]);
+
+    expect(validateSeasonReferences(source)).toEqual([]);
+  });
+
+  it('accepts an end at an earlier round once a later classified round lacks the seat', async () => {
+    // Round 12 is classified without Hadjar for red-bull: that is his exit.
+    const source = await splitSeasonFixture();
+    const hadjar = source.driverEntries.find(
+      (entry) => entry.driverId === 'isack-hadjar',
+    );
+
+    expect(hadjar?.endRound).toBe(11);
+    expect(validateSeasonReferences(source)).toEqual([]);
+  });
+
+  it('keeps the end null at the final round of a completed calendar', async () => {
+    const completed = completedCalendar(await splitSeasonFixture());
+    expect(
+      completed.calendar.every((event) => event.status === 'completed'),
+    ).toBe(true);
+    const closed = replacingDriver(completed, LAWSON, [
+      splitEntry(LAWSON, 'racing-bulls', null, 11),
+      splitEntry(LAWSON, 'red-bull', 12, 14),
+    ]);
+
+    expect(validateSeasonReferences(completed)).toEqual([]);
+    expect(validateSeasonReferences(closed)).toEqual(['driver-entry-support']);
+  });
+
+  it('lets a later same-seat result extend a null-ended span with no correction', async () => {
+    const published = await splitSeasonFixture();
+    const entries = published.driverEntries;
+    const extended = withDriverEntries(completedCalendar(published), entries);
+
+    expect(validateSeasonReferences(published)).toEqual([]);
+    // The very entries published at round 13 still hold once round 14
+    // observes Lawson for red-bull again: nothing had to be reopened.
+    expect(extended.driverEntries).toEqual(entries);
+    expect(validateSeasonReferences(extended)).toEqual([]);
+  });
+});
