@@ -497,7 +497,7 @@ and their implementation status differs by rule:
 |---|---|
 | **A6** - calendar `status` is `unknown` | **Implemented, dormant.** The Jolpica season-calendar port emits `unknown` for every `GrandPrix.status` and every `Session.status`. It is not registered, not constructed by any production composition and absent from the Worker bundle, so no deployed code path reaches it yet. |
 | **A10** - `format` from block evidence | **Implemented, dormant**, on the same port. |
-| **A7** - assembly-owned `hasResults` | **Not implemented.** Season assembly still takes `hasResults` verbatim from its contribution; the derivation from selected, classified race results remains outstanding. |
+| **A7** - assembly-owned `hasResults` | **Implemented, dormant** (2026-09-26, Implementation Plan §14.0.25). Coordinated season assembly ignores the contribution's value and sets `true` exactly for a round with a selected `final` or `provisional` race classification. An `unavailable` or `unknown` document, a non-race classification, the calendar status and the clock yield nothing, so the flag stays `false`. The coordination path is not registered and is absent from the Worker bundle. |
 
 Until a calendar source is actually wired, every published season still comes
 from the mock provider.

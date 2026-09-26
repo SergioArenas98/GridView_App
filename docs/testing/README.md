@@ -1681,6 +1681,33 @@ Coverage:
   a non-null end at the latest round, a span for an identity-only driver, an
   unsuffixed mid-season ID and an accepted ID collision - each made tests
   fail and were restored byte for byte.
+- **Assembly `hasResults` derivation (ADR 0022 A7, ADR 0026 D12 item 6,
+  2026-09-26)** - `event-has-results-derivation.test.ts` runs the real
+  coordinator, `assembleSeasonSource`, the preflight and the publisher over
+  the split season. It covers these cases:
+  - a contributed `false` becomes `true` for a selected `final` and a
+    selected `provisional` Jolpica race classification;
+  - a contributed `true` becomes `false` for a selected `unavailable`
+    document, which is kept verbatim, and for an `unknown` one;
+  - selected qualifying, sprint and sprint-qualifying classifications, and an
+    OpenF1 candidate that was attempted but not selected, never set the flag;
+  - each event is derived independently, and every other field, schedule
+    replacement and round order are preserved;
+  - the contribution and the selections are not mutated;
+  - an all-`unknown` calendar derives its flags from the classifications;
+  - a `completed` round without a classification is still withheld;
+  - `event-has-results` rejects an assembled candidate mutated in either
+    direction;
+  - `result-event` withholds a result naming another event;
+  - an OpenF1 classified race still withholds the season.
+
+  `season-identity-integrity.test.ts` keeps its direct relation assertions.
+  Its production-path halves now show that a disagreeing contribution is
+  replaced by the derived flag rather than withholding, and its logging test
+  targets `result-event`. Five negative controls each made tests fail and
+  were restored byte for byte: copying the contribution, counting
+  `unavailable` documents, reading `completed`, counting non-race
+  classifications and disabling `event-has-results`.
 - **Non-vacuity** - the curated mock season and every production public fixture
   validate clean, and the season is asserted non-empty and to carry media, so
   the control cannot pass by having nothing to check.

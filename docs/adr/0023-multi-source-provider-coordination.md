@@ -666,6 +666,18 @@ keeps publishing that same absence document exactly as before. The
 > `hasResults` derivation is still not implemented, and the coordination
 > path stays dormant.
 
+> **Amended 2026-09-26: A7 implemented** (Implementation Plan §14.0.25). For
+> coordinated season assembly, "`hasResults` is never rewritten" no longer
+> describes the code. Assembly **derives** each event's flag from the race
+> classifications it selected: `true` exactly when the round's selected race
+> classification is `final` or `provisional`. The calendar contribution's
+> value is never read. Deriving the flag is not repairing a provider value.
+> The `unavailable` contribution is still never discarded, no classification
+> is fabricated or altered, and a `completed` round without a classification
+> still withholds the whole candidate. `event-has-results` is unchanged and
+> remains the guard against an assembly defect. The text above is retained
+> for the record.
+
 **This is publication completeness, not scheduling.** The predicate reads one
 field of data the source supplied. No clock, event offset, session duration,
 cadence or due-job calculation is involved, and G5 remains untouched. A
@@ -1057,6 +1069,11 @@ result is fabricated or discarded to repair the disagreement.
 > the exact cross-resource assertion above holds by construction and
 > `event-has-results` remains unchanged as the guard against an assembly
 > defect. The text above is retained for the record.
+
+> **Implemented 2026-09-26** (Implementation Plan §14.0.25). The preflight is
+> unchanged. It still rejects an assembled candidate whose flag is broken in
+> either direction, and the tests prove that on a mutated assembled
+> candidate.
 
 **Grand Prix round and Grand Prix id are independently unique.** The local
 database keys `grand_prix` on `id` _and_ carries `UNIQUE(season, round)`, so
