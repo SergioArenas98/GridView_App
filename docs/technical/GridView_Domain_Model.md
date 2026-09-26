@@ -598,6 +598,11 @@ spans differ. A `startRound`/`endRound` of `null` means "from the season start"
 >   between them, and not at the classified round just outside either
 >   boundary (`driver-entry-support`).
 
+> **Implemented 2026-09-26 (span derivation).** Season assembly derives these
+> spans from its selected, classified race classifications, one per maximal
+> run of consecutive classified rounds for one driver and one constructor
+> (Implementation Plan §14.0.24), on the dormant coordination path only.
+
 ### 6.8 ConstructorSeasonEntry
 
 Identity: `id` (`{season}-{constructorId}`). A team's season-specific branding

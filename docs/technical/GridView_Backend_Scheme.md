@@ -770,6 +770,11 @@ Different fields may come from different sources.
 > override schema exists (`overrides.schema.json` covers identity fields only),
 > and curated pre-season participation would need its own future decision. None
 > of this is implemented.
+>
+> **Note 2026-09-26.** Season assembly now derives every `DriverSeasonEntry`
+> this way on the dormant coordination path (Implementation Plan §14.0.24).
+> No coordinated season has been published, and the override remark above is
+> unchanged.
 
 ### 9.1 Precedence
 

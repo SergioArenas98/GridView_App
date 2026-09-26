@@ -66,6 +66,22 @@
 > provider was contacted, and nothing was deployed. This decision itself is
 > unchanged.
 
+> **Implementation note 2026-09-26 (span derivation).** Season assembly now
+> derives every `DriverSeasonEntry` (D3-D8, D11; Implementation Plan
+> §14.0.24). `deriveDriverSeasonEntries` builds one span per maximal run of
+> consecutive selected, classified race rounds in which one driver is
+> observed for one constructor, from the exact classifications assembly
+> selected. A calendar round at or before the latest classified race round
+> without a classification of its own is unaccounted and withholds the
+> season (D4); the authoritative-snapshot half of the coverage horizon
+> belongs to D14 and is not implemented. The participants contribution stays
+> empty. The existing `duplicate-identity` check now runs over the derived
+> collection, so D12 item 11 is implemented. A7, D12 items 6 to 10, 12 and 13
+> and D14 to D16 remain **unimplemented**. The coordination path and all four
+> Jolpica ports stay dormant and unregistered and are absent from every
+> Worker bundle, no provider was contacted, and nothing was deployed. This
+> decision itself is unchanged.
+
 ## Context
 
 The coordinated `season-participants` resource is one payload carrying four
@@ -578,6 +594,17 @@ implemented by this decision:
 > because no derived `driverEntries` collection exists yet for it to run on.
 > Items 6 to 13 are unimplemented.
 
+> **Implementation note 2026-09-26 (span derivation).** Item 11 is
+> implemented. Season assembly derives the complete `driverEntries`
+> collection (Implementation Plan §14.0.24) and runs the existing preflight
+> over it, so the `duplicate-identity` category `driver-season-entry-id`
+> refuses any duplicate derived entry ID, including a cross-driver D7
+> collision, for the whole candidate. No second uniqueness mechanism was
+> added, and no entry is dropped, merged or renamed. A production-path test
+> derives a synthetic `yuki-tsunoda-12` base entry beside the round-12
+> `yuki-tsunoda` span and is withheld; a negative control that empties the
+> category makes it fail. Items 6 to 10, 12 and 13 remain unimplemented.
+
 ### D13 - Requests and scheduling
 
 - Identity refresh requires `GET /ergast/f1/{season}/drivers/?limit=100` and
@@ -813,6 +840,9 @@ The seven choices the decision pack left open are settled:
 
   > **Note 2026-09-26.** The integrity relations and the driver-detail fix
   > are implemented (§14.0.23). Assembly derivation is still not.
+
+  > **Note 2026-09-26 (span derivation).** Assembly derivation is
+  > implemented (§14.0.24).
 - **Split-span publication.** The contract and client change that lets the
   season Drivers collection carry split spans is undecided (D12).
 
@@ -828,6 +858,16 @@ The seven choices the decision pack left open are settled:
   > collection carries one row per span (§14.0.23). A candidate with split
   > spans still cannot publish through coordination, because derivation,
   > A7 and items 6 to 13 are open.
+
+  > **Note 2026-09-26 (span derivation).** Derivation is implemented
+  > (§14.0.24). Run privately over the preserved rounds 1-14 evidence through
+  > the production ports and assembly, it derives exactly the 24 spans above:
+  > 22 from round 1, 20 of them still open at round 14, `isack-hadjar` at
+  > `red-bull` and `liam-lawson` at `racing-bulls` closed at round 11, and
+  > `2026-liam-lawson-12` (`red-bull`) and `2026-yuki-tsunoda-12`
+  > (`racing-bulls`) open from round 12. The nine identity-only drivers get
+  > none. A split candidate still cannot publish through coordination,
+  > because A7 and items 6 to 10, 12 and 13 are open.
 - **Provisional-source participation.** Whether a selected OpenF1 race
   classification may create participation is undecided, and must be settled
   before OpenF1 is unlocked (D3).
@@ -845,6 +885,10 @@ The seven choices the decision pack left open are settled:
   > `driverEntries` id and is now tested against a cross-driver D7
   > collision (§14.0.23). Item 11 stays open until it runs over a derived
   > collection.
+
+  > **Note 2026-09-26 (span derivation).** Item 11 is implemented: the same
+  > check now runs over the derived collection (§14.0.24). A real collision
+  > still needs a curator and contract decision.
 - **Classified-coverage non-regression.** The D14 guard and the read of the
   authoritative snapshot or durable coverage metadata it needs are not
   implemented (D12 item 10), and may depend on G9.
@@ -862,6 +906,11 @@ The seven choices the decision pack left open are settled:
   > **Note 2026-09-26.** Implemented: null/null reads "From season start"
   > in every supported locale (§14.0.23).
 - **Cancelled rounds.** There is no curated cancelled-round record or schema.
+
+  > **Note 2026-09-26.** There still is none, so span derivation withholds
+  > the season for any calendar round at or before the latest classified race
+  > round without a classification, whatever its calendar status, `cancelled`
+  > included (D4, §14.0.24).
 - **A7** `hasResults` is not implemented.
 - **Runtime.** Runtime wiring, G1 (live provider mode) and provider activation
   do not exist.
