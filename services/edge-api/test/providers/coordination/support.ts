@@ -46,6 +46,12 @@ export const FIXED_NOW = '2026-07-20T12:00:00.000Z';
  * driver has a row in a classified race, and nothing is invented. The public
  * mock snapshots are unaffected: they are generated from the provider source
  * directly.
+ *
+ * Those entries are what season assembly derives from this calendar, written
+ * out rather than computed: its only classified race is its first round, so
+ * every span opens and stays open there (null/null), carries no race number or
+ * short code (ADR 0026 D8), and the collection is ordered by driver. No port
+ * contributes them - see `payloadFor`.
  */
 export async function seasonFixture(): Promise<ProviderSeasonSource> {
   const provider = new MockFormulaOneProvider({
@@ -63,12 +69,21 @@ export async function seasonFixture(): Promise<ProviderSeasonSource> {
       )
       .flatMap((result) => result.entries.map((entry) => entry.driverId)),
   );
-  return {
-    ...source,
-    driverEntries: source.driverEntries.filter((entry) =>
-      classified.has(entry.driverId),
-    ),
-  };
+  const driverEntries = source.driverEntries
+    .filter((entry) => classified.has(entry.driverId))
+    .map((entry) => ({ ...entry, raceNumber: null, shortCode: null }))
+    .sort((left, right) => (left.driverId < right.driverId ? -1 : 1));
+  if (
+    driverEntries.some(
+      (entry) =>
+        entry.startRound !== null ||
+        entry.endRound !== null ||
+        entry.role !== 'race',
+    )
+  ) {
+    throw new Error('fixture gap: the mock line-up changed shape');
+  }
+  return { ...source, driverEntries };
 }
 
 /** The publication metadata a caller supplies. Never derived by coordination. */
@@ -131,11 +146,14 @@ export function payloadFor(
     case 'season-calendar':
       return { kind: 'season-calendar', events: source.calendar };
     case 'season-participants':
+      // Like the Jolpica participants port, the contribution carries no
+      // participation spans: season assembly derives them from the selected
+      // race classifications (ADR 0026 D11).
       return {
         kind: 'season-participants',
         drivers: source.drivers,
         constructors: source.constructors,
-        driverEntries: source.driverEntries,
+        driverEntries: [],
         constructorEntries: source.constructorEntries,
       };
     case 'season-circuits':

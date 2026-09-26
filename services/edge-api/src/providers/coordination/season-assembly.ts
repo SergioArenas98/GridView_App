@@ -31,6 +31,7 @@ import type {
 } from '../../contract/types';
 import type { EventStatus } from '../../contract/enums';
 import type { ProviderSeasonSource } from '../formula-one-provider';
+import { deriveDriverSeasonEntries } from './driver-span-derivation';
 import type { CoordinationRun, ResourceCoordination } from './outcome';
 import {
   isClassifiedResult,
@@ -67,7 +68,11 @@ export const assemblyGaps = [
   'resource-unavailable',
   /** A resource the season snapshot requires was not planned at all. */
   'missing-required-resource',
-  /** A calendar round has no selected race classification. */
+  /**
+   * A calendar round has no selected race classification: a `completed` round,
+   * or any round at or before the latest classified race round, which span
+   * derivation would otherwise bridge (ADR 0026 D4).
+   */
   'missing-round-classification',
   /**
    * The selected payloads are individually valid but mutually inconsistent:
@@ -333,6 +338,33 @@ export function assembleSeasonSource(
     };
   }
 
+  // Participation is derived here, from the classifications selected above
+  // (ADR 0026 D11). A calendar round at or before the latest classified race
+  // round without a classification of its own is unaccounted (D4): deriving
+  // across it would bridge an unobserved round, so the season is withheld
+  // under the same gap as any other missing race classification.
+  const derivation = deriveDriverSeasonEntries(
+    run.season,
+    calendar.map((event) => event.round),
+    classifications,
+  );
+  if (derivation.outcome === 'unaccounted-rounds') {
+    return {
+      complete: false,
+      gap: 'missing-round-classification',
+      missing: derivation.rounds.map(
+        (round) =>
+          ({
+            kind: 'session-classification',
+            season: run.season,
+            round,
+            sessionType: 'race',
+          }) as CoordinatedResource,
+      ),
+      relations: [],
+    };
+  }
+
   // Every member is a race classification for a distinct round, so round
   // order is a total order and no session tiebreak is reachable.
   const results = classifications
@@ -351,7 +383,17 @@ export function assembleSeasonSource(
     drivers: [...participants.drivers] as Driver[],
     constructors: [...participants.constructors] as Constructor[],
     circuits: [...circuitsPayload.circuits] as Circuit[],
-    driverEntries: [...participants.driverEntries] as DriverSeasonEntry[],
+    // The contribution carries no participation evidence (ADR 0026 D11): the
+    // participants port contributes an empty list, and the derived spans
+    // follow it. Nothing contributed is dropped, merged or renamed. A
+    // non-empty contribution cannot pass the preflight below: an entry not
+    // observed at its own opening round fails `driver-entry-support`, and one
+    // that is observed there overlaps the derived span of that same
+    // observation, failing `driver-entry-span`.
+    driverEntries: [
+      ...participants.driverEntries,
+      ...derivation.entries,
+    ] as DriverSeasonEntry[],
     constructorEntries: [
       ...participants.constructorEntries,
     ] as ConstructorSeasonEntry[],

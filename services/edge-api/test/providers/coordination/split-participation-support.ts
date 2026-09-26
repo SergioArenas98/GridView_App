@@ -6,14 +6,15 @@
  * from round 12, `yuki-tsunoda` joins `racing-bulls` at round 12 and
  * `isack-hadjar`'s `red-bull` span ends at round 11. Nothing here is provider
  * data: no captured response or bulk copy of its rows is used, the rows are
- * written by hand, and no span is derived from anything - the spans are
- * authored next to the rows so both integrity directions can be exercised.
+ * written by hand, and the spans are authored next to the rows so both
+ * integrity directions can be exercised. They are exactly the spans season
+ * assembly derives from those rows (`driver-span-derivation.test.ts`).
  *
  * The calendar reuses the mock provider's five events (their identities and
  * sessions are unchanged) at rounds 1, 11, 12, 13 and 14. Rounds 1 and 11-13
- * carry a final race classification; round 14 is unclassified. The rounds in
- * between are simply absent from this calendar: round accounting (ADR 0026 D4)
- * belongs to span derivation, which does not exist yet.
+ * carry a final race classification; round 14 is unclassified, and so future.
+ * The rounds in between are absent from this calendar, so round accounting
+ * (ADR 0026 D4), which is over calendar rounds, has nothing to withhold.
  */
 
 import {

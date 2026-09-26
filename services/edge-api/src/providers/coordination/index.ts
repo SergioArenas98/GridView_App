@@ -106,6 +106,9 @@ export type {
   CoordinatedResourceKind,
 } from './resource';
 
+export { deriveDriverSeasonEntries } from './driver-span-derivation';
+export type { DriverSpanDerivation } from './driver-span-derivation';
+
 export {
   assembleSeasonSource,
   assemblyGaps,
