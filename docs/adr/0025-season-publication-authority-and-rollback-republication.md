@@ -241,6 +241,32 @@
 > rejection with no write and no exception, through one bounded conversion
 > helper both the coordinator and the local port route through (D4, updated
 > below).
+>
+> **Publication guard binding (2026-09-27) — repository only, not deployed.**
+> [ADR 0026](0026-season-participation-semantics-and-derivation.md) D14-D16
+> are now implemented on the **sequenced** publication path, for ordinary
+> publication and rollback-republication alike:
+>
+> - `prepare` carries a mandatory `expectedPredecessor` and compare-and-swaps
+>   on it;
+> - a `prepared` response returns `priorVersion`;
+> - `finalize` asserts that the bound predecessor is still active;
+> - a lost or undecodable `prepare` or `finalize` answer over the Durable
+>   Object client is now **uncertain**, never a definite `state-corrupt`
+>   rejection, and `finalize` is re-driven at most once.
+>
+> No durable key, record field or migration was added. See D4, "Amendment
+> (2026-09-27): the expected-predecessor binding".
+>
+> Once deployed, this changes staging's season-2026 publication and rollback
+> behaviour, so deploying it is cutover-sensitive and needs its own
+> authorization. Nothing was deployed. The dormant coordinated-publication
+> bridge still names the legacy `SnapshotPublisher` (ADR 0023 D11) and is
+> **not** guarded by this change.
+>
+> `snapshotRevision` now has runtime callers on the sequenced path: the
+> publication plan and the predecessor read. This supersedes the "no
+> production caller" statement above, which was true when written.
 
 ## Context
 
@@ -1276,6 +1302,143 @@ comparison can independently audit:
 A mismatched manifest commitment is, and remains, rejected unconditionally.
 Nothing above weakens that check; it narrows only what a *matching* value is
 honestly said to establish.
+
+#### Amendment (2026-09-27): the expected-predecessor binding
+
+This amendment implements
+[ADR 0026](0026-season-participation-semantics-and-derivation.md) D16 for the
+D14 and D15 publication guard, on this ADR's two-phase protocol. It also fixes
+one existing transport defect. It adds **no durable state**: no new key, no new
+record field and no migration. The existing `committed/{documentName}`
+revision rows are the version-bound metadata the binding relies on.
+
+**Why the protocol needed a binding.** `readAuthority` and `prepare` are
+separate transactions. Before this amendment, the following could happen:
+
+1. A caller compared its candidate against version *V0*.
+2. Another operation committed *V1*.
+3. The caller's `prepare` still succeeded, with `priorVersion = V1`.
+
+The candidate then replaced a release it was never compared against.
+`priorVersion` was durably recorded but never read.
+
+**`prepare` takes a mandatory `expectedPredecessor`.**
+
+```text
+expectedPredecessor:
+  activeVersion:  string        // the version the caller compared against
+  guardDocuments: { documentName, revision }[]
+                  // every committed grand-prix:{round}:results document of
+                  // that version; sorted by UTF-8 bytes, unique, at most
+                  // maximumManifestSize entries
+```
+
+- A missing or malformed value is refused as `invalid-expected-predecessor`
+  before any durable read. There is no unguarded `prepare`.
+- Two checks run inside the **same** `transactionSync` as the existing ones.
+  They run after `authority-not-active` and `season-mismatch`, and before
+  single-flight, staleness, epoch allocation or any write:
+  - `activeVersion` must equal the season's `activeVersion`, else
+    `stale-predecessor`;
+  - the committed rows whose name matches `grand-prix:{digits}:results` must
+    equal `guardDocuments` exactly, name for name and revision for revision,
+    else `predecessor-guard-mismatch`.
+- Both refusals leave durable state byte-for-byte unchanged, and no epoch is
+  allocated.
+- The Durable Object learns one naming pattern and compares strings. It never
+  derives a guard and never reads Workers KV. It could not recompute a digest
+  inside `transactionSync` anyway, because `crypto.subtle` is asynchronous.
+
+**`prepared` returns `priorVersion`**, the version the operation is now bound
+to. The client refuses a `prepared` answer as `state-corrupt` when its
+`priorVersion` is absent or differs from `expectedPredecessor.activeVersion`.
+
+An older object ignores `expectedPredecessor` and returns no `priorVersion`.
+So during a deployment, a new Worker talking to an old object fails closed
+instead of silently skipping the binding. The Worker never acts on the
+operation such an object may have prepared; its TTL retires it (D5).
+
+**`finalize` asserts the invariant.** The check runs after the existing
+identity, replay, phase, expiry and manifest-commitment checks, and before the
+commit. `operation.priorVersion` must equal `authority.activeVersion`, else
+`finalize` refuses with `predecessor-changed` and makes no transition.
+
+Single-flight and epoch fencing already make this unreachable: nothing else
+moves `activeVersion` between a successful `prepare` and its own `finalize`.
+The invariant is asserted rather than assumed, and a corrupted-record test
+pins it.
+
+**Lost or undecodable answers are uncertain, not rejections.** Before this
+amendment, the Durable Object client mapped every transport failure and every
+undecodable body to `rejected/state-corrupt`. That had two effects:
+
+- The caller's "uncertain `finalize`" branch was unreachable over the real
+  binding.
+- A commit whose answer was lost was reported as `failed`, and its
+  post-commit maintenance and cache purge were skipped. Nothing was deleted,
+  because the sequencer refuses to cancel or clean up a committed operation.
+
+Now:
+
+- The client returns a client-only `uncertain` outcome for `prepare` and
+  `finalize`. The coordinator never produces it, and the decoders never accept
+  it from the wire.
+- A decodable answer that does not match its request stays `state-corrupt`.
+- **`finalize`:**
+  - Nothing is cleaned up while the outcome is unknown.
+  - The caller re-drives `finalize` **exactly once**, with the same epoch and
+    token. A commit that happened replays as `committed` (D9); one that did
+    not is decided then.
+  - If the answer is still uncertain, the result is
+    `sequencer-authority-unavailable`, still with no cleanup. There is no
+    unbounded retry. A later run's `readAuthority` finds whichever version is
+    authoritative.
+- **`prepare`:**
+  - The result is `sequencer-authority-unavailable`, never a definite
+    sequencer refusal.
+  - No second `prepare` is sent automatically.
+  - Nothing is cleaned up without a known operation token.
+  - If an operation was prepared, the existing TTL and pending-cleanup path
+    (D5) retires and collects it.
+- Definite `prepare` and `finalize` rejections keep their existing cleanup
+  behaviour.
+
+**Rollback stays guarded.** Rollback-republication (D8) goes through the same
+comparison and the same binding. There is no exemption (ADR 0026 curator
+decision C1). A rollback is refused before `prepare` when its target does any
+of these:
+
+- lacks a classified round of the active release;
+- lacks a fact of the active release;
+- names another constructor for one of its facts.
+
+A committed rollback's own revisions become the next predecessor anchor,
+exactly as any committed release's do.
+
+**What this does not change.**
+
+- The coordinated-publication bridge (ADR 0023 D11) still publishes through the
+  legacy `SnapshotPublisher`, which cannot bind a predecessor. It is dormant,
+  and it is not guarded until a later change retypes it.
+- A season without an active sequencer authority keeps the legacy fallback for
+  ordinary mock synchronization.
+- There is no sequencer genesis (curator decision C3) and no break-glass
+  correction (C4).
+- The public API, the normalized contract and OpenAPI are unchanged.
+
+The new publication reasons are internal:
+
+- `guard-round-coverage-regression`
+- `guard-participation-fact-removed`
+- `guard-constructor-replaced`
+- `guard-predecessor-stale`
+- `guard-predecessor-unavailable`
+- `guard-predecessor-invalid`
+- `guard-candidate-invalid`
+- `guard-authority-not-sequenced`, reserved for the guarded coordinated entry
+  point
+
+Their logs carry only the season, the operation kind and a closed category.
 
 ### D5. Prepared-operation cancellation
 

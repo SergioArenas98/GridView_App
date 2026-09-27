@@ -630,6 +630,84 @@ Full record:
 operator decision**. Production has never been deployed and is not authorized
 for deployment by anything above.
 
+### Publication guard deployment (prepared 2026-09-27, not deployed)
+
+The ADR 0026 D14-D16 publication guard now exists on the sequenced publication
+path (Implementation Plan §14.0.26; ADR 0025 D4, "Amendment (2026-09-27): the
+expected-predecessor binding"). It leaves `SEASON_PUBLICATION_CUTOVER_CONTROL`
+and `SEASON_PUBLICATION_AUTHORITY` unchanged, so the var comparison above would
+call it ordinary. **Treat it as cutover-sensitive anyway.** Deploying it changes
+how staging publishes and rolls back season 2026, the one season the sequencer
+is authoritative for:
+
+- **Every season-2026 publication and rollback is compared with the active
+  release.** The candidate must keep every classified round of the active
+  release. It must also keep every `(round, driver)` participation fact of that
+  release with the same constructor.
+  - Otherwise it is withheld as `rejected`, with
+    `guard-round-coverage-regression`, `guard-participation-fact-removed` or
+    `guard-constructor-replaced`, and the active release keeps serving.
+  - **Rollback has no exemption.** A rollback to a release that lacks any of
+    those rounds or facts, or names another constructor, is refused the same
+    way.
+- **`prepare` binds the comparison to the active release.** A candidate
+  compared against a release that is no longer active fails as
+  `guard-predecessor-stale`. The next scheduled run compares against whatever
+  is active then; nothing is rebuilt automatically.
+- **Missing or invalid active-release data fails closed.** If the active
+  release's inventory or a results document cannot be read, the run fails as
+  `guard-predecessor-unavailable`. If it is invalid or does not match the
+  sequencer's committed revisions, the run fails as `guard-predecessor-invalid`.
+  - Both block publication **and** rollback for season 2026 until resolved.
+  - No correction or break-glass mechanism exists (ADR 0026 curator decision
+    C4).
+- **Lost sequencer answers are uncertain, not failures of the candidate.**
+  - A lost `finalize` answer is re-driven once. A commit that happened is then
+    reported as applied.
+  - A lost `prepare` answer is reported as `sequencer-authority-unavailable`
+    and never retried. An operation it may have prepared holds the season for
+    at most 15 minutes, then expires.
+- **Mixed versions fail closed.** While a Worker with the guard talks to a
+  sequencer object still running older code, every `prepare` is refused as
+  `state-corrupt` (reported as `sequencer-prepare-rejected`). An operation that
+  such an object prepared expires after 15 minutes.
+
+**The fail-closed mock predecessor (ADR 0026 curator decision C2).** Staging's
+active season-2026 release was published from the mock provider. The mock's
+only classified race is **round 12** (the Italian Grand Prix), with five
+participation facts:
+
+| Driver | Constructor |
+|---|---|
+| `max-verstappen` | `red-bull` |
+| `lando-norris` | `mclaren` |
+| `oscar-piastri` | `mclaren` |
+| `charles-leclerc` | `ferrari` |
+| `lewis-hamilton` | `ferrari` |
+
+Every later season-2026 candidate must keep round 12 classified with those five
+facts:
+
+- A mock candidate is identical, so ordinary mock synchronization passes.
+- A future real candidate that lacks any of them is withheld until a correction
+  mechanism is accepted.
+
+The live release itself was not inspected here; the mock generator is its
+proxy. An offline comparison against the privately preserved 2026-09-24 race
+results found all five facts, with the same constructors, in both real round 1
+and real round 12. So the comparison exposed no staging cutover blocker. No
+provider was contacted for it.
+
+Before running the deploy command above for a Worker that contains the guard,
+the operator must hold explicit, separate authorization. It must name:
+
+- the reviewed commit;
+- staging;
+- season 2026;
+- that the deployment changes season-2026 publication and rollback behaviour.
+
+Merging the pull request does not authorize the deployment.
+
 ## 7. Initial synchronization and publication
 
 **Not for season 2026 between the deploy of a `SEASON_PUBLICATION_CUTOVER_CONTROL`
@@ -668,6 +746,12 @@ A successful publication writes the full versioned document set, the
 `previous:{season}` pointer (if any), content/season metadata, and finally the
 `active:{season}` pointer. Publication provenance is `status: "mock"` — the data
 is non-authoritative.
+
+For a sequencer-active season (season 2026 in staging), a Worker that contains
+the publication guard refuses a candidate that loses a classified round or a
+participation fact of the active release, or that changes one of its
+constructors. See section 6, "Publication guard deployment (prepared
+2026-09-27, not deployed)".
 
 ## 8. Public smoke tests
 
@@ -763,6 +847,13 @@ curl -i -X POST https://gridview-api-staging.sejuma18.workers.dev/internal/admin
 The publisher verifies the target has its complete document set before writing
 the pointer; a cache-purge failure is reported but never undoes the pointer
 change.
+
+For a sequencer-active season, rollback republishes the target as a new
+release (ADR 0025 D8). A Worker that contains the publication guard refuses a
+rollback whose target lacks a classified round or a participation fact of the
+active release, or names another constructor for one of those facts. There is
+no rollback exemption. See section 6, "Publication guard deployment (prepared
+2026-09-27, not deployed)".
 
 ## 12. Observability and redaction
 

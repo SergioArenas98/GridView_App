@@ -94,6 +94,20 @@
 > provider was contacted, and nothing was deployed. This decision itself is
 > unchanged.
 
+> **Implementation note 2026-09-27 (publication guard).** The D14, D15 and
+> D16 guard mechanism now exists on the **sequenced** publication path, for
+> ordinary publication and rollback-republication alike (Implementation Plan
+> §14.0.26; ADR 0025 D4, "Amendment (2026-09-27): the expected-predecessor
+> binding"). D12 items 10, 12 and 13 nevertheless stay **open**. The
+> coordinated path they govern still publishes through the legacy
+> `SnapshotPublisher` (ADR 0023 D11), which cannot bind a predecessor, and the
+> guard is not enforced for coordinated publication until that bridge is
+> retyped. The guard reads the active release itself and persists nothing, so
+> it does not depend on **G9**. Item 7 stays open. Items 8 and 9 are
+> objectively satisfied for 2026 (see the D12 note). The coordination path and
+> all four Jolpica ports stay dormant and unregistered, no provider was
+> contacted, and nothing was deployed. This decision itself is unchanged.
+
 ## Context
 
 The coordinated `season-participants` resource is one payload carrying four
@@ -633,6 +647,53 @@ implemented by this decision:
 > other than Jolpica still withholds the whole season as
 > `inconsistent-references` with `result-entry-span` (item 7 is still open).
 > Items 7 to 10, 12 and 13 remain unimplemented.
+
+> **Implementation note 2026-09-27 (publication guard).** The guard
+> mechanism for items 10, 12 and 13 exists, on the sequenced publication path
+> only (Implementation Plan §14.0.26).
+>
+> - **Derivation.** One pure function derives a release's guard from its
+>   `grand-prix:{round}:results` documents alone: the sorted classified rounds
+>   (`final` or `provisional` race results, rounds 1 to 100) and the
+>   `(round, canonicalDriverId, canonicalConstructorId)` facts. The candidate
+>   and the authoritative predecessor are derived the same way. A duplicate
+>   `(round, driver)`, an inconsistent or out-of-range round, a malformed body
+>   or more than 100 rows fails closed. It is never read as an empty release.
+> - **Item 10 (D14).** Every predecessor classified round must be classified
+>   in the candidate.
+> - **Item 12 (D15).** Every predecessor fact must have a candidate fact for
+>   the same `(round, driver)` naming the same constructor. Added rounds and
+>   facts are allowed, and position, points, status, order and fastest lap are
+>   not guard inputs.
+> - **Item 13 (D16).** The predecessor is read from the exact version
+>   `readAuthority` reports, and its results revisions are recomputed with
+>   `snapshotRevision`. `prepare` then compare-and-swaps on that version and
+>   those revisions against the sequencer's committed rows, inside its own
+>   transaction, and `finalize` re-asserts the binding.
+>
+> The mechanism applies to rollback-republication with no exemption (curator
+> decision C1). It needs no **G9** persistence: it reads the active release
+> itself and stores no guard set.
+>
+> **Items 10, 12 and 13 stay open.** They are prerequisites of *coordinated*
+> publication, and the dormant coordinated bridge still names the legacy
+> `SnapshotPublisher`, which this mechanism cannot guard. They close only when
+> that bridge publishes through the guarded sequencer.
+>
+> **Item 7** stays open.
+>
+> **Items 8 and 9 are objectively satisfied for 2026**, although their text
+> above says otherwise, which was true when written:
+>
+> - The season-2026 mapping dataset holds a Jolpica mapping for all 32 observed
+>   drivers and all 11 observed constructors (GridView_Provider_Evaluation.md
+>   §8.9-§8.10).
+> - The drivers and constructors responses (2026-09-23) and the rounds 1-14
+>   race results (2026-09-24) are captured and hashed. They are held privately
+>   and not committed, as the provider policy requires (§8.9-§8.11; ADR 0023
+>   A2.2).
+>
+> Both are per season: a later season needs its own identities and evidence.
 
 ### D13 - Requests and scheduling
 
