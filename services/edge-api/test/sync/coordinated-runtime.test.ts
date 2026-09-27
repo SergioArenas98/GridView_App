@@ -19,10 +19,15 @@ import type {
   ProviderRateLimiterClient,
   ReservationOutcome,
 } from '../../src/providers/http/provider-rate-limiter';
+import { MemorySequencerHost } from '../../src/publication/sequencer/hosts';
 import { SequencedPublicationService } from '../../src/publication/sequenced/service';
 import { FixedClock } from '../../src/runtime/clock';
 import { MemorySnapshotStorage } from '../../src/storage/local';
 import { composeCoordinatedRuntime } from '../../src/sync/coordinated/composition';
+import {
+  ReconciliationLedger,
+  type LedgerNamespace,
+} from '../../src/sync/coordinated/ledger';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
 import {
   SEASON,
@@ -490,5 +495,116 @@ describe('the guarded publication a coordinated run would bind', () => {
       authorityMode: 'legacy',
       guarded: null,
     });
+  });
+});
+
+/**
+ * The ledger storage foundation (C1) adds a Durable Object class and its
+ * client, and binds neither. Even an environment that carries a ledger-shaped
+ * namespace under a plausible name reaches nothing: no code reads such a
+ * field, so both entry points still stop at `ledger-unbound`.
+ */
+describe('the ledger storage foundation binds nothing', () => {
+  const storageWrites = [
+    'writeVersionedDocument',
+    'writeVersionInventory',
+    'writePublicationMetadata',
+    'deletePublicationMetadata',
+    'setActiveVersion',
+    'setPreviousVersion',
+    'setCurrentSeason',
+    'setSyncState',
+    'setQuotaState',
+    'setContentMetadata',
+    'deleteUnpublishedVersion',
+  ] as const;
+
+  it('stops scheduled and manual runs at ledger-unbound with zero reservations, requests and publication writes', async () => {
+    const { ctx, env, logger } = await selectedStaging();
+    const ledgerHost = new MemorySequencerHost();
+    let namespaceLookups = 0;
+    const namespace: LedgerNamespace = {
+      idFromName: (name) => {
+        namespaceLookups += 1;
+        return name;
+      },
+      get: () => {
+        const object = new ReconciliationLedger({
+          storage: {
+            transactionSync: (run) => ledgerHost.transactionSync(() => run()),
+            kv: {
+              get: () => undefined,
+              put: () => undefined,
+              delete: () => false,
+              list: () => [],
+            },
+          },
+        });
+        return {
+          fetch: (url, init) => object.fetch(new Request(url, init)),
+        };
+      },
+    };
+    const withLedgerShapes = {
+      ...env,
+      RECONCILIATION_LEDGER: namespace,
+      __RECONCILIATION_LEDGER: namespace,
+    } as Env;
+    const writes = storageWrites.map((method) => vi.spyOn(ctx.storage, method));
+    const prepare = vi.spyOn(ctx.port, 'prepare');
+    const finalize = vi.spyOn(ctx.port, 'finalize');
+    const before = await ctx.port.readAuthority(SEASON);
+
+    const response = await worker.fetch(
+      adminRequest('/internal/admin/sync/full'),
+      withLedgerShapes,
+    );
+    await worker.scheduled?.({} as ScheduledController, withLedgerShapes);
+
+    expect(response.status).toBe(503);
+    expect(
+      ((await response.json()) as { data: { reasons: string[] } }).data.reasons,
+    ).toEqual(['ledger-unbound']);
+    expect(compose).toHaveBeenCalledTimes(2);
+    for (const call of compose.mock.calls) {
+      expect(call[0].ledger).toBeNull();
+    }
+    expect(
+      logger.events
+        .filter((event) => event.operation === 'sync.coordinated.withheld')
+        .map((event) => [
+          event.syncTrigger,
+          event.coordinationMissingDependencies,
+          event.providerOperationCallCount,
+        ]),
+    ).toEqual([
+      ['manual', ['ledger-unbound'], 0],
+      ['scheduled', ['ledger-unbound'], 0],
+    ]);
+    // Zero limiter reservations and zero provider requests...
+    expect(traffic()).toEqual(none);
+    // ...zero publication writes...
+    expect(prepare).not.toHaveBeenCalled();
+    expect(finalize).not.toHaveBeenCalled();
+    for (const write of writes) expect(write).not.toHaveBeenCalled();
+    expect(await ctx.port.readAuthority(SEASON)).toEqual(before);
+    // ...and the ledger-shaped namespace was never looked up.
+    expect(namespaceLookups).toBe(0);
+    expect(ledgerHost.committedKeys()).toEqual([]);
+  });
+
+  it('leaves mock and none unchanged: neither reaches the coordinated composition', async () => {
+    for (const providerMode of ['mock', 'none'] as const) {
+      const harness = createHarness({ environment: 'staging', providerMode });
+      harness.env.__PROVIDER_RATE_LIMITER = limiter;
+      harness.env.__PROVIDER_TRANSPORT = transport;
+      await worker.scheduled?.({} as ScheduledController, harness.env);
+      await worker.fetch(
+        adminRequest('/internal/admin/sync/full'),
+        harness.env,
+      );
+    }
+    expect(compose).not.toHaveBeenCalled();
+    expect(traffic()).toEqual(none);
   });
 });
