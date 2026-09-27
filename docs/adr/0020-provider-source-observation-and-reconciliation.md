@@ -638,6 +638,9 @@ ledger: the `ReconciliationLedgerPort` interface in
 Object, no binding and no test hook, so `resolveReconciliationLedger` always
 answers `null`. Every coordinated run is refused as `ledger-unbound` before any
 provider request.
+*(Superseded in part on 2026-09-27, and true when written. The C1 note below
+adds the storage implementation as an exported Durable Object class. It is
+unregistered and unbound, and the resolver still answers `null`.)*
 
 **None of obligations 1-4 is advanced by it.** The obligations stay open:
 `sourceObservedAt`, the 60-record backlog capacity, the §10.4.1 state machine
@@ -648,6 +651,62 @@ publication run that **never advances scheduled due times**, so it cannot move
 the cadence or build D2.1 corroboration by repetition (runtime activation
 decision O-8). Obligation 5 is unchanged and reinforced by wiring: no OpenF1
 port is registered, and no provisional bound is passed.
+
+The decision above is unchanged.
+
+### C1: the reconciliation ledger storage foundation (2026-09-27)
+
+Owner decision **O-6** chose G9's storage: one global SQLite-backed
+`ReconciliationLedger` Durable Object, intended to be addressed by the stable
+name `reconciliation` once it is bound. Implementation Plan §14.0.30 records
+the **storage foundation** built on that decision. It is storage and protocol
+only, under `src/sync/coordinated/ledger/`, and it is **dormant**. The class is
+a named Worker export with no `[exports]` entry, no migration and no binding.
+`resolveReconciliationLedger` still answers `null`, so every coordinated run is
+still refused as `ledger-unbound`. O-6 approved no binding, migration,
+provisioning or deployment, and none was made.
+
+What the storage now guarantees, for a later G9 implementation to build on:
+
+- **Closed, versioned, payload-free records** (schema version 1). They hold
+  only bounded identifiers, canonical UTC instants, bounded counters, closed
+  states and `sha256:` revision hashes, and every read and write is strictly
+  decoded. No record can carry a provider body, a normalized payload, a name, a
+  URL, a header or a credential. The provider-payload retention gates in §4 are
+  therefore not engaged by the ledger.
+- **Fenced per-season leases** with a 10-minute lifetime and a fencing token
+  that only ever grows. A released, expired or superseded token commits
+  nothing.
+- **Versioned conditional commits**, applied all or nothing. A refused or
+  failed transaction changes no record.
+- **Obligation 2's capacity half.** The operator backlog is capped at 60
+  records **globally across seasons**. The cap is counted inside the committing
+  transaction of the one global object. An insertion that would exceed it is
+  refused, and there is no eviction and no age-based deletion. The typed
+  capacity-exceeded **event**, the operator alert and the disposition path are
+  **not** implemented. Obligation 2 therefore stays open.
+- **D2.2 at the storage layer.** The superseded-revision history is bounded (16)
+  and append-only. An insertion beyond it is refused rather than made room for
+  by eviction, so no revision can be forgotten and then applied again. While a
+  revision is in the history, no candidate, staged or competing slot may hold
+  it.
+- **The ledger is not a publication authority.** `publishedRevision` is a cache
+  that only `reconcilePublishedRevisions` writes, from the authoritative
+  release's revisions. An ordinary commit can never set it, and reconciliation
+  never refuses the authority's value, including after a rollback.
+
+**Obligations 1, 3 and 4 are not advanced, and G9 and G5 are not complete.**
+Still open:
+
+- the §10.4.1 observation transitions, recorded against I1-I5;
+- D2.1 corroboration, settling, and D2.3-D2.9 with both operational events;
+- the due-work planner (G5);
+- the no-change publication gate (O-12) and ordering input (O-13);
+- source ordering, and the observation and outcome orchestration.
+
+Owner decisions **O-3 to O-5, O-7, O-9 and O-12 to O-16** remain open. So do
+**round coherence** and **empty-standings replacement** (ADR 0023 A3.5), and
+**attribution**. These belong to PR-C2 and later, separately authorized steps.
 
 The decision above is unchanged.
 
