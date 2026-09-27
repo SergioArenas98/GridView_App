@@ -34,6 +34,8 @@ import {
   SEED_VERSION,
   SidecarReadFailingStorage,
   generatedSet,
+  portWith,
+  recording,
   sequencedContext,
   sequencerTransports,
   type SequencedContext,
@@ -180,43 +182,6 @@ async function laterSet(ctx: SequencedContext): Promise<GeneratedSnapshotSet> {
 }
 
 // --- wiring -----------------------------------------------------------------
-
-function portWith(
-  base: SeasonPublicationSequencerPort,
-  overrides: Partial<SeasonPublicationSequencerPort>,
-): SeasonPublicationSequencerPort {
-  return {
-    readAuthority: (r) => base.readAuthority(r),
-    prepare: (r) => base.prepare(r),
-    finalize: (r) => base.finalize(r),
-    cancel: (r) => base.cancel(r),
-    authorizeCleanup: (r) => base.authorizeCleanup(r),
-    acknowledgeCleanup: (r) => base.acknowledgeCleanup(r),
-    seedCutover: (r) => base.seedCutover(r),
-    recoverCutoverSeed: (r) => base.recoverCutoverSeed(r),
-    activateCutover: (r) => base.activateCutover(r),
-    ...overrides,
-  };
-}
-
-/** A port that records every method called on it, in order. */
-function recording(base: SeasonPublicationSequencerPort): {
-  port: SeasonPublicationSequencerPort;
-  calls: string[];
-} {
-  const calls: string[] = [];
-  const port = portWith(base, {});
-  const recorded = Object.fromEntries(
-    Object.entries(port).map(([name, method]) => [
-      name,
-      (request: never) => {
-        calls.push(name);
-        return (method as (r: never) => Promise<unknown>)(request);
-      },
-    ]),
-  ) as unknown as SeasonPublicationSequencerPort;
-  return { port: recorded, calls };
-}
 
 function serviceWith(
   ctx: SequencedContext,
@@ -704,35 +669,8 @@ describe.each(sequencerTransports)(
         expectBoundedLogs(ctx);
       });
 
-      it('keeps the candidate when finalize stays uncertain, and a later run finds what committed', async () => {
-        const ctx = await context();
-        const { port, calls } = recording(losingFinalizeAnswers(ctx, 2));
-        const candidate = widened(await laterSet(ctx));
-
-        const result = await serviceWith(ctx, { port }).publish(candidate);
-
-        expect(result).toMatchObject({
-          status: 'failed',
-          reason: 'sequencer-authority-unavailable',
-        });
-        expect(calls.filter((call) => call === 'finalize')).toHaveLength(2);
-        expect(calls).not.toContain('cancel');
-        expect(calls).not.toContain('authorizeCleanup');
-        // The commit did happen; its release was not deleted.
-        const committed = await activeVersion(ctx);
-        expect(committed).not.toBe(SEED_VERSION);
-        expect(await ctx.storage.listVersions(SEASON)).toContain(committed);
-        expect(
-          await readPredecessorGuard(ctx.storage, SEASON, committed),
-        ).toMatchObject({ kind: 'read' });
-
-        // A later scheduled run binds to whichever version is authoritative.
-        const later = await ctx.service.publish(candidate);
-        expect(later).toMatchObject({
-          status: 'applied',
-          previousVersion: committed,
-        });
-      });
+      // Two uncertain `finalize` answers, and the one authority read that
+      // follows them, are covered in `uncertain-finalize.test.ts`.
 
       it('reports a lost prepare answer as unavailable, never retries it, and cleans nothing', async () => {
         const sequencerClock = new MutableClock(

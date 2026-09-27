@@ -501,11 +501,33 @@ export class SequencedPublicationService implements PublicationCommands {
       finalized = await this.finalizeOnce(finalizeRequest);
     }
     if (finalized.outcome === 'uncertain') {
-      // Still unknown. Nothing is cleaned up here: deleting the candidate
-      // could destroy a release that did commit, and the sequencer's own
-      // pending-cleanup slot collects it if it did not (ADR 0025 D5). No global
-      // state was touched, so the prior release keeps serving either way, and a
-      // later run's `readAuthority` finds whichever version is authoritative.
+      // Still unknown, so the authority is read exactly once - no polling. The
+      // candidate version was allocated to this operation alone and only its
+      // own `finalize` can make it active, so an active, authoritative
+      // `candidateVersion` proves this commit happened: it is completed exactly
+      // like a commit whose answer arrived.
+      if (await this.candidateIsAuthoritative(input.season, candidateVersion)) {
+        this.logger.warn({
+          operation: 'publication.sequencer.finalize_reconciled',
+          season: input.season,
+          releaseVersion: candidateVersion,
+          publicationStatus: input.operationKind,
+        });
+        return this.completeCommitted(
+          input,
+          plan.documentNames,
+          baked,
+          candidateVersion,
+          outgoing,
+        );
+      }
+      // Any other answer - unreadable, not active, the predecessor, another
+      // version, malformed - leaves the commit unknown. Nothing is cleaned up
+      // here: deleting the candidate could destroy a release that did commit,
+      // and the sequencer's own pending-cleanup slot collects it if it did not
+      // (ADR 0025 D5). No global state was touched, so the prior release keeps
+      // serving either way, and a later run's `readAuthority` finds whichever
+      // version is authoritative.
       this.logger.warn({
         operation: 'publication.sequencer.finalize_unavailable',
         season: input.season,
@@ -556,26 +578,47 @@ export class SequencedPublicationService implements PublicationCommands {
       );
     }
 
-    // Committed. Everything below is post-commit and best-effort; none of it
-    // can un-publish (ADR 0025 D9 "Failure behavior").
-    //
-    // The global current-season and content-metadata writes belong here rather
-    // than in the candidate write phase: they decide which season
-    // `/v1/seasons/current` resolves to, so performing them before the
-    // authoritative `finalize` would make a *pre-commit* failure - an expired
-    // lease, a supersession, a corrupt-state rejection - user-visible while the
-    // prior release is still the one serving.
+    return this.completeCommitted(
+      input,
+      plan.documentNames,
+      baked,
+      candidateVersion,
+      outgoing,
+    );
+  }
+
+  /**
+   * The one post-commit path, for a commit whose answer arrived and for one
+   * the authority confirmed after that answer was lost.
+   *
+   * Everything here is post-commit and best-effort; none of it can un-publish
+   * (ADR 0025 D9 "Failure behavior").
+   *
+   * The global current-season and content-metadata writes belong here rather
+   * than in the candidate write phase: they decide which season
+   * `/v1/seasons/current` resolves to, so performing them before the
+   * authoritative `finalize` would make a *pre-commit* failure - an expired
+   * lease, a supersession, a corrupt-state rejection - user-visible while the
+   * prior release is still the one serving.
+   */
+  private async completeCommitted(
+    input: TwoPhaseInput,
+    documentNames: readonly SnapshotDocumentName[],
+    baked: readonly StoredSnapshot[],
+    candidateVersion: string,
+    outgoing: OutgoingCurrentSeason,
+  ): Promise<PublicationResult> {
     const maintenance = input.publishesSeasonPointer
       ? await this.maintainGlobalMetadata(input.season, baked)
       : 'not-required';
     const withdrawn = await this.withdrawnRoutes(
       input.season,
       input.authority.activeVersion,
-      plan.documentNames,
+      documentNames,
     );
     const purge = await this.purgeDocuments(
       input.season,
-      plan.documentNames,
+      documentNames,
       withdrawn.documents,
       withdrawn.enumerable,
       // A rejected maintenance write is not proof the pointer stayed put: the
@@ -713,6 +756,27 @@ export class SequencedPublicationService implements PublicationCommands {
         guardDocuments: predecessor.guardDocuments,
       },
     };
+  }
+
+  /**
+   * Whether one authority read shows `candidateVersion` committed: the season
+   * is `active`, authoritative, and serves exactly that version. A read that
+   * throws or answers anything else - including a malformed record - is not a
+   * confirmation.
+   */
+  private async candidateIsAuthoritative(
+    season: number,
+    candidateVersion: string,
+  ): Promise<boolean> {
+    const confirmed = await attempt(async () => {
+      const authority = await this.port.readAuthority(season);
+      return (
+        authority.cutoverState === 'active' &&
+        authority.authoritative === true &&
+        authority.activeVersion === candidateVersion
+      );
+    });
+    return confirmed.ok && confirmed.value;
   }
 
   /** One `finalize` call; a call that throws is as uncertain as a lost answer. */

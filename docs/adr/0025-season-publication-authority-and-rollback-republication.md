@@ -253,7 +253,8 @@
 > - `finalize` asserts that the bound predecessor is still active;
 > - a lost or undecodable `prepare` or `finalize` answer over the Durable
 >   Object client is now **uncertain**, never a definite `state-corrupt`
->   rejection, and `finalize` is re-driven at most once.
+>   rejection, and `finalize` is re-driven at most once. A second uncertain
+>   `finalize` answer is reconciled by exactly one authority read.
 >
 > No durable key, record field or migration was added. See D4, "Amendment
 > (2026-09-27): the expected-predecessor binding".
@@ -1389,10 +1390,20 @@ Now:
   - The caller re-drives `finalize` **exactly once**, with the same epoch and
     token. A commit that happened replays as `committed` (D9); one that did
     not is decided then.
-  - If the answer is still uncertain, the result is
-    `sequencer-authority-unavailable`, still with no cleanup. There is no
-    unbounded retry. A later run's `readAuthority` finds whichever version is
-    authoritative.
+  - If the answer is still uncertain, the caller reads the authority
+    **exactly once**. The candidate version is allocated to this operation
+    alone, and only its own `finalize` can make it active. So a season that
+    is `active`, authoritative and serving exactly `candidateVersion` proves
+    the commit. The operation then completes through the same post-commit
+    path as a commit whose answer arrived: the current-season and content
+    metadata writes, and the cache purge.
+  - Any other answer leaves the commit unknown, and the result is
+    `sequencer-authority-unavailable`. That includes an unreadable authority,
+    one that is not active, one still serving the predecessor or another
+    version, and a malformed record. There is no post-commit work, no
+    cleanup, and no further `prepare` or `finalize`. The operation's TTL and a
+    later run's `readAuthority` recover it.
+  - There is no polling and no unbounded retry: one re-drive, then one read.
 - **`prepare`:**
   - The result is `sequencer-authority-unavailable`, never a definite
     sequencer refusal.

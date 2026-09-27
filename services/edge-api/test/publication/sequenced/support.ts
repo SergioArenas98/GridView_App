@@ -504,3 +504,41 @@ export function countingPort(
     ),
   };
 }
+
+/** `base`, with only the named methods replaced. */
+export function portWith(
+  base: SeasonPublicationSequencerPort,
+  overrides: Partial<SeasonPublicationSequencerPort>,
+): SeasonPublicationSequencerPort {
+  return {
+    readAuthority: (r) => base.readAuthority(r),
+    prepare: (r) => base.prepare(r),
+    finalize: (r) => base.finalize(r),
+    cancel: (r) => base.cancel(r),
+    authorizeCleanup: (r) => base.authorizeCleanup(r),
+    acknowledgeCleanup: (r) => base.acknowledgeCleanup(r),
+    seedCutover: (r) => base.seedCutover(r),
+    recoverCutoverSeed: (r) => base.recoverCutoverSeed(r),
+    activateCutover: (r) => base.activateCutover(r),
+    ...overrides,
+  };
+}
+
+/** A port that records every method called on it, in order. */
+export function recording(base: SeasonPublicationSequencerPort): {
+  port: SeasonPublicationSequencerPort;
+  calls: string[];
+} {
+  const calls: string[] = [];
+  const port = portWith(base, {});
+  const recorded = Object.fromEntries(
+    Object.entries(port).map(([name, method]) => [
+      name,
+      (request: never) => {
+        calls.push(name);
+        return (method as (r: never) => Promise<unknown>)(request);
+      },
+    ]),
+  ) as unknown as SeasonPublicationSequencerPort;
+  return { port: recorded, calls };
+}

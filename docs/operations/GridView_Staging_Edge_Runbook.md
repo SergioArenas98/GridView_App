@@ -664,6 +664,11 @@ is authoritative for:
 - **Lost sequencer answers are uncertain, not failures of the candidate.**
   - A lost `finalize` answer is re-driven once. A commit that happened is then
     reported as applied.
+  - If the re-drive's answer is lost too, the authority is read once. If it
+    serves this run's candidate version, the run is reported as applied and
+    the current-season update and cache purge run as usual. Otherwise the run
+    fails as `sequencer-authority-unavailable`, deletes nothing, and the next
+    scheduled run finds whichever version is authoritative. Nothing polls.
   - A lost `prepare` answer is reported as `sequencer-authority-unavailable`
     and never retried. An operation it may have prepared holds the season for
     at most 15 minutes, then expires.
