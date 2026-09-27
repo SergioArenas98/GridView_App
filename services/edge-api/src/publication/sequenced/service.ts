@@ -31,6 +31,15 @@
  * predecessor - its version and its committed results revisions - inside the
  * sequencer's transaction, so a release that changed in between is refused
  * rather than silently replaced. Rollback has no exemption.
+ *
+ * ## The guarded entry point
+ *
+ * `publishGuarded` is ordinary publication without the fallback. It is what the
+ * coordinated-publication bridge calls (`GuardedPublicationCommands`): a season
+ * that is not `active` is refused as `guard-authority-not-sequenced` instead of
+ * being handed to the legacy authority, which cannot bind a predecessor. The
+ * decision is made from the authority read alone, before any write. `publish`,
+ * `rollback` and `purgeActiveVersion` keep their fallback unchanged.
  */
 
 import {
@@ -50,7 +59,10 @@ import type {
 import type { SnapshotValidator } from '../../validation/snapshot-validator';
 import type { GeneratedSnapshotSet } from '../../snapshots/generator';
 import type { ContentManifest } from '../../contract/types';
-import type { PublicationCommands } from '../commands';
+import type {
+  GuardedPublicationCommands,
+  PublicationCommands,
+} from '../commands';
 import type {
   ManualCachePurgeResult,
   PointerMaintenanceDisposition,
@@ -166,7 +178,9 @@ interface TwoPhaseInput {
   readonly publishesSeasonPointer: boolean;
 }
 
-export class SequencedPublicationService implements PublicationCommands {
+export class SequencedPublicationService
+  implements PublicationCommands, GuardedPublicationCommands
+{
   private readonly port: SeasonPublicationSequencerPort;
   private readonly fallback: PublicationCommands;
   private readonly storage: SnapshotStorage;
@@ -190,6 +204,37 @@ export class SequencedPublicationService implements PublicationCommands {
   async publish(set: GeneratedSnapshotSet): Promise<PublicationResult> {
     const authority = await this.activeAuthority(set.season);
     if (authority === null) return this.fallback.publish(set);
+    return this.publishToAuthority(set, authority);
+  }
+
+  /**
+   * Ordinary publication that never reaches `fallback`. Only the answer to a
+   * season that is not `active` differs from `publish`: it is refused, with no
+   * write, rather than delegated.
+   */
+  async publishGuarded(set: GeneratedSnapshotSet): Promise<PublicationResult> {
+    const authority = await this.activeAuthority(set.season);
+    if (authority === null) {
+      this.logger.warn({
+        operation: 'publication.guard.rejected',
+        season: set.season,
+        failureCategory: 'guard-authority-not-sequenced',
+        publicationStatus: 'ordinary-publication',
+      });
+      return failed(
+        set.season,
+        set.version,
+        null,
+        'guard-authority-not-sequenced',
+      );
+    }
+    return this.publishToAuthority(set, authority);
+  }
+
+  private async publishToAuthority(
+    set: GeneratedSnapshotSet,
+    authority: ActiveAuthority | 'unavailable',
+  ): Promise<PublicationResult> {
     if (authority === 'unavailable') {
       return failed(
         set.season,

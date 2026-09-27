@@ -377,9 +377,9 @@ describe('a mis-identified classification withholds the whole assembled season',
       id: OPAQUE_ID,
     });
 
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, '2026.07.20.1');
 
@@ -388,7 +388,7 @@ describe('a mis-identified classification withholds the whole assembled season',
     expect(outcome.gap).toBe('inconsistent-references');
     expect(outcome.relations).toContain('result-identity');
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
     // Bounded diagnostics only: no provider-controlled identifier rides out.
     expect(harness.logger.serialized()).not.toContain(OPAQUE_ID);
     expect(harness.logger.serialized()).not.toContain(victim.grandPrixId);
@@ -430,9 +430,9 @@ describe('a mis-identified classification withholds the whole assembled season',
     const assembly = assembleSeasonSource(run, metadataFor(source));
     expect(assembly.complete).toBe(true);
 
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, '2026.07.20.1');
     expect(outcome.outcome).toBe('published');

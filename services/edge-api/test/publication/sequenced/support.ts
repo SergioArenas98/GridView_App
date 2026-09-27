@@ -295,6 +295,12 @@ export async function sequencedContext(
     sequencerClock?: Clock;
     /** Reshapes the seeded release before it is published and seeded. */
     seedTransform?: (set: GeneratedSnapshotSet) => GeneratedSnapshotSet;
+    /**
+     * How far the sequencer's cutover goes: `active` (the default) seeds and
+     * activates it; `seeded` stops after the seed; `none` leaves the season
+     * `uninitialized`. The legacy publication of the seed happens regardless.
+     */
+    cutover?: 'active' | 'seeded' | 'none';
   } = {},
 ): Promise<SequencedContext> {
   const clock = new FixedClock(new Date('2026-07-20T12:00:00.000Z'));
@@ -376,16 +382,21 @@ export async function sequencedContext(
     perKeyState: await perKeyStateFor(seedDocuments, SEED_HIGH_WATER_MARK),
     seasonSnapshotObservedAtHighWaterMark: SEED_HIGH_WATER_MARK,
   };
-  const seeded = coordinator.seedCutover(seed);
-  if (seeded.outcome !== 'seeded') {
-    throw new Error(`seedCutover: ${JSON.stringify(seeded)}`);
+  const cutover = options.cutover ?? 'active';
+  if (cutover !== 'none') {
+    const seeded = coordinator.seedCutover(seed);
+    if (seeded.outcome !== 'seeded') {
+      throw new Error(`seedCutover: ${JSON.stringify(seeded)}`);
+    }
   }
-  const activated = coordinator.activateCutover({
-    season: SEASON,
-    cutoverFingerprint: CUTOVER_FINGERPRINT,
-  });
-  if (activated.outcome !== 'activated') {
-    throw new Error(`activateCutover: ${JSON.stringify(activated)}`);
+  if (cutover === 'active') {
+    const activated = coordinator.activateCutover({
+      season: SEASON,
+      cutoverFingerprint: CUTOVER_FINGERPRINT,
+    });
+    if (activated.outcome !== 'activated') {
+      throw new Error(`activateCutover: ${JSON.stringify(activated)}`);
+    }
   }
 
   const service = new SequencedPublicationService({

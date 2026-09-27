@@ -96,7 +96,7 @@ function publish(
   version = VERSION,
 ): Promise<Awaited<ReturnType<CoordinatedSeasonPublication['publish']>>> {
   return new CoordinatedSeasonPublication({
-    publisher: harness.publisher,
+    commands: harness.commands,
     logger: harness.logger,
   }).publish(run, metadataFor(source), FIXED_NOW, version);
 }
@@ -106,12 +106,12 @@ describe('hasResults matches the selected race result exactly', () => {
     const source = await seasonFixture();
     expect(validateSeasonReferences(source)).toEqual([]);
 
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const run = await coordinate(source, fullPlan(source).resources);
     const outcome = await publish(harness, run, source);
 
     expect(outcome.outcome).toBe('published');
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
   });
 
   it('rejects a published classification under an event flagged false', async () => {
@@ -231,7 +231,7 @@ describe('hasResults matches the selected race result exactly', () => {
 
     expect(validateSeasonReferences(source)).toEqual([]);
 
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const run = await coordinate(source, [
       ...seasonResources,
       ...all.filter((round) => round !== future).map((r) => raceResource(r)),
@@ -246,10 +246,10 @@ describe('hasResults matches the selected race result exactly', () => {
     // contribution is now evidence in neither direction: assembly derives the
     // flag, so the next release carries the classification's true flag.
     const base = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const healthy = await coordinate(base, fullPlan(base).resources);
     await publish(harness, healthy, base);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
 
     const round = classifiedRound(base);
     const disagreeing = sourceWith(base, {
@@ -266,7 +266,7 @@ describe('hasResults matches the selected race result exactly', () => {
       expect(assembled.source.calendar).toEqual(base.calendar);
     }
     expect(outcome.outcome).toBe('published');
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe('v2');
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
   });
 
   it('reports only a bounded relation name', async () => {
@@ -287,7 +287,7 @@ describe('hasResults matches the selected race result exactly', () => {
           : result,
       ),
     });
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const run = await coordinate(source, fullPlan(base).resources);
     const assembly = assembleSeasonSource(run, metadataFor(source));
     const outcome = await publish(harness, run, source);
@@ -324,13 +324,13 @@ describe('stable identities are unique where persistence keys on them', () => {
 
     expect(validateSeasonReferences(source)).toContain('duplicate-identity');
 
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const run = await coordinate(source, fullPlan(base).resources);
     const outcome = await publish(harness, run, source);
 
     expect(outcome.outcome).toBe('withheld');
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
   });
 
   it('still rejects a duplicated round', async () => {

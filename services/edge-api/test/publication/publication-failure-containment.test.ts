@@ -45,6 +45,14 @@ import type {
   StoredSnapshot,
 } from '../../src/storage/types';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
+import { FixedClock } from '../../src/runtime/clock';
+import {
+  LocalSeasonPublicationSequencer,
+  MemorySequencerHost,
+  SeasonPublicationCoordinator,
+} from '../../src/publication/sequencer';
+import { SequencedPublicationService } from '../../src/publication/sequenced/service';
+import { hexCounter, perKeyStateFor } from './sequenced/support';
 import type { SnapshotValidator } from '../../src/validation/snapshot-validator';
 import { generateSnapshotSet } from '../../src/snapshots/generator';
 import type { GeneratedSnapshotSet } from '../../src/snapshots/generator';
@@ -678,6 +686,70 @@ describe('coordinated publication returns for every operational failure', () => 
     }).coordinate({ plan: fullPlan(source) });
   }
 
+  /**
+   * The bridge's real boundary: the guarded sequenced service over the armable
+   * storage, with a local sequencer seeded from, and activated at, the prior
+   * legacy release. The legacy publisher is its fallback only so a test can
+   * prove guarded publication never reaches it.
+   */
+  async function guardedBoundary(
+    storage: ArmableStorage,
+    logger: CapturingLogger,
+    purger: CachePurgeAdapter,
+    validator: SnapshotValidator = runtimeSnapshotValidator,
+  ): Promise<{ boundary: CoordinatedSeasonPublication; active: () => string }> {
+    const inventory = await storage.readVersionInventory(SEASON, PRIOR);
+    const documents: StoredSnapshot[] = [];
+    for (const name of inventory ?? []) {
+      const document = await storage.readVersionedDocument(SEASON, PRIOR, name);
+      if (document) documents.push(document);
+    }
+    const coordinator = new SeasonPublicationCoordinator(
+      new MemorySequencerHost(),
+      {
+        clock: new FixedClock(new Date(FIXED_NOW)),
+        token: () => 'op-token',
+        opaqueVersionComponent: hexCounter(),
+      },
+    );
+    const seeded = coordinator.seedCutover({
+      season: SEASON,
+      cutoverFingerprint: 'containment-cutover',
+      activeVersion: PRIOR,
+      previousVersion: null,
+      committedSourceOrderingInput: PRIOR_UPDATED_AT,
+      perKeyState: await perKeyStateFor(documents, PRIOR_UPDATED_AT),
+      seasonSnapshotObservedAtHighWaterMark: PRIOR_UPDATED_AT,
+    });
+    expect(seeded.outcome).toBe('seeded');
+    coordinator.activateCutover({
+      season: SEASON,
+      cutoverFingerprint: 'containment-cutover',
+    });
+    const legacy = publisherFor(storage, purger, logger, validator);
+    legacy.publish = () => {
+      throw new Error('the legacy publisher must never be reached');
+    };
+    const service = new SequencedPublicationService({
+      port: new LocalSeasonPublicationSequencer(coordinator),
+      fallback: legacy,
+      storage,
+      validator,
+      purger,
+      logger,
+      clock: new FixedClock(new Date(FIXED_NOW)),
+      purgeOrigin: 'https://api.gridview.test',
+    });
+    return {
+      boundary: new CoordinatedSeasonPublication({ commands: service, logger }),
+      active: () => {
+        const authority = coordinator.readAuthority(SEASON);
+        if (authority.cutoverState !== 'active') throw new Error('not active');
+        return authority.activeVersion;
+      },
+    };
+  }
+
   it('never rejects, whichever phase fails', async () => {
     const source = await seasonFixture();
     const run = await completedRun(source);
@@ -689,18 +761,28 @@ describe('coordinated publication returns for every operational failure', () => 
       validator?: SnapshotValidator;
     }[] = [
       {
-        label: 'active-version read',
-        arm: 'getActiveVersion',
+        label: 'predecessor inventory read',
+        arm: 'readVersionInventory',
         purger: new CountingPurger(),
       },
       {
-        label: 'inactive write',
+        label: 'predecessor document read',
+        arm: 'readVersionedDocument',
+        purger: new CountingPurger(),
+      },
+      {
+        label: 'candidate write',
         arm: 'writeVersionedDocument',
         purger: new CountingPurger(),
       },
       {
-        label: 'active pointer',
-        arm: 'setActiveVersion',
+        label: 'candidate inventory write',
+        arm: 'writeVersionInventory',
+        purger: new CountingPurger(),
+      },
+      {
+        label: 'current-season maintenance',
+        arm: 'setCurrentSeason',
         purger: new CountingPurger(),
       },
       { label: 'purge rejects', purger: new ExplodingPurger('reject') },
@@ -714,11 +796,13 @@ describe('coordinated publication returns for every operational failure', () => 
 
     for (const entry of cases) {
       const { storage, logger } = await seeded(source);
-      if (entry.arm) storage.arm(entry.arm, 1);
-      const boundary = new CoordinatedSeasonPublication({
-        publisher: publisherFor(storage, entry.purger, logger, entry.validator),
+      const { boundary } = await guardedBoundary(
+        storage,
         logger,
-      });
+        entry.purger,
+        entry.validator,
+      );
+      if (entry.arm) storage.arm(entry.arm, 1);
 
       const outcome = await settle(() =>
         boundary.publish(run, metadataFor(source), FIXED_NOW, NEXT),
@@ -726,10 +810,14 @@ describe('coordinated publication returns for every operational failure', () => 
 
       expect(outcome.rejected, `${entry.label} must return`).toBe(false);
       expect(outcome.value?.outcome, entry.label).toBe('published');
+      if (entry.arm !== undefined) {
+        expect(storage.calls, entry.label).toContain(entry.arm);
+      }
       const serialized = logger.serialized();
       expect(serialized).not.toContain('KV outage');
       expect(serialized).not.toContain('secret-key');
       expect(serialized).not.toContain('purge exploded');
+      expect(serialized).not.toContain('legacy publisher');
     }
   });
 
@@ -737,42 +825,63 @@ describe('coordinated publication returns for every operational failure', () => 
     const source = await seasonFixture();
     const run = await completedRun(source);
     const { storage, logger } = await seeded(source);
-
-    const outcome = await new CoordinatedSeasonPublication({
-      publisher: publisherFor(storage, new ExplodingPurger('reject'), logger),
+    const { boundary, active } = await guardedBoundary(
+      storage,
       logger,
-    }).publish(run, metadataFor(source), FIXED_NOW, NEXT);
+      new ExplodingPurger('reject'),
+    );
+
+    const outcome = await boundary.publish(
+      run,
+      metadataFor(source),
+      FIXED_NOW,
+      NEXT,
+    );
 
     expect(outcome.outcome).toBe('published');
-    if (outcome.outcome === 'published') {
-      expect(outcome.result.status).toBe('applied');
-      expect(outcome.result.cachePurge).toBe('failed');
-    }
-    expect(await storage.getActiveVersion(SEASON)).toBe(NEXT);
+    if (outcome.outcome !== 'published') throw new Error('unreachable');
+    expect(outcome.result.status).toBe('applied');
+    expect(outcome.result.cachePurge).toBe('failed');
+    expect(active()).toBe(outcome.result.version);
+    // The legacy pointer is not what a guarded publication moves.
+    expect(await storage.getActiveVersion(SEASON)).toBe(PRIOR);
   });
 
   it('keeps a pre-commit failure as a truthful failed publication', async () => {
     const source = await seasonFixture();
     const run = await completedRun(source);
     const { storage, logger } = await seeded(source);
-    storage.arm('setActiveVersion', 1);
-
-    const outcome = await new CoordinatedSeasonPublication({
-      publisher: publisherFor(storage, new CountingPurger(), logger),
+    const { boundary, active } = await guardedBoundary(
+      storage,
       logger,
-    }).publish(run, metadataFor(source), FIXED_NOW, NEXT);
+      new CountingPurger(),
+    );
+    storage.arm('writeVersionedDocument', 1);
+
+    const outcome = await boundary.publish(
+      run,
+      metadataFor(source),
+      FIXED_NOW,
+      NEXT,
+    );
 
     expect(outcome.outcome).toBe('published');
     if (outcome.outcome === 'published') {
       expect(outcome.result.status).toBe('failed');
+      expect(outcome.result.reason).toBe('storage-write');
     }
     // Last known good survives.
-    expect(await storage.getActiveVersion(SEASON)).toBe(PRIOR);
+    expect(active()).toBe(PRIOR);
   });
 
   it('keeps cancellation distinct from any publication failure', async () => {
     const source = await seasonFixture();
     const { storage, logger } = await seeded(source);
+    const { boundary, active } = await guardedBoundary(
+      storage,
+      logger,
+      new CountingPurger(),
+    );
     const controller = new AbortController();
     controller.abort();
     const cancelled = await new MultiSourceCoordinator({
@@ -780,17 +889,19 @@ describe('coordinated publication returns for every operational failure', () => 
       logger,
     }).coordinate({ plan: fullPlan(source), signal: controller.signal });
 
-    const outcome = await new CoordinatedSeasonPublication({
-      publisher: publisherFor(storage, new CountingPurger(), logger),
-      logger,
-    }).publish(cancelled, metadataFor(source), FIXED_NOW, NEXT);
+    const outcome = await boundary.publish(
+      cancelled,
+      metadataFor(source),
+      FIXED_NOW,
+      NEXT,
+    );
 
     expect(cancelled.status).toBe('cancelled');
     expect(outcome.outcome).toBe('withheld');
     if (outcome.outcome === 'withheld') {
       expect(outcome.gap).toBe('run-not-completed');
     }
-    expect(await storage.getActiveVersion(SEASON)).toBe(PRIOR);
+    expect(active()).toBe(PRIOR);
   });
 });
 

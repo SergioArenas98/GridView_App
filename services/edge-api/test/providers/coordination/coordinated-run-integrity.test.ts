@@ -119,7 +119,7 @@ function publish(
   version = VERSION,
 ): Promise<Awaited<ReturnType<CoordinatedSeasonPublication['publish']>>> {
   return new CoordinatedSeasonPublication({
-    publisher: harness.publisher,
+    commands: harness.commands,
     logger: harness.logger,
   }).publish(run, metadataFor(source), FIXED_NOW, version);
 }
@@ -137,7 +137,7 @@ describe('a completed round needs a real classification', () => {
   for (const status of ['final', 'provisional'] as const) {
     it(`accepts a completed round classified as ${status}`, async () => {
       const { source } = await completedRoundWith(status);
-      const harness = publicationHarness();
+      const harness = await publicationHarness();
 
       const run = await coordinate(source, fullPlan(source).resources);
       const assembly = assembleSeasonSource(run, metadataFor(source));
@@ -145,14 +145,14 @@ describe('a completed round needs a real classification', () => {
 
       expect(assembly.complete, status).toBe(true);
       expect(outcome.outcome, status).toBe('published');
-      expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+      expect(harness.activeVersion()).toBe(harness.lastCommitted());
     });
   }
 
   for (const status of ['unavailable', 'unknown'] as const) {
     it(`withholds a completed round whose result is ${status}`, async () => {
       const { source, round } = await completedRoundWith(status);
-      const harness = publicationHarness();
+      const harness = await publicationHarness();
 
       const run = await coordinate(source, fullPlan(source).resources);
       const assembly = assembleSeasonSource(run, metadataFor(source));
@@ -170,7 +170,7 @@ describe('a completed round needs a real classification', () => {
       }
       expect(outcome.outcome, status).toBe('withheld');
       expect(harness.publishCalls, status).toBe(0);
-      expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+      expect(harness.activeVersion()).toBe(harness.seedVersion);
     });
   }
 
@@ -178,7 +178,7 @@ describe('a completed round needs a real classification', () => {
     // The unchanged curated season is exactly this shape: one classified round
     // and four non-completed rounds carrying `unavailable` documents.
     const source = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
 
     const run = await coordinate(source, fullPlan(source).resources);
     const outcome = await publish(harness, run, source);
@@ -190,9 +190,7 @@ describe('a completed round needs a real classification', () => {
     expect(absent.length).toBeGreaterThan(0);
     for (const result of absent) {
       // The document is still published: absence is meaningful, not omitted.
-      const stored = await harness.storage.readVersionedDocument(
-        SEASON,
-        VERSION,
+      const stored = await harness.activeDocument(
         `grand-prix:${result.round}:results`,
       );
       expect(stored, `round ${result.round}`).not.toBeNull();
@@ -201,10 +199,10 @@ describe('a completed round needs a real classification', () => {
 
   it('preserves last-known-good when a completed classification is missing', async () => {
     const healthy = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const good = await coordinate(healthy, fullPlan(healthy).resources);
     await publish(harness, good, healthy);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
 
     const { source } = await completedRoundWith('unavailable');
     const run = await coordinate(source, fullPlan(source).resources);
@@ -212,7 +210,7 @@ describe('a completed round needs a real classification', () => {
 
     expect(outcome.outcome).toBe('withheld');
     expect(harness.publishCalls).toBe(1);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
   });
 
   it('is deterministic under reversed plan order', async () => {
@@ -220,7 +218,7 @@ describe('a completed round needs a real classification', () => {
     const forward = fullPlan(source).resources;
 
     for (const plan of [forward, [...forward].reverse()]) {
-      const harness = publicationHarness();
+      const harness = await publicationHarness();
       const run = await coordinate(source, plan);
       const outcome = await publish(harness, run, source);
       expect(outcome.outcome).toBe('withheld');
@@ -293,7 +291,7 @@ describe('a same-source transport contradiction taints the whole run', () => {
   for (const [first, second] of contradictions) {
     it(`fails the run for ${first} versus ${second}`, async () => {
       const source = await seasonFixture();
-      const harness = publicationHarness();
+      const harness = await publicationHarness();
       const ports = conflictingPorts(source, first, second);
 
       const run = await new MultiSourceCoordinator({
@@ -307,8 +305,8 @@ describe('a same-source transport contradiction taints the whole run', () => {
       expect(run.status, `${first}/${second}`).toBe('invariant-violated');
       expect(assembly.complete).toBe(false);
       expect(outcome.outcome).toBe('withheld');
-      expect(harness.publishCalls, 'publisher must never be called').toBe(0);
-      expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+      expect(harness.publishCalls, 'publication must never be called').toBe(0);
+      expect(harness.activeVersion()).toBe(harness.seedVersion);
     });
   }
 
@@ -318,7 +316,7 @@ describe('a same-source transport contradiction taints the whole run', () => {
       ['successful', 'failed'],
       ['failed', 'successful'],
     ] as const) {
-      const harness = publicationHarness();
+      const harness = await publicationHarness();
       const run = await new MultiSourceCoordinator({
         ports: conflictingPorts(source, first, second),
         logger: harness.logger,
@@ -333,7 +331,7 @@ describe('a same-source transport contradiction taints the whole run', () => {
 
   it('keeps the same textual reference valid across different sources', async () => {
     const source = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     // Both adapters mint the identical token for genuinely separate requests.
     const ports = [
       completePort('jolpica', source, 'jolpica'),
@@ -353,7 +351,7 @@ describe('a same-source transport contradiction taints the whole run', () => {
 
   it('keeps identical repeated same-source claims deduplicated', async () => {
     const source = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const port = new (
       Object.getPrototypeOf(completePort('jolpica', source))
         .constructor as typeof import('./support').FakePort
@@ -380,7 +378,7 @@ describe('a same-source transport contradiction taints the whole run', () => {
 
   it('preserves accounting already established and never double-counts', async () => {
     const source = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const run = await new MultiSourceCoordinator({
       ports: conflictingPorts(source, 'successful', 'failed'),
       logger: harness.logger,
@@ -415,7 +413,7 @@ describe('a same-source transport contradiction taints the whole run', () => {
 
   it('leaves an ordinary provider failure publishable', async () => {
     const source = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     // A plain failure from one source with a healthy fallback is *not* an
     // invariant violation and must keep working.
     const failing = new (

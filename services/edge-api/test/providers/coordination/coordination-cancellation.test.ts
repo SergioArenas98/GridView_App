@@ -101,7 +101,7 @@ describe('cancellation performs and publishes nothing', () => {
       if (calls === 1) controller.abort();
     });
     const { subject } = coordinator([port]);
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
 
     const run = await subject.coordinate({
       plan: fullPlan(source),
@@ -114,7 +114,7 @@ describe('cancellation performs and publishes nothing', () => {
     expect(run.accounting.lifetime.total).toBe(1);
 
     const publication = new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     });
     const outcome = await publication.publish(
@@ -129,7 +129,7 @@ describe('cancellation performs and publishes nothing', () => {
       gap: 'run-not-completed',
     });
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
   });
 
   it('claims no further work once cancellation is observed, at full concurrency', async () => {

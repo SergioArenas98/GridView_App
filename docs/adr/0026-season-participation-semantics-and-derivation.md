@@ -108,6 +108,19 @@
 > all four Jolpica ports stay dormant and unregistered, no provider was
 > contacted, and nothing was deployed. This decision itself is unchanged.
 
+> **Implementation note 2026-09-27 (coordinated publication).** D12 items 10,
+> 12 and 13 are **implemented** for coordinated publication, and dormant
+> (Implementation Plan §14.0.27;
+> [ADR 0023 D11, amended 2026-09-27](0023-multi-source-provider-coordination.md#d11---publication-stays-exactly-where-it-was)). The coordinated bridge
+> publishes only through the guarded sequenced command. Every coordinated
+> candidate is therefore compared with the authoritative release (D14, D15)
+> and bound to it in sequencer `prepare` (D16). There is no legacy fallback:
+> a season without active sequencer authority fails as
+> `guard-authority-not-sequenced`. Item 7 stays open and enforced. Nothing
+> constructs or invokes the coordinated path, and all four Jolpica ports stay
+> dormant and unregistered. No provider was contacted, and nothing was
+> deployed. This decision itself is unchanged.
+
 ## Context
 
 The coordinated `season-participants` resource is one payload carrying four
@@ -695,6 +708,39 @@ implemented by this decision:
 >
 > Both are per season: a later season needs its own identities and evidence.
 
+> **Implementation note 2026-09-27 (coordinated publication).** **Items 10,
+> 12 and 13 are implemented**, and dormant (Implementation Plan §14.0.27).
+>
+> - **Items 10 and 12 (D14, D15).** Both are evaluated from the candidate's
+>   and the authoritative release's own `grand-prix:{round}:results`
+>   documents, by the single guard derivation and comparator described in
+>   the publication-guard note above. Coordination does not duplicate them.
+> - **Item 13 (D16).** Sequencer `prepare` binds the comparison to the exact
+>   predecessor inside its own transaction: the active version and its
+>   committed results revisions. `finalize` re-asserts the binding.
+> - **Coordinated publication uses that guarded path.**
+>   `CoordinatedSeasonPublication` publishes only through
+>   `SequencedPublicationService.publishGuarded`, never through
+>   `SnapshotPublisher` ([ADR 0023 D11, amended](0023-multi-source-provider-coordination.md#d11---publication-stays-exactly-where-it-was)). A season without
+>   active sequencer authority fails as `guard-authority-not-sequenced`, and
+>   nothing falls back to the legacy authority.
+> - **Previous state is still a guard only, never an input.** No predecessor
+>   row, round or span reaches the candidate. A refused candidate is withheld
+>   unchanged, and the authoritative release keeps serving.
+>
+> Still open:
+>
+> - **Item 7** stays open and enforced. A classified race selected from
+>   OpenF1 still withholds the season before publication.
+> - **Items 8 and 9** are satisfied for 2026, as the note above records.
+> - The correction or break-glass mechanism (D15; curator decision C4) is
+>   still undefined, so a genuine destructive correction fails closed.
+> - Sequencer genesis for a season with no release (C3) and production
+>   sequencer provisioning are not implemented.
+> - The implementation stays dormant until runtime wiring and scheduling are
+>   separately authorized. Nothing constructs or invokes the coordinated
+>   path.
+
 ### D13 - Requests and scheduling
 
 - Identity refresh requires `GET /ergast/f1/{season}/drivers/?limit=100` and
@@ -747,6 +793,12 @@ The guard requires access to that snapshot or metadata, which season assembly
 does not have today. It is a D12 publication prerequisite (item 10), and where
 it depends on persisted coverage metadata it depends on the open G9 gap. It is
 not implemented. It must execute atomically with publication (D16).
+
+> **Implemented 2026-09-27** (D12 item 10; Implementation Plan §14.0.26,
+> §14.0.27). The guard reads the active release itself, so it needs no G9
+> metadata. Coordinated publication runs it on the guarded sequenced path,
+> bound to the predecessor in `prepare` (D16). It is dormant. The paragraph
+> above is retained for the record.
 
 > **Complemented 2026-09-23, during review and before this ADR was merged.**
 > Review found that round-level containment is necessary but not sufficient:
@@ -810,6 +862,12 @@ same read of the authoritative snapshot, or of equivalent durable
 participation metadata, as D14, with the same possible G9 dependency. It is a
 D12 publication prerequisite (item 12) and is not implemented.
 
+> **Implemented 2026-09-27** (D12 item 12; Implementation Plan §14.0.26,
+> §14.0.27), on the same guarded path as D14 and with no G9 dependency. It is
+> dormant. No correction mechanism exists, so a genuine removal or
+> constructor reassignment still fails closed. The paragraph above is
+> retained for the record.
+
 > **Superseded wording, 2026-09-23, during review and before this ADR was
 > merged.** Adding D15 replaced three earlier statements. D5 said that "a
 > provider correction is absorbed by rebuilding"; only a non-destructive
@@ -841,6 +899,16 @@ This is an implementation prerequisite (D12 item 13), **not** a claim that
 this serialization exists today. Reading the active release inside season
 assembly, outside the publication authority's commit, would leave a
 time-of-check to time-of-use gap and does not satisfy it.
+
+> **Implemented 2026-09-27** (D12 item 13; Implementation Plan §14.0.26,
+> §14.0.27). The comparison runs in the publication authority's path, not in
+> season assembly. The sequencer's `prepare` compare-and-swaps on the
+> predecessor's active version and committed results revisions, and
+> `finalize` re-asserts it. A stale candidate is rejected, and the next run
+> compares against whatever is active then. Overlapping coordinated runs are
+> tested over both sequencer transports: the narrower candidate never
+> replaces the wider release. The implementation is dormant. The paragraph
+> above is retained for the record.
 
 ## Resolved choices
 
@@ -965,6 +1033,14 @@ The seven choices the decision pack left open are settled:
   > candidate that passes the normalized-contract validators and the full
   > preflight. A split candidate still cannot publish through coordination,
   > because items 7 to 10, 12 and 13 are open.
+
+  > **Note 2026-09-27 (coordinated publication).** Items 10, 12 and 13 are
+  > implemented (§14.0.27). The same private run, with the network blocked,
+  > publishes that candidate through the guarded coordinated path into a
+  > local sequencer seeded with the mock baseline. D14 and D15 pass, the
+  > five mock facts are present, and the `prepare` compare-and-swap
+  > succeeds. Nothing coordinated can reach a client until runtime wiring
+  > exists, and item 7 still withholds any OpenF1-selected race.
 - **Provisional-source participation.** Whether a selected OpenF1 race
   classification may create participation is undecided, and must be settled
   before OpenF1 is unlocked (D3).
@@ -989,13 +1065,24 @@ The seven choices the decision pack left open are settled:
 - **Classified-coverage non-regression.** The D14 guard and the read of the
   authoritative snapshot or durable coverage metadata it needs are not
   implemented (D12 item 10), and may depend on G9.
+
+  > **Note 2026-09-27.** Implemented for coordinated publication (D12 item
+  > 10, §14.0.27), reading the active release itself, so G9 is not needed.
 - **Participation-fact non-regression.** The D15 row-level guard is not
   implemented (D12 item 12). No correction mechanism for a genuine removal or
   constructor reassignment is defined, so such corrections fail closed.
+
+  > **Note 2026-09-27.** The guard is implemented for coordinated publication
+  > (D12 item 12, §14.0.27). The correction mechanism is still not defined,
+  > so such corrections still fail closed.
 - **Atomic comparison and publication.** Binding the D14 and D15 comparisons
   to the authoritative version the candidate replaces, through the ADR 0025
   publication authority or an equivalent compare-and-swap, is not implemented
   (D16, D12 item 13).
+
+  > **Note 2026-09-27.** Implemented as the sequencer `prepare`
+  > compare-and-swap, and used by coordinated publication (D12 item 13,
+  > §14.0.27).
 - **Client "Full season" inference.** The Flutter client still renders
   null/null as "Full season". Removing that inference is a mandatory
   publication prerequisite (D12 item 3), and it is not implemented.

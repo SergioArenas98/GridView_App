@@ -542,6 +542,106 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
   });
 
   /**
+   * The coordinated-publication bridge now depends on sequenced publication
+   * (ADR 0023 D11 as amended). That dependency is expected, and it points one
+   * way only: the Worker bundle contains the sequenced service and the command
+   * interface, and still contains no coordination module at all.
+   */
+  it('keeps the guarded coordinated bridge out of the Worker graph', async () => {
+    const bridge = 'src/providers/coordination/coordinated-publication.ts';
+    const own = await moduleGraph(edgeApiRoot, [bridge]);
+    expect(Object.keys(own.inputs)).toContain(
+      'src/providers/coordination/season-assembly.ts',
+    );
+
+    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
+    const inputs = Object.keys(worker.inputs);
+    expect(inputs).toContain('src/publication/sequenced/service.ts');
+    expect(inputs).toContain('src/publication/commands.ts');
+    expect(inputs).not.toContain(bridge);
+    expect(
+      inputs.filter((input) => input.startsWith('src/providers/coordination/')),
+    ).toEqual([]);
+  });
+
+  /**
+   * Coordination may depend on publication; nothing outside coordination and
+   * the dormant ports may depend on coordination. Every runtime module is an
+   * entry point here, so an edge into the seam from a module the Worker does
+   * not reach today is reported too.
+   */
+  it('lets no runtime module outside the seam and its ports reach coordination', async () => {
+    const seam = 'src/providers/coordination/';
+    const graph = await moduleGraph(
+      edgeApiRoot,
+      runtimeEntryPointsOutsideDormantDir(),
+    );
+
+    const edges: string[] = [];
+    for (const [input, detail] of Object.entries(graph.inputs)) {
+      if (input.startsWith(seam) || input.startsWith(dormantDir)) continue;
+      for (const imported of detail.imports) {
+        if (imported.path.startsWith(seam)) {
+          edges.push(`${input} -> ${imported.path} (${imported.kind})`);
+        }
+      }
+    }
+
+    expect(edges).toEqual([]);
+    // Non-vacuous: the seam is in this graph, as its own entry points.
+    expect(Object.keys(graph.inputs)).toContain(
+      'src/providers/coordination/coordinated-publication.ts',
+    );
+  });
+
+  /**
+   * The emitted Worker bundle, scanned for the names that would run the
+   * coordinated path. Unminified, as the graph builds are, so class and
+   * function names survive; the scan is proven able to see a symbol by the
+   * ones that must be there.
+   */
+  it('emits no coordination or Jolpica port symbol into the Worker bundle', async () => {
+    const result = await build({
+      ...workerBuildOptions,
+      absWorkingDir: edgeApiRoot,
+      entryPoints: [workerEntryPoint],
+    });
+    const text = (result.outputFiles ?? []).map((file) => file.text).join('\n');
+    expect(text.length).toBeGreaterThan(0);
+    const symbol = (name: string) => new RegExp(`\\b${name}\\d*\\b`);
+
+    for (const present of [
+      'SequencedPublicationService',
+      'publishGuarded',
+      'SnapshotPublisher',
+    ]) {
+      expect(text, present).toMatch(symbol(present));
+    }
+    for (const absent of [
+      'CoordinatedSeasonPublication',
+      'MultiSourceCoordinator',
+      'assembleSeasonSource',
+      'deriveDriverSeasonEntries',
+      'JolpicaCalendarPort',
+      'JolpicaCircuitsPort',
+      'JolpicaParticipantsPort',
+      'JolpicaResultsPort',
+    ]) {
+      expect(text, absent).not.toMatch(symbol(absent));
+    }
+  });
+
+  it('registers no Jolpica provider in the runtime factory', () => {
+    const factory = readFileSync(
+      join(edgeApiRoot, 'src', 'providers', 'factory.ts'),
+      'utf8',
+    );
+
+    expect(factory).not.toMatch(/jolpica/i);
+    expect(factory).not.toMatch(/coordinat/i);
+  });
+
+  /**
    * Non-vacuity for both boundaries above, in the four shapes a reachable
    * adapter could take.
    *

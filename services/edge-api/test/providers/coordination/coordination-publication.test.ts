@@ -1,8 +1,10 @@
 /**
- * The guarded bridge to the unchanged publication boundary, and last-known-good
- * under every source-failure combination.
+ * The guarded bridge to the guarded sequenced publication boundary, and
+ * last-known-good under every source-failure combination.
  *
- * Required cases 28-31.
+ * Required cases 28-31. The harness is the real `SequencedPublicationService`
+ * over an active, seeded sequencer; the legacy authority is present only as
+ * the seed's author and is never reached by coordination.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -17,10 +19,7 @@ import {
   type CoordinationRun,
   type ProviderResourceOutcome,
 } from '../../../src/providers/coordination';
-import { SnapshotPublisher } from '../../../src/publication/publisher';
-import { MemoryCachePurgeAdapter } from '../../../src/cache/purge';
 import { MemorySnapshotStorage } from '../../../src/storage/local';
-import { runtimeSnapshotValidator } from '../../../src/validation/snapshot-validator';
 import type { StoredSnapshot } from '../../../src/storage/types';
 import {
   FakePort,
@@ -53,15 +52,15 @@ async function coordinate(
 
 describe('a complete run publishes exactly once', () => {
   // Case 29
-  it('assembles the season and calls the publisher a single time', async () => {
+  it('assembles the season and calls guarded publication a single time', async () => {
     const source = await seasonFixture();
     const run = await coordinate(
       [completePort('jolpica', source)],
       fullPlan(source).resources,
     );
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const publication = new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     });
 
@@ -76,8 +75,12 @@ describe('a complete run publishes exactly once', () => {
     expect(outcome.outcome).toBe('published');
     if (outcome.outcome !== 'published') throw new Error('unreachable');
     expect(outcome.result.status).toBe('applied');
+    expect(outcome.result.previousVersion).toBe(harness.seedVersion);
     expect(harness.publishCalls).toBe(1);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe('release-1');
+    expect(harness.legacyPublishCalls).toBe(0);
+    // The sequencer allocated the committed version, not the caller.
+    expect(outcome.result.version).not.toBe('release-1');
+    expect(harness.activeVersion()).toBe(outcome.result.version);
   });
 
   it('assembles the same season the whole-season provider would', async () => {
@@ -149,7 +152,7 @@ describe('a complete run publishes exactly once', () => {
   });
 });
 
-describe('an incomplete run never reaches the publisher', () => {
+describe('an incomplete run never reaches publication', () => {
   // Case 28
   it('withholds publication for every incompleteness', async () => {
     const source = await seasonFixture();
@@ -204,9 +207,9 @@ describe('an incomplete run never reaches the publisher', () => {
 
     for (const scenario of cases) {
       const run = await coordinate([scenario.port], scenario.resources);
-      const harness = publicationHarness();
+      const harness = await publicationHarness();
       const publication = new CoordinatedSeasonPublication({
-        publisher: harness.publisher,
+        commands: harness.commands,
         logger: harness.logger,
       });
 
@@ -222,7 +225,7 @@ describe('an incomplete run never reaches the publisher', () => {
       expect(outcome.gap, scenario.name).toBe(scenario.gap);
       expect(outcome.missing.length, scenario.name).toBeGreaterThan(0);
       expect(harness.publishCalls, scenario.name).toBe(0);
-      expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+      expect(harness.activeVersion()).toBe(harness.seedVersion);
     }
   });
 
@@ -241,10 +244,10 @@ describe('an incomplete run never reaches the publisher', () => {
       ],
       fullPlan(source).resources,
     );
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
 
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), GENERATED_AT, 'release-y');
 
@@ -265,15 +268,15 @@ describe('an incomplete run never reaches the publisher', () => {
     expect(harness.publishCalls).toBe(0);
   });
 
-  it('withholds a rejected plan without touching the publisher', async () => {
+  it('withholds a rejected plan without touching publication', async () => {
     const source = await seasonFixture();
     const run = await coordinate(
       [completePort('jolpica', source)],
       [raceResource(12), raceResource(12)],
     );
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const publication = new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     });
 
@@ -293,7 +296,7 @@ describe('an incomplete run never reaches the publisher', () => {
   });
 });
 
-/** Storage whose versioned writes fail, so the publisher fails after validation. */
+/** Storage whose versioned writes fail, so publication fails after `prepare`. */
 class WriteFailingStorage extends MemorySnapshotStorage {
   failing = false;
 
@@ -309,20 +312,13 @@ class WriteFailingStorage extends MemorySnapshotStorage {
 
 describe('last-known-good survives every failure', () => {
   // Case 30
-  it('leaves the active release unchanged when the publisher fails', async () => {
+  it('leaves the active release unchanged when publication fails', async () => {
     const source = await seasonFixture();
     const storage = new WriteFailingStorage();
-    const logger = new CapturingLogger();
-    const publisher = new SnapshotPublisher(
-      storage,
-      runtimeSnapshotValidator,
-      new MemoryCachePurgeAdapter(),
-      logger,
-      'https://api.gridview.test',
-    );
+    const harness = await publicationHarness({ storage });
     const publication = new CoordinatedSeasonPublication({
-      publisher,
-      logger,
+      commands: harness.commands,
+      logger: harness.logger,
     });
     const run = await coordinate(
       [completePort('jolpica', source)],
@@ -336,8 +332,9 @@ describe('last-known-good survives every failure', () => {
       'release-1',
     );
     expect(first.outcome).toBe('published');
-    const active = await storage.getActiveVersion(SEASON);
-    expect(active).toBe('release-1');
+    const active = harness.activeVersion();
+    expect(active).toBe(harness.lastCommitted());
+    expect(active).not.toBe(harness.seedVersion);
 
     storage.failing = true;
     const second = await publication.publish(
@@ -350,16 +347,18 @@ describe('last-known-good survives every failure', () => {
     expect(second.outcome).toBe('published');
     if (second.outcome !== 'published') throw new Error('unreachable');
     expect(second.result.status).toBe('failed');
+    expect(second.result.reason).toBe('storage-write');
     // The prior release is still the one being served.
-    expect(await storage.getActiveVersion(SEASON)).toBe(active);
+    expect(harness.activeVersion()).toBe(active);
+    expect(harness.legacyPublishCalls).toBe(0);
   });
 
   // Case 31
   it('keeps the previous release for every source-failure combination', async () => {
     const source = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const publication = new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     });
     const good = await coordinate(
@@ -367,9 +366,9 @@ describe('last-known-good survives every failure', () => {
       fullPlan(source).resources,
     );
     await publication.publish(good, metadataFor(source), GENERATED_AT, 'good');
-    const active = await harness.storage.getActiveVersion(SEASON);
+    const active = harness.activeVersion();
     const publishedSoFar = harness.publishCalls;
-    expect(active).toBe('good');
+    expect(active).toBe(harness.lastCommitted());
 
     const failures: ProviderResourceOutcome[] = [
       { outcome: 'not-attempted', reason: 'rate-limit-deferred' },
@@ -413,7 +412,7 @@ describe('last-known-good survives every failure', () => {
         );
 
         expect(outcome.outcome).toBe('withheld');
-        expect(await harness.storage.getActiveVersion(SEASON)).toBe(active);
+        expect(harness.activeVersion()).toBe(active);
       }
     }
 

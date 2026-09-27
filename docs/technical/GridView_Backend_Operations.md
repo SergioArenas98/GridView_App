@@ -371,6 +371,14 @@ race classification - is withheld with a bounded reason, and the previous
 active release keeps serving. A publisher failure is not retried or
 compensated, so last-known-good survives it too.
 
+> **Note 2026-09-27.** "The existing publisher" is now the guarded sequenced
+> publication, never `SnapshotPublisher` (ADR 0023 D11, amended; Implementation
+> Plan §14.0.27). A coordinated candidate is compared with the authoritative
+> release (ADR 0026 D14, D15) and bound to it in sequencer `prepare` (D16). A
+> season without active sequencer authority fails as
+> `guard-authority-not-sequenced`, with no legacy fallback. The coordinated
+> path is still dormant: nothing constructs or runs it.
+
 `retryAt` on a deferred contribution is carried as **data only**. Acting on it
 is **G5 event-aware scheduling, which remains open**, and no persisted
 provenance or provisional/reconciled record state exists - that is **G9**,

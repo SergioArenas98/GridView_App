@@ -350,7 +350,7 @@ describe('a season-scoped candidate is bound to the requested season', () => {
 
   it('never publishes a rejected payload', async () => {
     const source = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const port = new FakePort(
       'jolpica',
       (request) =>
@@ -378,13 +378,13 @@ describe('a season-scoped candidate is bound to the requested season', () => {
       logger: harness.logger,
     }).coordinate({ plan: fullPlan(source) });
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, 'v1');
 
     expect(outcome.outcome).toBe('withheld');
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
   });
 
   it('leaves unrelated resources usable while one is rejected', async () => {
@@ -512,7 +512,7 @@ describe('a candidate requires a successful transport attempt', () => {
 
   it('cannot select or publish a contradictory candidate', async () => {
     const source = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const port = new FakePort(
       'jolpica',
       (request) =>
@@ -536,7 +536,7 @@ describe('a candidate requires a successful transport attempt', () => {
     }).coordinate({ plan: fullPlan(source) });
     const assembly = assembleSeasonSource(run, metadataFor(source));
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, 'v1');
 
@@ -546,7 +546,7 @@ describe('a candidate requires a successful transport attempt', () => {
     expect(assembly.complete).toBe(false);
     expect(outcome.outcome).toBe('withheld');
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
   });
 
   it('still classifies an ordinary failed outcome as an attempted failure', async () => {
@@ -910,7 +910,7 @@ describe('a failure reason agrees with its transport attempt', () => {
 
   it('keeps a contradictory pairing out of selection, assembly and publication', async () => {
     const source = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const port = new FakePort('jolpica', (request) => {
       if (request.resource.kind === 'season-circuits') {
         return failedOutcome(
@@ -932,7 +932,7 @@ describe('a failure reason agrees with its transport attempt', () => {
       logger: harness.logger,
     }).coordinate({ plan: fullPlan(source) });
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, 'v1');
 
@@ -941,7 +941,7 @@ describe('a failure reason agrees with its transport attempt', () => {
     );
     expect(outcome.outcome).toBe('withheld');
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
   });
 
   it('keeps transport deduplication source-qualified under the matrix', async () => {

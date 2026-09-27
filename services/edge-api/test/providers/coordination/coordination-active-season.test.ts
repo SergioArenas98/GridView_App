@@ -110,7 +110,7 @@ function publish(
   source: ProviderSeasonSource,
 ): Promise<Awaited<ReturnType<CoordinatedSeasonPublication['publish']>>> {
   return new CoordinatedSeasonPublication({
-    publisher: harness.publisher,
+    commands: harness.commands,
     logger: harness.logger,
   }).publish(run, metadataFor(source), FIXED_NOW, VERSION);
 }
@@ -118,7 +118,7 @@ function publish(
 describe('an active season publishes without results for future rounds', () => {
   it('does not withhold the season because a future round has no race result', async () => {
     const { source, completedRounds } = await activeSeason();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
 
     const run = await coordinate(source, activePlan(completedRounds));
     const assembly = assembleSeasonSource(run, metadataFor(source));
@@ -128,39 +128,27 @@ describe('an active season publishes without results for future rounds', () => {
     expect(assembly.complete).toBe(true);
     expect(outcome.outcome).toBe('published');
     expect(harness.publishCalls).toBe(1);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
   });
 
   it('emits no results document for the future round', async () => {
     const { source, completedRounds, futureRound } = await activeSeason();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
 
     const run = await coordinate(source, activePlan(completedRounds));
     await publish(harness, run, source);
 
     expect(
-      await harness.storage.readVersionedDocument(
-        SEASON,
-        VERSION,
-        `grand-prix:${futureRound}:results`,
-      ),
+      await harness.activeDocument(`grand-prix:${futureRound}:results`),
     ).toBeNull();
     // The event document itself is still published: the round exists, only its
     // classification is meaningfully absent.
     expect(
-      await harness.storage.readVersionedDocument(
-        SEASON,
-        VERSION,
-        `grand-prix:${futureRound}`,
-      ),
+      await harness.activeDocument(`grand-prix:${futureRound}`),
     ).not.toBeNull();
     for (const round of completedRounds) {
       expect(
-        await harness.storage.readVersionedDocument(
-          SEASON,
-          VERSION,
-          `grand-prix:${round}:results`,
-        ),
+        await harness.activeDocument(`grand-prix:${round}:results`),
       ).not.toBeNull();
     }
   });
@@ -169,7 +157,7 @@ describe('an active season publishes without results for future rounds', () => {
     const { source, completedRounds } = await activeSeason();
     const dropped = completedRounds[0];
     if (dropped === undefined) throw new Error('fixture gap');
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
 
     const run = await coordinate(
       source,
@@ -210,7 +198,7 @@ describe('an active season publishes without results for future rounds', () => {
 
     for (const status of EVENT_STATUSES) {
       const { source, completedRounds } = await activeSeason(status);
-      const harness = publicationHarness();
+      const harness = await publicationHarness();
       const run = await coordinate(source, activePlan(completedRounds));
       const assembly = assembleSeasonSource(run, metadataFor(source));
       await publish(harness, run, source);
@@ -223,10 +211,10 @@ describe('an active season publishes without results for future rounds', () => {
 
   it('keeps the prior active release when a completed round is missing', async () => {
     const { source, completedRounds } = await activeSeason();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const healthy = await coordinate(source, activePlan(completedRounds));
     await publish(harness, healthy, source);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
 
     const dropped = completedRounds[0];
     if (dropped === undefined) throw new Error('fixture gap');
@@ -235,13 +223,13 @@ describe('an active season publishes without results for future rounds', () => {
       activePlan(completedRounds.filter((round) => round !== dropped)),
     );
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(broken, metadataFor(source), FIXED_NOW, 'v2');
 
     expect(outcome.outcome).toBe('withheld');
     expect(harness.publishCalls).toBe(1);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
   });
 
   it('is deterministic under reversed plan order', async () => {
@@ -250,11 +238,11 @@ describe('an active season publishes without results for future rounds', () => {
     const reversed = [...forward].reverse();
 
     for (const plan of [forward, reversed]) {
-      const harness = publicationHarness();
+      const harness = await publicationHarness();
       const run = await coordinate(source, plan);
       const outcome = await publish(harness, run, source);
       expect(outcome.outcome).toBe('published');
-      expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+      expect(harness.activeVersion()).toBe(harness.lastCommitted());
     }
   });
 });

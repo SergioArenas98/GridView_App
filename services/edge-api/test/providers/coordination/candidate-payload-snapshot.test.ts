@@ -563,9 +563,9 @@ describe('a candidate that cannot be detached fails closed', () => {
     );
 
     const run = await coordinate([port], fullPlan(source).resources);
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, 'v-snapshot-1');
 
@@ -573,7 +573,7 @@ describe('a candidate that cannot be detached fails closed', () => {
     if (outcome.outcome !== 'withheld') return;
     expect(outcome.gap).toBe('resource-unavailable');
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
   });
 });
 
@@ -784,9 +784,9 @@ describe('ordinary payloads survive detachment unchanged', () => {
       [completePort('jolpica', source)],
       fullPlan(source).resources,
     );
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, 'v-snapshot-2');
 

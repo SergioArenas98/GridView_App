@@ -4,7 +4,7 @@
  * The first half drives the pure derivation with hand-written classifications,
  * one rule at a time. The second half drives the **production path** - the
  * real coordinator, `assembleSeasonSource`, the integrity preflight and the
- * real publisher with its runtime snapshot validator - over the synthetic
+ * guarded sequenced publication with its runtime snapshot validator - over the synthetic
  * split season, whose participants contribution carries no spans at all.
  * Nothing here is provider data and nothing reaches a network.
  */
@@ -725,13 +725,17 @@ describe('season assembly derives the driver entries', () => {
     });
     expect(validateSeasonReferences(result)).toEqual([]);
 
-    const harness = publicationHarness();
+    // The predecessor is the same season shape; the mock baseline's round-12
+    // line-up would be a D15 regression for this candidate.
+    const harness = await publicationHarness({ seedSource: source });
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, 'v-split');
 
     expect(outcome.outcome).toBe('published');
+    if (outcome.outcome !== 'published') throw new Error('unreachable');
+    expect(outcome.result.status).toBe('applied');
     expect(harness.publishCalls).toBe(1);
   });
 });
