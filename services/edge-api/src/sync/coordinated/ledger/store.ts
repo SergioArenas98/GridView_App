@@ -151,18 +151,17 @@ export class ReconciliationLedgerStore {
   }
 
   /**
-   * Gives the lease back. Only the current token may, and releasing never
-   * rewinds the fence.
+   * Gives the lease back. Only the current, unexpired token may - the same
+   * fence check every write runs - and releasing never rewinds the fence. An
+   * expired lease needs no release: it already admits the next acquisition.
    */
   releaseLease(payload: unknown): LeaseRelease {
     return this.transact((store) => {
       const token = decodeLeaseToken(payload);
       if (token === null) refuse('invalid-request');
-      const current = readLease(store, token.season);
-      const reason = tokenMismatch(current, token);
-      if (reason !== null) refuse(reason);
+      const current = requireLease(store, token, this.now());
       store.put(ledgerKeys.lease(token.season), {
-        ...current!,
+        ...current,
         state: 'released',
       } satisfies LeaseRecord);
       return { outcome: 'released' };
@@ -211,13 +210,14 @@ export class ReconciliationLedgerStore {
       }
 
       const backlog = readBacklog(store);
-      const existing = new Set(backlog.map((entry) => backlogKey(entry)));
+      const existing = new Map(
+        backlog.map((entry) => [backlogKey(entry), entry] as const),
+      );
       for (const removal of request.backlogRemovals) {
-        if (
-          !existing.has(
-            ledgerKeys.backlog(season, removal.round, removal.revision),
-          )
-        ) {
+        // A disposition names the resource and the staged revision it
+        // disposes of; any other revision does not match the entry.
+        const entry = existing.get(ledgerKeys.backlog(season, removal.round));
+        if (entry === undefined || entry.revision !== removal.revision) {
           refuse('backlog-entry-missing');
         }
       }
@@ -225,11 +225,8 @@ export class ReconciliationLedgerStore {
         request.classifications.map((w) => w.record.round),
       );
       for (const insertion of request.backlogInsertions) {
-        if (
-          existing.has(
-            ledgerKeys.backlog(season, insertion.round, insertion.revision),
-          )
-        ) {
+        // One entry per resource, whatever revision a second one names.
+        if (existing.has(ledgerKeys.backlog(season, insertion.round))) {
           refuse('backlog-duplicate');
         }
         if (
@@ -259,23 +256,18 @@ export class ReconciliationLedgerStore {
         });
       }
       for (const removal of request.backlogRemovals) {
-        store.delete(
-          ledgerKeys.backlog(season, removal.round, removal.revision),
-        );
+        store.delete(ledgerKeys.backlog(season, removal.round));
       }
       const enteredAt = now.toISOString();
       for (const insertion of request.backlogInsertions) {
-        store.put(
-          ledgerKeys.backlog(season, insertion.round, insertion.revision),
-          {
-            schemaVersion: LEDGER_SCHEMA_VERSION,
-            kind: 'backlog-entry',
-            season,
-            round: insertion.round,
-            revision: insertion.revision,
-            enteredAt,
-          } satisfies BacklogEntry,
-        );
+        store.put(ledgerKeys.backlog(season, insertion.round), {
+          schemaVersion: LEDGER_SCHEMA_VERSION,
+          kind: 'backlog-entry',
+          season,
+          round: insertion.round,
+          revision: insertion.revision,
+          enteredAt,
+        } satisfies BacklogEntry);
       }
       return {
         outcome: 'committed',
@@ -374,12 +366,13 @@ function tokenMismatch(
   return null;
 }
 
-/** The fenced write check every mutating operation runs first. */
-function requireLease(store: Store, token: LeaseToken, now: Date): void {
+/** The fenced check every mutating operation runs first. */
+function requireLease(store: Store, token: LeaseToken, now: Date): LeaseRecord {
   const current = readLease(store, token.season);
   const reason = tokenMismatch(current, token);
   if (reason !== null) refuse(reason);
   if (expired(current!, now)) refuse('lease-expired');
+  return current!;
 }
 
 /**
@@ -494,7 +487,7 @@ function readPublished(
 }
 
 function backlogKey(entry: BacklogEntry): string {
-  return ledgerKeys.backlog(entry.season, entry.round, entry.revision);
+  return ledgerKeys.backlog(entry.season, entry.round);
 }
 
 /** Every backlog entry, across every season. */
@@ -534,11 +527,7 @@ function readSnapshot(store: Store, season: number, now: Date): LedgerSnapshot {
       capacity: BACKLOG_CAPACITY,
       entries: backlog
         .filter((entry) => entry.season === season)
-        .sort(
-          (left, right) =>
-            left.round - right.round ||
-            (left.revision < right.revision ? -1 : 1),
-        ),
+        .sort((left, right) => left.round - right.round),
     },
   };
 }

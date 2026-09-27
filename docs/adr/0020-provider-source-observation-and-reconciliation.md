@@ -676,11 +676,13 @@ What the storage now guarantees, for a later G9 implementation to build on:
   therefore not engaged by the ledger.
 - **Fenced per-season leases** with a 10-minute lifetime and a fencing token
   that only ever grows. A released, expired or superseded token commits
-  nothing.
+  nothing and cannot release.
 - **Versioned conditional commits**, applied all or nothing. A refused or
   failed transaction changes no record.
 - **Obligation 2's capacity half.** The operator backlog is capped at 60
-  records **globally across seasons**. The cap is counted inside the committing
+  records **globally across seasons**, with at most one entry per
+  classification resource. A competing correction stays on the record's own
+  slot, never as a second entry. The cap is counted inside the committing
   transaction of the one global object. An insertion that would exceed it is
   refused, and there is no eviction and no age-based deletion. The typed
   capacity-exceeded **event**, the operator alert and the disposition path are

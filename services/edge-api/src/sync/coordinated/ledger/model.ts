@@ -158,7 +158,14 @@ export interface SeasonRecord {
   readonly publicationDueAt: LedgerInstant | null;
 }
 
-/** One operator-review backlog entry, key `backlog:{season}:{round}:{revision}`. */
+/**
+ * One operator-review backlog entry, key `backlog:{season}:{round}`.
+ *
+ * At most one per classification resource, so the capacity counts resources
+ * (ADR 0020 §4). `revision` is the staged correction the entry was made for;
+ * a competing correction is held on the classification record, never as a
+ * second entry.
+ */
 export interface BacklogEntry {
   readonly schemaVersion: typeof LEDGER_SCHEMA_VERSION;
   readonly kind: 'backlog-entry';

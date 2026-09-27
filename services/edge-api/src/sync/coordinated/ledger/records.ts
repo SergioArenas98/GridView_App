@@ -60,8 +60,8 @@ export const ledgerKeys = {
   classification: (season: number, round: number) =>
     `classification:${season}:${round}`,
   backlogPrefix: 'backlog:',
-  backlog: (season: number, round: number, revision: string) =>
-    `backlog:${season}:${round}:${revision}`,
+  // One entry per classification resource: the capacity counts resources.
+  backlog: (season: number, round: number) => `backlog:${season}:${round}`,
 } as const;
 
 const instantPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -540,10 +540,6 @@ function decodeReferences(value: unknown): BacklogReference[] | null {
   return references;
 }
 
-function referenceKey(reference: BacklogReference): string {
-  return `${reference.round}:${reference.revision}`;
-}
-
 function hasDuplicates(values: readonly (string | number)[]): boolean {
   return new Set(values).size !== values.length;
 }
@@ -603,9 +599,11 @@ export function decodeCommitRequest(
 
   if (
     hasDuplicates(classifications.map((write) => write.record.round)) ||
+    // One backlog change per resource per request: a resource is entered,
+    // or disposed of, never both at once and never twice.
     hasDuplicates([
-      ...backlogInsertions.map(referenceKey),
-      ...backlogRemovals.map(referenceKey),
+      ...backlogInsertions.map((reference) => reference.round),
+      ...backlogRemovals.map((reference) => reference.round),
     ])
   ) {
     return refused('duplicate-record');

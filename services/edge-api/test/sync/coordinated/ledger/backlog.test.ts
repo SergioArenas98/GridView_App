@@ -86,9 +86,12 @@ describe('the global backlog capacity', () => {
     expect(
       await fixture.ledger.commit(
         commitRequest(token, {
-          backlogInsertions: [1, 2, 3].map((round) => ({
+          classifications: [59, 60, 61].map((round) =>
+            write(classification(round)),
+          ),
+          backlogInsertions: [59, 60, 61].map((round) => ({
             round,
-            revision: rev(`competing-${round}`),
+            revision: rev(`staged-${round}`),
           })),
         }),
       ),
@@ -100,9 +103,12 @@ describe('the global backlog capacity', () => {
       (
         await fixture.ledger.commit(
           commitRequest(token, {
-            backlogInsertions: [1, 2].map((round) => ({
+            classifications: [59, 60].map((round) =>
+              write(classification(round)),
+            ),
+            backlogInsertions: [59, 60].map((round) => ({
               round,
-              revision: rev(`competing-${round}`),
+              revision: rev(`staged-${round}`),
             })),
           }),
         )
@@ -123,7 +129,8 @@ describe('the global backlog capacity', () => {
     expect(
       await fixture.ledger.commit(
         commitRequest(renewed, {
-          backlogInsertions: [{ round: 1, revision: rev('newer') }],
+          classifications: [write(classification(61))],
+          backlogInsertions: [{ round: 61, revision: rev('newer') }],
         }),
       ),
     ).toEqual({ outcome: 'rejected', reason: 'backlog-capacity-exceeded' });
@@ -136,13 +143,15 @@ describe('the global backlog capacity', () => {
     const token = await lease(fixture);
     await fill(fixture, token, 60, 'full');
 
-    // A removal and an insertion in the same commit net to the capacity.
+    // Disposing of one resource frees the slot another resource takes, in
+    // the same commit, netting to the capacity.
     expect(
       (
         await fixture.ledger.commit(
           commitRequest(token, {
+            classifications: [write(classification(61))],
             backlogRemovals: [{ round: 1, revision: rev('full-1') }],
-            backlogInsertions: [{ round: 1, revision: rev('replacement') }],
+            backlogInsertions: [{ round: 61, revision: rev('next') }],
           }),
         )
       ).outcome,
@@ -155,7 +164,7 @@ describe('the global backlog capacity', () => {
     const fixture = ledgerFixture();
     const token = await lease(fixture);
     await fill(fixture, token, 60, 'full');
-    fixture.host.poke(ledgerKeys.backlog(SEASON, 61, rev('smuggled')), {
+    fixture.host.poke(ledgerKeys.backlog(SEASON, 61), {
       schemaVersion: LEDGER_SCHEMA_VERSION,
       kind: 'backlog-entry',
       season: SEASON,
@@ -171,6 +180,46 @@ describe('the global backlog capacity', () => {
 });
 
 describe('backlog entries', () => {
+  it('holds at most one entry per classification resource, whatever the revision', async () => {
+    const fixture = ledgerFixture();
+    const token = await lease(fixture);
+    await fill(fixture, token, 1, 'one');
+    const before = committedBytes(fixture.host);
+
+    // Repeated commits naming new revisions for the same resource cannot
+    // take a second slot, so one resource can never exhaust the capacity.
+    for (const label of ['second', 'third']) {
+      expect(
+        await fixture.ledger.commit(
+          commitRequest(token, {
+            backlogInsertions: [{ round: 1, revision: rev(label) }],
+          }),
+        ),
+      ).toEqual({ outcome: 'rejected', reason: 'backlog-duplicate' });
+    }
+    expect(committedBytes(fixture.host)).toBe(before);
+    const read = await fixture.ledger.readSeason(SEASON);
+    expect(read.outcome === 'read' && read.snapshot.backlog.count).toBe(1);
+
+    // The other 59 slots stay available to other resources.
+    const others = Array.from({ length: 59 }, (_, index) => index + 2);
+    expect(
+      (
+        await fixture.ledger.commit(
+          commitRequest(token, {
+            classifications: others.map((round) =>
+              write(classification(round)),
+            ),
+            backlogInsertions: others.map((round) => ({
+              round,
+              revision: rev(`other-${round}`),
+            })),
+          }),
+        )
+      ).outcome,
+    ).toBe('committed');
+  });
+
   it('refuses a duplicate entry, a missing removal and an orphan, changing nothing', async () => {
     const fixture = ledgerFixture();
     const token = await lease(fixture);
@@ -188,6 +237,13 @@ describe('backlog entries', () => {
       await fixture.ledger.commit(
         commitRequest(token, {
           backlogRemovals: [{ round: 1, revision: rev('never-entered') }],
+        }),
+      ),
+    ).toEqual({ outcome: 'rejected', reason: 'backlog-entry-missing' });
+    expect(
+      await fixture.ledger.commit(
+        commitRequest(token, {
+          backlogRemovals: [{ round: 2, revision: rev('one-1') }],
         }),
       ),
     ).toEqual({ outcome: 'rejected', reason: 'backlog-entry-missing' });

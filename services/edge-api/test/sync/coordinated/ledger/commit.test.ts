@@ -465,7 +465,7 @@ describe('storage restart', () => {
 
     expect(fixture.host.committedKeys()).toEqual(
       [
-        ledgerKeys.backlog(SEASON, 1, rev('staged')),
+        ledgerKeys.backlog(SEASON, 1),
         ledgerKeys.classification(SEASON, 1),
         ledgerKeys.lease(SEASON),
         ledgerKeys.published(SEASON),

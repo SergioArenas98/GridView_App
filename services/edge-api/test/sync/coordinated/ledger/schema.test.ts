@@ -305,6 +305,24 @@ describe('commit requests', () => {
         }),
       ),
     ).toEqual({ ok: false, reason: 'duplicate-record' });
+    // One backlog change per resource, even under different revisions.
+    for (const parts of [
+      {
+        backlogInsertions: [
+          { round: 3, revision: rev('a') },
+          { round: 3, revision: rev('b') },
+        ],
+      },
+      {
+        backlogInsertions: [{ round: 3, revision: rev('a') }],
+        backlogRemovals: [{ round: 3, revision: rev('b') }],
+      },
+    ]) {
+      expect(decodeCommitRequest(commitRequest(token, parts))).toEqual({
+        ok: false,
+        reason: 'duplicate-record',
+      });
+    }
   });
 
   it.each([

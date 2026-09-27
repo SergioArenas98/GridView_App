@@ -168,6 +168,24 @@ describe('fencing', () => {
     ).toBe('committed');
   });
 
+  it('refuses to release an expired lease, which already admits the next caller', async () => {
+    const fixture = ledgerFixture();
+    const token = await lease(fixture);
+    fixture.clock.advance(LEASE_TTL_MS);
+    const before = committedBytes(fixture.host);
+
+    expect(await fixture.ledger.releaseLease(token)).toEqual({
+      outcome: 'rejected',
+      reason: 'lease-expired',
+    });
+    expect(committedBytes(fixture.host)).toBe(before);
+    const read = await fixture.ledger.readSeason(SEASON);
+    expect(read.outcome === 'read' && read.snapshot.lease?.state).toBe(
+      'expired',
+    );
+    expect(await lease(fixture)).toEqual({ season: SEASON, fence: 2 });
+  });
+
   it('refuses a released token, and never hands its fence out again', async () => {
     const fixture = ledgerFixture();
     const token = await lease(fixture);

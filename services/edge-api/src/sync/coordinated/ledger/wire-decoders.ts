@@ -126,7 +126,13 @@ export function decodeSnapshot(
   const entries: BacklogEntry[] = [];
   for (const entry of backlog.entries) {
     const decoded = decodeBacklogEntry(entry);
-    if (decoded === null || decoded.season !== season) return null;
+    if (
+      decoded === null ||
+      decoded.season !== season ||
+      decoded.round <= (entries.at(-1)?.round ?? 0)
+    ) {
+      return null;
+    }
     entries.push(decoded);
   }
 
