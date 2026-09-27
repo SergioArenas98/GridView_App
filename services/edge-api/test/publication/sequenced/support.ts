@@ -17,16 +17,22 @@ import {
   snapshotRevision,
 } from '../../../src/publication/snapshot-revision';
 import {
+  DurableObjectSeasonPublicationSequencer,
+  durableObjectSequencerHost,
   LocalSeasonPublicationSequencer,
   MemorySequencerHost,
   SeasonPublicationCoordinator,
+  SeasonPublicationSequencer,
   type CutoverSeed,
   type PerKeyState,
   type SeasonPublicationSequencerPort,
+  type SequencerDurableHost,
+  type SequencerNamespace,
+  type SequencerOptions,
 } from '../../../src/publication/sequencer';
 import { SequencedPublicationService } from '../../../src/publication/sequenced/service';
 import { MockFormulaOneProvider } from '../../../src/providers/mock/mock-provider';
-import { FixedClock } from '../../../src/runtime/clock';
+import { FixedClock, type Clock } from '../../../src/runtime/clock';
 import {
   generateSnapshotSet,
   type GeneratedSnapshotSet,
@@ -85,7 +91,12 @@ export interface SequencedContext {
   readonly logger: CapturingLogger;
   readonly purger: MemoryCachePurgeAdapter;
   readonly coordinator: SeasonPublicationCoordinator;
-  readonly port: LocalSeasonPublicationSequencer;
+  readonly port: SeasonPublicationSequencerPort;
+  /**
+   * Present only for the `durable-object` transport: the namespace the port
+   * reaches the object through, whose `intercept` hook can lose an answer.
+   */
+  readonly transport: DurableTransport | null;
   readonly service: SequencedPublicationService;
   readonly legacy: SnapshotPublisher;
   readonly clock: FixedClock;
@@ -190,8 +201,101 @@ export async function perKeyStateFor(
   return states;
 }
 
+/** How a test's service reaches the sequencer. */
+export type SequencerTransport = 'local' | 'durable-object';
+
+export const sequencerTransports: readonly SequencerTransport[] = [
+  'local',
+  'durable-object',
+];
+
+/**
+ * Decides what one Durable Object call returns. `run` executes the command on
+ * the object and yields its real response; an interceptor may return it, drop
+ * it by throwing (a lost answer after the object acted), or throw without
+ * calling `run` (a call that never arrived).
+ */
+export type TransportInterceptor = (
+  command: string,
+  run: () => Promise<Response>,
+) => Promise<Response>;
+
+export interface DurableTransport {
+  readonly namespace: SequencerNamespace;
+  /** Every command the client sent, in order. */
+  readonly commands: string[];
+  intercept: TransportInterceptor | null;
+}
+
+/**
+ * SQLite-backed storage's shape over an in-memory map: `transactionSync`
+ * applies its callback's writes atomically and discards them if it throws.
+ */
+function memoryDurableState(): SequencerDurableHost {
+  let committed = new Map<string, unknown>();
+  let working: Map<string, unknown> | null = null;
+  const current = () => working ?? committed;
+  return {
+    storage: {
+      transactionSync<T>(closure: () => T): T {
+        working = new Map(committed);
+        try {
+          const result = closure();
+          committed = working;
+          return result;
+        } finally {
+          working = null;
+        }
+      },
+      kv: {
+        get: <T>(key: string) => current().get(key) as T | undefined,
+        put: <T>(key: string, value: T) => {
+          current().set(key, structuredClone(value));
+        },
+        delete: (key: string) => current().delete(key),
+        list: <T>({ prefix = '' }: { prefix?: string } = {}) =>
+          [...current().entries()].filter(([key]) =>
+            key.startsWith(prefix),
+          ) as [string, T][],
+      },
+    },
+  };
+}
+
+function durableTransport(
+  object: SeasonPublicationSequencer,
+): DurableTransport {
+  const transport: DurableTransport = {
+    commands: [],
+    intercept: null,
+    namespace: {
+      idFromName: (name: string) => name,
+      get: () => ({
+        fetch: async (url: string, init: RequestInit) => {
+          const command = String(
+            (JSON.parse(String(init.body)) as { command?: unknown }).command,
+          );
+          transport.commands.push(command);
+          const run = () => object.fetch(new Request(url, init));
+          return transport.intercept === null
+            ? run()
+            : transport.intercept(command, run);
+        },
+      }),
+    },
+  };
+  return transport;
+}
+
 export async function sequencedContext(
-  options: { storage?: MemorySnapshotStorage } = {},
+  options: {
+    storage?: MemorySnapshotStorage;
+    transport?: SequencerTransport;
+    /** The sequencer's own clock, when a test must move it. */
+    sequencerClock?: Clock;
+    /** Reshapes the seeded release before it is published and seeded. */
+    seedTransform?: (set: GeneratedSnapshotSet) => GeneratedSnapshotSet;
+  } = {},
 ): Promise<SequencedContext> {
   const clock = new FixedClock(new Date('2026-07-20T12:00:00.000Z'));
   const storage = options.storage ?? new MemorySnapshotStorage();
@@ -205,10 +309,13 @@ export async function sequencedContext(
   );
 
   // 1. An initial legacy publication supplies real documents and an inventory.
-  const seedSet = await generatedSet(clock, SEED_VERSION, {
+  const generatedSeed = await generatedSet(clock, SEED_VERSION, {
     sourceUpdatedAt: SEED_ORDERING_INPUT,
     contentVersion: '2026.07.10.1',
   });
+  const seedSet = options.seedTransform
+    ? options.seedTransform(generatedSeed)
+    : generatedSeed;
   const seededPublication = await legacy.publish(seedSet);
   if (seededPublication.status !== 'applied') {
     throw new Error(
@@ -217,17 +324,36 @@ export async function sequencedContext(
   }
 
   // 2. Seed + activate the sequencer from it, the way D12 migration would.
-  const coordinator = new SeasonPublicationCoordinator(
-    new MemorySequencerHost(),
-    {
-      clock,
-      token: (() => {
-        let n = 0;
-        return () => `op-token-${(n += 1)}`;
-      })(),
-      opaqueVersionComponent: hexCounter(),
-    },
-  );
+  const sequencerOptions: SequencerOptions = {
+    clock: options.sequencerClock ?? clock,
+    token: (() => {
+      let n = 0;
+      return () => `op-token-${(n += 1)}`;
+    })(),
+    opaqueVersionComponent: hexCounter(),
+  };
+  let coordinator: SeasonPublicationCoordinator;
+  let port: SeasonPublicationSequencerPort;
+  let transport: DurableTransport | null = null;
+  if (options.transport === 'durable-object') {
+    // The object and a second coordinator over the same durable state: the
+    // coordinator seeds it and lets a test inspect it, while the service only
+    // ever reaches the object through the client and a serialized request.
+    const state = memoryDurableState();
+    const object = new SeasonPublicationSequencer(state, sequencerOptions);
+    coordinator = new SeasonPublicationCoordinator(
+      durableObjectSequencerHost(state),
+      { clock: sequencerOptions.clock },
+    );
+    transport = durableTransport(object);
+    port = new DurableObjectSeasonPublicationSequencer(transport.namespace);
+  } else {
+    coordinator = new SeasonPublicationCoordinator(
+      new MemorySequencerHost(),
+      sequencerOptions,
+    );
+    port = new LocalSeasonPublicationSequencer(coordinator);
+  }
   const inventory = await readStoredInventory(storage, SEASON, SEED_VERSION);
   if (inventory.kind !== 'documents') {
     throw new Error('seed inventory not readable');
@@ -262,7 +388,6 @@ export async function sequencedContext(
     throw new Error(`activateCutover: ${JSON.stringify(activated)}`);
   }
 
-  const port = new LocalSeasonPublicationSequencer(coordinator);
   const service = new SequencedPublicationService({
     port,
     fallback: legacy,
@@ -280,6 +405,7 @@ export async function sequencedContext(
     purger,
     coordinator,
     port,
+    transport,
     service,
     legacy,
     clock,

@@ -31,9 +31,9 @@
  *   ever recorded a sidecar - so it must never silently select the legacy path.
  *
  * Nothing here repairs, filters or reconstructs a record. A value either is one
- * or is not. **This module has no production caller**: resolving rollback
- * provenance and writing the sidecar as part of the required publication write
- * set are Integration-PR obligations.
+ * or is not. The sequenced publication service writes the sidecar as part of
+ * the required publication write set, and rollback reads it to resolve a
+ * target's provenance (ADR 0025 D3, D8).
  */
 
 import { canonicalInstant } from './canonical/instant';

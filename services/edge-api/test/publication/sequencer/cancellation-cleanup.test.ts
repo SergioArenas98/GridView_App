@@ -18,6 +18,7 @@ import {
   SEED_ACTIVE_VERSION,
   activeSequencer,
   commitment,
+  currentPredecessor,
   keyRevision,
   prepareRequest,
   rev,
@@ -27,7 +28,12 @@ import {
 const MANIFEST = commitment('manifest-1');
 
 function prepared(harness: Harness, overrides = {}) {
-  const outcome = harness.sequencer.prepare(prepareRequest(overrides));
+  const outcome = harness.sequencer.prepare(
+    prepareRequest({
+      expectedPredecessor: currentPredecessor(harness),
+      ...overrides,
+    }),
+  );
   if (outcome.outcome !== 'prepared') {
     throw new Error(`expected prepared, got ${JSON.stringify(outcome)}`);
   }

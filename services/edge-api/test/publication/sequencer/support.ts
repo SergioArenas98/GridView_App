@@ -9,13 +9,17 @@
  */
 
 import {
+  committedKeyPrefix,
   MemorySequencerHost,
   SeasonPublicationCoordinator,
   type CutoverSeed,
+  type ExpectedPredecessor,
   type PerKeyRevision,
   type PerKeyState,
   type SequencerOptions,
 } from '../../../src/publication/sequencer';
+import { compareUtf8 } from '../../../src/publication/canonical/ordering';
+import { isRaceResultsDocumentName } from '../../../src/publication/guard/participation-guard';
 import type { Clock } from '../../../src/runtime/clock';
 import type { SnapshotDocumentName } from '../../../src/storage/types';
 
@@ -166,6 +170,51 @@ export function activeSequencer(
   return harness;
 }
 
+/**
+ * The D16 binding for the seeded release: its active version, and no results
+ * documents, because the seed commits none.
+ */
+export function seededPredecessor(
+  activeVersion: string = SEED_ACTIVE_VERSION,
+): ExpectedPredecessor {
+  return { activeVersion, guardDocuments: [] };
+}
+
+/**
+ * The binding for whatever release is active now, read from the sequencer's
+ * own committed rows - what a correct caller's predecessor read produces.
+ */
+export function currentPredecessor(
+  harness: Pick<Harness, 'sequencer' | 'host'>,
+  season: number = SEASON,
+): ExpectedPredecessor {
+  const authority = harness.sequencer.readAuthority(season);
+  if (authority.cutoverState !== 'active') {
+    throw new Error(`season not active: ${JSON.stringify(authority)}`);
+  }
+  const guardDocuments = committedRows(harness.host)
+    .filter((row) => isRaceResultsDocumentName(row.documentName))
+    .map((row) => keyRevision(row.documentName, row.revision))
+    .sort((left, right) => compareUtf8(left.documentName, right.documentName));
+  return { activeVersion: authority.activeVersion, guardDocuments };
+}
+
+function committedRows(host: MemorySequencerHost): PerKeyState[] {
+  const rows: PerKeyState[] = [];
+  for (const key of host.committedKeys()) {
+    if (!key.startsWith(committedKeyPrefix)) continue;
+    const state = host.peek(key) as { revision: string; observedAt: string };
+    rows.push(
+      keyState(
+        key.slice(committedKeyPrefix.length),
+        state.revision,
+        state.observedAt,
+      ),
+    );
+  }
+  return rows;
+}
+
 /** The prepare request every test starts from, with per-test overrides. */
 export function prepareRequest(
   overrides: {
@@ -174,6 +223,7 @@ export function prepareRequest(
     perKeyRevisions?: readonly PerKeyRevision[];
     sourceOrderingInput?: string;
     expectedManifestCommitment?: string;
+    expectedPredecessor?: ExpectedPredecessor;
   } = {},
 ) {
   return {
@@ -185,6 +235,7 @@ export function prepareRequest(
     ],
     sourceOrderingInput: '2026-09-02T00:00:00.000Z',
     expectedManifestCommitment: commitment('manifest-1'),
+    expectedPredecessor: seededPredecessor(),
     ...overrides,
   };
 }

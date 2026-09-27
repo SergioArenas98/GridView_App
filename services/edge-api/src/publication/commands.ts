@@ -4,11 +4,15 @@
  *
  * `SnapshotPublisher` (the legacy Workers KV pointer authority) and
  * `SequencedPublicationService` (the two-phase `SeasonPublicationSequencer`
- * protocol) both satisfy this shape structurally. The synchronization service,
- * the admin router and the coordinated-publication bridge type against this
- * interface so the composition root can hand them either one without any of
- * them knowing which - and, crucially, so the default build wires the exact
- * `SnapshotPublisher` it wires today, unchanged.
+ * protocol) both satisfy this shape structurally. The synchronization service
+ * and the admin router type against this interface so the composition root can
+ * hand them either one without either knowing which - and, crucially, so the
+ * default build wires the exact `SnapshotPublisher` it wires today, unchanged.
+ *
+ * The dormant coordinated-publication bridge does **not** type against it yet:
+ * it still names the concrete legacy `SnapshotPublisher` (ADR 0023 D11). Only
+ * the sequenced implementation enforces the ADR 0026 D14-D16 guard, so
+ * coordinated publication is not guarded until that bridge is retyped.
  */
 
 import type { GeneratedSnapshotSet } from '../snapshots/generator';

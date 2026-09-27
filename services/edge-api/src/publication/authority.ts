@@ -2,11 +2,12 @@
  * Resolves which season publication authority this Worker instance runs with
  * (ADR 0025 D6, D12), and nothing more.
  *
- * The default - and the only configuration any deployed environment uses - is
- * `legacy`: the existing Workers KV `active:{season}`/`previous:{season}`
- * pointers. The composition root then wires the exact `SnapshotPublisher` and
- * the exact public router path it wires today, and never constructs a sequencer
- * port or performs a Durable Object lookup.
+ * The default is `legacy`: the existing Workers KV
+ * `active:{season}`/`previous:{season}` pointers. Development and production
+ * use it; the composition root then wires the exact `SnapshotPublisher` and
+ * the exact public router path it always has, and never constructs a sequencer
+ * port or performs a Durable Object lookup. Staging selects `sequencer` for the
+ * ADR 0025 D12 season-2026 cutover (see `wrangler.toml`).
  *
  * `sequencer` is selected only by `SEASON_PUBLICATION_AUTHORITY=sequencer`
  * together with a way to reach the sequencer - the test-only

@@ -23,12 +23,11 @@
  *
  * The Worker addresses an object only through the client below, which
  * `resolvePublicationAuthority` constructs over the binding only once
- * `SEASON_PUBLICATION_AUTHORITY` is explicitly `sequencer`. No committed
- * environment sets that value or `SEASON_PUBLICATION_CUTOVER_CONTROL`, so a
- * deployment that has the namespace bound - staging included - still never
- * looks it up, and legacy KV pointers stay authoritative. Selected with no
- * binding, the authority resolves to `sequencer-unavailable` and fails closed
- * rather than falling back to legacy.
+ * `SEASON_PUBLICATION_AUTHORITY` is explicitly `sequencer`. Only `env.staging`
+ * sets that value and `SEASON_PUBLICATION_CUTOVER_CONTROL`; development and
+ * production never look the namespace up, and legacy KV pointers stay
+ * authoritative there. Selected with no binding, the authority resolves to
+ * `sequencer-unavailable` and fails closed rather than falling back to legacy.
  *
  * ## Why the classic `fetch` interface
  *
@@ -208,6 +207,14 @@ export interface SequencerNamespace {
  * never to something a caller could mistake for a decision. In particular an
  * unreachable sequencer never resolves to `committed`, `authorized`,
  * `activated` or an authoritative version.
+ *
+ * For the two mutating operations a caller must act on - `prepare` and
+ * `finalize` - a lost or undecodable response resolves to `uncertain`, never
+ * to a definite rejection: the object may have applied the call before its
+ * answer was lost, and reporting that as `state-corrupt` would have a caller
+ * clean up, or report as failed, an operation that exists or a release that
+ * committed. A response that decodes but does not answer the request that
+ * was sent is still `state-corrupt`.
  */
 export class DurableObjectSeasonPublicationSequencer implements SeasonPublicationSequencerPort {
   constructor(private readonly namespace: SequencerNamespace) {}
@@ -226,7 +233,8 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
     const value = await this.call(request.season, 'prepare', request);
     const decoded = decodePrepareOutcome(value);
     if (decoded === null) {
-      return { outcome: 'rejected', reason: 'state-corrupt' };
+      // Whether an operation was prepared is unknown. Not a rejection.
+      return { outcome: 'uncertain' };
     }
     if (
       decoded.outcome === 'prepared' &&
@@ -236,6 +244,16 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
       // manifest this call sent. Never acted on.
       return { outcome: 'rejected', reason: 'state-corrupt' };
     }
+    if (
+      decoded.outcome === 'prepared' &&
+      decoded.priorVersion !== request.expectedPredecessor.activeVersion
+    ) {
+      // D16. The object did not bind the predecessor this call compared
+      // against - including an older object that never returns
+      // `priorVersion` because it never checked `expectedPredecessor`. The
+      // operation it may have prepared is never acted on; its TTL retires it.
+      return { outcome: 'rejected', reason: 'state-corrupt' };
+    }
     return decoded;
   }
 
@@ -243,7 +261,9 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
     const value = await this.call(request.season, 'finalize', request);
     const decoded = decodeFinalizeOutcome(value);
     if (decoded === null) {
-      return { outcome: 'rejected', reason: 'state-corrupt' };
+      // The commit may have happened before the answer was lost. Not a
+      // rejection, and never grounds for cleaning the candidate up.
+      return { outcome: 'uncertain' };
     }
     if (
       decoded.outcome === 'committed' &&

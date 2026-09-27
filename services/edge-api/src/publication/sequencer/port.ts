@@ -10,13 +10,12 @@
  * **Holding the port is not reaching a live sequencer.** In the Worker, a
  * Durable Object-backed port is constructed only by
  * `resolvePublicationAuthority`, and only once `SEASON_PUBLICATION_AUTHORITY`
- * is explicitly `sequencer`. No committed environment sets it, so under every
- * committed configuration no code path reaches an object, whichever
- * environments have the `SEASON_PUBLICATION_SEQUENCER` namespace provisioned
- * (declared for `env.staging` only; see
- * `docs/technical/GridView_Environments.md`). Registration is described in
- * `durable-object.ts`. Selected with no reachable binding, the authority fails
- * closed as `sequencer-unavailable`.
+ * is explicitly `sequencer`. Only `env.staging` sets it - the only environment
+ * that declares the `SEASON_PUBLICATION_SEQUENCER` namespace (see
+ * `docs/technical/GridView_Environments.md`); development and production never
+ * reach an object. Registration is described in `durable-object.ts`. Selected
+ * with no reachable binding, the authority fails closed as
+ * `sequencer-unavailable`.
  */
 
 import type {

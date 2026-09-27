@@ -139,6 +139,14 @@ export function consequenceForRejectedPublication(
     case 'sequencer-prepare-rejected':
     case 'sequencer-operation-superseded':
     case 'season-paused-for-cutover':
+    case 'guard-round-coverage-regression':
+    case 'guard-participation-fact-removed':
+    case 'guard-constructor-replaced':
+    case 'guard-predecessor-stale':
+    case 'guard-predecessor-unavailable':
+    case 'guard-predecessor-invalid':
+    case 'guard-candidate-invalid':
+    case 'guard-authority-not-sequenced':
       return 'failed';
   }
 }

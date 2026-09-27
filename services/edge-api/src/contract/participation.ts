@@ -1,5 +1,7 @@
 /**
- * Ordering and selection over a season's driver participation spans.
+ * Ordering and selection over a season's driver participation spans, and the
+ * one predicate for whether a result is a classification - shared by season
+ * assembly and the publication guard so the two can never disagree.
  *
  * A driver may hold several `DriverSeasonEntry` rows in one season: a
  * mid-season move or a return is a new span, never a mutation of the earlier
@@ -21,7 +23,24 @@
  * reaches it.
  */
 
+import type { ResultStatus } from './enums';
 import type { DriverSeasonEntry } from './types';
+
+/**
+ * Whether a result document carries an actual classification.
+ *
+ * A result *object* existing is not the same as a result being available: the
+ * public contract requires a not-yet-run session to return
+ * `status = 'unavailable'` with an empty `entries` array rather than a
+ * fabricated empty classification (GridView_Backend_Scheme.md §10.5), and the
+ * provider emits exactly that. Only `final` and `provisional` denote a real
+ * classification; `unavailable` says so explicitly, and `unknown` establishes
+ * nothing, so neither may assert availability. This is the same
+ * fail-towards-not-fabricating rule the event-status table uses.
+ */
+export function isClassifiedResult(status: ResultStatus): boolean {
+  return status === 'final' || status === 'provisional';
+}
 
 /** The span's effective start: a null start is the season start. */
 function effectiveStart(entry: DriverSeasonEntry): number {

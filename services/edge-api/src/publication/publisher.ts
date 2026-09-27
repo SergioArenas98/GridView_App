@@ -108,6 +108,50 @@ export const publicationReasons = [
    * rather than report a completed cadence.
    */
   'season-paused-for-cutover',
+  /**
+   * Sequenced publication and rollback only (ADR 0026 D14). A classified
+   * round of the authoritative predecessor is not classified in the candidate.
+   * Rejected before `prepare`; the predecessor keeps serving.
+   */
+  'guard-round-coverage-regression',
+  /**
+   * ADR 0026 D15. A `(round, driver)` participation fact of the authoritative
+   * predecessor is absent from the candidate. Rejected before `prepare`.
+   */
+  'guard-participation-fact-removed',
+  /**
+   * ADR 0026 D15. A published `(round, driver)` fact names a different
+   * constructor in the candidate. Rejected before `prepare`.
+   */
+  'guard-constructor-replaced',
+  /**
+   * ADR 0026 D16. The release the candidate was compared against is no longer
+   * the active one - `prepare` found another version committed
+   * (`stale-predecessor`), or `finalize` found the bound predecessor moved
+   * (`predecessor-changed`). Nothing is rebuilt automatically; the next run
+   * compares against whatever is active then.
+   */
+  'guard-predecessor-stale',
+  /**
+   * The authoritative predecessor's inventory or a results document of it
+   * could not be read, or read as absent. Never treated as an empty release.
+   */
+  'guard-predecessor-unavailable',
+  /**
+   * The authoritative predecessor's results are not a valid release's: a
+   * malformed inventory or document, a duplicate or out-of-range fact, or
+   * content whose revisions are not the ones the sequencer committed
+   * (`predecessor-guard-mismatch`). Fails closed; there is no correction path.
+   */
+  'guard-predecessor-invalid',
+  /** The candidate's own results documents violate the guard derivation. */
+  'guard-candidate-invalid',
+  /**
+   * A guarded publication would reach a season whose authority is not the
+   * active sequencer. Reserved for the guarded coordinated entry point; the
+   * legacy authority cannot bind a predecessor (ADR 0026 D16).
+   */
+  'guard-authority-not-sequenced',
 ] as const;
 
 export type PublicationReason = (typeof publicationReasons)[number];

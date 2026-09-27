@@ -27,6 +27,7 @@ import {
   prepareRequest,
   rev,
   seedFor,
+  seededPredecessor,
 } from './support';
 
 function preparedOrThrow(
@@ -366,7 +367,12 @@ describe('prepare: bounded input and state-specific authority', () => {
     // The second season has its own storage and its own epoch space: the first
     // season's live operation neither blocks it nor advances its epoch.
     const other = preparedOrThrow(
-      second.sequencer.prepare(prepareRequest({ season: OTHER_SEASON })),
+      second.sequencer.prepare(
+        prepareRequest({
+          season: OTHER_SEASON,
+          expectedPredecessor: seededPredecessor('20250901T000000000-bbbbbbbb'),
+        }),
+      ),
     );
     expect(other.operationEpoch).toBe(1);
     expect(second.sequencer.readAuthority(OTHER_SEASON)).toMatchObject({

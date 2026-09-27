@@ -27,7 +27,6 @@
  * diagnostic.
  */
 
-import type { ResultStatus } from '../../contract/enums';
 import {
   canonicalConstructorSeasonEntryId,
   canonicalDriverSeasonEntryId,
@@ -35,6 +34,7 @@ import {
   canonicalRaceResultId,
   canonicalSessionId,
 } from '../../contract/identity';
+import { isClassifiedResult } from '../../contract/participation';
 import type { DriverSeasonEntry } from '../../contract/types';
 import type { ProviderSeasonSource } from '../formula-one-provider';
 
@@ -214,20 +214,10 @@ export const seasonRelations = [
 export type SeasonRelation = (typeof seasonRelations)[number];
 
 /**
- * Whether a result document carries an actual classification.
- *
- * A result *object* existing is not the same as a result being available: the
- * public contract requires a not-yet-run session to return
- * `status = 'unavailable'` with an empty `entries` array rather than a
- * fabricated empty classification (GridView_Backend_Scheme.md §10.5), and the
- * provider emits exactly that. Only `final` and `provisional` denote a real
- * classification; `unavailable` says so explicitly, and `unknown` establishes
- * nothing, so neither may assert availability. This is the same
- * fail-towards-not-fabricating rule the event-status table uses.
+ * Re-exported from the neutral contract module, where publication can reach it
+ * without importing the provider layer (ADR 0026 D14-D16).
  */
-export function isClassifiedResult(status: ResultStatus): boolean {
-  return status === 'final' || status === 'provisional';
-}
+export { isClassifiedResult };
 
 function idSet(values: readonly { readonly id: string }[]): Set<string> {
   return new Set(values.map((value) => value.id));

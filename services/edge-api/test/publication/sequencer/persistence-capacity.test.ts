@@ -29,6 +29,7 @@ import {
   SEED_HIGH_WATER_MARK,
   activeSequencer,
   commitment,
+  currentPredecessor,
   keyRevision,
   keyState,
   makeSequencer,
@@ -303,6 +304,7 @@ describe('capacity: the largest supported release manifest', () => {
       prepareRequest({
         sourceOrderingInput: '2026-09-10T00:00:00.000Z',
         perKeyRevisions: changed,
+        expectedPredecessor: currentPredecessor(harness),
       }),
     );
     if (operation.outcome !== 'prepared') throw new Error('expected prepared');
@@ -368,6 +370,7 @@ describe('capacity: the largest supported release manifest', () => {
           prepareRequest({
             sourceOrderingInput: '2026-09-10T00:00:00.000Z',
             perKeyRevisions: manifest,
+            expectedPredecessor: currentPredecessor(harness),
           }),
         );
         if (operation.outcome !== 'prepared') {
