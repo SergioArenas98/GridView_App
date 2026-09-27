@@ -629,6 +629,28 @@ activation, each its own authorization. Staging provisioning is not
 outstanding; it completed on 2026-09-12. Smoke and latency verification and any
 production decision are later, separately authorized gates (ADR 0025 D12).
 
+### G5 and G9 remain open behind a dormant coordinated runtime (2026-09-27)
+
+The dormant coordinated runtime composition (Implementation Plan §14.0.29;
+ADR 0023 D14 status note) adds only a **seam** for the G9 reconciliation
+ledger: the `ReconciliationLedgerPort` interface in
+`src/sync/coordinated/ledger-port.ts`. It has no implementation, no Durable
+Object, no binding and no test hook, so `resolveReconciliationLedger` always
+answers `null`. Every coordinated run is refused as `ledger-unbound` before any
+provider request.
+
+**None of obligations 1-4 is advanced by it.** The obligations stay open:
+`sourceObservedAt`, the 60-record backlog capacity, the §10.4.1 state machine
+recorded against I1-I5, and D2.1-D2.9. The event-aware G5 scheduler does not
+exist either. The runtime
+fixes one rule in code ahead of both. A manual coordinated run is a forced
+publication run that **never advances scheduled due times**, so it cannot move
+the cadence or build D2.1 corroboration by repetition (runtime activation
+decision O-8). Obligation 5 is unchanged and reinforced by wiring: no OpenF1
+port is registered, and no provisional bound is passed.
+
+The decision above is unchanged.
+
 ## Reopening conditions
 
 | Trigger | Consequence |

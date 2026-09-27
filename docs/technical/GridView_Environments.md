@@ -328,6 +328,27 @@ the binding. Wherever the namespace is unbound, every provider reservation
 resolves to `unavailable` - the fail-closed default, under which no outbound
 provider request can be issued at all.
 
+**`PROVIDER_MODE`, committed and live (2026-09-27).** The code admits `mock`,
+`none` and `coordinated` (Implementation Plan §14.0.29). `coordinated` is
+admitted only when `ENVIRONMENT` is `staging` or `production`, and is a
+configuration error in development. **No environment selects it**, committed
+or live:
+
+| Environment | Committed (`wrangler.toml`) | Live |
+|---|---|---|
+| development | unset (`mock`) | local only |
+| staging | `mock` | `mock` (version `c297d260-…`, which predates the `coordinated` value) |
+| production | `none` | not provisioned |
+
+Admitting the value activates nothing. Even where it is selected, the
+coordinated runtime needs a bound reconciliation ledger (G9), and no such
+binding exists. Every coordinated run therefore stops as `ledger-unbound`
+before any transport, client or port is constructed, with zero provider
+requests. The rate-limiter note above is otherwise unchanged. Once a
+coordinated run can pass that gate, the hardened client reserves through
+this namespace. Selecting `coordinated`, adding a ledger binding and changing
+the cron are each cutover-sensitive staging changes (runbook §6).
+
 `SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **`sequencer` in
 live staging** since 2026-09-15 (version `cccdcf11-…`, kept unchanged by
 version `c297d260-…` on 2026-09-16), and in `env.staging` as committed. It is unset in development and production. An absent, empty or unrecognised value resolves to `legacy` and
