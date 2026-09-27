@@ -110,15 +110,21 @@ Staging config lives in `wrangler.toml` (`[env.staging]`): Worker
 `PROVIDER_MODE = mock`, `PUBLIC_BASE_URL` set, and cron `17 3 * * *` (03:17 UTC).
 
 > **Pass the runbook's section 6 gate before every staging deploy.** The gate
-> compares `SEASON_PUBLICATION_CUTOVER_CONTROL` and
-> `SEASON_PUBLICATION_AUTHORITY` in the dry-run below with the live version.
+> compares `SEASON_PUBLICATION_CUTOVER_CONTROL`,
+> `SEASON_PUBLICATION_AUTHORITY`, `PROVIDER_MODE`, the cron trigger and the
+> Durable Object bindings in the dry-run below with the live version.
 > Any difference makes the deploy cutover-sensitive, never routine, and it
 > may run only under the separate authorization section 6 requires. Live
 > staging (`c297d260-…`, deployed 2026-09-16) carries
 > `SEASON_PUBLICATION_AUTHORITY = "sequencer"` and `activate:2026` — which is
-> exactly what this `wrangler.toml` commits, so the two values match again and
-> a staging deploy of `master` is ordinary by that gate. Any deploy that
-> changes or omits either value remains cutover-sensitive. Season 2026 was
+> exactly what this `wrangler.toml` commits, so those values match again. A
+> matching configuration is not enough on its own, though: the runbook's
+> section 6 also marks the publication guard and the coordinated runtime
+> composition in current `master` as cutover-sensitive code, so a staging
+> deploy of `master` is **not** ordinary today. Any deploy that changes or
+> omits one of those values remains cutover-sensitive. `PROVIDER_MODE` admits
+> `coordinated` in code, but no environment selects it, and selecting it is a
+> separate authorization. Season 2026 was
 > **activated on 2026-09-16** and is `active` and authoritative: its
 > publication and rollback run through the sequencer, and the legacy
 > `active:2026` / `previous:2026` pointers are unchanged but no longer

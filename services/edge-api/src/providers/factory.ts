@@ -9,7 +9,9 @@ export function resolveProvider(
   clock: Clock,
 ): FormulaOneProvider | null {
   if (env.__PROVIDER) return env.__PROVIDER;
-  if (config.providerMode === 'none') return null;
+  // Only `mock` builds a provider. Every other mode gets none: this seam is
+  // the whole-season provider path, and no other mode may run through it.
+  if (config.providerMode !== 'mock') return null;
   return new MockFormulaOneProvider({
     clock,
     failureMode:

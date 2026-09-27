@@ -275,8 +275,8 @@ describe('coordination performs no I/O of its own', () => {
 });
 
 describe('the coordination seam is dormant', () => {
-  it('is consumed by no runtime module', () => {
-    const offenders = sourceFiles()
+  it('is consumed only by the coordinated runtime composition', () => {
+    const consumers = sourceFiles()
       .filter((file) => !file.startsWith('providers/coordination/'))
       .filter((file) => {
         const contents = readFileSync(join(sourceDir, file), 'utf8');
@@ -287,10 +287,12 @@ describe('the coordination seam is dormant', () => {
         );
       });
 
-    // No port is registered, so nothing may drive the coordinator yet. The mock
-    // provider remains the whole-season double the synchronization service
-    // uses, and `PROVIDER_MODE` still admits exactly `mock | none`.
-    expect(offenders).toEqual([]);
+    // An exact allow-list. The composition is the one module that builds a
+    // coordinator, and it builds one only when `PROVIDER_MODE` is
+    // `coordinated` and every dependency is bound, which no committed
+    // environment satisfies. The mock provider remains the whole-season
+    // double the synchronization service uses in `mock`.
+    expect(consumers).toEqual(['sync/coordinated/composition.ts']);
   });
 
   it('adds no OpenF1 adapter and no source-named module for it', () => {
@@ -306,11 +308,12 @@ describe('the coordination seam is dormant', () => {
     // live in `test/providers/provider-neutrality.test.ts`.
   });
 
-  it('is invoked by no runtime module, and neither is its guarded entry point', () => {
+  it('is built only by the composition, and its guarded entry point used nowhere else', () => {
     // `publishGuarded` is declared by the command interface, implemented by
-    // the sequenced service and called by the bridge. Nothing else under
-    // `src/` - no composition root, route, scheduler or synchronization path
-    // - names it or the bridge.
+    // the sequenced service and called by the bridge. Outside the seam, only
+    // the coordinated runtime composition names the bridge, which it
+    // constructs over the guarded commands it is handed. No route, scheduler
+    // or synchronization path names either.
     const callers = sourceFiles()
       .filter((file) => !file.startsWith('providers/coordination/'))
       .filter((file) => {
@@ -325,6 +328,7 @@ describe('the coordination seam is dormant', () => {
     expect(callers).toEqual([
       'publication/commands.ts',
       'publication/sequenced/service.ts',
+      'sync/coordinated/composition.ts',
     ]);
   });
 
@@ -412,13 +416,13 @@ describe('the coordination seam is dormant', () => {
     expect(seen).toBeGreaterThan(0);
   });
 
-  it('keeps the runtime provider mode union unchanged', () => {
+  it('widens the runtime provider mode union by exactly coordinated', () => {
     const environment = readFileSync(
       join(sourceDir, 'config', 'environment.ts'),
       'utf8',
     );
     expect(environment).toContain(
-      "const validProviderModes = ['mock', 'none'] as const;",
+      "const validProviderModes = ['mock', 'none', 'coordinated'] as const;",
     );
   });
 });

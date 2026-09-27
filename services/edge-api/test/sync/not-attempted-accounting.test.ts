@@ -216,17 +216,17 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
     'utf8',
   );
 
-  it('keeps PROVIDER_MODE exactly mock and none', () => {
+  it('admits exactly mock, none and coordinated, and commits no coordinated mode', () => {
     const environment = readFileSync(
       join(repoRoot, 'services', 'edge-api', 'src', 'config', 'environment.ts'),
       'utf8',
     );
 
     expect(environment).toContain(
-      "const validProviderModes = ['mock', 'none'] as const;",
+      "const validProviderModes = ['mock', 'none', 'coordinated'] as const;",
     );
     expect(wrangler).not.toMatch(
-      /PROVIDER_MODE = "(jolpica|openf1|live|dual)"/,
+      /PROVIDER_MODE = "(jolpica|openf1|live|dual|coordinated)"/,
     );
   });
 

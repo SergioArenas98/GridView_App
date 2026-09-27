@@ -1282,6 +1282,40 @@ production is `none`.
 > unreachable from the Worker entry point. The notes above are retained for
 > the record.
 
+> **Status 2026-09-27 (dormant composition).** The coordinated runtime
+> composition exists and is **reachable** from the Worker entry point
+> (Implementation Plan §14.0.29). It is still dormant: it is not enabled
+> anywhere, and no provider request is possible. The earlier "unreachable
+> from the Worker entry point" statements above no longer hold. They are
+> replaced by an **exact import allow-list**:
+> `src/sync/coordinated/composition.ts` is the only runtime module outside
+> this package and `src/providers/jolpica/` that imports either one.
+>
+> - A single `JolpicaResourcePort` routes the six Jolpica resources to the
+>   five ports. It is the one registration for source `jolpica`.
+>   `event-schedule` and every non-race classification are refused as
+>   `resource-unsupported` before any reservation. No OpenF1 port is
+>   registered and no provisional bound is passed.
+> - One composition builds one pacer (at least 260 ms between reservations,
+>   no re-ask after a deferral), one hardened client, one coordinator at
+>   concurrency 1, and the D11 bridge. The bridge is built over the guarded
+>   sequenced publication, with no legacy fallback.
+> - `PROVIDER_MODE` now admits `coordinated`, in staging and production only.
+>   Admitting the value activates nothing. No committed environment selects
+>   it: staging is `mock` and production is `none`. In `mock` and `none` the
+>   composition is never reached.
+> - Where `coordinated` is selected, the composition first checks the limiter,
+>   a sequencer authority, a purge origin and the G9 reconciliation ledger.
+>   The ledger is an unbound interface, so every run ends as
+>   `coordinated-runtime-unavailable` / `ledger-unbound` before any transport,
+>   client or port exists.
+>
+> `SynchronizationService` is unchanged and still serves `mock` and `none`.
+> Still open: the G5 planner and the G9 ledger, round coherence, protection
+> against an empty standings table replacing a non-empty one, attribution,
+> the no-change gate, activation decisions O-3 to O-16, provisioning and
+> deployment. The notes above are retained for the record.
+
 #### Deep normalized-contract validation is an activation gate
 
 > **Amended by [ADR 0024](0024-deep-normalized-contract-validation.md)

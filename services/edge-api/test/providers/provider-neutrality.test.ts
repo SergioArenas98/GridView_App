@@ -286,20 +286,73 @@ function edgesIntoDormantDir(metafile: Metafile): string[] {
   return edges.sort();
 }
 
+/** The coordination seam, as esbuild names it in a metafile. */
+const coordinationDir = 'src/providers/coordination/';
+
+/** The one runtime module allowed to import either package. */
+const compositionModule = 'src/sync/coordinated/composition.ts';
+
+/** The five Jolpica port modules. */
+const jolpicaPortModules: readonly string[] = [
+  `${dormantDir}calendar-port.ts`,
+  `${dormantDir}circuits-port.ts`,
+  `${dormantDir}participants-port.ts`,
+  `${dormantDir}results-port.ts`,
+  `${dormantDir}standings-port.ts`,
+];
+
 /**
- * Every runtime module under `src/` that is not part of the dormant adapter,
- * as an esbuild entry point.
- *
- * The entry-point graph answers "is the adapter in the deployed bundle". This
- * set answers the separate question A9 also asks: does *anything* under
- * `src/` reach the adapter, including a module the entry point does not
- * reach today. Making every such module an entry point means the union of
- * their graphs contains a dormant module only if one of them imported it.
+ * The exact runtime import allow-list: every edge from a module outside both
+ * packages into either of them. The composition imports each package through
+ * its index and nothing else does.
  */
-function runtimeEntryPointsOutsideDormantDir(): string[] {
+const allowedPackageEdges: readonly string[] = [
+  `${compositionModule} -> ${coordinationDir}index.ts (import-statement)`,
+  `${compositionModule} -> ${dormantDir}index.ts (import-statement)`,
+];
+
+function insidePackages(input: string): boolean {
+  return input.startsWith(dormantDir) || input.startsWith(coordinationDir);
+}
+
+/** Every edge that crosses into either package from outside both. */
+function edgesIntoPackages(metafile: Metafile): string[] {
+  const edges: string[] = [];
+  for (const [input, detail] of Object.entries(metafile.inputs)) {
+    if (insidePackages(input)) continue;
+    for (const imported of detail.imports) {
+      if (insidePackages(imported.path)) {
+        edges.push(`${input} -> ${imported.path} (${imported.kind})`);
+      }
+    }
+  }
+  return edges.sort();
+}
+
+/** Every module in the graph that imports `module`. */
+function importersOf(metafile: Metafile, module: string): string[] {
+  return Object.entries(metafile.inputs)
+    .filter(([, detail]) =>
+      detail.imports.some((imported) => imported.path === module),
+    )
+    .map(([input]) => input)
+    .sort();
+}
+
+/**
+ * Every runtime module under `src/` outside both packages, as esbuild entry
+ * points.
+ *
+ * The entry-point graph answers "what is in the deployed bundle". This set
+ * answers the separate question A9 also asks: does *anything* under `src/`
+ * import either package, including a module the entry point does not reach
+ * today. Making every such module an entry point means an edge into either
+ * package appears only if one of them wrote it.
+ */
+function runtimeEntryPointsOutsidePackages(): string[] {
   return sourceFiles(srcRoot)
     .map((file) => `src/${file}`)
-    .filter((entry) => !entry.startsWith(dormantDir));
+    .filter((entry) => !insidePackages(entry));
 }
 
 /**
@@ -329,7 +382,7 @@ async function withSourceTree(
 }
 
 describe('runtime provider modes are unchanged by Phase 9B-1', () => {
-  it('admits exactly mock and none', () => {
+  it('admits no source-named provider mode', () => {
     expect(resolveProviderMode('mock', 'development')).toBe('mock');
     expect(resolveProviderMode('none', 'staging')).toBe('none');
 
@@ -385,11 +438,15 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
    * A name-based proxy was sound only while no adapter could exist. It lets a
    * real adapter pass by choosing a neutral name and fails an honest one that
    * is fully dormant, so it is not a sustainable architectural test. The
-   * assertions below are the boundaries A9 names instead: the adapter is
-   * unreachable from the Worker entry point, nothing outside its own directory
-   * imports it, and no configuration enables it.
+   * assertions below are the boundaries A9 names instead, in the form they
+   * take once the coordinated runtime composition is reachable: an **exact
+   * import allow-list**, under which only `src/sync/coordinated/composition.ts`
+   * imports the adapter or the coordination seam, and no configuration
+   * selects the mode that constructs it. That the committed `mock` and `none`
+   * paths never reach the composition, and make no provider request, is
+   * proven by behaviour in `test/sync/coordinated-runtime.test.ts`.
    *
-   * The first two are answered by **the bundler itself**, not by a private
+   * The graph assertions are answered by **the bundler itself**, not by a private
    * model of it. An earlier revision walked the TypeScript AST and resolved
    * specifiers with `ts.resolveModuleName`; every defect found in it was the
    * same defect - an edge the real build follows and the model did not, most
@@ -397,233 +454,76 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
    * ESM import at all. Asking esbuild under Wrangler's own options removes
    * the class rather than another instance of it.
    */
-  it('keeps the Jolpica adapter unreachable from the Worker entry point', async () => {
+  it('reaches both packages from the Worker entry point only through the composition', async () => {
     const graph = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
 
-    // The entry point's graph is the set of files the deployed bundle is
-    // built from. Nothing under the adapter directory may appear in it.
-    expect(edgesIntoDormantDir(graph)).toEqual([]);
-    expect(dormantModules(graph)).toEqual([]);
+    // The coordinated composition is reachable, so the packages are in the
+    // bundle. Every edge that crosses into either one comes from the single
+    // allow-listed module and nowhere else.
+    expect(edgesIntoPackages(graph)).toEqual(allowedPackageEdges);
 
-    // The graph is real, not an empty one from a build that resolved nothing:
-    // the entry point genuinely reaches its own modules.
+    // Non-vacuous: the graph really contains the five ports, the dispatcher,
+    // the coordinator and the bridge, and the path to the composition runs
+    // through the coordinated sync entry point.
     const inputs = Object.keys(graph.inputs);
-    expect(inputs).toContain(workerEntryPoint);
-    expect(inputs).toContain('src/providers/factory.ts');
-    expect(inputs).toContain('src/sync/sync-service.ts');
+    for (const module of [
+      ...jolpicaPortModules,
+      `${dormantDir}resource-port.ts`,
+      `${coordinationDir}coordinator.ts`,
+      `${coordinationDir}coordinated-publication.ts`,
+      compositionModule,
+      'src/sync/coordinated/run.ts',
+      'src/providers/http/reservation-pacer.ts',
+    ]) {
+      expect(inputs, module).toContain(module);
+    }
+    expect(importersOf(graph, compositionModule)).toEqual([
+      'src/sync/coordinated/run.ts',
+    ]);
+    expect(importersOf(graph, 'src/sync/coordinated/run.ts')).toEqual([
+      workerEntryPoint,
+    ]);
   });
 
-  it('is imported by no runtime module outside its own directory', async () => {
-    const entryPoints = runtimeEntryPointsOutsideDormantDir();
+  it('lets no other runtime module import either package', async () => {
+    const entryPoints = runtimeEntryPointsOutsidePackages();
     const graph = await moduleGraph(edgeApiRoot, entryPoints);
 
-    // Every module outside the adapter directory is its own entry point, so
-    // an adapter module in this graph was reached from one of them - whether
-    // or not the Worker entry point reaches that importer.
-    expect(edgesIntoDormantDir(graph)).toEqual([]);
-    expect(dormantModules(graph)).toEqual([]);
+    // Every module outside the two packages is its own entry point, so an
+    // edge from a module the Worker does not reach today is reported too.
+    expect(edgesIntoPackages(graph)).toEqual(allowedPackageEdges);
 
-    // The enumeration is real, and it excludes exactly the adapter.
+    // The enumeration is real, and it excludes exactly the two packages.
     expect(entryPoints).toContain(workerEntryPoint);
-    expect(entryPoints).toContain('src/providers/coordination/coordinator.ts');
-    expect(entryPoints.some((entry) => entry.startsWith(dormantDir))).toBe(
-      false,
-    );
-    // The graph covers more than the deployed bundle: the coordination seam
-    // is dormant too, and is in this graph only because it is an entry point
-    // of its own.
-    expect(Object.keys(graph.inputs)).toContain(
-      'src/providers/coordination/coordinator.ts',
-    );
-  });
-
-  /**
-   * The season-circuits port, named module by module.
-   *
-   * The directory-wide assertions above already cover it. This pins the claim
-   * specifically and non-vacuously: rooted at the port itself, the same
-   * bundler under the same options reaches every circuits module, so their
-   * absence from the Worker entry point's graph is a statement about
-   * reachability rather than about a misspelt path.
-   */
-  it('keeps the season-circuits port out of the Worker graph', async () => {
-    const circuitsModules = [
-      `${dormantDir}circuits-port.ts`,
-      `${dormantDir}circuits-payload.ts`,
-      `${dormantDir}circuits-normalizer.ts`,
-      `${dormantDir}curated-circuits.ts`,
-    ];
-
-    const own = await moduleGraph(edgeApiRoot, [circuitsModules[0] as string]);
-    for (const module of circuitsModules) {
-      expect(Object.keys(own.inputs)).toContain(module);
-    }
-
-    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
-    for (const module of circuitsModules) {
-      expect(Object.keys(worker.inputs)).not.toContain(module);
-    }
-  });
-
-  /**
-   * The season-participants port, named module by module, on exactly the
-   * circuits port's terms: rooted at the port, the bundler reaches every
-   * participants module, and none of them is in the Worker entry point's graph.
-   */
-  it('keeps the season-participants port out of the Worker graph', async () => {
-    const participantsModules = [
-      `${dormantDir}participants-port.ts`,
-      `${dormantDir}participants-payload.ts`,
-      `${dormantDir}participants-normalizer.ts`,
-      `${dormantDir}curated-participants.ts`,
-    ];
-
-    const own = await moduleGraph(edgeApiRoot, [
-      participantsModules[0] as string,
-    ]);
-    for (const module of participantsModules) {
-      expect(Object.keys(own.inputs)).toContain(module);
-    }
-
-    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
-    for (const module of participantsModules) {
-      expect(Object.keys(worker.inputs)).not.toContain(module);
-    }
-  });
-
-  /**
-   * The race-results port, named module by module, on exactly the circuits
-   * and participants ports' terms: rooted at the port, the bundler reaches
-   * every results module, and none of them is in the Worker entry point's
-   * graph.
-   */
-  it('keeps the race-results port out of the Worker graph', async () => {
-    const resultsModules = [
-      `${dormantDir}results-port.ts`,
-      `${dormantDir}results-payload.ts`,
-      `${dormantDir}results-normalizer.ts`,
-    ];
-
-    const own = await moduleGraph(edgeApiRoot, [resultsModules[0] as string]);
-    for (const module of resultsModules) {
-      expect(Object.keys(own.inputs)).toContain(module);
-    }
-
-    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
-    for (const module of resultsModules) {
-      expect(Object.keys(worker.inputs)).not.toContain(module);
-    }
-  });
-
-  /**
-   * The standings port, named module by module, on exactly the other ports'
-   * terms: rooted at the port, the bundler reaches every standings module, and
-   * none of them is in the Worker entry point's graph.
-   */
-  it('keeps the standings port out of the Worker graph', async () => {
-    const standingsModules = [
-      `${dormantDir}standings-port.ts`,
-      `${dormantDir}standings-payload.ts`,
-      `${dormantDir}standings-normalizer.ts`,
-    ];
-
-    const own = await moduleGraph(edgeApiRoot, [standingsModules[0] as string]);
-    for (const module of standingsModules) {
-      expect(Object.keys(own.inputs)).toContain(module);
-    }
-
-    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
-    for (const module of standingsModules) {
-      expect(Object.keys(worker.inputs)).not.toContain(module);
-    }
-  });
-
-  /**
-   * The coordination seam the ports answer to is dormant too, and the
-   * multi-request amendment (ADR 0023 A1) changed only modules inside it. So
-   * no coordination module may be in the Worker entry point's graph either:
-   * that is what lets the amendment leave the deployed bundle unchanged.
-   */
-  it('keeps the coordination seam out of the Worker graph', async () => {
-    const coordinationModules = [
-      'src/providers/coordination/port.ts',
-      'src/providers/coordination/coordinator.ts',
-      'src/providers/coordination/outcome.ts',
-    ];
-
-    const own = await moduleGraph(edgeApiRoot, [
-      'src/providers/coordination/index.ts',
-    ]);
-    for (const module of coordinationModules) {
-      expect(Object.keys(own.inputs)).toContain(module);
-    }
-
-    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
-    for (const module of coordinationModules) {
-      expect(Object.keys(worker.inputs)).not.toContain(module);
-    }
-  });
-
-  /**
-   * The coordinated-publication bridge now depends on sequenced publication
-   * (ADR 0023 D11 as amended). That dependency is expected, and it points one
-   * way only: the Worker bundle contains the sequenced service and the command
-   * interface, and still contains no coordination module at all.
-   */
-  it('keeps the guarded coordinated bridge out of the Worker graph', async () => {
-    const bridge = 'src/providers/coordination/coordinated-publication.ts';
-    const own = await moduleGraph(edgeApiRoot, [bridge]);
-    expect(Object.keys(own.inputs)).toContain(
-      'src/providers/coordination/season-assembly.ts',
-    );
-
-    const worker = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
-    const inputs = Object.keys(worker.inputs);
-    expect(inputs).toContain('src/publication/sequenced/service.ts');
-    expect(inputs).toContain('src/publication/commands.ts');
-    expect(inputs).not.toContain(bridge);
+    expect(entryPoints).toContain(compositionModule);
     expect(
-      inputs.filter((input) => input.startsWith('src/providers/coordination/')),
-    ).toEqual([]);
+      entryPoints.some(
+        (entry) =>
+          entry.startsWith(dormantDir) || entry.startsWith(coordinationDir),
+      ),
+    ).toBe(false);
   });
 
-  /**
-   * Coordination may depend on publication; nothing outside coordination and
-   * the dormant ports may depend on coordination. Every runtime module is an
-   * entry point here, so an edge into the seam from a module the Worker does
-   * not reach today is reported too.
-   */
-  it('lets no runtime module outside the seam and its ports reach coordination', async () => {
-    const seam = 'src/providers/coordination/';
-    const graph = await moduleGraph(
-      edgeApiRoot,
-      runtimeEntryPointsOutsideDormantDir(),
-    );
-
-    const edges: string[] = [];
-    for (const [input, detail] of Object.entries(graph.inputs)) {
-      if (input.startsWith(seam) || input.startsWith(dormantDir)) continue;
-      for (const imported of detail.imports) {
-        if (imported.path.startsWith(seam)) {
-          edges.push(`${input} -> ${imported.path} (${imported.kind})`);
-        }
-      }
+  it('keeps every Jolpica port reachable only behind the composition', async () => {
+    const graph = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
+    for (const module of [
+      ...jolpicaPortModules,
+      `${dormantDir}resource-port.ts`,
+    ]) {
+      // Only the package index, which the composition alone imports, reaches
+      // a port module.
+      expect(importersOf(graph, module), module).toEqual([
+        `${dormantDir}index.ts`,
+      ]);
     }
-
-    expect(edges).toEqual([]);
-    // Non-vacuous: the seam is in this graph, as its own entry points.
-    expect(Object.keys(graph.inputs)).toContain(
-      'src/providers/coordination/coordinated-publication.ts',
-    );
   });
 
   /**
-   * The emitted Worker bundle, scanned for the names that would run the
-   * coordinated path. Unminified, as the graph builds are, so class and
-   * function names survive; the scan is proven able to see a symbol by the
-   * ones that must be there.
+   * The emitted Worker bundle, scanned for the names that run the coordinated
+   * path. They are present now that the composition is reachable, and no
+   * OpenF1 adapter symbol is: none exists.
    */
-  it('emits no coordination or Jolpica port symbol into the Worker bundle', async () => {
+  it('emits the coordinated composition and no OpenF1 adapter into the Worker bundle', async () => {
     const result = await build({
       ...workerBuildOptions,
       absWorkingDir: edgeApiRoot,
@@ -637,24 +537,43 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
       'SequencedPublicationService',
       'publishGuarded',
       'SnapshotPublisher',
+      'composeCoordinatedRuntime',
+      'runCoordinatedSync',
+      'PacedReservationClient',
+      'JolpicaResourcePort',
+      'MultiSourceCoordinator',
+      'CoordinatedSeasonPublication',
     ]) {
       expect(text, present).toMatch(symbol(present));
     }
     for (const absent of [
-      'CoordinatedSeasonPublication',
-      'MultiSourceCoordinator',
-      'assembleSeasonSource',
-      'deriveDriverSeasonEntries',
-      'JolpicaCalendarPort',
-      'JolpicaCircuitsPort',
-      'JolpicaParticipantsPort',
-      'JolpicaResultsPort',
-      'JolpicaStandingsPort',
-      'decodeDriverStandings',
-      'normalizeDriverStandings',
+      'OpenF1Port',
+      'OpenF1ResourcePort',
+      'OpenF1Adapter',
     ]) {
       expect(text, absent).not.toMatch(symbol(absent));
     }
+  });
+
+  it('reports an import from a module outside the allow-list', async () => {
+    const dormantModule = `${dormantDir}index.ts`;
+
+    await withSourceTree(
+      {
+        'src/index.ts':
+          "import './sync/coordinated/composition';\nimport './routes/rogue';\nexport default {};\n",
+        [compositionModule]: "export * from '../../providers/jolpica';\n",
+        'src/routes/rogue.ts': "export * from '../providers/jolpica';\n",
+        [dormantModule]: 'export const port = 1;\n',
+      },
+      async (root) => {
+        const graph = await moduleGraph(root, ['src/index.ts']);
+        expect(edgesIntoPackages(graph)).toEqual([
+          `src/routes/rogue.ts -> ${dormantModule} (import-statement)`,
+          `${compositionModule} -> ${dormantModule} (import-statement)`,
+        ]);
+      },
+    );
   });
 
   it('registers no Jolpica provider in the runtime factory', () => {
@@ -888,20 +807,37 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     ]);
   });
 
-  it('is constructed by no production composition', () => {
+  it('is constructed only by the coordinated runtime composition', () => {
     const sourceDir = join(repoRoot, 'services', 'edge-api', 'src');
+    const constructions = [
+      'new JolpicaCalendarPort',
+      'new JolpicaCircuitsPort',
+      'new JolpicaParticipantsPort',
+      'new JolpicaResultsPort',
+      'new JolpicaStandingsPort',
+      'new JolpicaResourcePort',
+      'new MultiSourceCoordinator',
+      'new CoordinatedSeasonPublication',
+      'new PacedReservationClient',
+      'new ProviderHttpClient',
+    ];
+    const sites: string[] = [];
     for (const file of sourceFiles(sourceDir)) {
-      if (file.startsWith('providers/jolpica/')) continue;
+      if (file.startsWith('providers/')) continue;
       const contents = readFileSync(join(sourceDir, file), 'utf8');
-      expect(contents).not.toContain('JolpicaCalendarPort');
-      expect(contents).not.toContain('JolpicaCircuitsPort');
-      expect(contents).not.toContain('JolpicaParticipantsPort');
-      expect(contents).not.toContain('JolpicaResultsPort');
-      expect(contents).not.toContain('JolpicaStandingsPort');
-      // The coordinator that would drive a port is itself still unconstructed
-      // outside its own dormant scope.
-      expect(contents).not.toContain('new MultiSourceCoordinator');
+      for (const construction of constructions) {
+        if (contents.includes(construction)) {
+          sites.push(`${file}: ${construction}`);
+        }
+      }
     }
+
+    // An exact allow-list: one construction of each, all in the composition.
+    expect(sites).toEqual(
+      constructions.map(
+        (construction) => `sync/coordinated/composition.ts: ${construction}`,
+      ),
+    );
   });
 
   it('is enabled by no binding, variable, route or cron', () => {

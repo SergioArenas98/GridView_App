@@ -27,7 +27,7 @@
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -168,12 +168,16 @@ describe('no real coordination port is wired into production', () => {
       !path.includes(join('providers', 'jolpica')),
   );
 
-  it('constructs no coordinator outside the coordination module', () => {
-    const offenders = files.filter((path) =>
-      readFileSync(path, 'utf8').includes('new MultiSourceCoordinator'),
-    );
+  it('constructs a coordinator only in the coordinated runtime composition', () => {
+    const constructors = files
+      .filter((path) =>
+        readFileSync(path, 'utf8').includes('new MultiSourceCoordinator'),
+      )
+      .map((path) => relative(sourceRoot, path).split('\\').join('/'));
 
-    expect(offenders).toEqual([]);
+    // An exact allow-list: the composition builds one, gated on
+    // `PROVIDER_MODE=coordinated` and every coordinated dependency.
+    expect(constructors).toEqual(['sync/coordinated/composition.ts']);
   });
 
   it('registers no provider resource port anywhere in runtime wiring', () => {

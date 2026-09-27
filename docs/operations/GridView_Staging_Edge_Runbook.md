@@ -147,8 +147,12 @@ The dry-run bundles the Worker and resolves bindings without uploading anything
 plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL`,
 `SEASON_PUBLICATION_CUTOVER_CONTROL` (`activate:2026`, live since 2026-09-16)
 and `SEASON_PUBLICATION_AUTHORITY` (`sequencer`, live since 2026-09-15) vars.
-Committed and live now match for both, so a deploy of `master` is ordinary
-under the section 6 gate. The historical dry-run of the temporary season-2026
+Committed and live now match for both, and for `PROVIDER_MODE` (`mock`), the
+cron and the Durable Object bindings. That is necessary, not sufficient: a
+deploy of `master` is ordinary under the section 6 gate only if no later
+subsection of section 6 marks the code it carries as cutover-sensitive. The
+publication guard and the coordinated runtime composition both do, so a
+deploy of current `master` is cutover-sensitive. The historical dry-run of the temporary season-2026
 reopening configuration (PR #23) showed **no**
 `SEASON_PUBLICATION_CUTOVER_CONTROL` while live staging carried `seed:2026`;
 that configuration is superseded — see section 2. **Read the dry-run output, and compare it with the
@@ -156,6 +160,16 @@ live version, before proceeding to section 6** — that comparison is how the
 cutover-sensitive gate below is checked.
 
 ## 6. Deploy staging
+
+> **Amended 2026-09-27: the gate compares five things, not two.** Besides
+> the two vars below, a deploy is cutover-sensitive when the dry-run and the
+> live version differ in `PROVIDER_MODE`, in the cron trigger, or in any
+> Durable Object binding (added, removed or renamed). That includes a future
+> reconciliation-ledger binding. Each of these changes when, how and from
+> where season-2026 publications run. The comparison procedure, the
+> authorization it requires and the rule that merging authorizes nothing are
+> unchanged. Selecting `PROVIDER_MODE = "coordinated"` is a separate
+> authorization of its own (see "Coordinated runtime composition" below).
 
 There are two kinds of staging deploy, distinguished by comparing
 `SEASON_PUBLICATION_CUTOVER_CONTROL` and `SEASON_PUBLICATION_AUTHORITY` in
@@ -712,6 +726,33 @@ the operator must hold explicit, separate authorization. It must name:
 - that the deployment changes season-2026 publication and rollback behaviour.
 
 Merging the pull request does not authorize the deployment.
+
+### Coordinated runtime composition (prepared 2026-09-27, not deployed)
+
+The dormant coordinated runtime composition is in `master` (Implementation
+Plan §14.0.29). It changes no committed var, cron or binding: staging stays
+`PROVIDER_MODE = "mock"`, the cron stays `17 3 * * *`, and no ledger binding
+exists. **Treat a deploy that carries it as cutover-sensitive anyway**, under
+the same authorization the publication guard needs:
+
+- `/v1/status` now reads season 2026's active version from the sequencer, not
+  from the stale legacy `active:2026` pointer. Its `snapshotAgeSeconds` and
+  ETag therefore follow the sequencer-active release.
+- `PROVIDER_MODE` now admits `coordinated`. Deploying code that admits it does
+  not select it. With staging on `mock`, the scheduled handler and every admin
+  route behave exactly as before, and the coordinated runtime is never
+  reached.
+
+**Selecting `coordinated` is a separate, later authorization.** It must name
+the mode change, staging and season 2026. Until a reconciliation ledger
+exists and is bound, a staging Worker with `coordinated` selected makes **no
+provider request**:
+
+- every scheduled run writes one `sync.coordinated.withheld` warn line with
+  `coordinationMissingDependencies` including `ledger-unbound`;
+- `POST /internal/admin/sync/full` answers 503 with the same closed reasons;
+- `sync/resource` and `rebuild/home` answer 409 `SYNC_MODE_UNSUPPORTED`;
+- mock synchronization stops, so the last published release keeps serving.
 
 ## 7. Initial synchronization and publication
 
