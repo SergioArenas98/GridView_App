@@ -76,6 +76,19 @@ export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';
  */
 export { SeasonPublicationSequencer } from './publication/sequencer/durable-object';
 
+/**
+ * The global reconciliation ledger's Durable Object class (G9 storage
+ * foundation, runtime activation decision O-6).
+ *
+ * **Exported is not registered, and registered would not be bound.** No
+ * `[exports.ReconciliationLedger]` entry, migration or binding declares it in
+ * any environment, and Wrangler provisions a Durable Object class only from
+ * such a declaration, so this export creates no namespace. Nothing constructs
+ * its client, and `resolveReconciliationLedger` answers `null`, so every
+ * coordinated run still stops at `ledger-unbound`.
+ */
+export { ReconciliationLedger } from './sync/coordinated/ledger/durable-object';
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const startedAt = Date.now();

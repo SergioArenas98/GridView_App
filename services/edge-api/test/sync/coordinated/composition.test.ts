@@ -3,7 +3,8 @@
  * dependencies only. Nothing here contacts a provider or Cloudflare: the
  * transport is a local function answering from memory, the global `fetch` is
  * replaced by a stub that fails the test if it is reached unexpectedly, and
- * the reconciliation ledger is a synthetic value (none can be bound yet).
+ * the reconciliation ledger is an in-process store over memory (none can be
+ * bound yet).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,12 +27,19 @@ import {
   type CoordinatedRuntime,
   type CoordinatedRuntimeDependencies,
 } from '../../../src/sync/coordinated/composition';
+import { MemorySequencerHost } from '../../../src/publication/sequencer/hosts';
+import {
+  LocalReconciliationLedger,
+  ReconciliationLedgerStore,
+} from '../../../src/sync/coordinated/ledger';
 import type { ReconciliationLedgerPort } from '../../../src/sync/coordinated/ledger-port';
 import { MutableClock } from '../../publication/sequencer/support';
 
 const START = '2026-09-27T12:00:00.000Z';
 const SEASON = 2026;
-const syntheticLedger: ReconciliationLedgerPort = { ledger: 'reconciliation' };
+const syntheticLedger: ReconciliationLedgerPort = new LocalReconciliationLedger(
+  new ReconciliationLedgerStore(new MemorySequencerHost()),
+);
 
 /** Records every reservation, and when it was asked, on the run's clock. */
 class CountingLimiter implements ProviderRateLimiterClient {

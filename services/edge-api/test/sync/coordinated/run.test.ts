@@ -8,8 +8,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CapturingLogger } from '../../../src/logging/logger';
 import type { ProviderRateLimiterClient } from '../../../src/providers/http/provider-rate-limiter';
+import { MemorySequencerHost } from '../../../src/publication/sequencer/hosts';
 import { FixedClock } from '../../../src/runtime/clock';
 import type { CoordinatedRuntimeDependencies } from '../../../src/sync/coordinated/composition';
+import {
+  LocalReconciliationLedger,
+  ReconciliationLedgerStore,
+} from '../../../src/sync/coordinated/ledger';
 import { resolveReconciliationLedger } from '../../../src/sync/coordinated/ledger-port';
 import {
   coordinatedRunKind,
@@ -104,7 +109,11 @@ describe('runCoordinatedSync', () => {
   });
 
   it('sends nothing even when composed over a synthetic ledger: there is no planner', async () => {
-    const input = dependencies({ ledger: { ledger: 'reconciliation' } });
+    const host = new MemorySequencerHost();
+    const ledger = new LocalReconciliationLedger(
+      new ReconciliationLedgerStore(host),
+    );
+    const input = dependencies({ ledger });
     const outcome = await runCoordinatedSync(
       { season: 2026, trigger: 'manual' },
       input,
@@ -119,5 +128,7 @@ describe('runCoordinatedSync', () => {
     expect(input.reservations()).toBe(0);
     expect(input.requests()).toBe(0);
     expect(globalFetch).not.toHaveBeenCalled();
+    // Composing over a ledger takes no lease and writes nothing to it.
+    expect(host.committedKeys()).toEqual([]);
   });
 });
