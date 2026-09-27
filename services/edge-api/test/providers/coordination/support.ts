@@ -9,14 +9,28 @@
  * all.
  */
 
-import { MemoryCachePurgeAdapter } from '../../../src/cache/purge';
-import { CapturingLogger } from '../../../src/logging/logger';
+import type { MemoryCachePurgeAdapter } from '../../../src/cache/purge';
+import type { CapturingLogger } from '../../../src/logging/logger';
 import type { ProviderSeasonSource } from '../../../src/providers/formula-one-provider';
 import { MockFormulaOneProvider } from '../../../src/providers/mock/mock-provider';
-import { SnapshotPublisher } from '../../../src/publication/publisher';
+import type { GuardedPublicationCommands } from '../../../src/publication/commands';
 import { FixedClock } from '../../../src/runtime/clock';
-import { MemorySnapshotStorage } from '../../../src/storage/local';
-import { runtimeSnapshotValidator } from '../../../src/validation/snapshot-validator';
+import {
+  generateSnapshotSet,
+  type GeneratedSnapshotSet,
+} from '../../../src/snapshots/generator';
+import type { MemorySnapshotStorage } from '../../../src/storage/local';
+import type {
+  SnapshotDocumentName,
+  StoredSnapshot,
+} from '../../../src/storage/types';
+import {
+  SEED_ORDERING_INPUT,
+  SEED_VERSION,
+  sequencedContext,
+  type SequencedContext,
+  type SequencerTransport,
+} from '../../publication/sequenced/support';
 import type {
   CoordinationPlan,
   CoordinatedPayload,
@@ -293,39 +307,112 @@ export function failingPort(
 }
 
 export interface PublicationHarness {
-  storage: MemorySnapshotStorage;
-  publisher: SnapshotPublisher;
-  purger: MemoryCachePurgeAdapter;
-  logger: CapturingLogger;
+  /** The real sequencer, sequenced service and legacy publisher behind it. */
+  readonly context: SequencedContext;
+  readonly storage: MemorySnapshotStorage;
+  /** What the bridge publishes through: the real guarded sequenced service. */
+  readonly commands: GuardedPublicationCommands;
+  readonly purger: MemoryCachePurgeAdapter;
+  readonly logger: CapturingLogger;
+  /** The legacy release every harness starts from, and the sequencer's seed. */
+  readonly seedVersion: string;
+  /** Guarded publication calls the bridge made. */
   publishCalls: number;
+  /** `SnapshotPublisher.publish` calls after setup. Coordination must make none. */
+  legacyPublishCalls: number;
+  /** Every set the bridge handed over, as received, and a copy taken first. */
+  readonly handed: {
+    readonly set: GeneratedSnapshotSet;
+    readonly copy: GeneratedSnapshotSet;
+  }[];
+  /**
+   * The version the season's authority serves: the sequencer's own committed
+   * record, read directly rather than through the transport, or `null` while
+   * the season is not `active`. The legacy `active:{season}` pointer is never
+   * what a guarded publication moves.
+   */
+  activeVersion(): string | null;
+  /** The version the latest `applied` guarded publication committed, if any. */
+  lastCommitted(): string | null;
+  /** One document of the version the authority serves now. */
+  activeDocument(name: SnapshotDocumentName): Promise<StoredSnapshot | null>;
 }
 
 /**
- * The **real** publisher over in-memory storage, with a counter around it so a
- * test can prove publication happened at most once.
+ * The **real** guarded publication path over in-memory storage: a
+ * `SequencedPublicationService` over the in-process sequencer or its Durable
+ * Object client, seeded from a legacy publication of the mock baseline (whose
+ * only classified race is round 12, with five participation facts) and, by
+ * default, activated. Counters around it let a test prove guarded publication
+ * happened at most once and the legacy publisher was never reached.
+ *
+ * `seedSource` replaces the mock baseline with a release generated from that
+ * source, for a test whose candidate must be compared against a predecessor
+ * of its own season shape rather than the mock line-up.
  */
-export function publicationHarness(): PublicationHarness {
-  const storage = new MemorySnapshotStorage();
-  const purger = new MemoryCachePurgeAdapter();
-  const logger = new CapturingLogger();
-  const publisher = new SnapshotPublisher(
-    storage,
-    runtimeSnapshotValidator,
-    purger,
-    logger,
-    'https://api.gridview.test',
-  );
+export async function publicationHarness(
+  options: {
+    storage?: MemorySnapshotStorage;
+    transport?: SequencerTransport;
+    cutover?: 'active' | 'seeded' | 'none';
+    seedSource?: ProviderSeasonSource;
+  } = {},
+): Promise<PublicationHarness> {
+  const { seedSource, ...rest } = options;
+  const context = await sequencedContext({
+    ...rest,
+    ...(seedSource === undefined
+      ? {}
+      : { seedTransform: () => seedSetFrom(seedSource) }),
+  });
+  const committed: string[] = [];
   const harness: PublicationHarness = {
-    storage,
-    publisher,
-    purger,
-    logger,
+    context,
+    storage: context.storage,
+    purger: context.purger,
+    logger: context.logger,
+    seedVersion: SEED_VERSION,
     publishCalls: 0,
+    legacyPublishCalls: 0,
+    handed: [],
+    commands: {
+      publishGuarded: async (set) => {
+        harness.publishCalls += 1;
+        harness.handed.push({ set, copy: structuredClone(set) });
+        const result = await context.service.publishGuarded(set);
+        if (result.status === 'applied') committed.push(result.version);
+        return result;
+      },
+    },
+    lastCommitted: () => committed.at(-1) ?? null,
+    activeDocument: async (name) => {
+      const version = harness.activeVersion();
+      return version === null
+        ? null
+        : context.storage.readVersionedDocument(SEASON, version, name);
+    },
+    activeVersion: () => {
+      const authority = context.coordinator.readAuthority(SEASON);
+      return authority.cutoverState === 'active'
+        ? authority.activeVersion
+        : null;
+    },
   };
-  const real = publisher.publish.bind(publisher);
-  publisher.publish = async (set) => {
-    harness.publishCalls += 1;
-    return real(set);
+  const legacy = context.legacy.publish.bind(context.legacy);
+  context.legacy.publish = async (set) => {
+    harness.legacyPublishCalls += 1;
+    return legacy(set);
   };
   return harness;
+}
+
+/** The release a predecessor seed publishes: `source`, generated as the seed. */
+export function seedSetFrom(
+  source: ProviderSeasonSource,
+): GeneratedSnapshotSet {
+  return generateSnapshotSet(
+    { ...source, sourceUpdatedAt: SEED_ORDERING_INPUT },
+    FIXED_NOW,
+    SEED_VERSION,
+  );
 }

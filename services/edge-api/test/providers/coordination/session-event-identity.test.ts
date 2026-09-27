@@ -391,9 +391,9 @@ describe('a mis-bound schedule withholds the whole assembled season', () => {
       reparent(victim.sessions, victim.id, FOREIGN_EVENT),
     );
 
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, '2026.07.20.1');
 
@@ -402,7 +402,7 @@ describe('a mis-bound schedule withholds the whole assembled season', () => {
     expect(outcome.gap).toBe('inconsistent-references');
     expect(outcome.relations).toContain('session-event');
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
     // Bounded diagnostics only: no identifier ever rides out.
     expect(harness.logger.serialized()).not.toContain(FOREIGN_EVENT);
     expect(harness.logger.serialized()).not.toContain(victim.id);
@@ -430,9 +430,9 @@ describe('a mis-bound schedule withholds the whole assembled season', () => {
       published?.sessions.every((session) => session.status === 'completed'),
     ).toBe(true);
 
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, '2026.07.20.1');
     expect(outcome.outcome).toBe('published');

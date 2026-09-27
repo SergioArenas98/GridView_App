@@ -113,7 +113,7 @@ async function publish(
   generatedAt = FIXED_NOW,
 ): Promise<Awaited<ReturnType<CoordinatedSeasonPublication['publish']>>> {
   return new CoordinatedSeasonPublication({
-    publisher: harness.publisher,
+    commands: harness.commands,
     logger: harness.logger,
   }).publish(run, metadataFor(source), generatedAt, VERSION);
 }
@@ -132,7 +132,7 @@ describe('only a race classification is published as the Grand Prix result', () 
     const source = sourceWith(base, {
       results: [qualifying, ...base.results],
     });
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
 
     const run = await coordinate(source, [
       ...fullPlan(base).resources,
@@ -141,9 +141,7 @@ describe('only a race classification is published as the Grand Prix result', () 
     const outcome = await publish(harness, run, source);
 
     expect(outcome.outcome).toBe('published');
-    const document = await harness.storage.readVersionedDocument(
-      SEASON,
-      VERSION,
+    const document = await harness.activeDocument(
       `grand-prix:${round}:results`,
     );
     expect((document?.data as RaceResult).sessionType).toBe('race');
@@ -164,7 +162,7 @@ describe('only a race classification is published as the Grand Prix result', () 
     ] as const) {
       const extra = nonRaceResultFor(base, round, sessionType);
       const source = sourceWith(base, { results: [extra, ...base.results] });
-      const harness = publicationHarness();
+      const harness = await publicationHarness();
 
       const run = await coordinate(source, [
         ...fullPlan(base).resources,
@@ -173,9 +171,7 @@ describe('only a race classification is published as the Grand Prix result', () 
       const outcome = await publish(harness, run, source);
 
       expect(outcome.outcome, sessionType).toBe('published');
-      const document = await harness.storage.readVersionedDocument(
-        SEASON,
-        VERSION,
+      const document = await harness.activeDocument(
         `grand-prix:${round}:results`,
       );
       expect((document?.data as RaceResult).sessionType, sessionType).toBe(
@@ -197,7 +193,7 @@ describe('only a race classification is published as the Grand Prix result', () 
         ...base.results.filter((result) => result.round !== round),
       ],
     });
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
 
     const run = await coordinate(source, [
       ...seasonResources,
@@ -215,7 +211,7 @@ describe('only a race classification is published as the Grand Prix result', () 
     }
     expect(outcome.outcome).toBe('withheld');
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
   });
 
   it('selects the same race classification whichever plan order is used', async () => {
@@ -238,13 +234,11 @@ describe('only a race classification is published as the Grand Prix result', () 
         classificationResource(round, 'qualifying'),
       ],
     ]) {
-      const harness = publicationHarness();
+      const harness = await publicationHarness();
       const run = await coordinate(source, order);
       await publish(harness, run, source);
 
-      const document = await harness.storage.readVersionedDocument(
-        SEASON,
-        VERSION,
+      const document = await harness.activeDocument(
         `grand-prix:${round}:results`,
       );
       expect((document?.data as RaceResult).id).toBe(expected);
@@ -259,7 +253,7 @@ describe('cross-resource references are checked before generation', () => {
   }> {
     const base = await seasonFixture();
     const source = sourceWith(base, broken);
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const run = await coordinate(source, fullPlan(base).resources);
     const outcome = await publish(harness, run, source);
     return { harness, outcome };
@@ -275,7 +269,7 @@ describe('cross-resource references are checked before generation', () => {
 
     expect(outcome.outcome).toBe('withheld');
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
   });
 
   it('withholds when a participant entry names an absent driver profile', async () => {
@@ -530,7 +524,7 @@ describe('cross-resource references are checked before generation', () => {
     const source = sourceWith(base, {
       drivers: base.drivers.filter((driver) => driver.id !== used),
     });
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
 
     const run = await coordinate(source, fullPlan(base).resources);
     const assembly = assembleSeasonSource(run, metadataFor(source));
@@ -557,25 +551,25 @@ describe('cross-resource references are checked before generation', () => {
     const source = sourceWith(base, {
       circuits: base.circuits.filter((circuit) => circuit.id !== used),
     });
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
 
     const run = await coordinate(source, fullPlan(base).resources);
     await publish(harness, run, source);
 
     // Not one document of the otherwise healthy season is written.
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
-    expect(
-      await harness.storage.readVersionedDocument(SEASON, VERSION, 'season'),
-    ).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
+    expect(await harness.storage.listVersions(SEASON)).toEqual([
+      harness.seedVersion,
+    ]);
   });
 
   it('leaves a prior active release serving when preflight fails', async () => {
     const base = await seasonFixture();
-    const good = publicationHarness();
+    const good = await publicationHarness();
     const healthy = await coordinate(base, fullPlan(base).resources);
     await publish(good, healthy, base);
-    expect(await good.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(good.activeVersion()).toBe(good.lastCommitted());
 
     const used = base.driverEntries[0]?.driverId;
     if (used === undefined) throw new Error('fixture gap');
@@ -584,31 +578,31 @@ describe('cross-resource references are checked before generation', () => {
     });
     const run = await coordinate(broken, fullPlan(base).resources);
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: good.publisher,
+      commands: good.commands,
       logger: good.logger,
     }).publish(run, metadataFor(broken), FIXED_NOW, 'v2');
 
     expect(outcome.outcome).toBe('withheld');
     expect(good.publishCalls).toBe(1);
-    expect(await good.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(good.activeVersion()).toBe(good.lastCommitted());
   });
 
   it('still publishes a fully consistent season exactly once', async () => {
     const base = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const run = await coordinate(base, fullPlan(base).resources);
     const outcome = await publish(harness, run, base);
 
     expect(outcome.outcome).toBe('published');
     expect(harness.publishCalls).toBe(1);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
   });
 });
 
 describe('snapshot generation cannot throw out of publication', () => {
   it('contains an unexpected generator failure as a bounded withheld outcome', async () => {
     const base = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const run = await coordinate(base, fullPlan(base).resources);
 
     // A malformed `generatedAt` is a caller input the assembled source cannot
@@ -621,12 +615,12 @@ describe('snapshot generation cannot throw out of publication', () => {
       expect(outcome.gap).toBe('generation-failed');
     }
     expect(harness.publishCalls).toBe(0);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBeNull();
+    expect(harness.activeVersion()).toBe(harness.seedVersion);
   });
 
   it('never lets the exception text or a payload reach the logs', async () => {
     const base = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const run = await coordinate(base, fullPlan(base).resources);
 
     await publish(harness, run, base, 'not-a-timestamp');
@@ -640,28 +634,28 @@ describe('snapshot generation cannot throw out of publication', () => {
 
   it('leaves a prior active release serving when generation fails', async () => {
     const base = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const healthy = await coordinate(base, fullPlan(base).resources);
     await publish(harness, healthy, base);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
 
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(healthy, metadataFor(base), 'not-a-timestamp', 'v2');
 
     expect(outcome.outcome).toBe('withheld');
     expect(harness.publishCalls).toBe(1);
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe(VERSION);
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
   });
 
-  it('still reports a publisher failure as a publication outcome', async () => {
+  it('still reports a publication failure as a publication outcome', async () => {
     const base = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const run = await coordinate(base, fullPlan(base).resources);
-    // The guard is around generation only: once the publisher has been
+    // The guard is around generation only: once guarded publication has been
     // reached, its own result is returned unchanged and never reinterpreted.
-    harness.publisher.publish = async () => {
+    harness.commands.publishGuarded = async () => {
       harness.publishCalls += 1;
       return {
         status: 'failed' as const,
@@ -686,7 +680,7 @@ describe('snapshot generation cannot throw out of publication', () => {
 
   it('never publishes a cancelled run, and does not call it a generation failure', async () => {
     const base = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const controller = new AbortController();
     controller.abort();
     const run = await new MultiSourceCoordinator({

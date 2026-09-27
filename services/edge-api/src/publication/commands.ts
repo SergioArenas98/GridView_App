@@ -9,10 +9,10 @@
  * hand them either one without either knowing which - and, crucially, so the
  * default build wires the exact `SnapshotPublisher` it wires today, unchanged.
  *
- * The dormant coordinated-publication bridge does **not** type against it yet:
- * it still names the concrete legacy `SnapshotPublisher` (ADR 0023 D11). Only
- * the sequenced implementation enforces the ADR 0026 D14-D16 guard, so
- * coordinated publication is not guarded until that bridge is retyped.
+ * The dormant coordinated-publication bridge does **not** type against it: an
+ * implementation of this shape may hand a season to the legacy authority, and
+ * coordinated publication must never reach it (ADR 0023 D11). The bridge
+ * types against `GuardedPublicationCommands` instead.
  */
 
 import type { GeneratedSnapshotSet } from '../snapshots/generator';
@@ -22,6 +22,24 @@ export interface PublicationCommands {
   publish(set: GeneratedSnapshotSet): Promise<PublicationResult>;
   rollback(season: number, targetVersion?: string): Promise<PublicationResult>;
   purgeActiveVersion(season: number): Promise<ManualCachePurgeResult>;
+}
+
+/**
+ * The one command the coordinated-publication bridge may use (ADR 0023 D11,
+ * ADR 0026 D14-D16): ordinary publication through the guarded sequencer, with
+ * **no legacy fallback**.
+ *
+ * Only `SequencedPublicationService` implements it. `SnapshotPublisher` does
+ * not and cannot: the legacy authority has no predecessor binding, so it can
+ * never satisfy D16. A season whose sequencer authority is not `active` is
+ * refused as `guard-authority-not-sequenced` before anything is written, and an
+ * unreachable sequencer is the same bounded `sequencer-authority-unavailable`
+ * failure ordinary sequenced publication reports. Otherwise the D14/D15
+ * comparison, the expected-predecessor `prepare`, the candidate write and
+ * `finalize` run exactly as they do for `PublicationCommands.publish`.
+ */
+export interface GuardedPublicationCommands {
+  publishGuarded(set: GeneratedSnapshotSet): Promise<PublicationResult>;
 }
 
 /**

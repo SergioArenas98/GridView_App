@@ -10,6 +10,10 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import worker from '../../../src/index';
+import { MemoryCachePurgeAdapter } from '../../../src/cache/purge';
+import { SnapshotPublisher } from '../../../src/publication/publisher';
+import { MemorySnapshotStorage } from '../../../src/storage/local';
+import { runtimeSnapshotValidator } from '../../../src/validation/snapshot-validator';
 import { CapturingLogger } from '../../../src/logging/logger';
 import {
   COORDINATION_CONTRIBUTION_OPERATION,
@@ -22,6 +26,7 @@ import {
   runEvent,
   selectionEvent,
   transportReferenceMaxLength,
+  type CoordinatedSeasonPublicationOptions,
   type CoordinationOutcomeReason,
   type SourceContribution,
 } from '../../../src/providers/coordination';
@@ -207,7 +212,7 @@ describe('coordination performs no I/O of its own', () => {
       .spyOn(globalThis, 'fetch')
       .mockRejectedValue(new Error('coordination must not fetch'));
     const source = await seasonFixture();
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const coordinator = new MultiSourceCoordinator({
       ports: [completePort('jolpica', source)],
       logger: harness.logger,
@@ -215,12 +220,12 @@ describe('coordination performs no I/O of its own', () => {
 
     const run = await coordinator.coordinate({ plan: fullPlan(source) });
     await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), '2026-07-20T12:00:00.000Z', 'v1');
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(await harness.storage.getActiveVersion(SEASON)).toBe('v1');
+    expect(harness.activeVersion()).toBe(harness.lastCommitted());
   });
 
   it('declares no transport, storage or scheduling primitive', () => {
@@ -299,6 +304,112 @@ describe('the coordination seam is dormant', () => {
     // honestly named, and its dormancy is proven by composition and
     // dependency boundaries instead (ADR 0022 amendment A9). Those assertions
     // live in `test/providers/provider-neutrality.test.ts`.
+  });
+
+  it('is invoked by no runtime module, and neither is its guarded entry point', () => {
+    // `publishGuarded` is declared by the command interface, implemented by
+    // the sequenced service and called by the bridge. Nothing else under
+    // `src/` - no composition root, route, scheduler or synchronization path
+    // - names it or the bridge.
+    const callers = sourceFiles()
+      .filter((file) => !file.startsWith('providers/coordination/'))
+      .filter((file) => {
+        const contents = readFileSync(join(sourceDir, file), 'utf8');
+        return (
+          contents.includes('publishGuarded') ||
+          contents.includes('CoordinatedSeasonPublication')
+        );
+      })
+      .sort();
+
+    expect(callers).toEqual([
+      'publication/commands.ts',
+      'publication/sequenced/service.ts',
+    ]);
+  });
+
+  it('reaches publication only through the guarded command type', () => {
+    const bridge = readFileSync(
+      join(
+        sourceDir,
+        'providers',
+        'coordination',
+        'coordinated-publication.ts',
+      ),
+      'utf8',
+    );
+    const publicationImports = bridge
+      .split('\n')
+      .filter((line) => line.includes("from '../../publication/"));
+
+    // Type-only imports: the bridge constructs nothing from publication, so
+    // the dependency cannot pull the sequenced service - or anything - into
+    // a graph the bridge is not already in.
+    expect(publicationImports).toEqual([
+      "import type { GuardedPublicationCommands } from '../../publication/commands';",
+      "import type { PublicationResult } from '../../publication/publisher';",
+    ]);
+    const code = bridge.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+    expect(code).not.toMatch(/\bSnapshotPublisher\b/);
+    expect(code).not.toMatch(/\bPublicationCommands\b/);
+    expect(code).not.toMatch(/\bfallback\b/);
+    expect(code).not.toMatch(/\.publish\(/);
+    expect(code.match(/\.publishGuarded\(/g)).toHaveLength(1);
+  });
+
+  it('cannot be handed the legacy publisher', () => {
+    const logger = new CapturingLogger();
+    const legacy = new SnapshotPublisher(
+      new MemorySnapshotStorage(),
+      runtimeSnapshotValidator,
+      new MemoryCachePurgeAdapter(),
+      logger,
+    );
+
+    // The legacy authority has no guarded entry point, so the bridge's options
+    // cannot hold it: the line below does not compile.
+    const options: CoordinatedSeasonPublicationOptions = {
+      // @ts-expect-error `SnapshotPublisher` is not `GuardedPublicationCommands`.
+      commands: legacy,
+      logger,
+    };
+
+    expect('publishGuarded' in legacy).toBe(false);
+    expect(options.logger).toBe(logger);
+  });
+
+  it('owns guard-authority-not-sequenced through the guarded entry point alone', () => {
+    const reason = "'guard-authority-not-sequenced'";
+    const emitters = sourceFiles()
+      .filter((file) =>
+        readFileSync(join(sourceDir, file), 'utf8').includes(reason),
+      )
+      .sort();
+
+    // Declared once, classified once by the exhaustive synchronization switch,
+    // and produced only by the service.
+    expect(emitters).toEqual([
+      'publication/publisher.ts',
+      'publication/sequenced/service.ts',
+      'sync/sync-service.ts',
+    ]);
+    const service = readFileSync(
+      join(sourceDir, 'publication', 'sequenced', 'service.ts'),
+      'utf8',
+    );
+    const start = service.indexOf('async publishGuarded(');
+    const end = service.indexOf('private async publishToAuthority(');
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    let index = service.indexOf(reason);
+    let seen = 0;
+    while (index !== -1) {
+      expect(index).toBeGreaterThan(start);
+      expect(index).toBeLessThan(end);
+      seen += 1;
+      index = service.indexOf(reason, index + 1);
+    }
+    expect(seen).toBeGreaterThan(0);
   });
 
   it('keeps the runtime provider mode union unchanged', () => {

@@ -14,7 +14,7 @@
  *
  * Every case runs the production path - the real coordinator,
  * `assembleSeasonSource`, the integrity preflight and, where it matters, the
- * real publisher - over the synthetic split season (`splitSeasonFixture`):
+ * guarded sequenced publication - over the synthetic split season (`splitSeasonFixture`):
  * rounds 1, 11, 12 and 13 carry a `final` Jolpica race classification and
  * round 14 carries the `unavailable` absence document.
  */
@@ -190,12 +190,16 @@ describe('season assembly derives hasResults from selected classifications', () 
     expect(flagOf(result, 13)).toBe(true);
     expect(validateSeasonReferences(result)).toEqual([]);
 
-    const harness = publicationHarness();
+    const harness = await publicationHarness({
+      seedSource: await splitSeasonFixture(),
+    });
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(source), FIXED_NOW, 'v-provisional');
     expect(outcome.outcome).toBe('published');
+    if (outcome.outcome !== 'published') throw new Error('unreachable');
+    expect(outcome.result.status).toBe('applied');
   });
 
   it('sets false for a selected unavailable race document, which is kept', async () => {
@@ -554,9 +558,9 @@ describe('the post-assembly relations stay unchanged', () => {
       relations: ['result-entry-span'],
     });
 
-    const harness = publicationHarness();
+    const harness = await publicationHarness();
     const outcome = await new CoordinatedSeasonPublication({
-      publisher: harness.publisher,
+      commands: harness.commands,
       logger: harness.logger,
     }).publish(run, metadataFor(base), FIXED_NOW, 'v-openf1');
     expect(outcome.outcome).toBe('withheld');
