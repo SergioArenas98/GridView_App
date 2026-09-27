@@ -232,6 +232,14 @@ export function decodePrepareOutcome(value: unknown): PrepareOutcome | null {
     const assignedTimestamps = decodePerKeyStateArray(value.assignedTimestamps);
     if (assignedTimestamps === null) return null;
     if (!isInstant(value.deadline)) return null;
+    // Absent only from an older sequencer build, which the client refuses by
+    // binding it to the request; present, it must be a version identifier.
+    if (
+      value.priorVersion !== undefined &&
+      !isVersionIdentifier(value.priorVersion)
+    ) {
+      return null;
+    }
     const base = {
       outcome: 'prepared',
       operationEpoch: value.operationEpoch,
@@ -239,6 +247,9 @@ export function decodePrepareOutcome(value: unknown): PrepareOutcome | null {
       candidateVersion: value.candidateVersion,
       assignedTimestamps,
       deadline: value.deadline,
+      ...(value.priorVersion === undefined
+        ? {}
+        : { priorVersion: value.priorVersion }),
     } as const;
     if (value.retiredCleanup === undefined) return base;
     // Present only when this prepare displaced a retired operation; it must be

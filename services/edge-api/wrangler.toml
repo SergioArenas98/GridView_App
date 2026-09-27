@@ -44,17 +44,23 @@ storage = "sqlite"
 # `previousVersion` and per-key snapshot state, once - and only once - a season
 # has been seeded and activated.
 #
-# DECLARED HERE; PROVISIONED IN STAGING ONLY; SEASON 2026 SEEDED THERE, NOT
-# ACTIVATED. This entry and the `env.staging` binding below were deployed to
-# staging on 2026-09-12, which created the staging namespace. Live staging
-# (version `cccdcf11-…`, 2026-09-15) selects the sequencer authority and
-# carries `seed:2026`, and the season-2026 seed was committed there on
-# 2026-09-15. The sequencer holds season 2026 as `seeded`, which is not
-# authoritative, so legacy KV pointers still decide publication, rollback and
-# public reads for every season. `env.staging` below moves the cutover phase
-# to `activate:2026`, prepared and not deployed - read the warning there
-# before deploying this file. Development and production select no authority;
-# production declares no binding and has never been deployed.
+# DECLARED HERE; PROVISIONED IN STAGING ONLY; SEASON 2026 ACTIVE THERE. This
+# entry and the `env.staging` binding below were deployed to staging on
+# 2026-09-12, which created the staging namespace. Staging has selected the
+# sequencer authority since 2026-09-15 (version `cccdcf11-…`); the season-2026
+# seed was committed there that day, and season 2026 was activated on
+# 2026-09-16 under `activate:2026` (version `c297d260-…`). The sequencer is
+# therefore the authority for season 2026's publication, rollback and public
+# reads in staging; every other season stays on the legacy KV pointers.
+# Development and production select no authority; production declares no
+# binding and has never been deployed.
+#
+# Deploying a Worker built with the D14-D16 publication guard (ADR 0026)
+# changes how staging publishes and rolls back season 2026: every sequenced
+# publication and rollback must preserve the active release's classified
+# rounds and participation facts, and `prepare` binds that comparison to the
+# active release. Such a deployment is cutover-sensitive (staging runbook,
+# section 6) and needs its own explicit authorization.
 #
 # `storage = "sqlite"` is required: the coordinator commits through
 # `ctx.storage.transactionSync`, which only SQLite-backed Durable Objects
@@ -74,24 +80,20 @@ ENVIRONMENT = "staging"
 PROVIDER_MODE = "mock"
 PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
 
-# Season 2026 cutover phase (ADR 0025 D12) - ACTIVATION PHASE, PREPARED HERE,
-# NOT DEPLOYED. DO NOT DEPLOY THIS FILE AS ROUTINE WORK.
+# Season 2026 cutover phase (ADR 0025 D12) - ACTIVATION PHASE, LIVE IN STAGING
+# since 2026-09-16 (version `c297d260-c81b-4110-bdf2-7572e1206af3`). DO NOT
+# DEPLOY THIS FILE AS ROUTINE WORK.
 #
-# Live staging (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`, 2026-09-15)
-# carries `seed:2026`, and the one seed it permits is already committed: the
-# sequencer holds season 2026 as `seeded`, non-authoritative, under the
-# approved checkpoint's fingerprint. This value moves the phase on. Like
-# `seed:2026`, `activate:2026` keeps season 2026's legacy publication and
-# rollback admission closed. Unlike it, it permits the authenticated
-# activation route and refuses another seed (`phase-not-permitted`).
-#
-# Merging this file deploys nothing. Deploying it activates nothing either:
-# season 2026 stays `seeded`, and public reads stay on the legacy authority,
-# until a separate authenticated activation POST re-presents the approved
-# checkpoint exactly, with `confirmActivation: true`, and succeeds. Every
-# deployment of this value is cutover-sensitive (staging runbook, section 6)
-# and needs its own explicit authorization. The 2026-09-13 recovery window and
-# the 2026-09-15 seed are recorded in that runbook section.
+# The earlier `seed:2026` phase (live from 2026-09-12, and in version
+# `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` on 2026-09-15) permitted the one seed,
+# which was committed on 2026-09-15. `activate:2026` refuses another seed
+# (`phase-not-permitted`) and permitted the authenticated activation route,
+# through which season 2026 was activated on 2026-09-16: its publication and
+# rollback now run through the sequencer, never through the legacy pointers.
+# Every deployment that changes this value is cutover-sensitive (staging
+# runbook, section 6) and needs its own explicit authorization. The 2026-09-13
+# recovery window, the 2026-09-15 seed and the 2026-09-16 activation are
+# recorded in that runbook section.
 SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"
 
 # Sequencer authority for the season-2026 cutover (ADR 0025 D12) - LIVE IN
@@ -99,9 +101,9 @@ SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"
 #
 # Every cutover route refuses with `authority-mode-not-sequencer` unless this
 # is exactly `sequencer`. It switches no season's authority by itself: a season
-# the sequencer reports as `uninitialized` or `seeded` - season 2026 included -
-# keeps the legacy KV pointers for publication, rollback and public reads until
-# its separately authorized activation. Publications and public reads ask the
+# the sequencer reports as `uninitialized` or `seeded` keeps the legacy KV
+# pointers for publication, rollback and public reads until its separately
+# authorized activation. Season 2026 was activated on 2026-09-16. Publications and public reads ask the
 # sequencer for each season's cutover state first, and fail closed if that
 # lookup fails. A later deployment that omits or changes this value is
 # cutover-sensitive (staging runbook, section 6). Development and production

@@ -1,9 +1,10 @@
 /**
  * The pure rules the coordinator applies inside its transactions: bounded input
  * validation, the two-case per-key timestamp assignment, the high-water-mark
- * advance, deadline evaluation and cutover-seed equality
+ * advance, deadline evaluation, cutover-seed equality and the expected-predecessor
+ * compare-and-swap
  * ([ADR 0025](../../../../../docs/adr/0025-season-publication-authority-and-rollback-republication.md)
- * D4, D5, D12).
+ * D4, D5, D12; ADR 0026 D16).
  *
  * None of them reads or writes storage. Keeping them here means each is
  * separately readable and separately testable, and it keeps the coordinator
@@ -14,6 +15,7 @@ import type {
   AuthorityRecord,
   CutoverRejectionReason,
   CutoverSeed,
+  ExpectedPredecessor,
   OperationIdentity,
   OperationRecord,
   PerKeyRevision,
@@ -38,6 +40,8 @@ import {
   compareInstants,
   instantPlusMillisecond,
 } from '../canonical/instant';
+import { compareUtf8 } from '../canonical/ordering';
+import { isRaceResultsDocumentName } from '../guard/participation-guard';
 
 /**
  * The result of per-key timestamp assignment.
@@ -241,7 +245,68 @@ export function validatePrepareRequest(
     if (seen.has(entry.documentName)) return 'invalid-per-key-revisions';
     seen.add(entry.documentName);
   }
+  if (!isExpectedPredecessor(request.expectedPredecessor)) {
+    return 'invalid-expected-predecessor';
+  }
   return null;
+}
+
+/**
+ * Whether a value is a well-formed {@link ExpectedPredecessor}: a version
+ * identifier, and a bounded list of results-document revisions strictly
+ * ascending by `compareUtf8` - which also makes it unique. Checked before any
+ * durable read, so a malformed binding never reaches the transaction.
+ */
+function isExpectedPredecessor(value: unknown): value is ExpectedPredecessor {
+  if (typeof value !== 'object' || value === null) return false;
+  const { activeVersion, guardDocuments } = value as {
+    activeVersion?: unknown;
+    guardDocuments?: unknown;
+  };
+  if (!isVersionIdentifier(activeVersion)) return false;
+  if (!Array.isArray(guardDocuments)) return false;
+  if (guardDocuments.length > maximumManifestSize) return false;
+  let previous: string | null = null;
+  for (const entry of guardDocuments as unknown[]) {
+    if (typeof entry !== 'object' || entry === null) return false;
+    const { documentName, revision } = entry as {
+      documentName?: unknown;
+      revision?: unknown;
+    };
+    if (!isDocumentName(documentName)) return false;
+    if (!isRaceResultsDocumentName(documentName)) return false;
+    if (!isSnapshotRevision(revision)) return false;
+    if (previous !== null && compareUtf8(previous, documentName) >= 0) {
+      return false;
+    }
+    previous = documentName;
+  }
+  return true;
+}
+
+/**
+ * The D16 content binding: whether the committed results-document rows are
+ * exactly the expected ones, name for name and revision for revision.
+ *
+ * Only committed rows whose name is a `grand-prix:{round}:results` document
+ * take part - the same selection the caller applied to the predecessor's
+ * inventory - so a results document the caller did not read, or read with
+ * different content, is a mismatch rather than something skipped.
+ */
+export function committedGuardRowsMatch(
+  committed: readonly PerKeyState[],
+  expected: ExpectedPredecessor,
+): boolean {
+  const rows = committed.filter((state) =>
+    isRaceResultsDocumentName(state.documentName),
+  );
+  if (rows.length !== expected.guardDocuments.length) return false;
+  const revisions = new Map<string, string>(
+    rows.map((state) => [state.documentName, state.revision]),
+  );
+  return expected.guardDocuments.every(
+    (entry) => revisions.get(entry.documentName) === entry.revision,
+  );
 }
 
 export function validateCutoverSeed(

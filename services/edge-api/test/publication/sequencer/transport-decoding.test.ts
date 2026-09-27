@@ -619,7 +619,7 @@ describe('the client maps an undecodable response to its bounded fallback', () =
         operationToken: 'token-1',
         completionAttestation: { manifestCommitment: commitment('m') },
       }),
-    ).toEqual({ outcome: 'rejected', reason: 'state-corrupt' });
+    ).toEqual({ outcome: 'uncertain' });
   });
 
   it('never turns a partial prepared body into an allocation', async () => {
@@ -627,8 +627,21 @@ describe('the client maps an undecodable response to its bounded fallback', () =
       responding({ outcome: 'prepared', operationEpoch: 1 }),
     );
     expect(await client.prepare(prepareRequest())).toEqual({
-      outcome: 'rejected',
-      reason: 'state-corrupt',
+      outcome: 'uncertain',
+    });
+  });
+
+  it('never decodes an uncertain outcome from the wire', async () => {
+    // `uncertain` is the client's own classification of a lost answer. An
+    // object that sends it is sending something the protocol cannot produce,
+    // which is itself undecodable - never a way to steer the caller.
+    const client = new DurableObjectSeasonPublicationSequencer(
+      responding({ outcome: 'uncertain' }),
+    );
+    expect(decodePrepareOutcome({ outcome: 'uncertain' })).toBeNull();
+    expect(decodeFinalizeOutcome({ outcome: 'uncertain' })).toBeNull();
+    expect(await client.prepare(prepareRequest())).toEqual({
+      outcome: 'uncertain',
     });
   });
 
@@ -673,6 +686,7 @@ describe('the client maps an undecodable response to its bounded fallback', () =
     candidateVersion: versionForEpoch(epoch),
     assignedTimestamps,
     deadline: INSTANT,
+    priorVersion: request.expectedPredecessor.activeVersion,
   });
 
   it('rejects a prepared response whose assignments are for another manifest', async () => {
@@ -727,6 +741,52 @@ describe('the client maps an undecodable response to its bounded fallback', () =
       ),
     );
     expect((await client.prepare(request)).outcome).toBe('prepared');
+  });
+
+  // D16: the object must return the predecessor it bound, and it must be the
+  // one this request compared against. An older object that never checked
+  // `expectedPredecessor` returns none, and that fails closed.
+  const matchingAssignments = request.perKeyRevisions.map((entry) => ({
+    documentName: entry.documentName,
+    revision: entry.revision,
+    observedAt: INSTANT,
+  }));
+
+  it('rejects a prepared response with no priorVersion as state-corrupt', async () => {
+    const withoutPrior: Record<string, unknown> = {
+      ...wellFormedPreparedFor(1, matchingAssignments),
+    };
+    delete withoutPrior.priorVersion;
+    const client = new DurableObjectSeasonPublicationSequencer(
+      responding(withoutPrior),
+    );
+    expect(await client.prepare(request)).toEqual({
+      outcome: 'rejected',
+      reason: 'state-corrupt',
+    });
+  });
+
+  it('rejects a prepared response bound to another predecessor as state-corrupt', async () => {
+    const client = new DurableObjectSeasonPublicationSequencer(
+      responding({
+        ...wellFormedPreparedFor(1, matchingAssignments),
+        priorVersion: '20260902T000000000-cccccccc',
+      }),
+    );
+    expect(await client.prepare(request)).toEqual({
+      outcome: 'rejected',
+      reason: 'state-corrupt',
+    });
+  });
+
+  it('treats a malformed priorVersion as undecodable, never as a binding', async () => {
+    const client = new DurableObjectSeasonPublicationSequencer(
+      responding({
+        ...wellFormedPreparedFor(1, matchingAssignments),
+        priorVersion: 42,
+      }),
+    );
+    expect(await client.prepare(request)).toEqual({ outcome: 'uncertain' });
   });
 
   it('rejects a cancelled response whose candidateVersion belongs to another epoch', async () => {

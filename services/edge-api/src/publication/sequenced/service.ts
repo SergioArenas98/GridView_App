@@ -21,6 +21,16 @@
  * (ADR 0025 D2, D9). The caller never mints or chooses a version - `prepare`
  * allocates it in the sidecar-required `pm1-…` namespace - and every per-key
  * `snapshotObservedAt` is assigned by `prepare`, not by generation.
+ *
+ * ## The participation guard (ADR 0026 D14-D16)
+ *
+ * Ordinary publication and rollback-republication are guarded alike: before
+ * `prepare`, the candidate's classified rounds and participation facts must
+ * contain the authoritative predecessor's, derived from that exact release's
+ * own results documents. `prepare` then binds the comparison to that
+ * predecessor - its version and its committed results revisions - inside the
+ * sequencer's transaction, so a release that changed in between is refused
+ * rather than silently replaced. Rollback has no exemption.
  */
 
 import {
@@ -49,6 +59,9 @@ import type {
 } from '../publisher';
 import { manifestCommitment } from '../sequencer/manifest-commitment';
 import type {
+  ExpectedPredecessor,
+  FinalizeOutcome,
+  FinalizeRequest,
   OperationKind,
   PerKeyState,
   PrepareOutcome,
@@ -59,6 +72,11 @@ import { writePublicationMetadataOnce } from '../publication-metadata';
 import { buildPublicationPlan, type PublicationPlan } from './manifest-plan';
 import { bakeAssignedTimestamps, refreshVolatileFields } from './documents';
 import { resolveRollbackSourceOrdering } from './rollback-provenance';
+import {
+  compareParticipationGuards,
+  deriveParticipationGuard,
+} from '../guard/participation-guard';
+import { readPredecessorGuard } from '../guard/predecessor';
 
 /** Season-level documents every generated set carries; also the manual-purge base. */
 const baseDocumentNames: readonly SnapshotDocumentName[] = [
@@ -383,6 +401,17 @@ export class SequencedPublicationService implements PublicationCommands {
   // --- the shared two-phase core -------------------------------------------
 
   private async runTwoPhase(input: TwoPhaseInput): Promise<PublicationResult> {
+    const guarded = await this.guardAgainstPredecessor(input);
+    if (guarded.kind === 'refused') {
+      const outcome = guarded.status === 'rejected' ? rejection : failed;
+      return outcome(
+        input.season,
+        '',
+        input.authority.activeVersion,
+        guarded.reason,
+      );
+    }
+
     const plan = await buildPublicationPlan(input.documents);
 
     // Read before anything commits. `meta:current-season` is global state that
@@ -395,7 +424,11 @@ export class SequencedPublicationService implements PublicationCommands {
         )
       : noOutgoingCurrentSeason;
 
-    const prepared = await this.prepareWithCleanup(input, plan);
+    const prepared = await this.prepareWithCleanup(
+      input,
+      plan,
+      guarded.expectedPredecessor,
+    );
     if (prepared.kind !== 'prepared') {
       // A prepare refusal is not automatically an operational failure: a
       // strictly older ordinary candidate is the pacing system working, and
@@ -446,20 +479,55 @@ export class SequencedPublicationService implements PublicationCommands {
     const completionAttestation = {
       manifestCommitment: await manifestCommitment(plan.documentNames),
     };
-    const call = await attempt(() =>
-      this.port.finalize({
+    const finalizeRequest: FinalizeRequest = {
+      season: input.season,
+      operationEpoch,
+      operationToken,
+      completionAttestation,
+    };
+    let finalized = await this.finalizeOnce(finalizeRequest);
+    if (finalized.outcome === 'uncertain') {
+      // The commit call did not resolve to an answer, so whether it committed
+      // is unknown. `finalize` is idempotent for its own epoch and token, so it
+      // is re-driven exactly once: a commit that did happen replays as
+      // `committed`, and one that did not is decided now. Never more than
+      // once - an unbounded loop would only hide an unavailable authority.
+      this.logger.warn({
+        operation: 'publication.sequencer.finalize_uncertain',
         season: input.season,
-        operationEpoch,
-        operationToken,
-        completionAttestation,
-      }),
-    );
-    if (!call.ok) {
-      // The commit call itself did not resolve, so whether it committed is
-      // genuinely unknown. Nothing is cleaned up here: deleting the candidate
-      // could destroy a release that did commit, and the sequencer's own
-      // pending-cleanup slot collects it if it did not (ADR 0025 D5). No global
-      // state was touched, so the prior release keeps serving either way.
+        failureCategory: 'sequencer-authority-unavailable',
+        publicationStatus: input.operationKind,
+      });
+      finalized = await this.finalizeOnce(finalizeRequest);
+    }
+    if (finalized.outcome === 'uncertain') {
+      // Still unknown, so the authority is read exactly once - no polling. The
+      // candidate version was allocated to this operation alone and only its
+      // own `finalize` can make it active, so an active, authoritative
+      // `candidateVersion` proves this commit happened: it is completed exactly
+      // like a commit whose answer arrived.
+      if (await this.candidateIsAuthoritative(input.season, candidateVersion)) {
+        this.logger.warn({
+          operation: 'publication.sequencer.finalize_reconciled',
+          season: input.season,
+          releaseVersion: candidateVersion,
+          publicationStatus: input.operationKind,
+        });
+        return this.completeCommitted(
+          input,
+          plan.documentNames,
+          baked,
+          candidateVersion,
+          outgoing,
+        );
+      }
+      // Any other answer - unreadable, not active, the predecessor, another
+      // version, malformed - leaves the commit unknown. Nothing is cleaned up
+      // here: deleting the candidate could destroy a release that did commit,
+      // and the sequencer's own pending-cleanup slot collects it if it did not
+      // (ADR 0025 D5). No global state was touched, so the prior release keeps
+      // serving either way, and a later run's `readAuthority` finds whichever
+      // version is authoritative.
       this.logger.warn({
         operation: 'publication.sequencer.finalize_unavailable',
         season: input.season,
@@ -473,7 +541,6 @@ export class SequencedPublicationService implements PublicationCommands {
         'sequencer-authority-unavailable',
       );
     }
-    const finalized = call.value;
 
     if (finalized.outcome === 'superseded') {
       this.logger.warn({
@@ -505,30 +572,53 @@ export class SequencedPublicationService implements PublicationCommands {
         input.season,
         candidateVersion,
         input.authority.activeVersion,
-        'sequencer-prepare-rejected',
+        finalized.reason === 'predecessor-changed'
+          ? 'guard-predecessor-stale'
+          : 'sequencer-prepare-rejected',
       );
     }
 
-    // Committed. Everything below is post-commit and best-effort; none of it
-    // can un-publish (ADR 0025 D9 "Failure behavior").
-    //
-    // The global current-season and content-metadata writes belong here rather
-    // than in the candidate write phase: they decide which season
-    // `/v1/seasons/current` resolves to, so performing them before the
-    // authoritative `finalize` would make a *pre-commit* failure - an expired
-    // lease, a supersession, a corrupt-state rejection - user-visible while the
-    // prior release is still the one serving.
+    return this.completeCommitted(
+      input,
+      plan.documentNames,
+      baked,
+      candidateVersion,
+      outgoing,
+    );
+  }
+
+  /**
+   * The one post-commit path, for a commit whose answer arrived and for one
+   * the authority confirmed after that answer was lost.
+   *
+   * Everything here is post-commit and best-effort; none of it can un-publish
+   * (ADR 0025 D9 "Failure behavior").
+   *
+   * The global current-season and content-metadata writes belong here rather
+   * than in the candidate write phase: they decide which season
+   * `/v1/seasons/current` resolves to, so performing them before the
+   * authoritative `finalize` would make a *pre-commit* failure - an expired
+   * lease, a supersession, a corrupt-state rejection - user-visible while the
+   * prior release is still the one serving.
+   */
+  private async completeCommitted(
+    input: TwoPhaseInput,
+    documentNames: readonly SnapshotDocumentName[],
+    baked: readonly StoredSnapshot[],
+    candidateVersion: string,
+    outgoing: OutgoingCurrentSeason,
+  ): Promise<PublicationResult> {
     const maintenance = input.publishesSeasonPointer
       ? await this.maintainGlobalMetadata(input.season, baked)
       : 'not-required';
     const withdrawn = await this.withdrawnRoutes(
       input.season,
       input.authority.activeVersion,
-      plan.documentNames,
+      documentNames,
     );
     const purge = await this.purgeDocuments(
       input.season,
-      plan.documentNames,
+      documentNames,
       withdrawn.documents,
       withdrawn.enumerable,
       // A rejected maintenance write is not proof the pointer stayed put: the
@@ -600,9 +690,107 @@ export class SequencedPublicationService implements PublicationCommands {
     return 'failed';
   }
 
+  /**
+   * The D14/D15 comparison, and the D16 binding it produces for `prepare`.
+   *
+   * 1. The candidate's guard, from its own results documents.
+   * 2. The authoritative predecessor's guard, from that exact version's
+   *    immutable documents, with the revisions `prepare` will check.
+   * 3. Predecessor containment in the candidate.
+   *
+   * A missing or unreadable predecessor is never an empty one. The predecessor
+   * is only read: nothing from it reaches the candidate, the plan or storage.
+   */
+  private async guardAgainstPredecessor(input: TwoPhaseInput): Promise<
+    | {
+        readonly kind: 'guarded';
+        readonly expectedPredecessor: ExpectedPredecessor;
+      }
+    | {
+        readonly kind: 'refused';
+        readonly status: 'failed' | 'rejected';
+        readonly reason: PublicationReason;
+      }
+  > {
+    const refuse = (
+      status: 'failed' | 'rejected',
+      reason: PublicationReason,
+    ) => {
+      // Bounded: the season, the operation kind and a closed category. Never a
+      // round, a driver, a constructor, a fact or a revision.
+      this.logger.warn({
+        operation: 'publication.guard.rejected',
+        season: input.season,
+        failureCategory: reason,
+        publicationStatus: input.operationKind,
+      });
+      return { kind: 'refused', status, reason } as const;
+    };
+
+    const candidate = deriveParticipationGuard(input.season, input.documents);
+    if (candidate.kind === 'invalid') {
+      return refuse('rejected', 'guard-candidate-invalid');
+    }
+    const predecessor = await readPredecessorGuard(
+      this.storage,
+      input.season,
+      input.authority.activeVersion,
+    );
+    if (predecessor.kind === 'unavailable') {
+      return refuse('failed', 'guard-predecessor-unavailable');
+    }
+    if (predecessor.kind === 'invalid') {
+      return refuse('failed', 'guard-predecessor-invalid');
+    }
+    const comparison = compareParticipationGuards(
+      predecessor.guard,
+      candidate.guard,
+    );
+    if (comparison.kind === 'regression') {
+      return refuse('rejected', comparison.reason);
+    }
+    return {
+      kind: 'guarded',
+      expectedPredecessor: {
+        activeVersion: input.authority.activeVersion,
+        guardDocuments: predecessor.guardDocuments,
+      },
+    };
+  }
+
+  /**
+   * Whether one authority read shows `candidateVersion` committed: the season
+   * is `active`, authoritative, and serves exactly that version. A read that
+   * throws or answers anything else - including a malformed record - is not a
+   * confirmation.
+   */
+  private async candidateIsAuthoritative(
+    season: number,
+    candidateVersion: string,
+  ): Promise<boolean> {
+    const confirmed = await attempt(async () => {
+      const authority = await this.port.readAuthority(season);
+      return (
+        authority.cutoverState === 'active' &&
+        authority.authoritative === true &&
+        authority.activeVersion === candidateVersion
+      );
+    });
+    return confirmed.ok && confirmed.value;
+  }
+
+  /** One `finalize` call; a call that throws is as uncertain as a lost answer. */
+  private async finalizeOnce(
+    request: FinalizeRequest,
+  ): Promise<FinalizeOutcome> {
+    const call = await attempt(() => this.port.finalize(request));
+    return call.ok ? call.value : { outcome: 'uncertain' };
+  }
+
   private async prepareWithCleanup(
     input: TwoPhaseInput,
     plan: PublicationPlan,
+    expectedPredecessor: ExpectedPredecessor,
     retried = false,
   ): Promise<
     | {
@@ -624,13 +812,39 @@ export class SequencedPublicationService implements PublicationCommands {
         reason: PublicationReason;
       }
   > {
-    const outcome: PrepareOutcome = await this.port.prepare({
-      season: input.season,
-      operationKind: input.operationKind,
-      perKeyRevisions: plan.perKeyRevisions,
-      sourceOrderingInput: input.sourceOrderingInput,
-      expectedManifestCommitment: plan.expectedManifestCommitment,
-    });
+    const call = await attempt(() =>
+      this.port.prepare({
+        season: input.season,
+        operationKind: input.operationKind,
+        perKeyRevisions: plan.perKeyRevisions,
+        sourceOrderingInput: input.sourceOrderingInput,
+        expectedManifestCommitment: plan.expectedManifestCommitment,
+        expectedPredecessor,
+      }),
+    );
+    // A call that throws is as unknown as a lost answer.
+    const outcome: PrepareOutcome = call.ok
+      ? call.value
+      : { outcome: 'uncertain' };
+
+    if (outcome.outcome === 'uncertain') {
+      // Whether an operation was prepared is unknown. It is not reported as a
+      // sequencer refusal, no second `prepare` is sent - one could only create
+      // another operation or be refused as in progress - and nothing is cleaned
+      // up without a known token. If an operation was prepared, its TTL
+      // retires it and a later `prepare` collects its candidate (D5).
+      this.logger.warn({
+        operation: 'publication.sequencer.prepare_uncertain',
+        season: input.season,
+        failureCategory: 'sequencer-authority-unavailable',
+        publicationStatus: input.operationKind,
+      });
+      return {
+        kind: 'rejected',
+        status: 'failed',
+        reason: 'sequencer-authority-unavailable',
+      };
+    }
 
     if (outcome.outcome === 'prepared') {
       if (outcome.retiredCleanup) {
@@ -658,7 +872,9 @@ export class SequencedPublicationService implements PublicationCommands {
         outcome.pendingCleanup.operationEpoch,
         outcome.pendingCleanup.candidateVersion,
       );
-      if (!retried) return this.prepareWithCleanup(input, plan, true);
+      if (!retried) {
+        return this.prepareWithCleanup(input, plan, expectedPredecessor, true);
+      }
     }
 
     this.logger.warn({
@@ -681,6 +897,23 @@ export class SequencedPublicationService implements PublicationCommands {
         kind: 'rejected',
         status: 'failed',
         reason: 'sequencer-authority-unavailable',
+      };
+    }
+    if (outcome.reason === 'stale-predecessor') {
+      return {
+        kind: 'rejected',
+        status: 'failed',
+        reason: 'guard-predecessor-stale',
+      };
+    }
+    if (
+      outcome.reason === 'predecessor-guard-mismatch' ||
+      outcome.reason === 'invalid-expected-predecessor'
+    ) {
+      return {
+        kind: 'rejected',
+        status: 'failed',
+        reason: 'guard-predecessor-invalid',
       };
     }
     return {

@@ -17,6 +17,7 @@ import {
   SEED_HIGH_WATER_MARK,
   activeSequencer,
   commitment,
+  currentPredecessor,
   keyRevision,
   prepareRequest,
   rev,
@@ -26,7 +27,12 @@ import {
 const MANIFEST = commitment('manifest-1');
 
 function prepared(harness: Harness, overrides = {}) {
-  const outcome = harness.sequencer.prepare(prepareRequest(overrides));
+  const outcome = harness.sequencer.prepare(
+    prepareRequest({
+      expectedPredecessor: currentPredecessor(harness),
+      ...overrides,
+    }),
+  );
   if (outcome.outcome !== 'prepared') {
     throw new Error(`expected prepared, got ${JSON.stringify(outcome)}`);
   }
@@ -221,7 +227,10 @@ describe('finalize: the authoritative commit', () => {
     });
     // A later ordinary candidate is measured against the rollback's value.
     const after = harness.sequencer.prepare(
-      prepareRequest({ sourceOrderingInput: '2026-07-01T00:00:00.000Z' }),
+      prepareRequest({
+        sourceOrderingInput: '2026-07-01T00:00:00.000Z',
+        expectedPredecessor: currentPredecessor(harness),
+      }),
     );
     expect(after).toEqual({
       outcome: 'rejected',

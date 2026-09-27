@@ -261,9 +261,10 @@ describe('the sequencer client', () => {
       cutoverState: 'unavailable',
       authoritative: false,
     });
+    // The two mutating calls a caller acts on are uncertain, never a definite
+    // rejection: the object may have applied either before its answer was lost.
     expect(await client.prepare(prepareRequest())).toEqual({
-      outcome: 'rejected',
-      reason: 'state-corrupt',
+      outcome: 'uncertain',
     });
     expect(
       await client.finalize({
@@ -272,7 +273,7 @@ describe('the sequencer client', () => {
         operationToken: 'token-1',
         completionAttestation: { manifestCommitment: MANIFEST },
       }),
-    ).toEqual({ outcome: 'rejected', reason: 'state-corrupt' });
+    ).toEqual({ outcome: 'uncertain' });
     expect(
       await client.authorizeCleanup({
         season: SEASON,
@@ -308,7 +309,7 @@ describe('the sequencer client', () => {
         operationToken: 'token-1',
         completionAttestation: { manifestCommitment: MANIFEST },
       }),
-    ).toEqual({ outcome: 'rejected', reason: 'state-corrupt' });
+    ).toEqual({ outcome: 'uncertain' });
   });
 
   it('satisfies the same port in-process', async () => {

@@ -30,7 +30,9 @@
  * that component's own tests, and is never described here as something this
  * component checks.
  *
- * **This component has no production caller and no runtime binding.**
+ * Its only runtime caller is the `SeasonPublicationSequencer` Durable Object,
+ * whose namespace is bound in `env.staging` only; production declares no
+ * binding.
  */
 
 import {
@@ -84,6 +86,7 @@ import {
 } from './store';
 import {
   assignObservationTimestamps,
+  committedGuardRowsMatch,
   highestInstant,
   isExpired,
   isOperationIdentity,
@@ -221,6 +224,24 @@ export class SeasonPublicationCoordinator {
         return { outcome: 'rejected', reason: 'season-mismatch' };
       }
 
+      // D16: the candidate was compared against one exact predecessor. Bind it
+      // here, in the same transaction that admits the operation, before any
+      // epoch is allocated or anything is written. From this point until this
+      // operation's own `finalize`, single-flight and epoch fencing keep that
+      // predecessor authoritative, and `finalize` re-asserts it.
+      const expected = request.expectedPredecessor;
+      if (current.activeVersion !== expected.activeVersion) {
+        return { outcome: 'rejected', reason: 'stale-predecessor' };
+      }
+      const committed = readPerKeyState(store, committedKeyPrefix);
+      if (committed.kind === 'corrupt') {
+        return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
+      const committedStates = committed.kind === 'value' ? committed.value : [];
+      if (!committedGuardRowsMatch(committedStates, expected)) {
+        return { outcome: 'rejected', reason: 'predecessor-guard-mismatch' };
+      }
+
       const operation = readOperationRecord(store);
       if (operation.kind === 'corrupt') {
         return { outcome: 'rejected', reason: 'state-corrupt' };
@@ -319,13 +340,9 @@ export class SeasonPublicationCoordinator {
         return { outcome: 'rejected', reason: 'epoch-space-exhausted' };
       }
 
-      const committed = readPerKeyState(store, committedKeyPrefix);
-      if (committed.kind === 'corrupt') {
-        return { outcome: 'rejected', reason: 'state-corrupt' };
-      }
       const assignment = assignObservationTimestamps(
         request.perKeyRevisions,
-        committed.kind === 'value' ? committed.value : [],
+        committedStates,
         current.seasonSnapshotObservedAtHighWaterMark,
         now,
       );
@@ -346,7 +363,7 @@ export class SeasonPublicationCoordinator {
         token: this.token(),
         operationKind: request.operationKind,
         phase: 'prepared',
-        priorVersion: current.activeVersion,
+        priorVersion: expected.activeVersion,
         candidateVersion,
         sourceOrderingInput: request.sourceOrderingInput,
         expectedManifestCommitment: request.expectedManifestCommitment,
@@ -375,6 +392,7 @@ export class SeasonPublicationCoordinator {
         candidateVersion,
         assignedTimestamps,
         deadline: record.deadline,
+        priorVersion: expected.activeVersion,
         ...(stagedRetirement !== null
           ? {
               retiredCleanup: {
@@ -472,6 +490,13 @@ export class SeasonPublicationCoordinator {
         record.expectedManifestCommitment
       ) {
         return { outcome: 'rejected', reason: 'manifest-commitment-mismatch' };
+      }
+      if (record.priorVersion !== authority.activeVersion) {
+        // D16. The release this operation was compared against and bound to at
+        // `prepare` is no longer the active one. Unreachable while the
+        // single-flight and epoch invariants hold; asserted so that a corrupted
+        // state refuses to commit rather than replace an unchecked release.
+        return { outcome: 'rejected', reason: 'predecessor-changed' };
       }
 
       const prepared = readPerKeyState(store, preparedKeyPrefix);

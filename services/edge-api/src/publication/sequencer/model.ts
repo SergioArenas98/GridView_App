@@ -223,6 +223,22 @@ export const prepareRejectionReasons = [
    * `pendingCleanup`.
    */
   'pending-cleanup-required',
+  /**
+   * D16. The request's `expectedPredecessor.activeVersion` is not the version
+   * this season has committed as active: the candidate was compared against a
+   * release that is no longer authoritative. Nothing is written and no epoch is
+   * allocated; a later run compares against whatever is active then.
+   */
+  'stale-predecessor',
+  /**
+   * D16. The active version matches, but the supplied results-document
+   * `(documentName, revision)` pairs are not exactly this sequencer's committed
+   * `grand-prix:{round}:results` rows: the content compared is not the content
+   * the authority committed. Nothing is written.
+   */
+  'predecessor-guard-mismatch',
+  /** `expectedPredecessor` is missing, malformed, unsorted or oversized. */
+  'invalid-expected-predecessor',
   'state-corrupt',
 ] as const;
 
@@ -239,6 +255,14 @@ export const finalizeRejectionReasons = [
   'preparation-expired',
   'manifest-commitment-mismatch',
   'authority-not-active',
+  /**
+   * D16 invariant. The operation's durable `priorVersion` is not the season's
+   * current `activeVersion`. Single-flight and epoch fencing make this
+   * unreachable by construction; it is asserted rather than assumed, so a
+   * corrupted state refuses to commit instead of replacing a release the
+   * candidate was never compared against.
+   */
+  'predecessor-changed',
   'state-corrupt',
 ] as const;
 
@@ -295,12 +319,30 @@ export const cutoverRejectionReasons = [
 
 export type CutoverRejectionReason = (typeof cutoverRejectionReasons)[number];
 
+/**
+ * The authoritative predecessor a candidate was compared against (ADR 0026
+ * D16, ADR 0025 D4).
+ *
+ * `prepare` compare-and-swaps on it inside its own transaction: the season's
+ * `activeVersion` must be `activeVersion`, and its committed
+ * `grand-prix:{round}:results` rows must be exactly `guardDocuments`, name for
+ * name and revision for revision. `guardDocuments` is sorted by `compareUtf8`,
+ * unique, and bounded by `maximumManifestSize`; it is empty only when the
+ * predecessor committed no results document at all.
+ */
+export interface ExpectedPredecessor {
+  readonly activeVersion: string;
+  readonly guardDocuments: readonly PerKeyRevision[];
+}
+
 export interface PrepareRequest {
   readonly season: number;
   readonly operationKind: OperationKind;
   readonly perKeyRevisions: readonly PerKeyRevision[];
   readonly sourceOrderingInput: string;
   readonly expectedManifestCommitment: string;
+  /** Mandatory for every sequenced `prepare`; there is no unguarded form. */
+  readonly expectedPredecessor: ExpectedPredecessor;
 }
 
 /**
@@ -321,6 +363,15 @@ export type PrepareOutcome =
       readonly candidateVersion: string;
       readonly assignedTimestamps: readonly PerKeyState[];
       readonly deadline: string;
+      /**
+       * The active version this operation was bound to - the one it will
+       * replace. This sequencer always returns it. It is optional only because
+       * an older sequencer build never sent it; the client refuses a `prepared`
+       * response whose value is absent or differs from the request's
+       * `expectedPredecessor.activeVersion`, so a version-skewed object fails
+       * closed rather than silently skipping the compare-and-swap.
+       */
+      readonly priorVersion?: string;
       /**
        * Present only when this `prepare` displaced an expired or cancelled
        * operation whose candidate must still be cleaned up: its identity was
@@ -349,7 +400,23 @@ export type PrepareOutcome =
        * acknowledged before another operation can be retired.
        */
       readonly pendingCleanup?: RetiredCleanupHandle;
-    };
+    }
+  | TransportUncertainOutcome;
+
+/**
+ * The call's outcome is unknown: the transport failed, or the response could
+ * not be decoded into any outcome the protocol can produce.
+ *
+ * Produced **only by the Durable Object client**, never by the coordinator and
+ * never decoded from the wire, so an object can never claim it. It is not a
+ * rejection: the call may or may not have taken effect. A caller must not
+ * guess - it must not clean up without a known operation token, must not
+ * automatically submit a second `prepare`, and may re-drive an idempotent
+ * `finalize` only with the same epoch and token.
+ */
+export interface TransportUncertainOutcome {
+  readonly outcome: 'uncertain';
+}
 
 /** The identity `finalize` and `cancel` present: epoch **and** token. */
 export interface OperationIdentity {
@@ -389,7 +456,8 @@ export type FinalizeOutcome =
   | {
       readonly outcome: 'rejected';
       readonly reason: FinalizeRejectionReason;
-    };
+    }
+  | TransportUncertainOutcome;
 
 export type CancelOutcome =
   | { readonly outcome: 'cancelled'; readonly candidateVersion: string }

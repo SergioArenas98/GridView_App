@@ -9,15 +9,13 @@
  *
  * ## Nothing here publishes anything
  *
- * This module has **no production caller**. It computes a revision; it does not
- * assign an observation time, does not read or write storage, and does not
- * touch `meta.sourceUpdatedAt`. Binding a revision to a `snapshotObservedAt`
- * and publishing that value is the second half of Phase 9B-6, and it is blocked
- * on a serialization guarantee that Workers KV cannot provide (ADR 0007, ADR
- * 0010): two overlapping publications for one season both decide pre-commit
- * from the same active pointer, so a pre-commit assignment cannot be shown to
- * be strictly monotonic (D1.10). Until that is resolved, the published
- * `sourceUpdatedAt` is unchanged and this module is inert.
+ * It computes a revision; it does not assign an observation time, does not
+ * read or write storage, and does not touch `meta.sourceUpdatedAt`. Its callers
+ * are the sequenced publication plan (the per-key revisions `prepare`
+ * receives, ADR 0025 D4), the cutover seed (D12), and the ADR 0026 D14-D16
+ * predecessor read, which recomputes the revisions `prepare` compares against
+ * the sequencer's committed rows. Binding a revision to a `snapshotObservedAt`
+ * is the sequencer's job, inside its own transaction.
  *
  * ## The hashed input
  *
