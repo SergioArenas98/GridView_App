@@ -4,10 +4,10 @@
  * **Dormant by design.** No runtime module outside this directory imports it,
  * `src/index.ts` cannot reach it, no production composition constructs it, and
  * `PROVIDER_MODE` still admits exactly `mock | none`. It implements exactly
- * four coordinated resources, each in its own port - the season calendar,
- * the season circuits, the season participants and the race classification -
- * and each port refuses every other resource before reserving capacity or
- * touching transport.
+ * six coordinated resources in five ports - the season calendar, the season
+ * circuits, the season participants, the race classification, and the driver
+ * and constructor standings, which share one port - and each port refuses
+ * every other resource before reserving capacity or touching transport.
  */
 
 export { JolpicaCalendarPort, calendarPageLimit } from './calendar-port';
@@ -118,3 +118,28 @@ export type {
   ResultsNormalization,
   ResultsNormalizationProblem,
 } from './results-normalizer';
+
+export { JolpicaStandingsPort, standingsPageLimit } from './standings-port';
+export type { JolpicaStandingsPortOptions } from './standings-port';
+
+export {
+  decodeConstructorStandings,
+  decodeDriverStandings,
+  parseStandingPoints,
+  standingsDecodeProblems,
+} from './standings-payload';
+export type {
+  DecodedConstructorStanding,
+  DecodedDriverStanding,
+  StandingsDecodeProblem,
+  StandingsDecodeResult,
+} from './standings-payload';
+
+export {
+  normalizeConstructorStandings,
+  normalizeDriverStandings,
+} from './standings-normalizer';
+export type {
+  StandingsNormalization,
+  StandingsNormalizationProblem,
+} from './standings-normalizer';

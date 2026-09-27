@@ -1232,6 +1232,14 @@ The handler:
 > other three, it is **not registered** and is unreachable from the Worker
 > entry point.
 >
+> **Standings (2026-09-27).** A fifth dormant, fixture-tested Jolpica port
+> answers `driver-standings` and `constructor-standings` with one request per
+> call, under the curator decisions of
+> [ADR 0023 amendment A3](../adr/0023-multi-source-provider-coordination.md#amendment-a3---jolpica-standings-normalization).
+> It returns one normalized standings table, carries no round and derives no
+> participation span. Like the others, it is **not registered** and is
+> unreachable from the Worker entry point.
+>
 > **An answered outcome is the coordinator's own normalized copy.** The instant
 > an adapter's answer crosses the coordination boundary it is parsed rather than
 > merely validated: its shape is closed against the variant it declares, each

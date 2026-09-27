@@ -294,7 +294,9 @@ integers and can be added later under the same model if a contract requires it.
   the A7 assembly change are still outstanding. *The **A7 assembly change**
   followed on **2026-09-26**, in the equally dormant season assembly
   (Implementation Plan §14.0.25); every other Jolpica resource is still
-  outstanding.*
+  outstanding.* *A **driver and constructor standings** port followed on
+  **2026-09-27**, equally dormant (Implementation Plan §14.0.28); event
+  schedules and non-race classifications are still outstanding.*
 - Date: 2026-09-16
 - Phase: 9B, recorded before the first Jolpica calendar adapter slice
 - Amends: this ADR's [scope note](#scope-note), and — for coordinated season
@@ -829,7 +831,8 @@ a future adapter must satisfy.
 | Jolpica **season-circuits** port             | **Implemented, fixture-tested and dormant** (2026-09-22, Implementation Plan §14.0.17); a separate port that answers only `season-circuits`, resolving every `circuitId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |
 | Jolpica **season-participants** port         | **Implemented, fixture-tested and dormant** (2026-09-24, Implementation Plan §14.0.21); two sequential requests resolving every `driverId` and `constructorId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |
 | Jolpica race **session-classification** port | **Implemented, fixture-tested and dormant** (2026-09-26, Implementation Plan §14.0.22, [ADR 0023 A2](0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization)); one request per round, resolving the event locator, every `driverId` and every `constructorId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |
-| Jolpica adapter, for every other resource     | **Not implemented.** Event schedules, classifications and standings are refused as `resource-unsupported`; this is not a working full adapter. *Participants removed from this row 2026-09-24: see the row above.* *Race classifications removed 2026-09-26: see the row above. Qualifying, sprint and sprint-qualifying classifications stay refused.* |
+| Jolpica **driver and constructor standings** port | **Implemented, fixture-tested and dormant** (2026-09-27, Implementation Plan §14.0.28, [ADR 0023 A3](0023-multi-source-provider-coordination.md#amendment-a3---jolpica-standings-normalization)); one request per call, resolving every `driverId` and every listed `constructorId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |
+| Jolpica adapter, for every other resource     | **Not implemented.** Event schedules, classifications and standings are refused as `resource-unsupported`; this is not a working full adapter. *Participants removed from this row 2026-09-24: see the row above.* *Race classifications removed 2026-09-26: see the row above. Qualifying, sprint and sprint-qualifying classifications stay refused.* *Standings removed 2026-09-27: see the row above.* |
 | `provider-neutrality.test.ts`                | **Replaced** (2026-09-20), in the same change that added the adapter: composition, dependency and configuration dormancy assertions in place of the Jolpica file-name assertion (A9) |
 | G1 (live provider mode)                      | **Open**                                                                 |
 | G5 (event-aware scheduling), G9 (provenance) | **Open**                                                                 |
