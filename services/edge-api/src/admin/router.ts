@@ -4,6 +4,7 @@ import { jsonResponse } from '../http/envelope';
 import type { Logger } from '../logging/logger';
 import type { PublicationCommands } from '../publication/commands';
 import type { CutoverPreparationService } from '../publication/cutover/service';
+import type { CoordinatedSyncOutcome } from '../sync/coordinated/run';
 import type { SynchronizationService } from '../sync/sync-service';
 import { emptySyncState } from '../sync/sync-service';
 import {
@@ -18,10 +19,27 @@ import type {
 import { adminAuthOk, unauthorized } from './auth';
 import { handleCutoverRequest, isCutoverPath } from './cutover-routes';
 
+/**
+ * How the admin sync routes synchronize, fixed by `PROVIDER_MODE`.
+ *
+ * - `whole-season` (`mock`, `none`): the existing `SynchronizationService`.
+ * - `coordinated`: `sync/full` is a manual coordinated run, a forced
+ *   publication run that never advances scheduled due times (O-8).
+ *   `sync/resource` and `rebuild/home` are refused as `SYNC_MODE_UNSUPPORTED`,
+ *   because a coordinated publication cannot be a subset of the season and
+ *   `home-rebuild` must never become a provider request.
+ */
+export type AdminSynchronization =
+  | { readonly mode: 'whole-season'; readonly sync: SynchronizationService }
+  | {
+      readonly mode: 'coordinated';
+      readonly run: (season: number) => Promise<CoordinatedSyncOutcome>;
+    };
+
 interface AdminContext {
   env: Env;
   storage: SnapshotStorage;
-  sync: SynchronizationService;
+  synchronization: AdminSynchronization;
   publisher: PublicationCommands;
   purger: CachePurgeAdapter;
   logger: Logger;
@@ -103,15 +121,45 @@ export async function handleAdminRequest(
   }
 
   const season = await resolveAdminSeason(request, context.storage);
+  const synchronization = context.synchronization;
+  if (
+    synchronization.mode === 'coordinated' &&
+    (url.pathname === '/internal/admin/sync/resource' ||
+      url.pathname === '/internal/admin/rebuild/home')
+  ) {
+    return jsonResponse(
+      {
+        error: {
+          code: 'SYNC_MODE_UNSUPPORTED',
+          message: 'This synchronization route is not available in this mode.',
+          requestId: context.requestId,
+        },
+      },
+      409,
+      context.requestId,
+      noStore(),
+    );
+  }
   if (url.pathname === '/internal/admin/sync/full') {
-    const result = await context.sync.run({
+    if (synchronization.mode === 'coordinated') {
+      const outcome = await synchronization.run(season);
+      return ok(
+        outcome,
+        context.requestId,
+        outcome.status === 'coordinated-runtime-unavailable' ? 503 : 200,
+      );
+    }
+    const result = await synchronization.sync.run({
       season,
       trigger: 'manual-full',
       forceJobs: allSyncJobs(),
     });
     return ok(result, context.requestId);
   }
-  if (url.pathname === '/internal/admin/sync/resource') {
+  if (
+    synchronization.mode === 'whole-season' &&
+    url.pathname === '/internal/admin/sync/resource'
+  ) {
     const body = await readJson(request);
     const job = jobForResource(
       typeof body.resource === 'string' ? body.resource : '',
@@ -131,7 +179,7 @@ export async function handleAdminRequest(
       );
     }
     return ok(
-      await context.sync.run({
+      await synchronization.sync.run({
         season,
         trigger: 'manual-resource',
         forceJobs: [job],
@@ -139,9 +187,12 @@ export async function handleAdminRequest(
       context.requestId,
     );
   }
-  if (url.pathname === '/internal/admin/rebuild/home') {
+  if (
+    synchronization.mode === 'whole-season' &&
+    url.pathname === '/internal/admin/rebuild/home'
+  ) {
     return ok(
-      await context.sync.run({
+      await synchronization.sync.run({
         season,
         trigger: 'manual-home',
         forceJobs: ['home-rebuild'],

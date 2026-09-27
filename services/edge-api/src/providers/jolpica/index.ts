@@ -1,14 +1,24 @@
 /**
  * The Jolpica adapter package.
  *
- * **Dormant by design.** No runtime module outside this directory imports it,
- * `src/index.ts` cannot reach it, no production composition constructs it, and
- * `PROVIDER_MODE` still admits exactly `mock | none`. It implements exactly
- * six coordinated resources in five ports - the season calendar, the season
- * circuits, the season participants, the race classification, and the driver
- * and constructor standings, which share one port - and each port refuses
- * every other resource before reserving capacity or touching transport.
+ * **Dormant by design.** Exactly one runtime module outside this directory
+ * imports it: the coordinated runtime composition,
+ * `src/sync/coordinated/composition.ts`. That module is reachable from the
+ * Worker, but it constructs nothing unless `PROVIDER_MODE` is `coordinated`
+ * and every coordinated dependency is bound. No committed environment selects
+ * that mode, and the reconciliation ledger it requires has no binding, so no
+ * port here is constructed in any deployed configuration.
+ *
+ * It implements exactly six coordinated resources in five ports: the season
+ * calendar, the season circuits, the season participants, the race
+ * classification, and the driver and constructor standings, which share one
+ * port. Each port refuses every other resource before reserving capacity or
+ * touching transport. `JolpicaResourcePort` is the single registration a
+ * coordinator holds for source `jolpica`, and routes to the five.
  */
+
+export { JolpicaResourcePort } from './resource-port';
+export type { JolpicaResourcePorts } from './resource-port';
 
 export { JolpicaCalendarPort, calendarPageLimit } from './calendar-port';
 export type { JolpicaCalendarPortOptions } from './calendar-port';

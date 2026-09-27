@@ -1,5 +1,5 @@
 import { isInternalPath } from './admin/auth';
-import { handleAdminRequest } from './admin/router';
+import { handleAdminRequest, type AdminSynchronization } from './admin/router';
 import {
   CloudflareCacheApiPurgeAdapter,
   getSharedMemoryPurger,
@@ -19,6 +19,7 @@ import {
 } from './publication/authority';
 import {
   UnavailableSequencerPublicationCommands,
+  type GuardedPublicationCommands,
   type PublicationCommands,
 } from './publication/commands';
 import { CutoverPausedPublicationCommands } from './publication/cutover/admission';
@@ -28,9 +29,16 @@ import { SnapshotPublisher } from './publication/publisher';
 import { SequencedPublicationService } from './publication/sequenced/service';
 import { handlePublicRequest } from './public/router';
 import { resolveProvider } from './providers/factory';
+import {
+  resolveProviderRateLimiter,
+  unboundRateLimiter,
+} from './providers/http/factory';
 import { systemClock } from './runtime/clock';
 import { handleStatus } from './routes/status';
 import { resolveStorage } from './storage/factory';
+import type { CoordinatedRuntimeDependencies } from './sync/coordinated/composition';
+import { resolveReconciliationLedger } from './sync/coordinated/ledger-port';
+import { runCoordinatedSync } from './sync/coordinated/run';
 import { SynchronizationService } from './sync/sync-service';
 import { runtimeSnapshotValidator } from './validation/snapshot-validator';
 
@@ -42,9 +50,11 @@ export type { Env };
  * Wrangler to resolve `class_name`.
  *
  * Exporting it does not provision or start anything, and where a deployment has
- * bound the namespace nothing reserves through it: no adapter calls the
- * hardened HTTP boundary. Provider requests are governed by `PROVIDER_MODE` and
- * whether a live adapter exists, not by this export or its binding.
+ * bound the namespace nothing reserves through it. Only a composed coordinated
+ * runtime reserves, and composition requires `PROVIDER_MODE=coordinated` plus
+ * a bound reconciliation ledger, which nothing can bind yet. Provider requests
+ * are governed by that mode and those dependencies, not by this export or its
+ * binding.
  */
 export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';
 
@@ -83,10 +93,9 @@ export default {
       const config = resolveRuntimeConfig(env);
       const storage = resolveStorage(env);
       const purger = resolveCachePurger(env, config);
-      const provider = resolveProvider(env, config, clock);
       const authority = resolvePublicationAuthority(env, config);
       const validator = env.__SNAPSHOT_VALIDATOR ?? runtimeSnapshotValidator;
-      const publisher = buildPublicationCommands(
+      const { commands: publisher, guarded } = buildPublicationCommands(
         authority,
         config,
         storage,
@@ -96,20 +105,39 @@ export default {
         clock,
         url.origin,
       );
-      const sync = new SynchronizationService(
-        storage,
-        provider,
-        publisher,
-        clock,
-        logger,
-      );
+      const synchronization: AdminSynchronization = coordinatedMode(config)
+        ? {
+            mode: 'coordinated',
+            run: (season) =>
+              runCoordinatedSync(
+                { season, trigger: 'manual' },
+                coordinatedDependencies(
+                  env,
+                  authority,
+                  guarded,
+                  url.origin,
+                  logger,
+                  clock,
+                ),
+              ),
+          }
+        : {
+            mode: 'whole-season',
+            sync: new SynchronizationService(
+              storage,
+              resolveProvider(env, config, clock),
+              publisher,
+              clock,
+              logger,
+            ),
+          };
 
       let response: Response;
       if (isInternalPath(url.pathname)) {
         response = await handleAdminRequest(request, {
           env,
           storage,
-          sync,
+          synchronization,
           publisher,
           purger,
           logger,
@@ -140,7 +168,14 @@ export default {
         routeTemplate = url.pathname;
         cacheOutcome = 'error';
       } else if (url.pathname === '/v1/status') {
-        response = await handleStatus(request, env, storage, clock, requestId);
+        response = await handleStatus(
+          request,
+          env,
+          storage,
+          clock,
+          requestId,
+          authority,
+        );
         routeTemplate = '/v1/status';
         cacheOutcome = response.status === 304 ? 'not-modified' : 'hit';
       } else {
@@ -212,9 +247,13 @@ async function runScheduled(env: Env): Promise<void> {
   try {
     const config = resolveRuntimeConfig(env);
     const storage = resolveStorage(env);
+    if (coordinatedMode(config)) {
+      await runScheduledCoordinated(env, config, storage, clock, logger);
+      return;
+    }
     const purger = resolveCachePurger(env, config);
     const provider = resolveProvider(env, config, clock);
-    const publisher = buildPublicationCommands(
+    const { commands: publisher } = buildPublicationCommands(
       resolvePublicationAuthority(env, config),
       config,
       storage,
@@ -239,6 +278,82 @@ async function runScheduled(env: Env): Promise<void> {
       failureCategory: 'scheduled-handler',
     });
   }
+}
+
+/**
+ * The single provider-mode check in front of every coordinated path. In
+ * `mock` and `none` it is false, and neither the coordinated run nor its
+ * composition is ever reached, so nothing coordinated is constructed.
+ */
+function coordinatedMode(config: RuntimeConfig): boolean {
+  return config.providerMode === 'coordinated';
+}
+
+/**
+ * The scheduled coordinated run. A missing `PUBLIC_BASE_URL` is not a
+ * configuration error here: the run reports `purge-origin-missing` among its
+ * bounded reasons instead, and no publication surface is built without it.
+ */
+async function runScheduledCoordinated(
+  env: Env,
+  config: RuntimeConfig,
+  storage: import('./storage/types').SnapshotStorage,
+  clock: import('./runtime/clock').Clock,
+  logger: import('./logging/logger').Logger,
+): Promise<void> {
+  const authority = resolvePublicationAuthority(env, config);
+  const purgeOrigin = config.publicBaseUrl;
+  const guarded =
+    purgeOrigin === null
+      ? null
+      : buildPublicationCommands(
+          authority,
+          config,
+          storage,
+          env.__SNAPSHOT_VALIDATOR ?? runtimeSnapshotValidator,
+          resolveCachePurger(env, config),
+          logger,
+          clock,
+          purgeOrigin,
+        ).guarded;
+  const season = (await storage.getCurrentSeason()) ?? 2026;
+  await runCoordinatedSync(
+    { season, trigger: 'scheduled' },
+    coordinatedDependencies(
+      env,
+      authority,
+      guarded,
+      purgeOrigin,
+      logger,
+      clock,
+    ),
+  );
+}
+
+/**
+ * The facts the coordinated composition gates on. Resolving them constructs
+ * no transport, client or port and makes no request. The reconciliation
+ * ledger has no binding yet, so it is always absent.
+ */
+function coordinatedDependencies(
+  env: Env,
+  authority: PublicationAuthority,
+  guarded: GuardedPublicationCommands | null,
+  purgeOrigin: string | null,
+  logger: import('./logging/logger').Logger,
+  clock: import('./runtime/clock').Clock,
+): CoordinatedRuntimeDependencies {
+  const limiter = resolveProviderRateLimiter(env);
+  return {
+    limiter: limiter === unboundRateLimiter ? null : limiter,
+    authorityMode: authority.mode,
+    guarded,
+    purgeOrigin,
+    ledger: resolveReconciliationLedger(),
+    transport: env.__PROVIDER_TRANSPORT,
+    logger,
+    clock,
+  };
 }
 
 /**
@@ -277,6 +392,14 @@ async function runScheduled(env: Env): Promise<void> {
  * Absent, the surface built above is returned unchanged. Which environment sets
  * the control, committed and deployed, is recorded in
  * `docs/technical/GridView_Environments.md`.
+ *
+ * `guarded` is the same `SequencedPublicationService` instance, exposed
+ * through its guarded entry point, whenever the authority is a reachable
+ * sequencer: in the `seed:` and `activate:` phases alike, and with no control
+ * at all. It is `null` under every other authority. The guarded entry point
+ * has no legacy fallback and refuses any season whose sequencer authority is
+ * not `active`, so exposing it outside the cutover admission boundary admits
+ * nothing that boundary refuses. Only the coordinated runtime reads it.
  */
 function buildPublicationCommands(
   authority: PublicationAuthority,
@@ -287,13 +410,16 @@ function buildPublicationCommands(
   logger: import('./logging/logger').Logger,
   clock: import('./runtime/clock').Clock,
   purgeOrigin: string,
-): PublicationCommands {
+): PublicationSurface {
   const control = config.publicationCutoverControl;
   if (authority.mode === 'sequencer-unavailable') {
-    return closedForCutover(
-      control,
-      new UnavailableSequencerPublicationCommands(),
-    );
+    return {
+      commands: closedForCutover(
+        control,
+        new UnavailableSequencerPublicationCommands(),
+      ),
+      guarded: null,
+    };
   }
   const legacy = new SnapshotPublisher(
     storage,
@@ -302,7 +428,9 @@ function buildPublicationCommands(
     logger,
     purgeOrigin,
   );
-  if (authority.mode !== 'sequencer') return closedForCutover(control, legacy);
+  if (authority.mode !== 'sequencer') {
+    return { commands: closedForCutover(control, legacy), guarded: null };
+  }
   const sequenced = (fallback: PublicationCommands) =>
     new SequencedPublicationService({
       port: authority.port,
@@ -315,11 +443,18 @@ function buildPublicationCommands(
       purgeOrigin,
     });
   if (control.kind === 'activate') {
-    return sequenced(
+    const service = sequenced(
       new CutoverPausedPublicationCommands(legacy, control.season),
     );
+    return { commands: service, guarded: service };
   }
-  return closedForCutover(control, sequenced(legacy));
+  const service = sequenced(legacy);
+  return { commands: closedForCutover(control, service), guarded: service };
+}
+
+interface PublicationSurface {
+  readonly commands: PublicationCommands;
+  readonly guarded: GuardedPublicationCommands | null;
 }
 
 /**

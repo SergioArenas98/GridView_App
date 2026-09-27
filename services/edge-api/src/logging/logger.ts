@@ -52,6 +52,13 @@ export interface LogEvent {
   coordinationOutcome?: string;
   /** Bounded resource kinds a publishable season was missing. */
   coordinationMissing?: string[];
+  /**
+   * Closed reasons a coordinated run could not start (`limiter-unbound`,
+   * `authority-not-sequencer`, `purge-origin-missing`, `ledger-unbound`).
+   */
+  coordinationMissingDependencies?: string[];
+  /** Bounded coordinated run trigger: `scheduled` or `manual`. */
+  syncTrigger?: string;
   /** Integer counts for one coordination run. */
   coordinationPlanned?: number;
   coordinationSelected?: number;
@@ -99,13 +106,19 @@ export interface Logger {
   error(event: LogEvent): void;
 }
 
-const SENSITIVE_KEYS = new Set([
+/**
+ * Keys redacted wherever they appear, compared against the **lower-cased**
+ * key. Every entry must therefore be lower case itself: a camelCase entry
+ * such as `adminToken` could never equal `key.toLowerCase()` and would never
+ * match.
+ */
+export const SENSITIVE_KEYS: ReadonlySet<string> = new Set([
   'authorization',
-  'adminToken',
+  'admintoken',
   'token',
   'secret',
-  'providerKey',
-  'apiKey',
+  'providerkey',
+  'apikey',
   'password',
 ]);
 

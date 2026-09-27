@@ -4,7 +4,7 @@ import {
 } from '../publication/cutover/control';
 
 const validEnvironments = ['development', 'staging', 'production'] as const;
-const validProviderModes = ['mock', 'none'] as const;
+const validProviderModes = ['mock', 'none', 'coordinated'] as const;
 
 /**
  * Which authority decides `activeVersion`/`previousVersion` for a season
@@ -45,6 +45,13 @@ interface TestOnlyBindings {
    * path deterministically instead of waiting on the real backoff.
    */
   __CUTOVER_RETRY?: import('../publication/cutover/migration').CutoverRetryPolicy;
+  /**
+   * The outbound transport the coordinated runtime would hand its hardened
+   * HTTP client. Test-only: it lets a test count provider requests without
+   * replacing the global `fetch`. The runtime reads it only after every
+   * coordinated dependency gate has passed.
+   */
+  __PROVIDER_TRANSPORT?: import('../providers/http/provider-http-client').ProviderTransport;
 }
 
 /** Bindings and variables available to the Worker. */
@@ -142,6 +149,20 @@ export class ConfigurationError extends Error {
   }
 }
 
+/**
+ * Resolves `PROVIDER_MODE` (runtime activation decision O-1).
+ *
+ * - `mock`: the whole-season mock provider through `SynchronizationService`.
+ *   Refused in production.
+ * - `none`: no provider, so nothing is synchronized.
+ * - `coordinated`: the coordinated runtime (`src/sync/coordinated/`), admitted
+ *   in staging and production only. **Admitting the value activates nothing.**
+ *   No committed environment selects it. Even where it is selected, every
+ *   coordinated run is refused before any provider request while the
+ *   reconciliation ledger is unbound (`ledger-unbound`).
+ *
+ * Any other value, and `coordinated` in development, is a `ConfigurationError`.
+ */
 export function resolveProviderMode(
   value: string | undefined,
   environment: EnvironmentName,
@@ -160,6 +181,13 @@ export function resolveProviderMode(
   if (environment === 'production' && mode === 'mock') {
     throw new ConfigurationError(
       'The mock provider cannot be selected in production.',
+    );
+  }
+  if (environment === 'development' && mode === 'coordinated') {
+    // Local runs stay on the mock; tests inject the coordinated dependencies
+    // directly instead of selecting the mode.
+    throw new ConfigurationError(
+      'The coordinated provider mode can be selected only in staging or production.',
     );
   }
   return mode as ProviderMode;
