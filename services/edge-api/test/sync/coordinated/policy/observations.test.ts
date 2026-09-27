@@ -312,6 +312,27 @@ describe('observation runs', () => {
   });
 });
 
+describe('a failing bootstrap', () => {
+  it('asks for the calendar once per six hours, not on every tick', async () => {
+    const simulation = new Simulation([anchorOf(1, ANCHOR)]);
+    simulation.seasonRevision = () => failed;
+    const start = plus(ANCHOR, -3 * DAY);
+    const ticks = await simulation.run(start, plus(start, DAY - 1));
+
+    expect(ticks).toHaveLength(24);
+    expect(
+      ticks.filter((tick) => tick.plan.kind === 'observation'),
+    ).toHaveLength(4);
+    expect(
+      ticks.every((tick) =>
+        tick.plan.kind === 'observation'
+          ? tick.plan.bootstrap
+          : tick.plan.kind === 'nothing-due',
+      ),
+    ).toBe(true);
+  });
+});
+
 describe('full backfill from an empty ledger', () => {
   it('bootstraps, then publishes every eligible round in one run, settling the old ones on deadline', async () => {
     const calendar = weeklyCalendar(23, '2026-03-08T04:00:00.000Z');

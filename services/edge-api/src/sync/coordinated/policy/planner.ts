@@ -234,6 +234,14 @@ export function planRun(input: PlanInput): RunPlan {
   const calendar = seasonRecord?.calendarAnchors ?? null;
 
   if (calendar === null) {
+    // A failed bootstrap still waits for its calendar cadence; only a manual
+    // run may ask again before then.
+    if (
+      trigger === 'scheduled' &&
+      !isDue(seasonRecord?.refresh.calendar.nextDueAt ?? null, now)
+    ) {
+      return nothingDue(season, trigger, 'no-work');
+    }
     const refresh: RefreshResource[] = ['calendar'];
     return {
       kind: 'observation',

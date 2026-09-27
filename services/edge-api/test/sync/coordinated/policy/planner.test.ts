@@ -98,6 +98,40 @@ describe('bootstrap', () => {
     },
   );
 
+  it('waits for the calendar cadence after a failed bootstrap, unless forced', () => {
+    const failedAt = new Date('2026-09-01T00:17:00.000Z');
+    const season = seasonRecord({
+      refresh: {
+        ...seasonRecord().refresh,
+        calendar: {
+          observedRevision: null,
+          lastAttemptedAt: failedAt.toISOString(),
+          lastSuccessAt: null,
+          nextDueAt: plus(failedAt, 6 * HOUR).toISOString(),
+        },
+      },
+    });
+
+    for (const hours of [1, 5]) {
+      expect(plan(plus(failedAt, hours * HOUR), { season })).toMatchObject({
+        kind: 'nothing-due',
+        reason: 'no-work',
+        providerRequests: 0,
+      });
+      expect(
+        plan(plus(failedAt, hours * HOUR), { season }, 'manual'),
+      ).toMatchObject({
+        kind: 'observation',
+        bootstrap: true,
+      });
+    }
+    expect(plan(plus(failedAt, 6 * HOUR), { season })).toMatchObject({
+      kind: 'observation',
+      bootstrap: true,
+      providerRequests: 1,
+    });
+  });
+
   it('publishes the season-level resources next, even with no race yet (six requests)', () => {
     const season = seasonRecord({
       calendarAnchors: calendar,

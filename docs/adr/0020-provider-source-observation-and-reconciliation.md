@@ -799,6 +799,8 @@ Implementation Plan §14.0.31):
 9. Standings are refreshed daily from the first race to the final race's
    ceiling, and weekly otherwise.
 10. A round's own record anchor governs once the round is recorded.
+11. A scheduled bootstrap honours the calendar's due time, so a failed
+    bootstrap waits its six hours. A manual run asks at once.
 
 **Still open, and prerequisites for any provider-backed run:**
 
