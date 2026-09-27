@@ -399,10 +399,11 @@ function checkClassificationWrite(
   ) {
     refuse('revision-history-rewrite');
   }
-  // A superseded revision is never applied again (ADR 0020 D2.2): no slot a
-  // later decision could promote may hold one.
+  // A superseded revision is never applied again (ADR 0020 D2.2): neither the
+  // accepted content nor any slot a later decision could promote may hold one.
   const superseded = new Set(next.supersededRevisions);
   for (const revision of [
+    next.contentRevision,
     next.candidateRevision,
     next.stagedCorrection?.revision ?? null,
     next.competingCorrection?.revision ?? null,

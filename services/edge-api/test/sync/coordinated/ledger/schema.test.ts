@@ -119,6 +119,14 @@ describe('the classification record schema', () => {
         (r.publishedRevision = rev('x').toUpperCase()),
     ],
     [
+      'a normalized document as the accepted content',
+      (r: Record<string, unknown>) => (r.contentRevision = { results: [] }),
+    ],
+    [
+      'a missing accepted content revision',
+      (r: Record<string, unknown>) => delete r.contentRevision,
+    ],
+    [
       'an unknown anchor kind',
       (r: Record<string, unknown>) => (r.anchorKind = 'date'),
     ],
@@ -214,8 +222,27 @@ describe('the season record schema', () => {
   it('accepts a complete record', () => {
     const record = seasonRecord({
       publicationDueAt: '2026-09-27T13:17:00.000Z',
+      calendarAnchors: [
+        {
+          round: 1,
+          anchor: '2026-03-08T04:00:00.000Z',
+          anchorKind: 'date-time',
+        },
+        {
+          round: 2,
+          anchor: '2026-03-15T23:59:59.000Z',
+          anchorKind: 'date-eod',
+        },
+      ],
     });
     expect(decodeSeasonRecord(record)).toEqual({ ok: true, value: record });
+  });
+
+  it('accepts an observed calendar with no races, distinct from none observed', () => {
+    for (const calendarAnchors of [null, []]) {
+      const record = seasonRecord({ calendarAnchors });
+      expect(decodeSeasonRecord(record)).toEqual({ ok: true, value: record });
+    }
   });
 
   it.each([
@@ -258,6 +285,73 @@ describe('the season record schema', () => {
     [
       'a last publication it does not model yet',
       (r: Record<string, unknown>) => (r.lastPublication = null),
+    ],
+    [
+      'a missing calendar',
+      (r: Record<string, unknown>) => delete r.calendarAnchors,
+    ],
+    [
+      'an anchor carrying a race name',
+      (r: Record<string, unknown>) =>
+        (r.calendarAnchors = [
+          {
+            round: 1,
+            anchor: '2026-03-08T04:00:00.000Z',
+            anchorKind: 'date-time',
+            raceName: 'A Grand Prix',
+          },
+        ]),
+    ],
+    [
+      'anchors out of round order',
+      (r: Record<string, unknown>) =>
+        (r.calendarAnchors = [
+          {
+            round: 2,
+            anchor: '2026-03-15T04:00:00.000Z',
+            anchorKind: 'date-time',
+          },
+          {
+            round: 1,
+            anchor: '2026-03-08T04:00:00.000Z',
+            anchorKind: 'date-time',
+          },
+        ]),
+    ],
+    [
+      'two anchors for one round',
+      (r: Record<string, unknown>) =>
+        (r.calendarAnchors = [
+          {
+            round: 1,
+            anchor: '2026-03-08T04:00:00.000Z',
+            anchorKind: 'date-time',
+          },
+          {
+            round: 1,
+            anchor: '2026-03-09T04:00:00.000Z',
+            anchorKind: 'date-time',
+          },
+        ]),
+    ],
+    [
+      'an anchor with a provider date string',
+      (r: Record<string, unknown>) =>
+        (r.calendarAnchors = [
+          { round: 1, anchor: '2026-03-08', anchorKind: 'date-eod' },
+        ]),
+    ],
+    [
+      'more anchors than rounds',
+      (r: Record<string, unknown>) =>
+        (r.calendarAnchors = Array.from(
+          { length: MAXIMUM_ROUND + 1 },
+          (_, index) => ({
+            round: index + 1,
+            anchor: '2026-03-08T04:00:00.000Z',
+            anchorKind: 'date-time',
+          }),
+        )),
     ],
   ])('refuses %s', (_label, mutate) => {
     const record = { ...seasonRecord() } as Record<string, unknown>;

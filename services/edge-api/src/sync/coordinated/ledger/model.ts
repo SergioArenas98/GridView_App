@@ -4,9 +4,14 @@
  *
  * **Storage only.** These types say what the ledger may hold and which
  * outcomes its operations report. They encode no §10.4.1 transition,
- * corroboration, settling, due-work planning or publication decision; those
- * belong to the later G9/G5 change that computes new records and commits them
+ * corroboration, settling, due-work planning or publication decision. Those
+ * are the pure policy in `../policy/`, which computes new records that commit
  * through this storage.
+ *
+ * Schema version 1 was refined in place by PR-C2, before any record was ever
+ * stored: the class has never been registered, bound or provisioned in any
+ * environment, so no reader of the earlier shape exists. The refinement added
+ * `ClassificationRecord.contentRevision` and `SeasonRecord.calendarAnchors`.
  *
  * Every stored value is bounded and closed: identifiers, canonical UTC
  * instants, bounded counters, closed states and `sha256:` revision hashes.
@@ -100,6 +105,13 @@ export interface CorrectionSlot {
  * commit can never change it; only `reconcilePublishedRevisions`, which takes
  * its values from the authoritative release, writes it. The ledger is never a
  * second publication authority.
+ *
+ * `contentRevision` is the revision the §10.4.1 machine has **accepted** for
+ * the resource: what Provider Evaluation §10.4.1 calls the published revision,
+ * and ADR 0020 names `contentRevision`. It is set by a first write (T0) or a
+ * corroborated change (T3) and is what a publication candidate must carry. It
+ * differs from `publishedRevision` until a publication that carries it has
+ * been applied and reconciled, or after a rollback.
  */
 export interface ClassificationRecord {
   readonly schemaVersion: typeof LEDGER_SCHEMA_VERSION;
@@ -115,6 +127,7 @@ export interface ClassificationRecord {
   readonly nextDueAt: LedgerInstant | null;
   readonly limiterDeferralUntil: LedgerInstant | null;
   readonly publishedRevision: RevisionHash | null;
+  readonly contentRevision: RevisionHash | null;
   readonly candidateRevision: RevisionHash | null;
   readonly candidateFirstSeenAt: LedgerInstant | null;
   readonly consecutiveConfirmations: number;
@@ -149,6 +162,17 @@ export interface RefreshRecord {
   readonly nextDueAt: LedgerInstant | null;
 }
 
+/**
+ * One race's Jolpica anchor from the last observed calendar: the scheduled
+ * race start (`date-time`), or its date at 23:59:59 UTC when the start time
+ * is absent (`date-eod`). An instant and a round, never a name or a locator.
+ */
+export interface CalendarAnchor {
+  readonly round: number;
+  readonly anchor: LedgerInstant;
+  readonly anchorKind: AnchorKind;
+}
+
 /** One season's refresh state, key `season:{season}`. */
 export interface SeasonRecord {
   readonly schemaVersion: typeof LEDGER_SCHEMA_VERSION;
@@ -156,6 +180,12 @@ export interface SeasonRecord {
   readonly season: number;
   readonly refresh: Readonly<Record<RefreshResource, RefreshRecord>>;
   readonly publicationDueAt: LedgerInstant | null;
+  /**
+   * The race anchors of the last successful calendar observation, sorted by
+   * round, or `null` when no calendar has been observed yet. The planner
+   * schedules from these, never from a calendar read in the same run.
+   */
+  readonly calendarAnchors: readonly CalendarAnchor[] | null;
 }
 
 /**
