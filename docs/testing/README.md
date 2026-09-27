@@ -391,9 +391,12 @@ path so an accidental request fails loudly.
 
 Fixtures are **derived from the checked-in curated content through the
 production mock provider**, so no test duplicates assembly logic or invents a
-season. The publication tests drive the **real** `SnapshotPublisher` over
-in-memory storage, and the mapping tests drive the **real** Phase 9B-3
-registry.
+season. Since 2026-09-27 the publication tests drive the **real** guarded
+`SequencedPublicationService` over in-memory storage, through the in-process
+sequencer or the Durable Object client, seeded with the mock baseline; the
+legacy `SnapshotPublisher` is present only to publish that seed, and a counter
+proves coordination never calls it. The mapping tests drive the **real**
+Phase 9B-3 registry.
 
 Coverage:
 
@@ -1708,6 +1711,45 @@ Coverage:
   were restored byte for byte: copying the contribution, counting
   `unavailable` documents, reading `completed`, counting non-race
   classifications and disabling `event-has-results`.
+- **Coordinated guarded publication (ADR 0023 D11 as amended, ADR 0026 D12
+  items 10, 12 and 13, 2026-09-27)** - the bridge publishes only through
+  `publishGuarded`, with no legacy fallback.
+  - `coordinated-guarded-publication.test.ts` runs the production path (real
+    coordinator, `assembleSeasonSource`, preflight, generator, bridge and
+    sequenced service) over the split season, over both sequencer transports.
+    It covers:
+    - a committed candidate identical to the generated documents, left
+      unaltered by the guard, with one post-commit metadata and cache pass;
+    - added rounds and facts, a span closed by absence, and non-guard result
+      changes all publishing;
+    - D14 and D15 regressions rejected, with the prior release still active
+      and publicly readable and no predecessor row in the candidate;
+    - uninitialized, seeded-only, unreachable and `unavailable` authorities
+      failing closed without the legacy publisher, while ordinary publication
+      still falls back;
+    - an OpenF1-selected race and a missing classified round still withheld
+      before publication, and an OpenF1 candidate that was consulted but not
+      selected not blocking;
+    - bounded logs.
+  - `coordinated-publication-concurrency.test.ts` holds a wider and a
+    narrower coordinated run at the authority-read/`prepare` boundary, in both
+    winner orders, with the loser preparing before or after the winner
+    commits. The loser is refused as `operation-in-progress` or
+    `guard-predecessor-stale`. The narrower candidate, rerun, fails D14 and
+    never replaces the wider release.
+  - The dormancy tests in `coordination-containment.test.ts` and
+    `provider-neutrality.test.ts` pin four things:
+    - the bridge's type-only publication imports and its single
+      `publishGuarded` call;
+    - the legacy publisher being a type error for its options;
+    - `guard-authority-not-sequenced` being produced only by `publishGuarded`;
+    - the bridge staying out of the Worker graph and the emitted bundle while
+      the sequenced service is in it.
+  - Five negative controls each made tests fail and were restored byte for
+    byte: re-enabling the fallback, typing the bridge on `SnapshotPublisher`,
+    rebinding the expected predecessor in a port double, and disabling D14 or
+    D15. The private run over the preserved 2026 evidence is recorded in the
+    Implementation Plan (§14.0.27). It is not a committed test.
 - **Non-vacuity** - the curated mock season and every production public fixture
   validate clean, and the season is asserted non-empty and to carry media, so
   the control cannot pass by having nothing to check.

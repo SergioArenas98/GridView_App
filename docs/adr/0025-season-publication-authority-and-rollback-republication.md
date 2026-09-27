@@ -265,6 +265,12 @@
 > bridge still names the legacy `SnapshotPublisher` (ADR 0023 D11) and is
 > **not** guarded by this change.
 >
+> **Note 2026-09-27 (coordinated publication).** A later change retyped that
+> bridge (Implementation Plan §14.0.27; ADR 0023 D11, amended 2026-09-27).
+> It now publishes only through `SequencedPublicationService.publishGuarded`,
+> which runs this guard and binding and has no legacy fallback. The bridge
+> stays dormant. The sentence above was true when written.
+>
 > `snapshotRevision` now has runtime callers on the sequenced path: the
 > publication plan and the predecessor read. This supersedes the "no
 > production caller" statement above, which was true when written.
@@ -1431,6 +1437,12 @@ exactly as any committed release's do.
 - The coordinated-publication bridge (ADR 0023 D11) still publishes through the
   legacy `SnapshotPublisher`, which cannot bind a predecessor. It is dormant,
   and it is not guarded until a later change retypes it.
+
+  > **Note 2026-09-27.** Retyped (Implementation Plan §14.0.27). The bridge
+  > holds a `GuardedPublicationCommands` and calls `publishGuarded`, ordinary
+  > sequenced publication without the fallback. A season that is not
+  > `active` is refused as `guard-authority-not-sequenced` from the authority
+  > read alone, before any write. The bridge is still dormant.
 - A season without an active sequencer authority keeps the legacy fallback for
   ordinary mock synchronization.
 - There is no sequencer genesis (curator decision C3) and no break-glass
@@ -1447,7 +1459,7 @@ The new publication reasons are internal:
 - `guard-predecessor-invalid`
 - `guard-candidate-invalid`
 - `guard-authority-not-sequenced`, reserved for the guarded coordinated entry
-  point
+  point (emitted by `publishGuarded` since 2026-09-27, and by nothing else)
 
 Their logs carry only the season, the operation kind and a closed category.
 

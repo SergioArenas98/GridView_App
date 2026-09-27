@@ -589,6 +589,43 @@ with no loop and no retry. The publisher remains the sole publication
 authority, the active pointer remains its final write, and
 [ADR 0007](0007-versioned-kv-publication-active-pointer.md) is unchanged.
 
+> **Amended 2026-09-27: coordinated publication uses the guarded sequencer**
+> (Implementation Plan §14.0.27;
+> [ADR 0026](0026-season-participation-semantics-and-derivation.md) D14-D16,
+> D12 items 10, 12 and 13). The bridge no longer calls
+> `SnapshotPublisher.publish`. `CoordinatedSeasonPublication` holds a
+> `GuardedPublicationCommands` and calls
+> `SequencedPublicationService.publishGuarded` at most once, from the same
+> single call site, with no loop and no retry. That call runs the D14/D15
+> comparison against the authoritative release, the expected-predecessor
+> `prepare`, the candidate write and `finalize`. The sequencer's `finalize`
+> is the commit point, not a KV pointer write
+> ([ADR 0025](0025-season-publication-authority-and-rollback-republication.md)
+> D2, D9).
+>
+> - **No legacy fallback.** The bridge cannot receive a `SnapshotPublisher`,
+>   because its option type is the guarded interface, which the legacy
+>   authority does not implement.
+> - **Fail closed without sequencer authority.** A season that is not
+>   `active` in the sequencer (legacy-only, uninitialized or seeded) fails as
+>   `guard-authority-not-sequenced`. The decision comes from the authority
+>   read alone, before any write. An unreachable sequencer fails as
+>   `sequencer-authority-unavailable`.
+> - **Other callers are unchanged.** Ordinary synchronization and admin
+>   publication keep their existing fallback.
+> - **Outcomes use the existing model.** `published` still means that
+>   publication was reached. A committed release is `published` with
+>   `applied`. A refused or failed guarded publication is `published` with its
+>   bounded `status` and `reason`, and the authoritative release keeps
+>   serving. The bridge never repairs a candidate from the predecessor.
+> - **Coordination stays dormant and unwired.** Nothing under `src/`
+>   constructs or invokes the bridge. No provider is registered, no scheduler
+>   runs it, and `PROVIDER_MODE` still admits only `mock` and `none`.
+>
+> The paragraph above, and the `SnapshotPublisher` step list and containment
+> discussion below, describe the legacy authority's own guarantees. They are
+> retained for the record and no longer describe the coordinated path.
+
 **Only `completed` rounds require a race classification.** Completeness is
 decided per event by a pure, total predicate over the closed status union, and
 by nothing else:
@@ -1225,6 +1262,14 @@ production is `none`.
 > ([A2](#amendment-a2---jolpica-race-result-normalization), Implementation
 > Plan §14.0.22). Like the other three, it is registered with no coordinator
 > and unreachable from the Worker entry point. The notes above are retained
+> for the record.
+
+> **Status 2026-09-27.** The coordinated-publication bridge now depends on
+> sequenced publication (D11 amendment; Implementation Plan §14.0.27). That
+> dependency points one way only. The Worker bundle contains the sequenced
+> service and no coordination module. No runtime module outside the
+> coordination package and the dormant ports imports it. Nothing constructs
+> the bridge or calls its guarded entry point. The notes above are retained
 > for the record.
 
 #### Deep normalized-contract validation is an activation gate
