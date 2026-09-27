@@ -48,6 +48,7 @@ export function classification(
     nextDueAt: '2026-03-08T09:00:00.000Z',
     limiterDeferralUntil: null,
     publishedRevision: null,
+    contentRevision: null,
     candidateRevision: null,
     candidateFirstSeenAt: null,
     consecutiveConfirmations: 0,
@@ -90,6 +91,7 @@ export function seasonRecord(
       participants: { ...emptyRefresh },
     },
     publicationDueAt: null,
+    calendarAnchors: null,
     ...overrides,
   } as SeasonRecord;
 }

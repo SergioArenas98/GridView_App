@@ -709,6 +709,113 @@ Still open:
 Owner decisions **O-3 to O-5, O-7, O-9 and O-12 to O-16** remain open. So do
 **round coherence** and **empty-standings replacement** (ADR 0023 A3.5), and
 **attribution**. These belong to PR-C2 and later, separately authorized steps.
+*(Superseded in part on 2026-09-27, and true when written. The C2 note below
+implements the §10.4.1 transitions and the due-work planner as dormant pure
+policy, under owner decisions O-3, O-4, O-5(a) and O-7. The other items in
+this list stay open.)*
+
+The decision above is unchanged.
+
+### C2: the reconciliation policy and due-work planner (2026-09-27)
+
+Implementation Plan §14.0.31 records the **pure policy and planner** built on
+the C1 ledger. They live in `src/sync/coordinated/policy/`. They are
+**implemented, not connected**: no Worker module imports them, and
+`resolveReconciliationLedger` still answers `null`. The scheduled handler and
+the manual route therefore still stop at `ledger-unbound`, with zero provider
+requests and zero publication writes. **G5 and G9 are not complete.**
+
+**Owner decisions taken for this dormant implementation:**
+
+- **O-3.** A publication candidate rereads every round with an accepted
+  classification, plus every check due now. No provider row carries over from
+  an earlier run. The request cost against the three-request model is recorded
+  in Provider Evaluation §11.1.
+- **O-4.** Race classifications carry D2.1 corroboration and the §10.4.1
+  review machine. The calendar, circuits, participants and both standings are
+  **refresh resources**: an identical revision is idempotent, a differing one
+  overwrites and raises an overwrite event, and nothing settles.
+- **O-5(a).** If any selected round is pending, staged, review-locked,
+  superseded or otherwise not accepted, the **whole season candidate is
+  withheld**. No row of an earlier release is substituted. **Consequence:** a
+  staged correction withholds the season until an operator disposes of it
+  (T12), and no disposition mechanism exists yet. A persistently rejected
+  correction can therefore keep the season frozen until that separate
+  mechanism exists.
+- **O-7, as a planning target only.** The eventual cron is hourly at minute 17.
+  The planner does not depend on the cron. The committed cron stays
+  `17 3 * * *`, and no environment changed.
+
+**How D2.1-D2.9 are enforced:**
+
+| Rule | Enforcement |
+|---|---|
+| D2.1 | An unsettled differing revision is recorded as pending (T2). It is accepted only when the next **cadence** check returns it again (T3). A third revision replaces it (T4), and the third consecutive replacement raises the unstable-source event. |
+| D2.2 | A superseded revision is rejected however often it returns (T5), and it clears any pending run. The history is append-only and bounded at 16. When it is full, a corroborated change stays pending instead of forgetting a revision. The store now also refuses an accepted `contentRevision` that is in the history. |
+| D2.3 | No provisional input form exists, and OpenF1 stays locked, so T7 cannot arise. |
+| D2.4 | Revisions are compared for equality only. A test shows that swapping which hash sorts first changes no decision. |
+| D2.5, D2.8 | A differing revision on a settled record is sighted once (T8). Its second sighting stages it (T9), and it is never applied. The staged slot is immutable. A staged or locked record takes **no** transition from any run, and T11-T11d stay unreachable. `classification.staged-correction` is its own event, distinct from the overwrite event. |
+| D2.6 | An identical revision confirms and changes neither the accepted content nor `sourceObservedAt` (T1). An identical refresh revision is recorded as unchanged. |
+| D2.7 | `classification.overwrite` fires on T3, and `refresh.overwrite` on a changed season-level revision. |
+| D2.9 | An event is a closed category and nothing else: no season, round, revision, instant or payload. |
+
+**How I1-I5 are shown** (each by its own test over the real C1 store, on
+hourly minute-17 ticks):
+
+| # | Demonstration |
+|---|---|
+| I1 | A revision first sighted at unsettled slot 2, 9 or 16 has a next check, and is accepted there. One sighted at the ceiling is staged, flagged uncorroborated. A late change to a settled round is read again within seven days and staged. |
+| I2 | A first result at each of the 17 slots settles by the ceiling: by the predicate for slots 1-15, and on deadline for slots 16 and 17. So do a corroborated change, and a revision held pending by an alternating source. |
+| I3 | At most 17 cadence checks, whatever the source does. After the last one, `nextDueAt` is `null` and no cadence check is planned again. |
+| I4 | A settled round is reread by every publication run. The weekly season-level refresh guarantees one such run at least every seven days. A correction 20 days after the race is sighted, then staged, and never published. |
+| I5 | In the ordinary case the first publishable candidate carrying the round comes at the first tick after `anchor + 5h`, within 24 hours, and the round settles at `+24h`. A companion test shows that this is an objective, not a guarantee: a source that answers only after 30 hours is published at the next due check, beyond 24 hours. |
+
+**The schema refinement.** Schema version 1 was refined in place, because no
+v1 record was ever stored: the class has never been registered or bound. The
+refinement adds `ClassificationRecord.contentRevision`, the revision the
+machine accepted, which is this ADR's `contentRevision` and §10.4.1's
+"published revision". It is kept apart from the authority cache
+`publishedRevision`, which only reconciliation writes. It also adds
+`SeasonRecord.calendarAnchors`, the last observed race anchors the planner
+schedules from. No binding or migration was added.
+
+**Choices made in implementation, not owner decisions** (each is recorded in
+Implementation Plan §14.0.31):
+
+1. Only a **cadence** check is a reconciliation check on an unsettled record.
+   An O-3 reread between slots is a read, not a check.
+2. On a settled record, every publication-run reread is a slow-path check.
+3. T5 also discards a pending revision, because corroboration must be
+   consecutive.
+4. The 14-day ceiling is a **time rule**. It fires at the final slot whatever
+   that check returned, and never on a deferred or cancelled one.
+5. A round with no result by the ceiling is abandoned and flagged. If a manual
+   run later finds its first result, it settles on deadline at once.
+6. A manual first write counts no confirmation.
+7. At backlog capacity, or with a full revision history, the revision stays
+   pending, so the season stays withheld, and it is retried at the next read.
+8. Any unexpired limiter deferral recorded on a classification withholds
+   scheduled planning. A deferred season-level request records nothing.
+9. Standings are refreshed daily from the first race to the final race's
+   ceiling, and weekly otherwise.
+10. A round's own record anchor governs once the round is recorded.
+11. A scheduled bootstrap honours the calendar's due time, so a failed
+    bootstrap waits its six hours. A manual run asks at once.
+
+**Still open, and prerequisites for any provider-backed run:**
+
+- the runtime observation and outcome orchestration (decision pack §6.6);
+- the no-change publication gate (O-12) and the ordering input (O-13);
+- source ordering;
+- round coherence and empty-standings replacement (ADR 0023 A3.5);
+- attribution;
+- operator verification, the T12 disposition, and the capacity alert;
+- publication of `sourceObservedAt` (obligation 1; D1.9-D1.11);
+- every binding, migration, provisioning, cron and staging-mode change.
+
+Owner decisions **O-9 and O-12 to O-16** remain open. Obligations 3 and 4 are
+implemented as policy but are not in force, because nothing runs the policy.
+Obligation 2's alert and disposition path stay open.
 
 The decision above is unchanged.
 

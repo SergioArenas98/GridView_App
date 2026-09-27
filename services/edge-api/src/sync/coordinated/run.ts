@@ -11,10 +11,11 @@
  * recorded. Public reads are unaffected: the refusal is a bounded outcome of
  * the sync entry point, never a Worker-wide configuration error.
  *
- * Planning, lease, observation, the publishability decision and the no-change
- * gate belong to the G5 planner and G9 ledger and do not exist yet. Even a
- * fully composed runtime, reachable today only by handing this function a
- * synthetic ledger, stops at `not-planned` and sends nothing.
+ * The G5 planner and the G9 transitions and publishability decision exist as
+ * pure policy in `policy/`, but this entry point does not call them: the
+ * lease, observation and outcome orchestration and the no-change gate do not
+ * exist yet. Even a fully composed runtime, reachable today only by handing
+ * this function a synthetic ledger, stops at `not-planned` and sends nothing.
  */
 
 import type { Logger } from '../../logging/logger';

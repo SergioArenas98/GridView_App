@@ -329,6 +329,7 @@ describe('the superseded-revision history', () => {
     // The only way to forget it is eviction, which is refused; and while it is
     // remembered, no slot may hold it.
     for (const overrides of [
+      { contentRevision: oldest },
       {
         candidateRevision: oldest,
         candidateFirstSeenAt: '2026-09-27T12:00:00.000Z',

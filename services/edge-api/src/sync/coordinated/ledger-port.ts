@@ -12,8 +12,9 @@
  * implemented by `ReconciliationLedgerStore` (`ledger/store.ts`) and reached
  * either in process (`LocalReconciliationLedger`) or through the
  * `ReconciliationLedger` Durable Object client. What to write - §10.4.1
- * transitions, corroboration, settling, due-work planning, the publishability
- * and no-change decisions - is not implemented and belongs to a later change.
+ * transitions, corroboration, settling, due-work planning and the
+ * publishability decision - is the pure policy in `policy/`, which nothing
+ * connects to a run yet. The no-change decision does not exist.
  *
  * No binding, variable or test hook supplies a ledger to the runtime, so
  * `resolveReconciliationLedger` always answers `null`. Every coordinated run,

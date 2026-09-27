@@ -35,6 +35,7 @@ import {
   type AuthoritativeRevision,
   type BacklogEntry,
   type BacklogReference,
+  type CalendarAnchor,
   type ClassificationMarker,
   type ClassificationRecord,
   type ConditionalWrite,
@@ -211,6 +212,7 @@ const classificationKeys = [
   'nextDueAt',
   'limiterDeferralUntil',
   'publishedRevision',
+  'contentRevision',
   'candidateRevision',
   'candidateFirstSeenAt',
   'consecutiveConfirmations',
@@ -253,6 +255,7 @@ export function decodeClassificationRecord(
     !isInstantOrNull(value.nextDueAt) ||
     !isInstantOrNull(value.limiterDeferralUntil) ||
     !isRevisionOrNull(value.publishedRevision) ||
+    !isRevisionOrNull(value.contentRevision) ||
     !isRevisionOrNull(value.candidateRevision) ||
     !isInstantOrNull(value.candidateFirstSeenAt) ||
     // A transient candidate is its revision and when it was first seen,
@@ -295,6 +298,7 @@ export function decodeClassificationRecord(
     nextDueAt: value.nextDueAt,
     limiterDeferralUntil: value.limiterDeferralUntil,
     publishedRevision: value.publishedRevision,
+    contentRevision: value.contentRevision,
     candidateRevision: value.candidateRevision,
     candidateFirstSeenAt: value.candidateFirstSeenAt,
     consecutiveConfirmations: value.consecutiveConfirmations,
@@ -344,7 +348,38 @@ const seasonKeys = [
   'season',
   'refresh',
   'publicationDueAt',
+  'calendarAnchors',
 ] as const;
+
+const anchorKeys = ['round', 'anchor', 'anchorKind'] as const;
+
+/** Bounded, one entry per round, strictly ascending by round. */
+function decodeCalendarAnchors(
+  value: unknown,
+): CalendarAnchor[] | null | 'invalid' {
+  if (value === null) return null;
+  if (!Array.isArray(value) || value.length > MAXIMUM_ROUND) return 'invalid';
+  const anchors: CalendarAnchor[] = [];
+  let previousRound = 0;
+  for (const entry of value) {
+    if (!isObject(entry) || !hasExactKeys(entry, anchorKeys)) return 'invalid';
+    if (
+      !isRound(entry.round) ||
+      entry.round <= previousRound ||
+      !isLedgerInstant(entry.anchor) ||
+      !isOneOf(anchorKinds, entry.anchorKind)
+    ) {
+      return 'invalid';
+    }
+    previousRound = entry.round;
+    anchors.push({
+      round: entry.round,
+      anchor: entry.anchor,
+      anchorKind: entry.anchorKind,
+    });
+  }
+  return anchors;
+}
 
 export function decodeSeasonRecord(value: unknown): Decoding<SeasonRecord> {
   if (!isObject(value) || !hasExactKeys(value, seasonKeys)) {
@@ -360,6 +395,8 @@ export function decodeSeasonRecord(value: unknown): Decoding<SeasonRecord> {
   ) {
     return refused('invalid-record');
   }
+  const calendarAnchors = decodeCalendarAnchors(value.calendarAnchors);
+  if (calendarAnchors === 'invalid') return refused('invalid-record');
   const refresh = {} as Record<RefreshResource, RefreshRecord>;
   for (const resource of refreshResources) {
     const decoded = decodeRefresh(value.refresh[resource]);
@@ -372,6 +409,7 @@ export function decodeSeasonRecord(value: unknown): Decoding<SeasonRecord> {
     season: value.season,
     refresh,
     publicationDueAt: value.publicationDueAt,
+    calendarAnchors,
   });
 }
 

@@ -45,6 +45,7 @@
 | 1.12 | 2026-09-26 | **Phase 9B: the 2026 rounds 1-14 race results are observed, and a dormant Jolpica race-results port exists** (§8.11; Implementation Plan §14.0.22; §10.1). A separately authorised capture on 2026-09-24 made 14 requests, `GET https://api.jolpi.ca/ergast/f1/2026/{round}/results/?limit=100` for rounds 1-14. Every one returned HTTP 200 with one race and 22 rows, 308 rows in all, naming 23 drivers and 11 constructors, and every identity maps. The raw responses are not committed. Their SHA-256 values and the curator decisions C-1 to C-9 are recorded in [ADR 0023 amendment A2](../adr/0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization). Non-starters are listed (seven rows), which answers ADR 0026 D3. The `liam-lawson` change at round 12 makes ADR 0026 D12 item 1 a real blocker. The port answers the race `session-classification` only, with one request, and returns one `final` `RaceResult` per round. It produces no span or season entry and derives no `hasResults`. It is fixture-tested only, was not used to contact Jolpica, is registered nowhere and is absent from every Worker bundle. This supersedes the "three dormant ports" statements in §8.8.1, §10.1, §11.4, §11.5 and §15.1. Span derivation, A7, publication and G1, G5, G9 and G-l stay open. |
 | 1.14 | 2026-09-27 | **Phase 9B: the 2026 driver and constructor standings are observed, and a dormant Jolpica standings port exists** (§8.12; Implementation Plan §14.0.28; §10.1). Two separately authorised requests captured both tables after round 15; every identity maps. The curator decisions S-1 to S-13 are recorded in [ADR 0023 amendment A3](../adr/0023-multi-source-provider-coordination.md#amendment-a3---jolpica-standings-normalization). A driver listing two constructors gets `constructorId: null`; `provisional: false` is curator policy, not provider evidence. Round coherence with the selected classifications and empty-table replacement remain open activation questions. No provider was contacted during implementation, and `PROVIDER_MODE` still admits exactly `mock` and `none`. |
 | 1.13 | 2026-09-26 | **Phase 9B: season assembly derives `hasResults` (ADR 0022 amendment A7).** No provider-evaluation conclusion changes. The dormant coordination path now sets each event's `hasResults` from its selected `final` or `provisional` race classifications (Implementation Plan §14.0.25). No provider was contacted, no evidence was captured and `PROVIDER_MODE` still admits exactly `mock` and `none`. |
+| 1.15 | 2026-09-27 | **Phase 9B: the §10.4.1 state machine and the event-aware planner are implemented as pure, dormant policy** (Implementation Plan §14.0.31; [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) C2 note). They are not connected to any runtime, and no provider or Cloudflare resource was contacted. Owner decisions O-3, O-4, O-5(a) and O-7 (a planning target only) are recorded. O-3 raises the modelled Jolpica cost of a race check from 3 requests to `6 + k + d` (§11.1 note). The weekly eight-slot sweep of §10.4.1 is subsumed by full-backfill publication runs. `PROVIDER_MODE` still admits exactly `mock` and `none`, and G5 and G9 are not complete. |
 
 ---
 
@@ -1990,6 +1991,16 @@ begins, at which point it is left alone and flagged.
 > than deferred. **It is specified, not implemented** — no adapter,
 > coordinator, scheduler or state store exists.
 
+> *(Superseded in part on 2026-09-27, and true when written. The state machine
+> below and the due-work planner are now implemented as pure functions over
+> the dormant reconciliation ledger, and nothing connects them to a runtime:
+> Implementation Plan §14.0.31 and the ADR 0020 C2 note. Owner decision O-3
+> subsumes the weekly sweep below: every publication run rereads every
+> accepted round. Under O-5(a), a publication run must also read every
+> operator-backlog record, because assembly has no carry-over. That read never
+> executes T11-T11d, and it withholds the season while any staged or locked
+> record exists.)*
+
 Two review rounds had produced successive settling rules that each broke a
 different case — a rule tied to "unchanged across the full check sequence" is
 unreachable for a result first published at check 2, and a rule that stops
@@ -2860,6 +2871,31 @@ sequence always runs all four checks, because settling needs three consecutive
 confirmations and is never evaluated before +24h (§10.4.1). Jolpica's ordinary
 per-session cost is therefore the **4-check** figure in the worst-case table
 above. See §11.3.1.
+
+> **A publication run rereads every accepted round (owner decision O-3,
+> 2026-09-27).** The tables above model a Jolpica race check as 3 requests.
+> The coordinated runtime has no per-resource carry-over: season assembly
+> publishes one snapshot built from one run. So a publication run reads the
+> six season-level requests (calendar 1, circuits 1, participants 2, both
+> standings 2), every round with an accepted classification (`k`), and every
+> unaccepted round whose check is due (`d`).
+>
+> | Case | 3-request model | O-3 |
+> |---|---:|---:|
+> | One race check, first round of a season | 3 | `6 + 0 + 1` = 7 |
+> | One race check, 15 rounds already accepted | 3 | `6 + 15 + 1` = **22** |
+> | Dense post-race day (4 checks, `k = 15`), plus up to 4 calendar observations | 12 | up to **92** |
+> | Manual reconstruction of a 23-round season | - | at most **29** |
+>
+> The hourly peak stays at or below 29 requests, under 6% of the 500-per-hour
+> limit in §11.4. The volume against a volunteer-run source is still about
+> seven times the modelled one. The reduction path is per-resource carry-over
+> (decision-pack O-5 option b), and it was not taken. The weekly eight-slot
+> sweep of §10.4.1 is subsumed. Every publication run rereads every settled
+> round, and the weekly circuits and participants refresh makes at least one
+> such run every seven days. These are modelled figures, not measurements;
+> §11.6 Q3 still applies. The planner that produces them is dormant
+> (Implementation Plan §14.0.31), and no request has been made.
 
 ### 11.2 Baseline, off-event
 
