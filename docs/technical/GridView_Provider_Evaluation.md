@@ -43,6 +43,7 @@
 | 1.11 | 2026-09-24 | **Phase 9B: a dormant Jolpica `season-participants` port exists** (Implementation Plan §14.0.21; §10.1). It makes two sequential requests, `/{season}/drivers/?limit=100` then `/{season}/constructors/?limit=100`, and returns the canonical drivers and constructors, one constructor season entry per constructor, and no driver entry. [ADR 0023 amendment A1](../adr/0023-multi-source-provider-coordination.md#amendment-a1---ordered-attempts-and-interrupted-executions) lets one outcome report every request it made. It is fixture-tested only, has never contacted Jolpica, is registered nowhere and is absent from every Worker bundle. This supersedes the "only two dormant ports" statements in §8.8.1, §10.1, §11.4, §11.5 and §15.1. The earlier dated rows and the §8.9 and §8.10 records are left unrewritten. Participation spans, race-result derivation, publication and G1, G5, G9 and G-l remain open. |
 | 1.10 | 2026-09-23 | **Phase 9B: the 2026 driver identity dataset is complete** (§8.10). The driver response of the same separately authorised capture, `GET https://api.jolpi.ca/ergast/f1/2026/drivers/?limit=100` at 2026-09-23T18:33:12Z, returned HTTP 200 with 32 of 32 rows (SHA-256 `2af29a2ae8fe8d3c1f2774d708fa9f8594ff27be69e0b2ce70b1d0513a4f0743`). The raw response is not committed. A curator approved a mapping for every observed `driverId`, with curator-authored canonical IDs built from the complete recorded given and family name (`antonelli` maps to `andrea-kimi-antonelli`) and display names that keep their diacritics. 25 identity-only rows were added, nine of them from name-only provider rows, and no provider descriptive field was imported. `max-verstappen` and `lando-norris` lost their unreliable `permanentNumber`. The driver registry holds **33** identities, the season-2026 dataset **93 exact mappings**, **96 approved evidence identities** and **three acknowledgements**, all OpenF1: `driver_number` `12` stays unmapped with the reason `no-approved-provider-mapping`. No participants port exists, the two Jolpica ports remain dormant, and the ADR 0026 implementation prerequisites remain open. `PROVIDER_MODE` still admits exactly `mock` and `none`, no live provider mode has been enabled, nothing was deployed, no cutover occurred, and no licensing conclusion changes. G1, G5, G9 and G-l remain open. |
 | 1.12 | 2026-09-26 | **Phase 9B: the 2026 rounds 1-14 race results are observed, and a dormant Jolpica race-results port exists** (§8.11; Implementation Plan §14.0.22; §10.1). A separately authorised capture on 2026-09-24 made 14 requests, `GET https://api.jolpi.ca/ergast/f1/2026/{round}/results/?limit=100` for rounds 1-14. Every one returned HTTP 200 with one race and 22 rows, 308 rows in all, naming 23 drivers and 11 constructors, and every identity maps. The raw responses are not committed. Their SHA-256 values and the curator decisions C-1 to C-9 are recorded in [ADR 0023 amendment A2](../adr/0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization). Non-starters are listed (seven rows), which answers ADR 0026 D3. The `liam-lawson` change at round 12 makes ADR 0026 D12 item 1 a real blocker. The port answers the race `session-classification` only, with one request, and returns one `final` `RaceResult` per round. It produces no span or season entry and derives no `hasResults`. It is fixture-tested only, was not used to contact Jolpica, is registered nowhere and is absent from every Worker bundle. This supersedes the "three dormant ports" statements in §8.8.1, §10.1, §11.4, §11.5 and §15.1. Span derivation, A7, publication and G1, G5, G9 and G-l stay open. |
+| 1.14 | 2026-09-27 | **Phase 9B: the 2026 driver and constructor standings are observed, and a dormant Jolpica standings port exists** (§8.12; Implementation Plan §14.0.28; §10.1). Two separately authorised requests captured both tables after round 15; every identity maps. The curator decisions S-1 to S-13 are recorded in [ADR 0023 amendment A3](../adr/0023-multi-source-provider-coordination.md#amendment-a3---jolpica-standings-normalization). A driver listing two constructors gets `constructorId: null`; `provisional: false` is curator policy, not provider evidence. Round coherence with the selected classifications and empty-table replacement remain open activation questions. No provider was contacted during implementation, and `PROVIDER_MODE` still admits exactly `mock` and `none`. |
 | 1.13 | 2026-09-26 | **Phase 9B: season assembly derives `hasResults` (ADR 0022 amendment A7).** No provider-evaluation conclusion changes. The dormant coordination path now sets each event's `hasResults` from its selected `final` or `provisional` race classifications (Implementation Plan §14.0.25). No provider was contacted, no evidence was captured and `PROVIDER_MODE` still admits exactly `mock` and `none`. |
 
 ---
@@ -1562,6 +1563,58 @@ correction was observed. Sprint results were deliberately not captured. A
 later correction or an unobserved status produces a response the port refuses
 until a reviewed change on new, separately authorised evidence.
 
+### 8.12 2026 driver and constructor standings observation (2026-09-27)
+
+**Source and licence.** Jolpica F1 (`https://api.jolpi.ca/ergast/f1/`), used
+under its published CC BY-NC-SA 4.0 licence with the attribution recorded in
+§7.2, §7.3 and [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
+
+**Requests.** Two separately authorised, sequential public requests,
+`GET https://api.jolpi.ca/ergast/f1/2026/driverstandings/?limit=100` and
+`GET https://api.jolpi.ca/ergast/f1/2026/constructorstandings/?limit=100`,
+from 2026-09-27T15:15:44.040Z to 15:15:47.880Z. Both were HTTP 200 with one
+complete page (`limit "100"`, `offset "0"`, `total` equal to the rows: 23 and
+11). No request was retried or redirected, and no pagination or discovery
+request was made. Neither response carried an `ETag`. The raw responses are
+preserved privately and are **not** committed. Their SHA-256 values are
+recorded in
+[ADR 0023 amendment A3](../adr/0023-multi-source-provider-coordination.md#a32---evidence),
+together with the hashes of the private analysis and decision pack.
+
+**What was observed.**
+
+- **All identities mapped.** 23 of 23 drivers, 24 of 24 constructor
+  references in driver rows and 11 of 11 constructors resolve through the
+  committed curated mappings. No duplicate provider identity or canonical
+  target exists. Provider `audi` resolves to the stable canonical `sauber`.
+- **The provider chooses the round.** Both tables are bound to round `"15"`,
+  stated on the table and on its one standings list. The request names no
+  round.
+- **One driver lists two constructors.** `liam-lawson` lists `racing-bulls`
+  and then `red-bull`, with one season total. That order is both chronological
+  and alphabetical, so it cannot establish which team is current.
+- **Positions.** `positionText` always equals `position`. Positions are
+  1..23 and 1..11 in row order, and equal points still carry distinct
+  positions.
+- **No finality and no podium field** in either response.
+- **Not reconcilable exactly with §8.11.** The standings include round 15
+  and the sprints, which the rounds 1-14 race capture does not. No
+  discrepancy the evidence could establish was found.
+
+**Curator decisions.** S-1 to S-13, approved on these observations, are
+recorded in ADR 0023 amendment A3. A dormant standings port applies them
+(Implementation Plan §14.0.28, §10.1).
+
+**No additional provider request was made** while the port was implemented,
+and its tests replay small synthetic fixtures only.
+
+**Limits of this evidence.** It is a point-in-time observation after round
+15. No empty table, no non-numeric or tied position, no fractional points and
+no three-team driver was observed. The empty shape the port accepts is
+unobserved. Whether a published standings table must be bound to the
+classified rounds published beside it, and how an empty table is kept from
+replacing a non-empty one, are open activation questions (A3.5).
+
 ---
 
 ## 9. Cost and quota evidence
@@ -1693,6 +1746,22 @@ provider mode, binding or route was created or changed.**
 > bundle. The previous note's "race results do not exist" is superseded for
 > the port only. Participation spans and a weekly schedule still do not
 > exist.
+
+> **The standings resources (v1.14, 2026-09-27).** One standings port now
+> answers `driver-standings` and `constructor-standings`, with **one request**
+> per call, `GET /ergast/f1/{season}/driverstandings/?limit=100` or
+> `/constructorstandings/?limit=100`, through the hardened boundary and the
+> Jolpica limiter. It normalizes each table under the curator decisions S-1 to
+> S-13 of
+> [ADR 0023 amendment A3](../adr/0023-multi-source-provider-coordination.md#amendment-a3---jolpica-standings-normalization).
+> It validates the provider's round and drops it. It publishes no team for a
+> driver listing several constructors, and never apportions points or
+> derives podiums. `provisional: false` is a curator policy for the
+> reconciled role. **The evidence behind it is the private §8.12 capture, and
+> its tests are fixture-only.** It is dormant, registered with no
+> coordinator and absent from every Worker bundle. Whether standings must be
+> bound to the classified rounds published beside them, and how an empty
+> table is kept from replacing a non-empty one, are open (A3.5).
 
 Every stored record is in exactly one of two states: **provisional** (last
 written from OpenF1) or **reconciled** (last written from Jolpica). The public

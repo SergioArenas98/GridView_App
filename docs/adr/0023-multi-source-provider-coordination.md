@@ -16,6 +16,9 @@
 - Amended: [A2](#amendment-a2---jolpica-race-result-normalization)
   (2026-09-26) - Jolpica race-result normalization and curator decisions C-1
   to C-9
+- Amended: [A3](#amendment-a3---jolpica-standings-normalization)
+  (2026-09-27) - Jolpica driver and constructor standings normalization and
+  curator decisions S-1 to S-13
 
 ## Context
 
@@ -1272,6 +1275,13 @@ production is `none`.
 > the bridge or calls its guarded entry point. The notes above are retained
 > for the record.
 
+> **Status 2026-09-27 (A3).** A fifth dormant, fixture-tested Jolpica port now
+> implements the port: `driver-standings` and `constructor-standings`, in one
+> port ([A3](#amendment-a3---jolpica-standings-normalization), Implementation
+> Plan §14.0.28). Like the others, it is registered with no coordinator and
+> unreachable from the Worker entry point. The notes above are retained for
+> the record.
+
 #### Deep normalized-contract validation is an activation gate
 
 > **Amended by [ADR 0024](0024-deep-normalized-contract-validation.md)
@@ -1655,6 +1665,167 @@ synthetic fixtures whose shapes are traceable to the capture. No captured
 response or row is committed. Every candidate passes the production
 validators. Nothing is registered with a coordinator in production, and no
 provider was contacted during implementation.
+
+## Amendment A3 - Jolpica standings normalization
+
+- Date: 2026-09-27
+- Status: Accepted and implemented in a dormant port
+- Amends: nothing in D1-D14, A1 or A2. It records the curator decisions S-1
+  to S-13 that a `driver-standings` or `constructor-standings` adapter needs
+  and that no accepted document settled, and the adapter rules that follow
+  from them.
+
+### Why
+
+The coordinated `driver-standings` and `constructor-standings` resources and
+their payloads already existed (D3, `coordination/resource.ts`), and season
+assembly already requires both before a season can publish. Nothing decided
+how a Jolpica standings table becomes one. A private capture of both 2026
+tables (A3.2) showed four things the provider does not settle:
+
+- the provider chooses the round a table is bound to;
+- a driver who changed teams lists two constructors beside one season total;
+- no finality field exists;
+- no podium field exists.
+
+Each needed an explicit curator decision before an adapter could normalize a
+table without guessing.
+
+### A3.1 - Resource and request
+
+- **Scope.** `driver-standings` and `constructor-standings` only, both served
+  by one port. Every other resource is `not-attempted` /
+  `resource-unsupported` before any reservation, request or attempt.
+- **Request.** Exactly one request per call, chosen by the requested kind:
+  `GET /ergast/f1/{season}/driverstandings/?limit=100` or
+  `GET /ergast/f1/{season}/constructorstandings/?limit=100`. Both go through
+  the hardened boundary and the Jolpica limiter. Cancellation is checked
+  before reservation. One attempt, no retry and no second page. A1 applies
+  unchanged: the outcome carries a one-element `attempts`. One port per
+  source (D2) still holds, so a future runtime needs a dispatching Jolpica
+  port; this amendment adds none.
+- **Structure.** `limit`, `offset` and `total` are strict integer strings,
+  `offset` is 0, the echoed limit is 100, and `total` - which counts
+  **standing rows** on these endpoints - equals the returned row count. The
+  table's season and its one standings list's season must equal the request.
+- **Identity.** Every `driverId` and `constructorId`, including every
+  constructor a driver row lists, is resolved through the curated mappings
+  only. An unresolved identity is `mapping-failure` for the whole resource,
+  and no row is dropped (ADR 0022 D10).
+
+### A3.2 - Evidence
+
+Jolpica F1 data is used under its published CC BY-NC-SA 4.0 licence, with the
+attribution [ADR 0019](0019-formula-one-provider-legal-gate.md) already
+requires. The provider was contacted only by the separately authorised capture
+below, and **not** while this port was implemented.
+
+On 2026-09-27, exactly two sequential requests ran from 15:15:44.040Z to
+15:15:47.880Z, 3,611 ms apart. Both returned HTTP 200 with one complete page.
+No retry, redirect, pagination or discovery request occurred. The raw
+responses are preserved privately and are **not** committed. They are cited
+by SHA-256 only:
+
+| Request | Rows | Bytes | SHA-256 |
+|---|---|---|---|
+| `GET https://api.jolpi.ca/ergast/f1/2026/driverstandings/?limit=100` | 23 | 10111 | `8419b9172728dff556105679f1dc99a886bfb2c4468ec6e45fc78ea1e8cd0450` |
+| `GET https://api.jolpi.ca/ergast/f1/2026/constructorstandings/?limit=100` | 11 | 2500 | `167a0c14d3d5e092d5804ce890cab11d2795127cd35d7a4df4cd423f150daa4a` |
+
+The capture's private record set is `capture-manifest.json`, `analysis-data.json`
+(`ef8c5d00962f75bd0faeb4807410c1931372720f500917f639860c3ccff1db04`) and
+`standings-audit-and-decision-pack.md`
+(`c5e6d55e6bae9bd9cf09a73ef33b4879321a8caf3dd384b129115bb17900b871`).
+
+Both tables are bound to round `"15"`, stated on the table and on its one list.
+Every driver, and every constructor listed in a driver row or in the
+constructor table, resolves through the committed curated mappings: 23 of 23
+drivers, 24 of 24 driver-row constructor references and 11 of 11 constructors.
+There are no duplicate provider identities and no duplicate canonical targets.
+Exactly one driver row lists two constructors: `liam-lawson`, listing
+`racing-bulls` and then `red-bull`, with one season total. `positionText`
+always equals `position`, and equal points still carry distinct positions.
+Neither response has a finality or podium field.
+
+### A3.3 - Curator decisions
+
+| # | Decision |
+|---|---|
+| S-1 | Standing rows use the existing `(season, driverId)` and `(season, constructorId)` identities. No standing ID and no public field is created. |
+| S-2 | The season and the round of each response are validated, including agreement between the outer table and its standings list. Both rounds must be strict positive integer strings. The round is then **omitted** from the normalized payload. This does **not** decide whether a coordinated publication may combine standings bound to one round with classifications selected through another (A3.5). |
+| S-3 | Every constructor a driver standing references must map. Exactly one listed constructor becomes its canonical ID. More than one becomes `constructorId: null`. The current team is never inferred from list order, points or race results. |
+| S-4 | The driver's season points total is kept as supplied and never allocated between constructors. A driver standing with no constructor reference is refused. |
+| S-5 | `position` is a strict positive integer string, and `positionText` must equal it byte for byte. Positions are unique and strictly increasing in response order. Contiguity is **not** required: nothing in the evidence establishes it. |
+| S-6 | Points are strict non-negative decimal text parsed into the contract's number type. Malformed, non-finite, unsafe (beyond `Number.MAX_SAFE_INTEGER`) and digit-losing conversions are refused: the parsed number must restate the text exactly, up to trailing fractional zeros. Nothing is rounded. |
+| S-7 | `wins` is the supplied non-negative integer. Driver `podiums` is `null` and is never derived. |
+| S-8 | `provisional` is `false`, as an explicit curator policy for Jolpica's reconciled standings role, consistent with C-1. **The responses contain no finality field, and this value is not provider evidence.** A finality-looking field that appears is not read. |
+| S-9 | An empty table is accepted only as one exact shape: no standings list, a complete page and `total "0"`. This shape is **unobserved**. With no list, the table round may be absent; if present it must still be a strict positive integer string. A standings list present with no rows is refused. |
+| S-10 | A duplicate provider ID, a duplicate canonical target or a duplicate position fails the whole resource. This includes two provider constructors in one driver row that resolve to one canonical constructor. |
+| S-11 | An unmapped identity or a malformed row fails the whole resource. No row is ever omitted. Only the contract's `constructorId` (S-3) and driver `podiums` (S-7) may be `null`. |
+| S-12 | Provider display names, codes, numbers, birth dates, nationalities and URLs are ignored. Identities are resolved through curated mappings and registries only. |
+| S-13 | Jolpica attribution is a prerequisite to any public release of standings (ADR 0019). **This amendment authorizes neither release nor deployment.** |
+
+### A3.4 - Field rules and failure outcomes
+
+- `DriverStanding` is `{season, driverId, constructorId, position, points,
+  wins, podiums: null, provisional: false}`. `ConstructorStanding` is
+  `{season, constructorId, position, points, wins, provisional: false}`.
+  `season` restates the request. Rows keep the provider's order, which
+  `snapshots/generator.ts` relies on for the Home leaders.
+- An unmapped driver or constructor is `mapping-failure`. A structural,
+  pagination, season, round, position, points, wins or duplicate defect is
+  `invalid-payload` with a bounded closed code. Each reports the one
+  `successful` attempt. Logs carry only the closed code, the season and the
+  bounded resource kind.
+- The port refuses a driver standings body served for a constructor request,
+  because the list collection it reads is kind-specific.
+
+### A3.5 - Unresolved publication questions
+
+This amendment settles normalization only. Two questions about what a future
+coordinated runtime may publish stay **open**:
+
+1. **Round coherence.** The captured standings are bound to round 15, while
+   the preserved classifications cover rounds 1-14. Because the round is
+   dropped (S-2), a coordinated run could publish standings after round N
+   beside classifications selected through round M, where M differs from N.
+   Whether that is acceptable, or whether standings must be bound to the
+   selected classified-round set (for example through an internal round on the
+   coordinated payload and an assembly relation), is an unresolved activation
+   decision. **It is not solved here.**
+2. **Empty replacement.** An empty table (S-9) is a valid candidate. The
+   runtime must separately prevent an empty table from replacing a previously
+   valid non-empty one. Neither this port nor the D14-D16 guards, which cover
+   classified rounds and participation facts only, establish that safeguard.
+
+A table that loses its **last** row, with `total` lowered to match, is also
+indistinguishable from a genuine shorter table. No port-level rule can detect
+it, and contiguity (declined in S-5) would not detect it either.
+
+### A3.6 - What does not change
+
+- The coordination contract, the outcome shapes, the normalized contract,
+  OpenAPI, the public schemas, `content/`, mappings, evidence and registries,
+  season assembly, the coordinator, `src/index.ts`, `wrangler.toml`,
+  `PROVIDER_MODE` and Flutter.
+- The port produces no participation span, no season entry, no round and no
+  per-constructor points. Standings never create, extend or close a span
+  (ADR 0026 D1).
+- Dormancy (D14): the port is registered with no coordinator and is absent
+  from the Worker bundle. No routing port, scheduler, ledger or coordinated
+  provider mode exists.
+
+### Implementation status (2026-09-27)
+
+Implemented as the dormant `JolpicaStandingsPort`
+(`src/providers/jolpica/standings-port.ts`, `standings-payload.ts` and
+`standings-normalizer.ts`; Implementation Plan §14.0.28). Its tests use small
+synthetic fixtures whose shapes are traceable to the capture. No captured
+response or row is committed. Every candidate passes the production
+validators. Run privately against both preserved responses, the port produced
+23 valid driver standings and 11 valid constructor standings, with
+`liam-lawson` at `constructorId: null` and provider `audi` resolved to
+canonical `sauber`. Nothing is registered with a coordinator in production,
+and no provider was contacted during implementation.
 
 ## Consequences
 
