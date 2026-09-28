@@ -13,8 +13,10 @@
  * either in process (`LocalReconciliationLedger`) or through the
  * `ReconciliationLedger` Durable Object client. What to write - §10.4.1
  * transitions, corroboration, settling, due-work planning and the
- * publishability decision - is the pure policy in `policy/`, which nothing
- * connects to a run yet. The no-change decision does not exist.
+ * publishability decision - is the pure policy in `policy/`. Only the
+ * injected observation orchestration in `observation/` commits its records
+ * through this port, and no Worker run reaches it. The no-change decision
+ * does not exist.
  *
  * No binding, variable or test hook supplies a ledger to the runtime, so
  * `resolveReconciliationLedger` always answers `null`. Every coordinated run,

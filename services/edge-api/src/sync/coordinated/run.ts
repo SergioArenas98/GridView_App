@@ -12,10 +12,12 @@
  * the sync entry point, never a Worker-wide configuration error.
  *
  * The G5 planner and the G9 transitions and publishability decision exist as
- * pure policy in `policy/`, but this entry point does not call them: the
- * lease, observation and outcome orchestration and the no-change gate do not
- * exist yet. Even a fully composed runtime, reachable today only by handing
- * this function a synthetic ledger, stops at `not-planned` and sends nothing.
+ * pure policy in `policy/`, and the lease and observation half of the
+ * orchestration exists, injected and unconnected, in `observation/`. This
+ * entry point calls neither: the outcome orchestration, publication and the
+ * no-change gate do not exist yet. Even a fully composed runtime, reachable
+ * today only by handing this function a synthetic ledger, stops at
+ * `not-planned` and sends nothing.
  */
 
 import type { Logger } from '../../logging/logger';

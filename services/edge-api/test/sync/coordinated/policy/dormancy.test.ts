@@ -1,45 +1,31 @@
 /**
- * The policy and planner are implemented but not connected: no Worker module
- * imports them, and they reach no network, Cloudflare, publication or
- * wall-clock global. The coordinated runtime still stops at `ledger-unbound`.
+ * The policy and planner are implemented but not connected: only the dormant
+ * observation orchestration imports them, no Worker module imports that, and
+ * they reach no network, Cloudflare, publication or wall-clock global. The
+ * coordinated runtime still stops at `ledger-unbound`.
  */
-
-import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
 import { resolveReconciliationLedger } from '../../../../src/sync/coordinated/ledger-port';
+import { importersOf, readSource, sourceFiles } from '../source-graph';
 
-const sourceDir = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  '..',
-  '..',
-  'src',
-);
 const policyDir = 'sync/coordinated/policy/';
-
-function sourceFiles(): string[] {
-  return (readdirSync(sourceDir, { recursive: true }) as string[])
-    .map((entry) => entry.toString().split('\\').join('/'))
-    .filter((file) => file.endsWith('.ts'));
-}
-
-const read = (file: string) => readFileSync(join(sourceDir, file), 'utf8');
+const read = readSource;
 const policyFiles = () =>
   sourceFiles().filter((file) => file.startsWith(policyDir));
 
 describe('the reconciliation policy is not connected', () => {
-  it('is imported by no Worker module', () => {
-    const importers = sourceFiles()
-      .filter((file) => !file.startsWith(policyDir))
-      .filter((file) =>
-        /from '[^']*coordinated\/policy|from '\.\/policy/.test(read(file)),
-      );
-    expect(importers).toEqual([]);
+  it('is imported only by the dormant observation orchestration', () => {
+    // Every relative import is resolved, so an import spelled from a sibling
+    // directory (`../policy`) is found too. The observation orchestration is
+    // itself imported by no Worker module (its own dormancy test).
+    expect(importersOf(policyDir)).toEqual([
+      'sync/coordinated/observation/observe.ts',
+      'sync/coordinated/observation/outcomes.ts',
+      'sync/coordinated/observation/revisions.ts',
+    ]);
+    expect(importersOf('sync/coordinated/observation/')).toEqual([]);
     expect(resolveReconciliationLedger()).toBeNull();
   });
 
