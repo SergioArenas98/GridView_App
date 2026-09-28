@@ -312,6 +312,15 @@ const allowedPackageEdges: readonly string[] = [
   `${compositionModule} -> ${dormantDir}index.ts (import-statement)`,
 ];
 
+/**
+ * The dormant observation orchestration (PR-C3) reads the coordinator's typed
+ * run through the coordination index. It is not reachable from the Worker
+ * entry point, so this edge appears only when every module is an entry point.
+ */
+const dormantObservationEdges: readonly string[] = [
+  'src/sync/coordinated/observation/outcomes.ts -> src/providers/coordination/index.ts (import-statement)',
+];
+
 function insidePackages(input: string): boolean {
   return input.startsWith(dormantDir) || input.startsWith(coordinationDir);
 }
@@ -484,6 +493,15 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     expect(importersOf(graph, 'src/sync/coordinated/run.ts')).toEqual([
       workerEntryPoint,
     ]);
+    // The C2 policy and the C3 observation orchestration are not in the
+    // Worker's graph at all.
+    expect(
+      inputs.filter(
+        (input) =>
+          input.startsWith('src/sync/coordinated/policy/') ||
+          input.startsWith('src/sync/coordinated/observation/'),
+      ),
+    ).toEqual([]);
   });
 
   it('lets no other runtime module import either package', async () => {
@@ -492,7 +510,9 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
 
     // Every module outside the two packages is its own entry point, so an
     // edge from a module the Worker does not reach today is reported too.
-    expect(edgesIntoPackages(graph)).toEqual(allowedPackageEdges);
+    expect(edgesIntoPackages(graph)).toEqual(
+      [...allowedPackageEdges, ...dormantObservationEdges].sort(),
+    );
 
     // The enumeration is real, and it excludes exactly the two packages.
     expect(entryPoints).toContain(workerEntryPoint);

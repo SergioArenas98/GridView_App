@@ -57,6 +57,11 @@ export interface LogEvent {
    * `authority-not-sequencer`, `purge-origin-missing`, `ledger-unbound`).
    */
   coordinationMissingDependencies?: string[];
+  observationPlan?: string;
+  observationStage?: string;
+  ledgerRejection?: string;
+  /** A count per fixed reconciliation policy event category. */
+  reconciliationEvents?: Record<string, number>;
   /** Bounded coordinated run trigger: `scheduled` or `manual`. */
   syncTrigger?: string;
   /** Integer counts for one coordination run. */

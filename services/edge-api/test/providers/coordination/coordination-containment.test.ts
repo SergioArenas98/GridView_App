@@ -292,7 +292,15 @@ describe('the coordination seam is dormant', () => {
     // `coordinated` and every dependency is bound, which no committed
     // environment satisfies. The mock provider remains the whole-season
     // double the synchronization service uses in `mock`.
-    expect(consumers).toEqual(['sync/coordinated/composition.ts']);
+    //
+    // The dormant observation orchestration (PR-C3) reads the coordinator's
+    // typed run through the package index. It builds no coordinator - it uses
+    // the one the composition built - and no Worker module imports it.
+    expect(consumers).toEqual([
+      'sync/coordinated/composition.ts',
+      'sync/coordinated/observation/outcomes.ts',
+      'sync/coordinated/observation/revisions.ts',
+    ]);
   });
 
   it('adds no OpenF1 adapter and no source-named module for it', () => {
