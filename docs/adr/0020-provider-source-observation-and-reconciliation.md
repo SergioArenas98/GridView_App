@@ -831,6 +831,111 @@ not been observed. The runtime observation and outcome orchestration remains
 open, and nothing runs the policy. This note does not revisit the other items
 above.)*
 
+*(Superseded in part on 2026-09-28, and true when written. The C3 note below
+implements the observation half of the runtime orchestration as injected,
+unconnected code. The outcome half, publication and every item above other
+than round coherence stay open.)*
+
+The decision above is unchanged.
+
+### C3: the observation half of the runtime orchestration (2026-09-28)
+
+Implementation Plan §14.0.34 records PR-C3. It implements decision pack §6.6
+steps 1 to 5, the **observation half** of the runtime orchestration, in
+`src/sync/coordinated/observation/`. It is **injected and not connected**. No
+Worker module imports it, and `runCoordinatedSync` does not call it.
+`resolveReconciliationLedger` still answers `null`, so the scheduled handler
+and the manual route still stop at `ledger-unbound`, with zero provider
+requests. The Wrangler dry-run bundle is byte-identical to the one before this
+change. **G5 and G9 are not complete.**
+
+**One run, for one season:**
+
+1. The runtime is composed through the existing gate. A refused composition
+   builds nothing that could send a request.
+2. The season's fenced lease is acquired. If another run holds it, the run
+   answers `run-in-progress`: it reads nothing from the authority and sends
+   nothing.
+3. The sequencer is asked which release is active. The run proceeds only when
+   the season is **active and authoritative**. That release's
+   `grand-prix:{round}:results` revisions are recomputed by the D14-D16
+   predecessor read and reconciled into `publishedRevision`. The planner reads
+   the reconciled snapshot.
+4. The C2 planner decides. **Nothing due makes zero provider requests.** A
+   calendar bootstrap, a due observation run and a publication run are the
+   planner's own plans, unchanged. The O-3 reread and the scheduled cadence
+   check stay distinct, because the planner's checks reach the policy as they
+   are.
+5. One plan is executed through the single coordinator. The coordinator reaches
+   Jolpica only through the one routing port, the hardened HTTP client, the
+   per-run pacer and the global limiter that the composition built. No other
+   client is built, and the global `fetch` is never called.
+6. Each request's result is mapped onto the C2 policy (`recordRunObservations`).
+   The resulting records are committed in one conditional ledger transaction
+   under the lease.
+7. The lease is released on every path after it was acquired.
+
+**Revisions.** A race classification is recorded under the revision its
+release would publish: `snapshotRevision` of a `grand-prix:{round}:results`
+document at the generator's schema version. `contentRevision` and
+`publishedRevision` are therefore equal exactly when the content is equal. A
+test pins this against both a generated set and the active release. A
+season-level refresh resource is compared only with its own earlier
+observations. It is hashed as a domain-separated (`gv-observation/1`)
+canonical JSON of the whole normalized payload, so every field counts,
+including the internal standings round. Calendar anchors come from each race
+session's UTC start.
+
+**Failure accounting.** Only a completed request is a check.
+
+| What the request did | Recorded as | Effect (C2 policy) |
+|---|---|---|
+| Selected candidate | `observed` | The §10.4.1 transition for its check kind |
+| Sent and failed: upstream error, timeout, `429`, invalid payload or unresolved identity | `failed` (T6) | The attempt time, and a cadence slot is consumed. No revision, count, candidate or review state changes. |
+| Limiter deferral, including one that interrupts a two-request execution | `deferred` with its `retryAt` | Only `limiterDeferralUntil`, and no slot. A scheduled tick sends nothing before `retryAt`. |
+| Cancelled, limiter unavailable, or never reached | `not-attempted` | Nothing |
+
+**Fail closed.** None of the following commits any observation or publishes
+anything, and the lease is still given back:
+
+- a lease that expired before coordination (no request is sent), or during the
+  run (the store refuses the commit as `lease-expired` or `lease-superseded`);
+- an authority that throws, cannot answer or is not active and authoritative;
+- a release whose results cannot be read or are invalid;
+- a refused reconciliation;
+- a coordination the run cannot believe (a rejected plan, a violated
+  invariant, an adapter error, a malformed answer, a missing resource);
+- a selected payload that cannot be hashed or anchored;
+- a refused, unavailable or uncertain commit.
+
+The next clean run then makes exactly the requests the failed run was due to
+make. Every outcome is one bounded log line (`sync.coordinated.observation`).
+It carries closed statuses, the request count and a count per fixed policy
+event category, and never a revision, round, instant, provider value or
+payload.
+
+**The boundary this slice stops at.** This slice does not implement the
+following, and nothing in it does their work:
+
+- calling `publishGuarded` or the bridge, or creating a release. The run
+  outcome always says `publication: 'not-attempted'`;
+- acting on the O-5(a) **publishability decision**. `recordRunObservations`
+  computes it, and the run discards it;
+- the **O-12 no-change gate**, the **O-13 ordering input** and the **O-14
+  publication metadata**;
+- the **publication outcome commit** (§6.6 step 9). One consequence must be
+  closed by it before any activation. The C2 step-5 rule clears
+  `publicationDueAt` on every scheduled publication run, including a cancelled
+  or withheld one. The outcome commit must set it again whenever a candidate is
+  not applied;
+- **runtime activation**: connecting this path to `runCoordinatedSync`, a
+  ledger binding, `[exports]` entry or resolver, `PROVIDER_MODE =
+  "coordinated"`, the hourly cron, O-9, and the A3.5 staging predecessor gate.
+
+G5 now plans real runs in injected tests. G9's transitions now run against
+real requests' results there. Neither is in force in any environment, and
+obligations 1 to 4 are unchanged in status.
+
 The decision above is unchanged.
 
 ## Reopening conditions
