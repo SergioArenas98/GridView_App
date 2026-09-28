@@ -1918,7 +1918,10 @@ coherence does not change that.
   span (ADR 0026 D1).
 - Dormancy (D14): the port is registered with no coordinator and is absent
   from the Worker bundle. No routing port, scheduler, ledger or coordinated
-  provider mode exists.
+  provider mode exists. (True when A3 was accepted. Since the coordinated
+  runtime composition, Implementation Plan §14.0.29, the port is routed by
+  `JolpicaResourcePort` and is in the Worker bundle, but it is constructed in
+  no committed configuration and has made no provider request.)
 
 ### Implementation status (2026-09-27)
 

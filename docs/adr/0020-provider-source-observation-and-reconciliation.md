@@ -817,6 +817,20 @@ Owner decisions **O-9 and O-12 to O-16** remain open. Obligations 3 and 4 are
 implemented as policy but are not in force, because nothing runs the policy.
 Obligation 2's alert and disposition path stay open.
 
+*(Status note, 2026-09-28. The list above records what was open when C2
+landed. Since then, round coherence (ADR 0023 A3.5 item 1) is implemented and
+**dormant** (Implementation Plan §14.0.33): season assembly withholds any
+candidate whose two standings tables are not both bound to the latest
+selected, classified race round, as `standings-round-incoherent`. Empty
+replacement follows from that rule and D14 only while the authoritative
+predecessor is itself coherent, so no independent predecessor-standings guard
+was added. The read-only operational gate on the active release that A3.5
+item 2 requires is **not implemented**. It remains a required gate before
+any staging activation. Jolpica's actual pre-season standings response has
+not been observed. The runtime observation and outcome orchestration remains
+open, and nothing runs the policy. This note does not revisit the other items
+above.)*
+
 The decision above is unchanged.
 
 ## Reopening conditions
