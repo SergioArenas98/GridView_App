@@ -1785,7 +1785,7 @@ Neither response has a finality or podium field.
 | # | Decision |
 |---|---|
 | S-1 | Standing rows use the existing `(season, driverId)` and `(season, constructorId)` identities. No standing ID and no public field is created. |
-| S-2 | The season and the round of each response are validated, including agreement between the outer table and its standings list. Both rounds must be strict positive integer strings. The round is then **omitted** from the normalized payload. This does **not** decide whether a coordinated publication may combine standings bound to one round with classifications selected through another (A3.5). |
+| S-2 | The season and the round of each response are validated, including agreement between the outer table and its standings list. Both rounds must be strict positive integer strings. The round is then **omitted** from every normalized standing. Since 2026-09-28 it is carried **internally**, beside the table on the coordinated payload, so that season assembly can apply the round-coherence rule (A3.5 item 1). No public field carries it. |
 | S-3 | Every constructor a driver standing references must map. Exactly one listed constructor becomes its canonical ID. More than one becomes `constructorId: null`. The current team is never inferred from list order, points or race results. |
 | S-4 | The driver's season points total is kept as supplied and never allocated between constructors. A driver standing with no constructor reference is refused. |
 | S-5 | `position` is a strict positive integer string, and `positionText` must equal it byte for byte. Positions are unique and strictly increasing in response order. Contiguity is **not** required: nothing in the evidence establishes it. |
@@ -1813,37 +1813,109 @@ Neither response has a finality or podium field.
 - The port refuses a driver standings body served for a constructor request,
   because the list collection it reads is kind-specific.
 
-### A3.5 - Unresolved publication questions
+### A3.5 - Standings publication rules
 
-This amendment settles normalization only. Two questions about what a future
-coordinated runtime may publish stay **open**:
+A3 as first accepted settled normalization only and left two publication
+questions open. The captured standings are bound to round 15, while the
+preserved classifications cover rounds 1-14, so a coordinated run could have
+published standings after round N beside classifications selected through a
+different round M. And an empty table (S-9) is a valid candidate, so something
+had to keep it from replacing a non-empty one.
 
-1. **Round coherence.** The captured standings are bound to round 15, while
-   the preserved classifications cover rounds 1-14. Because the round is
-   dropped (S-2), a coordinated run could publish standings after round N
-   beside classifications selected through round M, where M differs from N.
-   Whether that is acceptable, or whether standings must be bound to the
-   selected classified-round set (for example through an internal round on the
-   coordinated payload and an assembly relation), is an unresolved activation
-   decision. **It is not solved here.**
-2. **Empty replacement.** An empty table (S-9) is a valid candidate. The
-   runtime must separately prevent an empty table from replacing a previously
-   valid non-empty one. Neither this port nor the D14-D16 guards, which cover
-   classified rounds and participation facts only, establish that safeguard.
+Item 1 was **decided and implemented, dormant, on 2026-09-28**. Item 2 follows
+from item 1 and the existing D14 guard, **under the condition stated in it**.
 
-A table that loses its **last** row, with `total` lowered to match, is also
+1. **Round coherence (decided).** A candidate season may include driver and
+   constructor standings only when **both** tables describe the latest
+   selected, classified race round.
+
+   - **The round travels internally.** The `driver-standings` and
+     `constructor-standings` coordinated payloads carry `round`
+     (`CoordinatedStandingsRound`, `number | null`) beside `standings`. For a
+     table with rows it is the round of the standings list, which S-2 already
+     requires to equal the table's. For the S-9 empty answer it is the table's
+     round when one is stated, and `null` when none is. An absent round is
+     carried as absent and is never replaced by a value. The payload contract
+     admits `null` or a strictly positive safe integer. The round never
+     reaches a `DriverStanding`, a `ConstructorStanding`, a snapshot, the
+     OpenAPI or Flutter, and no public round value is derived from it.
+   - **The horizon** is the latest round with a selected race classification
+     whose status is `final` or `provisional`, the same set that drives
+     `hasResults` (ADR 0022 A7). Any classified race selected from a source
+     other than Jolpica is already withheld as `result-entry-span` (ADR 0026
+     D3), so the horizon is always the latest classified Jolpica race round.
+   - **The rule.** With a horizon, both tables must have rows and both rounds
+     must equal it exactly. With no classified race at all, both tables must be
+     empty and both must state no round. Anything else withholds the **whole**
+     candidate as the assembly gap `standings-round-incoherent`, with no
+     missing resources and no relations. That covers a table ahead of the
+     horizon, a table behind it, two tables that disagree, a table with rows
+     but no round, an empty table once a race is classified, and a table with
+     rows, or an empty one naming a round, before any race is. No table is
+     dropped, trimmed or replaced by an earlier one, no partial season is
+     published, and the release already active keeps serving.
+   - **The delay is deliberate.** Standings that already reflect a sprint or
+     a later race, while the race classification for that round has not been
+     selected, are withheld until it is. Then the same tables publish. No lag
+     is tolerated in either direction: a tolerance would break the implication
+     item 2 relies on.
+   - **The pre-season shape is unobserved.** No preserved capture contains an
+     empty standings response (A3.2 is after round 15), so the S-9 shape is
+     still unverified. Assembly admits pre-season tables only as the empty
+     answer with **no** stated round. If Jolpica's real pre-season response
+     states a round, the candidate is withheld until round 1's race is
+     classified. That fails closed. Changing it needs captured evidence and an
+     owner decision, not a guessed round.
+   - **Precedence.** The rule is checked after run completion, planned and
+     required resources, missing round classifications, the non-Jolpica
+     classification refusal and span derivation, and before the reference
+     preflight. A season with a missing classification is still reported as
+     `missing-round-classification`.
+
+2. **Empty replacement (follows from item 1 and D14, conditionally).** No
+   independent predecessor-standings guard is added. The argument:
+   - under item 1, a candidate with empty standings has no classified race
+     round;
+   - D14 (ADR 0026) refuses any candidate that lacks a classified round of the
+     authoritative predecessor, as `guard-round-coverage-regression`;
+   - so an empty-standings candidate can replace only a predecessor with no
+     classified round.
+
+   That is the same as "never replaces non-empty standings" **only if the
+   predecessor is itself coherent**, meaning its standings tables are non-empty
+   exactly when it has a classified race round. A predecessor with non-empty
+   standings and no classified round - a release not produced by coordinated
+   assembly under this rule, such as a seeded or mock-derived one - would let
+   an empty candidate pass D14 vacuously. The guarded bridge is the only
+   coordinated publication path (D11 as amended), so D14 is always applied.
+   Rollback republication republishes an existing release and is outside this
+   argument.
+
+   **Staging precondition (not implemented here).** Before any staging
+   activation, a separate read-only operational gate must read the active
+   release and verify its classified race rounds and both standings tables:
+   both present, and non-empty exactly when a classified round exists. The
+   release carries no standings round, so the gate can establish that
+   correspondence, not the round a published table was bound to. If the gate
+   fails, or cannot read the release, activation stops for an owner decision.
+   An unknown predecessor is **never** treated as empty.
+
+A table that loses its **last** row, with `total` lowered to match, is still
 indistinguishable from a genuine shorter table. No port-level rule can detect
-it, and contiguity (declined in S-5) would not detect it either.
+it, and contiguity (declined in S-5) would not detect it either. Round
+coherence does not change that.
 
 ### A3.6 - What does not change
 
 - The coordination contract, the outcome shapes, the normalized contract,
   OpenAPI, the public schemas, `content/`, mappings, evidence and registries,
   season assembly, the coordinator, `src/index.ts`, `wrangler.toml`,
-  `PROVIDER_MODE` and Flutter.
-- The port produces no participation span, no season entry, no round and no
-  per-constructor points. Standings never create, extend or close a span
-  (ADR 0026 D1).
+  `PROVIDER_MODE` and Flutter. (Since 2026-09-28, A3.5 item 1 adds the
+  internal standings round to the coordination payload and one assembly gap.
+  The public contract, OpenAPI and Flutter are still unchanged.)
+- The port produces no participation span, no season entry, no public round
+  and no per-constructor points. Standings never create, extend or close a
+  span (ADR 0026 D1).
 - Dormancy (D14): the port is registered with no coordinator and is absent
   from the Worker bundle. No routing port, scheduler, ledger or coordinated
   provider mode exists.
@@ -1860,6 +1932,27 @@ validators. Run privately against both preserved responses, the port produced
 `liam-lawson` at `constructorId: null` and provider `audi` resolved to
 canonical `sauber`. Nothing is registered with a coordinator in production,
 and no provider was contacted during implementation.
+
+### Implementation status - A3.5 (2026-09-28)
+
+Round coherence (A3.5 item 1) is implemented and **dormant** (Implementation
+Plan §14.0.33). The decoder returns the validated round, the port carries it
+on the coordinated payload, and `assembleSeasonSource` applies the rule as
+`standings-round-incoherent`. Tests cover:
+
+- equal rounds, each table ahead and behind, and disagreement;
+- a table with rows and no round, and empty tables after a race;
+- pre-season empty tables, and pre-season tables with rows or a stated round;
+- withheld standings publishing once the matching race arrives;
+- the multi-constructor `constructorId: null` row carried unchanged;
+- at publication, over both sequencer transports: an incoherent candidate is
+  never handed over, and a coherent pre-season candidate is refused by D14 as
+  `guard-round-coverage-regression`. In both cases the active release is
+  left intact.
+
+The Jolpica normalizer and the Lawson rule (S-3) are unchanged. The staging
+predecessor gate in item 2 is **not** implemented, and runtime activation and
+O-9 remain open. No provider was contacted.
 
 ## Consequences
 
