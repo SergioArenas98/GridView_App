@@ -44,6 +44,18 @@ const record = JSON.parse(
   ),
 ) as { version: string; sources: readonly AttributionSource[] };
 
+/**
+ * Every data source GridView has evaluated (Provider Evaluation §6-§7). The
+ * notice may name one only while the record credits it.
+ */
+const knownSourceNames: readonly string[] = [
+  'Jolpica',
+  'OpenF1',
+  'Ergast',
+  'Sportmonks',
+  'API-Sports',
+];
+
 /** The description with line breaks folded, so phrases can span lines. */
 const description = info.description.replace(/\s+/g, ' ');
 
@@ -62,30 +74,52 @@ describe('the API documentation licence notice', () => {
     expect(description).toContain(record.version);
   });
 
-  it('states the modification, non-endorsement and unofficial notices', () => {
-    expect(description).toContain(
-      'transformed, normalized and combined that data with independently curated material',
-    );
-    expect(description).toContain('has not reviewed or endorsed GridView');
+  it('credits no source the record does not hold', () => {
+    // A licensor may ask to be removed (CC BY-NC-SA 4.0 §3(a)(3)); its entry
+    // then leaves the record, and the notice must drop it too.
+    const recorded = record.sources.map((source) => source.name.toLowerCase());
+    for (const name of knownSourceNames) {
+      if (recorded.some((held) => held.includes(name.toLowerCase()))) continue;
+      expect(description.toLowerCase()).not.toContain(name.toLowerCase());
+    }
+  });
+
+  it('states the modification and non-endorsement notices for each source', () => {
+    for (const source of record.sources) {
+      expect(description).toContain(
+        `carries data derived from ${source.name}, GridView has transformed, normalized and combined that data with independently curated material`,
+      );
+      expect(description).toContain(
+        `${source.name} has not reviewed or endorsed GridView`,
+      );
+    }
+  });
+
+  it('states the unofficial notice', () => {
     expect(description).toContain(
       'not associated with, endorsed by or affiliated with Formula 1, the FIA or any team',
     );
   });
 
   it('disclaims exclusive ownership and keeps service controls apart from the licence', () => {
-    expect(description).toContain('claims no exclusive ownership');
-    expect(description).toContain(
-      'imposes no restriction on any use the licence permits',
-    );
+    // The disclaimer is about licensed provider-derived data, so it is owed
+    // while any source is credited; the service-control statement always is.
+    if (record.sources.length > 0) {
+      expect(description).toContain('claims no exclusive ownership');
+      expect(description).toContain(
+        'imposes no restriction on any use the licence permits',
+      );
+    }
     expect(description).toContain(
       'they do not restrict the licence that applies to the data',
     );
   });
 
-  it('does not claim provider data is served while every source is dormant', () => {
-    if (record.sources.every((source) => source.status === 'dormant')) {
+  it('does not claim a dormant source is served', () => {
+    for (const source of record.sources) {
+      if (source.status !== 'dormant') continue;
       expect(description).toContain(
-        'No GridView runtime retrieves data from Jolpica F1 yet',
+        `No GridView runtime retrieves data from ${source.name} yet`,
       );
     }
   });
