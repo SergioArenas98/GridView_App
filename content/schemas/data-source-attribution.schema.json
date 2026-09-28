@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gridview.local/schemas/data-source-attribution.schema.json",
+  "title": "GridView data-source attribution record",
+  "description": "The repository-owned, per-source attribution GridView shows for third-party data it relies on (ADR 0019 decision 5; GridView_Provider_Evaluation.md §7.6.2). Attribution is held as data rather than hard-coded strings so a licensor-supplied copyright notice, warranty-disclaimer notice or creator designation can be added, and a source removed on the licensor's request (CC BY-NC-SA 4.0 §3(a)(3)), without changing application code. The Flutter Acknowledgements screen renders this file; the edge API does not read it yet. Localized explanatory copy (status, modification and non-endorsement notices) lives in the application's localization files, never here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "version", "sources"],
+  "properties": {
+    "kind": { "const": "data-source-attribution" },
+    "version": {
+      "type": "string",
+      "description": "Identifies the exact content of this record: every source entry and every field of each entry. Any change to that content, including adding or removing a source or changing a link, licence, notice or status, requires a new version, and a version is never reused for different content. `npm run validate:content` enforces the binding through a pinned content digest per version. This is the value a later SeasonSnapshotMetadata.attributionVersion will carry; nothing publishes it yet.",
+      "pattern": "^data-sources-v[1-9][0-9]*$"
+    },
+    "sources": {
+      "type": "array",
+      "description": "One entry per licensor. Attribution is per source, never merged into one generic credit.",
+      "items": { "$ref": "#/$defs/source" }
+    }
+  },
+  "$defs": {
+    "httpsUrl": {
+      "type": "string",
+      "description": "An https URL with a host and no embedded credentials; the application refuses to open anything else.",
+      "pattern": "^https://[^/@\\s]+(/[^\\s]*)?$",
+      "maxLength": 300
+    },
+    "notice": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 400
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "name",
+        "sourceUrl",
+        "termsUrl",
+        "licenseName",
+        "licenseTitle",
+        "licenseUrl",
+        "status",
+        "copyrightNotice",
+        "warrantyDisclaimerNotice",
+        "creatorDesignation"
+      ],
+      "properties": {
+        "sourceId": {
+          "$ref": "common.schema.json#/$defs/slug",
+          "description": "Stable key for the source within this record. Not shown to the reader."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "The source's own name, shown as published by the source."
+        },
+        "sourceUrl": {
+          "$ref": "#/$defs/httpsUrl",
+          "description": "Link to the source project."
+        },
+        "termsUrl": {
+          "anyOf": [{ "$ref": "#/$defs/httpsUrl" }, { "type": "null" }],
+          "description": "Link to the source's published terms of use, when it publishes any."
+        },
+        "licenseName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "Short licence name, e.g. `CC BY-NC-SA 4.0`."
+        },
+        "licenseTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Full licence title as the licence publishes it."
+        },
+        "licenseUrl": {
+          "$ref": "#/$defs/httpsUrl",
+          "description": "Link to the licence."
+        },
+        "status": {
+          "description": "`dormant`: no GridView runtime retrieves data from this source yet, so the screen must not claim that live data from it is being served. `active`: GridView retrieves and serves data derived from it. Moving to `active` is an explicit activation decision, not a side effect of this file.",
+          "enum": ["dormant", "active"]
+        },
+        "copyrightNotice": {
+          "$ref": "#/$defs/notice",
+          "description": "A copyright notice the licensor supplies, retained verbatim (CC BY-NC-SA 4.0 §3(a)(1)(A)(ii)). `null` when none is supplied."
+        },
+        "warrantyDisclaimerNotice": {
+          "$ref": "#/$defs/notice",
+          "description": "A notice referring to the licensor's disclaimer of warranties (§3(a)(1)(A)(iv)). `null` when none is supplied."
+        },
+        "creatorDesignation": {
+          "$ref": "#/$defs/notice",
+          "description": "A creator identification the licensor requests (§3(a)(1)(A)(i)). `null` when none is requested; the source `name` is then the attribution."
+        }
+      }
+    }
+  }
+}

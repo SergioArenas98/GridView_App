@@ -18,7 +18,9 @@ import 'package:gridview/core/theme/gridview_theme.dart';
 import 'package:gridview/core/time/device_time_zone.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/settings/application/app_info.dart';
+import 'package:gridview/features/settings/application/data_source_attributions.dart';
 import 'package:gridview/features/settings/application/external_links.dart';
+import 'package:gridview/features/settings/domain/data_source_attribution.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/domain/entities/media.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
@@ -217,6 +219,10 @@ Future<GoRouter> pumpApp(
   /// the data layer with fakes and never open Drift.
   List<MediaAttribution> mediaAttributions = const <MediaAttribution>[],
 
+  /// Replaces the data-source attribution record. By default the real bundled
+  /// record is read, so screens show exactly what the app ships.
+  Future<DataSourceAttributions> Function()? dataSourceAttributions,
+
   /// The observability surface. Defaults to the inert one, so no test reports,
   /// traces or reaches Firebase unless it deliberately asks for a fake.
   Observability observability = const Observability.disabled(),
@@ -282,6 +288,10 @@ Future<GoRouter> pumpApp(
         mediaAttributionsProvider.overrideWith(
           (Ref ref) => Stream<List<MediaAttribution>>.value(mediaAttributions),
         ),
+        if (dataSourceAttributions != null)
+          dataSourceAttributionsProvider.overrideWith(
+            (Ref ref) => dataSourceAttributions(),
+          ),
         appEnvironmentProvider.overrideWithValue(environment),
         observabilityProvider.overrideWithValue(observability),
         usesMockDataProvider.overrideWithValue(mockData),
@@ -389,4 +399,17 @@ double scrollOffsetOf(WidgetTester tester, Type screen) {
     matching: find.byType(Scrollable),
   );
   return tester.state<ScrollableState>(scrollable.first).position.pixels;
+}
+
+/// Scrolls the first scroll view inside [screen] until the widget keyed [key]
+/// is visible, building it first if the list is lazy.
+Future<void> scrollToKey(WidgetTester tester, Type screen, Key key) async {
+  await tester.scrollUntilVisible(
+    find.byKey(key),
+    200,
+    scrollable: find
+        .descendant(of: find.byType(screen), matching: find.byType(Scrollable))
+        .first,
+  );
+  await tester.pumpAndSettle();
 }

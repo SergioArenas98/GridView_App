@@ -9,19 +9,24 @@ import '../../shared/domain/entities/media.dart';
 import '../../shared/presentation/domain_status.dart';
 import '../../shared/presentation/widgets/screen_scaffold.dart';
 import '../../shared/presentation/widgets/screen_sections.dart';
+import '../application/data_source_attributions.dart';
+import '../domain/data_source_attribution.dart';
+import 'widgets/data_source_attribution_card.dart';
 import 'widgets/settings_rows.dart';
 
-/// The credits GridView is required to show, built from locally persisted media
-/// metadata and the actually-configured data source.
+/// The credits GridView is required to show, built from the actually-configured
+/// data source, the repository-owned data-source attribution record and locally
+/// persisted media metadata.
 ///
 /// A pure read: it issues no request of its own, so it works offline as soon as
 /// the content manifest has been synchronised once. Credits are deduplicated
 /// across size variants, and an asset with no attribution text simply does not
 /// appear — an absent credit is never rendered as a credit for "unknown".
 ///
-/// Only the configured data source is acknowledged. No third-party Formula 1
-/// provider is named, because none is configured: naming a Phase 9 candidate
-/// here would be a claim the build cannot support.
+/// Third-party data sources are credited from the attribution record (ADR 0019
+/// decision 5), each with its own status. A source GridView does not retrieve
+/// data from yet is credited as such, so the screen never claims that live
+/// provider data is being served.
 class AcknowledgementsScreen extends ConsumerWidget {
   const AcknowledgementsScreen({super.key});
 
@@ -31,6 +36,9 @@ class AcknowledgementsScreen extends ConsumerWidget {
     final bool usesMockData = ref.watch(usesMockDataProvider);
     final AsyncValue<List<MediaAttribution>> credits = ref.watch(
       mediaAttributionsProvider,
+    );
+    final AsyncValue<DataSourceAttributions> sources = ref.watch(
+      dataSourceAttributionsProvider,
     );
 
     return GvScreenScaffold(
@@ -61,6 +69,8 @@ class AcknowledgementsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: GvSpacing.xl),
 
+          ..._sources(context, l10n, sources),
+
           GvScreenSection(
             title: l10n.settingsAcknowledgementsMedia,
             child: _credits(context, l10n, credits),
@@ -68,6 +78,58 @@ class AcknowledgementsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// The data-source attribution section, one card per source.
+  ///
+  /// The record is bundled with the app, so it resolves almost at once. Until
+  /// it has, a neutral reserved block is shown rather than a claim about which
+  /// sources exist. A record that cannot be read says so plainly; it is never
+  /// rendered as "no sources". An empty record renders no section at all.
+  List<Widget> _sources(
+    BuildContext context,
+    AppLocalizations l10n,
+    AsyncValue<DataSourceAttributions> sources,
+  ) {
+    final Widget content;
+    if (sources.hasValue) {
+      final List<DataSourceAttribution> resolved = sources.requireValue.sources;
+      if (resolved.isEmpty) return const <Widget>[];
+      content = Column(
+        key: sourcesKey,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (int i = 0; i < resolved.length; i++) ...<Widget>[
+            if (i > 0) const SizedBox(height: GvSpacing.md),
+            DataSourceAttributionCard(source: resolved[i]),
+          ],
+        ],
+      );
+    } else if (sources.hasError) {
+      content = GvInfoCard(
+        key: sourcesUnavailableKey,
+        children: <Widget>[
+          Text(l10n.settingsSourcesUnavailable, style: context.gvText.bodyM),
+        ],
+      );
+    } else {
+      content = GvInfoCard(
+        key: sourcesResolvingKey,
+        children: <Widget>[
+          GvLoadingSemantics(
+            label: l10n.a11yLoading,
+            child: const GvSkeletonBlock(height: 20),
+          ),
+        ],
+      );
+    }
+    return <Widget>[
+      GvScreenSection(
+        title: l10n.settingsAcknowledgementsSources,
+        child: content,
+      ),
+      const SizedBox(height: GvSpacing.xl),
+    ];
   }
 
   /// The credits section.
@@ -125,4 +187,13 @@ class AcknowledgementsScreen extends ConsumerWidget {
   );
   static const Key emptyKey = ValueKey<String>('acknowledgements-empty');
   static const Key creditsKey = ValueKey<String>('acknowledgements-credits');
+
+  /// Which of the three data-source states is rendered. Test-visible only.
+  static const Key sourcesResolvingKey = ValueKey<String>(
+    'acknowledgements-sources-resolving',
+  );
+  static const Key sourcesUnavailableKey = ValueKey<String>(
+    'acknowledgements-sources-unavailable',
+  );
+  static const Key sourcesKey = ValueKey<String>('acknowledgements-sources');
 }

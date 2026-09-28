@@ -1484,6 +1484,74 @@
   "@settingsAcknowledgementsMedia": {
     "description": "Section header for media attributions."
   },
+  "settingsAcknowledgementsSources": "Data sources",
+  "@settingsAcknowledgementsSources": {
+    "description": "Section header for the third-party data-source attributions."
+  },
+  "settingsSourceStatusDormant": "Not connected yet. GridView does not currently retrieve data from this source automatically.",
+  "@settingsSourceStatusDormant": {
+    "description": "Status of a credited data source that GridView does not retrieve data from yet. Must not claim that data from it is being served."
+  },
+  "settingsSourceStatusActive": "GridView retrieves data from this source.",
+  "@settingsSourceStatusActive": {
+    "description": "Status of a credited data source that GridView retrieves data from."
+  },
+  "settingsSourceModified": "Where GridView uses data from this source, it transforms, normalizes and combines that data with independently curated information, so what you see is not the original data.",
+  "@settingsSourceModified": {
+    "description": "Licence modification notice (CC BY-NC-SA 4.0 indicate-changes duty) for a credited data source."
+  },
+  "settingsSourceLicenseNotice": "Data from {source} is licensed under {license}.",
+  "@settingsSourceLicenseNotice": {
+    "description": "Licence notice for a credited data source. Source and licence names are shown as published.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Jolpica F1"
+      },
+      "license": {
+        "type": "String",
+        "example": "CC BY-NC-SA 4.0"
+      }
+    }
+  },
+  "settingsSourceNotEndorsed": "{source} has not reviewed or endorsed GridView.",
+  "@settingsSourceNotEndorsed": {
+    "description": "Non-endorsement notice for a credited data source.",
+    "placeholders": {
+      "source": {
+        "type": "String",
+        "example": "Jolpica F1"
+      }
+    }
+  },
+  "settingsSourceProject": "Source project",
+  "@settingsSourceProject": {
+    "description": "Link row that opens a data source's project page."
+  },
+  "settingsSourceLicense": "License",
+  "@settingsSourceLicense": {
+    "description": "Link row that opens a data source's licence."
+  },
+  "settingsSourceTerms": "Terms of use",
+  "@settingsSourceTerms": {
+    "description": "Link row that opens a data source's published terms of use."
+  },
+  "settingsSourceNotice": "Source notice",
+  "@settingsSourceNotice": {
+    "description": "Label for a warranty-disclaimer notice supplied by a data source, shown as published."
+  },
+  "settingsSourceCopyright": "Copyright",
+  "@settingsSourceCopyright": {
+    "description": "Label for a copyright notice supplied by a data source, shown as published."
+  },
+  "settingsSourceCredit": "Credit",
+  "@settingsSourceCredit": {
+    "description": "Label for a creator designation requested by a data source, shown as published."
+  },
+  "settingsSourcesUnavailable": "Data source details could not be loaded.",
+  "@settingsSourcesUnavailable": {
+    "description": "Shown if the bundled data-source attribution record cannot be read."
+  },
   "settingsFeedbackUnavailable": "No contact address is configured.",
   "@settingsFeedbackUnavailable": {
     "description": "Shown when no feedback contact is configured."

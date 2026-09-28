@@ -7,8 +7,11 @@
 # (see docs/technical/GridView_Backend_Scheme.md sections 21-23). The
 # `security-defined` rule is therefore disabled for this contract.
 #
-# `info-license-strict` is disabled because the project uses a proprietary
-# license with no SPDX identifier or public URL.
+# `info-license-strict` is disabled because `info.license` deliberately names no
+# single licence: data derived from Jolpica F1 is under CC BY-NC-SA 4.0, while
+# GridView's own code and this document are not, so there is no one SPDX
+# identifier or URL to give. The contract's "Data sources and licensing"
+# section carries the per-material notice (ADR 0019).
 extends:
   - recommended
 rules:

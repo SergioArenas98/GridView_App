@@ -24,6 +24,33 @@ current-season, calendar, Grand Prix detail and results, driver and constructor
 standings, season and detail views for drivers, constructors and circuits, and
 the content manifest.
 
+## Data sources and licensing
+
+The contract's `info.description` carries the public licence notice for
+provider-derived data ([ADR 0019](../adr/0019-formula-one-provider-legal-gate.md)
+decision 5; Provider Evaluation §7.6.2 and §7.6.4). It keeps three things
+apart:
+
+- **Data derived from Jolpica F1** is credited to Jolpica F1, linked, and stated
+  to remain available under CC BY-NC-SA 4.0 wherever ShareAlike applies, with
+  GridView's transformation, normalization and combination disclosed. GridView
+  claims no exclusive ownership of it. No GridView runtime retrieves Jolpica F1
+  data yet, and the notice says so.
+- **GridView's own work** - the application and edge API source code and this
+  contract document - is not licensed by that notice.
+- **Service controls** such as rate limiting protect GridView's infrastructure
+  and are not restrictions on the data licence.
+
+`info.license` deliberately names no single licence, because one label would
+either claim the data or license GridView's own work under the data licence;
+see [`../../redocly.yaml`](../../redocly.yaml). The notice names the attribution
+version of [`../../content/attribution/data-sources.json`](../../content/attribution/data-sources.json),
+the same record the app's Acknowledgements screen renders. No response schema
+changed, and no per-record provenance is published.
+`services/edge-api/test/contract/api-licensing-notice.test.ts` checks the notice
+against that record and refuses blanket ownership wording; the provider-neutrality
+test still refuses provider names everywhere else in the contract.
+
 ## Validation
 
 The contract is linted with [Redocly CLI](https://redocly.com/docs/cli). The

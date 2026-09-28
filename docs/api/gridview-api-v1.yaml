@@ -4,11 +4,11 @@ info:
   title: GridView API
   version: "1.0.0"
   summary: Read-only Formula 1 data contract between the GridView edge API and the Flutter client.
-  description: >
+  description: |
     GridView API v1 is a read-only, cache-first contract served by a Cloudflare
-    Worker. It exposes normalized, GridView-owned snapshots of Formula 1 season,
-    calendar, standings, driver, constructor, circuit and result data.
-
+    Worker. It exposes normalized snapshots, assembled and published by GridView,
+    of Formula 1 season, calendar, standings, driver, constructor, circuit and
+    result data.
 
     Only `GET` and `HEAD` are public. Every successful response uses the GridView
     envelope (`data` + `meta`); every error uses the error envelope
@@ -17,18 +17,64 @@ info:
     `docs/technical/GridView_Backend_Scheme.md` sections 11-12 for the envelope
     and error contract.
 
-
     Public rate limiting (HTTP 429 with `Retry-After`) is applied at the edge as
     described in the Backend Scheme section 22; it is an infrastructure concern
     and is not enumerated per operation in this version.
 
-
     This document is the source of truth for the wire contract. Provider
     identifiers never appear in any response.
+
+    ## Data sources and licensing
+
+    Response data and GridView's own work are licensed separately. This section
+    is a licence notice, not a legal opinion.
+
+    **Data derived from Jolpica F1.** Jolpica F1
+    (<https://github.com/jolpica/jolpica-f1>) publishes its data under the
+    Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+    licence, CC BY-NC-SA 4.0
+    (<https://creativecommons.org/licenses/by-nc-sa/4.0/>). Where a response
+    carries data derived from Jolpica F1, GridView has transformed, normalized
+    and combined that data with independently curated material, so it is not the
+    original data. That data, and the adapted material GridView derives from it,
+    remains available under CC BY-NC-SA 4.0 wherever ShareAlike applies.
+    GridView claims no exclusive ownership of it and imposes no restriction on
+    any use the licence permits. Jolpica F1 has not reviewed or endorsed
+    GridView, and states that it does not guarantee uptime, availability or
+    correctness of its data.
+
+    **Current state.** No GridView runtime retrieves data from Jolpica F1 yet:
+    production serves no provider data, and staging serves GridView's mock
+    dataset. This notice is published ahead of any activation, which remains a
+    separate, explicit decision. It will be kept current if other sources are
+    added.
+
+    **GridView's own work.** The GridView application and edge API source code
+    and this contract document are GridView's own work. They are not licensed by
+    the data notice above, and processing licensed data does not change their
+    licensing. GridView's independently curated material, such as its stable
+    identifiers and media metadata, is also its own work; where it is
+    combined with Jolpica F1-derived data, the combination is shared on the
+    CC BY-NC-SA 4.0 terms above wherever ShareAlike applies.
+
+    **Service controls.** Rate limiting, caching and abuse prevention protect
+    GridView's infrastructure. They govern access to this service; they do not
+    restrict the licence that applies to the data.
+
+    **Unofficial.** GridView is an independent application. It is not associated
+    with, endorsed by or affiliated with Formula 1, the FIA or any team.
+
+    The per-source attribution GridView shows is held in the repository record
+    `content/attribution/data-sources.json` (attribution version
+    `data-sources-v1`). The `attributionVersion` field in responses is not yet
+    bound to that record.
   contact:
     name: GridView
   license:
-    name: Proprietary
+    # Deliberately not a single licence: see "Data sources and licensing" above.
+    # A blanket label here would either claim exclusive ownership of
+    # provider-derived data or license GridView's own work under the data licence.
+    name: Per material - see Data sources and licensing
 
 servers:
   - url: https://api.gridview.example

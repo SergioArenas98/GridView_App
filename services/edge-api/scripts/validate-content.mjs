@@ -10,6 +10,7 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 
 import { heading, printAjvErrors, summarize } from './lib/report.mjs';
+import { validateAttributionDocument } from './lib/attribution-rules.mjs';
 import { validateDriverSeasonEntries } from './lib/driver-entry-rules.mjs';
 import {
   validateEvidenceCoverage,
@@ -52,6 +53,8 @@ const kindToSchemaId = {
   'provider-evidence':
     'https://gridview.local/schemas/provider-evidence.schema.json',
   overrides: 'https://gridview.local/schemas/overrides.schema.json',
+  'data-source-attribution':
+    'https://gridview.local/schemas/data-source-attribution.schema.json',
 };
 
 function collectJsonFiles(dir) {
@@ -209,6 +212,29 @@ for (const { label, data } of parsedByKind.get('driver-season-entries') ?? []) {
   const problems = validateDriverSeasonEntries(data);
   if (problems.length === 0) {
     console.log(`ok   ${label}  (${data.entries.length} entries)`);
+  } else {
+    console.error(`FAIL ${label}`);
+    for (const problem of problems) console.error(`  - ${problem}`);
+    failures += 1;
+  }
+}
+
+// Exactly one attribution record, whose version still identifies its content.
+heading('data-source attribution');
+const attributionDocuments = parsedByKind.get('data-source-attribution') ?? [];
+semanticChecks += 1;
+if (attributionDocuments.length !== 1) {
+  failures += 1;
+  console.error(
+    `FAIL expected exactly one data-source-attribution record, found ${attributionDocuments.length}`,
+  );
+} else {
+  const { label, data } = attributionDocuments[0];
+  const problems = validateAttributionDocument(data);
+  if (problems.length === 0) {
+    console.log(
+      `ok   ${label}  (${data.version}, ${data.sources.length} sources)`,
+    );
   } else {
     console.error(`FAIL ${label}`);
     for (const problem of problems) console.error(`  - ${problem}`);

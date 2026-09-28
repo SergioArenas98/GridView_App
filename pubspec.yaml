@@ -69,3 +69,7 @@ flutter:
     # Dev/staging-only fixture snapshots served by the injected fixture API.
     # OpenAPI-valid; never used in production builds (see FixtureGridViewApi).
     - assets/dev_fixtures/
+    # The repository-owned data-source attribution record the Acknowledgements
+    # screen renders (ADR 0019). Bundled verbatim from content/ so the file CI
+    # validates is the file the app shows.
+    - content/attribution/data-sources.json
