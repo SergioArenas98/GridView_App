@@ -147,6 +147,23 @@ export function fullPlan(source: ProviderSeasonSource): CoordinationPlan {
 }
 
 /**
+ * The internal round a fixture's standings describe (ADR 0023 A3.5): its
+ * latest classified race round, or `null` when none is classified. A fixture
+ * is authored as one coherent season, so its tables are read as describing
+ * exactly that round; a test that needs another round states it explicitly.
+ */
+export function standingsRoundFor(source: ProviderSeasonSource): number | null {
+  const rounds = source.results
+    .filter(
+      (result) =>
+        result.sessionType === 'race' &&
+        (result.status === 'final' || result.status === 'provisional'),
+    )
+    .map((result) => result.round);
+  return rounds.length === 0 ? null : Math.max(...rounds);
+}
+
+/**
  * The payload a source would contribute for one resource.
  *
  * Returns `null` when the fixture has nothing for that identity, which is what
@@ -173,10 +190,15 @@ export function payloadFor(
     case 'season-circuits':
       return { kind: 'season-circuits', circuits: source.circuits };
     case 'driver-standings':
-      return { kind: 'driver-standings', standings: source.driverStandings };
+      return {
+        kind: 'driver-standings',
+        round: standingsRoundFor(source),
+        standings: source.driverStandings,
+      };
     case 'constructor-standings':
       return {
         kind: 'constructor-standings',
+        round: standingsRoundFor(source),
         standings: source.constructorStandings,
       };
     case 'event-schedule': {

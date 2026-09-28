@@ -153,6 +153,7 @@ describe('a season-scoped candidate is bound to the requested season', () => {
     const source = await seasonFixture();
     const wrong = {
       kind: 'driver-standings',
+      round: 1,
       standings: withSeasonEverywhere(source.driverStandings, OTHER_SEASON),
     };
 
@@ -664,6 +665,7 @@ describe('a candidate requires a successful transport attempt', () => {
     const source = await seasonFixture();
     const wrong = {
       kind: 'driver-standings',
+      round: 1,
       standings: withSeasonEverywhere(source.driverStandings, OTHER_SEASON),
     };
     const yielded = (): Promise<void> =>

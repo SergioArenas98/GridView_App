@@ -29,11 +29,13 @@
  * attempt is counted. One request, one attempt, no retry and no second page.
  *
  * **What it produces** is one normalized standings table (ADR 0023 amendment
- * A3). It carries no round: the provider's round is validated and dropped, and
- * whether it may be published beside classifications selected through another
- * round is an unresolved activation decision. An empty table (S-9) is a valid
- * candidate here; preventing it from replacing a previously published
- * non-empty table is a publication safeguard this port does not provide.
+ * A3) and, beside it, the internal round the provider bound that table to
+ * (A3.5). The round is never part of a public standing: season assembly reads
+ * it to publish the tables only when both describe the latest classified race
+ * round, and withholds the whole season otherwise. An empty table (S-9) is a
+ * valid candidate here; assembly admits it only while no race is classified,
+ * and the D14 round-coverage guard is what stops a season with no classified
+ * round from replacing one that has them.
  */
 
 import type { Logger } from '../../logging/logger';
@@ -109,11 +111,13 @@ type Decoded =
   | {
       readonly ok: true;
       readonly kind: 'driver-standings';
+      readonly round: number | null;
       readonly rows: readonly DecodedDriverStanding[];
     }
   | {
       readonly ok: true;
       readonly kind: 'constructor-standings';
+      readonly round: number | null;
       readonly rows: readonly DecodedConstructorStanding[];
     }
   | { readonly ok: false; readonly problem: StandingsDecodeProblem };
@@ -213,7 +217,10 @@ export class JolpicaStandingsPort implements ProviderResourcePort {
     return this.invalidPayload(kind, season, attempt, table.problem);
   }
 
-  /** Resolves one decoded table and wraps it as the requested payload. */
+  /**
+   * Resolves one decoded table and wraps it as the requested payload, with the
+   * provider's round carried exactly as decoded.
+   */
   private normalize(
     decoded: Extract<Decoded, { readonly ok: true }>,
     season: number,
@@ -227,7 +234,11 @@ export class JolpicaStandingsPort implements ProviderResourcePort {
       return table.ok
         ? {
             ok: true,
-            payload: { kind: decoded.kind, standings: table.standings },
+            payload: {
+              kind: decoded.kind,
+              round: decoded.round,
+              standings: table.standings,
+            },
           }
         : table;
     }
@@ -239,7 +250,11 @@ export class JolpicaStandingsPort implements ProviderResourcePort {
     return table.ok
       ? {
           ok: true,
-          payload: { kind: decoded.kind, standings: table.standings },
+          payload: {
+            kind: decoded.kind,
+            round: decoded.round,
+            standings: table.standings,
+          },
         }
       : table;
   }
@@ -313,10 +328,14 @@ export class JolpicaStandingsPort implements ProviderResourcePort {
 function decode(kind: StandingsKind, season: number, body: unknown): Decoded {
   if (kind === 'driver-standings') {
     const decoded = decodeDriverStandings(body, season, standingsPageLimit);
-    return decoded.ok ? { ok: true, kind, rows: decoded.rows } : decoded;
+    return decoded.ok
+      ? { ok: true, kind, round: decoded.round, rows: decoded.rows }
+      : decoded;
   }
   const decoded = decodeConstructorStandings(body, season, standingsPageLimit);
-  return decoded.ok ? { ok: true, kind, rows: decoded.rows } : decoded;
+  return decoded.ok
+    ? { ok: true, kind, round: decoded.round, rows: decoded.rows }
+    : decoded;
 }
 
 /**

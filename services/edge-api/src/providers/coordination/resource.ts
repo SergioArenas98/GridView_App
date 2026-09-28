@@ -91,6 +91,19 @@ export type CoordinatedResource =
     };
 
 /**
+ * The round a source bound one standings table to (ADR 0023 A3.5).
+ *
+ * **Internal only.** Season assembly reads it to publish the two standings
+ * tables only when both describe the latest selected, classified race round;
+ * it is never copied into a public standing, a snapshot or the OpenAPI.
+ *
+ * `null` means the source stated no round at all, which only its empty
+ * answer may do (S-9). It is the source's own representation carried as
+ * absent, never a stand-in for a round.
+ */
+export type CoordinatedStandingsRound = number | null;
+
+/**
  * The normalized payload a source contributes.
  *
  * Each member is pinned to exactly one resource kind, so a calendar payload
@@ -109,10 +122,14 @@ export type CoordinatedPayload =
   | { readonly kind: 'season-circuits'; readonly circuits: readonly Circuit[] }
   | {
       readonly kind: 'driver-standings';
+      /** See {@link CoordinatedStandingsRound}. */
+      readonly round: CoordinatedStandingsRound;
       readonly standings: readonly DriverStanding[];
     }
   | {
       readonly kind: 'constructor-standings';
+      /** See {@link CoordinatedStandingsRound}. */
+      readonly round: CoordinatedStandingsRound;
       readonly standings: readonly ConstructorStanding[];
     }
   | {

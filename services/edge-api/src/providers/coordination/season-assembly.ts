@@ -76,6 +76,14 @@ export const assemblyGaps = [
    */
   'missing-round-classification',
   /**
+   * The selected standings tables do not both describe the latest classified
+   * race round (ADR 0023 A3.5): a table is ahead of or behind it, the two
+   * tables disagree, a table is empty after a race was classified, or one has
+   * rows before any race was. The whole season is withheld; no table is
+   * dropped or replaced by an earlier one.
+   */
+  'standings-round-incoherent',
+  /**
    * The selected payloads are individually valid but mutually inconsistent:
    * a reference snapshot generation depends on does not resolve.
    */
@@ -179,6 +187,41 @@ export function requiresRaceClassification(status: EventStatus): boolean {
 const participationSources: ReadonlySet<CoordinatedSourceId> = new Set([
   'jolpica',
 ]);
+
+/**
+ * Whether one standings contribution describes the race horizon (ADR 0023
+ * A3.5): the latest selected, classified race round, or `null` before any.
+ *
+ * - **Before any classified race**, the table must be the source's empty
+ *   answer with no round stated. A table with rows, or one naming a round,
+ *   describes a round the season has no classification for.
+ * - **After one**, the table must have rows and be bound to exactly that
+ *   round. An empty table, a table from an earlier round (behind) and one
+ *   already reflecting a later sprint or race (ahead) all fail. Waiting for
+ *   the matching race classification is deliberate: nothing here compares
+ *   points or guesses which session a table reflects.
+ *
+ * Nothing is tolerated in either direction, so an equal-round pair is the only
+ * publishable one and the two tables can never disagree with each other.
+ */
+function standingsDescribeHorizon(
+  payload: CoordinatedPayloadFor<'driver-standings' | 'constructor-standings'>,
+  horizon: number | null,
+): boolean {
+  if (horizon === null) {
+    return payload.round === null && payload.standings.length === 0;
+  }
+  return payload.round === horizon && payload.standings.length > 0;
+}
+
+/** The latest classified race round, or `null` when none is classified. */
+function raceHorizon(classifiedRounds: ReadonlySet<number>): number | null {
+  let horizon: number | null = null;
+  for (const round of classifiedRounds) {
+    if (horizon === null || round > horizon) horizon = round;
+  }
+  return horizon;
+}
 
 function sourceOf(resource: ResourceCoordination): CoordinatedSourceId | null {
   return resource.selection.outcome === 'selected'
@@ -404,6 +447,24 @@ export function assembleSeasonSource(
             sessionType: 'race',
           }) as CoordinatedResource,
       ),
+      relations: [],
+    };
+  }
+
+  // Standings are publishable only beside the classifications they summarize
+  // (ADR 0023 A3.5). Every classified race here is a selected Jolpica race,
+  // since any other was refused above, so the horizon is the latest of them.
+  // The internal round is read here and goes no further: the public standings
+  // below carry none.
+  const horizon = raceHorizon(classifiedRounds);
+  if (
+    !standingsDescribeHorizon(driverStandingsPayload, horizon) ||
+    !standingsDescribeHorizon(constructorStandingsPayload, horizon)
+  ) {
+    return {
+      complete: false,
+      gap: 'standings-round-incoherent',
+      missing: [],
       relations: [],
     };
   }

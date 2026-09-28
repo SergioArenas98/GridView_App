@@ -104,6 +104,7 @@ export type {
   CoordinatedPayloadFor,
   CoordinatedResource,
   CoordinatedResourceKind,
+  CoordinatedStandingsRound,
 } from './resource';
 
 export { deriveDriverSeasonEntries } from './driver-span-derivation';
