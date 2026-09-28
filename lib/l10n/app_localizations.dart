@@ -2054,6 +2054,84 @@ abstract class AppLocalizations {
   /// **'Images'**
   String get settingsAcknowledgementsMedia;
 
+  /// Section header for the third-party data-source attributions.
+  ///
+  /// In en, this message translates to:
+  /// **'Data sources'**
+  String get settingsAcknowledgementsSources;
+
+  /// Status of a credited data source that GridView does not retrieve data from yet. Must not claim that data from it is being served.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected yet. GridView does not currently retrieve data from this source automatically.'**
+  String get settingsSourceStatusDormant;
+
+  /// Status of a credited data source that GridView retrieves data from.
+  ///
+  /// In en, this message translates to:
+  /// **'GridView retrieves data from this source.'**
+  String get settingsSourceStatusActive;
+
+  /// Licence modification notice (CC BY-NC-SA 4.0 indicate-changes duty) for a credited data source.
+  ///
+  /// In en, this message translates to:
+  /// **'Where GridView uses data from this source, it transforms, normalizes and combines that data with independently curated information, so what you see is not the original data.'**
+  String get settingsSourceModified;
+
+  /// Licence notice for a credited data source. Source and licence names are shown as published.
+  ///
+  /// In en, this message translates to:
+  /// **'Data from {source} is licensed under {license}.'**
+  String settingsSourceLicenseNotice(String source, String license);
+
+  /// Non-endorsement notice for a credited data source.
+  ///
+  /// In en, this message translates to:
+  /// **'{source} has not reviewed or endorsed GridView.'**
+  String settingsSourceNotEndorsed(String source);
+
+  /// Link row that opens a data source's project page.
+  ///
+  /// In en, this message translates to:
+  /// **'Source project'**
+  String get settingsSourceProject;
+
+  /// Link row that opens a data source's licence.
+  ///
+  /// In en, this message translates to:
+  /// **'License'**
+  String get settingsSourceLicense;
+
+  /// Link row that opens a data source's published terms of use.
+  ///
+  /// In en, this message translates to:
+  /// **'Terms of use'**
+  String get settingsSourceTerms;
+
+  /// Label for a warranty-disclaimer notice supplied by a data source, shown as published.
+  ///
+  /// In en, this message translates to:
+  /// **'Source notice'**
+  String get settingsSourceNotice;
+
+  /// Label for a copyright notice supplied by a data source, shown as published.
+  ///
+  /// In en, this message translates to:
+  /// **'Copyright'**
+  String get settingsSourceCopyright;
+
+  /// Label for a creator designation requested by a data source, shown as published.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit'**
+  String get settingsSourceCredit;
+
+  /// Shown if the bundled data-source attribution record cannot be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Data source details could not be loaded.'**
+  String get settingsSourcesUnavailable;
+
   /// Shown when no feedback contact is configured.
   ///
   /// In en, this message translates to:

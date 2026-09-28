@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 // bundler the deployed Worker is actually built by and cannot
 // drift away from it.
 import { build, type BuildOptions, type Metafile } from 'esbuild';
+import yaml from 'js-yaml';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -988,8 +989,25 @@ describe('provider identity stays out of the public contract', () => {
 
     expect(openapi).not.toContain('sourceId');
     expect(openapi).not.toContain('providerSource');
-    expect(openapi).not.toMatch(/\bjolpica\b/i);
-    expect(openapi).not.toMatch(/\bopenf1\b/i);
+
+    // The licence notice in `info.description` must name each data source
+    // (ADR 0019 decision 5), so provider names are refused everywhere else:
+    // every path, parameter, schema, example and the rest of `info`. The notice
+    // itself is covered by `test/contract/api-licensing-notice.test.ts`.
+    const document = yaml.load(openapi) as { info: Record<string, unknown> };
+    const description = document.info.description as string;
+    const wireContract = JSON.stringify({
+      ...document,
+      info: { ...document.info, description: null },
+    });
+    expect(wireContract).toContain('"paths"');
+    expect(wireContract).not.toMatch(/jolpica/i);
+    expect(wireContract).not.toMatch(/openf1/i);
+    // Every mention in the file is one inside the notice, including comments.
+    expect(openapi.match(/jolpica/gi)?.length).toBe(
+      description.match(/jolpica/gi)?.length,
+    );
+    expect(openapi).not.toMatch(/openf1/i);
 
     const fixtureDir = join(
       repoRoot,

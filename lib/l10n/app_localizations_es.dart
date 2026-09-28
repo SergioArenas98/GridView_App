@@ -1118,6 +1118,53 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsAcknowledgementsMedia => 'Imágenes';
 
   @override
+  String get settingsAcknowledgementsSources => 'Fuentes de datos';
+
+  @override
+  String get settingsSourceStatusDormant =>
+      'Todavía no está conectada. GridView no obtiene actualmente datos de esta fuente de forma automática.';
+
+  @override
+  String get settingsSourceStatusActive =>
+      'GridView obtiene datos de esta fuente.';
+
+  @override
+  String get settingsSourceModified =>
+      'Cuando GridView utiliza datos de esta fuente, los transforma, normaliza y combina con información seleccionada de forma independiente, por lo que lo que ves no son los datos originales.';
+
+  @override
+  String settingsSourceLicenseNotice(String source, String license) {
+    return 'Los datos de $source se publican con la licencia $license.';
+  }
+
+  @override
+  String settingsSourceNotEndorsed(String source) {
+    return '$source no ha revisado ni respaldado GridView.';
+  }
+
+  @override
+  String get settingsSourceProject => 'Proyecto de origen';
+
+  @override
+  String get settingsSourceLicense => 'Licencia';
+
+  @override
+  String get settingsSourceTerms => 'Condiciones de uso';
+
+  @override
+  String get settingsSourceNotice => 'Aviso de la fuente';
+
+  @override
+  String get settingsSourceCopyright => 'Derechos de autor';
+
+  @override
+  String get settingsSourceCredit => 'Crédito';
+
+  @override
+  String get settingsSourcesUnavailable =>
+      'No se pudieron cargar los detalles de las fuentes de datos.';
+
+  @override
   String get settingsFeedbackUnavailable =>
       'No hay ninguna dirección de contacto configurada.';
 

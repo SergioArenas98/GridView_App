@@ -18,11 +18,13 @@ content/
 │   ├── driver-season-entries.schema.json
 │   ├── constructor-season-entries.schema.json
 │   ├── media-assets.schema.json
+│   ├── data-source-attribution.schema.json  (per-source data attribution)
 │   ├── provider-mappings.schema.json   (INTERNAL: curated provider-ID mappings)
 │   ├── provider-evidence.schema.json   (INTERNAL: approved provider-ID corpus)
 │   └── overrides.schema.json
 ├── registries/        stable identities (drivers, constructors, circuits, events)
 ├── seasons/2026/      season entries, provider mappings, provider evidence, overrides
+├── attribution/       the data-source attribution record the app renders
 └── media/             media asset metadata
 ```
 
@@ -75,6 +77,42 @@ credential or a confidential document. No image binary is committed under
 non-routable `.local` host, and is never a publication source.
 
 See `../docs/technical/GridView_Media.md`.
+
+## Data-source attribution record
+
+`attribution/data-sources.json` (`kind: data-source-attribution`) is the
+**repository-owned, per-source attribution** GridView owes each third-party data
+source ([ADR 0019](../docs/adr/0019-formula-one-provider-legal-gate.md)
+decision 5; `../docs/technical/GridView_Provider_Evaluation.md` §7.6.2). The
+Flutter app bundles this exact file and renders it on the Acknowledgements
+screen; the public API documentation carries the equivalent notice. The edge
+API does not read it yet.
+
+It credits **Jolpica F1** alone, with status **`dormant`**: no GridView runtime
+retrieves data from it yet, so the app says so rather than claiming that live
+provider data is served. OpenF1 is not listed, because no OpenF1 adapter exists.
+Changing a status to `active` is part of an explicit activation decision, never
+a side effect of editing this file.
+
+Attribution is data rather than hard-coded strings, so a copyright notice,
+warranty-disclaimer notice or creator designation a licensor supplies can be
+added, and an entry removed at the licensor's request (CC BY-NC-SA 4.0
+§3(a)(3)), without changing code. The source's name, licence name and notices
+are shown as published; GridView's explanatory copy is localized in the app.
+
+**`version`** (`data-sources-v1` today) identifies the exact content of the
+`sources` array: every entry and every field, in order. Any change to that
+content, including a link, a notice or a status, needs a new version, and a
+version is never reused. `npm run validate:content` enforces this through the
+append-only `ISSUED_ATTRIBUTION_VERSIONS` digest table in
+`services/edge-api/scripts/lib/attribution-rules.mjs`; the failure message
+prints the digest to pin. A later `SeasonSnapshotMetadata.attributionVersion`
+is expected to carry this value; nothing publishes it yet, and the mock
+provider's `attributionVersion` is unrelated to it.
+
+This record prepares the minimum attribution surfaces. It is not a legal
+conclusion about commercial use, it does not complete the production licence
+review, and it does not authorize staging activation.
 
 ## Provider-identifier mapping registry
 

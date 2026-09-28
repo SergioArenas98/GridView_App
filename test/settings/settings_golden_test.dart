@@ -4,6 +4,7 @@ import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/core/preferences/preference_values.dart';
 import 'package:gridview/features/settings/application/app_info.dart';
 import 'package:gridview/features/settings/application/external_links.dart';
+import 'package:gridview/features/settings/presentation/acknowledgements_screen.dart';
 import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/media.dart';
 
@@ -130,10 +131,25 @@ void main() {
     await _expectGolden(tester, 'settings_privacy_configured');
   });
 
+  // The shipped data-source attribution, as the screen first opens.
+  testWidgets('golden: acknowledgements data sources', (
+    WidgetTester tester,
+  ) async {
+    await _pumpSettings(tester, location: '/settings/acknowledgements');
+    await _expectGolden(tester, 'settings_acknowledgements_sources');
+  });
+
+  // The media credits follow the data-source attribution, so the two credit
+  // goldens scroll to the state they are named for.
   testWidgets('golden: acknowledgements empty state', (
     WidgetTester tester,
   ) async {
     await _pumpSettings(tester, location: '/settings/acknowledgements');
+    await scrollToKey(
+      tester,
+      AcknowledgementsScreen,
+      AcknowledgementsScreen.emptyKey,
+    );
     await _expectGolden(tester, 'settings_acknowledgements_empty');
   });
 
@@ -155,6 +171,11 @@ void main() {
           attribution: 'Second Rights Holder',
         ),
       ],
+    );
+    await scrollToKey(
+      tester,
+      AcknowledgementsScreen,
+      AcknowledgementsScreen.creditsKey,
     );
     await _expectGolden(tester, 'settings_acknowledgements_populated');
   });

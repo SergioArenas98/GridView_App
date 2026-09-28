@@ -46,6 +46,7 @@
 | 1.14 | 2026-09-27 | **Phase 9B: the 2026 driver and constructor standings are observed, and a dormant Jolpica standings port exists** (§8.12; Implementation Plan §14.0.28; §10.1). Two separately authorised requests captured both tables after round 15; every identity maps. The curator decisions S-1 to S-13 are recorded in [ADR 0023 amendment A3](../adr/0023-multi-source-provider-coordination.md#amendment-a3---jolpica-standings-normalization). A driver listing two constructors gets `constructorId: null`; `provisional: false` is curator policy, not provider evidence. Round coherence with the selected classifications and empty-table replacement remain open activation questions. No provider was contacted during implementation, and `PROVIDER_MODE` still admits exactly `mock` and `none`. |
 | 1.13 | 2026-09-26 | **Phase 9B: season assembly derives `hasResults` (ADR 0022 amendment A7).** No provider-evaluation conclusion changes. The dormant coordination path now sets each event's `hasResults` from its selected `final` or `provisional` race classifications (Implementation Plan §14.0.25). No provider was contacted, no evidence was captured and `PROVIDER_MODE` still admits exactly `mock` and `none`. |
 | 1.15 | 2026-09-27 | **Phase 9B: the §10.4.1 state machine and the event-aware planner are implemented as pure, dormant policy** (Implementation Plan §14.0.31; [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) C2 note). They are not connected to any runtime, and no provider or Cloudflare resource was contacted. Owner decisions O-3, O-4, O-5(a) and O-7 (a planning target only) are recorded. O-3 raises the modelled Jolpica cost of a race check from 3 requests to `6 + k + d` (§11.1 note). The weekly eight-slot sweep of §10.4.1 is subsumed by full-backfill publication runs. `PROVIDER_MODE` still admits exactly `mock` and `none`, and G5 and G9 are not complete. |
+| 1.16 | 2026-09-28 | **Phase 9B: the minimum Jolpica attribution surfaces exist** (§7.6.2 note; Implementation Plan §14.0.32). A repository-owned, per-source record (`content/attribution/data-sources.json`, version `data-sources-v1`) credits Jolpica F1 with a link to the project, its terms, CC BY-NC-SA 4.0 and its link, the modification notice, a non-endorsement notice and Jolpica's warranty-disclaimer notice; the Flutter Acknowledgements screen renders it and the OpenAPI `info` carries the equivalent notice, replacing the "GridView-owned snapshots" wording and the blanket "Proprietary" licence label (§7.6.4). Jolpica is recorded as **dormant**, so neither surface claims that provider data is served. OpenF1 is not credited, because no OpenF1 adapter exists; its entry is added with its adapter. Jolpica's `TERMS.md` was re-read on 2026-09-28 and is unchanged since 27 August 2025. **No Jolpica API request was made**, and no provider or Cloudflare resource was contacted. This prepares the surfaces only: it is not a legal conclusion about commercial use, it does not complete the §15.3 licence-compliance sweep, and it does not authorize staging activation. Owner decision **O-9** still requires an explicit activation decision. |
 
 ---
 
@@ -710,6 +711,23 @@ obligation to **stop** displaying something on request.
 Whether a stable machine-readable attribution or data-sources endpoint is
 appropriate is a **Phase 9B determination**. It is deliberately not added in this
 documentation-only pass.
+
+> **Implemented on 2026-09-28 as the minimum surfaces, for Jolpica F1 only**
+> (Implementation Plan §14.0.32). The per-source record is
+> `content/attribution/data-sources.json` (schema
+> `content/schemas/data-source-attribution.schema.json`), and it carries fields
+> for duties 7-9 so a supplied notice needs no code change; duty 11 is a removal
+> of the entry under a new version. Duty 8 is met with Jolpica's own disclaimer
+> from its `TERMS.md` §3 (re-read 2026-09-28, last updated 27 August 2025,
+> SHA-256 `2c196c2e…7ffdda`); Jolpica supplies no copyright notice or creator
+> designation today. The app renders elements 2-6 for Jolpica, and element 1
+> (OpenF1) is deliberately absent while no OpenF1 adapter exists. The public API
+> documentation carries the equivalent notice in the OpenAPI `info.description`.
+> The record's `version` identifies its exact content and is the value intended
+> for `SeasonSnapshotMetadata.attributionVersion`; nothing publishes it yet. No
+> machine-readable attribution endpoint was added. The source is recorded as
+> **dormant**, and moving it to `active` belongs to the explicit activation
+> decision (O-9), which this work does not take.
 
 #### 7.6.3 ShareAlike
 

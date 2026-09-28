@@ -1,0 +1,20 @@
+{
+  "$schema": "../schemas/data-source-attribution.schema.json",
+  "kind": "data-source-attribution",
+  "version": "data-sources-v1",
+  "sources": [
+    {
+      "sourceId": "jolpica",
+      "name": "Jolpica F1",
+      "sourceUrl": "https://github.com/jolpica/jolpica-f1",
+      "termsUrl": "https://github.com/jolpica/jolpica-f1/blob/main/TERMS.md",
+      "licenseName": "CC BY-NC-SA 4.0",
+      "licenseTitle": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International",
+      "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "status": "dormant",
+      "copyrightNotice": null,
+      "warrantyDisclaimerNotice": "Jolpica F1 does not guarantee uptime, availability or correctness of the data.",
+      "creatorDesignation": null
+    }
+  ]
+}

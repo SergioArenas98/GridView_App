@@ -252,6 +252,8 @@ void main() {
   });
 
   group('acknowledgements', () {
+    // The media credits follow the data-source attributions, so each test
+    // scrolls to the credit block it asserts on before asserting.
     testWidgets('shows the credits stored locally, with no request', (
       WidgetTester tester,
     ) async {
@@ -267,6 +269,11 @@ void main() {
           ),
         ],
       );
+      await scrollToKey(
+        tester,
+        AcknowledgementsScreen,
+        AcknowledgementsScreen.creditsKey,
+      );
 
       expect(find.byKey(AcknowledgementsScreen.creditsKey), findsOneWidget);
       expect(find.textContaining('GridView synthetic fixture'), findsOneWidget);
@@ -279,6 +286,11 @@ void main() {
         tester,
         initialLocation: '/settings/acknowledgements',
         surfaceSize: _surface,
+      );
+      await scrollToKey(
+        tester,
+        AcknowledgementsScreen,
+        AcknowledgementsScreen.emptyKey,
       );
       expect(find.byKey(AcknowledgementsScreen.emptyKey), findsOneWidget);
       expect(find.byKey(AcknowledgementsScreen.creditsKey), findsNothing);
@@ -303,6 +315,11 @@ void main() {
           ),
         ],
       );
+      await scrollToKey(
+        tester,
+        AcknowledgementsScreen,
+        AcknowledgementsScreen.creditsKey,
+      );
 
       expect(find.textContaining('Alpha rights holder'), findsOneWidget);
       expect(find.textContaining('Beta rights holder'), findsOneWidget);
@@ -322,6 +339,11 @@ void main() {
             attribution: 'GridView synthetic fixture',
           ),
         ],
+      );
+      await scrollToKey(
+        tester,
+        AcknowledgementsScreen,
+        AcknowledgementsScreen.creditsKey,
       );
 
       // The label is a localized category, never an identifier.

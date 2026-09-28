@@ -4,6 +4,8 @@ import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/core/preferences/preference_values.dart';
 import 'package:gridview/features/settings/application/app_info.dart';
 import 'package:gridview/features/settings/application/external_links.dart';
+import 'package:gridview/features/settings/domain/data_source_attribution.dart';
+import 'package:gridview/features/settings/presentation/acknowledgements_screen.dart';
 import 'package:gridview/features/settings/presentation/widgets/settings_rows.dart';
 
 import '../support/a11y_harness.dart';
@@ -26,6 +28,7 @@ Future<void> pumpSettings(
   double textScale = 1.0,
   Size surfaceSize = _tall,
   bool mockData = false,
+  Future<DataSourceAttributions> Function()? dataSourceAttributions,
 }) => pumpApp(
   tester,
   initialLocation: location,
@@ -38,6 +41,7 @@ Future<void> pumpSettings(
   textScale: textScale,
   surfaceSize: surfaceSize,
   mockData: mockData,
+  dataSourceAttributions: dataSourceAttributions,
   disableAnimations: true,
 );
 
@@ -556,23 +560,162 @@ void main() {
   });
 
   group('acknowledgements', () {
-    testWidgets('acknowledges the configured data source and no future '
-        'provider', (WidgetTester tester) async {
+    testWidgets('credits Jolpica F1 from the shipped record without claiming '
+        'its data is served', (WidgetTester tester) async {
       await pumpSettings(tester, location: '/settings/acknowledgements');
       await tester.pumpAndSettle();
 
       expect(find.text('Data'), findsOneWidget);
+      expect(find.text('Data sources'), findsOneWidget);
       expect(find.text('Images'), findsOneWidget);
-      // No third-party Formula 1 provider is named: none is configured.
+      expect(find.text('Jolpica F1'), findsOneWidget);
+
       final String all = renderedText(tester).join(' ');
-      for (final String provider in <String>[
-        'Ergast',
-        'Jolpica',
+      // Dormant: credited, but never presented as the source of served data.
+      expect(
+        all,
+        contains(
+          'Not connected yet. GridView does not currently retrieve data from '
+          'this source automatically.',
+        ),
+      );
+      expect(all, isNot(contains('GridView retrieves data from this source.')));
+      // The modification, licence and non-endorsement notices.
+      expect(
+        all,
+        contains(
+          'GridView uses data from this source, it transforms, normalizes and '
+          'combines that data with independently curated information',
+        ),
+      );
+      expect(
+        all,
+        contains('Data from Jolpica F1 is licensed under CC BY-NC-SA 4.0.'),
+      );
+      expect(
+        all,
+        contains('Jolpica F1 has not reviewed or endorsed GridView.'),
+      );
+      expect(
+        all,
+        contains(
+          'Creative Commons Attribution-NonCommercial-ShareAlike 4.0 '
+          'International',
+        ),
+      );
+      // The licensor's warranty disclaimer, retained as published.
+      expect(
+        all,
+        contains(
+          'Jolpica F1 does not guarantee uptime, availability or correctness '
+          'of the data.',
+        ),
+      );
+      // The existing unofficial and non-affiliation notice stays.
+      expect(all, contains('not associated with, endorsed by or affiliated'));
+      // Only sources in the record are credited: OpenF1 has no adapter and is
+      // not in it, and nothing claims live data or official status.
+      for (final String absent in <String>[
         'OpenF1',
+        'Ergast',
         'Formula 1 API',
+        'live data',
+        'official data',
       ]) {
-        expect(all, isNot(contains(provider)), reason: provider);
+        expect(all, isNot(contains(absent)), reason: absent);
       }
+    });
+
+    testWidgets('the source, terms and licence rows open exactly the recorded '
+        'links', (WidgetTester tester) async {
+      final RecordingExternalLinkLauncher launcher =
+          RecordingExternalLinkLauncher();
+      await pumpSettings(
+        tester,
+        location: '/settings/acknowledgements',
+        linkLauncher: launcher,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('github.com/jolpica/jolpica-f1'), findsOneWidget);
+      for (final String key in <String>[
+        'data-source-jolpica-project',
+        'data-source-jolpica-terms',
+        'data-source-jolpica-license',
+      ]) {
+        final Finder row = find.byKey(ValueKey<String>(key));
+        await tester.ensureVisible(row);
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+      }
+
+      expect(launcher.opened, <Uri>[
+        Uri.parse('https://github.com/jolpica/jolpica-f1'),
+        Uri.parse('https://github.com/jolpica/jolpica-f1/blob/main/TERMS.md'),
+        Uri.parse('https://creativecommons.org/licenses/by-nc-sa/4.0/'),
+      ]);
+    });
+
+    testWidgets('an active source is described as retrieved, and supplied '
+        'notices are retained', (WidgetTester tester) async {
+      await pumpSettings(
+        tester,
+        location: '/settings/acknowledgements',
+        dataSourceAttributions: () async =>
+            DataSourceAttributions.fromJson(<String, Object?>{
+              'kind': 'data-source-attribution',
+              'version': 'data-sources-v9',
+              'sources': <Object?>[
+                <String, Object?>{
+                  'sourceId': 'example',
+                  'name': 'Example Source',
+                  'sourceUrl': 'https://example.org/project',
+                  'termsUrl': null,
+                  'licenseName': 'CC BY-NC-SA 4.0',
+                  'licenseTitle': 'Example licence title',
+                  'licenseUrl': 'https://example.org/licence',
+                  'status': 'active',
+                  'copyrightNotice': '(c) Example Contributors',
+                  'warrantyDisclaimerNotice': null,
+                  'creatorDesignation': 'Example Creator',
+                },
+              ],
+            }),
+      );
+      await tester.pumpAndSettle();
+
+      final String all = renderedText(tester).join(' ');
+      expect(all, contains('GridView retrieves data from this source.'));
+      expect(all, isNot(contains('Not connected yet')));
+      expect(all, contains('(c) Example Contributors'));
+      expect(all, contains('Example Creator'));
+      expect(all, isNot(contains('Source notice')));
+      expect(
+        find.byKey(const ValueKey<String>('data-source-example-terms')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('an unreadable record says so and never reads as no sources', (
+      WidgetTester tester,
+    ) async {
+      await pumpSettings(
+        tester,
+        location: '/settings/acknowledgements',
+        dataSourceAttributions: () async =>
+            throw const FormatException('broken record'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(AcknowledgementsScreen.sourcesUnavailableKey),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Data source details could not be loaded.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(AcknowledgementsScreen.sourcesKey), findsNothing);
     });
 
     testWidgets('an empty attribution set shows an explicit empty state', (

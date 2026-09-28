@@ -385,6 +385,13 @@ void main() {
           ),
         ],
       );
+      // The media credits follow the data-source attributions; this golden is
+      // about the credits, so it is taken with them in view.
+      await scrollToKey(
+        tester,
+        AcknowledgementsScreen,
+        AcknowledgementsScreen.creditsKey,
+      );
       await expectLater(
         find.byType(AcknowledgementsScreen),
         matchesGoldenFile('goldens/acknowledgements_with_credits.png'),
