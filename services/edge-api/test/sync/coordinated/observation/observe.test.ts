@@ -24,6 +24,7 @@ import {
   changedFields,
   paths,
   seasonPaths,
+  paced,
   tickAfter,
 } from './support';
 
@@ -142,12 +143,17 @@ describe('the first calendar bootstrap', () => {
     expect(run.requests).toEqual(seasonPaths);
     expect(run.reservations).toBe(6);
     const season = await harness.season();
+    // Observed once the sixth response arrived, not when the run was planned.
+    const observed = paced(at, 6);
     expect(season.publicationDueAt).toBeNull();
-    expect(season.refresh.circuits.nextDueAt).toBe(later(at, 7 * DAY));
-    expect(season.refresh.participants.nextDueAt).toBe(later(at, 7 * DAY));
+    expect(season.refresh.circuits.lastAttemptedAt).toBe(observed);
+    expect(season.refresh.circuits.nextDueAt).toBe(later(observed, 7 * DAY));
+    expect(season.refresh.participants.nextDueAt).toBe(
+      later(observed, 7 * DAY),
+    );
     // Pre-season, standings are weekly.
     expect(season.refresh['driver-standings'].nextDueAt).toBe(
-      later(at, 7 * DAY),
+      later(observed, 7 * DAY),
     );
     expect(harness.publishGuarded).not.toHaveBeenCalled();
   });
@@ -182,9 +188,10 @@ describe('a due season-level refresh', () => {
     const harness = await startedSeason();
     const before = await harness.season();
 
-    // The calendar was last observed at PRE_SEASON + 1h; six hours later it
-    // is the only thing due.
-    const at = later(PRE_SEASON, 7 * HOUR);
+    // Six hours after the calendar was last observed, it is the only thing
+    // due. One request, so nothing is paced and the run observes at `at`.
+    const at = before.refresh.calendar.nextDueAt!;
+    expect(at).toBe(later(paced(later(PRE_SEASON, HOUR), 6), 6 * HOUR));
     const run = await harness.run(at);
 
     expect(run.outcome).toMatchObject({
@@ -226,17 +233,19 @@ describe('a first classification', () => {
     expect(run.requests).toEqual([...seasonPaths, paths.results(1)]);
     expect(run.reservations).toBe(7);
     const record = await harness.record(1);
+    // Observed once the seventh response arrived, not when the run was planned.
+    const observed = paced(at, 7);
     expect(record).toMatchObject({
       checkIndex: 1,
-      lastAttemptedAt: at,
-      lastSuccessfulObservationAt: at,
+      lastAttemptedAt: observed,
+      lastSuccessfulObservationAt: observed,
       nextDueAt: checkTime(anchorOf(1).toISOString(), 2).toISOString(),
       contentRevision: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
       consecutiveConfirmations: 1,
       provenance: 'reconciled',
       reviewState: 'unsettled',
       markers: [],
-      sourceObservedAt: at,
+      sourceObservedAt: observed,
     });
     // No other round is eligible yet, so none is recorded.
     expect((await harness.snapshot()).classifications).toHaveLength(1);
@@ -274,7 +283,7 @@ describe('corroboration of an unsettled change (D2.1)', () => {
     ]);
     expect(pending).toMatchObject({
       contentRevision: accepted,
-      candidateFirstSeenAt: sightedAt,
+      candidateFirstSeenAt: paced(sightedAt, 7),
       consecutiveConfirmations: 0,
       checkIndex: 2,
       markers: ['pending'],
@@ -291,7 +300,7 @@ describe('corroboration of an unsettled change (D2.1)', () => {
       contentRevision: candidate,
       supersededRevisions: [accepted],
       // The revision was first observed at the sighting, not now.
-      sourceObservedAt: sightedAt,
+      sourceObservedAt: paced(sightedAt, 7),
       consecutiveConfirmations: 2,
       candidateRevision: null,
       checkIndex: 3,
@@ -390,7 +399,7 @@ describe('a failed attempted check (T6)', () => {
       'nextDueAt',
     ]);
     expect(after).toMatchObject({
-      lastAttemptedAt: at,
+      lastAttemptedAt: paced(at, 7),
       checkIndex: 3,
       contentRevision: pending!.contentRevision,
       candidateRevision: pending!.candidateRevision,
@@ -474,7 +483,7 @@ describe('a late correction to a settled round (D2.5, D2.8)', () => {
       candidateRevision: null,
       stagedCorrection: {
         revision: sighted!.candidateRevision,
-        firstSeenAt: sightedAt,
+        firstSeenAt: paced(sightedAt, 8),
         uncorroborated: false,
       },
       markers: ['staged'],
@@ -645,7 +654,7 @@ describe('a limiter deferral', () => {
     });
     const after = await harness.season();
     expect(after.refresh.participants).toEqual(season.refresh.participants);
-    expect(after.refresh.circuits.lastAttemptedAt).toBe(at);
+    expect(after.refresh.circuits.lastAttemptedAt).toBe(paced(at, 7));
   });
 });
 
@@ -671,7 +680,7 @@ describe('cancellation', () => {
     });
     expect(await harness.record(1)).toEqual(record);
     const after = await harness.season();
-    expect(after.refresh.calendar.lastAttemptedAt).toBe(at);
+    expect(after.refresh.calendar.lastAttemptedAt).toBe(paced(at, 2));
     for (const resource of [
       'participants',
       'driver-standings',

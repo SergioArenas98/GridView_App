@@ -25,6 +25,7 @@ import type {
 } from '../../../../src/providers/http/provider-rate-limiter';
 import type { ProviderTransport } from '../../../../src/providers/http/provider-http-client';
 import type { RealProviderSourceId } from '../../../../src/providers/http/reservation-engine';
+import { minimumReservationSpacingMillis } from '../../../../src/providers/http/reservation-pacer';
 import { MemorySequencerHost } from '../../../../src/publication/sequencer/hosts';
 import type { SeasonPublicationSequencerPort } from '../../../../src/publication/sequencer/port';
 import type { SnapshotStorage } from '../../../../src/storage/types';
@@ -81,6 +82,16 @@ export function anchorOf(round: number): Date {
 export function tickAfter(round: number, hours: number): string {
   return new Date(
     anchorOf(round).getTime() + hours * HOUR + 17 * 60 * 1000,
+  ).toISOString();
+}
+
+/**
+ * The instant a run started at `at` observes its results: after its
+ * reservations, which the pacer spaces `minimumReservationSpacingMillis` apart.
+ */
+export function paced(at: string, reservations: number): string {
+  return new Date(
+    Date.parse(at) + (reservations - 1) * minimumReservationSpacingMillis,
   ).toISOString();
 }
 

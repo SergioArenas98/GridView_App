@@ -249,9 +249,9 @@ async function underLease(
     return ledgerFailure('reconciliation', reconciled, 0);
   }
 
-  const now = dependencies.clock.now();
+  const plannedAt = dependencies.clock.now();
   const plan = planRun({
-    now,
+    now: plannedAt,
     snapshot: reconciled.snapshot,
     trigger: request.trigger,
   });
@@ -263,7 +263,9 @@ async function underLease(
     return failure('coordination', 'lease-expired', null, 0);
   }
 
-  return observe(request, runtime, lease, reconciled.snapshot, plan, now);
+  return observe(request, runtime, lease, reconciled.snapshot, plan, () =>
+    dependencies.clock.now(),
+  );
 }
 
 async function observe(
@@ -272,12 +274,16 @@ async function observe(
   lease: LeaseToken,
   snapshot: LedgerSnapshot,
   plan: Exclude<RunPlan, { readonly kind: 'nothing-due' }>,
-  now: Date,
+  clock: () => Date,
 ): Promise<HeldOutcome> {
   const run = await runtime.coordinator.coordinate({
     plan: { season: request.season, resources: plan.resources },
     ...(request.signal ? { signal: request.signal } : {}),
   });
+  // The observation instant is taken once every response has arrived, never
+  // at planning: what the run records as attempted and observed must not
+  // predate the responses it describes. The plan's slots are unaffected.
+  const observedAt = clock();
   const providerRequests = run.accounting.lifetime.total;
   if (run.status === 'plan-rejected') {
     return failure(
@@ -304,7 +310,7 @@ async function observe(
     lease,
     snapshot,
     plan,
-    now,
+    now: observedAt,
     seasonOutcomes: mapped.seasonOutcomes,
     classificationOutcomes: mapped.classificationOutcomes,
   });

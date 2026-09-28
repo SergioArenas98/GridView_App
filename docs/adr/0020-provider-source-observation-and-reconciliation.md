@@ -872,7 +872,9 @@ change. **G5 and G9 are not complete.**
    client is built, and the global `fetch` is never called.
 6. Each request's result is mapped onto the C2 policy (`recordRunObservations`).
    The resulting records are committed in one conditional ledger transaction
-   under the lease.
+   under the lease. The policy's instant is the **observation instant**, taken
+   after every response has arrived. It is never the planning instant, so no
+   attempt, observation or due time predates the response it describes.
 7. The lease is released on every path after it was acquired.
 
 **Revisions.** A race classification is recorded under the revision its
