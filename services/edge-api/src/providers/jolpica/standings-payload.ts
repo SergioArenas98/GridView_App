@@ -16,13 +16,14 @@
  * not approved (ADR 0022 D5; A3 S-12), so it is never read and never carried
  * forward.
  *
- * **The round is validated, then dropped** (S-2). The provider chooses the
- * round a standings response is bound to; the response states it twice, once
- * on the table and once on its standings list. Both must be the same strict
- * positive integer string, and neither is returned: the normalized contract
- * has no round field. Whether a standings table from one round may be
- * published beside classifications selected through another is a separate,
- * unresolved activation decision, which this module does not answer.
+ * **The round is validated and returned, never published** (S-2, A3.5). The
+ * provider chooses the round a standings response is bound to; the response
+ * states it twice, once on the table and once on its standings list. Both must
+ * be the same strict positive integer string. It is returned beside the rows
+ * so the internal standings contribution can carry it to season assembly,
+ * which publishes a table only when it describes the latest classified race
+ * round. The public contract still has no round field, and none is derived
+ * from this one.
  *
  * **No finality is read** (S-8). The responses carry no finality field, and a
  * field that appeared would not be read.
@@ -86,8 +87,18 @@ export interface DecodedConstructorStanding {
 }
 
 export type StandingsDecodeResult<R> =
-  /** Every row in provider order. Empty only for the S-9 empty answer. */
-  | { readonly ok: true; readonly rows: readonly R[] }
+  | {
+      readonly ok: true;
+      /**
+       * The round the provider bound the table to, exactly as it stated it.
+       * Always present with rows. For the S-9 empty answer it is the table's
+       * own round when one is stated and `null` when none is: an absent round
+       * is carried as absent, never replaced by a value.
+       */
+      readonly round: number | null;
+      /** Every row in provider order. Empty only for the S-9 empty answer. */
+      readonly rows: readonly R[];
+    }
   | { readonly ok: false; readonly problem: StandingsDecodeProblem };
 
 /** A plain object. `null` and arrays are not records. */
@@ -294,14 +305,15 @@ interface StandingsShape<R> {
  *
  * **The response must answer the question asked.** The table's season and
  * its one list's season both restate the request. The round is checked and
- * dropped (see the module comment).
+ * returned (see the module comment).
  *
  * **Empty only in one exact shape** (S-9): no standings list at all, with a
  * complete page and `total "0"`. This shape was not observed; it is accepted
  * because it is the only structurally coherent empty answer, and it is marked
  * unverified in ADR 0023 A3. With no list, the table's round has nothing to
  * agree with: it may be absent, and if present it must still be a strict
- * positive integer string. A list present with no rows fails.
+ * positive integer string. Either way it is returned as stated. A list present
+ * with no rows fails.
  */
 function decodeStandings<R extends { readonly position: number }>(
   body: unknown,
@@ -336,17 +348,20 @@ function decodeStandings<R extends { readonly position: number }>(
     return { ok: false, problem: 'standings-collection' };
   }
   if (lists.length === 0) {
-    if (tableRound !== undefined && parsePositiveInteger(tableRound) === null) {
+    const emptyRound =
+      tableRound === undefined ? null : parsePositiveInteger(tableRound);
+    if (tableRound !== undefined && emptyRound === null) {
       return { ok: false, problem: 'round' };
     }
     return total === 0
-      ? { ok: true, rows: [] }
+      ? { ok: true, round: emptyRound, rows: [] }
       : { ok: false, problem: 'incomplete-page' };
   }
   if (lists.length !== 1) {
     return { ok: false, problem: 'standings-collection' };
   }
-  if (parsePositiveInteger(tableRound) === null) {
+  const round = parsePositiveInteger(tableRound);
+  if (round === null) {
     return { ok: false, problem: 'round' };
   }
 
@@ -380,7 +395,7 @@ function decodeStandings<R extends { readonly position: number }>(
 
   const contradiction = checkPositions(rows) ?? shape.checkRows(rows);
   if (contradiction !== null) return { ok: false, problem: contradiction };
-  return { ok: true, rows };
+  return { ok: true, round, rows };
 }
 
 /** Decodes one complete `/{season}/driverstandings/` response. */

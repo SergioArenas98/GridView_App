@@ -76,7 +76,7 @@ function standings(kind: string): Record<string, unknown> {
           podiums: 1,
           provisional: false,
         };
-  return { kind, standings: [entry] };
+  return { kind, round: 1, standings: [entry] };
 }
 
 function coordinate(
@@ -721,6 +721,7 @@ describe('ordinary outcomes are unchanged by normalization', () => {
           attempts: [attempt('o-1')],
           payload: {
             kind: 'driver-standings',
+            round: 1,
             standings: source.driverStandings,
           },
         }) as ProviderResourceOutcome,

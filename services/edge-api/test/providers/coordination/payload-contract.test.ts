@@ -92,6 +92,7 @@ describe('dispatch is total over the payload vocabulary', () => {
     const source = await seasonFixture();
     const payload = {
       kind: 'driver-standings',
+      round: 1,
       standings: [
         { ...source.driverStandings[0]!, position: 0 },
         { ...source.driverStandings[1]!, points: Number.NaN },
@@ -101,6 +102,55 @@ describe('dispatch is total over the payload vocabulary', () => {
     expect(
       validateCoordinatedPayload(payload, 'payload').map((issue) => issue.path),
     ).toEqual(['payload.standings[0].position', 'payload.standings[1].points']);
+  });
+
+  describe('the internal standings round (ADR 0023 A3.5)', () => {
+    const table = (round: unknown, withRound = true): CoordinatedPayload =>
+      ({
+        kind: 'constructor-standings',
+        ...(withRound ? { round } : {}),
+        standings: [],
+      }) as unknown as CoordinatedPayload;
+
+    const codes = (payload: CoordinatedPayload) =>
+      validateCoordinatedPayload(payload).map(({ path, code }) => ({
+        path,
+        code,
+      }));
+
+    it('admits a positive round and the stated absence of one', () => {
+      expect(validateCoordinatedPayload(table(1))).toEqual([]);
+      expect(validateCoordinatedPayload(table(24))).toEqual([]);
+      expect(validateCoordinatedPayload(table(null))).toEqual([]);
+    });
+
+    it.each([
+      ['zero', 0, 'range'],
+      ['a negative round', -1, 'range'],
+      ['a fractional round', 1.5, 'range'],
+      ['an unsafe integer', Number.MAX_SAFE_INTEGER + 1, 'range'],
+      ['NaN', Number.NaN, 'range'],
+      ['a string', '3', 'range'],
+    ])('refuses %s', (_label, round, code) => {
+      expect(codes(table(round))).toEqual([{ path: 'payload.round', code }]);
+    });
+
+    it('refuses a table whose round is missing rather than stated absent', () => {
+      expect(codes(table(undefined, false))).toEqual([
+        { path: 'payload.round', code: 'missing' },
+      ]);
+    });
+
+    it('still refuses a null event-schedule round', () => {
+      const schedule = {
+        kind: 'event-schedule',
+        round: null,
+        sessions: [],
+      } as unknown as CoordinatedPayload;
+      expect(codes(schedule)).toEqual([
+        { path: 'payload.round', code: 'null' },
+      ]);
+    });
   });
 });
 

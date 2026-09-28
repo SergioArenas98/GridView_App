@@ -46,6 +46,7 @@ import {
   raceResource,
   seasonFixture,
   seasonResources,
+  standingsRoundFor,
   testOnlyProvisionalBound,
 } from './support';
 
@@ -291,7 +292,7 @@ describe('a reused adapter buffer cannot change an already-classified contributi
       return {
         outcome: 'candidate',
         attempts: [attempt(`j-${sequence}`)],
-        payload: { kind: request.resource.kind, standings: buffer },
+        payload: { kind: request.resource.kind, round: 1, standings: buffer },
       } as unknown as ProviderResourceOutcome;
     });
 
@@ -385,6 +386,7 @@ describe('a stateful accessor cannot answer one value to validation and another 
     let reads = 0;
     const payload = {
       kind: 'driver-standings',
+      round: 1,
       get standings(): unknown {
         reads += 1;
         return reads <= 1 ? valid : invalid;
@@ -419,6 +421,7 @@ describe('a stateful accessor cannot answer one value to validation and another 
     let reads = 0;
     const standingsPayload = {
       kind: 'driver-standings',
+      round: standingsRoundFor(source),
       get standings(): unknown {
         reads += 1;
         return reads <= 1 ? valid : invalid;
@@ -610,6 +613,7 @@ describe('ordinary payloads survive detachment unchanged', () => {
     // the point of the closed rule, and is covered by the contract suites.
     const payload = {
       kind: 'driver-standings',
+      round: 1,
       standings: [
         {
           season: SEASON,
@@ -659,7 +663,7 @@ describe('ordinary payloads survive detachment unchanged', () => {
   });
 
   it('accepts an empty but valid collection', async () => {
-    const payload = { kind: 'driver-standings', standings: [] };
+    const payload = { kind: 'driver-standings', round: null, standings: [] };
     const run = await coordinate([payloadPort(payload)], [DRIVER_STANDINGS]);
     expect(run.resources[0]?.selection.outcome).toBe('selected');
     expect(selectedPayload(run, DRIVER_STANDINGS)).toEqual(payload);

@@ -59,6 +59,30 @@ function wrapper(...fields: readonly Field[]): Check {
   return objectOf([{ key: 'kind', check: kindOnly }, ...fields]);
 }
 
+/** A strictly positive safe integer, or `null` when the value is `nullable`. */
+function roundCheck(nullable: boolean): Check {
+  return (value, path, collector) => {
+    if (value === null) {
+      if (!nullable) collector.add(path, 'null');
+      return;
+    }
+    if (
+      typeof value !== 'number' ||
+      !Number.isSafeInteger(value) ||
+      value < 1
+    ) {
+      collector.add(path, 'range');
+    }
+  };
+}
+
+/**
+ * A standings contribution's internal round (ADR 0023 A3.5). `null` is the
+ * source's own "no round stated"; whether it may stand beside the table's rows
+ * is season assembly's decision, not a contract rule.
+ */
+const standingsRound: Field = { key: 'round', check: roundCheck(true) };
+
 const checks: Record<CoordinatedPayload['kind'], Check> = {
   'season-calendar': wrapper({ key: 'events', check: arrayOf(grandPrixCheck) }),
   'season-participants': wrapper(
@@ -68,29 +92,18 @@ const checks: Record<CoordinatedPayload['kind'], Check> = {
     { key: 'constructorEntries', check: arrayOf(constructorSeasonEntryCheck) },
   ),
   'season-circuits': wrapper({ key: 'circuits', check: arrayOf(circuitCheck) }),
-  'driver-standings': wrapper({
+  'driver-standings': wrapper(standingsRound, {
     key: 'standings',
     check: arrayOf(driverStandingCheck),
   }),
-  'constructor-standings': wrapper({
+  'constructor-standings': wrapper(standingsRound, {
     key: 'standings',
     check: arrayOf(constructorStandingCheck),
   }),
   'event-schedule': wrapper(
     // `round` is bound to the request by `payloadMatchesResource`; its value
     // rule still belongs to the contract.
-    {
-      key: 'round',
-      check: (value, path, collector) => {
-        if (
-          typeof value !== 'number' ||
-          !Number.isSafeInteger(value) ||
-          value < 1
-        ) {
-          collector.add(path, value === null ? 'null' : 'range');
-        }
-      },
-    },
+    { key: 'round', check: roundCheck(false) },
     { key: 'sessions', check: arrayOf(sessionCheck) },
   ),
   'session-classification': wrapper({ key: 'result', check: raceResultCheck }),

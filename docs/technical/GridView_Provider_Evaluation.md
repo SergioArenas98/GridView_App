@@ -47,6 +47,7 @@
 | 1.13 | 2026-09-26 | **Phase 9B: season assembly derives `hasResults` (ADR 0022 amendment A7).** No provider-evaluation conclusion changes. The dormant coordination path now sets each event's `hasResults` from its selected `final` or `provisional` race classifications (Implementation Plan §14.0.25). No provider was contacted, no evidence was captured and `PROVIDER_MODE` still admits exactly `mock` and `none`. |
 | 1.15 | 2026-09-27 | **Phase 9B: the §10.4.1 state machine and the event-aware planner are implemented as pure, dormant policy** (Implementation Plan §14.0.31; [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) C2 note). They are not connected to any runtime, and no provider or Cloudflare resource was contacted. Owner decisions O-3, O-4, O-5(a) and O-7 (a planning target only) are recorded. O-3 raises the modelled Jolpica cost of a race check from 3 requests to `6 + k + d` (§11.1 note). The weekly eight-slot sweep of §10.4.1 is subsumed by full-backfill publication runs. `PROVIDER_MODE` still admits exactly `mock` and `none`, and G5 and G9 are not complete. |
 | 1.16 | 2026-09-28 | **Phase 9B: the minimum Jolpica attribution surfaces exist** (§7.6.2 note; Implementation Plan §14.0.32). A repository-owned, per-source record (`content/attribution/data-sources.json`, version `data-sources-v1`) credits Jolpica F1 with a link to the project, its terms, CC BY-NC-SA 4.0 and its link, the modification notice, a non-endorsement notice and Jolpica's warranty-disclaimer notice; the Flutter Acknowledgements screen renders it and the OpenAPI `info` carries the equivalent notice, replacing the "GridView-owned snapshots" wording and the blanket "Proprietary" licence label (§7.6.4). Jolpica is recorded as **dormant**, so neither surface claims that provider data is served. OpenF1 is not credited, because no OpenF1 adapter exists; its entry is added with its adapter. Jolpica's `TERMS.md` was re-read on 2026-09-28 and is unchanged since 27 August 2025. **No Jolpica API request was made**, and no provider or Cloudflare resource was contacted. This prepares the surfaces only: it is not a legal conclusion about commercial use, it does not complete the §15.3 licence-compliance sweep, and it does not authorize staging activation. Owner decision **O-9** still requires an explicit activation decision. |
+| 1.17 | 2026-09-28 | **Phase 9B: standings round coherence is implemented, dormant** ([ADR 0023 A3.5](../adr/0023-multi-source-provider-coordination.md#a35---standings-publication-rules) item 1; Implementation Plan §14.0.33). No provider-evaluation conclusion changes. §8.12 keeps its dated account and gains a note; §10.1's standings note now states that the port carries the round internally, that round coherence is decided, and that the port is bundled but constructed in no committed configuration and has made no provider request. The read-only staging predecessor gate is not implemented and still blocks staging activation. The empty pre-season response is unobserved. No provider or Cloudflare resource was contacted. |
 
 ---
 
@@ -1634,6 +1635,18 @@ unobserved. Whether a published standings table must be bound to the
 classified rounds published beside it, and how an empty table is kept from
 replacing a non-empty one, are open activation questions (A3.5).
 
+*(Note, 2026-09-28. The paragraph above records what was open on 2026-09-27,
+and is kept as written. Round coherence is now decided in
+[ADR 0023 A3.5](../adr/0023-multi-source-provider-coordination.md#a35---standings-publication-rules)
+item 1 and implemented, dormant, by PR #55 (Implementation Plan §14.0.33). A
+candidate season carries standings only when both tables are bound to the
+latest selected, classified race round. Before any race is classified, both
+must be empty and state no round. Anything else withholds the whole candidate
+as `standings-round-incoherent`. Empty replacement follows from that rule and
+the D14 guard only while the active predecessor is itself coherent. The
+read-only staging gate that must verify this is not implemented. The empty
+pre-season shape is still unobserved, and no provider request was made.)*
+
 ---
 
 ## 9. Cost and quota evidence
@@ -1773,14 +1786,28 @@ provider mode, binding or route was created or changed.**
 > Jolpica limiter. It normalizes each table under the curator decisions S-1 to
 > S-13 of
 > [ADR 0023 amendment A3](../adr/0023-multi-source-provider-coordination.md#amendment-a3---jolpica-standings-normalization).
-> It validates the provider's round and drops it. It publishes no team for a
+> It validates the provider's round and carries it internally on the
+> coordinated payload for season assembly; no public field carries it (S-2,
+> as amended on 2026-09-28). It publishes no team for a
 > driver listing several constructors, and never apportions points or
 > derives podiums. `provisional: false` is a curator policy for the
 > reconciled role. **The evidence behind it is the private §8.12 capture, and
-> its tests are fixture-only.** It is dormant, registered with no
-> coordinator and absent from every Worker bundle. Whether standings must be
-> bound to the classified rounds published beside them, and how an empty
-> table is kept from replacing a non-empty one, are open (A3.5).
+> its tests are fixture-only.** It is **bundled but dormant**. Since the
+> coordinated runtime composition (Implementation Plan §14.0.29) it is in
+> the Worker bundle, routed by `JolpicaResourcePort`. It is constructed only
+> when `PROVIDER_MODE` is `coordinated` and every coordinated dependency is
+> bound. No committed environment selects that mode (staging `mock`,
+> production `none`), and the reconciliation ledger has no binding, so a
+> coordinated run stops at `ledger-unbound`. The port has made **no provider
+> request**. *(Updated 2026-09-28.)* Round coherence is decided and
+> implemented, dormant (A3.5 item 1; Implementation Plan §14.0.33): a
+> candidate carries standings only when both tables are bound to the latest
+> selected, classified race round, and before any classified race only as
+> empty tables stating no round. Otherwise it is withheld as
+> `standings-round-incoherent`. Empty replacement follows from that rule and
+> D14 only when the active predecessor is itself coherent. The read-only
+> staging gate that must verify this is **not implemented**, and it blocks
+> staging activation. The pre-season shape remains unobserved.
 
 Every stored record is in exactly one of two states: **provisional** (last
 written from OpenF1) or **reconciled** (last written from Jolpica). The public

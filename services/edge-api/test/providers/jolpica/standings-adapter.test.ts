@@ -316,16 +316,34 @@ describe('driver standings', () => {
     for (const row of plain) expect(row.provisional).toBe(false);
   });
 
-  it('validates the round, then drops it from the payload (S-2)', async () => {
+  it('validates the round and carries it internally, never on a standing (S-2, A3.5)', async () => {
     const at9 = await fetchStandings(DRIVERS);
     const at15 = await withDriverRows(() => undefined, {
       round: '15',
       listRound: '15',
     });
+    const constructorsAt15 = await withConstructorBody(
+      constructorStandingsEnvelope(baseConstructorRows(), {
+        round: '15',
+        listRound: '15',
+      }),
+    );
     if (at9.outcome.outcome !== 'candidate') throw new Error('no candidate');
+    if (at15.outcome.outcome !== 'candidate') throw new Error('no candidate');
+    if (constructorsAt15.outcome.outcome !== 'candidate') {
+      throw new Error('no candidate');
+    }
 
     expect(driverTable(at15.outcome)).toEqual(driverTable(at9.outcome));
-    expect(JSON.stringify(at9.outcome.payload)).not.toContain('round');
+    expect(at9.outcome.payload).toMatchObject({ round: 9 });
+    expect(at15.outcome.payload).toMatchObject({ round: 15 });
+    expect(constructorsAt15.outcome.payload).toMatchObject({ round: 15 });
+    // The round rides beside the table only: no public standing carries one.
+    expect(JSON.stringify(driverTable(at15.outcome))).not.toContain('round');
+    expect(
+      JSON.stringify(constructorTable(constructorsAt15.outcome)),
+    ).not.toContain('round');
+    expect(validateCoordinatedPayload(at15.outcome.payload)).toEqual([]);
   });
 
   it('preserves equal points at distinct positions in provider order', async () => {
@@ -613,6 +631,18 @@ describe('an empty standings answer (S-9, unverified shape)', () => {
       emptyStandingsEnvelope('DriverStandings', { round: undefined }),
     );
     expect(driverTable(absent.outcome)).toEqual([]);
+    // An absent round is carried as absent: nothing stands in for it.
+    if (absent.outcome.outcome !== 'candidate') throw new Error('no candidate');
+    expect(absent.outcome.payload).toMatchObject({ round: null });
+    expect(validateCoordinatedPayload(absent.outcome.payload)).toEqual([]);
+
+    // A stated table round on the empty shape is carried exactly as stated;
+    // whether it may be published is season assembly's decision.
+    const stated = await withConstructorBody(
+      emptyStandingsEnvelope('ConstructorStandings', { round: '3' }),
+    );
+    if (stated.outcome.outcome !== 'candidate') throw new Error('no candidate');
+    expect(stated.outcome.payload).toMatchObject({ round: 3, standings: [] });
 
     expectInvalid(
       await withDriverBody(
