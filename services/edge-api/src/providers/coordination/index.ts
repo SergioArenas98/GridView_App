@@ -40,8 +40,10 @@ export {
   COORDINATED_PUBLICATION_OPERATION,
 } from './coordinated-publication';
 export type {
+  CandidatePreparation,
   CoordinatedPublicationOutcome,
   CoordinatedSeasonPublicationOptions,
+  PreparedSeasonCandidate,
 } from './coordinated-publication';
 
 export {

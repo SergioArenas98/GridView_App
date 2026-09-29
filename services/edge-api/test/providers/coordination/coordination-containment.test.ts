@@ -398,11 +398,14 @@ describe('the coordination seam is dormant', () => {
       )
       .sort();
 
-    // Declared once, classified once by the exhaustive synchronization switch,
-    // and produced only by the service.
+    // Declared once, classified by the exhaustive synchronization switch and
+    // by the dormant coordinated outcome commit (which records it as a
+    // season's block reason), and produced only by the service.
     expect(emitters).toEqual([
       'publication/publisher.ts',
       'publication/sequenced/service.ts',
+      'sync/coordinated/ledger/model.ts',
+      'sync/coordinated/outcome/decisions.ts',
       'sync/sync-service.ts',
     ]);
     const service = readFileSync(

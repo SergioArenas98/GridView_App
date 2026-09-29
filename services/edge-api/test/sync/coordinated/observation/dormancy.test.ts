@@ -1,10 +1,11 @@
 /**
- * The observation orchestration is implemented, injected and not connected.
+ * The coordinated orchestration is implemented, injected and not connected.
  *
  * No Worker module imports it, the coordinated entry point still refuses every
  * run as `ledger-unbound`, it reaches the provider only through the composed
- * runtime, and it has no path to publication. Bundle reachability is proven
- * by the bundler in `test/providers/provider-neutrality.test.ts`.
+ * runtime, and it reaches publication only through the outcome half
+ * (`../outcome/`, whose own dormancy test pins how). Bundle reachability is
+ * proven by the bundler in `test/providers/provider-neutrality.test.ts`.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -58,6 +59,7 @@ describe('the observation orchestration is not connected', () => {
       'storage/types.ts',
       'sync/coordinated/composition.ts',
       'sync/coordinated/ledger/model.ts',
+      'sync/coordinated/outcome/index.ts',
       'sync/coordinated/policy/index.ts',
     ]);
   });
@@ -74,12 +76,14 @@ describe('the observation orchestration is not connected', () => {
     }
   });
 
-  it('has no path to publication', () => {
+  it('reaches publication only through the outcome half', () => {
     for (const file of observationFiles()) {
       const code = readSource(file);
       expect(code, file).not.toMatch(
-        /publishGuarded|CoordinatedSeasonPublication|\.publication\b|\.(prepare|finalize|cancel|seedCutover|activateCutover)\(|writeVersionedDocument/,
+        /publishGuarded|CoordinatedSeasonPublication|runtime\.publication|prepareCandidate|publishCandidate|\.(prepare|finalize|cancel|seedCutover|activateCutover)\(|writeVersionedDocument/,
       );
     }
+    const observe = readSource('sync/coordinated/observation/observe.ts');
+    expect(observe.match(/publishUnderLease\(/g)).toHaveLength(1);
   });
 });

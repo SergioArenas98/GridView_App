@@ -92,6 +92,9 @@ export function seasonRecord(
     },
     publicationDueAt: null,
     calendarAnchors: null,
+    lastOrderingInput: null,
+    lastPublication: null,
+    publicationDisposition: null,
     ...overrides,
   } as SeasonRecord;
 }

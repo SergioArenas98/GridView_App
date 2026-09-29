@@ -301,8 +301,15 @@ export async function sequencedContext(
      * `uninitialized`. The legacy publication of the seed happens regardless.
      */
     cutover?: 'active' | 'seeded' | 'none';
+    /**
+     * The seed's release-wide ordering input and high-water mark. Defaults to
+     * `SEED_ORDERING_INPUT`; a test whose candidates are ordered earlier in
+     * the year seeds behind them instead.
+     */
+    seedOrderingInput?: string;
   } = {},
 ): Promise<SequencedContext> {
+  const seedOrderingInput = options.seedOrderingInput ?? SEED_ORDERING_INPUT;
   const clock = new FixedClock(new Date('2026-07-20T12:00:00.000Z'));
   const storage = options.storage ?? new MemorySnapshotStorage();
   const logger = new CapturingLogger();
@@ -316,7 +323,7 @@ export async function sequencedContext(
 
   // 1. An initial legacy publication supplies real documents and an inventory.
   const generatedSeed = await generatedSet(clock, SEED_VERSION, {
-    sourceUpdatedAt: SEED_ORDERING_INPUT,
+    sourceUpdatedAt: seedOrderingInput,
     contentVersion: '2026.07.10.1',
   });
   const seedSet = options.seedTransform
@@ -378,9 +385,13 @@ export async function sequencedContext(
     cutoverFingerprint: CUTOVER_FINGERPRINT,
     activeVersion: SEED_VERSION,
     previousVersion: null,
-    committedSourceOrderingInput: SEED_ORDERING_INPUT,
-    perKeyState: await perKeyStateFor(seedDocuments, SEED_HIGH_WATER_MARK),
-    seasonSnapshotObservedAtHighWaterMark: SEED_HIGH_WATER_MARK,
+    committedSourceOrderingInput: seedOrderingInput,
+    perKeyState: await perKeyStateFor(
+      seedDocuments,
+      options.seedOrderingInput ?? SEED_HIGH_WATER_MARK,
+    ),
+    seasonSnapshotObservedAtHighWaterMark:
+      options.seedOrderingInput ?? SEED_HIGH_WATER_MARK,
   };
   const cutover = options.cutover ?? 'active';
   if (cutover !== 'none') {

@@ -43,6 +43,21 @@ afterEach(() => {
 });
 
 const iso = (millis: number) => new Date(millis).toISOString();
+
+/**
+ * The mock baseline the sequencer is seeded from classifies round 12, so
+ * every candidate these observation cases build is refused by the D14 guard
+ * and held for an operator: nothing is published. Publishing is exercised in
+ * `../outcome/`.
+ */
+const SEED = 'v-seed-legacy';
+const refusedByD14 = {
+  outcome: 'not-applied',
+  publicationStatus: 'rejected',
+  reason: 'guard-round-coverage-regression',
+  publishCalls: 1,
+  next: 'blocked',
+} as const;
 const later = (at: string, millis: number) => iso(Date.parse(at) + millis);
 
 /** Bootstrap and the first season-level publication run, both pre-season. */
@@ -138,7 +153,7 @@ describe('the first calendar bootstrap', () => {
       plan: 'publication',
       providerRequests: 6,
       events: { 'refresh.first-observation': 4, 'refresh.unchanged': 1 },
-      publication: 'not-attempted',
+      publication: refusedByD14,
     });
     expect(run.requests).toEqual(seasonPaths);
     expect(run.reservations).toBe(6);
@@ -155,7 +170,14 @@ describe('the first calendar bootstrap', () => {
     expect(season.refresh['driver-standings'].nextDueAt).toBe(
       later(observed, 7 * DAY),
     );
-    expect(harness.publishGuarded).not.toHaveBeenCalled();
+    // One guarded publication, refused: held for an operator, not retried.
+    expect(run.publishCalls).toBe(1);
+    expect(harness.activeVersion()).toBe(SEED);
+    expect(season.publicationDisposition).toEqual({
+      state: 'blocked',
+      since: expect.any(String),
+      reason: 'guard-round-coverage-regression',
+    });
   });
 });
 
@@ -228,7 +250,7 @@ describe('a first classification', () => {
       plan: 'publication',
       providerRequests: 7,
       events: { 'classification.first-write': 1 },
-      publication: 'not-attempted',
+      publication: refusedByD14,
     });
     expect(run.requests).toEqual([...seasonPaths, paths.results(1)]);
     expect(run.reservations).toBe(7);
@@ -249,7 +271,8 @@ describe('a first classification', () => {
     });
     // No other round is eligible yet, so none is recorded.
     expect((await harness.snapshot()).classifications).toHaveLength(1);
-    expect(harness.publishGuarded).not.toHaveBeenCalled();
+    expect(run.publishCalls).toBe(1);
+    expect(harness.activeVersion()).toBe(SEED);
   });
 });
 
@@ -320,7 +343,8 @@ describe('corroboration of an unsettled change (D2.1)', () => {
       terminalReason: 'settled',
       nextDueAt: null,
     });
-    expect(harness.publishGuarded).not.toHaveBeenCalled();
+    // Publication was attempted and refused at every publication run.
+    expect(harness.activeVersion()).toBe(SEED);
   });
 });
 
@@ -505,7 +529,12 @@ describe('a late correction to a settled round (D2.5, D2.8)', () => {
         },
       ],
     });
-    expect(harness.publishGuarded).not.toHaveBeenCalled();
+    // The staged correction withholds the season for an operator (O-5(a)).
+    expect(harness.activeVersion()).toBe(SEED);
+    expect((await harness.season()).publicationDisposition).toMatchObject({
+      state: 'blocked',
+      reason: 'classification-staged',
+    });
   });
 });
 

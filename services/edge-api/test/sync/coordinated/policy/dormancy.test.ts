@@ -16,16 +16,22 @@ const policyFiles = () =>
   sourceFiles().filter((file) => file.startsWith(policyDir));
 
 describe('the reconciliation policy is not connected', () => {
-  it('is imported only by the dormant observation orchestration', () => {
+  it('is imported only by the dormant orchestration', () => {
     // Every relative import is resolved, so an import spelled from a sibling
     // directory (`../policy`) is found too. The observation orchestration is
-    // itself imported by no Worker module (its own dormancy test).
+    // itself imported by no Worker module (its own dormancy test), and the
+    // outcome half only by it.
     expect(importersOf(policyDir)).toEqual([
       'sync/coordinated/observation/observe.ts',
       'sync/coordinated/observation/outcomes.ts',
       'sync/coordinated/observation/revisions.ts',
+      'sync/coordinated/outcome/decisions.ts',
+      'sync/coordinated/outcome/publish.ts',
     ]);
     expect(importersOf('sync/coordinated/observation/')).toEqual([]);
+    expect(importersOf('sync/coordinated/outcome/')).toEqual([
+      'sync/coordinated/observation/observe.ts',
+    ]);
     expect(resolveReconciliationLedger()).toBeNull();
   });
 

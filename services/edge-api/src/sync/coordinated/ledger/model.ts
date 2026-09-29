@@ -12,6 +12,8 @@
  * stored: the class has never been registered, bound or provisioned in any
  * environment, so no reader of the earlier shape exists. The refinement added
  * `ClassificationRecord.contentRevision` and `SeasonRecord.calendarAnchors`.
+ * PR-C4 refined it again, on the same grounds, with the season's publication
+ * state: `lastOrderingInput`, `lastPublication` and `publicationDisposition`.
  *
  * Every stored value is bounded and closed: identifiers, canonical UTC
  * instants, bounded counters, closed states and `sha256:` revision hashes.
@@ -173,6 +175,79 @@ export interface CalendarAnchor {
   readonly anchorKind: AnchorKind;
 }
 
+/**
+ * The last release the coordinated runtime itself published for a season, or
+ * confirmed unchanged (runtime activation decision O-12).
+ *
+ * `digest` is the candidate digest - sorted document names and snapshot
+ * revisions - and `activeVersion` the release that carried it. Recorded by an
+ * outcome commit from the sequencer's own answer, never by reconciliation, and
+ * never a substitute for the authority: the no-change gate skips only while
+ * the authority still serves exactly `activeVersion`.
+ */
+export interface LastPublication {
+  readonly digest: RevisionHash;
+  readonly activeVersion: string;
+  readonly publishedAt: LedgerInstant;
+  /** The last run that found the candidate unchanged, or published it. */
+  readonly confirmedAt: LedgerInstant;
+}
+
+/**
+ * Why a season's publication is held for an operator rather than retried on
+ * a timer. Closed and bounded: withholding or refusal reasons that retrying
+ * cannot change.
+ */
+export const publicationBlockReasons = [
+  /** A staged correction awaits disposition (O-5(a)). */
+  'classification-staged',
+  /** A competing correction locked a record for review. */
+  'classification-review-locked',
+  /** ADR 0026 D14: the candidate drops a classified round. */
+  'guard-round-coverage-regression',
+  /** ADR 0026 D15: the candidate drops a participation fact. */
+  'guard-participation-fact-removed',
+  /** ADR 0026 D15: the candidate names another constructor for a fact. */
+  'guard-constructor-replaced',
+  'guard-candidate-invalid',
+  'guard-predecessor-invalid',
+  /** The season is not active on the sequencer. */
+  'guard-authority-not-sequenced',
+  /** A generated document failed contract validation. */
+  'contract-validation',
+  /** The generator could not build the candidate. */
+  'generation-failed',
+  /** A reference between curated and observed identities did not resolve. */
+  'inconsistent-references',
+  /** No curated season metadata exists for the season (O-14). */
+  'metadata-unavailable',
+] as const;
+export type PublicationBlockReason = (typeof publicationBlockReasons)[number];
+
+/**
+ * A season's unfinished or held publication, bounded to one slot.
+ *
+ * - `publishing`: a publication run committed its observations and has not
+ *   committed its outcome. `digest` and `orderingInput` are set, together,
+ *   only once the run reserved its ordering input immediately before calling
+ *   the guarded publisher; before that the run never reached it. The next run
+ *   resolves this slot against the authority before planning anything.
+ * - `blocked`: publication is held for operator action; no due time is set
+ *   for it, so it is never retried on a timer.
+ */
+export type PublicationDisposition =
+  | {
+      readonly state: 'publishing';
+      readonly since: LedgerInstant;
+      readonly digest: RevisionHash | null;
+      readonly orderingInput: LedgerInstant | null;
+    }
+  | {
+      readonly state: 'blocked';
+      readonly since: LedgerInstant;
+      readonly reason: PublicationBlockReason;
+    };
+
 /** One season's refresh state, key `season:{season}`. */
 export interface SeasonRecord {
   readonly schemaVersion: typeof LEDGER_SCHEMA_VERSION;
@@ -186,6 +261,15 @@ export interface SeasonRecord {
    * schedules from these, never from a calendar read in the same run.
    */
   readonly calendarAnchors: readonly CalendarAnchor[] | null;
+  /**
+   * The last release-wide `sourceOrderingInput` this season reserved (O-13).
+   * The store refuses any write that does not strictly increase it, so two
+   * reservations can never share or reverse an ordering value, whatever the
+   * run's clock did.
+   */
+  readonly lastOrderingInput: LedgerInstant | null;
+  readonly lastPublication: LastPublication | null;
+  readonly publicationDisposition: PublicationDisposition | null;
 }
 
 /**
@@ -286,6 +370,7 @@ export const ledgerRejectionReasons = [
   'backlog-duplicate',
   'backlog-entry-missing',
   'backlog-orphan',
+  'ordering-input-regression',
   'state-corrupt',
 ] as const;
 export type LedgerRejectionReason = (typeof ledgerRejectionReasons)[number];

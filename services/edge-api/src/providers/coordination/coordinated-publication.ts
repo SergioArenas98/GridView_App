@@ -18,7 +18,10 @@
  * - The coordinator never writes an active pointer. The sequencer's `finalize`
  *   is the commit point, and it belongs to the sequenced service.
  * - Publication happens **at most once** for one completed run: one call site,
- *   no loop, no retry, no second attempt on failure.
+ *   no loop, no retry, no second attempt on failure. A caller that inspects
+ *   the candidate first - the no-change gate - prepares it once with
+ *   `prepareCandidate` and hands that same candidate to `publishCandidate`,
+ *   which refuses a candidate it has already handed over.
  * - An incomplete, cancelled or rejected run does not reach publication at
  *   all, so it cannot replace the active release.
  * - There is **no legacy fallback**. A season whose sequencer authority is not
@@ -46,7 +49,10 @@
 import type { Logger } from '../../logging/logger';
 import type { GuardedPublicationCommands } from '../../publication/commands';
 import type { PublicationResult } from '../../publication/publisher';
-import { generateSnapshotSet } from '../../snapshots/generator';
+import {
+  generateSnapshotSet,
+  type GeneratedSnapshotSet,
+} from '../../snapshots/generator';
 import type { CoordinationRun } from './outcome';
 import type { CoordinatedResource } from './resource';
 import {
@@ -75,9 +81,22 @@ export interface CoordinatedSeasonPublicationOptions {
   readonly logger: Logger;
 }
 
+/** A generated candidate, ready for exactly one guarded publication. */
+export interface PreparedSeasonCandidate {
+  readonly outcome: 'prepared';
+  readonly season: number;
+  readonly set: GeneratedSnapshotSet;
+}
+
+export type CandidatePreparation =
+  | PreparedSeasonCandidate
+  | Extract<CoordinatedPublicationOutcome, { readonly outcome: 'withheld' }>;
+
 export class CoordinatedSeasonPublication {
   private readonly commands: GuardedPublicationCommands;
   private readonly logger: Logger;
+  /** Candidates prepared here and not yet handed over. */
+  private readonly prepared = new WeakSet<PreparedSeasonCandidate>();
 
   constructor(options: CoordinatedSeasonPublicationOptions) {
     this.commands = options.commands;
@@ -85,7 +104,9 @@ export class CoordinatedSeasonPublication {
   }
 
   /**
-   * Publishes a completed run, or withholds it with a bounded reason.
+   * Publishes a completed run, or withholds it with a bounded reason: exactly
+   * `prepareCandidate` followed, for a prepared candidate, by
+   * `publishCandidate`.
    *
    * `generatedAt` and `version` are supplied by the caller; nothing about
    * publication identity is invented by coordination. The sequencer allocates
@@ -98,6 +119,31 @@ export class CoordinatedSeasonPublication {
     generatedAt: string,
     version: string,
   ): Promise<CoordinatedPublicationOutcome> {
+    const candidate = this.prepareCandidate(
+      run,
+      metadata,
+      generatedAt,
+      version,
+    );
+    if (candidate.outcome === 'withheld') return candidate;
+    return this.publishCandidate(candidate);
+  }
+
+  /**
+   * Assembles and generates the candidate for a completed run, once, without
+   * publishing it, or withholds it with a bounded reason.
+   *
+   * This is the only assembly and generation step coordinated publication
+   * has: a caller that must inspect the candidate before deciding whether to
+   * publish it - the no-change gate - holds the prepared set and hands that
+   * same set to `publishCandidate`, never a second one.
+   */
+  prepareCandidate(
+    run: CoordinationRun,
+    metadata: SeasonSnapshotMetadata,
+    generatedAt: string,
+    version: string,
+  ): CandidatePreparation {
     const assembly = assembleSeasonSource(run, metadata);
     if (!assembly.complete) {
       this.logger.warn({
@@ -130,7 +176,7 @@ export class CoordinatedSeasonPublication {
     // inputs it cannot vouch for, and this boundary promises an outcome rather
     // than a thrown error. The thrown value is never read: it can embed a
     // payload, an identifier or a stack.
-    let set;
+    let set: GeneratedSnapshotSet;
     try {
       set = generateSnapshotSet(assembly.source, generatedAt, version);
     } catch {
@@ -150,6 +196,30 @@ export class CoordinatedSeasonPublication {
         relations: [],
       };
     }
+    const candidate: PreparedSeasonCandidate = Object.freeze({
+      outcome: 'prepared',
+      season: run.season,
+      set,
+    });
+    this.prepared.add(candidate);
+    return candidate;
+  }
+
+  /**
+   * Hands one prepared candidate to the guarded sequenced publication,
+   * **at most once**. A candidate this bridge did not prepare, or one already
+   * handed over, is a programmer defect and throws before anything is sent.
+   */
+  async publishCandidate(
+    candidate: PreparedSeasonCandidate,
+  ): Promise<Extract<CoordinatedPublicationOutcome, { outcome: 'published' }>> {
+    if (!this.prepared.delete(candidate)) {
+      throw new TypeError(
+        'A coordinated candidate is published at most once, by the bridge that prepared it.',
+      );
+    }
+    const { set } = candidate;
+    const season = candidate.season;
 
     // Past this point the sequenced service owns the result, including whether
     // the commit point was crossed. Its outcomes are returned unchanged: a
@@ -160,7 +230,7 @@ export class CoordinatedSeasonPublication {
     const result = await this.commands.publishGuarded(set);
     const event = {
       operation: COORDINATED_PUBLICATION_OPERATION,
-      season: run.season,
+      season,
       releaseVersion: result.version,
       coordinationOutcome: 'published',
       publicationStatus: result.status,
