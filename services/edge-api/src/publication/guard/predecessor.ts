@@ -98,7 +98,7 @@ export async function readPredecessorGuard(
  * version its revision is computed over. Anything else cannot have produced a
  * committed revision, so it is invalid rather than hashed.
  */
-function isEnvelopeFor(
+export function isEnvelopeFor(
   document: StoredSnapshot,
   name: SnapshotDocumentName,
 ): boolean {

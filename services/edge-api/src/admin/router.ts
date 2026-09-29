@@ -2,6 +2,7 @@ import type { CachePurgeAdapter } from '../cache/purge';
 import type { Env } from '../config/environment';
 import { jsonResponse } from '../http/envelope';
 import type { Logger } from '../logging/logger';
+import type { PublicationAuthority } from '../publication/authority';
 import type { PublicationCommands } from '../publication/commands';
 import type { CutoverPreparationService } from '../publication/cutover/service';
 import type { CoordinatedSyncOutcome } from '../sync/coordinated/run';
@@ -18,6 +19,10 @@ import type {
 } from '../storage/types';
 import { adminAuthOk, unauthorized } from './auth';
 import { handleCutoverRequest, isCutoverPath } from './cutover-routes';
+import {
+  handleStandingsPredecessorRequest,
+  standingsPredecessorPath,
+} from './standings-predecessor-route';
 
 /**
  * How the admin sync routes synchronize, fixed by `PROVIDER_MODE`.
@@ -54,6 +59,12 @@ interface AdminContext {
    * `SEASON_PUBLICATION_AUTHORITY` remains unset everywhere regardless.
    */
   cutover: CutoverPreparationService;
+  /**
+   * The resolved season publication authority, read only by the A3.5 staging
+   * predecessor gate. Every other route reaches it through `publisher` or
+   * `cutover`.
+   */
+  authority: PublicationAuthority;
 }
 
 export async function handleAdminRequest(
@@ -74,6 +85,10 @@ export async function handleAdminRequest(
       context.cutover,
       context.requestId,
     );
+  }
+  // Also names its season explicitly, and is read-only.
+  if (url.pathname === standingsPredecessorPath) {
+    return handleStandingsPredecessorRequest(request, url, context);
   }
   if (request.method === 'GET') {
     if (url.pathname === '/internal/admin/quota') {
