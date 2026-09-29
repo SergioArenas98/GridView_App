@@ -938,6 +938,165 @@ G5 now plans real runs in injected tests. G9's transitions now run against
 real requests' results there. Neither is in force in any environment, and
 obligations 1 to 4 are unchanged in status.
 
+*(Superseded in part on 2026-09-29, and true when written. The C4 note below
+implements the publication half: `publishGuarded`, the publishability
+decision, O-12, O-13, O-14 and the outcome commit, including re-setting
+`publicationDueAt` on every non-applied path. Runtime activation stays open.)*
+
+The decision above is unchanged.
+
+### C4: the publication half of the runtime orchestration (2026-09-29)
+
+Implementation Plan §14.0.35 records PR-C4. It implements decision pack §6.6
+steps 6 to 9, the **publication half** of the runtime orchestration, in
+`src/sync/coordinated/outcome/`. The injected orchestration in `observation/`
+hands it every publication plan **under the same fenced lease**. It applies
+owner decisions **O-12, O-13 and O-14** as the PR-C4 instruction states them.
+It is still **injected and not connected**: no Worker module imports either
+package, `runCoordinatedSync` is unchanged, and `resolveReconciliationLedger`
+still answers `null`. Every scheduled and manual coordinated run therefore
+still stops at `ledger-unbound`, with zero provider requests. **G5 and G9 are
+not complete.**
+
+**One publication run, under one lease.** Observation plans and nothing-due
+runs behave exactly as C3 left them. A publication plan continues:
+
+1. **Recovery, before planning.** A `publishing` slot left by an earlier run
+   is resolved against the authority (below).
+2. **Observation commit.** The C2 records are committed with the season marked
+   `publishing`, so a run that never records its outcome leaves the
+   publication due rather than lost.
+3. **Publishability** is decided from the *committed* records (O-5(a)). A
+   withheld candidate is never assembled.
+4. **One candidate** is assembled and generated once by the bridge the
+   composition built (`prepareCandidate`). It carries curated metadata (O-14)
+   and a reserved ordering input (O-13).
+5. **The no-change gate (O-12).** The digest is SHA-256 over `gv-candidate/1`
+   and the sorted `(documentName, snapshotRevision)` pairs of the prepared
+   set. These are the per-key revisions `prepare` receives, so `generatedAt`,
+   `sourceUpdatedAt`, `staleAfter`, `fetchedAt` and the release label cannot
+   change it. The guarded publisher is skipped only when the digest equals
+   `lastPublication.digest` **and** a fresh authority read serves exactly
+   `lastPublication.activeVersion`. That read is taken after the candidate
+   exists, never reused from before coordination. An authority that cannot
+   be confirmed never skips.
+6. **Reservation.** One fenced commit writes the ordering input and the digest
+   into the `publishing` slot. Without it, nothing is sent.
+7. **One guarded publication** (`publishCandidate`, at most once per prepared
+   candidate). The D14-D16 guard, prepare CAS and finalize are the existing
+   ones.
+8. **Outcome commit**, with an explicit durable next-due decision. Only then
+   is the lease released.
+
+**The race the gate cannot close.** Another writer can commit between the
+fresh authority read and the outcome commit. The run then records the release
+it confirmed while the authority serves another. The planner treats that
+difference as drift (`releaseDrifted`): the reconciled `activeVersion` differs
+from `lastPublication.activeVersion`, so a publication is due at the next tick
+and the identical candidate is published again. A rollback is handled the
+same way. The work is found at the next tick, not lost. Drift never retries a
+season that is `blocked`.
+
+**Ordering (O-13).** The release-wide `sourceOrderingInput` is the run's
+observation instant, raised to one millisecond past the season's last
+reservation when the clock repeated or went backwards. The ledger refuses any
+season write that does not strictly increase `lastOrderingInput`
+(`ordering-input-regression`), inside the fenced transaction. The per-key
+`sourceUpdatedAt` stays the sequencer-assigned `snapshotObservedAt`,
+unchanged. A reservation stays consumed when its publication is not applied.
+
+**Metadata (O-14).** `contentVersion` is the curated dataset version. It is
+`datasetVersion` of a new curated record,
+`content/seasons/2026/season-metadata.development.json`. `seasonLabel` is the
+same record's label. `attributionVersion` is the `version` of
+`content/attribution/data-sources.json` (`data-sources-v1`), and `mediaVersion`
+is `null`. Nothing comes from a provider response. A season without exactly
+one valid record is `blocked` as `metadata-unavailable`. The record's two
+values (`2026.09.29.1`, and the Domain Model's example label) are
+curator-owned and must be confirmed. `validate:content` checks the record's
+schema and location.
+
+**Every ending makes a durable next-due decision.**
+
+| Ending | Decision |
+|---|---|
+| Applied | `completed`: `lastPublication` records the committed version and the digest |
+| Identical digest, authority confirmed | `completed`: `confirmedAt` only, no release |
+| Cancelled; season resource or classification unavailable; an assembly gap such as `standings-round-incoherent`; a stale or unreadable predecessor; a busy, superseded or refused `prepare`; a storage failure; an older ordering input | `retry`: `publicationDueAt` = now + 1 h |
+| Withheld only as pending, unaccepted or superseded | `cadence`: the earliest selected round's next cadence check, never sooner than now + 1 h |
+| Staged or review-locked record; D14 or D15 refusal; an invalid candidate or predecessor; a season not active on the sequencer; contract validation; `inconsistent-references`; generation failure; no curated metadata | `blocked`: no due time; the disposition holds the closed reason and when it began |
+| `sequencer-authority-unavailable` (the commit is unknown) | `resolve`: the reservation is kept, and the next run decides |
+
+A manual run records completions, blocks and reservations, but moves no due
+time (O-8). A failed or uncertain reservation or outcome commit is reported as
+a run failure at stage `intent` or `outcome`, with what was published. It is
+never a clean success.
+
+**Restart and lost answers.** Every run starts by resolving a `publishing`
+slot against the authority it has just reconciled:
+
+- **No reservation.** The guarded publisher was never reached. The
+  publication is due now.
+- **A reservation.** The reserved ordering input was written into the
+  candidate's immutable `__publication_metadata` sidecar before `finalize`.
+  The authoritative release is this run's exactly when its sidecar carries
+  that value. Then the release is recorded as published with the reserved
+  digest, and nothing is published again. Otherwise the publication is due
+  now, and the next publication run builds a fresh candidate through every
+  guard.
+
+A sidecar that cannot be read fails the run at stage `recovery` before any
+provider request. Nothing is replayed, rebuilt or cleaned up.
+
+**Ledger schema v1**, refined in place a second time, because no instance has
+ever been bound. `SeasonRecord` gains `lastOrderingInput`, `lastPublication`
+(`digest`, `activeVersion`, `publishedAt`, `confirmedAt`) and a bounded
+`publicationDisposition` (`publishing` or `blocked` with a closed reason).
+`publishedRevision` is still written only by reconciliation from the
+authority. An applied release reaches it at the next run. No migration exists
+or is needed.
+
+**Choices made in implementation, not owner decisions:**
+
+1. The observation commit of a publication run marks the season `publishing`.
+2. An unfinished publication is recognized by its sidecar ordering input.
+3. Drift makes a publication due, except while the season is `blocked`. An
+   operator rollback is therefore republished at the next tick. Holding a
+   rollback needs the operator disposition path below.
+4. Withholding that only a cadence check can resolve waits for that check. An
+   hourly retry would repeat six or more requests for nothing.
+5. Every `sequencer-authority-unavailable` answer is treated as an unknown
+   commit, including one raised before `prepare`. Recovery then finds it not
+   published, which is conservative.
+6. `older-source-updated-at` is retried, not blocked.
+7. A crashed manual run's recovery makes a publication due, even though a
+   manual run otherwise moves no due time.
+
+**G5 and G9 now.** Implemented but **dormant** (injected tests only):
+
+- the §6.6 run end to end, from lease to outcome commit;
+- the publishability decision acting on the candidate;
+- O-12, O-13 and O-14;
+- durable next-due decisions on every path;
+- restart recovery;
+- the `blocked` disposition for staged corrections and D14/D15 refusals.
+
+Obligations 3 and 4 run inside that orchestration, and are in force nowhere.
+
+**Still open:**
+
+- the **operator disposition path**: clearing a `blocked` season, disposing
+  of a staged correction and the T12 verification (obligation 2);
+- the **capacity and blocked-season alerts**;
+- the read-only **A3.5 staging predecessor gate**;
+- **O-9**, O-15 and O-16;
+- publication of `sourceObservedAt` as obligation 1 frames it, including its
+  clamp event. The O-13 clamp raises no dedicated event either;
+- **runtime activation**: connecting `runCoordinatedSync`, the ledger
+  `[exports]` entry, binding and resolver, `PROVIDER_MODE = "coordinated"` and
+  the hourly cron;
+- every provisioning and deployment step.
+
 The decision above is unchanged.
 
 ## Reopening conditions
