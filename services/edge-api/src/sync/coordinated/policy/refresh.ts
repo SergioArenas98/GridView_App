@@ -73,6 +73,9 @@ export function newSeasonRecord(season: number): SeasonRecord {
     },
     publicationDueAt: null,
     calendarAnchors: null,
+    lastOrderingInput: null,
+    lastPublication: null,
+    publicationDisposition: null,
   };
 }
 

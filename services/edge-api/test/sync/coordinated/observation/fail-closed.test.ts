@@ -48,6 +48,9 @@ async function startedSeason(): Promise<ObservationHarness> {
   const harness = await ObservationHarness.create();
   await harness.run(PRE_SEASON);
   await harness.run(later(PRE_SEASON, HOUR));
+  // The setup's own pre-season publication attempt (refused by the D14 guard
+  // against the mock baseline) is not what these cases measure.
+  harness.publishGuarded.mockClear();
   return harness;
 }
 
@@ -382,8 +385,10 @@ describe('the run log line', () => {
       (event) => event.operation === 'sync.coordinated.observation',
     );
     expect(lines).toHaveLength(4);
+    // The candidate is refused by the D14 guard against the mock baseline
+    // and held for an operator, so the line warns, with closed values only.
     expect(lines[2]).toEqual({
-      level: 'info',
+      level: 'warn',
       operation: 'sync.coordinated.observation',
       season: SEASON,
       syncTrigger: 'scheduled',
@@ -393,8 +398,14 @@ describe('the run log line', () => {
       observationPlan: 'publication',
       reconciliationEvents: {
         'classification.first-write': 1,
-        'refresh.unchanged': 5,
+        // Both standings tables moved from empty to round 1.
+        'refresh.overwrite': 2,
+        'refresh.unchanged': 3,
       },
+      publicationOutcome: 'not-applied',
+      publicationNextDue: 'blocked',
+      publicationStatus: 'rejected',
+      publicationReason: 'guard-round-coverage-regression',
     });
     expect(lines[3]).toMatchObject({
       level: 'warn',

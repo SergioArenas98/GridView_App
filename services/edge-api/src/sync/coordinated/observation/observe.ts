@@ -1,6 +1,7 @@
 /**
- * The observation half of coordinated runtime orchestration (decision pack
- * §6.6 steps 1-5; PR-C3).
+ * Coordinated runtime orchestration for one season (decision pack §6.6): the
+ * observation half (steps 1-5; PR-C3) and, for a publication plan, the
+ * publication half (steps 6-9; PR-C4, `../outcome/`).
  *
  * **Internal, injected and not connected.** No Worker module imports this
  * package. `runCoordinatedSync` does not call it, `resolveReconciliationLedger`
@@ -24,26 +25,37 @@
  *    per-run pacer and the global limiter the composition built.
  * 6. Map what each request produced onto the C2 policy, and commit the
  *    resulting records in one conditional ledger transaction under the lease.
- * 7. Release the lease, whatever happened after it was acquired.
+ *    A publication run's commit also marks the season `publishing`, so a run
+ *    that never records its outcome leaves the publication due, not lost.
+ * 7. For a publication plan only, the publication half, **under the same
+ *    lease**: the publishability decision from the committed records, one
+ *    prepared candidate, the no-change gate, at most one guarded publication
+ *    and the outcome commit with its durable next-due decision.
+ * 8. Release the lease, whatever happened after it was acquired.
  *
- * **No publication.** Nothing here calls the guarded publication command, the
- * bridge or the sequencer's write path, creates a release
- * or acts on the policy's publishability decision. The no-change gate (O-12),
- * the ordering input (O-13), publication metadata (O-14), the publication
- * outcome commit and runtime activation are the next slice. A scheduled
- * publication run's observation commit clears `publicationDueAt` exactly as
- * the C2 policy computes it (§6.6 step 5); re-setting it when the candidate is
- * not applied belongs to that outcome commit (step 9).
+ * Before planning, a `publishing` slot a previous run left behind is resolved
+ * against the authority (`../outcome/recovery.ts`), so a release whose
+ * commit answer was lost is recognized rather than published again.
+ *
+ * Observation plans and nothing-due runs never reach publication: they
+ * behave exactly as PR-C3 left them.
  *
  * Every refusal after the lease is acquired fails closed: a lease that has
  * expired, an authority that cannot answer, a coordination defect, a malformed
- * selection and a refused or uncertain commit all leave the ledger's records
- * as they were and publish nothing.
+ * selection and a refused or uncertain commit publish nothing. A failed or
+ * uncertain outcome commit after a publication is reported as a failure, with
+ * what was published, never as a clean success.
  */
 
 import type { Logger } from '../../../logging/logger';
 import type { SeasonPublicationSequencerPort } from '../../../publication/sequencer/port';
 import type { SnapshotStorage } from '../../../storage/types';
+import {
+  publishUnderLease,
+  recoverUnfinishedPublication,
+  type CuratedSeasonMetadata,
+  type PublicationRunResult,
+} from '../outcome';
 import {
   composeCoordinatedRuntime,
   type CoordinatedRuntime,
@@ -56,6 +68,7 @@ import type {
   LedgerCommitRequest,
   LedgerRejectionReason,
   LedgerSnapshot,
+  SeasonRecord,
 } from '../ledger/model';
 import {
   countPolicyEvents,
@@ -75,9 +88,13 @@ export const observationStages = [
   'lease',
   'authority',
   'reconciliation',
+  'recovery',
   'coordination',
   'observation',
   'commit',
+  'publication',
+  'intent',
+  'outcome',
 ] as const;
 export type ObservationStage = (typeof observationStages)[number];
 
@@ -108,6 +125,8 @@ export interface CoordinatedObservationDependencies extends CoordinatedRuntimeDe
   readonly sequencer: SeasonPublicationSequencerPort;
   /** Where the active release's documents are read from. */
   readonly storage: SnapshotStorage;
+  /** The curated metadata source. Defaults to the bundled records (O-14). */
+  readonly metadata?: (season: number) => CuratedSeasonMetadata | null;
 }
 
 interface RunFields {
@@ -136,6 +155,11 @@ export type CoordinatedObservationResult =
       readonly providerRequests: number;
       /** `null` when no lease was acquired. */
       readonly leaseRelease: LeaseReleaseResult | null;
+      /**
+       * Present only when the run failed after reaching the publication half:
+       * what it decided or published before the durable write that failed.
+       */
+      readonly publication?: PublicationRunResult | null;
     }
   | {
       readonly status: 'nothing-due';
@@ -151,8 +175,8 @@ export type CoordinatedObservationResult =
       /** Whether the run had anything to write. */
       readonly committed: boolean;
       readonly events: Readonly<Partial<Record<PolicyEventCategory, number>>>;
-      /** Always: publication is the next slice. */
-      readonly publication: 'not-attempted';
+      /** `not-attempted` for an observation plan, which never publishes. */
+      readonly publication: 'not-attempted' | PublicationRunResult;
       readonly leaseRelease: LeaseReleaseResult;
     };
 
@@ -223,7 +247,7 @@ export async function observeCoordinatedSeason(
   return logged(dependencies.logger, { ...fields, ...held, leaseRelease });
 }
 
-/** Steps 3-6. Everything here runs under the acquired lease. */
+/** Steps 3-7. Everything here runs under the acquired lease. */
 async function underLease(
   request: CoordinatedObservationRequest,
   dependencies: CoordinatedObservationDependencies,
@@ -249,10 +273,20 @@ async function underLease(
     return ledgerFailure('reconciliation', reconciled, 0);
   }
 
+  const recovered = await recover(
+    dependencies,
+    runtime,
+    lease,
+    reconciled.snapshot,
+    published.activeVersion,
+  );
+  if (recovered.kind === 'failed') return recovered.failure;
+  const snapshot = recovered.snapshot;
+
   const plannedAt = dependencies.clock.now();
   const plan = planRun({
     now: plannedAt,
-    snapshot: reconciled.snapshot,
+    snapshot,
     trigger: request.trigger,
   });
   if (plan.kind === 'nothing-due') {
@@ -263,19 +297,62 @@ async function underLease(
     return failure('coordination', 'lease-expired', null, 0);
   }
 
-  return observe(request, runtime, lease, reconciled.snapshot, plan, () =>
-    dependencies.clock.now(),
-  );
+  return observe(request, dependencies, runtime, grant, snapshot, plan);
+}
+
+/**
+ * Resolves a publication a previous run left `publishing`, before planning.
+ * A slot that cannot be resolved fails the run before any provider request.
+ */
+async function recover(
+  dependencies: CoordinatedObservationDependencies,
+  runtime: CoordinatedRuntime,
+  lease: LeaseToken,
+  snapshot: LedgerSnapshot,
+  activeVersion: string,
+): Promise<
+  | { readonly kind: 'ready'; readonly snapshot: LedgerSnapshot }
+  | { readonly kind: 'failed'; readonly failure: Omit<Failure, 'leaseRelease'> }
+> {
+  const current = snapshot.seasonRecord;
+  const recovery = await recoverUnfinishedPublication({
+    record: current?.record ?? null,
+    activeVersion,
+    storage: dependencies.storage,
+    now: dependencies.clock.now(),
+  });
+  if (recovery.kind === 'none') return { kind: 'ready', snapshot };
+  if (recovery.kind === 'unreadable') {
+    return {
+      kind: 'failed',
+      failure: failure('recovery', 'published-release-unavailable', null, 0),
+    };
+  }
+  const outcome = await runtime.ledger.commit({
+    lease,
+    seasonRecord: {
+      expectedVersion: current!.version,
+      record: recovery.record,
+    },
+    classifications: [],
+    backlogInsertions: [],
+    backlogRemovals: [],
+  });
+  if (outcome.outcome !== 'committed') {
+    return { kind: 'failed', failure: ledgerFailure('recovery', outcome, 0) };
+  }
+  return { kind: 'ready', snapshot: outcome.snapshot };
 }
 
 async function observe(
   request: CoordinatedObservationRequest,
+  dependencies: CoordinatedObservationDependencies,
   runtime: CoordinatedRuntime,
-  lease: LeaseToken,
+  grant: LeaseGrant,
   snapshot: LedgerSnapshot,
   plan: Exclude<RunPlan, { readonly kind: 'nothing-due' }>,
-  clock: () => Date,
 ): Promise<HeldOutcome> {
+  const lease: LeaseToken = { season: grant.season, fence: grant.fence };
   const run = await runtime.coordinator.coordinate({
     plan: { season: request.season, resources: plan.resources },
     ...(request.signal ? { signal: request.signal } : {}),
@@ -283,7 +360,7 @@ async function observe(
   // The observation instant is taken once every response has arrived, never
   // at planning: what the run records as attempted and observed must not
   // predate the responses it describes. The plan's slots are unaffected.
-  const observedAt = clock();
+  const observedAt = dependencies.clock.now();
   const providerRequests = run.accounting.lifetime.total;
   if (run.status === 'plan-rejected') {
     return failure(
@@ -314,22 +391,92 @@ async function observe(
     seasonOutcomes: mapped.seasonOutcomes,
     classificationOutcomes: mapped.classificationOutcomes,
   });
+  const commitRequest =
+    plan.kind === 'publication'
+      ? markPublishing(result.request, snapshot, observedAt)
+      : result.request;
 
-  const committed = hasWrites(result.request);
+  const committed = hasWrites(commitRequest);
+  let after = snapshot;
   if (committed) {
-    const outcome = await runtime.ledger.commit(result.request);
+    const outcome = await runtime.ledger.commit(commitRequest);
     if (outcome.outcome !== 'committed') {
       return ledgerFailure('commit', outcome, providerRequests);
     }
+    after = outcome.snapshot;
   }
-  return {
+  const observed = {
     status: 'observed',
     plan: plan.kind,
     coordination: run.status,
     providerRequests,
     committed,
     events: countPolicyEvents(result.events),
-    publication: 'not-attempted',
+  } as const;
+  if (plan.kind === 'observation') {
+    return { ...observed, publication: 'not-attempted' };
+  }
+
+  const step = await publishUnderLease({
+    runtime,
+    sequencer: dependencies.sequencer,
+    clock: () => dependencies.clock.now(),
+    lease,
+    leaseExpiresAt: grant.expiresAt,
+    plan,
+    run,
+    seasonOutcomes: mapped.seasonOutcomes,
+    classificationOutcomes: mapped.classificationOutcomes,
+    committed: after,
+    previous: snapshot.seasonRecord?.record.publicationDisposition ?? null,
+    observedAt,
+    ...(dependencies.metadata ? { metadata: dependencies.metadata } : {}),
+  });
+  if (step.kind === 'failed') {
+    return {
+      ...failure(
+        step.stage,
+        step.failure,
+        step.ledgerRejection,
+        providerRequests,
+      ),
+      publication: step.publication,
+    };
+  }
+  return { ...observed, publication: step.publication };
+}
+
+/**
+ * The season record a publication run's observation commit writes: the
+ * policy's record, marked `publishing` until the outcome commit replaces it.
+ * A season record exists, because a publication plan needs an observed
+ * calendar.
+ */
+function markPublishing(
+  request: LedgerCommitRequest,
+  snapshot: LedgerSnapshot,
+  observedAt: Date,
+): LedgerCommitRequest {
+  const stored = snapshot.seasonRecord;
+  const record: SeasonRecord | undefined =
+    request.seasonRecord?.record ?? stored?.record;
+  if (record === undefined) {
+    throw new TypeError('A publication plan without a season record.');
+  }
+  return {
+    ...request,
+    seasonRecord: {
+      expectedVersion: stored?.version ?? 0,
+      record: {
+        ...record,
+        publicationDisposition: {
+          state: 'publishing',
+          since: observedAt.toISOString(),
+          digest: null,
+          orderingInput: null,
+        },
+      },
+    },
   };
 }
 
@@ -395,14 +542,26 @@ async function release(
 
 /**
  * One bounded line per run: closed statuses, counts and the fixed event
- * categories. No revision, round, instant, provider value or payload.
+ * categories. No revision, digest, round, instant, provider value or payload.
+ * A run that published, confirmed or deliberately withheld with a retry is
+ * quiet; a block, a refusal, an unknown commit and every failure warn.
  */
 function logged(
   logger: Logger,
   outcome: CoordinatedObservationOutcome,
 ): CoordinatedObservationOutcome {
+  const publication =
+    outcome.status === 'observed' || outcome.status === 'failed'
+      ? (outcome.publication ?? null)
+      : null;
+  const settled = publication === 'not-attempted' ? null : publication;
   const quiet =
-    outcome.status === 'observed' || outcome.status === 'nothing-due';
+    outcome.status === 'nothing-due' ||
+    (outcome.status === 'observed' &&
+      (settled === null ||
+        (settled.outcome !== 'not-applied' &&
+          settled.next !== 'blocked' &&
+          settled.next !== 'resolve')));
   const event = {
     operation: COORDINATED_OBSERVATION_OPERATION,
     season: outcome.season,
@@ -437,8 +596,30 @@ function logged(
           reconciliationEvents: { ...outcome.events },
         }
       : {}),
+    ...(settled === null ? {} : publicationFields(settled)),
   };
   if (quiet) logger.info(event);
   else logger.warn(event);
   return outcome;
+}
+
+function publicationFields(publication: PublicationRunResult) {
+  return {
+    publicationOutcome: publication.outcome,
+    publicationNextDue: publication.next,
+    ...(publication.outcome === 'published'
+      ? { releaseVersion: publication.releaseVersion }
+      : {}),
+    ...(publication.outcome === 'not-applied'
+      ? { publicationStatus: publication.publicationStatus }
+      : {}),
+    ...(publication.outcome === 'withheld'
+      ? { publicationReason: publication.cause }
+      : {}),
+    ...((publication.outcome === 'not-applied' ||
+      publication.outcome === 'published') &&
+    publication.reason !== null
+      ? { publicationReason: publication.reason }
+      : {}),
+  };
 }

@@ -22,6 +22,9 @@
  * plus every round with a cadence check due now (O-3). Missed checks collapse
  * into one current check; there is no catch-up burst.
  *
+ * A publication is also due when the authority serves a release other than
+ * the one this runtime last published or confirmed (`releaseDrifted`).
+ *
  * A manual run is a forced publication run over every eligible round (O-8). It
  * follows the same eligibility, cannot name a round, ignores the limiter's
  * deferral (the limiter itself still decides) and consumes no due slot.
@@ -226,6 +229,25 @@ function selectChecks(
   return checks;
 }
 
+/**
+ * Whether another writer replaced the release this runtime last published or
+ * confirmed (runtime activation decision O-12): the reconciled authority
+ * serves a version other than `lastPublication.activeVersion`.
+ *
+ * A rollback, an operator publication or a commit whose outcome was never
+ * recorded all look the same here, and each makes a publication due, so a
+ * version change that raced a no-change decision is found at the next tick
+ * instead of waiting for the next cadence check. A season held `blocked` for
+ * an operator is the exception: drift alone never retries it on a timer.
+ */
+export function releaseDrifted(snapshot: LedgerSnapshot): boolean {
+  const record = snapshot.seasonRecord?.record ?? null;
+  const last = record?.lastPublication ?? null;
+  if (last === null || snapshot.published === null) return false;
+  if (record!.publicationDisposition?.state === 'blocked') return false;
+  return snapshot.published.activeVersion !== last.activeVersion;
+}
+
 export function planRun(input: PlanInput): RunPlan {
   const { now, snapshot, trigger } = input;
   const season = snapshot.season;
@@ -267,7 +289,8 @@ export function planRun(input: PlanInput): RunPlan {
     checks.some((check) => check.check === 'cadence') ||
     publicationTriggers.some(refreshDue) ||
     (seasonRecord!.publicationDueAt !== null &&
-      isDue(seasonRecord!.publicationDueAt, now));
+      isDue(seasonRecord!.publicationDueAt, now)) ||
+    releaseDrifted(snapshot);
 
   if (publication) {
     const resources = [

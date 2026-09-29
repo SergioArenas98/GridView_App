@@ -60,6 +60,17 @@ export interface LogEvent {
   observationPlan?: string;
   observationStage?: string;
   ledgerRejection?: string;
+  /**
+   * How a coordinated publication run ended (`published`, `unchanged`,
+   * `withheld`, `not-applied`) and its closed next-due decision
+   * (`completed`, `retry`, `cadence`, `blocked`, `resolve`). With
+   * `publicationStatus` and a closed `failureCategory` only; never a digest,
+   * a revision or an instant.
+   */
+  publicationOutcome?: string;
+  publicationNextDue?: string;
+  /** A closed withholding cause or publication reason; never a value. */
+  publicationReason?: string;
   /** A count per fixed reconciliation policy event category. */
   reconciliationEvents?: Record<string, number>;
   /** Bounded coordinated run trigger: `scheduled` or `manual`. */

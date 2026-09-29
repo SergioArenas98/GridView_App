@@ -238,6 +238,42 @@ describe('the season record schema', () => {
     expect(decodeSeasonRecord(record)).toEqual({ ok: true, value: record });
   });
 
+  it('accepts the publication state: last publication, ordering input and each disposition', () => {
+    const lastPublication = {
+      digest: rev('candidate'),
+      activeVersion: 'pm1-0000000001-00000001',
+      publishedAt: '2026-09-27T12:00:00.000Z',
+      confirmedAt: '2026-09-28T12:00:00.000Z',
+    };
+    for (const publicationDisposition of [
+      null,
+      {
+        state: 'publishing',
+        since: '2026-09-28T12:00:00.000Z',
+        digest: null,
+        orderingInput: null,
+      },
+      {
+        state: 'publishing',
+        since: '2026-09-28T12:00:00.000Z',
+        digest: rev('next'),
+        orderingInput: '2026-09-28T12:00:00.001Z',
+      },
+      {
+        state: 'blocked',
+        since: '2026-09-28T12:00:00.000Z',
+        reason: 'guard-participation-fact-removed',
+      },
+    ]) {
+      const record = seasonRecord({
+        lastOrderingInput: '2026-09-28T12:00:00.001Z',
+        lastPublication,
+        publicationDisposition,
+      });
+      expect(decodeSeasonRecord(record)).toEqual({ ok: true, value: record });
+    }
+  });
+
   it('accepts an observed calendar with no races, distinct from none observed', () => {
     for (const calendarAnchors of [null, []]) {
       const record = seasonRecord({ calendarAnchors });
@@ -278,13 +314,78 @@ describe('the season record schema', () => {
       },
     ],
     [
-      'an ordering input it does not model yet',
-      (r: Record<string, unknown>) =>
-        (r.lastOrderingInput = '2026-09-27T12:00:00.000Z'),
+      'an ordering input that is not a canonical instant',
+      (r: Record<string, unknown>) => (r.lastOrderingInput = '2026-09-27'),
     ],
     [
-      'a last publication it does not model yet',
-      (r: Record<string, unknown>) => (r.lastPublication = null),
+      'a missing ordering input',
+      (r: Record<string, unknown>) => delete r.lastOrderingInput,
+    ],
+    [
+      'a last publication without its digest',
+      (r: Record<string, unknown>) =>
+        (r.lastPublication = {
+          activeVersion: 'pm1-0000000001-00000001',
+          publishedAt: '2026-09-27T12:00:00.000Z',
+          confirmedAt: '2026-09-27T12:00:00.000Z',
+        }),
+    ],
+    [
+      'a last publication confirmed before it was published',
+      (r: Record<string, unknown>) =>
+        (r.lastPublication = {
+          digest: rev('candidate'),
+          activeVersion: 'pm1-0000000001-00000001',
+          publishedAt: '2026-09-27T12:00:00.000Z',
+          confirmedAt: '2026-09-27T11:59:59.999Z',
+        }),
+    ],
+    [
+      'a last publication naming no version',
+      (r: Record<string, unknown>) =>
+        (r.lastPublication = {
+          digest: rev('candidate'),
+          activeVersion: '../active',
+          publishedAt: '2026-09-27T12:00:00.000Z',
+          confirmedAt: '2026-09-27T12:00:00.000Z',
+        }),
+    ],
+    [
+      'a reservation with a digest but no ordering input',
+      (r: Record<string, unknown>) =>
+        (r.publicationDisposition = {
+          state: 'publishing',
+          since: '2026-09-27T12:00:00.000Z',
+          digest: rev('candidate'),
+          orderingInput: null,
+        }),
+    ],
+    [
+      'a block with an open-ended reason',
+      (r: Record<string, unknown>) =>
+        (r.publicationDisposition = {
+          state: 'blocked',
+          since: '2026-09-27T12:00:00.000Z',
+          reason: 'the provider said so',
+        }),
+    ],
+    [
+      'a block carrying a digest',
+      (r: Record<string, unknown>) =>
+        (r.publicationDisposition = {
+          state: 'blocked',
+          since: '2026-09-27T12:00:00.000Z',
+          reason: 'classification-staged',
+          digest: rev('candidate'),
+        }),
+    ],
+    [
+      'a disposition in an unknown state',
+      (r: Record<string, unknown>) =>
+        (r.publicationDisposition = {
+          state: 'published',
+          since: '2026-09-27T12:00:00.000Z',
+        }),
     ],
     [
       'a missing calendar',

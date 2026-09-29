@@ -55,6 +55,8 @@ const kindToSchemaId = {
   overrides: 'https://gridview.local/schemas/overrides.schema.json',
   'data-source-attribution':
     'https://gridview.local/schemas/data-source-attribution.schema.json',
+  'season-metadata':
+    'https://gridview.local/schemas/season-metadata.schema.json',
 };
 
 function collectJsonFiles(dir) {
@@ -235,6 +237,30 @@ if (attributionDocuments.length !== 1) {
     console.log(
       `ok   ${label}  (${data.version}, ${data.sources.length} sources)`,
     );
+  } else {
+    console.error(`FAIL ${label}`);
+    for (const problem of problems) console.error(`  - ${problem}`);
+    failures += 1;
+  }
+}
+
+// At most one curated metadata record per season, stored under that season.
+heading('season metadata');
+const seasonMetadata = parsedByKind.get('season-metadata') ?? [];
+const metadataSeasons = new Set();
+for (const { label, data } of seasonMetadata) {
+  semanticChecks += 1;
+  const expected = ['content', 'seasons', String(data.season)].join('/');
+  const problems = [];
+  if (!label.split(sep).join('/').startsWith(`${expected}/`)) {
+    problems.push(`season ${data.season} must be stored under ${expected}/`);
+  }
+  if (metadataSeasons.has(data.season)) {
+    problems.push(`a second season-metadata record for ${data.season}`);
+  }
+  metadataSeasons.add(data.season);
+  if (problems.length === 0) {
+    console.log(`ok   ${label}  (${data.season}, ${data.datasetVersion})`);
   } else {
     console.error(`FAIL ${label}`);
     for (const problem of problems) console.error(`  - ${problem}`);

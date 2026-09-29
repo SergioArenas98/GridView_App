@@ -23,11 +23,12 @@
  * - **`publishedRevision` is a cache of the authoritative release.** An
  *   ordinary commit can never change it; only `reconcilePublishedRevisions`,
  *   which is handed the authoritative release's revisions, writes it.
+ * - **A strictly increasing release-wide ordering input** per season (O-13).
  *
  * What it deliberately does not do: any §10.4.1 transition, corroboration,
  * settling, due-work planning, publishability or no-change decision, or
- * ordering-input assignment. Those compute the records a later change commits
- * here.
+ * choosing an ordering input. Those compute the records a caller commits
+ * here; the store only refuses an ordering input that does not move forward.
  *
  * The object's own clock is the only time source for leases and entry times.
  */
@@ -192,6 +193,12 @@ export class ReconciliationLedgerStore {
         seasonWrite.expectedVersion !== (storedSeason?.version ?? 0)
       ) {
         refuse('version-conflict');
+      }
+      if (seasonWrite !== null) {
+        checkOrderingInput(
+          storedSeason?.record.lastOrderingInput ?? null,
+          seasonWrite.record.lastOrderingInput,
+        );
       }
 
       const stored = new Map<number, Versioned<ClassificationRecord> | null>();
@@ -373,6 +380,20 @@ function requireLease(store: Store, token: LeaseToken, now: Date): LeaseRecord {
   if (reason !== null) refuse(reason);
   if (expired(current!, now)) refuse('lease-expired');
   return current!;
+}
+
+/**
+ * The season's release-wide ordering input only ever moves strictly forward
+ * (O-13). An unchanged value is not a reservation; a lowered, repeated or
+ * cleared one is refused, so no two releases the ledger ordered can share or
+ * reverse an ordering value, whatever the writer's clock did.
+ */
+function checkOrderingInput(stored: string | null, next: string | null): void {
+  if (next === stored) return;
+  if (next === null) refuse('ordering-input-regression');
+  if (stored !== null && Date.parse(next) <= Date.parse(stored)) {
+    refuse('ordering-input-regression');
+  }
 }
 
 /**

@@ -493,13 +493,17 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     expect(importersOf(graph, 'src/sync/coordinated/run.ts')).toEqual([
       workerEntryPoint,
     ]);
-    // The C2 policy and the C3 observation orchestration are not in the
+    // The C2 policy, the C3 observation orchestration and the C4 publication
+    // half - with the curated season metadata only it reads - are not in the
     // Worker's graph at all.
     expect(
       inputs.filter(
         (input) =>
           input.startsWith('src/sync/coordinated/policy/') ||
-          input.startsWith('src/sync/coordinated/observation/'),
+          input.startsWith('src/sync/coordinated/observation/') ||
+          input.startsWith('src/sync/coordinated/outcome/') ||
+          input.endsWith('season-metadata.development.json') ||
+          input.endsWith('attribution/data-sources.json'),
       ),
     ).toEqual([]);
   });

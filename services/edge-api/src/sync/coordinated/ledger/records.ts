@@ -29,10 +29,13 @@ import {
   anchorKinds,
   classificationMarkers,
   provenanceStates,
+  publicationBlockReasons,
   refreshResources,
   reviewStates,
   terminalReasons,
   type AuthoritativeRevision,
+  type LastPublication,
+  type PublicationDisposition,
   type BacklogEntry,
   type BacklogReference,
   type CalendarAnchor,
@@ -349,7 +352,75 @@ const seasonKeys = [
   'refresh',
   'publicationDueAt',
   'calendarAnchors',
+  'lastOrderingInput',
+  'lastPublication',
+  'publicationDisposition',
 ] as const;
+
+const lastPublicationKeys = [
+  'digest',
+  'activeVersion',
+  'publishedAt',
+  'confirmedAt',
+] as const;
+
+function decodeLastPublication(
+  value: unknown,
+): LastPublication | null | 'invalid' {
+  if (value === null) return null;
+  if (!isObject(value) || !hasExactKeys(value, lastPublicationKeys)) {
+    return 'invalid';
+  }
+  if (
+    !isSnapshotRevision(value.digest) ||
+    !isVersionIdentifier(value.activeVersion) ||
+    !isLedgerInstant(value.publishedAt) ||
+    !isLedgerInstant(value.confirmedAt) ||
+    Date.parse(value.confirmedAt) < Date.parse(value.publishedAt)
+  ) {
+    return 'invalid';
+  }
+  return {
+    digest: value.digest,
+    activeVersion: value.activeVersion,
+    publishedAt: value.publishedAt,
+    confirmedAt: value.confirmedAt,
+  };
+}
+
+const publishingKeys = ['state', 'since', 'digest', 'orderingInput'] as const;
+const blockedKeys = ['state', 'since', 'reason'] as const;
+
+function decodeDisposition(
+  value: unknown,
+): PublicationDisposition | null | 'invalid' {
+  if (value === null) return null;
+  if (!isObject(value) || !isLedgerInstant(value.since)) return 'invalid';
+  if (value.state === 'publishing' && hasExactKeys(value, publishingKeys)) {
+    // A reservation is a digest and its ordering input, together or not at all.
+    if (
+      !isRevisionOrNull(value.digest) ||
+      !isInstantOrNull(value.orderingInput) ||
+      (value.digest === null) !== (value.orderingInput === null)
+    ) {
+      return 'invalid';
+    }
+    return {
+      state: 'publishing',
+      since: value.since,
+      digest: value.digest,
+      orderingInput: value.orderingInput,
+    };
+  }
+  if (
+    value.state === 'blocked' &&
+    hasExactKeys(value, blockedKeys) &&
+    isOneOf(publicationBlockReasons, value.reason)
+  ) {
+    return { state: 'blocked', since: value.since, reason: value.reason };
+  }
+  return 'invalid';
+}
 
 const anchorKeys = ['round', 'anchor', 'anchorKind'] as const;
 
@@ -390,13 +461,24 @@ export function decodeSeasonRecord(value: unknown): Decoding<SeasonRecord> {
     value.kind !== 'season' ||
     !isSeason(value.season) ||
     !isInstantOrNull(value.publicationDueAt) ||
+    !isInstantOrNull(value.lastOrderingInput) ||
     !isObject(value.refresh) ||
     !hasExactKeys(value.refresh, refreshResources)
   ) {
     return refused('invalid-record');
   }
   const calendarAnchors = decodeCalendarAnchors(value.calendarAnchors);
-  if (calendarAnchors === 'invalid') return refused('invalid-record');
+  const lastPublication = decodeLastPublication(value.lastPublication);
+  const publicationDisposition = decodeDisposition(
+    value.publicationDisposition,
+  );
+  if (
+    calendarAnchors === 'invalid' ||
+    lastPublication === 'invalid' ||
+    publicationDisposition === 'invalid'
+  ) {
+    return refused('invalid-record');
+  }
   const refresh = {} as Record<RefreshResource, RefreshRecord>;
   for (const resource of refreshResources) {
     const decoded = decodeRefresh(value.refresh[resource]);
@@ -410,6 +492,9 @@ export function decodeSeasonRecord(value: unknown): Decoding<SeasonRecord> {
     refresh,
     publicationDueAt: value.publicationDueAt,
     calendarAnchors,
+    lastOrderingInput: value.lastOrderingInput,
+    lastPublication,
+    publicationDisposition,
   });
 }
 

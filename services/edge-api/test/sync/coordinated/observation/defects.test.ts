@@ -109,6 +109,9 @@ async function startedSeason(): Promise<ObservationHarness> {
   await harness.run(PRE_SEASON);
   await harness.run(new Date(Date.parse(PRE_SEASON) + HOUR).toISOString());
   harness.server.results.set(1, 'A');
+  // The setup's own pre-season publication attempt (refused by the D14 guard
+  // against the mock baseline) is not what these cases measure.
+  harness.publishGuarded.mockClear();
   return harness;
 }
 
