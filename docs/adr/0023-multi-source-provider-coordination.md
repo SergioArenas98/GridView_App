@@ -1900,6 +1900,10 @@ from item 1 and the existing D14 guard, **under the condition stated in it**.
    fails, or cannot read the release, activation stops for an owner decision.
    An unknown predecessor is **never** treated as empty.
 
+   *(Since 2026-09-29 the gate is implemented, read-only, and has never been
+   run. See "Implementation status - A3.5 staging predecessor gate
+   (2026-09-29)" below.)*
+
 A table that loses its **last** row, with `total` lowered to match, is still
 indistinguishable from a genuine shorter table. No port-level rule can detect
 it, and contiguity (declined in S-5) would not detect it either. Round
@@ -1956,6 +1960,58 @@ on the coordinated payload, and `assembleSeasonSource` applies the rule as
 The Jolpica normalizer and the Lawson rule (S-3) are unchanged. The staging
 predecessor gate in item 2 is **not** implemented, and runtime activation and
 O-9 remain open. No provider was contacted.
+
+### Implementation status - A3.5 staging predecessor gate (2026-09-29)
+
+The item 2 staging precondition is implemented as a **read-only** check
+(Implementation Plan §14.0.36). It has **not been run** against staging or any
+other deployment, and the staging Worker does not yet contain it.
+
+- **What it reads.** `checkStandingsPredecessor`
+  (`src/publication/guard/standings-predecessor.ts`) asks the sequencer for
+  the season. Only a season that is `active` **and** authoritative is
+  examined. It reads that release's inventory, its classified race rounds
+  through `readPredecessorGuard` (the read D14 uses, so "classified" means a
+  `race` result that is `final` or `provisional`), and both
+  `standings:drivers` and `standings:constructors`. Each table must carry a
+  valid envelope, be a list of at most 100 rows, pass the normalized
+  `DriverStanding` or `ConstructorStanding` contract row by row, name only
+  this season, and list no driver or constructor twice. It then reads the
+  authority again and reports only a release that is still active.
+- **The rule.** The two tables must agree, and both must be non-empty
+  **exactly when** at least one race round is classified.
+- **Closed refusals.** `authority-not-sequenced` (the Worker runs the legacy
+  authority; the legacy `active:{season}` pointer is never read),
+  `authority-unavailable`, `authority-not-active` (uninitialized, seeded or
+  not authoritative), `release-unavailable` (an inventory or document read
+  failed or read as absent, never an empty table), `release-invalid`,
+  `standings-missing`, `standings-invalid`, `standings-tables-disagree`,
+  `standings-without-classified-round`, `classified-round-without-standings`
+  and `authority-changed`.
+- **Surface.** One `ADMIN_TOKEN`-protected route,
+  `GET /internal/admin/publication/standings-predecessor?season=YYYY`. It
+  answers `200` with `coherent`, the season, the active version and two
+  closed values (`classifiedRace` `present`/`absent`, `standings`
+  `non-empty`/`empty`), or `409` with the season and one closed reason. It
+  writes one log line with only the season, the version and the reason. No
+  row, identity or document content leaves the check. The season must be
+  named in the query and is never inferred.
+- **The limit.** A published standings table carries no round, so the gate
+  **cannot** establish which round an existing table describes. A non-empty
+  table bound to another round beside a classified race round passes. It
+  checks the emptiness correspondence item 2 needs, and nothing more. A pass
+  is a fact about one version at one moment: it does not keep a later
+  release coherent. It does not observe Jolpica's real pre-season shape, and
+  it does not detect a table that lost its last row.
+- **What it does not do.** It never repairs, rewrites, rolls back or
+  republishes the active release, and it changes no publication path, D14-D16
+  rule, binding, provider mode, cron, ledger resolver or attribution status.
+  It is not called by any scheduled or publication code.
+
+Running it, and the decision it gates, are separately authorized operator
+steps (staging runbook, "A3.5 standings predecessor gate"). O-9, O-15, O-16
+and runtime activation remain open. No provider or Cloudflare resource was
+contacted.
 
 ## Consequences
 

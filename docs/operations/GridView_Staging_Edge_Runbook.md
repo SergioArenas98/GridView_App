@@ -754,6 +754,118 @@ provider request**:
 - `sync/resource` and `rebuild/home` answer 409 `SYNC_MODE_UNSUPPORTED`;
 - mock synchronization stops, so the last published release keeps serving.
 
+### A3.5 standings predecessor gate (prepared 2026-09-29, not deployed, never run)
+
+ADR 0023 A3.5 item 2 lets an empty standings candidate replace only a release
+with no classified race round. That keeps a published non-empty table from
+being emptied **only if the active release is itself coherent**: its driver
+and constructor standings are both non-empty exactly when it has at least one
+classified race round. Staging's active season-2026 release came from the mock
+provider, not from coordinated assembly, so this read-only gate must pass
+**before any staging activation of coordinated mode**. If it refuses, or
+cannot be run, activation stops for an owner decision. Nothing in this
+repository runs it.
+
+**What it is.** One read-only admin route (Implementation Plan §14.0.36):
+
+```text
+GET /internal/admin/publication/standings-predecessor?season=2026
+```
+
+- It asks the sequencer for season 2026 and examines only the release that is
+  `active` **and** authoritative. It never reads the legacy `active:2026`
+  pointer.
+- It reads that release's classified race rounds (the D14 read) and both
+  standings tables, and validates each table row by row.
+- It re-reads the authority and reports only a release that is still active.
+- It writes nothing: no pointer, sequencer record, ledger, cache purge or log
+  content beyond the season, the version and a closed reason.
+
+**Preconditions.**
+
+1. The deployed staging Worker must contain the gate. Version `c297d260-…`
+   (from `36b0fd2`) does **not**. The deploy that adds it also carries the
+   publication guard and the coordinated runtime composition above, so it is
+   cutover-sensitive and needs the explicit, separate authorization those
+   subsections describe. Merging does not authorize it.
+2. Running the gate is a separate, explicit operator step. It must name
+   staging, season 2026 and this read-only check.
+3. `SEASON_PUBLICATION_AUTHORITY` must still be `sequencer`, and season 2026
+   must still be `active` and authoritative (the cutover `status` route).
+
+**Procedure (PowerShell).** Export the token for this shell only, as section 4
+describes, and send exactly one request. `Invoke-WebRequest` keeps the token
+in process memory, out of the command line and history:
+
+```powershell
+$env:GRIDVIEW_STAGING_ADMIN_TOKEN = Read-Host "Staging admin token"
+$uri = "https://gridview-api-staging.sejuma18.workers.dev/internal/admin/publication/standings-predecessor?season=2026"
+$headers = @{ Authorization = "Bearer $env:GRIDVIEW_STAGING_ADMIN_TOKEN" }
+try {
+  $r = Invoke-WebRequest -Uri $uri -Method Get -Headers $headers -UseBasicParsing
+  "$($r.StatusCode) $($r.Content)"
+} catch {
+  $resp = $_.Exception.Response
+  if ($resp) {
+    "$([int]$resp.StatusCode) $((New-Object IO.StreamReader($resp.GetResponseStream())).ReadToEnd())"
+  } else { "no response" }
+} finally {
+  Remove-Item Env:\GRIDVIEW_STAGING_ADMIN_TOKEN
+}
+```
+
+**Reading the answer.**
+
+| Answer | Meaning | Next step |
+|---|---|---|
+| `200`, `data.kind` `coherent` | The active release's two tables agree and are non-empty exactly when a race round is classified. `data.activeVersion` names the release checked. | Record the request ID, `activeVersion`, `classifiedRace` and `standings`. The gate has passed **for that version only**. |
+| `409`, `data.kind` `refused` | `data.reason` is one closed value (listed below). | **Stop.** Activation needs an owner decision. Do not retry to get a different answer, and do not repair, roll back or republish the release to make the gate pass. |
+| `401`, `404`, `405`, `5xx`, no response | The gate did not run: wrong token, a Worker without the route, or an outage. | **Stop.** An unrun gate is not a pass. |
+
+The closed refusals:
+
+- `authority-not-sequenced`, `authority-unavailable` or
+  `authority-not-active`: the release was not examined.
+- `authority-changed`: the active release changed during the check.
+- `release-unavailable`: a read failed or read as absent (possibly Workers KV
+  visibility lag). It is never read as an empty table.
+- `release-invalid` or `standings-invalid`: a document is not a valid release
+  or standings table.
+- `standings-missing`: the release lacks a standings document.
+- `standings-tables-disagree`: one table is empty and the other is not.
+- `standings-without-classified-round`: rows but no classified race round. This
+  is the shape that would let an empty candidate pass D14 vacuously.
+- `classified-round-without-standings`: a classified race round with two empty
+  tables.
+
+**Expected answer, not observed.** The mock generator's release (round 12
+classified, both tables non-empty) is `coherent` with `classifiedRace`
+`present` and `standings` `non-empty` in the repository tests. The live
+release has not been inspected. The daily mock synchronization may have
+published newer versions since the 2026-09-16 activation.
+
+**Binding the result to activation.** The answer describes one version.
+
+- If any season-2026 publication or rollback happens after the gate passes,
+  the pass no longer applies. That includes the `17 3 * * *` mock
+  synchronization.
+- Run the gate again immediately before the `PROVIDER_MODE = "coordinated"`
+  change. Confirm that its `activeVersion` is still the version the cutover
+  `status` route reports.
+
+**Limits. Do not claim more than this.**
+
+- A published standings table carries **no round**, so the gate **cannot
+  prove which round a table describes**. A non-empty table bound to another
+  round passes beside a classified race round. It checks only the emptiness
+  correspondence that A3.5 item 2 depends on.
+- A pass does not keep any later release coherent. That is round coherence
+  (A3.5 item 1) plus D14, for coordinated candidates.
+- It does not observe Jolpica's real pre-season response. It cannot detect a
+  table that lost its last row with `total` lowered to match.
+- It is not a substitute for any other activation prerequisite: O-9, O-15,
+  O-16, the ledger binding and resolver, and the cron change all stay open.
+
 ## 7. Initial synchronization and publication
 
 **Not for season 2026 between the deploy of a `SEASON_PUBLICATION_CUTOVER_CONTROL`
