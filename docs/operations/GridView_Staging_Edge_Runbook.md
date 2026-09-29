@@ -819,14 +819,18 @@ try {
 | Answer | Meaning | Next step |
 |---|---|---|
 | `200`, `data.kind` `coherent` | The active release's two tables agree and are non-empty exactly when a race round is classified. `data.activeVersion` names the release checked. | Record the request ID, `activeVersion`, `classifiedRace` and `standings`. The gate has passed **for that version only**. |
-| `409`, `data.kind` `refused` | `data.reason` is one closed value (listed below). | **Stop.** Activation needs an owner decision. Do not retry to get a different answer, and do not repair, roll back or republish the release to make the gate pass. |
+| `409`, `data.reason` `authority-changed` | No verdict: the active release changed during the check, so nothing was concluded about any release. | Confirm with the cutover `status` route that season 2026 is still `active` and authoritative, then run the gate **once** more. A second `authority-changed` means publication is not quiet: **stop** and find out why. |
+| `409`, any other `data.reason` | `data.reason` is one closed value (listed below), about the release that was still active when the check finished. | **Stop.** Activation needs an owner decision. Do not retry to get a different answer, and do not repair, roll back or republish the release to make the gate pass. |
 | `401`, `404`, `405`, `5xx`, no response | The gate did not run: wrong token, a Worker without the route, or an outage. | **Stop.** An unrun gate is not a pass. |
 
 The closed refusals:
 
 - `authority-not-sequenced`, `authority-unavailable` or
   `authority-not-active`: the release was not examined.
-- `authority-changed`: the active release changed during the check.
+- `authority-changed`: the active release changed during the check. Every
+  refusal below is reported only after the authority confirms that the same
+  release is still active, so a defect of a superseded release is never
+  reported.
 - `release-unavailable`: a read failed or read as absent (possibly Workers KV
   visibility lag). It is never read as an empty table.
 - `release-invalid` or `standings-invalid`: a document is not a valid release

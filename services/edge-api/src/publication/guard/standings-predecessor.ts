@@ -111,6 +111,60 @@ export async function checkStandingsPredecessor(
   if (active.kind === 'refused') return refused(active.reason);
   const version = active.version;
 
+  const inspection = await inspectRelease(storage, season, version);
+
+  // The documents are immutable, but every verdict - a refusal as much as a
+  // pass - is about the *active* release. A version superseded mid-check is
+  // neither reported as checked nor blamed for a defect: the operator re-runs
+  // the gate against whichever release is active then.
+  const after = await readActiveVersion(authority.port, season);
+  if (after.kind === 'refused') {
+    return refused(
+      after.reason === 'authority-unavailable'
+        ? 'authority-unavailable'
+        : 'authority-changed',
+    );
+  }
+  if (after.version !== version) return refused('authority-changed');
+
+  if (inspection.kind === 'refused') return refused(inspection.reason);
+  return {
+    kind: 'coherent',
+    season,
+    activeVersion: version,
+    classifiedRace: inspection.hasClassifiedRace ? 'present' : 'absent',
+    standings: inspection.hasStandings ? 'non-empty' : 'empty',
+  };
+}
+
+/** A release-specific refusal: everything after the authority was read. */
+type ReleaseRefusal = Exclude<
+  StandingsPredecessorRefusal,
+  | 'authority-not-sequenced'
+  | 'authority-unavailable'
+  | 'authority-not-active'
+  | 'authority-changed'
+>;
+
+type ReleaseInspection =
+  | {
+      readonly kind: 'coherent';
+      readonly hasClassifiedRace: boolean;
+      readonly hasStandings: boolean;
+    }
+  | { readonly kind: 'refused'; readonly reason: ReleaseRefusal };
+
+/** Reads one version's documents and applies the rule. Writes nothing. */
+async function inspectRelease(
+  storage: SnapshotStorage,
+  season: number,
+  version: string,
+): Promise<ReleaseInspection> {
+  const refused = (reason: ReleaseRefusal): ReleaseInspection => ({
+    kind: 'refused',
+    reason,
+  });
+
   const inventory = await readStoredInventory(storage, season, version);
   if (inventory.kind === 'unreadable' || inventory.kind === 'absent') {
     return refused('release-unavailable');
@@ -155,26 +209,7 @@ export async function checkStandingsPredecessor(
   if (!hasStandings && hasClassifiedRace) {
     return refused('classified-round-without-standings');
   }
-
-  // The documents are immutable, but the verdict is about the *active*
-  // release: a version superseded mid-check is not reported as checked.
-  const after = await readActiveVersion(authority.port, season);
-  if (after.kind === 'refused') {
-    return refused(
-      after.reason === 'authority-unavailable'
-        ? 'authority-unavailable'
-        : 'authority-changed',
-    );
-  }
-  if (after.version !== version) return refused('authority-changed');
-
-  return {
-    kind: 'coherent',
-    season,
-    activeVersion: version,
-    classifiedRace: hasClassifiedRace ? 'present' : 'absent',
-    standings: hasStandings ? 'non-empty' : 'empty',
-  };
+  return { kind: 'coherent', hasClassifiedRace, hasStandings };
 }
 
 type ActiveVersionRead =

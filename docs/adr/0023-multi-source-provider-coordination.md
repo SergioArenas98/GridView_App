@@ -1977,7 +1977,10 @@ other deployment, and the staging Worker does not yet contain it.
   valid envelope, be a list of at most 100 rows, pass the normalized
   `DriverStanding` or `ConstructorStanding` contract row by row, name only
   this season, and list no driver or constructor twice. It then reads the
-  authority again and reports only a release that is still active.
+  authority again **before any verdict**, a refusal as much as a pass. If the
+  active version moved, or the season stopped being authoritative, the answer
+  is `authority-changed`, never a defect of the superseded release; if the
+  authority cannot answer, it is `authority-unavailable`.
 - **The rule.** The two tables must agree, and both must be non-empty
   **exactly when** at least one race round is classified.
 - **Closed refusals.** `authority-not-sequenced` (the Worker runs the legacy

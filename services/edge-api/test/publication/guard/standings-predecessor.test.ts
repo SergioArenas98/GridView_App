@@ -690,6 +690,116 @@ describe('only a sequencer-active, authoritative release is examined', () => {
   );
 });
 
+describe('a release defect is reported only for a release that is still active', () => {
+  // Each builds a release the gate would refuse on its own merits. If the
+  // active version moves while it is inspected, the defect belongs to a
+  // superseded release, so the answer is `authority-changed`, never the defect.
+  const defective: ReadonlyArray<
+    readonly [string, string, () => Promise<SnapshotStorage>]
+  > = [
+    [
+      'standings without a classified round',
+      'standings-without-classified-round',
+      () =>
+        release({
+          documents: [unavailableRound(1), driverTable(), constructorTable()],
+        }),
+    ],
+    [
+      'a classified round without standings',
+      'classified-round-without-standings',
+      () =>
+        release({
+          documents: [
+            classifiedRound(1, ROUND_ONE),
+            driverTable([]),
+            constructorTable([]),
+          ],
+        }),
+    ],
+    [
+      'two tables that disagree',
+      'standings-tables-disagree',
+      () =>
+        release({
+          documents: [
+            classifiedRound(1, ROUND_ONE),
+            driverTable(),
+            constructorTable([]),
+          ],
+        }),
+    ],
+    [
+      'a malformed table',
+      'standings-invalid',
+      () =>
+        release({
+          documents: [
+            classifiedRound(1, ROUND_ONE),
+            driverTable([{ ...DRIVERS[0], points: 'ten' }]),
+            constructorTable(),
+          ],
+        }),
+    ],
+    [
+      'a malformed results document',
+      'release-invalid',
+      () =>
+        release({
+          documents: [
+            stored('grand-prix:1:results', { status: 'final' }),
+            driverTable(),
+            constructorTable(),
+          ],
+        }),
+    ],
+    [
+      'a missing table',
+      'standings-missing',
+      () =>
+        release({ documents: [classifiedRound(1, ROUND_ONE), driverTable()] }),
+    ],
+    [
+      'an unreadable table',
+      'release-unavailable',
+      async () =>
+        throwingOn(await release(), { document: 'standings:drivers' }),
+    ],
+  ];
+
+  it.each(defective)(
+    'reports %s as %s while the release stays active',
+    async (_label, reason, build) => {
+      const { authority, calls } = scriptedAuthority(activeAuthority());
+      expect(await check(await build(), authority)).toEqual(refusal(reason));
+      expect(calls).toEqual(['readAuthority', 'readAuthority']);
+    },
+  );
+
+  it.each(defective)(
+    'reports %s as authority-changed once another version is active',
+    async (_label, _reason, build) => {
+      const { authority } = scriptedAuthority(
+        activeAuthority(),
+        activeAuthority(OTHER_VERSION),
+      );
+      expect(await check(await build(), authority)).toEqual(
+        refusal('authority-changed'),
+      );
+    },
+  );
+
+  it.each(defective)(
+    'reports %s as authority-unavailable once the authority cannot answer',
+    async (_label, _reason, build) => {
+      const { authority } = scriptedAuthority(activeAuthority(), 'throw');
+      expect(await check(await build(), authority)).toEqual(
+        refusal('authority-unavailable'),
+      );
+    },
+  );
+});
+
 /** The mock baseline with every race classification made unavailable. */
 function unclassified(set: GeneratedSnapshotSet): GeneratedSnapshotSet {
   return {
