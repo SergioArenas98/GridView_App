@@ -40,7 +40,7 @@ import type {
 } from '../../storage/types';
 import { isEnvelopeFor, readPredecessorGuard } from './predecessor';
 
-/** The closed refusals, in evaluation order. */
+/** The closed refusals. Each is a bounded code, never a value read. */
 export const standingsPredecessorRefusals = [
   /** This Worker runs the legacy authority; there is no sequencer to ask. */
   'authority-not-sequenced',
