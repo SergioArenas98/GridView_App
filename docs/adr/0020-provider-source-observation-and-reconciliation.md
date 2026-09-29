@@ -1012,9 +1012,15 @@ same record's label. `attributionVersion` is the `version` of
 `content/attribution/data-sources.json` (`data-sources-v1`), and `mediaVersion`
 is `null`. Nothing comes from a provider response. A season without exactly
 one valid record is `blocked` as `metadata-unavailable`. The record's two
-values (`2026.09.29.1`, and the Domain Model's example label) are
-curator-owned and must be confirmed. `validate:content` checks the record's
-schema and location.
+values are curator-owned. `validate:content` checks the record's schema and
+location.
+
+*Curator confirmation, 2026-09-29:* the curator approved both values exactly
+as committed: `datasetVersion` `2026.09.29.1` and `seasonLabel`
+`2026 FIA Formula One World Championship`. `2026.09.29.1` is the initial
+curated 2026 dataset version. Any later change to the curated 2026 identities
+or provider mappings requires a new dataset version. The season label is
+display metadata and does not imply FIA endorsement.
 
 **Every ending makes a durable next-due decision.**
 
