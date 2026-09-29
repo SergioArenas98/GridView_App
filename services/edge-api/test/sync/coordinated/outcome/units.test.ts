@@ -436,6 +436,61 @@ describe('the outcome commit record', () => {
     });
   });
 
+  it('never clears an earlier block on a retry or a cadence wait', () => {
+    const held = {
+      state: 'blocked',
+      since: at(-86_400_000),
+      reason: 'guard-participation-fact-removed',
+    } as const;
+    const records = [
+      classification(1, { nextDueAt: at(4 * 60 * 60 * 1000) }),
+    ] as ClassificationRecord[];
+    for (const decision of [
+      { decision: 'retry' },
+      { decision: 'cadence', records },
+    ] as SettlementDecision[]) {
+      // A manual run moves no due time, so the block is the durable state.
+      const manual = settleSeasonRecord({
+        record: publishing,
+        previous: held,
+        decision,
+        now: NOW,
+        advancesSchedule: false,
+      });
+      expect(manual).toMatchObject({
+        publicationDisposition: held,
+        publicationDueAt: null,
+      });
+      // A scheduled run keeps the block and also sets its due time.
+      const scheduled = settleSeasonRecord({
+        record: publishing,
+        previous: held,
+        decision,
+        now: NOW,
+        advancesSchedule: true,
+      });
+      expect(scheduled.publicationDisposition).toEqual(held);
+      expect(scheduled.publicationDueAt).not.toBeNull();
+    }
+    // A completion does resolve it.
+    expect(
+      settleSeasonRecord({
+        record: publishing,
+        previous: held,
+        decision: {
+          decision: 'completed',
+          release: {
+            digest: rev('d'),
+            activeVersion: 'pm1-a',
+            published: true,
+          },
+        },
+        now: NOW,
+        advancesSchedule: false,
+      }).publicationDisposition,
+    ).toBeNull();
+  });
+
   it('leaves the reservation in place for an unknown commit', () => {
     expect(settle({ decision: 'resolve' })).toBe(publishing);
   });

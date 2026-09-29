@@ -10,8 +10,8 @@
  * | Decision | `publicationDueAt` | Disposition |
  * |---|---|---|
  * | `completed` (applied, or genuinely unchanged) | unchanged | cleared |
- * | `retry` (a transient failure, a cancellation) | now + 1 h | cleared |
- * | `cadence` (only a later cadence check can change it) | that check, at least now + 1 h | cleared |
+ * | `retry` (a transient failure, a cancellation) | now + 1 h | cleared, but an earlier block is kept |
+ * | `cadence` (only a later cadence check can change it) | that check, at least now + 1 h | cleared, but an earlier block is kept |
  * | `blocked` (operator action needed) | cleared | `blocked` with the reason |
  * | `resolve` (the commit is unknown) | unchanged | `publishing` kept |
  *
@@ -192,6 +192,19 @@ export interface SettlementInput {
   readonly advancesSchedule: boolean;
 }
 
+/**
+ * A block the run did not resolve. A retry or a cadence wait says nothing
+ * about the held reason - the run never reached a decision on it - so it never
+ * clears a block: a manual run moves no due time (O-8), and clearing the block
+ * there would leave the season with neither a due time nor an operator hold.
+ * Only a completion, or a new block, replaces it.
+ */
+function unresolvedBlock(
+  previous: SeasonRecord['publicationDisposition'],
+): SeasonRecord['publicationDisposition'] {
+  return previous?.state === 'blocked' ? previous : null;
+}
+
 /** The season record the outcome commit writes. */
 export function settleSeasonRecord(input: SettlementInput): SeasonRecord {
   const { record, decision, now, advancesSchedule } = input;
@@ -216,7 +229,7 @@ export function settleSeasonRecord(input: SettlementInput): SeasonRecord {
     case 'retry':
       return {
         ...record,
-        publicationDisposition: null,
+        publicationDisposition: unresolvedBlock(input.previous),
         publicationDueAt: advancesSchedule
           ? plus(now, PUBLICATION_RETRY_MS)
           : record.publicationDueAt,
@@ -224,7 +237,7 @@ export function settleSeasonRecord(input: SettlementInput): SeasonRecord {
     case 'cadence':
       return {
         ...record,
-        publicationDisposition: null,
+        publicationDisposition: unresolvedBlock(input.previous),
         publicationDueAt: advancesSchedule
           ? nextCadenceCheck(decision.records, now)
           : record.publicationDueAt,

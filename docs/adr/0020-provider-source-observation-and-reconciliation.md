@@ -1027,8 +1027,11 @@ schema and location.
 | Staged or review-locked record; D14 or D15 refusal; an invalid candidate or predecessor; a season not active on the sequencer; contract validation; `inconsistent-references`; generation failure; no curated metadata | `blocked`: no due time; the disposition holds the closed reason and when it began |
 | `sequencer-authority-unavailable` (the commit is unknown) | `resolve`: the reservation is kept, and the next run decides |
 
+A `retry` or `cadence` ending never clears an earlier block, because the run
+never decided the held reason; only a completion or a new block replaces it.
 A manual run records completions, blocks and reservations, but moves no due
-time (O-8). A failed or uncertain reservation or outcome commit is reported as
+time (O-8), so without that rule a failed manual retry would leave a blocked
+season with neither a due time nor a hold. A failed or uncertain reservation or outcome commit is reported as
 a run failure at stage `intent` or `outcome`, with what was published. It is
 never a clean success.
 

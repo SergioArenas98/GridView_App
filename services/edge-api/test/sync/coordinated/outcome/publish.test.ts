@@ -489,6 +489,41 @@ describe.each(sequencerTransports)(
       }
     });
 
+    it('keeps a D14 block through a manual retry that did not decide it', async () => {
+      const harness = await bootstrapped('mock');
+      await harness.run(FIRST_PUBLICATION);
+      const held = (await harness.season()).publicationDisposition;
+      expect(held).toMatchObject({
+        state: 'blocked',
+        reason: 'guard-round-coverage-regression',
+      });
+
+      // An operator retries by hand, and the run is cancelled.
+      const controller = new AbortController();
+      harness.server.onRequest = (path) => {
+        if (path === paths.drivers) controller.abort();
+      };
+      const manual = await harness.run(later(PRE_SEASON, 2 * HOUR), {
+        trigger: 'manual',
+        signal: controller.signal,
+      });
+      expect(manual.outcome).toMatchObject({
+        coordination: 'cancelled',
+        publication: { outcome: 'withheld', cause: 'cancelled', next: 'retry' },
+      });
+      expect(manual.publishCalls).toBe(0);
+      const after = await harness.season();
+      // Still held for an operator, and still visible: not silently forgotten.
+      expect(after.publicationDisposition).toEqual(held);
+      expect(after.publicationDueAt).toBeNull();
+
+      harness.server.onRequest = () => {};
+      const tick = await harness.run(later(PRE_SEASON, 3 * HOUR));
+      expect(tick.outcome).toMatchObject({ status: 'nothing-due' });
+      expect((await harness.season()).publicationDisposition).toEqual(held);
+      expect(harness.releases()).toEqual([]);
+    });
+
     it('holds a D15 refusal for an operator, and asks again only at a cadence check', async () => {
       const { harness } = await prePublished();
       harness.server.results.set(1, 'A');
