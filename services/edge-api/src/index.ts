@@ -167,6 +167,7 @@ export default {
             clock,
             retry: env.__CUTOVER_RETRY,
           }),
+          authority,
         });
         routeTemplate = url.pathname;
       } else if (request.method !== 'GET' && !isHead) {

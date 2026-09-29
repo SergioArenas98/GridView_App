@@ -100,6 +100,7 @@ Cloudflare Access remains a Phase 5B+ hardening option.
 - `GET /internal/admin/publication/cutover/status`
 - `POST /internal/admin/publication/cutover/seed`
 - `POST /internal/admin/publication/cutover/activate`
+- `GET /internal/admin/publication/standings-predecessor`
 
 No state-changing route uses `GET`. None of these appears in the public
 OpenAPI document, and every response is `Cache-Control: no-store`.
@@ -884,6 +885,16 @@ field for a source ordering input and none for a fingerprint** — the version's
 own sidecar or its validated uniform documents supply the provenance, and the
 fingerprint is derived from the checkpoint. `activate` additionally requires the
 literal `true`; no truthy stand-in is accepted.
+
+**The A3.5 standings predecessor gate** (added 2026-09-29; ADR 0023 A3.5
+item 2). `GET /internal/admin/publication/standings-predecessor?season=YYYY`
+is read-only and sits behind the same `ADMIN_TOKEN`. It examines only the
+release the sequencer reports `active` and authoritative, and answers `200`
+when both standings tables are non-empty exactly when the release has a
+classified race round, or `409` with one closed reason otherwise. A Worker on
+the legacy authority is refused as `authority-not-sequenced` without reading
+anything. It cannot tell which round a published table describes. The
+procedure and its limits are in the staging runbook.
 
 ### Operational expectations
 
