@@ -1106,6 +1106,167 @@ Obligations 3 and 4 run inside that orchestration, and are in force nowhere.
   the hourly cron;
 - every provisioning and deployment step.
 
+*(Superseded in part on 2026-09-30 by E1 below: the operator hold, the
+durable blocks that end the hourly loops, the T12 storage transition and the
+hold-gated rollback prerequisite now exist, dormant, and O-15 and O-16 are
+answered. The operator routes, the alerts and every other item stay open.)*
+
+The decision above is unchanged.
+
+### E1: operator holds, durable blocks and the T12 storage transition (2026-09-30)
+
+PR-E1 of the operator disposition decision pack (2026-09-29, private,
+read-only). It is **dormant**: the resolver still answers `null`, no route
+reaches any of it, and every coordinated run still stops at `ledger-unbound`.
+
+**Owner decisions (curator, 2026-09-30).**
+
+| # | Decision |
+|---|---|
+| OD-1 | Daily operator review is sufficient for staging. Production requires **verified** alert delivery. Nothing in E1 emits or delivers an alert. |
+| OD-2 | An operator action records the **authentication method** and a **unique operation ID**, never the admin token. The record does not claim to identify an individual. |
+| OD-3 | A coordinated rollback requires an explicit **hold** first. D14/D15 are still enforced on it. |
+| OD-4 | "Keep published" permanently rejects the **exact staged revision**. A different later revision follows the normal review rules. |
+| OD-5 | The unbounded hourly retries stop: the affected seasons are **durably blocked** until an explicit operator action. |
+| OD-6 | D2.2 stays **absolute** for now. |
+| OD-7 | Later operator verification (PR-E3) may show counts, canonical driver IDs and changed field **names**, but no values. |
+| OD-8 | Warn at **48 of the 60** backlog slots, and at capacity. |
+
+**O-15 and O-16, defined.** The repository named both without defining them.
+Their only definitions are in §14 of the private runtime activation decision
+pack of 2026-09-27 (SHA-256 `cef20b48…7925`, re-verified 2026-09-30). They
+are copied here verbatim:
+
+- **O-15**, "Step-4 irreversibility": *acknowledge that D14/C1 refuse
+  rollback to the mock baseline after the first real publication.*
+  **Answer (2026-09-30):** acknowledged. The first real staging publication is
+  data-level forward-only. The acknowledgement **does not authorize** that
+  publication: activation step 4 still needs its own authorization.
+- **O-16**, "Production genesis (C3)": *ADR 0025 sequencer-genesis amendment;
+  seeding from a legacy release is impossible in production.*
+  **Answer (2026-09-30):** a **separate production genesis design** is
+  approved, only for a season with **no earlier release**. It is not designed
+  or implemented here. E1 contains no genesis code (ADR 0025 status note of
+  the same date).
+
+No activation step is complete, or authorized, by either answer.
+
+**Baseline re-verified at `383d8aa` (2026-09-30).** The ledger has never been
+bound or used in any environment:
+
+- no revision of `wrangler.toml` ever named `ReconciliationLedger` in an
+  `[exports]` entry, a migration or a binding (`git log -S` finds none);
+- `resolveReconciliationLedger()` has always answered `null`, and `Env` has no
+  ledger field;
+- staging's only deployed version, `c297d260-…`, was built from `36b0fd2`,
+  which predates the ledger class (`a67278f`). Production runs provider mode
+  `none`.
+
+Schema v1 was therefore refined in place a third time. This justification ends
+at activation step 3, the first deploy that resolves a ledger. After that, a
+record change needs a versioned decoder and a migration decision.
+
+**What E1 implements.**
+
+| Area | Implementation |
+|---|---|
+| Record model | `SeasonRecord.operatorHold` (`since`, `operationId`), `durableBlock` (`since`, `reason`: `classification-superseded` or `backlog-capacity-exceeded`) and `lastOperatorAction` (`operationId`, `action`, `at`, `authMethod`). `ClassificationRecord.lastDisposition` (`operationId`, `action`, `at`, `authMethod`, `stagedRevision`). An operation ID is a lowercase UUID v4. `authMethod` is the closed value `shared-admin-token`, which names a method, not a person. |
+| Independent stops | The hold and the durable block are separate from the transient `publicationDisposition`. Marking a run `publishing`, crashing, recovering and completing all leave them exactly as they were. |
+| Operator transitions | Two new store operations, each one fenced, version-checked and idempotent transaction. **`operate`**: `hold`, `release-hold` or `clear-block`, conditional on the inspected season-record version (0 creates the record, so a season can be held before its first run). **`dispose`** is T12: `accept-staged`, `accept-competing` or `retain-published`. It is conditional on the record version and on the exact accepted, staged and competing revisions the operator inspected, and it releases the backlog entry in the same transaction. A resent operation ID answers `already-applied` and writes nothing. The same ID for another action is refused as `operation-id-reused`. The pure transitions are in `ledger/operator.ts`, and the decoders for the new requests are in `ledger/requests.ts`. |
+| T12 semantics | Every disposition clears the staged, competing and pending slots and appends exactly one revision to the history. `accept-*` appends the displaced accepted revision. `retain-published` appends the staged revision, so it is rejected permanently (OD-4). A competing revision is cleared, not superseded. The history bound refuses a disposition and never evicts. A transient `classification-staged` or `classification-review-locked` block lifts, with publication due now, only when no other round of the season still waits for review. A hold, a durable block, other block reasons and a `publishing` slot are untouched. Nothing is published: the next run publishes through every guard, and only if upstream then serves the accepted revision. |
+| Storage invariants (`commit`) | `staged-correction-immutable`: a commit that clears or changes a stored staged or competing correction, writes `lastDisposition`, or carries any backlog removal. A competing slot may still be filled (T11b). `backlog-staged-mismatch`: a backlog entry is inserted only together with the newly staged slot of the same revision, and the reverse. `operator-state-immutable`: a commit that sets, changes or clears a hold or `lastOperatorAction`, or changes or clears a durable block. A run may set a durable block. `publication-stopped`: a publication **reservation** while a hold or durable block is set. |
+| Every publishing path refuses | The **planner** plans no publication for a due publication alone, or for drift, while a stop is in force. A **manual** run answers `nothing-due` / `publication-stopped` with zero provider requests. **Cadence** checks and the weekly **refreshes** still observe, so the ledger keeps following upstream. The **publication half** checks the stop first, on the committed record, before anything is prepared, reserved or sent. It ends as `withheld` (`operator-hold` or `durable-block`), next-due `stopped`: an earlier block is kept, and a scheduled run clears its due time. The observation commit of a stopped season writes no `publishing` mark. **Recovery** resolves an unfinished publication as before and keeps both stops. The store's `publication-stopped` check backs all of these. |
+| OD-5 | A **settled** round whose reread returns a superseded revision, and a correction the full backlog could not stage (this run's `classification.backlog-capacity-exceeded`), now end `durably-blocked` instead of `cadence`. The run records `durableBlock` and clears its due time. It takes precedence over every other withholding decision in that run. An unsettled round serving a superseded revision keeps its own bounded cadence. |
+| OD-3 | `operator/rollback.ts`, `rollbackUnderHold`, dormant. It takes the season lease and refuses `not-held` before the rollback is reached. It refuses `run-in-progress`, `ledger-unavailable` and `lease-expired`. Otherwise it calls the existing rollback once, under the lease, and releases the lease on every path. The rollback is unchanged: the sequencer path runs the D8 republication through the D14/D15 guard. The hold is kept whatever the result. |
+| OD-8 | `BACKLOG_WARNING_THRESHOLD = 48`, and a pure `backlogAttention(count)`: `normal`, `warning` from 48, `full` at 60. Nothing emits it yet. |
+
+**Choices made in implementation, not owner decisions:**
+
+1. "Hold or block" means the operator hold and the durable block. The
+   transient `blocked` disposition is unchanged. It is re-derived by each run
+   from the same records and the same guard that caused it, and a completing
+   run still clears it. A staged or locked round still withholds through
+   publishability, and a D14/D15 refusal is still decided by the guard.
+2. A durable block is cleared only by `clear-block`. A disposition that frees
+   backlog capacity does not clear a `backlog-capacity-exceeded` block, even
+   in the same season.
+3. A hold does not move `publicationDueAt`. While a stop is in force, the
+   planner ignores it. `release-hold` and `clear-block` make publication due
+   now.
+4. A hold may be placed whatever the transient disposition, including an
+   unresolved `publishing` slot. Because it is independent, it cannot
+   overwrite a reservation. Recovery still records a release the crashed run
+   committed, and nothing is published again.
+5. Replay detection keeps only the last action of each record. An old ID
+   resent after a later action fails its version check, so it never applies
+   twice.
+6. The rollback prerequisite is a function, not a route change.
+   `POST /internal/admin/rollback` is unchanged.
+
+**Tests.** 112 new tests; the suite is now 4,576 in 200 files.
+
+- Store (49): schema, `operate`, replay, fencing, restart, the commit
+  invariants and T12.
+- Durable Object client (3): a lost answer is `uncertain`, and resending it
+  answers `already-applied`.
+- Planner (14).
+- Outcome rules (9).
+- Operator package (4): dormancy and OD-8.
+- The pairing invariant (1).
+- End to end, over both transports (32). These cover: a held cadence check
+  and weekly refresh; a refused manual run; release; a crash and restart
+  under a hold; recovery of a crash-committed release under a hold; an
+  operator kept out by a run's lease; the hold-gated rollback, including a
+  D14 refusal, a run in progress, an expired lease and a throwing rollback;
+  the superseded and capacity durable blocks stopping the hourly loop; and a
+  failed outcome commit that is re-derived and recorded by the next run.
+
+**Negative controls.** Each is a mutation of the committed code (`f8f6ede`),
+restored from a hash-verified backup:
+
+| Mutation | Tests failed |
+|---|---|
+| Publication-half stop check removed | 6 |
+| Store `publication-stopped` removed | 2 |
+| All three stop layers removed | 21 |
+| Staged immutability removed from `commit` | 5 |
+| `commit` may remove a backlog entry | 3 |
+| OD-5 durable block never raised | 8 |
+
+**Bundle.** The Wrangler dry-run `index.js` goes from `a473a777…725b`
+(649,568 B) to `e5b6a16f…cbcf` (664,968 B), identical in all three
+environments, and the binding reports are unchanged. The +15,400 B are the
+ledger package only (`store`, `records`/`requests`, `operator`, `model`,
+`durable-object`), because the Durable Object class is exported. Policy,
+observation, outcome and operator code stay out of the bundle.
+
+**Still open, for PR-E2 and later:**
+
+- **PR-E2 (operator surface):**
+  - the inspect, hold, release, clear-block and dispose routes;
+  - wiring `rollbackUnderHold` into `POST /internal/admin/rollback` for
+    coordinated mode;
+  - the level-triggered attention line (A7) using the OD-8 levels;
+  - the daily-review procedure that OD-1 accepts for staging;
+  - the runbook sections and the Backend Operations route table.
+- **PR-E3:** operator verification (T11-T11d) with the OD-7 content.
+- **PR-G:** the production genesis design O-16 approves.
+- Before production: verified alert delivery (OD-1).
+- **O-9**, and running the A3.5 staging predecessor gate.
+- Every activation step. E1 must merge before step 3.
+
+**Residual risks.**
+
+- An upstream revert to a superseded revision freezes the season. It is now
+  a visible durable block, not a loop, but D2.2 stays absolute (OD-6).
+- Releasing a hold after a rollback republishes the rolled-back content
+  unless upstream changed. Release is consent.
+- A full revision history (16) is a dead end for T12 as well as T3.
+- Audit identity rests on the operator keeping private evidence against the
+  operation ID.
+- A durably blocked or held season is visible today only by reading the
+  ledger or the run's `warn` line. No attention line exists yet (PR-E2).
+
 The decision above is unchanged.
 
 ## Reopening conditions
