@@ -45,11 +45,13 @@ import type {
 } from '../ledger/model';
 import {
   decidePublication,
+  publicationStop,
   type CheckOutcome,
   type RunPlan,
   type SeasonOutcomes,
 } from '../policy';
 import {
+  durableBlockReason,
   notApplied,
   settleSeasonRecord,
   withheldByPolicy,
@@ -140,6 +142,8 @@ export interface PublicationStepInput {
   readonly committed: LedgerSnapshot;
   /** The disposition the season carried before this run. */
   readonly previous: PublicationDisposition | null;
+  /** Whether the observation raised `classification.backlog-capacity-exceeded`. */
+  readonly capacityExceeded: boolean;
   /** When every response had arrived. */
   readonly observedAt: Date;
   /** The curated metadata source. Defaults to the bundled records. */
@@ -160,6 +164,13 @@ export async function publishUnderLease(
     input.committed.classifications.map(({ record }) => [record.round, record]),
   );
 
+  // Checked first, on what the observation commit left: a hold or a durable
+  // block ends the run before anything is prepared, reserved or sent,
+  // whatever the trigger, the plan or the observations (OD-3, OD-5).
+  const stop = publicationStop(current.record);
+  if (stop !== null) {
+    return settle(input, current, withheld(stop), { decision: 'stopped' });
+  }
   if (input.run.status === 'cancelled') {
     return settle(input, current, withheld('cancelled'), { decision: 'retry' });
   }
@@ -174,9 +185,16 @@ export async function publishUnderLease(
       const record = records.get(round);
       return record === undefined ? [] : [record];
     });
-    const settlement = withheldByPolicy(decision.reasons, selected);
+    const durable = durableBlockReason({
+      checks: input.plan.checks,
+      records,
+      outcomes: input.classificationOutcomes,
+      capacityExceeded: input.capacityExceeded,
+    });
+    const settlement = withheldByPolicy(decision.reasons, selected, durable);
     const cause =
-      settlement.decision === 'blocked'
+      settlement.decision === 'blocked' ||
+      settlement.decision === 'durably-blocked'
         ? (settlement.reason as WithheldCause)
         : decision.reasons[0]!;
     return settle(input, current, withheld(cause), settlement);

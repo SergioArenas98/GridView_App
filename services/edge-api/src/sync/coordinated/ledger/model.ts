@@ -14,6 +14,12 @@
  * `ClassificationRecord.contentRevision` and `SeasonRecord.calendarAnchors`.
  * PR-C4 refined it again, on the same grounds, with the season's publication
  * state: `lastOrderingInput`, `lastPublication` and `publicationDisposition`.
+ * PR-E1 refined it a third time, on the same grounds (re-verified at
+ * `383d8aa`), with the operator state: `SeasonRecord.operatorHold`,
+ * `durableBlock` and `lastOperatorAction`, and
+ * `ClassificationRecord.lastDisposition`. After the first deploy that
+ * resolves a ledger, any change needs a versioned decoder and a migration
+ * decision instead.
  *
  * Every stored value is bounded and closed: identifiers, canonical UTC
  * instants, bounded counters, closed states and `sha256:` revision hashes.
@@ -37,6 +43,12 @@ export const RECONCILIATION_LEDGER_OBJECT_NAME = 'reconciliation';
  * that would exceed it is refused.
  */
 export const BACKLOG_CAPACITY = 60;
+
+/**
+ * The backlog count at which an operator is warned, before capacity (OD-8:
+ * 48 of the 60 slots). Emitting the warning is later work (PR-E2).
+ */
+export const BACKLOG_WARNING_THRESHOLD = 48;
 
 /**
  * The bounded superseded-revision history per classification resource.
@@ -101,6 +113,49 @@ export interface CorrectionSlot {
 }
 
 /**
+ * A client-generated UUID v4, lowercase, naming one operator action. It is
+ * what makes a resent action idempotent; it identifies the action, never who
+ * took it.
+ */
+export type OperationId = string;
+
+/**
+ * How an operator action was authenticated (OD-2). `shared-admin-token` is
+ * the one bearer token every operator shares (ADR 0009), so it names a method
+ * and **identifies no individual**. The token itself is never stored.
+ */
+export const operatorAuthMethods = ['shared-admin-token'] as const;
+export type OperatorAuthMethod = (typeof operatorAuthMethods)[number];
+
+/**
+ * The §10.4.1 T12 dispositions (OD-4):
+ *
+ * - `accept-staged` / `accept-competing`: that revision becomes the accepted
+ *   content, and the displaced accepted revision joins the superseded
+ *   history.
+ * - `retain-published` ("keep published"): the accepted content stays, and
+ *   the exact staged revision joins the superseded history, so it is
+ *   rejected permanently. A different later revision follows the normal
+ *   review rules.
+ */
+export const dispositionActions = [
+  'accept-staged',
+  'accept-competing',
+  'retain-published',
+] as const;
+export type DispositionAction = (typeof dispositionActions)[number];
+
+/** The last T12 disposition of a resource: replay detection and audit. */
+export interface DispositionRecord {
+  readonly operationId: OperationId;
+  readonly action: DispositionAction;
+  readonly at: LedgerInstant;
+  readonly authMethod: OperatorAuthMethod;
+  /** The staged revision the disposition decided. */
+  readonly stagedRevision: RevisionHash;
+}
+
+/**
  * One race classification resource, key `classification:{season}:{round}`.
  *
  * `publishedRevision` is a **cache** of the authoritative release. An ordinary
@@ -145,6 +200,8 @@ export interface ClassificationRecord {
   readonly lastSweptAt: LedgerInstant | null;
   readonly lastPriorityAttemptAt: LedgerInstant | null;
   readonly unstableSightings: number;
+  /** Written only by the T12 `dispose` operation, never by a commit. */
+  readonly lastDisposition: DispositionRecord | null;
 }
 
 /** The season-level resources carried as refresh state. */
@@ -233,7 +290,10 @@ export type PublicationBlockReason = (typeof publicationBlockReasons)[number];
  *   the guarded publisher; before that the run never reached it. The next run
  *   resolves this slot against the authority before planning anything.
  * - `blocked`: publication is held for operator action; no due time is set
- *   for it, so it is never retried on a timer.
+ *   for it, so it is never retried on a timer. **Transient**: every run
+ *   re-derives it from the records and the guard, and a later run that
+ *   completes clears it. A stop that must survive runs is `operatorHold` or
+ *   `durableBlock` instead, which no publication run can clear.
  */
 export type PublicationDisposition =
   | {
@@ -247,6 +307,56 @@ export type PublicationDisposition =
       readonly since: LedgerInstant;
       readonly reason: PublicationBlockReason;
     };
+
+/**
+ * A deliberate operator hold on a season's publication (OD-3). Set and
+ * cleared only by an explicit operator action; while set, no path publishes.
+ */
+export interface OperatorHold {
+  readonly since: LedgerInstant;
+  readonly operationId: OperationId;
+}
+
+/**
+ * Why a season's publication stopped until an operator acts (OD-5). Each is a
+ * condition that retrying on a timer could not change and that would
+ * otherwise loop hourly:
+ *
+ * - `classification-superseded`: upstream serves a revision the ledger
+ *   superseded, for a settled round. D2.2 keeps it rejected (OD-6).
+ * - `backlog-capacity-exceeded`: a correction could not be staged because
+ *   the global backlog was full.
+ */
+export const durableBlockReasons = [
+  'classification-superseded',
+  'backlog-capacity-exceeded',
+] as const;
+export type DurableBlockReason = (typeof durableBlockReasons)[number];
+
+/**
+ * A stop a run records and only an operator clears. An ordinary commit may
+ * set it, never change or clear it.
+ */
+export interface DurableBlock {
+  readonly since: LedgerInstant;
+  readonly reason: DurableBlockReason;
+}
+
+/** The season-level operator actions (OD-3, OD-5). */
+export const seasonOperatorActions = [
+  'hold',
+  'release-hold',
+  'clear-block',
+] as const;
+export type SeasonOperatorAction = (typeof seasonOperatorActions)[number];
+
+/** The last season-level operator action: replay detection and audit. */
+export interface OperatorActionRecord {
+  readonly operationId: OperationId;
+  readonly action: SeasonOperatorAction;
+  readonly at: LedgerInstant;
+  readonly authMethod: OperatorAuthMethod;
+}
 
 /** One season's refresh state, key `season:{season}`. */
 export interface SeasonRecord {
@@ -270,6 +380,16 @@ export interface SeasonRecord {
   readonly lastOrderingInput: LedgerInstant | null;
   readonly lastPublication: LastPublication | null;
   readonly publicationDisposition: PublicationDisposition | null;
+  /**
+   * The operator hold, independent of the transient disposition above: a
+   * run that marks the season `publishing`, crashes or completes leaves it
+   * exactly as it was. Written only by the operator action.
+   */
+  readonly operatorHold: OperatorHold | null;
+  /** Set by a run, cleared only by the operator action. */
+  readonly durableBlock: DurableBlock | null;
+  /** Written only by the operator action. */
+  readonly lastOperatorAction: OperatorActionRecord | null;
 }
 
 /**
@@ -370,7 +490,22 @@ export const ledgerRejectionReasons = [
   'backlog-duplicate',
   'backlog-entry-missing',
   'backlog-orphan',
+  /** A backlog entry without its newly staged slot, or the reverse. */
+  'backlog-staged-mismatch',
   'ordering-input-regression',
+  /**
+   * D2.5: a commit would clear or change a staged or competing correction,
+   * write a disposition, or remove a backlog entry. Only `dispose` may.
+   */
+  'staged-correction-immutable',
+  /** A commit would set, change or clear operator state it may not. */
+  'operator-state-immutable',
+  /** A publication reservation while a hold or durable block is set. */
+  'publication-stopped',
+  /** An operation ID already used for a different action. */
+  'operation-id-reused',
+  /** The record is not in the state the operator action requires. */
+  'operator-precondition-failed',
   'state-corrupt',
 ] as const;
 export type LedgerRejectionReason = (typeof ledgerRejectionReasons)[number];
@@ -430,6 +565,49 @@ export interface LedgerCommitRequest {
 export type LedgerCommitOutcome =
   | {
       readonly outcome: 'committed';
+      readonly snapshot: LedgerSnapshot;
+    }
+  | LedgerRejection
+  | LedgerUnavailable
+  | LedgerUncertain;
+
+/**
+ * One season-level operator action. Fenced by the lease, conditional on the
+ * season record version the operator inspected (0: no record yet).
+ */
+export interface OperatorActionRequest {
+  readonly lease: LeaseToken;
+  readonly action: SeasonOperatorAction;
+  readonly operationId: OperationId;
+  readonly authMethod: OperatorAuthMethod;
+  readonly expectedVersion: number;
+}
+
+/**
+ * One T12 disposition. Every `expected` value must equal the stored record,
+ * so an operator decides exactly the state they inspected.
+ */
+export interface DispositionRequest {
+  readonly lease: LeaseToken;
+  readonly round: number;
+  readonly action: DispositionAction;
+  readonly operationId: OperationId;
+  readonly authMethod: OperatorAuthMethod;
+  readonly expected: {
+    readonly recordVersion: number;
+    readonly contentRevision: RevisionHash;
+    readonly stagedRevision: RevisionHash;
+    readonly competingRevision: RevisionHash | null;
+  };
+}
+
+/**
+ * What an operator transition did. `already-applied` is a resent operation
+ * ID: nothing was written, and the snapshot is the current state.
+ */
+export type OperatorTransitionOutcome =
+  | {
+      readonly outcome: 'applied' | 'already-applied';
       readonly snapshot: LedgerSnapshot;
     }
   | LedgerRejection

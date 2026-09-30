@@ -274,6 +274,26 @@
 > `snapshotRevision` now has runtime callers on the sequenced path: the
 > publication plan and the predecessor read. This supersedes the "no
 > production caller" statement above, which was true when written.
+>
+> **Owner decisions O-15 and O-16 recorded (2026-09-30) — no genesis code,
+> nothing deployed, no activation step complete.** Both were defined only in
+> the private runtime activation decision pack of 2026-09-27 (§14). ADR 0020,
+> "E1", quotes both definitions verbatim.
+>
+> - **O-15** (step-4 irreversibility) is **acknowledged**. After the first
+>   real staging publication, ADR 0026 D14 refuses a rollback or
+>   republication to the mock-derived baseline, with no C1 exemption. The
+>   season is **data-level forward-only** from then on. The acknowledgement
+>   does **not** authorize that publication.
+> - **O-16** (production genesis, curator decision C3) approves a **separate
+>   production genesis design**, a sequencer-genesis amendment to this ADR,
+>   **only for a season with no earlier release**. That design is not written
+>   here and nothing implements it. "There is no sequencer genesis" (D4,
+>   "Amendment (2026-09-27)") stays true.
+>
+> The same day, OD-3 made a coordinated-mode rollback require an operator
+> hold (ADR 0020, "E1"). The prerequisite exists only as a dormant function.
+> D8, D14/D15 and `POST /internal/admin/rollback` are unchanged.
 
 ## Context
 

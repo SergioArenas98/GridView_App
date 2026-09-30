@@ -29,6 +29,13 @@
  * follows the same eligibility, cannot name a round, ignores the limiter's
  * deferral (the limiter itself still decides) and consumes no due slot.
  *
+ * **A stopped season** - held by an operator, or durably blocked (PR-E1) - is
+ * never planned a publication for publication's sake: neither a due
+ * publication nor drift makes one, and a manual run sends nothing at all, not
+ * even a calendar bootstrap. Cadence checks, the weekly refreshes and a
+ * scheduled bootstrap still observe, so the ledger keeps following upstream,
+ * and the publication half then refuses to publish.
+ *
  * Planning target only (O-7): the eventual cron is hourly at minute 17. The
  * planner does not depend on the cron; the committed cron is unchanged.
  */
@@ -38,6 +45,7 @@ import type {
   ClassificationRecord,
   LedgerSnapshot,
   RefreshResource,
+  SeasonRecord,
 } from '../ledger/model';
 import { currentSlot, isEligible } from './cadence';
 
@@ -77,12 +85,16 @@ export type PlannedCheck =
       readonly check: 'reread' | 'manual';
     };
 
+/** Why nothing is due. `publication-stopped` answers only a manual run. */
+export type NothingDueReason =
+  'no-work' | 'limiter-deferred' | 'publication-stopped';
+
 export type RunPlan =
   | {
       readonly kind: 'nothing-due';
       readonly season: number;
       readonly trigger: RunTrigger;
-      readonly reason: 'no-work' | 'limiter-deferred';
+      readonly reason: NothingDueReason;
       readonly resources: readonly [];
       readonly providerRequests: 0;
     }
@@ -229,6 +241,22 @@ function selectChecks(
   return checks;
 }
 
+/** What stops a season's publication until an operator acts. */
+export type PublicationStop = 'operator-hold' | 'durable-block';
+
+/**
+ * The stop in force, or `null`. A hold wins over a durable block, because a
+ * hold is the operator's own decision; either stops publication.
+ */
+export function publicationStop(
+  record: SeasonRecord | null,
+): PublicationStop | null {
+  if (record === null) return null;
+  if (record.operatorHold !== null) return 'operator-hold';
+  if (record.durableBlock !== null) return 'durable-block';
+  return null;
+}
+
 /**
  * Whether another writer replaced the release this runtime last published or
  * confirmed (runtime activation decision O-12): the reconciled authority
@@ -238,13 +266,16 @@ function selectChecks(
  * recorded all look the same here, and each makes a publication due, so a
  * version change that raced a no-change decision is found at the next tick
  * instead of waiting for the next cadence check. A season held `blocked` for
- * an operator is the exception: drift alone never retries it on a timer.
+ * an operator is the exception: drift alone never retries it on a timer. A
+ * stopped season is another: a rollback made under a hold is never undone by
+ * drift (OD-3).
  */
 export function releaseDrifted(snapshot: LedgerSnapshot): boolean {
   const record = snapshot.seasonRecord?.record ?? null;
   const last = record?.lastPublication ?? null;
   if (last === null || snapshot.published === null) return false;
   if (record!.publicationDisposition?.state === 'blocked') return false;
+  if (publicationStop(record) !== null) return false;
   return snapshot.published.activeVersion !== last.activeVersion;
 }
 
@@ -254,7 +285,13 @@ export function planRun(input: PlanInput): RunPlan {
   const advancesSchedule = trigger === 'scheduled';
   const seasonRecord = snapshot.seasonRecord?.record ?? null;
   const calendar = seasonRecord?.calendarAnchors ?? null;
+  const stopped = publicationStop(seasonRecord) !== null;
 
+  if (trigger === 'manual' && stopped) {
+    // A forced publication run could only be refused: it sends nothing, not
+    // even a calendar bootstrap for a season held before its first run.
+    return nothingDue(season, trigger, 'publication-stopped');
+  }
   if (calendar === null) {
     // A failed bootstrap still waits for its calendar cadence; only a manual
     // run may ask again before then.
@@ -288,7 +325,8 @@ export function planRun(input: PlanInput): RunPlan {
     trigger === 'manual' ||
     checks.some((check) => check.check === 'cadence') ||
     publicationTriggers.some(refreshDue) ||
-    (seasonRecord!.publicationDueAt !== null &&
+    (!stopped &&
+      seasonRecord!.publicationDueAt !== null &&
       isDue(seasonRecord!.publicationDueAt, now)) ||
     releaseDrifted(snapshot);
 
@@ -331,7 +369,7 @@ export function planRun(input: PlanInput): RunPlan {
 function nothingDue(
   season: number,
   trigger: RunTrigger,
-  reason: 'no-work' | 'limiter-deferred',
+  reason: NothingDueReason,
 ): RunPlan {
   return {
     kind: 'nothing-due',

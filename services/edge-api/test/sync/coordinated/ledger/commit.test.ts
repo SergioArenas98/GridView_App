@@ -20,6 +20,7 @@ import {
   lease,
   ledgerFixture,
   rev,
+  stagedClassification,
   seasonRecord,
   write,
 } from './support';
@@ -158,7 +159,7 @@ describe('all or nothing', () => {
         commitRequest(token, {
           seasonRecord: write(seasonRecord()),
           classifications: [
-            write(classification(1)),
+            write(stagedClassification(1, rev('staged'))),
             write(classification(2)),
             write(classification(3)),
           ],
@@ -423,7 +424,7 @@ describe('storage restart', () => {
           ),
           classifications: [
             write(classification(1, { supersededRevisions: history(2) })),
-            write(classification(2)),
+            write(stagedClassification(2, rev('staged'))),
           ],
           backlogInsertions: [{ round: 2, revision: rev('staged') }],
         }),
@@ -439,7 +440,14 @@ describe('storage restart', () => {
       (
         await restarted.ledger.commit(
           commitRequest(token, {
-            classifications: [write(classification(2, { checkIndex: 1 }), 1)],
+            classifications: [
+              write(
+                stagedClassification(2, rev('staged'), SEASON, {
+                  checkIndex: 1,
+                }),
+                1,
+              ),
+            ],
           }),
         )
       ).outcome,
@@ -453,7 +461,7 @@ describe('storage restart', () => {
       await fixture.ledger.commit(
         commitRequest(token, {
           seasonRecord: write(seasonRecord()),
-          classifications: [write(classification(1))],
+          classifications: [write(stagedClassification(1, rev('staged')))],
           backlogInsertions: [{ round: 1, revision: rev('staged') }],
         }),
       ),

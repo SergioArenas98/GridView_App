@@ -20,9 +20,12 @@ import {
   lease,
   ledgerFixture,
   rev,
+  stagedClassification,
   write,
   type LedgerFixture,
 } from './support';
+
+const OPERATION = '4f7c1e2a-9b3d-4c5e-8f6a-1b2c3d4e5f60';
 
 /** Inserts `count` entries for `season`, one classification round each. */
 async function fill(
@@ -35,7 +38,9 @@ async function fill(
   const outcome = await fixture.ledger.commit(
     commitRequest(token, {
       classifications: rounds.map((round) =>
-        write(classification(round, {}, token.season)),
+        write(
+          stagedClassification(round, rev(`${label}-${round}`), token.season),
+        ),
       ),
       backlogInsertions: rounds.map((round) => ({
         round,
@@ -69,7 +74,9 @@ describe('the global backlog capacity', () => {
     expect(
       await fixture.ledger.commit(
         commitRequest(current, {
-          classifications: [write(classification(26))],
+          classifications: [
+            write(stagedClassification(26, rev('sixty-first'))),
+          ],
           backlogInsertions: [{ round: 26, revision: rev('sixty-first') }],
         }),
       ),
@@ -87,7 +94,7 @@ describe('the global backlog capacity', () => {
       await fixture.ledger.commit(
         commitRequest(token, {
           classifications: [59, 60, 61].map((round) =>
-            write(classification(round)),
+            write(stagedClassification(round, rev(`staged-${round}`))),
           ),
           backlogInsertions: [59, 60, 61].map((round) => ({
             round,
@@ -104,7 +111,7 @@ describe('the global backlog capacity', () => {
         await fixture.ledger.commit(
           commitRequest(token, {
             classifications: [59, 60].map((round) =>
-              write(classification(round)),
+              write(stagedClassification(round, rev(`staged-${round}`))),
             ),
             backlogInsertions: [59, 60].map((round) => ({
               round,
@@ -129,7 +136,7 @@ describe('the global backlog capacity', () => {
     expect(
       await fixture.ledger.commit(
         commitRequest(renewed, {
-          classifications: [write(classification(61))],
+          classifications: [write(stagedClassification(61, rev('newer')))],
           backlogInsertions: [{ round: 61, revision: rev('newer') }],
         }),
       ),
@@ -138,19 +145,46 @@ describe('the global backlog capacity', () => {
     expect(entries()).toEqual(kept);
   });
 
-  it('releases capacity only through an explicit removal', async () => {
+  it('releases capacity only through a T12 disposition, never a commit', async () => {
     const fixture = ledgerFixture();
     const token = await lease(fixture);
     await fill(fixture, token, 60, 'full');
+    const before = committedBytes(fixture.host);
 
-    // Disposing of one resource frees the slot another resource takes, in
-    // the same commit, netting to the capacity.
+    // An ordinary commit cannot remove an entry, even to make room (D2.5).
+    expect(
+      await fixture.ledger.commit(
+        commitRequest(token, {
+          classifications: [write(stagedClassification(61, rev('next')))],
+          backlogRemovals: [{ round: 1, revision: rev('full-1') }],
+          backlogInsertions: [{ round: 61, revision: rev('next') }],
+        }),
+      ),
+    ).toEqual({ outcome: 'rejected', reason: 'staged-correction-immutable' });
+    expect(committedBytes(fixture.host)).toBe(before);
+
+    // Disposing of one resource frees exactly one slot, which another takes.
+    const disposed = await fixture.ledger.dispose({
+      lease: token,
+      round: 1,
+      action: 'retain-published',
+      operationId: OPERATION,
+      authMethod: 'shared-admin-token',
+      expected: {
+        recordVersion: 1,
+        contentRevision: rev('content-1'),
+        stagedRevision: rev('full-1'),
+        competingRevision: null,
+      },
+    });
+    expect(
+      disposed.outcome === 'applied' && disposed.snapshot.backlog.count,
+    ).toBe(59);
     expect(
       (
         await fixture.ledger.commit(
           commitRequest(token, {
-            classifications: [write(classification(61))],
-            backlogRemovals: [{ round: 1, revision: rev('full-1') }],
+            classifications: [write(stagedClassification(61, rev('next')))],
             backlogInsertions: [{ round: 61, revision: rev('next') }],
           }),
         )
@@ -208,7 +242,7 @@ describe('backlog entries', () => {
         await fixture.ledger.commit(
           commitRequest(token, {
             classifications: others.map((round) =>
-              write(classification(round)),
+              write(stagedClassification(round, rev(`other-${round}`))),
             ),
             backlogInsertions: others.map((round) => ({
               round,
@@ -220,7 +254,7 @@ describe('backlog entries', () => {
     ).toBe('committed');
   });
 
-  it('refuses a duplicate entry, a missing removal and an orphan, changing nothing', async () => {
+  it('refuses a duplicate entry, any removal and an orphan, changing nothing', async () => {
     const fixture = ledgerFixture();
     const token = await lease(fixture);
     await fill(fixture, token, 1, 'one');
@@ -233,20 +267,19 @@ describe('backlog entries', () => {
         }),
       ),
     ).toEqual({ outcome: 'rejected', reason: 'backlog-duplicate' });
-    expect(
-      await fixture.ledger.commit(
-        commitRequest(token, {
-          backlogRemovals: [{ round: 1, revision: rev('never-entered') }],
-        }),
-      ),
-    ).toEqual({ outcome: 'rejected', reason: 'backlog-entry-missing' });
-    expect(
-      await fixture.ledger.commit(
-        commitRequest(token, {
-          backlogRemovals: [{ round: 2, revision: rev('one-1') }],
-        }),
-      ),
-    ).toEqual({ outcome: 'rejected', reason: 'backlog-entry-missing' });
+    // A removal is refused whether or not it names a real entry: only T12
+    // releases one.
+    for (const removal of [
+      { round: 1, revision: rev('one-1') },
+      { round: 1, revision: rev('never-entered') },
+      { round: 2, revision: rev('one-1') },
+    ]) {
+      expect(
+        await fixture.ledger.commit(
+          commitRequest(token, { backlogRemovals: [removal] }),
+        ),
+      ).toEqual({ outcome: 'rejected', reason: 'staged-correction-immutable' });
+    }
     expect(
       await fixture.ledger.commit(
         commitRequest(token, {
@@ -280,20 +313,70 @@ describe('backlog entries', () => {
     });
   });
 
-  it('cannot be removed under another season lease', async () => {
+  it('cannot be disposed of under another season lease', async () => {
     const fixture = ledgerFixture();
     const current = await lease(fixture, SEASON);
     const other = await lease(fixture, OTHER_SEASON);
     await fill(fixture, current, 1, 'current');
     const before = committedBytes(fixture.host);
 
+    // The other season holds no record for the round, so nothing matches.
     expect(
-      await fixture.ledger.commit(
-        commitRequest(other, {
-          backlogRemovals: [{ round: 1, revision: rev('current-1') }],
-        }),
-      ),
-    ).toEqual({ outcome: 'rejected', reason: 'backlog-entry-missing' });
+      await fixture.ledger.dispose({
+        lease: other,
+        round: 1,
+        action: 'accept-staged',
+        operationId: OPERATION,
+        authMethod: 'shared-admin-token',
+        expected: {
+          recordVersion: 1,
+          contentRevision: rev('content-1'),
+          stagedRevision: rev('current-1'),
+          competingRevision: null,
+        },
+      }),
+    ).toEqual({ outcome: 'rejected', reason: 'operator-precondition-failed' });
+    expect(committedBytes(fixture.host)).toBe(before);
+  });
+
+  it('enters an entry only together with the staged slot it holds', async () => {
+    const fixture = ledgerFixture();
+    const token = await lease(fixture);
+    const before = committedBytes(fixture.host);
+
+    for (const [parts, reason] of [
+      // An entry for a record written without a staged slot.
+      [
+        {
+          classifications: [write(classification(1))],
+          backlogInsertions: [{ round: 1, revision: rev('staged') }],
+        },
+        'backlog-staged-mismatch',
+      ],
+      // An entry naming another revision than the slot.
+      [
+        {
+          classifications: [write(stagedClassification(1, rev('staged')))],
+          backlogInsertions: [{ round: 1, revision: rev('other') }],
+        },
+        'backlog-staged-mismatch',
+      ],
+      // A staged slot without its entry.
+      [
+        { classifications: [write(stagedClassification(1, rev('staged')))] },
+        'backlog-staged-mismatch',
+      ],
+      // An entry for a round the request does not write.
+      [
+        { backlogInsertions: [{ round: 1, revision: rev('staged') }] },
+        'backlog-orphan',
+      ],
+    ] as const) {
+      expect(await fixture.ledger.commit(commitRequest(token, parts))).toEqual({
+        outcome: 'rejected',
+        reason,
+      });
+    }
     expect(committedBytes(fixture.host)).toBe(before);
   });
 });

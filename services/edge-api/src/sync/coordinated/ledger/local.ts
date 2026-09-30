@@ -10,6 +10,7 @@
 
 import type { ReconciliationLedgerPort } from '../ledger-port';
 import type {
+  DispositionRequest,
   LeaseAcquisition,
   LeaseRelease,
   LeaseToken,
@@ -17,6 +18,8 @@ import type {
   LedgerCommitRequest,
   LedgerReadOutcome,
   LedgerUnavailable,
+  OperatorActionRequest,
+  OperatorTransitionOutcome,
   PublishedReconciliationOutcome,
   PublishedReconciliationRequest,
 } from './model';
@@ -47,6 +50,18 @@ export class LocalReconciliationLedger implements ReconciliationLedgerPort {
     request: PublishedReconciliationRequest,
   ): Promise<PublishedReconciliationOutcome> {
     return guarded(() => this.store.reconcilePublishedRevisions(request));
+  }
+
+  async operate(
+    request: OperatorActionRequest,
+  ): Promise<OperatorTransitionOutcome> {
+    return guarded(() => this.store.operate(request));
+  }
+
+  async dispose(
+    request: DispositionRequest,
+  ): Promise<OperatorTransitionOutcome> {
+    return guarded(() => this.store.dispose(request));
   }
 }
 
