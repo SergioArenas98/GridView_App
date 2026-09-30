@@ -205,13 +205,27 @@ describe.each(stops)('a season stopped by %s', (_, stop) => {
     });
   });
 
-  it('still lets a manual run bootstrap a calendar, which is an observation', () => {
+  it('refuses a manual run even before the first calendar, which a scheduled bootstrap still observes', () => {
+    // An operator may hold a season no run has observed yet.
+    const quiet = quietSeason(calendar, FAR, stop);
     const season = {
-      ...quietSeason(calendar, FAR, stop),
+      ...quiet,
       calendarAnchors: null,
+      refresh: {
+        ...quiet.refresh,
+        calendar: { ...quiet.refresh.calendar, nextDueAt: null },
+      },
     };
-    expect(
-      planAt(plus(ANCHOR, -30 * DAY), snapshotOf({ season }), 'manual'),
-    ).toMatchObject({ kind: 'observation', bootstrap: true });
+    const at = plus(ANCHOR, -30 * DAY);
+    expect(planAt(at, snapshotOf({ season }), 'manual')).toMatchObject({
+      kind: 'nothing-due',
+      reason: 'publication-stopped',
+      providerRequests: 0,
+    });
+    expect(planAt(at, snapshotOf({ season }))).toMatchObject({
+      kind: 'observation',
+      bootstrap: true,
+      providerRequests: 1,
+    });
   });
 });

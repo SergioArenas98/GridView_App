@@ -237,6 +237,42 @@ describe.each(sequencerTransports)(
         });
       });
 
+      it('placed before the first run, refuses a manual run and lets only a scheduled bootstrap observe', async () => {
+        const harness = await ObservationHarness.create({
+          transport,
+          seed: 'unclassified',
+        });
+        expect(
+          (await operate(harness, PRE_SEASON, 'hold', OP[0])).outcome,
+        ).toBe('applied');
+
+        const manual = await harness.run(PRE_SEASON, { trigger: 'manual' });
+        expect(manual.outcome).toMatchObject({
+          status: 'nothing-due',
+          reason: 'publication-stopped',
+          providerRequests: 0,
+        });
+        expect(manual.requests).toEqual([]);
+
+        const bootstrap = await harness.run(later(PRE_SEASON, MINUTE));
+        expect(bootstrap.outcome).toMatchObject({
+          status: 'observed',
+          plan: 'observation',
+          publication: 'not-attempted',
+        });
+        expect(bootstrap.requests).toEqual([paths.calendar]);
+
+        // The first publication run the calendar makes due publishes nothing.
+        const first = await harness.run(FIRST_PUBLICATION);
+        expect(first.outcome).toMatchObject({
+          publication: { cause: 'operator-hold', next: 'stopped' },
+        });
+        expect(harness.releases()).toEqual([]);
+        expect((await harness.season()).operatorHold).toMatchObject({
+          operationId: OP[0],
+        });
+      });
+
       it('resumes at its release: the next tick publishes through every guard', async () => {
         const { harness } = await held(later(FIRST_PUBLICATION, MINUTE));
         harness.server.results.set(1, 'A');

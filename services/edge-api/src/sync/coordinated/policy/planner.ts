@@ -31,9 +31,10 @@
  *
  * **A stopped season** - held by an operator, or durably blocked (PR-E1) - is
  * never planned a publication for publication's sake: neither a due
- * publication nor drift makes one, and a manual run sends nothing at all.
- * Cadence checks and the weekly refreshes still observe, so the ledger keeps
- * following upstream, and the publication half then refuses to publish.
+ * publication nor drift makes one, and a manual run sends nothing at all, not
+ * even a calendar bootstrap. Cadence checks, the weekly refreshes and a
+ * scheduled bootstrap still observe, so the ledger keeps following upstream,
+ * and the publication half then refuses to publish.
  *
  * Planning target only (O-7): the eventual cron is hourly at minute 17. The
  * planner does not depend on the cron; the committed cron is unchanged.
@@ -284,7 +285,13 @@ export function planRun(input: PlanInput): RunPlan {
   const advancesSchedule = trigger === 'scheduled';
   const seasonRecord = snapshot.seasonRecord?.record ?? null;
   const calendar = seasonRecord?.calendarAnchors ?? null;
+  const stopped = publicationStop(seasonRecord) !== null;
 
+  if (trigger === 'manual' && stopped) {
+    // A forced publication run could only be refused: it sends nothing, not
+    // even a calendar bootstrap for a season held before its first run.
+    return nothingDue(season, trigger, 'publication-stopped');
+  }
   if (calendar === null) {
     // A failed bootstrap still waits for its calendar cadence; only a manual
     // run may ask again before then.
@@ -307,11 +314,6 @@ export function planRun(input: PlanInput): RunPlan {
     };
   }
 
-  const stopped = publicationStop(seasonRecord) !== null;
-  if (trigger === 'manual' && stopped) {
-    // A forced publication run could only be refused: it sends nothing.
-    return nothingDue(season, trigger, 'publication-stopped');
-  }
   if (trigger === 'scheduled' && deferredUntil(snapshot) > now.getTime()) {
     return nothingDue(season, trigger, 'limiter-deferred');
   }
