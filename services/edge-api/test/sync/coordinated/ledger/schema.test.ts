@@ -14,9 +14,9 @@ import {
 } from '../../../../src/sync/coordinated/ledger';
 import {
   decodeClassificationRecord,
-  decodeCommitRequest,
   decodeSeasonRecord,
 } from '../../../../src/sync/coordinated/ledger/records';
+import { decodeCommitRequest } from '../../../../src/sync/coordinated/ledger/requests';
 import {
   OTHER_SEASON,
   SEASON,

@@ -29,6 +29,7 @@ import {
   classification,
   commitRequest,
   rev,
+  stagedClassification,
   write,
 } from './support';
 
@@ -141,6 +142,8 @@ describe('ReconciliationLedger durable object', () => {
       'release-lease',
       'commit',
       'reconcile-published',
+      'operate',
+      'dispose',
     ]);
   });
 
@@ -160,7 +163,7 @@ describe('ReconciliationLedger durable object', () => {
 
     const committed = await ledger.commit(
       commitRequest(token, {
-        classifications: [write(classification(1))],
+        classifications: [write(stagedClassification(1, rev('staged')))],
         backlogInsertions: [{ round: 1, revision: rev('staged') }],
       }),
     );
@@ -356,6 +359,114 @@ describe('the client fails closed', () => {
     expect(await ledger.commit(commit)).toEqual({
       outcome: 'rejected',
       reason: 'backlog-capacity-exceeded',
+    });
+  });
+});
+
+describe('operator transitions through the client', () => {
+  const OPERATION = '5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d';
+
+  /** `namespace`, but every answer is lost after the object ran it. */
+  function losingAnswers(namespace: LedgerNamespace): LedgerNamespace {
+    return {
+      idFromName: (name) => namespace.idFromName(name),
+      get: (id) => ({
+        fetch: async (url: string, init: RequestInit) => {
+          await namespace.get(id).fetch(url, init);
+          throw new TypeError('connection lost');
+        },
+      }),
+    };
+  }
+
+  it('applies once: a lost answer is uncertain, and resending it is already applied', async () => {
+    const clock = new MutableClock(new Date(START));
+    const namespace = fakeNamespace(clock);
+    const ledger = new DurableObjectReconciliationLedger(namespace);
+    const acquired = await ledger.acquireLease(SEASON);
+    if (acquired.outcome !== 'acquired') throw new Error('not acquired');
+    const token = { season: SEASON, fence: acquired.lease.fence };
+    const hold = {
+      lease: token,
+      action: 'hold' as const,
+      operationId: OPERATION,
+      authMethod: 'shared-admin-token' as const,
+      expectedVersion: 0,
+    };
+
+    const lost = new DurableObjectReconciliationLedger(
+      losingAnswers(namespace),
+    );
+    expect(await lost.operate(hold)).toEqual({ outcome: 'uncertain' });
+
+    const resent = await ledger.operate(hold);
+    expect(resent.outcome).toBe('already-applied');
+    expect(
+      resent.outcome === 'already-applied' && resent.snapshot.seasonRecord,
+    ).toMatchObject({
+      version: 1,
+      record: { operatorHold: { since: START, operationId: OPERATION } },
+    });
+  });
+
+  it('disposes of a staged correction through the object', async () => {
+    const clock = new MutableClock(new Date(START));
+    const ledger = new DurableObjectReconciliationLedger(fakeNamespace(clock));
+    const acquired = await ledger.acquireLease(SEASON);
+    if (acquired.outcome !== 'acquired') throw new Error('not acquired');
+    const token = { season: SEASON, fence: acquired.lease.fence };
+    await ledger.commit(
+      commitRequest(token, {
+        classifications: [write(stagedClassification(1, rev('staged')))],
+        backlogInsertions: [{ round: 1, revision: rev('staged') }],
+      }),
+    );
+
+    const outcome = await ledger.dispose({
+      lease: token,
+      round: 1,
+      action: 'retain-published',
+      operationId: OPERATION,
+      authMethod: 'shared-admin-token',
+      expected: {
+        recordVersion: 1,
+        contentRevision: rev('content-1'),
+        stagedRevision: rev('staged'),
+        competingRevision: null,
+      },
+    });
+    expect(outcome.outcome).toBe('applied');
+    expect(
+      outcome.outcome === 'applied' && outcome.snapshot.backlog.count,
+    ).toBe(0);
+  });
+
+  it('never reads an undecodable or foreign answer as applied', async () => {
+    const request = {
+      lease: { season: SEASON, fence: 1 },
+      action: 'hold' as const,
+      operationId: OPERATION,
+      authMethod: 'shared-admin-token' as const,
+      expectedVersion: 0,
+    };
+    for (const body of [
+      { outcome: 'applied' },
+      { outcome: 'applied', snapshot: { season: OTHER_SEASON } },
+      { outcome: 'done', snapshot: null },
+    ]) {
+      const ledger = new DurableObjectReconciliationLedger(
+        answering(() => json(body)),
+      );
+      expect(await ledger.operate(request)).toEqual({ outcome: 'uncertain' });
+    }
+    const refusing = new DurableObjectReconciliationLedger(
+      answering(() =>
+        json({ outcome: 'rejected', reason: 'operation-id-reused' }),
+      ),
+    );
+    expect(await refusing.operate(request)).toEqual({
+      outcome: 'rejected',
+      reason: 'operation-id-reused',
     });
   });
 });

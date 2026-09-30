@@ -64,8 +64,40 @@ export function classification(
     lastSweptAt: null,
     lastPriorityAttemptAt: null,
     unstableSightings: 0,
+    lastDisposition: null,
     ...overrides,
   } as ClassificationRecord;
+}
+
+/**
+ * A settled record holding a staged correction of `revision`: the only kind
+ * of record a backlog entry may be inserted with (D2.5).
+ */
+export function stagedClassification(
+  round: number,
+  revision: string,
+  season = SEASON,
+  overrides: Partial<Record<keyof ClassificationRecord, unknown>> = {},
+): ClassificationRecord {
+  return classification(
+    round,
+    {
+      contentRevision: rev(`content-${round}`),
+      provenance: 'reconciled',
+      reviewState: 'settled',
+      terminalReason: 'settled',
+      settledAt: '2026-03-22T04:00:00.000Z',
+      nextDueAt: null,
+      markers: ['staged'],
+      stagedCorrection: {
+        revision,
+        firstSeenAt: '2026-04-01T04:00:00.000Z',
+        uncorroborated: false,
+      },
+      ...overrides,
+    },
+    season,
+  );
 }
 
 const emptyRefresh = {
@@ -95,6 +127,9 @@ export function seasonRecord(
     lastOrderingInput: null,
     lastPublication: null,
     publicationDisposition: null,
+    operatorHold: null,
+    durableBlock: null,
+    lastOperatorAction: null,
     ...overrides,
   } as SeasonRecord;
 }

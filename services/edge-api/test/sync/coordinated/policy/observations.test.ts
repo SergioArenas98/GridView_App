@@ -20,7 +20,12 @@ import {
   type CheckOutcome,
   type RunPlan,
 } from '../../../../src/sync/coordinated/policy';
-import { OTHER_SEASON, commitRequest, write } from '../ledger/support';
+import {
+  OTHER_SEASON,
+  commitRequest,
+  stagedClassification,
+  write,
+} from '../ledger/support';
 import {
   ANCHOR,
   DAY,
@@ -130,7 +135,13 @@ describe('the operator backlog capacity', () => {
         { season: OTHER_SEASON, fence: other.lease.fence },
         {
           classifications: Array.from({ length: occupied }, (_, index) =>
-            write(classification(index + 1, {}, OTHER_SEASON)),
+            write(
+              stagedClassification(
+                index + 1,
+                rev(`other-${index}`),
+                OTHER_SEASON,
+              ),
+            ),
           ),
           backlogInsertions: Array.from({ length: occupied }, (_, index) => ({
             round: index + 1,

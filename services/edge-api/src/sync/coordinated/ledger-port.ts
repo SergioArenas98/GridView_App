@@ -16,7 +16,9 @@
  * publishability decision - is the pure policy in `policy/`. Only the
  * injected orchestration in `observation/` and `outcome/` commits through this
  * port: observations, the ordering-input reservation and the publication
- * outcome. No Worker run reaches it.
+ * outcome. The operator transitions (`operate`, `dispose`; PR-E1) are defined
+ * and reached by nothing yet: the operator routes are later work (PR-E2). No
+ * Worker run reaches any of it.
  *
  * No binding, variable or test hook supplies a ledger to the runtime, so
  * `resolveReconciliationLedger` always answers `null`. Every coordinated run,
@@ -25,12 +27,15 @@
  */
 
 import type {
+  DispositionRequest,
   LeaseAcquisition,
   LeaseRelease,
   LeaseToken,
   LedgerCommitOutcome,
   LedgerCommitRequest,
   LedgerReadOutcome,
+  OperatorActionRequest,
+  OperatorTransitionOutcome,
   PublishedReconciliationOutcome,
   PublishedReconciliationRequest,
 } from './ledger/model';
@@ -61,6 +66,18 @@ export interface ReconciliationLedgerPort {
   reconcilePublishedRevisions(
     request: PublishedReconciliationRequest,
   ): Promise<PublishedReconciliationOutcome>;
+
+  /**
+   * A season-level operator action: hold, release the hold, or clear a
+   * durable block. The only writer of the hold. No route calls it yet.
+   */
+  operate(request: OperatorActionRequest): Promise<OperatorTransitionOutcome>;
+
+  /**
+   * T12: disposes of one staged correction. The only operation that clears a
+   * staged slot or releases a backlog entry. No route calls it yet.
+   */
+  dispose(request: DispositionRequest): Promise<OperatorTransitionOutcome>;
 }
 
 /**

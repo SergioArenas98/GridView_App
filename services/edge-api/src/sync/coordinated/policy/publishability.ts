@@ -55,7 +55,8 @@ export interface PublicationInput {
   readonly records: ReadonlyMap<number, ClassificationRecord>;
 }
 
-function roundReason(
+/** Why one selected round withholds the candidate, or `null` if it does not. */
+export function roundWithholdReason(
   record: ClassificationRecord | undefined,
   outcome: CheckOutcome | undefined,
 ): WithholdReason | null {
@@ -92,7 +93,10 @@ export function decidePublication(
   const rounds: { round: number; revision: RevisionHash }[] = [];
   for (const { round } of plan.checks) {
     const record = input.records.get(round);
-    const reason = roundReason(record, input.classificationOutcomes.get(round));
+    const reason = roundWithholdReason(
+      record,
+      input.classificationOutcomes.get(round),
+    );
     if (reason === null) {
       rounds.push({ round, revision: record!.contentRevision! });
     } else {

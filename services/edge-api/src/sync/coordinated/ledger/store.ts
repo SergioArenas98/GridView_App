@@ -24,11 +24,23 @@
  *   ordinary commit can never change it; only `reconcilePublishedRevisions`,
  *   which is handed the authoritative release's revisions, writes it.
  * - **A strictly increasing release-wide ordering input** per season (O-13).
+ * - **D2.5, the staged slot is immutable.** A commit can never clear or change
+ *   a staged or competing correction, write a disposition, or remove a
+ *   backlog entry, and a backlog entry is inserted only together with the
+ *   staged slot it holds. Only `dispose` (T12) releases either.
+ * - **Operator state belongs to operators.** A commit can never set, change
+ *   or clear a hold or the last operator action, and can set a durable block
+ *   but never change or clear one. Only `operate` does.
+ * - **No reservation through a stop.** A commit that reserves a publication
+ *   while a hold or durable block is set is refused, whatever its caller
+ *   decided.
  *
- * What it deliberately does not do: any §10.4.1 transition, corroboration,
- * settling, due-work planning, publishability or no-change decision, or
- * choosing an ordering input. Those compute the records a caller commits
- * here; the store only refuses an ordering input that does not move forward.
+ * What it deliberately does not do: any §10.4.1 transition other than T12,
+ * corroboration, settling, due-work planning, publishability or no-change
+ * decision, or choosing an ordering input. Those compute the records a caller
+ * commits here; the store only refuses an ordering input that does not move
+ * forward. The operator transitions are pure (`operator.ts`) and run here
+ * only because each needs checks one transaction must make atomically.
  *
  * The object's own clock is the only time source for leases and entry times.
  */
@@ -42,6 +54,7 @@ import {
   BACKLOG_CAPACITY,
   LEASE_TTL_MS,
   LEDGER_SCHEMA_VERSION,
+  SUPERSEDED_REVISION_CAPACITY,
   type BacklogEntry,
   type ClassificationRecord,
   type LeaseAcquisition,
@@ -53,24 +66,35 @@ import {
   type LedgerRejection,
   type LedgerRejectionReason,
   type LedgerSnapshot,
+  type OperatorTransitionOutcome,
   type PublishedReconciliation,
   type PublishedReconciliationOutcome,
   type SeasonRecord,
   type Versioned,
 } from './model';
 import {
+  applyDisposition,
+  applyOperatorAction,
+  emptySeasonRecord,
+  seasonAfterDisposition,
+} from './operator';
+import {
   decodeBacklogEntry,
   decodeClassificationRecord,
-  decodeCommitRequest,
   decodeLeaseRecord,
-  decodeLeaseToken,
   decodePublishedReconciliation,
-  decodeReconciliationRequest,
   decodeSeasonRecord,
-  decodeSeasonRequest,
   decodeVersioned,
   ledgerKeys,
 } from './records';
+import {
+  decodeCommitRequest,
+  decodeDispositionRequest,
+  decodeLeaseToken,
+  decodeOperatorActionRequest,
+  decodeReconciliationRequest,
+  decodeSeasonRequest,
+} from './requests';
 
 /** The storage host: SQLite-backed Durable Object storage, or its in-memory double. */
 export type LedgerHost = SequencerHost;
@@ -172,9 +196,9 @@ export class ReconciliationLedgerStore {
   /**
    * Applies every conditional write in the request, or none of them.
    *
-   * The checks run in a fixed order - lease, versions, the published-revision
-   * cache, the revision history, then the backlog - and the first failure
-   * refuses the whole request.
+   * The checks run in a fixed order - lease, versions, operator state, the
+   * published-revision cache, the revision history, the staged slots, then
+   * the backlog - and the first failure refuses the whole request.
    */
   commit(payload: unknown): LedgerCommitOutcome {
     return this.transact((store) => {
@@ -199,6 +223,7 @@ export class ReconciliationLedgerStore {
           storedSeason?.record.lastOrderingInput ?? null,
           seasonWrite.record.lastOrderingInput,
         );
+        checkOperatorState(storedSeason?.record ?? null, seasonWrite.record);
       }
 
       const stored = new Map<number, Versioned<ClassificationRecord> | null>();
@@ -216,37 +241,34 @@ export class ReconciliationLedgerStore {
         );
       }
 
-      const backlog = readBacklog(store);
-      const existing = new Map(
-        backlog.map((entry) => [backlogKey(entry), entry] as const),
-      );
-      for (const removal of request.backlogRemovals) {
-        // A disposition names the resource and the staged revision it
-        // disposes of; any other revision does not match the entry.
-        const entry = existing.get(ledgerKeys.backlog(season, removal.round));
-        if (entry === undefined || entry.revision !== removal.revision) {
-          refuse('backlog-entry-missing');
-        }
+      // D2.5: only T12 (`dispose`) releases a backlog entry.
+      if (request.backlogRemovals.length > 0) {
+        refuse('staged-correction-immutable');
       }
-      const written = new Set(
-        request.classifications.map((w) => w.record.round),
+      const backlog = readBacklog(store);
+      const existing = new Set(backlog.map(backlogKey));
+      const inserted = new Map(
+        request.backlogInsertions.map((entry) => [entry.round, entry.revision]),
       );
       for (const insertion of request.backlogInsertions) {
         // One entry per resource, whatever revision a second one names.
         if (existing.has(ledgerKeys.backlog(season, insertion.round))) {
           refuse('backlog-duplicate');
         }
-        if (
-          !written.has(insertion.round) &&
-          readClassification(store, season, insertion.round) === null
-        ) {
-          refuse('backlog-orphan');
+        if (!stored.has(insertion.round)) refuse('backlog-orphan');
+      }
+      for (const write of request.classifications) {
+        // A staged slot and its backlog entry are entered together, or not
+        // at all, so the capacity counts exactly the corrections held.
+        const before = stored.get(write.record.round)?.record ?? null;
+        const staged = write.record.stagedCorrection;
+        const entry = inserted.get(write.record.round);
+        const staging = before?.stagedCorrection == null && staged !== null;
+        if (staging ? entry !== staged.revision : entry !== undefined) {
+          refuse('backlog-staged-mismatch');
         }
       }
-      const count =
-        backlog.length -
-        request.backlogRemovals.length +
-        request.backlogInsertions.length;
+      const count = backlog.length + request.backlogInsertions.length;
       if (count > BACKLOG_CAPACITY) refuse('backlog-capacity-exceeded');
 
       // Every check passed. Only now is anything written.
@@ -261,9 +283,6 @@ export class ReconciliationLedgerStore {
           version: write.expectedVersion + 1,
           record: write.record,
         });
-      }
-      for (const removal of request.backlogRemovals) {
-        store.delete(ledgerKeys.backlog(season, removal.round));
       }
       const enteredAt = now.toISOString();
       for (const insertion of request.backlogInsertions) {
@@ -280,6 +299,122 @@ export class ReconciliationLedgerStore {
         outcome: 'committed',
         snapshot: readSnapshot(store, season, now),
       };
+    });
+  }
+
+  /**
+   * One season-level operator action - hold, release the hold, or clear a
+   * durable block - fenced by the lease and conditional on the season record
+   * version the operator inspected.
+   *
+   * A resent operation ID is answered `already-applied` and writes nothing,
+   * even after the version moved on; the same ID for another action is
+   * refused. Only the most recent action is remembered, so an ID resent after
+   * a later action fails its version check instead: it never applies twice.
+   */
+  operate(payload: unknown): OperatorTransitionOutcome {
+    return this.transact((store) => {
+      const decoded = decodeOperatorActionRequest(payload);
+      if (!decoded.ok) refuse(decoded.reason);
+      const request = decoded.value;
+      const season = request.lease.season;
+      const now = this.now();
+      requireLease(store, request.lease, now);
+
+      const stored = readSeasonRecord(store, season);
+      const last = stored?.record.lastOperatorAction ?? null;
+      if (last !== null && last.operationId === request.operationId) {
+        if (last.action !== request.action) refuse('operation-id-reused');
+        return {
+          outcome: 'already-applied',
+          snapshot: readSnapshot(store, season, now),
+        };
+      }
+      if (request.expectedVersion !== (stored?.version ?? 0)) {
+        refuse('version-conflict');
+      }
+      const next = applyOperatorAction(
+        stored?.record ?? emptySeasonRecord(season),
+        request,
+        now.toISOString(),
+      );
+      if (next === null) refuse('operator-precondition-failed');
+      store.put(ledgerKeys.season(season), {
+        version: (stored?.version ?? 0) + 1,
+        record: next,
+      });
+      return { outcome: 'applied', snapshot: readSnapshot(store, season, now) };
+    });
+  }
+
+  /**
+   * T12: disposes of one staged correction, releases its backlog entry and,
+   * when no other round of the season still waits for review, lifts the
+   * season's transient review block - all in one transaction, or nothing.
+   *
+   * The only operation that may clear a staged or competing correction or
+   * remove a backlog entry. It sends nothing and publishes nothing. A resent
+   * operation ID is answered as `operate` answers one.
+   */
+  dispose(payload: unknown): OperatorTransitionOutcome {
+    return this.transact((store) => {
+      const decoded = decodeDispositionRequest(payload);
+      if (!decoded.ok) refuse(decoded.reason);
+      const request = decoded.value;
+      const season = request.lease.season;
+      const now = this.now();
+      requireLease(store, request.lease, now);
+
+      const stored = readClassification(store, season, request.round);
+      if (stored === null) refuse('operator-precondition-failed');
+      const last = stored.record.lastDisposition;
+      if (last !== null && last.operationId === request.operationId) {
+        if (last.action !== request.action) refuse('operation-id-reused');
+        return {
+          outcome: 'already-applied',
+          snapshot: readSnapshot(store, season, now),
+        };
+      }
+      if (request.expected.recordVersion !== stored.version) {
+        refuse('version-conflict');
+      }
+      const at = now.toISOString();
+      const next = applyDisposition(stored.record, request, at);
+      if (next === null) refuse('operator-precondition-failed');
+      const entry = readBacklog(store).find(
+        (candidate) =>
+          candidate.season === season && candidate.round === request.round,
+      );
+      if (entry?.revision !== request.expected.stagedRevision) {
+        refuse('backlog-entry-missing');
+      }
+      if (next.supersededRevisions.length > SUPERSEDED_REVISION_CAPACITY) {
+        refuse('revision-history-capacity');
+      }
+      checkHistory(stored, next);
+
+      const storedSeason = readSeasonRecord(store, season);
+      const remaining = readClassifications(store, season)
+        .map(({ record }) => record)
+        .filter((record) => record.round !== request.round);
+      const seasonNext = seasonAfterDisposition(
+        storedSeason?.record ?? null,
+        remaining,
+        at,
+      );
+
+      store.put(ledgerKeys.classification(season, request.round), {
+        version: stored.version + 1,
+        record: next,
+      });
+      store.delete(ledgerKeys.backlog(season, request.round));
+      if (seasonNext !== null) {
+        store.put(ledgerKeys.season(season), {
+          version: storedSeason!.version + 1,
+          record: seasonNext,
+        });
+      }
+      return { outcome: 'applied', snapshot: readSnapshot(store, season, now) };
     });
   }
 
@@ -396,6 +531,41 @@ function checkOrderingInput(stored: string | null, next: string | null): void {
   }
 }
 
+/** Equality of two decoded values: closed, and built in a fixed key order. */
+function same(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/**
+ * Operator state a commit may not touch. A hold and the last operator action
+ * are written only by `operate`. A durable block may be set by a run - the
+ * outcome that found the condition - but only `operate` changes or clears it.
+ * And no reservation is recorded while either stop is set, so a publication
+ * cannot reach the guarded publisher through one.
+ */
+function checkOperatorState(
+  stored: SeasonRecord | null,
+  next: SeasonRecord,
+): void {
+  if (
+    !same(next.operatorHold, stored?.operatorHold ?? null) ||
+    !same(next.lastOperatorAction, stored?.lastOperatorAction ?? null) ||
+    (stored !== null &&
+      stored.durableBlock !== null &&
+      !same(next.durableBlock, stored.durableBlock))
+  ) {
+    refuse('operator-state-immutable');
+  }
+  const disposition = next.publicationDisposition;
+  if (
+    disposition?.state === 'publishing' &&
+    disposition.digest !== null &&
+    (next.operatorHold !== null || next.durableBlock !== null)
+  ) {
+    refuse('publication-stopped');
+  }
+}
+
 /**
  * The storage-level rules one classification write must satisfy, beyond its
  * schema and version.
@@ -409,11 +579,36 @@ function checkClassificationWrite(
   if (next.publishedRevision !== (stored?.record.publishedRevision ?? null)) {
     refuse('published-revision-not-reconciled');
   }
+  // D2.5: a staged or competing correction, once held, and the disposition
+  // record belong to T12 alone. A competing slot may still be filled.
+  const before = stored?.record ?? null;
+  if (
+    (before?.stagedCorrection != null &&
+      !same(next.stagedCorrection, before.stagedCorrection)) ||
+    (before?.competingCorrection != null &&
+      !same(next.competingCorrection, before.competingCorrection)) ||
+    !same(next.lastDisposition, before?.lastDisposition ?? null)
+  ) {
+    refuse('staged-correction-immutable');
+  }
+  checkHistory(stored, next);
+}
+
+/**
+ * D2.2, for every writer: the history is append-only, and no slot a later
+ * decision could promote holds a superseded revision.
+ */
+function checkHistory(
+  stored: Versioned<ClassificationRecord> | null,
+  next: ClassificationRecord,
+): void {
   // Append-only: the stored history must survive as the new history's prefix.
   // Dropping, reordering or replacing an entry is refused, never evicted.
   const previous = stored?.record.supersededRevisions ?? [];
   if (
     previous.length > next.supersededRevisions.length ||
+    new Set(next.supersededRevisions).size !==
+      next.supersededRevisions.length ||
     previous.some(
       (revision, index) => next.supersededRevisions[index] !== revision,
     )

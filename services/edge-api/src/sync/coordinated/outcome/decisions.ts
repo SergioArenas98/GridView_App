@@ -13,11 +13,17 @@
  * | `retry` (a transient failure, a cancellation) | now + 1 h | cleared, but an earlier block is kept |
  * | `cadence` (only a later cadence check can change it) | that check, at least now + 1 h | cleared, but an earlier block is kept |
  * | `blocked` (operator action needed) | cleared | `blocked` with the reason |
+ * | `durably-blocked` (an hourly loop otherwise; OD-5) | cleared | an earlier block is kept; `durableBlock` set |
+ * | `stopped` (a hold or durable block was in force) | cleared | an earlier block is kept |
  * | `resolve` (the commit is unknown) | unchanged | `publishing` kept |
  *
- * A manual run never moves a due time (O-8): its `retry` and `cadence`
- * decisions leave `publicationDueAt` as it was. It still records a block, a
- * completion and an unknown commit.
+ * A manual run never moves a due time (O-8): its `retry`, `cadence`,
+ * `durably-blocked` and `stopped` decisions leave `publicationDueAt` as it
+ * was. It still records a block, a durable block, a completion and an unknown
+ * commit.
+ *
+ * No decision touches `operatorHold`, and none clears `durableBlock`: only an
+ * operator action does (the store refuses anything else).
  *
  * `publishedRevision` is never written here: only reconciliation from the
  * authority writes it. An applied release reaches it at the next run.
@@ -29,12 +35,19 @@ import type {
 } from '../../../publication/publisher';
 import type {
   ClassificationRecord,
+  DurableBlockReason,
   LedgerInstant,
   PublicationBlockReason,
   RevisionHash,
   SeasonRecord,
 } from '../ledger/model';
-import type { WithholdReason } from '../policy';
+import {
+  roundWithholdReason,
+  type CheckOutcome,
+  type PlannedCheck,
+  type PublicationStop,
+  type WithholdReason,
+} from '../policy';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -46,6 +59,8 @@ export const nextDueDecisions = [
   'retry',
   'cadence',
   'blocked',
+  'durably-blocked',
+  'stopped',
   'resolve',
 ] as const;
 export type NextDueDecision = (typeof nextDueDecisions)[number];
@@ -67,6 +82,15 @@ export type SettlementDecision =
       readonly records: readonly ClassificationRecord[];
     }
   | { readonly decision: 'blocked'; readonly reason: PublicationBlockReason }
+  | {
+      /** Recorded as `durableBlock`: only an operator clears it (OD-5). */
+      readonly decision: 'durably-blocked';
+      readonly reason: DurableBlockReason;
+    }
+  | {
+      /** A hold or durable block was in force: nothing was prepared. */
+      readonly decision: 'stopped';
+    }
   | { readonly decision: 'resolve' };
 
 /** Assembly gaps, as the bridge reports them. */
@@ -81,7 +105,12 @@ export type CandidateGap =
 
 /** Why a candidate never reached the guarded publisher. Closed. */
 export type WithheldCause =
-  'cancelled' | 'metadata-unavailable' | WithholdReason | CandidateGap;
+  | 'cancelled'
+  | 'metadata-unavailable'
+  | PublicationStop
+  | DurableBlockReason
+  | WithholdReason
+  | CandidateGap;
 
 /** Withholding reasons only a later cadence check can resolve. */
 const cadenceResolved: ReadonlySet<WithholdReason> = new Set([
@@ -90,17 +119,59 @@ const cadenceResolved: ReadonlySet<WithholdReason> = new Set([
   'classification-superseded',
 ]);
 
+export interface DurableBlockInput {
+  readonly checks: readonly PlannedCheck[];
+  /** The records as the observation commit left them, by round. */
+  readonly records: ReadonlyMap<number, ClassificationRecord>;
+  readonly outcomes: ReadonlyMap<number, CheckOutcome>;
+  /** Whether this run raised `classification.backlog-capacity-exceeded`. */
+  readonly capacityExceeded: boolean;
+}
+
+/**
+ * The OD-5 conditions that would otherwise withhold the season on an hourly
+ * timer for as long as they last, or `null`:
+ *
+ * - a correction the full backlog could not take, which stays pending on a
+ *   settled record whose next sighting would stage it;
+ * - a settled round whose reread returned a revision the ledger superseded.
+ *   A settled record has no cadence check left, so only the hourly floor
+ *   would ever ask again, and D2.2 keeps the revision rejected (OD-6).
+ *
+ * An unsettled round serving a superseded revision is not one: its own
+ * cadence checks are bounded and end at settlement.
+ */
+export function durableBlockReason(
+  input: DurableBlockInput,
+): DurableBlockReason | null {
+  if (input.capacityExceeded) return 'backlog-capacity-exceeded';
+  for (const { round } of input.checks) {
+    const record = input.records.get(round);
+    if (
+      record?.reviewState === 'settled' &&
+      roundWithholdReason(record, input.outcomes.get(round)) ===
+        'classification-superseded'
+    ) {
+      return 'classification-superseded';
+    }
+  }
+  return null;
+}
+
 /**
  * The decision for a candidate withheld by the publishability policy.
  *
- * A staged or review-locked record needs an operator (O-5(a)); anything only
+ * A condition that would loop hourly stops the season durably (OD-5). A
+ * staged or review-locked record needs an operator (O-5(a)); anything only
  * a cadence check can settle waits for that check rather than an hourly
  * retry; everything else is a transient provider state, retried.
  */
 export function withheldByPolicy(
   reasons: readonly WithholdReason[],
   records: readonly ClassificationRecord[],
+  durable: DurableBlockReason | null = null,
 ): SettlementDecision {
+  if (durable !== null) return { decision: 'durably-blocked', reason: durable };
   if (reasons.includes('classification-staged')) {
     return { decision: 'blocked', reason: 'classification-staged' };
   }
@@ -259,6 +330,20 @@ export function settleSeasonRecord(input: SettlementInput): SeasonRecord {
         publicationDueAt: advancesSchedule ? null : record.publicationDueAt,
       };
     }
+    case 'durably-blocked':
+      return {
+        ...record,
+        publicationDisposition: unresolvedBlock(input.previous),
+        durableBlock: { since: at, reason: decision.reason },
+        publicationDueAt: advancesSchedule ? null : record.publicationDueAt,
+      };
+    case 'stopped':
+      // The stop itself is left exactly as it is; only an operator ends it.
+      return {
+        ...record,
+        publicationDisposition: unresolvedBlock(input.previous),
+        publicationDueAt: advancesSchedule ? null : record.publicationDueAt,
+      };
     case 'resolve':
       return record;
   }

@@ -116,6 +116,7 @@ export function newClassificationRecord(
     lastSweptAt: null,
     lastPriorityAttemptAt: null,
     unstableSightings: 0,
+    lastDisposition: null,
   };
 }
 

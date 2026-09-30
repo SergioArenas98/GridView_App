@@ -1,6 +1,6 @@
 /**
- * Strict runtime decoding for every value the reconciliation ledger stores,
- * accepts or answers.
+ * Strict runtime decoding for every value the reconciliation ledger stores.
+ * The requests it accepts are decoded in `requests.ts`, with these rules.
  *
  * Every decoder is closed: an object must carry exactly the model's keys, every
  * string must match a bounded shape (a `sha256:` revision, a canonical UTC
@@ -21,34 +21,35 @@ import {
 import {
   LEDGER_SCHEMA_VERSION,
   MAXIMUM_CHECK_INDEX,
-  MAXIMUM_COMMIT_WRITES,
   MAXIMUM_CONSECUTIVE_CONFIRMATIONS,
   MAXIMUM_ROUND,
   MAXIMUM_UNSTABLE_SIGHTINGS,
   SUPERSEDED_REVISION_CAPACITY,
   anchorKinds,
   classificationMarkers,
+  dispositionActions,
+  durableBlockReasons,
+  operatorAuthMethods,
   provenanceStates,
   publicationBlockReasons,
   refreshResources,
   reviewStates,
+  seasonOperatorActions,
   terminalReasons,
-  type AuthoritativeRevision,
   type LastPublication,
   type PublicationDisposition,
   type BacklogEntry,
-  type BacklogReference,
   type CalendarAnchor,
   type ClassificationMarker,
   type ClassificationRecord,
-  type ConditionalWrite,
   type CorrectionSlot,
+  type DispositionRecord,
+  type DurableBlock,
   type LeaseRecord,
-  type LeaseToken,
-  type LedgerCommitRequest,
   type LedgerRejectionReason,
+  type OperatorActionRecord,
+  type OperatorHold,
   type PublishedReconciliation,
-  type PublishedReconciliationRequest,
   type RefreshRecord,
   type RefreshResource,
   type SeasonRecord,
@@ -136,11 +137,11 @@ export type Decoding<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly reason: LedgerRejectionReason };
 
-function refused<T>(reason: LedgerRejectionReason): Decoding<T> {
+export function refused<T>(reason: LedgerRejectionReason): Decoding<T> {
   return { ok: false, reason };
 }
 
-function accepted<T>(value: T): Decoding<T> {
+export function accepted<T>(value: T): Decoding<T> {
   return { ok: true, value };
 }
 
@@ -162,6 +163,47 @@ function decodeCorrection(value: unknown): CorrectionSlot | null | 'invalid' {
     revision: value.revision,
     firstSeenAt: value.firstSeenAt,
     uncorroborated: value.uncorroborated,
+  };
+}
+
+const operationIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/** A lowercase UUID v4: bounded, and never a name or a credential. */
+export function isOperationId(value: unknown): value is string {
+  return typeof value === 'string' && operationIdPattern.test(value);
+}
+
+const dispositionKeys = [
+  'operationId',
+  'action',
+  'at',
+  'authMethod',
+  'stagedRevision',
+] as const;
+
+function decodeDispositionRecord(
+  value: unknown,
+): DispositionRecord | null | 'invalid' {
+  if (value === null) return null;
+  if (!isObject(value) || !hasExactKeys(value, dispositionKeys)) {
+    return 'invalid';
+  }
+  if (
+    !isOperationId(value.operationId) ||
+    !isOneOf(dispositionActions, value.action) ||
+    !isLedgerInstant(value.at) ||
+    !isOneOf(operatorAuthMethods, value.authMethod) ||
+    !isSnapshotRevision(value.stagedRevision)
+  ) {
+    return 'invalid';
+  }
+  return {
+    operationId: value.operationId,
+    action: value.action,
+    at: value.at,
+    authMethod: value.authMethod,
+    stagedRevision: value.stagedRevision,
   };
 }
 
@@ -231,6 +273,7 @@ const classificationKeys = [
   'lastSweptAt',
   'lastPriorityAttemptAt',
   'unstableSightings',
+  'lastDisposition',
 ] as const;
 
 export function decodeClassificationRecord(
@@ -244,6 +287,7 @@ export function decodeClassificationRecord(
   const markers = decodeMarkers(value.markers);
   const staged = decodeCorrection(value.stagedCorrection);
   const competing = decodeCorrection(value.competingCorrection);
+  const lastDisposition = decodeDispositionRecord(value.lastDisposition);
   if (
     value.schemaVersion !== LEDGER_SCHEMA_VERSION ||
     value.kind !== 'classification' ||
@@ -275,6 +319,7 @@ export function decodeClassificationRecord(
     markers === null ||
     staged === 'invalid' ||
     competing === 'invalid' ||
+    lastDisposition === 'invalid' ||
     !isInstantOrNull(value.sourceObservedAt) ||
     !isInstantOrNull(value.settledAt) ||
     !(
@@ -317,6 +362,7 @@ export function decodeClassificationRecord(
     lastSweptAt: value.lastSweptAt,
     lastPriorityAttemptAt: value.lastPriorityAttemptAt,
     unstableSightings: value.unstableSightings,
+    lastDisposition,
   });
 }
 
@@ -355,6 +401,9 @@ const seasonKeys = [
   'lastOrderingInput',
   'lastPublication',
   'publicationDisposition',
+  'operatorHold',
+  'durableBlock',
+  'lastOperatorAction',
 ] as const;
 
 const lastPublicationKeys = [
@@ -422,6 +471,65 @@ function decodeDisposition(
   return 'invalid';
 }
 
+const holdKeys = ['since', 'operationId'] as const;
+
+function decodeHold(value: unknown): OperatorHold | null | 'invalid' {
+  if (value === null) return null;
+  if (
+    !isObject(value) ||
+    !hasExactKeys(value, holdKeys) ||
+    !isLedgerInstant(value.since) ||
+    !isOperationId(value.operationId)
+  ) {
+    return 'invalid';
+  }
+  return { since: value.since, operationId: value.operationId };
+}
+
+const durableBlockKeys = ['since', 'reason'] as const;
+
+function decodeDurableBlock(value: unknown): DurableBlock | null | 'invalid' {
+  if (value === null) return null;
+  if (
+    !isObject(value) ||
+    !hasExactKeys(value, durableBlockKeys) ||
+    !isLedgerInstant(value.since) ||
+    !isOneOf(durableBlockReasons, value.reason)
+  ) {
+    return 'invalid';
+  }
+  return { since: value.since, reason: value.reason };
+}
+
+const operatorActionKeys = [
+  'operationId',
+  'action',
+  'at',
+  'authMethod',
+] as const;
+
+function decodeOperatorAction(
+  value: unknown,
+): OperatorActionRecord | null | 'invalid' {
+  if (value === null) return null;
+  if (
+    !isObject(value) ||
+    !hasExactKeys(value, operatorActionKeys) ||
+    !isOperationId(value.operationId) ||
+    !isOneOf(seasonOperatorActions, value.action) ||
+    !isLedgerInstant(value.at) ||
+    !isOneOf(operatorAuthMethods, value.authMethod)
+  ) {
+    return 'invalid';
+  }
+  return {
+    operationId: value.operationId,
+    action: value.action,
+    at: value.at,
+    authMethod: value.authMethod,
+  };
+}
+
 const anchorKeys = ['round', 'anchor', 'anchorKind'] as const;
 
 /** Bounded, one entry per round, strictly ascending by round. */
@@ -472,10 +580,16 @@ export function decodeSeasonRecord(value: unknown): Decoding<SeasonRecord> {
   const publicationDisposition = decodeDisposition(
     value.publicationDisposition,
   );
+  const operatorHold = decodeHold(value.operatorHold);
+  const durableBlock = decodeDurableBlock(value.durableBlock);
+  const lastOperatorAction = decodeOperatorAction(value.lastOperatorAction);
   if (
     calendarAnchors === 'invalid' ||
     lastPublication === 'invalid' ||
-    publicationDisposition === 'invalid'
+    publicationDisposition === 'invalid' ||
+    operatorHold === 'invalid' ||
+    durableBlock === 'invalid' ||
+    lastOperatorAction === 'invalid'
   ) {
     return refused('invalid-record');
   }
@@ -495,6 +609,9 @@ export function decodeSeasonRecord(value: unknown): Decoding<SeasonRecord> {
     lastOrderingInput: value.lastOrderingInput,
     lastPublication,
     publicationDisposition,
+    operatorHold,
+    durableBlock,
+    lastOperatorAction,
   });
 }
 
@@ -607,175 +724,6 @@ export function decodeVersioned<T>(
   }
   const record = decodeRecord(value.record);
   return record.ok ? { version: value.version, record: record.value } : null;
-}
-
-// --- Requests -------------------------------------------------------------
-
-const tokenKeys = ['season', 'fence'] as const;
-
-export function decodeLeaseToken(value: unknown): LeaseToken | null {
-  if (!isObject(value) || !hasExactKeys(value, tokenKeys)) return null;
-  if (!isSeason(value.season) || !isFence(value.fence)) return null;
-  return { season: value.season, fence: value.fence };
-}
-
-export function decodeSeasonRequest(value: unknown): number | null {
-  if (!isObject(value) || !hasExactKeys(value, ['season'])) return null;
-  return isSeason(value.season) ? value.season : null;
-}
-
-const writeKeys = ['expectedVersion', 'record'] as const;
-
-function decodeWrite<T>(
-  value: unknown,
-  decodeRecord: (record: unknown) => Decoding<T>,
-): Decoding<ConditionalWrite<T>> {
-  if (!isObject(value) || !hasExactKeys(value, writeKeys)) {
-    return refused('invalid-request');
-  }
-  if (
-    !isBoundedInteger(value.expectedVersion, 0, Number.MAX_SAFE_INTEGER - 1)
-  ) {
-    return refused('invalid-request');
-  }
-  const record = decodeRecord(value.record);
-  if (!record.ok) return refused(record.reason);
-  return accepted({
-    expectedVersion: value.expectedVersion,
-    record: record.value,
-  });
-}
-
-const referenceKeys = ['round', 'revision'] as const;
-
-function decodeReferences(value: unknown): BacklogReference[] | null {
-  if (!Array.isArray(value) || value.length > MAXIMUM_COMMIT_WRITES) {
-    return null;
-  }
-  const references: BacklogReference[] = [];
-  for (const entry of value) {
-    if (!isObject(entry) || !hasExactKeys(entry, referenceKeys)) return null;
-    if (!isRound(entry.round) || !isSnapshotRevision(entry.revision)) {
-      return null;
-    }
-    references.push({ round: entry.round, revision: entry.revision });
-  }
-  return references;
-}
-
-function hasDuplicates(values: readonly (string | number)[]): boolean {
-  return new Set(values).size !== values.length;
-}
-
-const commitKeys = [
-  'lease',
-  'seasonRecord',
-  'classifications',
-  'backlogInsertions',
-  'backlogRemovals',
-] as const;
-
-/**
- * A commit request: bounded, closed, one season, and no key written twice.
- * The whole request is refused on the first failure; nothing of it applies.
- */
-export function decodeCommitRequest(
-  value: unknown,
-): Decoding<LedgerCommitRequest> {
-  if (!isObject(value) || !hasExactKeys(value, commitKeys)) {
-    return refused('invalid-request');
-  }
-  const lease = decodeLeaseToken(value.lease);
-  if (lease === null) return refused('invalid-request');
-
-  let seasonRecord: ConditionalWrite<SeasonRecord> | null = null;
-  if (value.seasonRecord !== null) {
-    const decoded = decodeWrite(value.seasonRecord, decodeSeasonRecord);
-    if (!decoded.ok) return refused(decoded.reason);
-    if (decoded.value.record.season !== lease.season) {
-      return refused('invalid-request');
-    }
-    seasonRecord = decoded.value;
-  }
-
-  if (
-    !Array.isArray(value.classifications) ||
-    value.classifications.length > MAXIMUM_COMMIT_WRITES
-  ) {
-    return refused('invalid-request');
-  }
-  const classifications: ConditionalWrite<ClassificationRecord>[] = [];
-  for (const entry of value.classifications) {
-    const decoded = decodeWrite(entry, decodeClassificationRecord);
-    if (!decoded.ok) return refused(decoded.reason);
-    if (decoded.value.record.season !== lease.season) {
-      return refused('invalid-request');
-    }
-    classifications.push(decoded.value);
-  }
-
-  const backlogInsertions = decodeReferences(value.backlogInsertions);
-  const backlogRemovals = decodeReferences(value.backlogRemovals);
-  if (backlogInsertions === null || backlogRemovals === null) {
-    return refused('invalid-request');
-  }
-
-  if (
-    hasDuplicates(classifications.map((write) => write.record.round)) ||
-    // One backlog change per resource per request: a resource is entered,
-    // or disposed of, never both at once and never twice.
-    hasDuplicates([
-      ...backlogInsertions.map((reference) => reference.round),
-      ...backlogRemovals.map((reference) => reference.round),
-    ])
-  ) {
-    return refused('duplicate-record');
-  }
-
-  return accepted({
-    lease,
-    seasonRecord,
-    classifications,
-    backlogInsertions,
-    backlogRemovals,
-  });
-}
-
-const reconciliationKeys = ['lease', 'activeVersion', 'revisions'] as const;
-
-export function decodeReconciliationRequest(
-  value: unknown,
-): Decoding<PublishedReconciliationRequest> {
-  if (!isObject(value) || !hasExactKeys(value, reconciliationKeys)) {
-    return refused('invalid-request');
-  }
-  const lease = decodeLeaseToken(value.lease);
-  if (
-    lease === null ||
-    !isVersionIdentifier(value.activeVersion) ||
-    !Array.isArray(value.revisions) ||
-    value.revisions.length > MAXIMUM_ROUND
-  ) {
-    return refused('invalid-request');
-  }
-  const revisions: AuthoritativeRevision[] = [];
-  for (const entry of value.revisions) {
-    if (!isObject(entry) || !hasExactKeys(entry, referenceKeys)) {
-      return refused('invalid-request');
-    }
-    if (!isRound(entry.round) || !isSnapshotRevision(entry.revision)) {
-      return refused('invalid-request');
-    }
-    revisions.push({ round: entry.round, revision: entry.revision });
-  }
-  if (hasDuplicates(revisions.map((entry) => entry.round))) {
-    return refused('duplicate-record');
-  }
-  return accepted({
-    lease,
-    activeVersion: value.activeVersion,
-    revisions,
-  });
 }
 
 export { isObject as isLedgerObject, hasExactKeys as hasExactLedgerKeys };

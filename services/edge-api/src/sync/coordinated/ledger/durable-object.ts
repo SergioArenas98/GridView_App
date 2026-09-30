@@ -37,6 +37,7 @@ import {
 import type { ReconciliationLedgerPort } from '../ledger-port';
 import {
   RECONCILIATION_LEDGER_OBJECT_NAME,
+  type DispositionRequest,
   type LeaseAcquisition,
   type LeaseRelease,
   type LeaseToken,
@@ -44,6 +45,8 @@ import {
   type LedgerCommitRequest,
   type LedgerReadOutcome,
   type LedgerRejection,
+  type OperatorActionRequest,
+  type OperatorTransitionOutcome,
   type PublishedReconciliationOutcome,
   type PublishedReconciliationRequest,
 } from './model';
@@ -66,6 +69,8 @@ export const ledgerCommands = [
   'release-lease',
   'commit',
   'reconcile-published',
+  'operate',
+  'dispose',
 ] as const;
 
 export type LedgerCommand = (typeof ledgerCommands)[number];
@@ -124,6 +129,10 @@ export class ReconciliationLedger {
         return this.store.commit(payload);
       case 'reconcile-published':
         return this.store.reconcilePublishedRevisions(payload);
+      case 'operate':
+        return this.store.operate(payload);
+      case 'dispose':
+        return this.store.dispose(payload);
     }
   }
 }
@@ -153,8 +162,8 @@ export interface LedgerNamespace {
  * A transport, dispatch or decoding failure resolves to a bounded outcome,
  * never an exception and never something a caller could mistake for a
  * decision: `unavailable` for a read, an acquisition or a release, and
- * `uncertain` for a commit or a reconciliation, whose write may have applied
- * before its answer was lost. A response that decodes but describes another
+ * `uncertain` for a commit, a reconciliation or an operator transition, whose
+ * write may have applied before its answer was lost. A response that decodes but describes another
  * season is treated the same way.
  */
 export class DurableObjectReconciliationLedger implements ReconciliationLedgerPort {
@@ -217,6 +226,35 @@ export class DurableObjectReconciliationLedger implements ReconciliationLedgerPo
       const unrecordedRounds = decodeRounds(value.unrecordedRounds);
       if (snapshot !== null && unrecordedRounds !== null) {
         return { outcome: 'reconciled', snapshot, unrecordedRounds };
+      }
+    }
+    return { outcome: 'uncertain' };
+  }
+
+  async operate(
+    request: OperatorActionRequest,
+  ): Promise<OperatorTransitionOutcome> {
+    return this.transition('operate', request, request.lease.season);
+  }
+
+  async dispose(
+    request: DispositionRequest,
+  ): Promise<OperatorTransitionOutcome> {
+    return this.transition('dispose', request, request.lease.season);
+  }
+
+  private async transition(
+    command: 'operate' | 'dispose',
+    request: OperatorActionRequest | DispositionRequest,
+    season: number,
+  ): Promise<OperatorTransitionOutcome> {
+    const value = await this.call(command, request);
+    const rejection = decodeRejection(value);
+    if (rejection !== null) return rejection;
+    for (const outcome of ['applied', 'already-applied'] as const) {
+      if (isOutcome(value, outcome, ['snapshot'])) {
+        const snapshot = decodeSnapshot(value.snapshot, season);
+        if (snapshot !== null) return { outcome, snapshot };
       }
     }
     return { outcome: 'uncertain' };

@@ -26,7 +26,9 @@
  * 6. Map what each request produced onto the C2 policy, and commit the
  *    resulting records in one conditional ledger transaction under the lease.
  *    A publication run's commit also marks the season `publishing`, so a run
- *    that never records its outcome leaves the publication due, not lost.
+ *    that never records its outcome leaves the publication due, not lost -
+ *    unless an operator hold or a durable block stops the season, when there
+ *    is nothing to leave due and the mark is not written.
  * 7. For a publication plan only, the publication half, **under the same
  *    lease**: the publishability decision from the committed records, one
  *    prepared candidate, the no-change gate, at most one guarded publication
@@ -73,7 +75,9 @@ import type {
 import {
   countPolicyEvents,
   planRun,
+  publicationStop,
   recordRunObservations,
+  type NothingDueReason,
   type PolicyEventCategory,
   type RunPlan,
   type RunTrigger,
@@ -163,7 +167,7 @@ export type CoordinatedObservationResult =
     }
   | {
       readonly status: 'nothing-due';
-      readonly reason: 'no-work' | 'limiter-deferred';
+      readonly reason: NothingDueReason;
       readonly providerRequests: 0;
       readonly leaseRelease: LeaseReleaseResult;
     }
@@ -391,8 +395,12 @@ async function observe(
     seasonOutcomes: mapped.seasonOutcomes,
     classificationOutcomes: mapped.classificationOutcomes,
   });
+  // A stopped season publishes nothing, so there is no publication to mark
+  // unfinished: its hold or block survives the commit as it is either way.
+  const stopped =
+    publicationStop(snapshot.seasonRecord?.record ?? null) !== null;
   const commitRequest =
-    plan.kind === 'publication'
+    plan.kind === 'publication' && !stopped
       ? markPublishing(result.request, snapshot, observedAt)
       : result.request;
 
@@ -405,13 +413,14 @@ async function observe(
     }
     after = outcome.snapshot;
   }
+  const events = countPolicyEvents(result.events);
   const observed = {
     status: 'observed',
     plan: plan.kind,
     coordination: run.status,
     providerRequests,
     committed,
-    events: countPolicyEvents(result.events),
+    events,
   } as const;
   if (plan.kind === 'observation') {
     return { ...observed, publication: 'not-attempted' };
@@ -429,6 +438,8 @@ async function observe(
     classificationOutcomes: mapped.classificationOutcomes,
     committed: after,
     previous: snapshot.seasonRecord?.record.publicationDisposition ?? null,
+    capacityExceeded:
+      (events['classification.backlog-capacity-exceeded'] ?? 0) > 0,
     observedAt,
     ...(dependencies.metadata ? { metadata: dependencies.metadata } : {}),
   });
@@ -544,7 +555,8 @@ async function release(
  * One bounded line per run: closed statuses, counts and the fixed event
  * categories. No revision, digest, round, instant, provider value or payload.
  * A run that published, confirmed or deliberately withheld with a retry is
- * quiet; a block, a refusal, an unknown commit and every failure warn.
+ * quiet; a block, a durable block, a stop, a refusal, an unknown commit and
+ * every failure warn - including a manual run a stop refused.
  */
 function logged(
   logger: Logger,
@@ -556,11 +568,14 @@ function logged(
       : null;
   const settled = publication === 'not-attempted' ? null : publication;
   const quiet =
-    outcome.status === 'nothing-due' ||
+    (outcome.status === 'nothing-due' &&
+      outcome.reason !== 'publication-stopped') ||
     (outcome.status === 'observed' &&
       (settled === null ||
         (settled.outcome !== 'not-applied' &&
           settled.next !== 'blocked' &&
+          settled.next !== 'durably-blocked' &&
+          settled.next !== 'stopped' &&
           settled.next !== 'resolve')));
   const event = {
     operation: COORDINATED_OBSERVATION_OPERATION,
