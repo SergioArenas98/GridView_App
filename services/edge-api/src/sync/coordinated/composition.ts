@@ -27,14 +27,25 @@
  *   the D14-D16 guard stays inside the sequenced service.
  *
  * Nothing survives the run. Every object is built per call.
+ *
+ * `requestClassification` is the one request an operator verification makes
+ * (T11-T11c; PR-E3): a one-resource plan through the same coordinator, port,
+ * client, pacer and limiter. It lives here because this is the only module
+ * that may read the coordinator's typed answer, and it hands back only the
+ * selected `RaceResult` or a closed outcome - never a provider type.
  */
 
+import type { RaceResult } from '../../contract/types';
 import type { Logger } from '../../logging/logger';
 import type { PublicationAuthority } from '../../publication/authority';
 import type { GuardedPublicationCommands } from '../../publication/commands';
 import {
   CoordinatedSeasonPublication,
   MultiSourceCoordinator,
+  attemptedFailureReasons,
+  coordinationFor,
+  type CoordinatedPayload,
+  type SourceContribution,
 } from '../../providers/coordination';
 import {
   ProviderHttpClient,
@@ -191,4 +202,143 @@ export function composeCoordinatedRuntime(
       ledger,
     }),
   };
+}
+
+/**
+ * What one Jolpica contribution that was not selected means for a check, or
+ * `null` for a coordinator defect. Only a completed request is a check:
+ *
+ * - a request that was sent and failed - an upstream error, a timeout, a
+ *   `429`, an invalid payload, an unresolved identity - is `failed` (T6);
+ * - a limiter deferral is `deferred` with its `retryAt`, and nothing else;
+ * - a cancellation, a limiter that could not answer, or a resource that was
+ *   never reached is `not-attempted`.
+ */
+export type UnselectedOutcome =
+  | { readonly status: 'failed' }
+  | { readonly status: 'deferred'; readonly retryAt: string }
+  | { readonly status: 'not-attempted' };
+
+const notAttempted: UnselectedOutcome = { status: 'not-attempted' };
+const failed: UnselectedOutcome = { status: 'failed' };
+
+/** A limiter deferral, if its `retryAt` is an instant; otherwise not attempted. */
+function deferral(retryAt: string | null): UnselectedOutcome {
+  const at = retryAt === null ? Number.NaN : Date.parse(retryAt);
+  return Number.isNaN(at)
+    ? notAttempted
+    : { status: 'deferred', retryAt: new Date(at).toISOString() };
+}
+
+export function unselectedJolpicaOutcome(
+  contribution: SourceContribution,
+): UnselectedOutcome | null {
+  switch (contribution.status) {
+    case 'deferred':
+      return deferral(contribution.retryAt);
+    case 'skipped':
+      // Nothing left GridView: cancelled, limiter unavailable, or refused by
+      // policy before any request.
+      return notAttempted;
+    case 'interrupted':
+      return contribution.reason === 'rate-limit-deferred'
+        ? deferral(contribution.retryAt)
+        : notAttempted;
+    case 'failed':
+      if (!contribution.attempted) return null;
+      if (contribution.reason === 'mapping-unresolved') return failed;
+      return (attemptedFailureReasons as readonly unknown[]).includes(
+        contribution.reason,
+      )
+        ? failed
+        : null;
+    case 'candidate':
+      // A candidate that was not selected cannot happen with one source.
+      return null;
+  }
+}
+
+/**
+ * The selected classification, when the payload is one and describes exactly
+ * the season and round asked for; otherwise `null`, a malformed selection.
+ */
+export function selectedClassification(
+  payload: CoordinatedPayload,
+  season: number,
+  round: number,
+): RaceResult | null {
+  return payload.kind === 'session-classification' &&
+    payload.result.round === round &&
+    payload.result.season === season
+    ? payload.result
+    : null;
+}
+
+/** Why a classification request produced no provider outcome at all. Closed. */
+export type ClassificationRequestRefusal =
+  'coordination-rejected' | 'coordination-defect' | 'selection-malformed';
+
+export type ClassificationRequestOutcome =
+  | { readonly status: 'observed'; readonly result: RaceResult }
+  | UnselectedOutcome
+  | {
+      readonly status: 'refused';
+      readonly reason: ClassificationRequestRefusal;
+    };
+
+export interface ClassificationRequestResult {
+  readonly outcome: ClassificationRequestOutcome;
+  /** Requests that left GridView: 0 or 1. */
+  readonly providerRequests: number;
+}
+
+/**
+ * One race classification request for one round (operator verification,
+ * T11-T11c). It goes through the runtime's one coordinator, so it reaches
+ * Jolpica only through the routing port, the hardened client, the pacer and
+ * the global limiter, exactly as a run's request does. The results port makes
+ * one attempt, never a retry and never a second page, so this sends at most
+ * one request.
+ */
+export async function requestClassification(
+  runtime: CoordinatedRuntime,
+  season: number,
+  round: number,
+): Promise<ClassificationRequestResult> {
+  const resource = {
+    kind: 'session-classification',
+    season,
+    round,
+    sessionType: 'race',
+  } as const;
+  const run = await runtime.coordinator.coordinate({
+    plan: { season, resources: [resource] },
+  });
+  const providerRequests = run.accounting.lifetime.total;
+  const refused = (reason: ClassificationRequestRefusal) => ({
+    outcome: { status: 'refused', reason } as const,
+    providerRequests,
+  });
+  if (run.status === 'plan-rejected') return refused('coordination-rejected');
+  if (run.status === 'invariant-violated') {
+    return refused('coordination-defect');
+  }
+  const coordination = coordinationFor(run, resource);
+  if (coordination === undefined) return refused('coordination-defect');
+  const selection = coordination.selection;
+  if (selection.outcome === 'unavailable') {
+    const jolpica = coordination.contributions.filter(
+      (contribution) => contribution.source === 'jolpica',
+    );
+    const outcome =
+      jolpica.length === 1 ? unselectedJolpicaOutcome(jolpica[0]!) : null;
+    return outcome === null
+      ? refused('coordination-defect')
+      : { outcome, providerRequests };
+  }
+  if (selection.source !== 'jolpica') return refused('coordination-defect');
+  const result = selectedClassification(selection.payload, season, round);
+  return result === null
+    ? refused('selection-malformed')
+    : { outcome: { status: 'observed', result }, providerRequests };
 }

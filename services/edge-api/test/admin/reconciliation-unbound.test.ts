@@ -1,7 +1,8 @@
 /**
  * With the real resolver - no mock, no test hook - every reconciliation
- * operator route and the coordinated rollback refuse as `ledger-unbound`,
- * and nothing is requested, published, written or purged (PR-E2).
+ * operator route, the verification (PR-E3) and the coordinated rollback
+ * refuse as `ledger-unbound`, and nothing is requested, published, written
+ * or purged (PR-E2).
  *
  * The staging Worker here selects `coordinated` with every other dependency
  * bound: a counting limiter, a counting transport, a reachable sequencer
@@ -94,6 +95,16 @@ const operatorRoutes: readonly [string, string, unknown?][] = [
       },
     },
   ],
+  [
+    'POST',
+    paths.verification,
+    {
+      season: SEASON,
+      round: 3,
+      operationId: OP[2],
+      expectedStagedRevision: `sha256:${'b'.repeat(64)}`,
+    },
+  ],
 ];
 
 describe('the real resolver leaves every operator route ledger-unbound', () => {
@@ -170,6 +181,7 @@ describe('the real resolver leaves every operator route ledger-unbound', () => {
       'release-hold',
       'clear-block',
       'accept-staged',
+      'verify',
       'rollback',
     ]);
     for (const line of lines) {
@@ -202,6 +214,11 @@ describe('the real resolver leaves every operator route ledger-unbound', () => {
       {
         round: 3,
         operationId: OP[1],
+        operatorAuthMethod: 'shared-admin-token',
+      },
+      {
+        round: 3,
+        operationId: OP[2],
         operatorAuthMethod: 'shared-admin-token',
       },
       {

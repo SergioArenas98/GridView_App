@@ -17,6 +17,7 @@ import {
   type LeaseToken,
   type LedgerCommitRequest,
   type SeasonRecord,
+  ledgerKeys,
 } from '../../../../src/sync/coordinated/ledger';
 import { MutableClock } from '../../../publication/sequencer/support';
 
@@ -65,6 +66,7 @@ export function classification(
     lastPriorityAttemptAt: null,
     unstableSightings: 0,
     lastDisposition: null,
+    verifications: [],
     ...overrides,
   } as ClassificationRecord;
 }
@@ -178,6 +180,27 @@ export async function lease(
     throw new Error(`lease refused: ${JSON.stringify(outcome)}`);
   }
   return { season: outcome.lease.season, fence: outcome.lease.fence };
+}
+
+/**
+ * Writes `record` straight into storage at `version`, bypassing the store.
+ *
+ * Only for a state that only the `verify` operation can reach - a competing
+ * correction, which `commit` refuses to create - so a test of something else
+ * (a disposition, an inspection) does not depend on verification. The
+ * verification tests reach it through `verify` itself.
+ */
+export function plantClassification(
+  host: MemorySequencerHost,
+  record: ClassificationRecord,
+  version = 1,
+): void {
+  host.transactionSync((store) =>
+    store.put(ledgerKeys.classification(record.season, record.round), {
+      version,
+      record,
+    }),
+  );
 }
 
 /** Every committed key and value, serialized, for byte-for-byte comparison. */

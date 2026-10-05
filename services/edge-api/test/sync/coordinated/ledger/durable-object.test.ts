@@ -144,6 +144,7 @@ describe('ReconciliationLedger durable object', () => {
       'reconcile-published',
       'operate',
       'dispose',
+      'verify',
     ]);
   });
 

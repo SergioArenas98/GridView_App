@@ -26,6 +26,7 @@ import {
 import type {
   DispositionCommand,
   SeasonActionCommand,
+  VerificationCommand,
 } from '../sync/coordinated/operator';
 
 /** The largest body any operator route reads. Far above every valid one. */
@@ -166,6 +167,42 @@ export function decodeDisposition(body: unknown): Decoded<DispositionCommand> {
         stagedRevision: expected.stagedRevision,
         competingRevision: expected.competingRevision,
       },
+    },
+  };
+}
+
+const verificationKeys = [
+  'season',
+  'round',
+  'operationId',
+  'expectedStagedRevision',
+] as const;
+
+/**
+ * `{season, round, operationId, expectedStagedRevision}` for one operator
+ * verification (PR-E3), where `expectedStagedRevision` is the staged revision
+ * the operator read from the inspection.
+ */
+export function decodeVerification(
+  body: unknown,
+): Decoded<VerificationCommand> {
+  if (
+    !isObject(body) ||
+    !hasExactKeys(body, verificationKeys) ||
+    !isSeason(body.season) ||
+    !isRound(body.round) ||
+    !isOperationId(body.operationId) ||
+    !isSnapshotRevision(body.expectedStagedRevision)
+  ) {
+    return invalid('invalid-body');
+  }
+  return {
+    ok: true,
+    value: {
+      season: body.season,
+      round: body.round,
+      operationId: body.operationId,
+      expectedStagedRevision: body.expectedStagedRevision,
     },
   };
 }

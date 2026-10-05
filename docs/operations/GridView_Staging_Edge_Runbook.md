@@ -895,6 +895,7 @@ step 3). That authorization must name the route, staging and season 2026.
 | `/internal/admin/reconciliation/release-hold` | `POST` | same | Clears the hold and makes publication due now. **Release is consent**: the next tick publishes through every guard, including content a rollback replaced. |
 | `/internal/admin/reconciliation/clear-block` | `POST` | same | Clears a durable block (`classification-superseded` or `backlog-capacity-exceeded`) and makes publication due now. It never clears a hold. |
 | `/internal/admin/reconciliation/disposition` | `POST` | `{season, round, action, operationId, expected: {recordVersion, contentRevision, stagedRevision, competingRevision}}` | T12 for one staged round: `accept-staged`, `accept-competing` or `retain-published`. Releases its backlog slot. It publishes nothing. |
+| `/internal/admin/reconciliation/verification` | `POST` | `{season, round, operationId, expectedStagedRevision}` | PR-E3: **one Jolpica request** for one staged round, recording a candidate, a competing correction or a failed attempt (T11-T11c). Decides nothing. See "Operator verification" below. |
 | `/internal/admin/rollback` | `POST` | `{version?}` (existing) | In `coordinated` mode only: runs the existing rollback once, **only while the season is held**, with D14/D15 unchanged. `mock` and `none` are unchanged. |
 
 - `season` is always named in the request. These routes never use
@@ -982,6 +983,101 @@ runs the orchestration with a bound ledger, once a day:
 
 A day without a review leaves a stopped season unseen until the next one
 (residual risk R7).
+
+### Operator verification (prepared 2026-10-05, not deployed, never run)
+
+PR-E3 adds `POST /internal/admin/reconciliation/verification` (ADR 0020
+"E3"). It is in no deployed Worker. Like the routes above, it answers `503`
+`reconciliation-unavailable` today, having read nothing.
+
+**A verification is a Jolpica request.** Once a ledger is bound, each call
+can send one real classification request. **Every verification needs its own
+written authorization** naming staging, season 2026, the round and the
+staged revision. Without one, do not send it. Never verifying is a supported
+steady state: a staged round simply waits for a disposition.
+
+**What it does.** For one staged round, it asks Jolpica once for the round's
+classification and records what it saw (T11-T11c):
+
+- a new revision becomes the **candidate**;
+- the same candidate on a **later** verification becomes the **competing
+  correction**, and the round becomes `review_locked`;
+- the staged or accepted revision discards a pending candidate, and a third
+  revision replaces it;
+- a failed request records only the attempt.
+
+**It never decides anything.** It never accepts or rejects a correction,
+publishes, clears a hold or block, or changes accepted or published content.
+Deciding remains the disposition (T12) above.
+
+**Request.** `Authorization: Bearer <ADMIN_TOKEN>`, with this body:
+
+```json
+{"season": 2026, "round": 3, "operationId": "<new lowercase UUID v4>",
+ "expectedStagedRevision": "<stagedCorrection.revision from an inspection>"}
+```
+
+The checks run in this order: authentication, method, the strict body,
+`coordinated` mode and a bound ledger, and the coordinated runtime's own gate
+(limiter, sequencer authority, purge origin). Then, under the season lease:
+
+1. a resent operation ID;
+2. the staged revision and its backlog entry;
+3. the review lock;
+4. the round's earliest time (`anchor + 5h`).
+
+Only then is the one request sent, and it is never retried.
+
+**Answers.**
+
+| HTTP | `data.status` | Meaning | Next step |
+|---|---|---|---|
+| `200` | `verified` | Recorded. `transition` and `match` say what was seen. `comparison` is the OD-7 view. | Record the request ID, operation ID and transition privately. |
+| `200` | `already-applied` | This operation ID was already recorded. Nothing was sent or written. The comparison is not repeated (`not-repeated`). | None. |
+| `502` | `provider-failed` | Jolpica failed (`check-failed`, T6). Only the attempt was recorded. The candidate is kept. | A new authorization and a **new** operation ID to try again. |
+| `502` | `observation-refused` | The answer was not a usable classification. Nothing was recorded. | Investigate before any retry. |
+| `429` | `deferred` | The limiter deferred the request until `retryAt`. Nothing was sent. Only that instant was recorded, which also defers the season's scheduled runs until then. | Retry after `retryAt` with the **same** operation ID. |
+| `409` | `precondition-failed`, `reason` `staged-revision-mismatch` / `not-staged` / `backlog-entry-missing` | The target is stale or not staged. Nothing was sent or written. | Inspect again. |
+| `409` | `precondition-failed`, `reason` `review-locked` | A competing correction already exists (T11d). Nothing was sent. | Dispose (T12). |
+| `409` | `precondition-failed`, `reason` `verification-history-full` | The round already has 32 verifications. Nothing was sent. | **Stop.** Owner decision. |
+| `409` | `precondition-failed`, `reason` `not-eligible` / `lease-expired` / `operation-id-reused` | The round is not yet eligible, the lease ran out, or the ID named another target. | Wait, retry, or use a new ID. |
+| `409` | `run-in-progress` | A run or operator action holds the lease. Nothing was sent. | Retry later with the same ID. |
+| `503` | `coordinated-runtime-unavailable` / `not-attempted` / `ledger-unavailable` | Nothing was sent, or nothing is known to be written. | Fix the cause. Retry with the same ID. |
+| `503` | `outcome-unknown` | Sent, and the write's answer was lost. | **Resend with the same operation ID.** If it committed, the answer is `already-applied` with no new request. |
+
+**The OD-7 comparison.** It is shown only for a fresh, valid result. The base
+is the **published** document, the active release's
+`grand-prix:{round}:results`, never the accepted revision.
+`publishedIsAccepted` says whether they are the same. It shows these fields
+only:
+
+- `counts`;
+- `drivers` (`added`, `removed`, `changed`: sorted canonical driver IDs);
+- `resultFields`;
+- `entryFields`: the names of changed fields.
+
+**It never shows a value**, old or new. Otherwise it is `unavailable` with a
+closed reason. It is never logged or stored, so record what you need from the
+answer privately. **Never record the token.**
+
+**Limits.**
+
+- Every verification ID of the season is remembered. Resending any of them,
+  however old, answers `already-applied` and sends nothing. Use a **new** ID
+  for each intended verification.
+- A round holds at most 32 verifications, never evicted. The 33rd is
+  refused (`verification-history-full`), and freeing it needs an owner
+  decision.
+- The verification holds the season lease during its request. A scheduled
+  tick in that window sends nothing (`run-in-progress`).
+- It spends the shared limiter's capacity. No reserve is set aside for
+  operators.
+
+**Audit.** One `warn` `reconciliation.verification` line carries the
+outcome, the transition, the match, `compared` or the comparison's reason,
+the request count, the operation ID and `shared-admin-token`. It carries no
+revision, driver ID, field name or count. Inspection shows the round's
+`verificationCount` and its `lastVerification`.
 
 ## 7. Initial synchronization and publication
 

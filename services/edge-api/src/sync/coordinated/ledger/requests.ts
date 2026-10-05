@@ -25,6 +25,8 @@ import {
   type OperatorActionRequest,
   type PublishedReconciliationRequest,
   type SeasonRecord,
+  type VerificationObservation,
+  type VerificationRequest,
 } from './model';
 import {
   accepted,
@@ -33,6 +35,7 @@ import {
   hasExactLedgerKeys as hasExactKeys,
   isBoundedInteger,
   isFence,
+  isLedgerInstant,
   isLedgerObject as isObject,
   isOneOf,
   isOperationId,
@@ -296,5 +299,72 @@ export function decodeDispositionRequest(
       stagedRevision: expected.stagedRevision,
       competingRevision: expected.competingRevision,
     },
+  });
+}
+
+const verificationKeys = [
+  'lease',
+  'round',
+  'operationId',
+  'authMethod',
+  'expected',
+  'observation',
+] as const;
+
+function decodeObservation(value: unknown): VerificationObservation | null {
+  if (!isObject(value)) return null;
+  if (value.status === 'failed' && hasExactKeys(value, ['status'])) {
+    return { status: 'failed' };
+  }
+  if (
+    value.status === 'observed' &&
+    hasExactKeys(value, ['status', 'revision']) &&
+    isSnapshotRevision(value.revision)
+  ) {
+    return { status: 'observed', revision: value.revision };
+  }
+  if (
+    value.status === 'deferred' &&
+    hasExactKeys(value, ['status', 'retryAt']) &&
+    isLedgerInstant(value.retryAt)
+  ) {
+    return { status: 'deferred', retryAt: value.retryAt };
+  }
+  return null;
+}
+
+/** One operator verification of one staged classification resource. */
+export function decodeVerificationRequest(
+  value: unknown,
+): Decoding<VerificationRequest> {
+  if (!isObject(value) || !hasExactKeys(value, verificationKeys)) {
+    return refused('invalid-request');
+  }
+  const lease = decodeLeaseToken(value.lease);
+  const expected = value.expected;
+  const observation = decodeObservation(value.observation);
+  if (
+    lease === null ||
+    observation === null ||
+    !isRound(value.round) ||
+    !isOperationId(value.operationId) ||
+    !isOneOf(operatorAuthMethods, value.authMethod) ||
+    !isObject(expected) ||
+    !hasExactKeys(expected, ['recordVersion', 'stagedRevision']) ||
+    !isBoundedInteger(expected.recordVersion, 1, Number.MAX_SAFE_INTEGER - 1) ||
+    !isSnapshotRevision(expected.stagedRevision)
+  ) {
+    return refused('invalid-request');
+  }
+  return accepted({
+    lease,
+    round: value.round,
+    operationId: value.operationId,
+    authMethod: value.authMethod,
+    expected: {
+      recordVersion: expected.recordVersion,
+      stagedRevision: expected.stagedRevision,
+    },
+    observation,
   });
 }

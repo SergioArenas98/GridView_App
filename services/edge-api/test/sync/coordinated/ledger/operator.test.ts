@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SUPERSEDED_REVISION_CAPACITY,
   ledgerKeys,
+  type ClassificationRecord,
   type DispositionRequest,
   type LeaseToken,
   type OperatorActionRequest,
@@ -31,6 +32,7 @@ import {
   committedBytes,
   lease,
   ledgerFixture,
+  plantClassification,
   rev,
   seasonRecord,
   stagedClassification,
@@ -560,23 +562,21 @@ describe('D2.5: what an ordinary commit may not do to a staged correction', () =
 
   async function stagedRound(fixture: LedgerFixture, withCompeting = false) {
     const token = await lease(fixture);
-    const record = stagedClassification(
-      1,
-      rev('staged'),
-      SEASON,
-      withCompeting
-        ? {
-            competingCorrection: competing,
-            markers: ['review_locked', 'staged'],
-          }
-        : {},
-    );
+    const staged = stagedClassification(1, rev('staged'), SEASON);
     await fixture.ledger.commit(
       commitRequest(token, {
-        classifications: [write(record)],
+        classifications: [write(staged)],
         backlogInsertions: [{ round: 1, revision: rev('staged') }],
       }),
     );
+    if (!withCompeting) return { token, record: staged };
+    // Only `verify` can create it; planted, so this tests `commit` alone.
+    const record: ClassificationRecord = {
+      ...staged,
+      competingCorrection: competing,
+      markers: ['review_locked', 'staged'],
+    };
+    plantClassification(fixture.host, record);
     return { token, record };
   }
 
@@ -649,23 +649,85 @@ describe('D2.5: what an ordinary commit may not do to a staged correction', () =
     expect(committedBytes(fixture.host)).toBe(before);
   });
 
-  it('still lets a commit fill an empty competing slot and change scheduling fields', async () => {
+  it('refuses a commit that creates a competing correction: only verify may lock a record (PR-E3)', async () => {
+    const fixture = ledgerFixture();
+    const { token, record } = await stagedRound(fixture);
+    const before = committedBytes(fixture.host);
+
+    expect(
+      await fixture.ledger.commit(
+        commitRequest(token, {
+          classifications: [
+            write(
+              {
+                ...record,
+                competingCorrection: competing,
+                markers: ['review_locked', 'staged'],
+              },
+              1,
+            ),
+          ],
+        }),
+      ),
+    ).toEqual({ outcome: 'rejected', reason: 'staged-correction-immutable' });
+    // Not on a record's first write either.
+    expect(
+      await fixture.ledger.commit(
+        commitRequest(token, {
+          classifications: [
+            write(classification(2, { competingCorrection: competing })),
+          ],
+        }),
+      ),
+    ).toEqual({ outcome: 'rejected', reason: 'staged-correction-immutable' });
+    expect(committedBytes(fixture.host)).toBe(before);
+  });
+
+  it.each([
+    [
+      'sets a candidate on a staged record',
+      {
+        candidateRevision: rev('candidate'),
+        candidateFirstSeenAt: START,
+        markers: ['pending', 'staged'] as ClassificationRecord['markers'],
+      },
+    ],
+    [
+      'forges a verification',
+      {
+        verifications: [
+          {
+            operationId: OP[0],
+            at: START,
+            authMethod: 'shared-admin-token' as const,
+            stagedRevision: rev('staged'),
+            transition: 'candidate-observed' as const,
+          },
+        ],
+      },
+    ],
+  ])('refuses a commit that %s (PR-E3)', async (_, change) => {
+    const fixture = ledgerFixture();
+    const { token, record } = await stagedRound(fixture);
+    const before = committedBytes(fixture.host);
+
+    expect(
+      await fixture.ledger.commit(
+        commitRequest(token, {
+          classifications: [write({ ...record, ...change }, 1)],
+        }),
+      ),
+    ).toEqual({ outcome: 'rejected', reason: 'staged-correction-immutable' });
+    expect(committedBytes(fixture.host)).toBe(before);
+  });
+
+  it('still lets a commit change scheduling fields of a staged record', async () => {
     const fixture = ledgerFixture();
     const { token, record } = await stagedRound(fixture);
 
     const outcome = await fixture.ledger.commit(
       commitRequest(token, {
-        classifications: [
-          write(
-            {
-              ...record,
-              competingCorrection: competing,
-              markers: ['review_locked', 'staged'],
-              lastSweptAt: START,
-            },
-            1,
-          ),
-        ],
+        classifications: [write({ ...record, lastSweptAt: START }, 1)],
       }),
     );
     expect(outcome.outcome).toBe('committed');
@@ -744,12 +806,6 @@ describe('T12: dispose', () => {
           write(
             stagedClassification(round, rev(`staged-${round}`), SEASON, {
               supersededRevisions: options.history ?? [],
-              ...(options.competing && round === 1
-                ? {
-                    competingCorrection: competing,
-                    markers: ['review_locked', 'staged'],
-                  }
-                : {}),
             }),
           ),
         ),
@@ -759,6 +815,17 @@ describe('T12: dispose', () => {
         })),
       }),
     );
+    if (options.competing && rounds.includes(1)) {
+      // Only `verify` can create it; planted, so this tests `dispose` alone.
+      plantClassification(
+        fixture.host,
+        stagedClassification(1, rev('staged-1'), SEASON, {
+          supersededRevisions: options.history ?? [],
+          competingCorrection: competing,
+          markers: ['review_locked', 'staged'],
+        }),
+      );
+    }
     return token;
   }
 

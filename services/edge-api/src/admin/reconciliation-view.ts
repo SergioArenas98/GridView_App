@@ -16,6 +16,7 @@
 import type {
   ClassificationRecord,
   CorrectionSlot,
+  VerificationRecord,
   LedgerSnapshot,
   PublicationDisposition,
   SeasonRecord,
@@ -127,7 +128,23 @@ export function roundView({
             authMethod: record.lastDisposition.authMethod,
             stagedRevision: record.lastDisposition.stagedRevision,
           },
+    /** How many verifications the round recorded (PR-E3), of at most 32. */
+    verificationCount: record.verifications.length,
+    /** The last completed verification: closed values, no diff. */
+    lastVerification: verificationView(record.verifications.at(-1) ?? null),
   };
+}
+
+function verificationView(verification: VerificationRecord | null) {
+  return verification === null
+    ? null
+    : {
+        operationId: verification.operationId,
+        at: verification.at,
+        authMethod: verification.authMethod,
+        stagedRevision: verification.stagedRevision,
+        transition: verification.transition,
+      };
 }
 
 function slotView(slot: CorrectionSlot | null) {

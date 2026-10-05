@@ -342,13 +342,8 @@ describe('the superseded-revision history', () => {
           uncorroborated: true,
         },
       },
-      {
-        competingCorrection: {
-          revision: oldest,
-          firstSeenAt: '2026-09-27T12:00:00.000Z',
-          uncorroborated: true,
-        },
-      },
+      // A competing slot cannot be created by a commit at all (PR-E3); the
+      // verification tests hold `verify` to the same history rule.
     ]) {
       expect(
         await fixture.ledger.commit(
