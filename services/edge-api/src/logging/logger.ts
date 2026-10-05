@@ -114,6 +114,35 @@ export interface LogEvent {
    * `seeded` or `active`. Never a fingerprint, a receipt or an operator input.
    */
   cutoverState?: string;
+  /**
+   * The closed operator action (`inspect`, `hold`, `release-hold`,
+   * `clear-block`, a T12 disposition action, or `rollback`) and its closed
+   * outcome (`read`, `applied`, `already-applied`, `refused`, ...).
+   */
+  operatorAction?: string;
+  operatorOutcome?: string;
+  /**
+   * The client-generated lowercase UUID v4 naming one operator action,
+   * validated before it is logged. It names the action, never a person.
+   */
+  operationId?: string;
+  /** How the action was authenticated (`shared-admin-token`); never a token. */
+  operatorAuthMethod?: string;
+  /** Whether the season was held when a coordinated rollback was asked for. */
+  operatorHoldState?: string;
+  /** `released`, `refused` or `unavailable`. */
+  leaseRelease?: string;
+  /** A classification round, 1-100. */
+  round?: number;
+  /**
+   * The closed attention conditions (`operator-hold`, `durable-block`,
+   * `backlog-warning`, `backlog-full`), with the closed durable block reason
+   * and the global review backlog count and capacity.
+   */
+  reconciliationAttention?: string[];
+  durableBlockReason?: string;
+  backlogCount?: number;
+  backlogCapacity?: number;
 }
 
 export interface Logger {

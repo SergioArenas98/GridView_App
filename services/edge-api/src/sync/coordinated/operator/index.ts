@@ -1,11 +1,16 @@
 /**
- * The operator path's code that is not storage (PR-E1): the hold-gated
- * coordinated rollback (OD-3) and the backlog levels (OD-8).
+ * The operator path's code that is not storage: the operator transitions
+ * under the season lease, the hold-gated coordinated rollback (OD-3) and the
+ * attention signal with the backlog levels (OD-8).
  *
- * **Dormant.** Nothing imports it: the operator routes and the attention line
- * are later work (PR-E2), and `resolveReconciliationLedger` still answers
- * `null` in every environment.
+ * The admin routes call the transitions and the rollback, and the injected
+ * observation orchestration signals attention after a scheduled run (PR-E2),
+ * importing `attention.ts` alone.
+ * `resolveReconciliationLedger` still answers `null` in every environment, so
+ * every deployed route refuses as `ledger-unbound` before any of it runs.
  */
 
+export * from './actions';
 export * from './attention';
+export * from './lease';
 export * from './rollback';

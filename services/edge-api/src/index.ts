@@ -168,6 +168,13 @@ export default {
             retry: env.__CUTOVER_RETRY,
           }),
           authority,
+          // The operator routes and the coordinated rollback (PR-E2). The
+          // resolver answers `null`, so each refuses as `ledger-unbound`.
+          reconciliation: {
+            coordinated: coordinatedMode(config),
+            ledger: resolveReconciliationLedger(),
+          },
+          clock,
         });
         routeTemplate = url.pathname;
       } else if (request.method !== 'GET' && !isHead) {

@@ -59,6 +59,7 @@ describe('the observation orchestration is not connected', () => {
       'storage/types.ts',
       'sync/coordinated/composition.ts',
       'sync/coordinated/ledger/model.ts',
+      'sync/coordinated/operator/attention.ts',
       'sync/coordinated/outcome/index.ts',
       'sync/coordinated/policy/index.ts',
     ]);

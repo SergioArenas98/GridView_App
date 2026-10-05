@@ -46,7 +46,8 @@ export const BACKLOG_CAPACITY = 60;
 
 /**
  * The backlog count at which an operator is warned, before capacity (OD-8:
- * 48 of the 60 slots). Emitting the warning is later work (PR-E2).
+ * 48 of the 60 slots). The attention line raises it after every scheduled
+ * run (`../operator/attention.ts`, PR-E2).
  */
 export const BACKLOG_WARNING_THRESHOLD = 48;
 

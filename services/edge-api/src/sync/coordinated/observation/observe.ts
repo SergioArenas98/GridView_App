@@ -34,6 +34,12 @@
  *    prepared candidate, the no-change gate, at most one guarded publication
  *    and the outcome commit with its durable next-due decision.
  * 8. Release the lease, whatever happened after it was acquired.
+ * 9. After a **scheduled** run only, read the season once more and write the
+ *    level-triggered attention line while it is held, durably blocked or the
+ *    review backlog is at its OD-8 levels (`../operator/attention.ts`). This
+ *    happens whatever the run did, including `run-in-progress`, `failed` and
+ *    `nothing-due`, so a stopped season never goes quiet. A manual run
+ *    writes none: its operator is already looking.
  *
  * Before planning, a `publishing` slot a previous run left behind is resolved
  * against the authority (`../outcome/recovery.ts`), so a release whose
@@ -64,6 +70,7 @@ import {
   type CoordinatedRuntimeDependencies,
   type CoordinatedUnavailableReason,
 } from '../composition';
+import { signalAttention } from '../operator/attention';
 import type {
   LeaseGrant,
   LeaseToken,
@@ -218,7 +225,25 @@ export async function observeCoordinatedSeason(
     });
   }
   const { runtime } = composition;
+  const outcome = await runUnderComposition(
+    request,
+    dependencies,
+    runtime,
+    fields,
+  );
+  if (request.trigger === 'scheduled') {
+    await signalAttention(runtime.ledger, request.season, dependencies.logger);
+  }
+  return outcome;
+}
 
+/** Steps 2-8, for a composed runtime. */
+async function runUnderComposition(
+  request: CoordinatedObservationRequest,
+  dependencies: CoordinatedObservationDependencies,
+  runtime: CoordinatedRuntime,
+  fields: RunFields,
+): Promise<CoordinatedObservationOutcome> {
   const acquired = await runtime.ledger.acquireLease(request.season);
   if (acquired.outcome !== 'acquired') {
     if (acquired.outcome === 'rejected' && acquired.reason === 'lease-held') {
