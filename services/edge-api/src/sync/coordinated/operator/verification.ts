@@ -63,6 +63,7 @@ import type {
   Versioned,
 } from '../ledger/model';
 import {
+  recordedVerification,
   verificationMatch,
   verificationRefusal,
   type VerificationMatch,
@@ -122,6 +123,8 @@ export const verificationPreconditions = [
   'backlog-entry-missing',
   /** A competing correction is already held (T11d). */
   'review-locked',
+  /** The round already holds `MAXIMUM_VERIFICATIONS` verifications. */
+  'verification-history-full',
   /** The round's first check is not due yet (`anchor + 5h`). */
   'not-eligible',
   /** The lease expired before the request could be sent. */
@@ -320,7 +323,7 @@ async function underLease(
     (entry) => entry.record.round === command.round,
   );
   const bare = (result: Held) => ({ result, compare: null });
-  const replay = replayed(command, stored);
+  const replay = replayed(command, snapshot, stored);
   if (replay !== null) return bare(replay);
   const precondition = preconditionFailure(
     command,
@@ -394,7 +397,9 @@ async function underLease(
   const after = written.snapshot.classifications.find(
     (entry) => entry.record.round === command.round,
   );
-  const transition = after?.record.lastVerification?.transition;
+  const transition = after?.record.verifications.find(
+    (entry) => entry.operationId === command.operationId,
+  )?.transition;
   if (after === undefined || transition === undefined) {
     // The ledger answered without the record it just wrote.
     return bare({ status: 'outcome-unknown', providerRequests });
@@ -428,14 +433,25 @@ async function underLease(
   };
 }
 
-/** A resent operation ID, answered from the ledger without any request. */
+/**
+ * A resent operation ID, answered from the ledger without any request: any
+ * verification the season recorded, not only the latest, and on any round.
+ */
 function replayed(
   command: VerificationCommand,
+  snapshot: LedgerSnapshot,
   stored: Versioned<ClassificationRecord> | undefined,
 ): Held | null {
-  const last = stored?.record.lastVerification ?? null;
-  if (last === null || last.operationId !== command.operationId) return null;
-  if (last.stagedRevision !== command.expectedStagedRevision) {
+  const prior = recordedVerification(
+    snapshot.classifications.map(({ record }) => record),
+    command.operationId,
+  );
+  if (prior === null) return null;
+  const last = prior.verification;
+  if (
+    prior.round !== command.round ||
+    last.stagedRevision !== command.expectedStagedRevision
+  ) {
     return {
       status: 'precondition-failed',
       reason: 'operation-id-reused',
@@ -461,7 +477,9 @@ function preconditionFailure(
 ): VerificationPrecondition | null {
   const record = stored?.record ?? null;
   const refusal = verificationRefusal(record, command.expectedStagedRevision);
-  if (refusal === 'review-locked') return 'review-locked';
+  if (refusal === 'review-locked' || refusal === 'verification-history-full') {
+    return refusal;
+  }
   if (refusal !== null) {
     return record?.stagedCorrection == null
       ? 'not-staged'

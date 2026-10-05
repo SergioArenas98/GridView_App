@@ -695,13 +695,15 @@ describe('D2.5: what an ordinary commit may not do to a staged correction', () =
     [
       'forges a verification',
       {
-        lastVerification: {
-          operationId: OP[0],
-          at: START,
-          authMethod: 'shared-admin-token' as const,
-          stagedRevision: rev('staged'),
-          transition: 'candidate-observed' as const,
-        },
+        verifications: [
+          {
+            operationId: OP[0],
+            at: START,
+            authMethod: 'shared-admin-token' as const,
+            stagedRevision: rev('staged'),
+            transition: 'candidate-observed' as const,
+          },
+        ],
       },
     ],
   ])('refuses a commit that %s (PR-E3)', async (_, change) => {

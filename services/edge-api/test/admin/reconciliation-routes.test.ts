@@ -127,6 +127,7 @@ const roundKeys = [
   'lastDisposition.at',
   'lastDisposition.authMethod',
   'lastDisposition.stagedRevision',
+  'verificationCount',
   'lastVerification',
   'lastVerification.operationId',
   'lastVerification.at',

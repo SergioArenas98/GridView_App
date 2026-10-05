@@ -101,7 +101,10 @@ import {
   decodeSeasonRequest,
   decodeVerificationRequest,
 } from './requests';
-import { applyOperatorVerification } from './verification';
+import {
+  applyOperatorVerification,
+  recordedVerification,
+} from './verification';
 
 /** The storage host: SQLite-backed Durable Object storage, or its in-memory double. */
 export type LedgerHost = SequencerHost;
@@ -420,9 +423,11 @@ export class ReconciliationLedgerStore {
    * It writes that classification record and nothing else: no season record,
    * no backlog entry, and never the staged slot, the accepted or published
    * revision or the history (`verification.ts`). A deferral records only the
-   * limiter's retry instant and no verification. A resent operation ID is
-   * answered `already-applied` and writes nothing, so one response is never
-   * counted as two sightings; the same ID for another target is refused.
+   * limiter's retry instant and no verification. An operation ID any
+   * verification of the season already recorded is answered
+   * `already-applied` and writes nothing, so one response is never counted
+   * as two sightings; the same ID for another round or staged revision is
+   * refused.
    */
   verify(payload: unknown): OperatorTransitionOutcome {
     return this.transact((store) => {
@@ -433,11 +438,15 @@ export class ReconciliationLedgerStore {
       const now = this.now();
       requireLease(store, request.lease, now);
 
-      const stored = readClassification(store, season, request.round);
-      if (stored === null) refuse('operator-precondition-failed');
-      const last = stored.record.lastVerification;
-      if (last !== null && last.operationId === request.operationId) {
-        if (last.stagedRevision !== request.expected.stagedRevision) {
+      const prior = recordedVerification(
+        readClassifications(store, season).map(({ record }) => record),
+        request.operationId,
+      );
+      if (prior !== null) {
+        if (
+          prior.round !== request.round ||
+          prior.verification.stagedRevision !== request.expected.stagedRevision
+        ) {
           refuse('operation-id-reused');
         }
         return {
@@ -445,6 +454,8 @@ export class ReconciliationLedgerStore {
           snapshot: readSnapshot(store, season, now),
         };
       }
+      const stored = readClassification(store, season, request.round);
+      if (stored === null) refuse('operator-precondition-failed');
       if (request.expected.recordVersion !== stored.version) {
         refuse('version-conflict');
       }
@@ -641,7 +652,7 @@ function checkClassificationWrite(
         next.candidateFirstSeenAt !== before.candidateFirstSeenAt)) ||
     !same(next.competingCorrection, before?.competingCorrection ?? null) ||
     !same(next.lastDisposition, before?.lastDisposition ?? null) ||
-    !same(next.lastVerification, before?.lastVerification ?? null)
+    !same(next.verifications, before?.verifications ?? [])
   ) {
     refuse('staged-correction-immutable');
   }

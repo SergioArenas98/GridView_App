@@ -1039,6 +1039,7 @@ Only then is the one request sent, and it is never retried.
 | `429` | `deferred` | The limiter deferred the request until `retryAt`. Nothing was sent. Only that instant was recorded, which also defers the season's scheduled runs until then. | Retry after `retryAt` with the **same** operation ID. |
 | `409` | `precondition-failed`, `reason` `staged-revision-mismatch` / `not-staged` / `backlog-entry-missing` | The target is stale or not staged. Nothing was sent or written. | Inspect again. |
 | `409` | `precondition-failed`, `reason` `review-locked` | A competing correction already exists (T11d). Nothing was sent. | Dispose (T12). |
+| `409` | `precondition-failed`, `reason` `verification-history-full` | The round already has 32 verifications. Nothing was sent. | **Stop.** Owner decision. |
 | `409` | `precondition-failed`, `reason` `not-eligible` / `lease-expired` / `operation-id-reused` | The round is not yet eligible, the lease ran out, or the ID named another target. | Wait, retry, or use a new ID. |
 | `409` | `run-in-progress` | A run or operator action holds the lease. Nothing was sent. | Retry later with the same ID. |
 | `503` | `coordinated-runtime-unavailable` / `not-attempted` / `ledger-unavailable` | Nothing was sent, or nothing is known to be written. | Fix the cause. Retry with the same ID. |
@@ -1061,10 +1062,12 @@ answer privately. **Never record the token.**
 
 **Limits.**
 
-- Only the most recent verification ID per round is remembered. An older ID
-  resent after a later verification is a **new** verification, and it sends
-  a new request. Always use a new ID per intended verification, and resend
-  only the latest one.
+- Every verification ID of the season is remembered. Resending any of them,
+  however old, answers `already-applied` and sends nothing. Use a **new** ID
+  for each intended verification.
+- A round holds at most 32 verifications, never evicted. The 33rd is
+  refused (`verification-history-full`), and freeing it needs an owner
+  decision.
 - The verification holds the season lease during its request. A scheduled
   tick in that window sends nothing (`run-in-progress`).
 - It spends the shared limiter's capacity. No reserve is set aside for
@@ -1074,7 +1077,7 @@ answer privately. **Never record the token.**
 outcome, the transition, the match, `compared` or the comparison's reason,
 the request count, the operation ID and `shared-admin-token`. It carries no
 revision, driver ID, field name or count. Inspection shows the round's
-`lastVerification`.
+`verificationCount` and its `lastVerification`.
 
 ## 7. Initial synchronization and publication
 

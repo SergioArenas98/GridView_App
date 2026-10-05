@@ -18,6 +18,7 @@ import { CapturingLogger, type LogEvent } from '../../src/logging/logger';
 import { MemorySnapshotStorage } from '../../src/storage/local';
 import {
   LEDGER_SCHEMA_VERSION,
+  MAXIMUM_VERIFICATIONS,
   ledgerKeys,
   type ClassificationRecord,
 } from '../../src/sync/coordinated/ledger';
@@ -527,6 +528,77 @@ describe.each(sequencerTransports)(
       expect(harness.observationState()).toBe(state);
     });
 
+    it('recognizes an older operation ID after a later verification: its resend sends nothing and never corroborates', async () => {
+      const setup = await staged();
+      const { harness } = setup;
+      // Operation A sees B first; a later operation records a failure.
+      harness.server.results.set(1, 'B');
+      await verify(setup, at(0), OPS[0]);
+      harness.server.answers.set(RESULTS, () => ({
+        kind: 'status',
+        status: 503,
+      }));
+      expect((await verify(setup, at(1), OPS[1])).status).toBe(502);
+      harness.server.answers.delete(RESULTS);
+      const state = harness.observationState();
+      const requests = harness.server.requests.length;
+
+      // A is retried while upstream still serves B.
+      const resent = await verify(setup, at(2), OPS[0]);
+
+      expect(resent.status).toBe(200);
+      expect(resent.body.data).toMatchObject({
+        status: 'already-applied',
+        providerRequests: 0,
+        transition: 'candidate-observed',
+      });
+      expect(harness.server.requests.length).toBe(requests);
+      expect(harness.observationState()).toBe(state);
+      expect(await harness.record(1)).toMatchObject({
+        competingCorrection: null,
+        markers: ['pending', 'staged'],
+      });
+    });
+
+    it('refuses a round whose verification history is full, before any request', async () => {
+      const setup = await staged();
+      const { harness } = setup;
+      const snapshot = await harness.snapshot();
+      const entry = snapshot.classifications.find(
+        (candidate) => candidate.record.round === 1,
+      )!;
+      plantClassification(
+        harness.host,
+        {
+          ...entry.record,
+          verifications: Array.from(
+            { length: MAXIMUM_VERIFICATIONS },
+            (_, index) => ({
+              operationId: `${index.toString(16).padStart(8, '0')}-0000-4000-8000-000000000000`,
+              at: at(0),
+              authMethod: 'shared-admin-token' as const,
+              stagedRevision: setup.staged,
+              transition: 'check-failed' as const,
+            }),
+          ),
+        },
+        entry.version,
+      );
+      const state = harness.observationState();
+      const requests = harness.server.requests.length;
+
+      const answer = await verify(setup, at(1), OPS[0]);
+
+      expect(answer.status).toBe(409);
+      expect(answer.body.data).toMatchObject({
+        status: 'precondition-failed',
+        reason: 'verification-history-full',
+        providerRequests: 0,
+      });
+      expect(harness.server.requests.length).toBe(requests);
+      expect(harness.observationState()).toBe(state);
+    });
+
     it.each([
       [
         'a stale staged revision',
@@ -627,7 +699,10 @@ describe.each(sequencerTransports)(
           competingCorrection: null,
           lastAttemptedAt: at(5),
           lastSuccessfulObservationAt: before.lastSuccessfulObservationAt,
-          lastVerification: { operationId: OPS[1], transition: 'check-failed' },
+        });
+        expect(after.verifications.at(-1)).toMatchObject({
+          operationId: OPS[1],
+          transition: 'check-failed',
         });
         expect(await untouched(setup)).toBe(unchanged);
       },
@@ -653,7 +728,7 @@ describe.each(sequencerTransports)(
       expect(harness.server.requests.length).toBe(requests);
       expect(await harness.record(1)).toMatchObject({
         limiterDeferralUntil: retryAt,
-        lastVerification: null,
+        verifications: [],
         candidateRevision: null,
       });
       expect(await untouched(setup)).toBe(unchanged);

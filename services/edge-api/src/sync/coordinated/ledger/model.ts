@@ -19,7 +19,7 @@
  * `durableBlock` and `lastOperatorAction`, and
  * `ClassificationRecord.lastDisposition`. PR-E3 refined it a fourth time, on
  * the same grounds (re-verified at `086ed06`), with
- * `ClassificationRecord.lastVerification`. After the first deploy that
+ * `ClassificationRecord.verifications`. After the first deploy that
  * resolves a ledger, any change needs a versioned decoder and a migration
  * decision instead.
  *
@@ -61,6 +61,15 @@ export const BACKLOG_WARNING_THRESHOLD = 48;
  * otherwise be applied again (ADR 0020 D2.2).
  */
 export const SUPERSEDED_REVISION_CAPACITY = 16;
+
+/**
+ * The most operator verifications one classification resource records. They
+ * are never evicted: every operation ID stays recognizable, so a resend is
+ * never a second sighting, and a full history refuses further verification
+ * (`verification-history-full`). It also bounds the provider requests
+ * verifications can make for one round.
+ */
+export const MAXIMUM_VERIFICATIONS = 32;
 
 /** How long an acquired season lease stays valid on the ledger's own clock. */
 export const LEASE_TTL_MS = 10 * 60 * 1000;
@@ -191,9 +200,9 @@ export const verificationTransitions = [
 export type VerificationTransition = (typeof verificationTransitions)[number];
 
 /**
- * The last completed operator verification of a resource: replay detection
- * and audit. A limiter deferral is not a completed verification and is never
- * recorded here.
+ * One completed operator verification of a resource: replay detection and
+ * audit. A limiter deferral is not a completed verification and is never
+ * recorded.
  */
 export interface VerificationRecord {
   readonly operationId: OperationId;
@@ -251,8 +260,12 @@ export interface ClassificationRecord {
   readonly unstableSightings: number;
   /** Written only by the T12 `dispose` operation, never by a commit. */
   readonly lastDisposition: DispositionRecord | null;
-  /** Written only by the `verify` operation (T11-T11c), never by a commit. */
-  readonly lastVerification: VerificationRecord | null;
+  /**
+   * Every completed verification, oldest first, at most
+   * `MAXIMUM_VERIFICATIONS`, never evicted and each operation ID once.
+   * Written only by the `verify` operation (T11-T11c), never by a commit.
+   */
+  readonly verifications: readonly VerificationRecord[];
 }
 
 /** The season-level resources carried as refresh state. */
@@ -562,6 +575,8 @@ export const ledgerRejectionReasons = [
    * verification can only report, and is refused instead (T11d).
    */
   'review-locked',
+  /** The resource already holds `MAXIMUM_VERIFICATIONS` verifications. */
+  'verification-history-full',
   'state-corrupt',
 ] as const;
 export type LedgerRejectionReason = (typeof ledgerRejectionReasons)[number];

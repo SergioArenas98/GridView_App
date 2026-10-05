@@ -14,9 +14,11 @@ import { MemorySequencerHost } from '../../../../src/publication/sequencer/hosts
 import {
   DurableObjectReconciliationLedger,
   LocalReconciliationLedger,
+  MAXIMUM_VERIFICATIONS,
   ReconciliationLedger,
   ReconciliationLedgerStore,
   type ClassificationRecord,
+  type VerificationRecord,
   type LeaseToken,
   type VerificationObservation,
   type VerificationRequest,
@@ -60,6 +62,19 @@ const observed = (revision: string): VerificationObservation => ({
   status: 'observed',
   revision,
 });
+
+/** A record with its latest verification alongside, for assertions. */
+type Viewed = ClassificationRecord & {
+  readonly lastVerification: VerificationRecord | null;
+};
+const viewed = (record: ClassificationRecord): Viewed => ({
+  ...record,
+  lastVerification: record.verifications.at(-1) ?? null,
+});
+
+/** A distinct lowercase UUID v4 per index. */
+const opId = (index: number): string =>
+  `${index.toString(16).padStart(8, '0')}-0000-4000-8000-000000000000`;
 
 describe.each(transports)(
   'verify over the %s ledger transport',
@@ -163,11 +178,11 @@ describe.each(transports)(
       observation: VerificationObservation,
       operationId: string,
     ) {
-      const before = (await stored(fixture)).entry.record;
+      const before = viewed((await stored(fixture)).entry.record);
       const untouched = others(fixture);
       const outcome = await verify(fixture, observation, operationId);
       expect(outcome.outcome).toBe('applied');
-      const after = (await stored(fixture)).entry.record;
+      const after = viewed((await stored(fixture)).entry.record);
       // No season record, backlog entry or other record is ever written.
       expect(others(fixture)).toBe(untouched);
       // The staged slot, the accepted and published revisions and the history
@@ -198,6 +213,7 @@ describe.each(transports)(
         'lastSuccessfulObservationAt',
         'lastVerification',
         'markers',
+        'verifications',
       ]);
       expect(after).toMatchObject({
         candidateRevision: B,
@@ -271,7 +287,7 @@ describe.each(transports)(
       });
 
       await applied(fixture, observed(B), OP[3]);
-      const accepted = await applied(fixture, observed(ACCEPTED), OP[0]);
+      const accepted = await applied(fixture, observed(ACCEPTED), opId(9));
       expect(accepted.after).toMatchObject({
         candidateRevision: null,
         lastVerification: { transition: 'candidate-discarded' },
@@ -296,6 +312,7 @@ describe.each(transports)(
           'lastAttemptedAt',
           'lastSuccessfulObservationAt',
           'lastVerification',
+          'verifications',
         ]);
         expect(after.lastVerification?.transition).toBe(transition);
         expect(after.consecutiveConfirmations).toBe(
@@ -333,6 +350,7 @@ describe.each(transports)(
       expect(changedFields(before, after)).toEqual([
         'lastAttemptedAt',
         'lastVerification',
+        'verifications',
       ]);
       expect(after).toMatchObject({
         candidateRevision: B,
@@ -387,6 +405,83 @@ describe.each(transports)(
           expected: { recordVersion: 2, stagedRevision: rev('other-staged') },
         }),
       ).toEqual({ outcome: 'rejected', reason: 'operation-id-reused' });
+      expect(committedBytes(fixture.host)).toBe(bytes);
+    });
+
+    it('recognizes an older operation ID after later verifications, so its resend is never a second sighting', async () => {
+      const fixture = await setup();
+      // A first sighting of B, then a failed verification recorded after it.
+      await applied(fixture, observed(B), OP[0]);
+      fixture.clock.set(LATER);
+      await applied(fixture, { status: 'failed' }, OP[1]);
+      const bytes = committedBytes(fixture.host);
+
+      // The first operation, resent: answered, and B is still only a candidate.
+      fixture.clock.set(LATEST);
+      expect((await verify(fixture, observed(B), OP[0])).outcome).toBe(
+        'already-applied',
+      );
+      expect(committedBytes(fixture.host)).toBe(bytes);
+      expect((await stored(fixture)).entry.record).toMatchObject({
+        candidateRevision: B,
+        competingCorrection: null,
+        markers: ['pending', 'staged'],
+      });
+      expect(
+        (await stored(fixture)).entry.record.verifications.map(
+          (entry) => entry.operationId,
+        ),
+      ).toEqual([OP[0], OP[1]]);
+    });
+
+    it('refuses an operation ID already recorded on another round of the season', async () => {
+      const fixture = await setup();
+      await applied(fixture, observed(B), OP[0]);
+      plantClassification(fixture.host, stagedClassification(4, STAGED));
+      fixture.host.transactionSync((store) =>
+        store.put(`backlog:${SEASON}:4`, {
+          schemaVersion: 1,
+          kind: 'backlog-entry',
+          season: SEASON,
+          round: 4,
+          revision: STAGED,
+          enteredAt: START,
+        }),
+      );
+      const bytes = committedBytes(fixture.host);
+
+      expect(
+        await fixture.ledger.verify({
+          lease: fixture.token,
+          round: 4,
+          operationId: OP[0],
+          authMethod: 'shared-admin-token',
+          expected: { recordVersion: 1, stagedRevision: STAGED },
+          observation: observed(B),
+        }),
+      ).toEqual({ outcome: 'rejected', reason: 'operation-id-reused' });
+      expect(committedBytes(fixture.host)).toBe(bytes);
+    });
+
+    it('keeps every verification, and refuses one more once the history is full', async () => {
+      const fixture = await setup();
+      for (let index = 0; index < MAXIMUM_VERIFICATIONS; index += 1) {
+        expect(
+          (await verify(fixture, { status: 'failed' }, opId(index))).outcome,
+        ).toBe('applied');
+      }
+      const record = (await stored(fixture)).entry.record;
+      expect(record.verifications).toHaveLength(MAXIMUM_VERIFICATIONS);
+      const bytes = committedBytes(fixture.host);
+
+      expect(await verify(fixture, observed(B), OP[0])).toEqual({
+        outcome: 'rejected',
+        reason: 'verification-history-full',
+      });
+      // Every one of them is still recognized.
+      expect((await verify(fixture, observed(B), opId(0))).outcome).toBe(
+        'already-applied',
+      );
       expect(committedBytes(fixture.host)).toBe(bytes);
     });
 
@@ -513,28 +608,40 @@ describe.each(transports)(
   },
 );
 
-describe('the stored verification record', () => {
+describe('the stored verification history', () => {
+  const entry = {
+    operationId: OP[0],
+    at: START,
+    authMethod: 'shared-admin-token',
+    stagedRevision: STAGED,
+    transition: 'candidate-observed',
+  };
+
   it('is decoded strictly, and carries no value', () => {
     const record = stagedClassification(ROUND, STAGED, SEASON, {
-      lastVerification: {
-        operationId: OP[0],
-        at: START,
-        authMethod: 'shared-admin-token',
-        stagedRevision: STAGED,
-        transition: 'candidate-observed',
-      },
+      verifications: [entry],
     });
     expect(decodeClassificationRecord(record)).toMatchObject({ ok: true });
 
-    for (const lastVerification of [
-      { ...record.lastVerification, transition: 'published' },
-      { ...record.lastVerification, stagedRevision: 'P1 VER' },
-      { ...record.lastVerification, comparison: { changed: 1 } },
-      { ...record.lastVerification, authMethod: 'local-test-token' },
+    for (const verifications of [
+      [{ ...entry, transition: 'published' }],
+      [{ ...entry, stagedRevision: 'P1 VER' }],
+      [{ ...entry, comparison: { changed: 1 } }],
+      [{ ...entry, authMethod: 'local-test-token' }],
+      [null],
+      null,
+      // Each operation ID at most once.
+      [entry, { ...entry, transition: 'check-failed' }],
+      // Never more than the bound.
+      Array.from({ length: MAXIMUM_VERIFICATIONS + 1 }, (_, index) => ({
+        ...entry,
+        operationId: opId(index),
+      })),
     ]) {
-      expect(
-        decodeClassificationRecord({ ...record, lastVerification }),
-      ).toEqual({ ok: false, reason: 'invalid-record' });
+      expect(decodeClassificationRecord({ ...record, verifications })).toEqual({
+        ok: false,
+        reason: 'invalid-record',
+      });
     }
   });
 });

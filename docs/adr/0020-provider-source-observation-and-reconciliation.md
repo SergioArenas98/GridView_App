@@ -1460,7 +1460,7 @@ the replay, and makes its one write.
 
 **Transitions** (`ledger/verification.ts`, in §10.4.1 evaluation order):
 
-| Observed | Transition | Written besides the attempt and `lastVerification` |
+| Observed | Transition | Written besides the attempt and the `verifications` entry |
 |---|---|---|
 | A superseded revision | `superseded-rejected` (T5) | The candidate is cleared, and `consecutiveConfirmations` becomes 0. |
 | The accepted revision | `accepted-seen` (T11), or `candidate-discarded` (T11c) with a candidate pending | nothing, or the candidate is cleared |
@@ -1471,9 +1471,14 @@ the replay, and makes its one write.
 
 Every attempted verification records `lastAttemptedAt` and clears
 `limiterDeferralUntil`. A successful one also records
-`lastSuccessfulObservationAt`. `lastVerification` holds the operation ID,
-instant, `shared-admin-token`, the staged revision asked about and the
-transition. It never holds a payload or a diff.
+`lastSuccessfulObservationAt`. Each completed verification appends one
+entry to `ClassificationRecord.verifications`: the operation ID, instant,
+`shared-admin-token`, the staged revision asked about and the transition.
+An entry never holds a payload or a diff. The history holds at most 32
+entries (`MAXIMUM_VERIFICATIONS`), is never evicted, and names each
+operation ID once. A full history refuses further verification of the round
+as `verification-history-full`, before any request. That also bounds the
+requests verification can make for one round.
 
 A limiter **deferral** writes only `limiterDeferralUntil` (the existing
 rule), records no verification, and answers `429` `deferred`. A request that
@@ -1493,7 +1498,7 @@ selection (`observation-refused`) record nothing.
 slot, for T11b's sake. T11b is now `verify`, so `commit` refuses
 (`staged-correction-immutable`) any change to `competingCorrection`,
 including creating one. It also refuses any change to a staged record's
-candidate slot, and any write of `lastVerification`. Only an explicit
+candidate slot, and any write of `verifications`. Only an explicit
 operator verification can lock a record for review. Tests that need a
 competing slot for a disposition or an inspection plant it directly in
 storage.
@@ -1539,7 +1544,7 @@ The comparison is never logged, stored or cached.
 | `200` | `verified`, or `already-applied` (a resent ID: no request, no write, `comparison.reason` `not-repeated`) |
 | `502` | `provider-failed` (T6, recorded), or `observation-refused` (nothing recorded) |
 | `429` | `deferred`, with `retryAt` |
-| `409` | `precondition-failed`: `operation-id-reused`, `not-staged`, `staged-revision-mismatch`, `backlog-entry-missing`, `review-locked`, `not-eligible`, `lease-expired`. Also `run-in-progress`, and `refused` with the ledger's closed reason. |
+| `409` | `precondition-failed`: `operation-id-reused`, `not-staged`, `staged-revision-mismatch`, `backlog-entry-missing`, `review-locked`, `verification-history-full`, `not-eligible`, `lease-expired`. Also `run-in-progress`, and `refused` with the ledger's closed reason. |
 | `503` | `reconciliation-unavailable`, `coordinated-runtime-unavailable`, `not-attempted`, `ledger-unavailable`, `outcome-unknown` (resend the same operation ID) |
 
 A verified answer carries the transition, the match (`superseded`,
@@ -1557,7 +1562,7 @@ verification. It carries these closed values only:
 
 It never carries a revision, a driver ID, a field name or a count from the
 comparison. The read-only inspection now shows each round's
-`lastVerification`.
+`verificationCount` and its latest verification as `lastVerification`.
 
 **Choices made in implementation, not owner decisions:**
 
@@ -1574,14 +1579,19 @@ comparison. The read-only inspection now shows each round's
    "changes nothing".
 5. **A verification is not the sweep.** It advances neither `lastSweptAt`
    nor `lastPriorityAttemptAt`.
-6. **Replay memory is one slot per record** (`lastVerification`), as E1's is.
-   Two things follow:
-   - A resend of the most recent ID, including after `outcome-unknown`,
-     makes no request and is never a second sighting.
-   - An older ID resent after a later verification of the same record is not
-     recognized. It is a new verification: a new request, whose answer is a
-     genuinely new response. The route takes no record version from the
-     operator (V-5), so no version check catches it.
+6. **Replay memory is the season's whole verification history.** Unlike E1's
+   one-slot memory, it does not rely on a version check, because V-5 gives
+   the route no record version to check. The route and the store both
+   search every round's history:
+   - any ID already recorded on this round for this staged revision is
+     answered `already-applied`, with no request, however many verifications
+     came after it;
+   - the same ID on another round or staged revision is
+     `operation-id-reused`.
+
+   A resend is therefore never a second sighting. A deferral is not
+   recorded, so its ID stays usable. *(This replaces the one-slot design
+   PR #61 first opened with; see "Review correction" below.)*
 7. **The deferral rule is the existing one, with its existing effect.** The
    planner defers the season's scheduled runs until the latest
    `limiterDeferralUntil` of any record. A deferred verification therefore
@@ -1601,20 +1611,22 @@ comparison. The read-only inspection now shows each round's
     The store's reads moved to `ledger/reads.ts` to keep `store.ts` under 800
     lines.
 
-**Tests.** 94 new tests; the suite is now 4,805 in 207 files.
+**Tests.** 104 new tests; the suite is now 4,815 in 207 files.
 
-- Store `verify` (43): T11, T11b, T11c, T5, T6, deferral, replay, every
-  refusal and invalid requests, over the in-process and Durable Object
-  transports.
+- Store `verify` (49): T11, T11b, T11c, T5, T6, deferral, replay (including
+  an older ID after a later verification, and another round), the full
+  history, every refusal and invalid requests, over the in-process and
+  Durable Object transports.
 - Comparison (14): the diff, the value boundary with marker values, an
   order-only change, and every `unavailable` reason.
-- Worker route (34): over both ledger and sequencer transports, on a staged
+- Worker route (38): over both ledger and sequencer transports, on a staged
   correction reached through the real state machine (round 1 published as
   A, settled, then C staged by two publication runs):
   - first sighting, corroboration and the review lock;
   - the OD-7 output, with recursive key allow-lists on answers and log lines
     and a value-leak check against the published document;
-  - replay, and a reused ID;
+  - replay, an older ID resent after a later verification, and a reused ID;
+  - a full verification history;
   - a stale, unstaged or unrecorded target;
   - not eligible;
   - four provider failures;
@@ -1633,7 +1645,7 @@ comparison. The read-only inspection now shows each round's
 
 Existing tests changed in these ways only:
 
-- fixtures gained `lastVerification: null`;
+- fixtures gained `verifications: []`;
 - competing slots are planted rather than committed;
 - the D2.2 history loop no longer commits a competing slot;
 - the dormancy, bundle-graph and Durable Object command pins name the new
@@ -1654,10 +1666,12 @@ backup:
 | `commit` may create a competing slot again | 1 |
 | The eligibility check disabled | 2 |
 | A stale staged target checked only by the store, after the request | 2 |
+| Only the latest verification ID recognized (the first design) | 6 |
+| Replay searched on one round only | 6 |
 
-**Bundle.** `79575c4d…452a` (685,799 B) → `334fb7e5…89a4eb` (716,706 B),
+**Bundle.** `79575c4d…452a` (685,799 B) → `7a1a992d…e061a` (718,392 B),
 identical in all three environments. The binding reports are unchanged:
-staging `mock`, production `none`, and no ledger binding. The +30,907 B are:
+staging `mock`, production `none`, and no ledger binding. The +32,593 B are:
 
 - the verification and comparison modules;
 - the ledger `verify` operation;
@@ -1685,7 +1699,20 @@ Observation and outcome code stay out of the bundle.
 - The comparison can only show what the active release serves. After a
   rollback, that is not the accepted revision, which `publishedIsAccepted`
   reports.
-- Replay memory is one slot per record (choice 6).
+- A round that reaches 32 verifications can never be verified again. The
+  history is never evicted, so freeing it needs an owner decision. Like a
+  full revision history, it is a dead end.
+
+**Review correction.** Codex raised one P1 on PR #61 at `9f906d9`, and it was
+valid. The first design remembered only each record's latest verification.
+An older operation ID resent after a later verification, for example after
+a recorded failure, therefore sent a new request. If upstream still served
+the candidate, it was counted as the second sighting and created a competing
+correction and the review lock. The same ID was also accepted on another
+round. The single slot became the bounded, never-evicted history above,
+searched across the season by both the route and the store. Ten new tests
+cover it. With the old search, the older-ID tests fail (6), and with a
+one-round search the cross-round tests fail (6).
 
 The decision above is unchanged.
 

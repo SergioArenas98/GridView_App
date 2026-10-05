@@ -119,7 +119,7 @@ export function newClassificationRecord(
     lastPriorityAttemptAt: null,
     unstableSightings: 0,
     lastDisposition: null,
-    lastVerification: null,
+    verifications: [],
   };
 }
 

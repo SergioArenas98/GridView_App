@@ -66,7 +66,7 @@ export function classification(
     lastPriorityAttemptAt: null,
     unstableSightings: 0,
     lastDisposition: null,
-    lastVerification: null,
+    verifications: [],
     ...overrides,
   } as ClassificationRecord;
 }

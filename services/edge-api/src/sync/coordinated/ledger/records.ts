@@ -24,6 +24,7 @@ import {
   MAXIMUM_CONSECUTIVE_CONFIRMATIONS,
   MAXIMUM_ROUND,
   MAXIMUM_UNSTABLE_SIGHTINGS,
+  MAXIMUM_VERIFICATIONS,
   SUPERSEDED_REVISION_CAPACITY,
   anchorKinds,
   classificationMarkers,
@@ -242,6 +243,22 @@ function decodeVerificationRecord(
   };
 }
 
+/** Oldest first, bounded, and each operation ID at most once. */
+function decodeVerifications(value: unknown): VerificationRecord[] | null {
+  if (!Array.isArray(value) || value.length > MAXIMUM_VERIFICATIONS) {
+    return null;
+  }
+  const verifications: VerificationRecord[] = [];
+  for (const entry of value) {
+    if (entry === null) return null;
+    const decoded = decodeVerificationRecord(entry);
+    if (decoded === null || decoded === 'invalid') return null;
+    verifications.push(decoded);
+  }
+  const ids = new Set(verifications.map((entry) => entry.operationId));
+  return ids.size === verifications.length ? verifications : null;
+}
+
 /** Sorted in `classificationMarkers` order, each at most once. */
 function decodeMarkers(value: unknown): ClassificationMarker[] | null {
   if (!Array.isArray(value) || value.length > classificationMarkers.length) {
@@ -309,7 +326,7 @@ const classificationKeys = [
   'lastPriorityAttemptAt',
   'unstableSightings',
   'lastDisposition',
-  'lastVerification',
+  'verifications',
 ] as const;
 
 export function decodeClassificationRecord(
@@ -324,7 +341,7 @@ export function decodeClassificationRecord(
   const staged = decodeCorrection(value.stagedCorrection);
   const competing = decodeCorrection(value.competingCorrection);
   const lastDisposition = decodeDispositionRecord(value.lastDisposition);
-  const lastVerification = decodeVerificationRecord(value.lastVerification);
+  const verifications = decodeVerifications(value.verifications);
   if (
     value.schemaVersion !== LEDGER_SCHEMA_VERSION ||
     value.kind !== 'classification' ||
@@ -357,7 +374,7 @@ export function decodeClassificationRecord(
     staged === 'invalid' ||
     competing === 'invalid' ||
     lastDisposition === 'invalid' ||
-    lastVerification === 'invalid' ||
+    verifications === null ||
     !isInstantOrNull(value.sourceObservedAt) ||
     !isInstantOrNull(value.settledAt) ||
     !(
@@ -401,7 +418,7 @@ export function decodeClassificationRecord(
     lastPriorityAttemptAt: value.lastPriorityAttemptAt,
     unstableSightings: value.unstableSightings,
     lastDisposition,
-    lastVerification,
+    verifications,
   });
 }
 

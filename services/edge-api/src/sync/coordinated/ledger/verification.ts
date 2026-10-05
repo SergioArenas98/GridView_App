@@ -18,7 +18,12 @@
  * - `consecutiveConfirmations`, reset by T5 only;
  * - the attempt accounting every check records (`lastAttemptedAt`,
  *   `lastSuccessfulObservationAt`, `limiterDeferralUntil`);
- * - the markers, recomputed, and `lastVerification`.
+ * - the markers, recomputed, and one appended `verifications` entry.
+ *
+ * Every completed verification is kept, at most `MAXIMUM_VERIFICATIONS` per
+ * resource and never evicted, so any operation ID resent later - however many
+ * verifications came after it, and on whichever round - is recognized and
+ * never counted as a second sighting (`recordedVerification`).
  *
  * It never touches the staged slot, the accepted (`contentRevision`) or
  * published revision, the superseded history, the backlog, the season record
@@ -32,11 +37,14 @@
  */
 
 import {
+  MAXIMUM_VERIFICATIONS,
   classificationMarkers,
   type ClassificationMarker,
   type ClassificationRecord,
   type LedgerInstant,
+  type OperationId,
   type RevisionHash,
+  type VerificationRecord,
   type VerificationRequest,
   type VerificationTransition,
 } from './model';
@@ -60,17 +68,45 @@ export type VerificationStep =
     }
   | {
       readonly kind: 'refused';
-      readonly reason: 'operator-precondition-failed' | 'review-locked';
+      readonly reason: VerificationRefusal;
     };
+
+export type VerificationRefusal =
+  | 'operator-precondition-failed'
+  | 'review-locked'
+  | 'verification-history-full';
+
+/**
+ * The verification an operation ID already recorded in a season, on
+ * whichever round, or `null` when it names none.
+ */
+export function recordedVerification(
+  records: readonly ClassificationRecord[],
+  operationId: OperationId,
+): {
+  readonly round: number;
+  readonly verification: VerificationRecord;
+} | null {
+  for (const record of records) {
+    const verification = record.verifications.find(
+      (entry) => entry.operationId === operationId,
+    );
+    if (verification !== undefined) {
+      return { round: record.round, verification };
+    }
+  }
+  return null;
+}
 
 /**
  * Why a record cannot be verified against `stagedRevision`, or `null` when
- * it can: it holds exactly that staged revision and no competing one.
+ * it can: it holds exactly that staged revision, no competing one, and room
+ * for one more verification.
  */
 export function verificationRefusal(
   record: ClassificationRecord | null,
   stagedRevision: RevisionHash,
-): 'operator-precondition-failed' | 'review-locked' | null {
+): VerificationRefusal | null {
   if (record === null || record.stagedCorrection === null) {
     return 'operator-precondition-failed';
   }
@@ -79,7 +115,10 @@ export function verificationRefusal(
   }
   // T11d: two corroborated entries already wait; a verification could only
   // report, so it is refused before any request is spent on it.
-  return record.competingCorrection === null ? null : 'review-locked';
+  if (record.competingCorrection !== null) return 'review-locked';
+  return record.verifications.length < MAXIMUM_VERIFICATIONS
+    ? null
+    : 'verification-history-full';
 }
 
 /** The revision of `record` that `observed` is, in evaluation order. */
@@ -133,13 +172,16 @@ export function applyOperatorVerification(
     record: {
       ...next,
       markers: markersOf(next),
-      lastVerification: {
-        operationId: request.operationId,
-        at,
-        authMethod: request.authMethod,
-        stagedRevision: request.expected.stagedRevision,
-        transition: step.transition,
-      },
+      verifications: [
+        ...record.verifications,
+        {
+          operationId: request.operationId,
+          at,
+          authMethod: request.authMethod,
+          stagedRevision: request.expected.stagedRevision,
+          transition: step.transition,
+        },
+      ],
     },
     transition: step.transition,
   };
