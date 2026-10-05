@@ -8,6 +8,7 @@
  * POST /internal/admin/reconciliation/release-hold
  * POST /internal/admin/reconciliation/clear-block
  * POST /internal/admin/reconciliation/disposition
+ * POST /internal/admin/reconciliation/verification
  * ```
  *
  * Plus, in coordinated mode only, the hold-gated `POST /internal/admin/rollback`
@@ -29,13 +30,21 @@
  *
  * Nothing here publishes, sends a provider request, writes Workers KV or
  * purges a cache - except the coordinated rollback, which is the existing
- * rollback, run only under an operator hold.
+ * rollback, run only under an operator hold, and the verification (PR-E3),
+ * which sends one classification request through the composed coordinated
+ * runtime and writes only the verified classification record. The
+ * verification also needs that runtime to compose: without the limiter, the
+ * sequencer authority or a purge origin it answers `503`
+ * `coordinated-runtime-unavailable` before reading the ledger.
  */
 
 import { jsonResponse } from '../http/envelope';
 import type { Logger, LogEvent } from '../logging/logger';
+import type { PublicationAuthority } from '../publication/authority';
 import type { PublicationCommands } from '../publication/commands';
 import type { Clock } from '../runtime/clock';
+import type { SnapshotStorage } from '../storage/types';
+import type { CoordinatedRuntimeDependencies } from '../sync/coordinated/composition';
 import type {
   LedgerSnapshot,
   SeasonOperatorAction,
@@ -46,12 +55,15 @@ import {
   disposeUnderLease,
   operateUnderLease,
   rollbackUnderHold,
+  verifyUnderLease,
   type OperatorActionResult,
+  type VerificationResult,
 } from '../sync/coordinated/operator';
 import {
   decodeDisposition,
   decodeInspectionQuery,
   decodeSeasonAction,
+  decodeVerification,
   readOperatorBody,
   type OperatorRequestProblem,
 } from './reconciliation-requests';
@@ -65,6 +77,8 @@ import {
 export const reconciliationInspectPath = '/internal/admin/reconciliation';
 export const reconciliationDispositionPath =
   '/internal/admin/reconciliation/disposition';
+export const reconciliationVerificationPath =
+  '/internal/admin/reconciliation/verification';
 
 const seasonActionPaths: Readonly<Record<string, SeasonOperatorAction>> = {
   '/internal/admin/reconciliation/hold': 'hold',
@@ -76,6 +90,7 @@ export function isReconciliationPath(pathname: string): boolean {
   return (
     pathname === reconciliationInspectPath ||
     pathname === reconciliationDispositionPath ||
+    pathname === reconciliationVerificationPath ||
     Object.hasOwn(seasonActionPaths, pathname)
   );
 }
@@ -83,6 +98,8 @@ export function isReconciliationPath(pathname: string): boolean {
 export const RECONCILIATION_INSPECT_OPERATION = 'reconciliation.inspect';
 export const RECONCILIATION_OPERATOR_OPERATION =
   'reconciliation.operator-action';
+export const RECONCILIATION_VERIFICATION_OPERATION =
+  'reconciliation.verification';
 
 /** What the operator routes reach the ledger through. */
 export interface OperatorReconciliation {
@@ -90,6 +107,19 @@ export interface OperatorReconciliation {
   readonly coordinated: boolean;
   /** The resolved ledger; `null` in every environment today. */
   readonly ledger: ReconciliationLedgerPort | null;
+  /** What a verification composes its one request from (PR-E3). */
+  readonly verification: VerificationEnvironment;
+}
+
+/**
+ * The coordinated runtime's gated dependencies - the same ones a coordinated
+ * run composes from - with the publication authority and storage the
+ * published comparison base is read from. Resolving them builds nothing.
+ */
+export interface VerificationEnvironment {
+  readonly dependencies: CoordinatedRuntimeDependencies;
+  readonly authority: PublicationAuthority;
+  readonly storage: SnapshotStorage;
 }
 
 /** Why the operator surface is unavailable, in this order. Closed. */
@@ -116,6 +146,9 @@ export async function handleReconciliationRequest(
 
   const body = await readOperatorBody(request);
   if (!body.ok) return invalidRequest(context.requestId, body.problem);
+  if (url.pathname === reconciliationVerificationPath) {
+    return handleVerification(body.value, context);
+  }
   const action = seasonActionPaths[url.pathname];
   if (action !== undefined) {
     const command = decodeSeasonAction(body.value, action);
@@ -294,6 +327,149 @@ function answer(
     case 'outcome-unknown':
       return data(context.requestId, 503, { ...receipt, leaseRelease });
   }
+}
+
+/**
+ * `POST /internal/admin/reconciliation/verification` (PR-E3): one operator
+ * verification of one staged correction (T11-T11c), with the OD-7 comparison.
+ *
+ * Checked in order: the token (by the admin router), the method, the strict
+ * body, `coordinated` mode and a resolved ledger, then the coordinated
+ * runtime's own gate (`verifyUnderLease`) - all before the ledger is read or
+ * anything could send a request. The audit line carries closed values only: never a revision,
+ * a driver ID, a field name or a count from the comparison.
+ */
+async function handleVerification(
+  body: unknown,
+  context: ReconciliationRouteContext,
+): Promise<Response> {
+  const command = decodeVerification(body);
+  if (!command.ok) return invalidRequest(context.requestId, command.problem);
+  const { season, round, operationId } = command.value;
+  const audit = { season, round, operatorAction: 'verify', operationId };
+  const ledger = available(context, mutation(audit));
+  if (ledger instanceof Response) return ledger;
+
+  const environment = context.reconciliation.verification;
+  const authority = environment.authority;
+  const result = await verifyUnderLease(command.value, {
+    runtime: { ...environment.dependencies, ledger },
+    sequencer: authority.mode === 'sequencer' ? authority.port : null,
+    storage: environment.storage,
+  });
+  logVerification(context, audit, result);
+  return data(context.requestId, verificationStatus(result), {
+    status: result.status,
+    action: 'verify',
+    operationId,
+    season,
+    round,
+    providerRequests: result.providerRequests,
+    ...verificationBody(result),
+  });
+}
+
+function verificationStatus(result: VerificationResult): number {
+  switch (result.status) {
+    case 'verified':
+    case 'already-applied':
+      return 200;
+    case 'provider-failed':
+    case 'observation-refused':
+      return 502;
+    case 'deferred':
+      return 429;
+    case 'precondition-failed':
+    case 'run-in-progress':
+    case 'refused':
+      return 409;
+    case 'not-attempted':
+    case 'ledger-unavailable':
+    case 'outcome-unknown':
+    case 'coordinated-runtime-unavailable':
+      return 503;
+  }
+}
+
+/** The bounded answer: closed values, the review state and the OD-7 content. */
+function verificationBody(result: VerificationResult): object {
+  const leaseRelease = 'leaseRelease' in result ? result.leaseRelease : null;
+  switch (result.status) {
+    case 'verified':
+    case 'provider-failed':
+    case 'already-applied':
+      return {
+        transition: result.transition,
+        match: result.match,
+        record: result.record,
+        comparison: result.comparison,
+        leaseRelease,
+      };
+    case 'deferred':
+      return { retryAt: result.retryAt, leaseRelease };
+    case 'not-attempted':
+    case 'observation-refused':
+    case 'precondition-failed':
+    case 'refused':
+      return { reason: result.reason, leaseRelease };
+    case 'coordinated-runtime-unavailable':
+      return { reasons: result.reasons };
+    case 'run-in-progress':
+    case 'ledger-unavailable':
+    case 'outcome-unknown':
+      return { leaseRelease };
+  }
+}
+
+/**
+ * One audit line per verification: closed outcomes and the request count.
+ * Never the comparison's driver IDs, field names or counts, and no revision.
+ */
+function logVerification(
+  context: ReconciliationRouteContext,
+  audit: Audit,
+  result: VerificationResult,
+): void {
+  const leaseRelease = 'leaseRelease' in result ? result.leaseRelease : null;
+  const recorded =
+    result.status === 'verified' ||
+    result.status === 'provider-failed' ||
+    result.status === 'already-applied';
+  const event: LogEvent = {
+    operation: RECONCILIATION_VERIFICATION_OPERATION,
+    requestId: context.requestId,
+    ...audit,
+    operatorAuthMethod: OPERATOR_AUTH_METHOD,
+    operatorOutcome: result.status,
+    providerOperationCallCount: result.providerRequests,
+    ...(recorded
+      ? {
+          verificationTransition: result.transition,
+          ...(result.match === null ? {} : { verificationMatch: result.match }),
+          verificationComparison:
+            result.comparison.status === 'compared'
+              ? 'compared'
+              : result.comparison.reason,
+        }
+      : {}),
+    ...(result.status === 'deferred'
+      ? { providerRetryAt: result.retryAt }
+      : {}),
+    ...(result.status === 'refused' ? { ledgerRejection: result.reason } : {}),
+    ...(result.status === 'coordinated-runtime-unavailable'
+      ? {
+          failureCategory: result.status,
+          coordinationMissingDependencies: [...result.reasons],
+        }
+      : {}),
+    ...((result.status === 'precondition-failed' ||
+      result.status === 'observation-refused') &&
+    result.reason !== null
+      ? { failureCategory: result.reason }
+      : {}),
+    ...(leaseRelease === null ? {} : { leaseRelease }),
+  };
+  context.logger.warn(event);
 }
 
 export interface CoordinatedRollbackContext extends ReconciliationRouteContext {

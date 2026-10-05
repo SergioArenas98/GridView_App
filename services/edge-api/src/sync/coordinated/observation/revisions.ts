@@ -10,6 +10,8 @@
  *   authoritative release's revisions are recomputed with before they are
  *   reconciled into `publishedRevision`, so an accepted revision and a
  *   published revision compare equal exactly when the content is the same.
+ *   The rule lives in `../classification-revision.ts`, shared with operator
+ *   verification, and is re-exported here.
  * - **A season-level refresh resource** is compared only with its own earlier
  *   observations, and its payload is not the shape of any one public
  *   document. It is hashed as a domain-separated canonical JSON text of the
@@ -22,12 +24,10 @@
  */
 
 import type { CoordinatedPayload } from '../../../providers/coordination';
-import type { RaceResult } from '../../../contract/types';
 import {
   compareUtf8,
   encodeUtf8,
 } from '../../../publication/canonical/ordering';
-import { snapshotRevision } from '../../../publication/snapshot-revision';
 import {
   MAXIMUM_ROUND,
   type CalendarAnchor,
@@ -35,29 +35,16 @@ import {
 } from '../ledger/model';
 import { calendarAnchor } from '../policy';
 
-/**
- * The `meta.schemaVersion` every generated snapshot document carries
- * (`snapshots/generator.ts`). A results document's revision is computed over
- * it, so an observation must use the same value. A test pins the two together.
- */
-export const PUBLISHED_SNAPSHOT_SCHEMA_VERSION = 1;
+export {
+  PUBLISHED_SNAPSHOT_SCHEMA_VERSION,
+  classificationRevision,
+} from '../classification-revision';
 
 /** The format of the refresh-resource digest. Inside the hashed bytes. */
 export const OBSERVATION_REVISION_FORMAT = 'gv-observation/1';
 
 /** Deeper than any normalized payload; a guard against a hostile shape only. */
 const MAXIMUM_DEPTH = 32;
-
-/** The published revision of one race classification. */
-export async function classificationRevision(
-  result: RaceResult,
-): Promise<RevisionHash> {
-  return snapshotRevision({
-    documentName: `grand-prix:${result.round}:results`,
-    schemaVersion: PUBLISHED_SNAPSHOT_SCHEMA_VERSION,
-    data: result,
-  });
-}
 
 /**
  * The revision of one season-level payload, or `null` when it is not plain

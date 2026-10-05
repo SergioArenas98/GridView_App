@@ -48,15 +48,14 @@ describe('the observation orchestration is not connected', () => {
       }
     }
     expect([...outside].sort()).toEqual([
-      'contract/types.ts',
       'logging/logger.ts',
       'providers/coordination/index.ts',
       'publication/canonical/ordering.ts',
       'publication/guard/participation-guard.ts',
       'publication/guard/predecessor.ts',
       'publication/sequencer/port.ts',
-      'publication/snapshot-revision.ts',
       'storage/types.ts',
+      'sync/coordinated/classification-revision.ts',
       'sync/coordinated/composition.ts',
       'sync/coordinated/ledger/model.ts',
       'sync/coordinated/operator/attention.ts',

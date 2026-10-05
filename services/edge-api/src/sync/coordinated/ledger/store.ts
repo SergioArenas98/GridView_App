@@ -28,6 +28,10 @@
  *   a staged or competing correction, write a disposition, or remove a
  *   backlog entry, and a backlog entry is inserted only together with the
  *   staged slot it holds. Only `dispose` (T12) releases either.
+ * - **Review tracking belongs to verification.** A commit can never create a
+ *   competing correction, write a verification record, or change the
+ *   candidate slot of a staged record. Only `verify` (T11-T11c) does, so only
+ *   an explicit operator verification can lock a record for review.
  * - **Operator state belongs to operators.** A commit can never set, change
  *   or clear a hold or the last operator action, and can set a durable block
  *   but never change or clear one. Only `operate` does.
@@ -35,7 +39,7 @@
  *   while a hold or durable block is set is refused, whatever its caller
  *   decided.
  *
- * What it deliberately does not do: any §10.4.1 transition other than T12,
+ * What it deliberately does not do: any §10.4.1 transition other than T11-T12,
  * corroboration, settling, due-work planning, publishability or no-change
  * decision, or choosing an ordering input. Those compute the records a caller
  * commits here; the store only refuses an ordering input that does not move
@@ -46,10 +50,7 @@
  */
 
 import { systemClock, type Clock } from '../../../runtime/clock';
-import type {
-  SequencerHost,
-  SequencerRecordStore,
-} from '../../../publication/sequencer/store';
+import type { SequencerHost } from '../../../publication/sequencer/store';
 import {
   BACKLOG_CAPACITY,
   LEASE_TTL_MS,
@@ -65,7 +66,6 @@ import {
   type LedgerReadOutcome,
   type LedgerRejection,
   type LedgerRejectionReason,
-  type LedgerSnapshot,
   type OperatorTransitionOutcome,
   type PublishedReconciliation,
   type PublishedReconciliationOutcome,
@@ -79,14 +79,19 @@ import {
   seasonAfterDisposition,
 } from './operator';
 import {
-  decodeBacklogEntry,
-  decodeClassificationRecord,
-  decodeLeaseRecord,
-  decodePublishedReconciliation,
-  decodeSeasonRecord,
-  decodeVersioned,
-  ledgerKeys,
-} from './records';
+  LedgerRefusal,
+  backlogKey,
+  expired,
+  readBacklog,
+  readClassification,
+  readClassifications,
+  readLease,
+  readSeasonRecord,
+  readSnapshot,
+  refuse,
+  type Store,
+} from './reads';
+import { ledgerKeys } from './records';
 import {
   decodeCommitRequest,
   decodeDispositionRequest,
@@ -94,25 +99,15 @@ import {
   decodeOperatorActionRequest,
   decodeReconciliationRequest,
   decodeSeasonRequest,
+  decodeVerificationRequest,
 } from './requests';
+import { applyOperatorVerification } from './verification';
 
 /** The storage host: SQLite-backed Durable Object storage, or its in-memory double. */
 export type LedgerHost = SequencerHost;
-type Store = SequencerRecordStore;
 
 export interface LedgerStoreOptions {
   readonly clock?: Clock;
-}
-
-/** A refusal raised inside a transaction, so the transaction rolls back. */
-class LedgerRefusal extends Error {
-  constructor(readonly reason: LedgerRejectionReason) {
-    super(reason);
-  }
-}
-
-function refuse(reason: LedgerRejectionReason): never {
-  throw new LedgerRefusal(reason);
 }
 
 export class ReconciliationLedgerStore {
@@ -419,6 +414,64 @@ export class ReconciliationLedgerStore {
   }
 
   /**
+   * T11-T11c: one operator verification of one staged correction, against
+   * the staged revision the operator named and the record version they read.
+   *
+   * It writes that classification record and nothing else: no season record,
+   * no backlog entry, and never the staged slot, the accepted or published
+   * revision or the history (`verification.ts`). A deferral records only the
+   * limiter's retry instant and no verification. A resent operation ID is
+   * answered `already-applied` and writes nothing, so one response is never
+   * counted as two sightings; the same ID for another target is refused.
+   */
+  verify(payload: unknown): OperatorTransitionOutcome {
+    return this.transact((store) => {
+      const decoded = decodeVerificationRequest(payload);
+      if (!decoded.ok) refuse(decoded.reason);
+      const request = decoded.value;
+      const season = request.lease.season;
+      const now = this.now();
+      requireLease(store, request.lease, now);
+
+      const stored = readClassification(store, season, request.round);
+      if (stored === null) refuse('operator-precondition-failed');
+      const last = stored.record.lastVerification;
+      if (last !== null && last.operationId === request.operationId) {
+        if (last.stagedRevision !== request.expected.stagedRevision) {
+          refuse('operation-id-reused');
+        }
+        return {
+          outcome: 'already-applied',
+          snapshot: readSnapshot(store, season, now),
+        };
+      }
+      if (request.expected.recordVersion !== stored.version) {
+        refuse('version-conflict');
+      }
+      const step = applyOperatorVerification(
+        stored.record,
+        request,
+        now.toISOString(),
+      );
+      if (step.kind === 'refused') refuse(step.reason);
+      const entry = readBacklog(store).find(
+        (candidate) =>
+          candidate.season === season && candidate.round === request.round,
+      );
+      if (entry?.revision !== request.expected.stagedRevision) {
+        refuse('backlog-entry-missing');
+      }
+      checkHistory(stored, step.record);
+
+      store.put(ledgerKeys.classification(season, request.round), {
+        version: stored.version + 1,
+        record: step.record,
+      });
+      return { outcome: 'applied', snapshot: readSnapshot(store, season, now) };
+    });
+  }
+
+  /**
    * Replaces the season's cached published revisions with the authoritative
    * release's, and records which release they came from.
    *
@@ -489,10 +542,6 @@ export class ReconciliationLedgerStore {
       throw error;
     }
   }
-}
-
-function expired(lease: LeaseRecord, now: Date): boolean {
-  return now.getTime() >= Date.parse(lease.expiresAt);
 }
 
 /** Why a token may not act, or `null` when it holds the valid lease. */
@@ -580,14 +629,19 @@ function checkClassificationWrite(
     refuse('published-revision-not-reconciled');
   }
   // D2.5: a staged or competing correction, once held, and the disposition
-  // record belong to T12 alone. A competing slot may still be filled.
+  // record belong to T12 alone. A competing correction is created only by
+  // `verify` (T11b), which also owns a staged record's candidate slot and the
+  // verification record: a run can neither lock a record for review nor
+  // forge or erase a verification's sighting.
   const before = stored?.record ?? null;
   if (
     (before?.stagedCorrection != null &&
-      !same(next.stagedCorrection, before.stagedCorrection)) ||
-    (before?.competingCorrection != null &&
-      !same(next.competingCorrection, before.competingCorrection)) ||
-    !same(next.lastDisposition, before?.lastDisposition ?? null)
+      (!same(next.stagedCorrection, before.stagedCorrection) ||
+        next.candidateRevision !== before.candidateRevision ||
+        next.candidateFirstSeenAt !== before.candidateFirstSeenAt)) ||
+    !same(next.competingCorrection, before?.competingCorrection ?? null) ||
+    !same(next.lastDisposition, before?.lastDisposition ?? null) ||
+    !same(next.lastVerification, before?.lastVerification ?? null)
   ) {
     refuse('staged-correction-immutable');
   }
@@ -628,123 +682,4 @@ function checkHistory(
       refuse('superseded-revision-reapplied');
     }
   }
-}
-
-// --- Reads: every stored value is decoded; anything else is corruption. ---
-
-function readLease(store: Store, season: number): LeaseRecord | null {
-  const raw = store.get(ledgerKeys.lease(season));
-  if (raw === undefined) return null;
-  const lease = decodeLeaseRecord(raw);
-  if (lease === null || lease.season !== season) refuse('state-corrupt');
-  return lease;
-}
-
-function readSeasonRecord(
-  store: Store,
-  season: number,
-): Versioned<SeasonRecord> | null {
-  const raw = store.get(ledgerKeys.season(season));
-  if (raw === undefined) return null;
-  const decoded = decodeVersioned(raw, decodeSeasonRecord);
-  if (decoded === null || decoded.record.season !== season) {
-    refuse('state-corrupt');
-  }
-  return decoded;
-}
-
-function readClassification(
-  store: Store,
-  season: number,
-  round: number,
-): Versioned<ClassificationRecord> | null {
-  const raw = store.get(ledgerKeys.classification(season, round));
-  if (raw === undefined) return null;
-  const decoded = decodeVersioned(raw, decodeClassificationRecord);
-  if (
-    decoded === null ||
-    decoded.record.season !== season ||
-    decoded.record.round !== round
-  ) {
-    refuse('state-corrupt');
-  }
-  return decoded;
-}
-
-function readClassifications(
-  store: Store,
-  season: number,
-): Versioned<ClassificationRecord>[] {
-  const records: Versioned<ClassificationRecord>[] = [];
-  for (const [key, raw] of store.list(
-    ledgerKeys.classificationPrefix(season),
-  )) {
-    const decoded = decodeVersioned(raw, decodeClassificationRecord);
-    if (
-      decoded === null ||
-      key !== ledgerKeys.classification(season, decoded.record.round) ||
-      decoded.record.season !== season
-    ) {
-      refuse('state-corrupt');
-    }
-    records.push(decoded);
-  }
-  return records.sort((left, right) => left.record.round - right.record.round);
-}
-
-function readPublished(
-  store: Store,
-  season: number,
-): PublishedReconciliation | null {
-  const raw = store.get(ledgerKeys.published(season));
-  if (raw === undefined) return null;
-  const decoded = decodePublishedReconciliation(raw);
-  if (decoded === null || decoded.season !== season) refuse('state-corrupt');
-  return decoded;
-}
-
-function backlogKey(entry: BacklogEntry): string {
-  return ledgerKeys.backlog(entry.season, entry.round);
-}
-
-/** Every backlog entry, across every season. */
-function readBacklog(store: Store): BacklogEntry[] {
-  const entries: BacklogEntry[] = [];
-  for (const [key, raw] of store.list(ledgerKeys.backlogPrefix)) {
-    const entry = decodeBacklogEntry(raw);
-    if (entry === null || key !== backlogKey(entry)) refuse('state-corrupt');
-    entries.push(entry);
-  }
-  // More entries than the capacity can only come from outside this store.
-  if (entries.length > BACKLOG_CAPACITY) refuse('state-corrupt');
-  return entries;
-}
-
-function readSnapshot(store: Store, season: number, now: Date): LedgerSnapshot {
-  const lease = readLease(store, season);
-  const backlog = readBacklog(store);
-  return {
-    season,
-    seasonRecord: readSeasonRecord(store, season),
-    classifications: readClassifications(store, season),
-    published: readPublished(store, season),
-    lease:
-      lease === null
-        ? null
-        : {
-            fence: lease.fence,
-            state:
-              lease.state === 'held' && expired(lease, now)
-                ? 'expired'
-                : lease.state,
-            expiresAt: lease.expiresAt,
-          },
-    backlog: {
-      count: backlog.length,
-      capacity: BACKLOG_CAPACITY,
-      entries: backlog
-        .filter((entry) => entry.season === season)
-        .sort((left, right) => left.round - right.round),
-    },
-  };
 }

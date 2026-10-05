@@ -17,7 +17,9 @@
  * PR-E1 refined it a third time, on the same grounds (re-verified at
  * `383d8aa`), with the operator state: `SeasonRecord.operatorHold`,
  * `durableBlock` and `lastOperatorAction`, and
- * `ClassificationRecord.lastDisposition`. After the first deploy that
+ * `ClassificationRecord.lastDisposition`. PR-E3 refined it a fourth time, on
+ * the same grounds (re-verified at `086ed06`), with
+ * `ClassificationRecord.lastVerification`. After the first deploy that
  * resolves a ledger, any change needs a versioned decoder and a migration
  * decision instead.
  *
@@ -157,6 +159,52 @@ export interface DispositionRecord {
 }
 
 /**
+ * What one operator verification found and did (Provider Evaluation §10.4.1
+ * T11-T11c, with T5 and T6; PR-E3). Closed, and evaluated in this order:
+ *
+ * - `superseded-rejected` (T5): a revision in the superseded history. It is
+ *   never tracked; a pending candidate is discarded and the confirmation
+ *   count is reset, as T5 does everywhere.
+ * - `accepted-seen` / `staged-seen` (T11): the accepted or the staged revision
+ *   again. Nothing durable changes.
+ * - `candidate-corroborated` (T11b): the pending candidate again, on a later
+ *   verification. It becomes the competing correction, and the record is
+ *   locked for review.
+ * - `candidate-observed` (T11): any other revision, first sighting. It is
+ *   only the candidate: one sighting never stages anything.
+ * - `candidate-discarded` / `candidate-replaced` (T11c): a candidate is
+ *   pending and something else was seen - the accepted or staged revision
+ *   (discarded), or a third revision (it replaces the candidate).
+ * - `check-failed` (T6): the request failed. No revision, candidate, slot or
+ *   counter changes; only the attempt is recorded.
+ */
+export const verificationTransitions = [
+  'superseded-rejected',
+  'accepted-seen',
+  'staged-seen',
+  'candidate-corroborated',
+  'candidate-observed',
+  'candidate-discarded',
+  'candidate-replaced',
+  'check-failed',
+] as const;
+export type VerificationTransition = (typeof verificationTransitions)[number];
+
+/**
+ * The last completed operator verification of a resource: replay detection
+ * and audit. A limiter deferral is not a completed verification and is never
+ * recorded here.
+ */
+export interface VerificationRecord {
+  readonly operationId: OperationId;
+  readonly at: LedgerInstant;
+  readonly authMethod: OperatorAuthMethod;
+  /** The staged revision the verification was asked against. */
+  readonly stagedRevision: RevisionHash;
+  readonly transition: VerificationTransition;
+}
+
+/**
  * One race classification resource, key `classification:{season}:{round}`.
  *
  * `publishedRevision` is a **cache** of the authoritative release. An ordinary
@@ -203,6 +251,8 @@ export interface ClassificationRecord {
   readonly unstableSightings: number;
   /** Written only by the T12 `dispose` operation, never by a commit. */
   readonly lastDisposition: DispositionRecord | null;
+  /** Written only by the `verify` operation (T11-T11c), never by a commit. */
+  readonly lastVerification: VerificationRecord | null;
 }
 
 /** The season-level resources carried as refresh state. */
@@ -507,6 +557,11 @@ export const ledgerRejectionReasons = [
   'operation-id-reused',
   /** The record is not in the state the operator action requires. */
   'operator-precondition-failed',
+  /**
+   * The record already holds a competing correction (`review_locked`), so a
+   * verification can only report, and is refused instead (T11d).
+   */
+  'review-locked',
   'state-corrupt',
 ] as const;
 export type LedgerRejectionReason = (typeof ledgerRejectionReasons)[number];
@@ -600,6 +655,32 @@ export interface DispositionRequest {
     readonly stagedRevision: RevisionHash;
     readonly competingRevision: RevisionHash | null;
   };
+}
+
+/**
+ * What one verification request observed, in the policy's closed vocabulary.
+ * A deferral was not attempted: it records only the limiter's retry instant.
+ */
+export type VerificationObservation =
+  | { readonly status: 'observed'; readonly revision: RevisionHash }
+  | { readonly status: 'failed' }
+  | { readonly status: 'deferred'; readonly retryAt: LedgerInstant };
+
+/**
+ * One operator verification of one staged classification resource (T11-T11c).
+ * `expected` names the record the operator asked about; a record that moved
+ * on is refused, not verified.
+ */
+export interface VerificationRequest {
+  readonly lease: LeaseToken;
+  readonly round: number;
+  readonly operationId: OperationId;
+  readonly authMethod: OperatorAuthMethod;
+  readonly expected: {
+    readonly recordVersion: number;
+    readonly stagedRevision: RevisionHash;
+  };
+  readonly observation: VerificationObservation;
 }
 
 /**

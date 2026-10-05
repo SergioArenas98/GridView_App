@@ -22,6 +22,7 @@ import type {
   OperatorTransitionOutcome,
   PublishedReconciliationOutcome,
   PublishedReconciliationRequest,
+  VerificationRequest,
 } from './model';
 import type { ReconciliationLedgerStore } from './store';
 
@@ -62,6 +63,12 @@ export class LocalReconciliationLedger implements ReconciliationLedgerPort {
     request: DispositionRequest,
   ): Promise<OperatorTransitionOutcome> {
     return guarded(() => this.store.dispose(request));
+  }
+
+  async verify(
+    request: VerificationRequest,
+  ): Promise<OperatorTransitionOutcome> {
+    return guarded(() => this.store.verify(request));
   }
 }
 

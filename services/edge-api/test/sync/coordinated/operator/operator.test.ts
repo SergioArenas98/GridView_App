@@ -1,10 +1,12 @@
 /**
- * The operator package is connected exactly where PR-E2 connects it: the
- * admin reconciliation routes (transitions and the hold-gated rollback) and
- * the observation orchestration (the attention line, `attention.ts` alone).
- * It reaches no provider, Cloudflare or environment global. Its only writes
- * are the ledger's own `operate` and `dispose`, and its only way to publish
- * is the rollback command a caller hands it. The OD-8 levels are pure.
+ * The operator package is connected exactly where PR-E2 and PR-E3 connect
+ * it: the admin reconciliation routes (transitions, the hold-gated rollback
+ * and the verification) and the observation orchestration (the attention
+ * line, `attention.ts` alone). It reaches no Cloudflare or environment
+ * global, and a provider only through the composed runtime's one
+ * classification request. Its only writes are the ledger's own `operate`,
+ * `dispose` and `verify`, and its only way to publish is the rollback
+ * command a caller hands it. The OD-8 levels are pure.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -31,9 +33,11 @@ describe('the operator package is connected only where PR-E2 connects it', () =>
     expect(operatorFiles()).toEqual([
       'sync/coordinated/operator/actions.ts',
       'sync/coordinated/operator/attention.ts',
+      'sync/coordinated/operator/comparison.ts',
       'sync/coordinated/operator/index.ts',
       'sync/coordinated/operator/lease.ts',
       'sync/coordinated/operator/rollback.ts',
+      'sync/coordinated/operator/verification.ts',
     ]);
     expect(importersOf(operatorDir)).toEqual([
       'admin/reconciliation-requests.ts',
@@ -55,15 +59,36 @@ describe('the operator package is connected only where PR-E2 connects it', () =>
       }
     }
     expect([...outside].sort()).toEqual([
+      'contract/types.ts',
+      'contract/validation.ts',
       'logging/logger.ts',
+      'publication/guard/predecessor.ts',
       'publication/publisher.ts',
+      'publication/sequencer/port.ts',
+      'publication/snapshot-revision.ts',
       'runtime/clock.ts',
+      'storage/types.ts',
+      'sync/coordinated/classification-revision.ts',
+      'sync/coordinated/composition.ts',
       'sync/coordinated/ledger-port.ts',
       'sync/coordinated/ledger/model.ts',
+      'sync/coordinated/ledger/verification.ts',
+      'sync/coordinated/policy/cadence.ts',
     ]);
+    // The verification reads the planner's eligibility rule and nothing else
+    // of the policy, and reaches a provider only through the composition.
+    expect(
+      importsOf('sync/coordinated/operator/verification.ts').filter(
+        (file) =>
+          file.startsWith('sync/coordinated/policy/') ||
+          file.startsWith('providers/') ||
+          file.startsWith('sync/coordinated/observation/') ||
+          file.startsWith('sync/coordinated/outcome/'),
+      ),
+    ).toEqual(['sync/coordinated/policy/cadence.ts']);
   });
 
-  it('writes only through operate and dispose, publishes only through the rollback it is handed, and reads no global', () => {
+  it('writes only through operate, dispose and verify, publishes only through the rollback it is handed, and reads no global', () => {
     for (const file of operatorFiles()) {
       const code = readSource(file);
       expect(code, file).not.toMatch(
@@ -74,9 +99,24 @@ describe('the operator package is connected only where PR-E2 connects it', () =>
       );
     }
     const writers = operatorFiles().filter((file) =>
-      /\.(operate|dispose)\(/.test(readSource(file)),
+      /\.(operate|dispose|verify)\(/.test(readSource(file)),
     );
-    expect(writers).toEqual(['sync/coordinated/operator/actions.ts']);
+    expect(writers).toEqual([
+      'sync/coordinated/operator/actions.ts',
+      'sync/coordinated/operator/verification.ts',
+    ]);
+    // One verification: one classification request, one ledger write.
+    const verification = readSource(
+      'sync/coordinated/operator/verification.ts',
+    );
+    expect(verification.match(/ledger\.verify\(/g)).toHaveLength(1);
+    expect(verification.match(/requestClassification\(/g)).toHaveLength(1);
+    expect(verification).not.toMatch(/\.(operate|dispose)\(/);
+    // The comparison only reads.
+    const comparison = readSource('sync/coordinated/operator/comparison.ts');
+    expect(comparison).not.toMatch(
+      /\.(put|write\w*|delete|commit|verify|operate|dispose)\(/,
+    );
     const actions = readSource('sync/coordinated/operator/actions.ts');
     expect(actions.match(/ledger\.operate\(/g)).toHaveLength(1);
     expect(actions.match(/ledger\.dispose\(/g)).toHaveLength(1);

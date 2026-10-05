@@ -49,6 +49,7 @@ import {
   type OperatorTransitionOutcome,
   type PublishedReconciliationOutcome,
   type PublishedReconciliationRequest,
+  type VerificationRequest,
 } from './model';
 import { hasExactLedgerKeys, isLedgerObject } from './records';
 import { ReconciliationLedgerStore, type LedgerStoreOptions } from './store';
@@ -71,6 +72,7 @@ export const ledgerCommands = [
   'reconcile-published',
   'operate',
   'dispose',
+  'verify',
 ] as const;
 
 export type LedgerCommand = (typeof ledgerCommands)[number];
@@ -133,6 +135,8 @@ export class ReconciliationLedger {
         return this.store.operate(payload);
       case 'dispose':
         return this.store.dispose(payload);
+      case 'verify':
+        return this.store.verify(payload);
     }
   }
 }
@@ -243,9 +247,15 @@ export class DurableObjectReconciliationLedger implements ReconciliationLedgerPo
     return this.transition('dispose', request, request.lease.season);
   }
 
+  async verify(
+    request: VerificationRequest,
+  ): Promise<OperatorTransitionOutcome> {
+    return this.transition('verify', request, request.lease.season);
+  }
+
   private async transition(
-    command: 'operate' | 'dispose',
-    request: OperatorActionRequest | DispositionRequest,
+    command: 'operate' | 'dispose' | 'verify',
+    request: OperatorActionRequest | DispositionRequest | VerificationRequest,
     season: number,
   ): Promise<OperatorTransitionOutcome> {
     const value = await this.call(command, request);

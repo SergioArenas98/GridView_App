@@ -127,6 +127,12 @@ const roundKeys = [
   'lastDisposition.at',
   'lastDisposition.authMethod',
   'lastDisposition.stagedRevision',
+  'lastVerification',
+  'lastVerification.operationId',
+  'lastVerification.at',
+  'lastVerification.authMethod',
+  'lastVerification.stagedRevision',
+  'lastVerification.transition',
 ];
 const inspectionKeys = new Set([
   'status',
@@ -177,28 +183,23 @@ describe.each(sequencerTransports)(
               },
             }),
           ),
-          classifications: [
-            write(
-              stagedClassification(
-                3,
-                STAGED,
-                SEASON,
-                competing === null
-                  ? {}
-                  : {
-                      markers: ['review_locked', 'staged'],
-                      competingCorrection: {
-                        revision: competing,
-                        firstSeenAt: '2026-04-02T04:00:00.000Z',
-                        uncorroborated: false,
-                      },
-                    },
-              ),
-            ),
-          ],
+          classifications: [write(stagedClassification(3, STAGED, SEASON))],
           backlogInsertions: [{ round: 3, revision: STAGED }],
         },
         SEASON,
+      );
+      if (competing === null) return;
+      // Only `verify` can create a competing correction (PR-E3); planted,
+      // so these tests exercise the operator routes alone.
+      ledger.plant(
+        stagedClassification(3, STAGED, SEASON, {
+          markers: ['review_locked', 'staged'],
+          competingCorrection: {
+            revision: competing,
+            firstSeenAt: '2026-04-02T04:00:00.000Z',
+            uncorroborated: false,
+          },
+        }),
       );
     }
 

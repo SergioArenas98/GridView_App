@@ -8,7 +8,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { resolveReconciliationLedger } from '../../../../src/sync/coordinated/ledger-port';
-import { importersOf, readSource, sourceFiles } from '../source-graph';
+import {
+  importersOf,
+  importsOf,
+  readSource,
+  sourceFiles,
+} from '../source-graph';
 
 const policyDir = 'sync/coordinated/policy/';
 const read = readSource;
@@ -21,13 +26,21 @@ describe('the reconciliation policy is not connected', () => {
     // directory (`../policy`) is found too. The observation orchestration is
     // itself imported by no Worker module (its own dormancy test), and the
     // outcome half only by it.
+    // The one exception is the operator verification (PR-E3), which reads
+    // the planner's eligibility rule (`cadence.ts`) and nothing else.
     expect(importersOf(policyDir)).toEqual([
       'sync/coordinated/observation/observe.ts',
       'sync/coordinated/observation/outcomes.ts',
       'sync/coordinated/observation/revisions.ts',
+      'sync/coordinated/operator/verification.ts',
       'sync/coordinated/outcome/decisions.ts',
       'sync/coordinated/outcome/publish.ts',
     ]);
+    expect(
+      importsOf('sync/coordinated/operator/verification.ts').filter((file) =>
+        file.startsWith(policyDir),
+      ),
+    ).toEqual(['sync/coordinated/policy/cadence.ts']);
     expect(importersOf('sync/coordinated/observation/')).toEqual([]);
     expect(importersOf('sync/coordinated/outcome/')).toEqual([
       'sync/coordinated/observation/observe.ts',

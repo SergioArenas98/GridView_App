@@ -168,11 +168,25 @@ export default {
             retry: env.__CUTOVER_RETRY,
           }),
           authority,
-          // The operator routes and the coordinated rollback (PR-E2). The
-          // resolver answers `null`, so each refuses as `ledger-unbound`.
+          // The operator routes and the coordinated rollback (PR-E2), and
+          // the verification (PR-E3), which composes the coordinated runtime
+          // from the same gated dependencies as a run. The resolver answers
+          // `null`, so each refuses as `ledger-unbound`.
           reconciliation: {
             coordinated: coordinatedMode(config),
             ledger: resolveReconciliationLedger(),
+            verification: {
+              dependencies: coordinatedDependencies(
+                env,
+                authority,
+                guarded,
+                url.origin,
+                logger,
+                clock,
+              ),
+              authority,
+              storage,
+            },
           },
           clock,
         });

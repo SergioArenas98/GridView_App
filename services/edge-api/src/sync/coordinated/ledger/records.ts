@@ -36,6 +36,7 @@ import {
   reviewStates,
   seasonOperatorActions,
   terminalReasons,
+  verificationTransitions,
   type LastPublication,
   type PublicationDisposition,
   type BacklogEntry,
@@ -53,6 +54,7 @@ import {
   type RefreshRecord,
   type RefreshResource,
   type SeasonRecord,
+  type VerificationRecord,
   type Versioned,
 } from './model';
 
@@ -207,6 +209,39 @@ function decodeDispositionRecord(
   };
 }
 
+const verificationKeys = [
+  'operationId',
+  'at',
+  'authMethod',
+  'stagedRevision',
+  'transition',
+] as const;
+
+function decodeVerificationRecord(
+  value: unknown,
+): VerificationRecord | null | 'invalid' {
+  if (value === null) return null;
+  if (!isObject(value) || !hasExactKeys(value, verificationKeys)) {
+    return 'invalid';
+  }
+  if (
+    !isOperationId(value.operationId) ||
+    !isLedgerInstant(value.at) ||
+    !isOneOf(operatorAuthMethods, value.authMethod) ||
+    !isSnapshotRevision(value.stagedRevision) ||
+    !isOneOf(verificationTransitions, value.transition)
+  ) {
+    return 'invalid';
+  }
+  return {
+    operationId: value.operationId,
+    at: value.at,
+    authMethod: value.authMethod,
+    stagedRevision: value.stagedRevision,
+    transition: value.transition,
+  };
+}
+
 /** Sorted in `classificationMarkers` order, each at most once. */
 function decodeMarkers(value: unknown): ClassificationMarker[] | null {
   if (!Array.isArray(value) || value.length > classificationMarkers.length) {
@@ -274,6 +309,7 @@ const classificationKeys = [
   'lastPriorityAttemptAt',
   'unstableSightings',
   'lastDisposition',
+  'lastVerification',
 ] as const;
 
 export function decodeClassificationRecord(
@@ -288,6 +324,7 @@ export function decodeClassificationRecord(
   const staged = decodeCorrection(value.stagedCorrection);
   const competing = decodeCorrection(value.competingCorrection);
   const lastDisposition = decodeDispositionRecord(value.lastDisposition);
+  const lastVerification = decodeVerificationRecord(value.lastVerification);
   if (
     value.schemaVersion !== LEDGER_SCHEMA_VERSION ||
     value.kind !== 'classification' ||
@@ -320,6 +357,7 @@ export function decodeClassificationRecord(
     staged === 'invalid' ||
     competing === 'invalid' ||
     lastDisposition === 'invalid' ||
+    lastVerification === 'invalid' ||
     !isInstantOrNull(value.sourceObservedAt) ||
     !isInstantOrNull(value.settledAt) ||
     !(
@@ -363,6 +401,7 @@ export function decodeClassificationRecord(
     lastPriorityAttemptAt: value.lastPriorityAttemptAt,
     unstableSightings: value.unstableSightings,
     lastDisposition,
+    lastVerification,
   });
 }
 

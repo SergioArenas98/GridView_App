@@ -20,8 +20,10 @@
  *
  * Fixed rules, whatever the kind:
  *
- * - A staged or review-locked record takes no transition: T11-T11d run only
- *   under an explicit operator verification, which does not exist yet.
+ * - A staged or review-locked record takes no transition from any run:
+ *   T11-T11c run only inside an explicit operator verification, through the
+ *   ledger's own `verify` operation (`../ledger/verification.ts`), and T11d is
+ *   refused before any request.
  * - A failed check (T6) changes no revision, confirmation count, candidate,
  *   slot or review state. A deferred or cancelled check was not attempted and
  *   changes nothing but the recorded limiter deferral.
@@ -117,6 +119,7 @@ export function newClassificationRecord(
     lastPriorityAttemptAt: null,
     unstableSightings: 0,
     lastDisposition: null,
+    lastVerification: null,
   };
 }
 

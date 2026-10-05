@@ -16,9 +16,10 @@
  * publishability decision - is the pure policy in `policy/`. Only the
  * injected orchestration in `observation/` and `outcome/` commits through this
  * port: observations, the ordering-input reservation and the publication
- * outcome. The operator transitions (`operate`, `dispose`; PR-E1) are reached
- * only by the admin reconciliation routes (PR-E2), which also read the season
- * to inspect it. No Worker run reaches any of it.
+ * outcome. The operator transitions (`operate`, `dispose`; PR-E1, and
+ * `verify`; PR-E3) are reached only by the admin reconciliation routes
+ * (PR-E2, PR-E3), which also read the season to inspect it. No Worker run
+ * reaches any of it.
  *
  * No binding, variable or test hook supplies a ledger to the runtime, so
  * `resolveReconciliationLedger` always answers `null`. Every coordinated run,
@@ -39,6 +40,7 @@ import type {
   OperatorTransitionOutcome,
   PublishedReconciliationOutcome,
   PublishedReconciliationRequest,
+  VerificationRequest,
 } from './ledger/model';
 
 export interface ReconciliationLedgerPort {
@@ -81,6 +83,13 @@ export interface ReconciliationLedgerPort {
    * admin route.
    */
   dispose(request: DispositionRequest): Promise<OperatorTransitionOutcome>;
+
+  /**
+   * T11-T11c: records one operator verification of one staged correction.
+   * The only operation that creates a competing correction, and so the
+   * review lock. Reached by the verification admin route (PR-E3).
+   */
+  verify(request: VerificationRequest): Promise<OperatorTransitionOutcome>;
 }
 
 /**

@@ -487,7 +487,10 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     ]) {
       expect(inputs, module).toContain(module);
     }
+    // The coordinated sync entry point and the operator verification
+    // (PR-E3), which composes through the same gate for its one request.
     expect(importersOf(graph, compositionModule)).toEqual([
+      'src/sync/coordinated/operator/verification.ts',
       'src/sync/coordinated/run.ts',
     ]);
     expect(importersOf(graph, 'src/sync/coordinated/run.ts')).toEqual([
@@ -495,7 +498,8 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     ]);
     // The C2 policy, the C3 observation orchestration and the C4 publication
     // half - with the curated season metadata only it reads - are not in the
-    // Worker's graph at all.
+    // Worker's graph, except the planner's eligibility rule the verification
+    // checks before its request (`policy/cadence.ts`, pure arithmetic).
     expect(
       inputs.filter(
         (input) =>
@@ -505,7 +509,10 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
           input.endsWith('season-metadata.development.json') ||
           input.endsWith('attribution/data-sources.json'),
       ),
-    ).toEqual([]);
+    ).toEqual(['src/sync/coordinated/policy/cadence.ts']);
+    expect(
+      importersOf(graph, 'src/sync/coordinated/policy/cadence.ts'),
+    ).toEqual(['src/sync/coordinated/operator/verification.ts']);
   });
 
   it('lets no other runtime module import either package', async () => {

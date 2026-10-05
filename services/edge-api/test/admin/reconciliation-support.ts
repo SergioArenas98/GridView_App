@@ -27,6 +27,7 @@ import {
   type LeaseToken,
   type LedgerCommitRequest,
   type SeasonRecord,
+  ledgerKeys,
 } from '../../src/sync/coordinated/ledger';
 import type { ReconciliationLedgerPort } from '../../src/sync/coordinated/ledger-port';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
@@ -46,6 +47,7 @@ export const ledgerMethods = [
   'reconcilePublishedRevisions',
   'operate',
   'dispose',
+  'verify',
 ] as const;
 export type LedgerMethod = (typeof ledgerMethods)[number];
 
@@ -102,6 +104,19 @@ export class OperatorLedger {
           object.fetch(new Request(url, init)),
       }),
     });
+  }
+
+  /**
+   * Writes `record` straight into the host at `version`, bypassing the
+   * store: only for a competing correction, which only `verify` can create.
+   */
+  plant(record: ClassificationRecord, version = 1): void {
+    this.host.transactionSync((store) =>
+      store.put(ledgerKeys.classification(record.season, record.round), {
+        version,
+        record,
+      }),
+    );
   }
 
   /** Every committed key and value, for byte-for-byte comparison. */
@@ -223,6 +238,7 @@ export const paths = {
   releaseHold: '/internal/admin/reconciliation/release-hold',
   clearBlock: '/internal/admin/reconciliation/clear-block',
   disposition: '/internal/admin/reconciliation/disposition',
+  verification: '/internal/admin/reconciliation/verification',
   rollback: (season: number) => `/internal/admin/rollback?season=${season}`,
 } as const;
 

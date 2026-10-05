@@ -11,6 +11,8 @@
  *   policy records the attempt and changes no revision, count or review
  *   state (T6).
  * - A limiter deferral is `deferred` with its `retryAt`, and nothing else.
+ *   (The mapping of an unselected contribution is shared with operator
+ *   verification, so it lives in `../composition.ts`.)
  *   A cancellation, a limiter that could not answer, or a resource that was
  *   never reached is `not-attempted`. Neither counts as a check. That includes
  *   a multi-request execution interrupted by one of them after an earlier
@@ -23,13 +25,15 @@
  */
 
 import {
-  attemptedFailureReasons,
   coordinationFor,
   type CoordinatedResource,
   type CoordinationRun,
   type ResourceCoordination,
-  type SourceContribution,
 } from '../../../providers/coordination';
+import {
+  selectedClassification,
+  unselectedJolpicaOutcome,
+} from '../composition';
 import type { RefreshResource } from '../ledger/model';
 import type {
   CalendarOutcome,
@@ -65,46 +69,6 @@ const refreshResourceOf: Readonly<
   'constructor-standings': 'constructor-standings',
 };
 
-const notAttempted: CheckOutcome = { status: 'not-attempted' };
-const failed: CheckOutcome = { status: 'failed' };
-
-/** A limiter deferral, if its `retryAt` is an instant; otherwise not attempted. */
-function deferral(retryAt: string | null): CheckOutcome {
-  const at = retryAt === null ? Number.NaN : Date.parse(retryAt);
-  return Number.isNaN(at)
-    ? notAttempted
-    : { status: 'deferred', retryAt: new Date(at).toISOString() };
-}
-
-/** The outcome of an unselected Jolpica contribution, or `null` for a defect. */
-function unselectedOutcome(
-  contribution: SourceContribution,
-): CheckOutcome | null {
-  switch (contribution.status) {
-    case 'deferred':
-      return deferral(contribution.retryAt);
-    case 'skipped':
-      // Nothing left GridView: cancelled, limiter unavailable, or refused by
-      // policy before any request.
-      return notAttempted;
-    case 'interrupted':
-      return contribution.reason === 'rate-limit-deferred'
-        ? deferral(contribution.retryAt)
-        : notAttempted;
-    case 'failed':
-      if (!contribution.attempted) return null;
-      if (contribution.reason === 'mapping-unresolved') return failed;
-      return (attemptedFailureReasons as readonly unknown[]).includes(
-        contribution.reason,
-      )
-        ? failed
-        : null;
-    case 'candidate':
-      // A candidate that was not selected cannot happen with one source.
-      return null;
-  }
-}
-
 type ResourceOutcome =
   | {
       readonly kind: 'outcome';
@@ -125,7 +89,7 @@ async function outcomeOf(
       (contribution) => contribution.source === 'jolpica',
     );
     const outcome =
-      jolpica.length === 1 ? unselectedOutcome(jolpica[0]!) : null;
+      jolpica.length === 1 ? unselectedJolpicaOutcome(jolpica[0]!) : null;
     return outcome === null
       ? { kind: 'refused', reason: 'coordination-defect' }
       : { kind: 'outcome', outcome };
@@ -136,18 +100,17 @@ async function outcomeOf(
   const payload = selection.payload;
   const malformed = { kind: 'refused', reason: 'selection-malformed' } as const;
   if (resource.kind === 'session-classification') {
-    if (
-      payload.kind !== 'session-classification' ||
-      payload.result.round !== resource.round ||
-      payload.result.season !== resource.season
-    ) {
-      return malformed;
-    }
+    const result = selectedClassification(
+      payload,
+      resource.season,
+      resource.round,
+    );
+    if (result === null) return malformed;
     return {
       kind: 'outcome',
       outcome: {
         status: 'observed',
-        revision: await classificationRevision(payload.result),
+        revision: await classificationRevision(result),
       },
     };
   }

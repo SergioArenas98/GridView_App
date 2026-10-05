@@ -143,6 +143,16 @@ export interface LogEvent {
   durableBlockReason?: string;
   backlogCount?: number;
   backlogCapacity?: number;
+  /**
+   * An operator verification's closed transition (`candidate-observed`,
+   * `check-failed`, ...), which revision it matched (`staged`, `accepted`,
+   * `candidate`, `superseded`, `other`), and whether its OD-7 comparison was
+   * shown (`compared`) or the closed reason it was not. Never a revision, a
+   * driver ID, a field name or a count from the comparison.
+   */
+  verificationTransition?: string;
+  verificationMatch?: string;
+  verificationComparison?: string;
 }
 
 export interface Logger {

@@ -127,6 +127,17 @@ export function roundView({
             authMethod: record.lastDisposition.authMethod,
             stagedRevision: record.lastDisposition.stagedRevision,
           },
+    /** The last completed verification (PR-E3): closed values, no diff. */
+    lastVerification:
+      record.lastVerification === null
+        ? null
+        : {
+            operationId: record.lastVerification.operationId,
+            at: record.lastVerification.at,
+            authMethod: record.lastVerification.authMethod,
+            stagedRevision: record.lastVerification.stagedRevision,
+            transition: record.lastVerification.transition,
+          },
   };
 }
 
