@@ -1277,8 +1277,125 @@ observation, outcome and operator code stay out of the bundle.
   operation ID.
 - A durably blocked or held season is visible today only by reading the
   ledger or the run's `warn` line. No attention line exists yet (PR-E2).
+  *(Since E2: the attention line exists in the injected orchestration; see
+  below.)*
 
 The decision above is unchanged.
+
+### E2: the operator routes and the attention line (2026-10-05)
+
+PR-E2 of the operator disposition decision pack, under the same OD-1 to OD-8
+answers. **Nothing is bound, deployed or activated.**
+`resolveReconciliationLedger()` still answers `null`, so every route below
+answers `503` `reconciliation-unavailable` with `ledger-unbound` in every
+environment, having read nothing.
+
+**Routes.** All five are under `/internal/admin/`, behind `ADMIN_TOKEN`,
+`Cache-Control: no-store` and outside the public OpenAPI:
+
+| Route | Ledger operation |
+|---|---|
+| `GET /internal/admin/reconciliation?season=YYYY` | `readSeason` only: no lease, no write |
+| `POST /internal/admin/reconciliation/hold` | `operate` `hold` |
+| `POST /internal/admin/reconciliation/release-hold` | `operate` `release-hold` |
+| `POST /internal/admin/reconciliation/clear-block` | `operate` `clear-block` |
+| `POST /internal/admin/reconciliation/disposition` | `dispose` (T12) |
+
+Each request is checked in a fixed order, and nothing after a refusal is
+reached: authentication (the router), the method, the complete request
+(closed keys, a season, a lowercase UUID v4 operation ID, version counters,
+`sha256:` revisions, a round 1-100, a body of at most 2,048 characters), then
+`PROVIDER_MODE = coordinated` and a resolved ledger, and only then the ledger.
+A mutation takes the season lease, makes exactly one `operate` or `dispose`
+call, and releases the lease on every path. Every precondition is the
+store's own (E1): the lease fence, the inspected versions and revisions, the
+operation-ID replay and the state the action requires. The answer carries a
+closed `status`: `applied` or `already-applied` (`200`), `run-in-progress` or
+`refused` with the ledger's closed reason (`409`), `ledger-unavailable` or
+`outcome-unknown` (`503`, settled by resending the same operation ID). The
+response carries only what the ledger holds. The audit line is one `warn`
+`reconciliation.operator-action` with the season, round, closed action and
+outcome, the operation ID and `operatorAuthMethod: shared-admin-token`
+(OD-2), never the token and no revision. The Provider Evaluation's
+`reconciled.review_disposed` event is this line with a disposition action.
+
+**Coordinated rollback (OD-3).** In `coordinated` mode only,
+`POST /internal/admin/rollback` runs `rollbackUnderHold`: the existing
+rollback, once, under the season lease, only while `operatorHold` is set,
+with the D14/D15 guard unchanged. Without a hold it answers `409`
+`publication-not-held` and the publisher is never reached. `mock` and `none`
+keep the existing path exactly.
+
+**Attention line (OD-1, OD-8).** After every **scheduled** run of
+`observeCoordinatedSeason`, whatever its outcome, the season is read once more
+(after the lease is released) and, while it is held, durably blocked, or the
+global backlog holds 48 or 60 of its 60 slots, one
+`reconciliation.attention` line is written: `warn`, or `error` at a full
+backlog. It carries the season, the closed conditions, the durable block
+reason and the backlog count, and nothing else. A manual run writes none.
+
+**Departures from the decision pack, and why.**
+
+- The release and clear actions keep E1's names (`release-hold`,
+  `clear-block`) as their paths, and a hold and a durable block are released
+  independently, because E1 stores them independently.
+- Inspection reads only the ledger. It does not read the authority, so it
+  reports no `servingVersion` or `drifted`: the cutover `status` route already
+  reports the authority, and a ledger-only read cannot fail on the sequencer.
+- A coordinated rollback **with no ledger** is refused as `ledger-unbound`
+  instead of running unchanged (pack A4). The requirement is that a
+  coordinated rollback needs an active hold, and without a ledger the hold
+  cannot be verified. The way back to an ungated rollback is the existing
+  mode rollback to `mock`.
+- The attention conditions are exactly the hold, the durable block and the
+  two backlog levels. A transient `blocked` disposition and a pending review
+  are not conditions of their own: their backlog entries count toward the
+  backlog levels, and inspection shows them.
+- The line is written by the injected orchestration only. The Worker's
+  scheduled handler still calls `runCoordinatedSync`, which stops at
+  composition, so **no deployed Worker can write it**. Connecting the
+  orchestration is an activation step.
+
+**Tests.** 131 new tests (4,709 in 204 files). Through the Worker entry point,
+with the resolver's answer injected by `vi.mock` (no environment field or
+test hook supplies a ledger) and the ledger reached in process and through
+the Durable Object client: authentication, methods, malformed input, the
+mode gate, read-only inspection with a recursive key allow-list, replay,
+stale versions, reused operation IDs, a held lease, an expired lease, a lost
+answer, independent hold and block, every T12 action, and the coordinated
+rollback over the real sequencer (not held, held then drift-free ticks then
+release, a D14 refusal, a held lease). With the real resolver, every route
+and the coordinated rollback answer `ledger-unbound` with zero reservations,
+transport calls, sequencer commands, storage writes and purges. The
+attention line is tested over both transports at 47, 48, 59 and 60 slots,
+for a hold and a durable block on every tick, during a run in progress, and
+with an unreadable ledger. Existing E1 and C4 tests that pin a scheduled
+run's ledger calls now end with the attention read.
+
+**Negative controls.** Each is a one-line mutation, restored from a
+hash-verified backup:
+
+| Mutation | Failed tests |
+|---|---|
+| Operator routes dispatched before authentication | 2 |
+| Coordinated rollback bypassing the hold gate in the router | 5 |
+| `rollbackUnderHold` without its hold check | 2 |
+| Inspection takes and releases the lease | 4 |
+| Attention only after a run that observed | 14 |
+| Backlog warning above 48 instead of at 48 | 4 |
+| Season-action body keys not closed | 2 |
+| Provider-mode gate ignored | 8 |
+
+**Bundle.** `e5b6a16f…cbcf` (664,968 B) → `0e8ddbe7…1696` (685,659 B),
+identical in all three environments, binding reports unchanged (staging
+`mock`, production `none`, no ledger binding). The +20,691 B are the admin
+reconciliation routes and the operator package. Policy, observation and
+outcome code stay out of the bundle.
+
+**Still open:** connecting the orchestration to the scheduled handler, the
+ledger binding and resolver, and every other activation step; verified
+production alert delivery (OD-1); PR-E3 (OD-7); PR-G (O-16); O-9; running the
+A3.5 gate.
 
 ## Reopening conditions
 

@@ -101,6 +101,11 @@ Cloudflare Access remains a Phase 5B+ hardening option.
 - `POST /internal/admin/publication/cutover/seed`
 - `POST /internal/admin/publication/cutover/activate`
 - `GET /internal/admin/publication/standings-predecessor`
+- `GET /internal/admin/reconciliation`
+- `POST /internal/admin/reconciliation/hold`
+- `POST /internal/admin/reconciliation/release-hold`
+- `POST /internal/admin/reconciliation/clear-block`
+- `POST /internal/admin/reconciliation/disposition`
 
 No state-changing route uses `GET`. None of these appears in the public
 OpenAPI document, and every response is `Cache-Control: no-store`.
@@ -895,6 +900,29 @@ classified race round, or `409` with one closed reason otherwise. A Worker on
 the legacy authority is refused as `authority-not-sequenced` without reading
 anything. It cannot tell which round a published table describes. The
 procedure and its limits are in the staging runbook.
+
+**The reconciliation operator routes** (added 2026-10-05; ADR 0020 "E2"). They
+inspect a season's coordinated reconciliation ledger and act on it, behind
+the same `ADMIN_TOKEN`:
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/internal/admin/reconciliation?season=YYYY` | `GET` | Read-only inspection: hold, durable block, disposition, backlog and each round's review state and revision hashes. No lease, no write. |
+| `/internal/admin/reconciliation/hold` | `POST` | Places the operator hold. |
+| `/internal/admin/reconciliation/release-hold` | `POST` | Releases it; publication becomes due. |
+| `/internal/admin/reconciliation/clear-block` | `POST` | Clears a durable block; publication becomes due. |
+| `/internal/admin/reconciliation/disposition` | `POST` | T12 for one staged round. Publishes nothing. |
+
+Each mutation names its season, a lowercase UUID v4 operation ID (a resend is
+`already-applied`) and the version it inspected. It runs one fenced ledger
+operation under the season lease. In `coordinated` mode,
+`POST /internal/admin/rollback` also requires an operator hold (OD-3).
+**No environment binds the ledger**, so every one of these answers `503`
+`reconciliation-unavailable` today. The answers, the procedures and the
+staging daily review are in the staging runbook. The
+`reconciliation.attention` line those reviews look for is written only by
+the coordinated orchestration, which no deployed Worker runs. **No alert
+delivery exists.**
 
 ### Operational expectations
 
