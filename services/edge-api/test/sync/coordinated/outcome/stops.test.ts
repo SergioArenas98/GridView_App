@@ -69,6 +69,8 @@ const stoppedRun = [
   'reconcilePublishedRevisions',
   'commit',
   'releaseLease',
+  // The attention read every scheduled run ends with (PR-E2).
+  'readSeason',
 ];
 
 /** `target` with some methods replaced; the rest still reach `target`. */
@@ -192,12 +194,20 @@ describe.each(sequencerTransports)(
         expect(after.lastOrderingInput).toBe(before.lastOrderingInput);
         expect(after.publicationDisposition).toBeNull();
         expect((await harness.record(1))?.contentRevision).toMatch(/^sha256:/);
-        expect(harness.logger.events.at(-1)).toMatchObject({
-          level: 'warn',
-          publicationOutcome: 'withheld',
-          publicationNextDue: 'stopped',
-          publicationReason: 'operator-hold',
-        });
+        // The run's own line, then the attention line the hold raises.
+        expect(harness.logger.events.slice(-2)).toMatchObject([
+          {
+            level: 'warn',
+            publicationOutcome: 'withheld',
+            publicationNextDue: 'stopped',
+            publicationReason: 'operator-hold',
+          },
+          {
+            level: 'warn',
+            operation: 'reconciliation.attention',
+            reconciliationAttention: ['operator-hold'],
+          },
+        ]);
         expect(harness.releases()).toHaveLength(1);
       });
 

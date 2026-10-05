@@ -15,17 +15,19 @@
  * target that drops a classified round or a participation fact is refused
  * there, and the hold stays.
  *
- * **Dormant (PR-E1).** No route calls this: wiring it into
- * `POST /internal/admin/rollback` is later work (PR-E2), and
- * `resolveReconciliationLedger` still answers `null` everywhere.
+ * `POST /internal/admin/rollback` calls it in coordinated mode only (PR-E2).
+ * `resolveReconciliationLedger` still answers `null` in every environment,
+ * so there the route refuses before this is reached.
  */
 
 import type { PublicationResult } from '../../../publication/publisher';
 import type { Clock } from '../../../runtime/clock';
 import type { LeaseToken, LedgerRejectionReason } from '../ledger/model';
 import type { ReconciliationLedgerPort } from '../ledger-port';
-
-export type LeaseReleaseResult = 'released' | 'refused' | 'unavailable';
+import {
+  releaseSeasonLease as release,
+  type LeaseReleaseResult,
+} from './lease';
 
 export interface HeldRollbackRequest {
   readonly season: number;
@@ -131,17 +133,4 @@ export async function rollbackUnderHold(
     rollbackCalls: 1,
     leaseRelease: await release(ledger, lease),
   };
-}
-
-async function release(
-  ledger: ReconciliationLedgerPort,
-  lease: LeaseToken,
-): Promise<LeaseReleaseResult> {
-  try {
-    const outcome = await ledger.releaseLease(lease);
-    if (outcome.outcome === 'released') return 'released';
-    return outcome.outcome === 'rejected' ? 'refused' : 'unavailable';
-  } catch {
-    return 'unavailable';
-  }
 }

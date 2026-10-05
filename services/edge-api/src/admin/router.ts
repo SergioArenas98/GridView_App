@@ -5,6 +5,7 @@ import type { Logger } from '../logging/logger';
 import type { PublicationAuthority } from '../publication/authority';
 import type { PublicationCommands } from '../publication/commands';
 import type { CutoverPreparationService } from '../publication/cutover/service';
+import type { Clock } from '../runtime/clock';
 import type { CoordinatedSyncOutcome } from '../sync/coordinated/run';
 import type { SynchronizationService } from '../sync/sync-service';
 import { emptySyncState } from '../sync/sync-service';
@@ -19,6 +20,12 @@ import type {
 } from '../storage/types';
 import { adminAuthOk, unauthorized } from './auth';
 import { handleCutoverRequest, isCutoverPath } from './cutover-routes';
+import {
+  handleCoordinatedRollback,
+  handleReconciliationRequest,
+  isReconciliationPath,
+  type OperatorReconciliation,
+} from './reconciliation-routes';
 import {
   handleStandingsPredecessorRequest,
   standingsPredecessorPath,
@@ -65,6 +72,13 @@ interface AdminContext {
    * `cutover`.
    */
   authority: PublicationAuthority;
+  /**
+   * The reconciliation ledger the operator routes and the coordinated
+   * rollback reach (PR-E2). Its ledger is `null` in every environment, so
+   * each of them refuses as `ledger-unbound` before reading anything.
+   */
+  reconciliation: OperatorReconciliation;
+  clock: Clock;
 }
 
 export async function handleAdminRequest(
@@ -89,6 +103,10 @@ export async function handleAdminRequest(
   // Also names its season explicitly, and is read-only.
   if (url.pathname === standingsPredecessorPath) {
     return handleStandingsPredecessorRequest(request, url, context);
+  }
+  // Names its season explicitly too, and validates it before any ledger read.
+  if (isReconciliationPath(url.pathname)) {
+    return handleReconciliationRequest(request, url, context);
   }
   if (request.method === 'GET') {
     if (url.pathname === '/internal/admin/quota') {
@@ -218,6 +236,11 @@ export async function handleAdminRequest(
   if (url.pathname === '/internal/admin/rollback') {
     const body = await readJson(request);
     const version = typeof body.version === 'string' ? body.version : undefined;
+    if (synchronization.mode === 'coordinated') {
+      // OD-3: only under an operator hold, so drift cannot republish what
+      // the rollback replaced. `mock` and `none` keep the path below.
+      return handleCoordinatedRollback(season, version, context);
+    }
     const result = await context.publisher.rollback(season, version);
     return ok(
       result,

@@ -34,6 +34,13 @@
  *    prepared candidate, the no-change gate, at most one guarded publication
  *    and the outcome commit with its durable next-due decision.
  * 8. Release the lease, whatever happened after it was acquired.
+ * 9. After a **scheduled** run only, read the season once more and write the
+ *    level-triggered attention line while it is held, durably blocked or the
+ *    review backlog is at its OD-8 levels (`../operator/attention.ts`). This
+ *    happens whatever the run did, including `run-in-progress`, `failed`,
+ *    `nothing-due` and a refused composition with a ledger still bound, so a
+ *    stopped season never goes quiet. Without a ledger there is nothing to
+ *    read. A manual run writes none: its operator is already looking.
  *
  * Before planning, a `publishing` slot a previous run left behind is resolved
  * against the authority (`../outcome/recovery.ts`), so a release whose
@@ -64,6 +71,7 @@ import {
   type CoordinatedRuntimeDependencies,
   type CoordinatedUnavailableReason,
 } from '../composition';
+import { signalAttention } from '../operator/attention';
 import type {
   LeaseGrant,
   LeaseToken,
@@ -209,16 +217,39 @@ export async function observeCoordinatedSeason(
     trigger: request.trigger,
   };
   const composition = composeCoordinatedRuntime(dependencies);
-  if (composition.kind === 'unavailable') {
-    return logged(dependencies.logger, {
-      ...fields,
-      status: 'coordinated-runtime-unavailable',
-      reasons: composition.reasons,
-      providerRequests: 0,
-    });
+  const outcome =
+    composition.kind === 'unavailable'
+      ? logged(dependencies.logger, {
+          ...fields,
+          status: 'coordinated-runtime-unavailable',
+          reasons: composition.reasons,
+          providerRequests: 0,
+        })
+      : await runUnderComposition(
+          request,
+          dependencies,
+          composition.runtime,
+          fields,
+        );
+  // Step 9, against whichever ledger is bound, even when another dependency
+  // is missing: a degraded runtime must not silence a stopped season.
+  if (request.trigger === 'scheduled' && dependencies.ledger !== null) {
+    await signalAttention(
+      dependencies.ledger,
+      request.season,
+      dependencies.logger,
+    );
   }
-  const { runtime } = composition;
+  return outcome;
+}
 
+/** Steps 2-8, for a composed runtime. */
+async function runUnderComposition(
+  request: CoordinatedObservationRequest,
+  dependencies: CoordinatedObservationDependencies,
+  runtime: CoordinatedRuntime,
+  fields: RunFields,
+): Promise<CoordinatedObservationOutcome> {
   const acquired = await runtime.ledger.acquireLease(request.season);
   if (acquired.outcome !== 'acquired') {
     if (acquired.outcome === 'rejected' && acquired.reason === 'lease-held') {

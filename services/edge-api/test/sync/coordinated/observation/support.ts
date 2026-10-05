@@ -597,7 +597,9 @@ function unclassified(set: GeneratedSnapshotSet): GeneratedSnapshotSet {
  * Object ledger and the in-process one share exactly the same committed
  * bytes and the same atomic rollback.
  */
-function durableStateOver(host: MemorySequencerHost): SequencerDurableHost {
+export function durableStateOver(
+  host: MemorySequencerHost,
+): SequencerDurableHost {
   let store: SequencerRecordStore | null = null;
   const active = (): SequencerRecordStore => {
     if (store === null) throw new Error('storage used outside a transaction');

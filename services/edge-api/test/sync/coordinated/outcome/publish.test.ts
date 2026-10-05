@@ -66,6 +66,8 @@ const publishingRun = [
   'commit',
   'commit',
   'releaseLease',
+  // The attention read every scheduled run ends with (PR-E2).
+  'readSeason',
 ];
 /** A publication run that never reserved: observation and outcome commits. */
 const settlingRun = [
@@ -74,8 +76,14 @@ const settlingRun = [
   'commit',
   'commit',
   'releaseLease',
+  'readSeason',
 ];
-const idleRun = ['acquireLease', 'reconcilePublishedRevisions', 'releaseLease'];
+const idleRun = [
+  'acquireLease',
+  'reconcilePublishedRevisions',
+  'releaseLease',
+  'readSeason',
+];
 
 /** `target` with some methods replaced; the rest still reach `target`. */
 function overriding<T extends object>(target: T, methods: Partial<T>): T {
@@ -223,8 +231,8 @@ describe.each(sequencerTransports)(
       expect(harness.releases()).toEqual([release]);
       expect(harness.activeVersion()).toBe(release);
       // No reservation: the outcome commit is the only durable write after
-      // the observations.
-      expect(run.ledgerCalls).toEqual(settlingRun);
+      // the observations. A manual run makes no attention read.
+      expect(run.ledgerCalls).toEqual(settlingRun.slice(0, -1));
       const after = await harness.season();
       expect(after.lastOrderingInput).toBe(before.lastOrderingInput);
       expect(after.lastPublication).toEqual({
@@ -655,6 +663,7 @@ describe.each(sequencerTransports)(
         'commit',
         'commit',
         'releaseLease',
+        'readSeason',
       ]);
       const committed = harness.activeVersion();
       expect(committed).not.toBe(SEED);
@@ -679,6 +688,7 @@ describe.each(sequencerTransports)(
         'reconcilePublishedRevisions',
         'commit',
         'releaseLease',
+        'readSeason',
       ]);
       const resolved = await harness.season();
       expect(resolved.publicationDisposition).toBeNull();
@@ -726,6 +736,7 @@ describe.each(sequencerTransports)(
         'commit',
         'commit',
         'releaseLease',
+        'readSeason',
       ]);
       expect(harness.releases()).toHaveLength(1);
       expect(harness.activeVersion()).toBe(harness.releases()[0]);
