@@ -1135,8 +1135,11 @@ contains PR-E2 runs this rollback only while an operator holds the season,
 under the season's lease. Otherwise it answers `409` `publication-not-held`
 without reaching the publisher. With no ledger bound, which is every
 environment today, it answers `503` `reconciliation-unavailable`
-(`ledger-unbound`). `mock` and `none` are unchanged. The procedure is in
-section 6, "Reconciliation operator routes and attention line".
+(`ledger-unbound`). `mock` and `none` are unchanged. Switching
+`PROVIDER_MODE` back to `mock` removes only the hold gate: it restores no
+earlier release, and after the first real staging publication D14/C1 refuse a
+rollback to the mock baseline (O-15). The procedure is in section 6,
+"Reconciliation operator routes and attention line".
 
 ## 12. Observability and redaction
 

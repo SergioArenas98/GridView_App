@@ -1316,7 +1316,9 @@ closed `status`: `applied` or `already-applied` (`200`), `run-in-progress` or
 response carries only what the ledger holds. The audit line is one `warn`
 `reconciliation.operator-action` with the season, round, closed action and
 outcome, the operation ID and `operatorAuthMethod: shared-admin-token`
-(OD-2), never the token and no revision. The Provider Evaluation's
+(OD-2), never the token and no revision. A mutation refused before the
+ledger, as `reconciliation-unavailable`, still carries its operation ID and
+authentication method. The Provider Evaluation's
 `reconciled.review_disposed` event is this line with a disposition action.
 
 **Coordinated rollback (OD-3).** In `coordinated` mode only,
@@ -1328,7 +1330,8 @@ keep the existing path exactly.
 
 **Attention line (OD-1, OD-8).** After every **scheduled** run of
 `observeCoordinatedSeason`, whatever its outcome, the season is read once more
-(after the lease is released) and, while it is held, durably blocked, or the
+(after the lease is released), including after a refused composition while a
+ledger is bound, and, while it is held, durably blocked, or the
 global backlog holds 48 or 60 of its 60 slots, one
 `reconciliation.attention` line is written: `warn`, or `error` at a full
 backlog. It carries the season, the closed conditions, the durable block
@@ -1345,8 +1348,11 @@ reason and the backlog count, and nothing else. A manual run writes none.
 - A coordinated rollback **with no ledger** is refused as `ledger-unbound`
   instead of running unchanged (pack A4). The requirement is that a
   coordinated rollback needs an active hold, and without a ledger the hold
-  cannot be verified. The way back to an ungated rollback is the existing
-  mode rollback to `mock`.
+  cannot be verified. Switching `PROVIDER_MODE` back to `mock` removes only
+  the hold gate. It publishes nothing and restores no earlier release, and
+  D14/D15 still apply to any rollback then asked for. After the first real
+  staging publication, D14/C1 refuse a rollback to the mock baseline (O-15),
+  so that publication stays data-level forward-only in every mode.
 - The attention conditions are exactly the hold, the durable block and the
   two backlog levels. A transient `blocked` disposition and a pending review
   are not conditions of their own: their backlog entries count toward the
@@ -1356,7 +1362,7 @@ reason and the backlog count, and nothing else. A manual run writes none.
   composition, so **no deployed Worker can write it**. Connecting the
   orchestration is an activation step.
 
-**Tests.** 131 new tests (4,709 in 204 files). Through the Worker entry point,
+**Tests.** 133 new tests (4,711 in 204 files). Through the Worker entry point,
 with the resolver's answer injected by `vi.mock` (no environment field or
 test hook supplies a ledger) and the ledger reached in process and through
 the Durable Object client: authentication, methods, malformed input, the
@@ -1385,10 +1391,11 @@ hash-verified backup:
 | Backlog warning above 48 instead of at 48 | 4 |
 | Season-action body keys not closed | 2 |
 | Provider-mode gate ignored | 8 |
+| Both review corrections reverted to `6942091` | 3 (1 route, 2 attention) |
 
-**Bundle.** `e5b6a16f…cbcf` (664,968 B) → `0e8ddbe7…1696` (685,659 B),
+**Bundle.** `e5b6a16f…cbcf` (664,968 B) → `79575c4d…452a` (685,799 B),
 identical in all three environments, binding reports unchanged (staging
-`mock`, production `none`, no ledger binding). The +20,691 B are the admin
+`mock`, production `none`, no ledger binding). The +20,831 B are the admin
 reconciliation routes and the operator package. Policy, observation and
 outcome code stay out of the bundle.
 

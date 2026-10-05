@@ -19,6 +19,7 @@ import {
   type SeasonOperatorAction,
 } from '../../../../src/sync/coordinated/ledger';
 import type { ReconciliationLedgerPort } from '../../../../src/sync/coordinated/ledger-port';
+import { observeCoordinatedSeason } from '../../../../src/sync/coordinated/observation';
 import { seasonAttention } from '../../../../src/sync/coordinated/operator';
 import { sequencerTransports } from '../../../publication/sequenced/support';
 import {
@@ -341,6 +342,48 @@ describe.each(sequencerTransports)(
       expect(lines).toEqual([
         expect.objectContaining({ reconciliationAttention: ['operator-hold'] }),
       ]);
+    });
+
+    it('still raises a hold when another dependency is missing, but not on a manual run or without a ledger', async () => {
+      const harness = await published();
+      await operate(harness, later(FIRST_PUBLICATION, MINUTE), 'hold');
+      harness.clock.set(later(PRE_SEASON, 2 * HOUR));
+      const requests = harness.server.requests.length;
+      const reservations = harness.limiter.reservations.length;
+      const publishes = harness.publishGuarded.mock.calls.length;
+      const degraded = (trigger: 'scheduled' | 'manual', bound = true) =>
+        observeCoordinatedSeason(
+          { season: SEASON, trigger },
+          {
+            ...harness.dependencies(bound ? {} : { ledger: null }),
+            limiter: null,
+          },
+        );
+
+      const scheduled = await degraded('scheduled');
+      const lines = attentionLines(harness);
+      const manual = await degraded('manual');
+      const unbound = await degraded('scheduled', false);
+
+      expect(scheduled).toMatchObject({
+        status: 'coordinated-runtime-unavailable',
+        reasons: ['limiter-unbound'],
+        providerRequests: 0,
+      });
+      expect(lines).toEqual([
+        expect.objectContaining({
+          level: 'warn',
+          reconciliationAttention: ['operator-hold'],
+        }),
+      ]);
+      expect(manual).toMatchObject({ reasons: ['limiter-unbound'] });
+      expect(unbound).toMatchObject({
+        reasons: ['limiter-unbound', 'ledger-unbound'],
+      });
+      expect(attentionLines(harness)).toEqual(lines);
+      expect(harness.server.requests).toHaveLength(requests);
+      expect(harness.limiter.reservations).toHaveLength(reservations);
+      expect(harness.publishGuarded).toHaveBeenCalledTimes(publishes);
     });
 
     it.each([

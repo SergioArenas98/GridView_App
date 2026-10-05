@@ -120,29 +120,29 @@ export async function handleReconciliationRequest(
   if (action !== undefined) {
     const command = decodeSeasonAction(body.value, action);
     if (!command.ok) return invalidRequest(context.requestId, command.problem);
-    const ledger = available(context, command.value.season, action);
-    if (ledger instanceof Response) return ledger;
-    const result = await operateUnderLease(ledger, command.value);
     const audit = {
       season: command.value.season,
       operatorAction: action,
       operationId: command.value.operationId,
     };
+    const ledger = available(context, mutation(audit));
+    if (ledger instanceof Response) return ledger;
+    const result = await operateUnderLease(ledger, command.value);
     return answer(context, audit, result, (snapshot) => seasonView(snapshot));
   }
 
   const command = decodeDisposition(body.value);
   if (!command.ok) return invalidRequest(context.requestId, command.problem);
   const { season, round } = command.value;
-  const ledger = available(context, season, command.value.action);
-  if (ledger instanceof Response) return ledger;
-  const result = await disposeUnderLease(ledger, command.value);
   const audit = {
     season,
     round,
     operatorAction: command.value.action,
     operationId: command.value.operationId,
   };
+  const ledger = available(context, mutation(audit));
+  if (ledger instanceof Response) return ledger;
+  const result = await disposeUnderLease(ledger, command.value);
   return answer(context, audit, result, (snapshot) => {
     const record = snapshot.classifications.find(
       (entry) => entry.record.round === round,
@@ -161,7 +161,10 @@ async function handleInspection(
 ): Promise<Response> {
   const season = decodeInspectionQuery(url);
   if (!season.ok) return invalidRequest(context.requestId, season.problem);
-  const ledger = available(context, season.value, 'inspect');
+  const ledger = available(context, {
+    season: season.value,
+    operatorAction: 'inspect',
+  });
   if (ledger instanceof Response) return ledger;
 
   // Takes no lease and writes nothing.
@@ -194,13 +197,29 @@ async function handleInspection(
 }
 
 /**
+ * What a refusal's audit line names. A mutation carries its authentication
+ * method and, when it has one, its operation ID, so a refused action can be
+ * matched to the operator's private evidence. An inspection carries neither.
+ */
+interface RefusalAudit {
+  readonly season: number;
+  readonly round?: number;
+  readonly operatorAction: string;
+  readonly operationId?: string;
+  readonly operatorAuthMethod?: typeof OPERATOR_AUTH_METHOD;
+}
+
+function mutation(audit: Omit<RefusalAudit, 'operatorAuthMethod'>) {
+  return { ...audit, operatorAuthMethod: OPERATOR_AUTH_METHOD };
+}
+
+/**
  * The ledger, or the `503` that refuses before it is reached. Every missing
  * condition is reported, not only the first.
  */
 function available(
   context: ReconciliationRouteContext,
-  season: number,
-  operatorAction: string,
+  audit: RefusalAudit,
 ): ReconciliationLedgerPort | Response {
   const { coordinated, ledger } = context.reconciliation;
   const reasons: ReconciliationUnavailableReason[] = [];
@@ -210,8 +229,7 @@ function available(
   context.logger.warn({
     operation: RECONCILIATION_OPERATOR_OPERATION,
     requestId: context.requestId,
-    season,
-    operatorAction,
+    ...audit,
     operatorOutcome: 'reconciliation-unavailable',
     failureCategory: 'reconciliation-unavailable',
     coordinationMissingDependencies: reasons,
@@ -296,7 +314,10 @@ export async function handleCoordinatedRollback(
   targetVersion: string | undefined,
   context: CoordinatedRollbackContext,
 ): Promise<Response> {
-  const ledger = available(context, season, 'rollback');
+  const ledger = available(
+    context,
+    mutation({ season, operatorAction: 'rollback' }),
+  );
   if (ledger instanceof Response) return ledger;
   const outcome = await rollbackUnderHold(
     targetVersion === undefined ? { season } : { season, targetVersion },

@@ -180,6 +180,36 @@ describe('the real resolver leaves every operator route ledger-unbound', () => {
         coordinationMissingDependencies: ['ledger-unbound'],
       });
     }
+    // A refused mutation stays auditable: its operation ID (when it has one)
+    // and authentication method. The inspection carries neither.
+    expect(
+      lines.map(({ round, operationId, operatorAuthMethod }) => ({
+        round,
+        operationId,
+        operatorAuthMethod,
+      })),
+    ).toEqual([
+      {
+        round: undefined,
+        operationId: undefined,
+        operatorAuthMethod: undefined,
+      },
+      ...[0, 0, 0].map((index) => ({
+        round: undefined,
+        operationId: OP[index],
+        operatorAuthMethod: 'shared-admin-token',
+      })),
+      {
+        round: 3,
+        operationId: OP[1],
+        operatorAuthMethod: 'shared-admin-token',
+      },
+      {
+        round: undefined,
+        operationId: undefined,
+        operatorAuthMethod: 'shared-admin-token',
+      },
+    ]);
   });
 
   it.each([
