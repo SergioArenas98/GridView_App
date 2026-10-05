@@ -754,7 +754,7 @@ requests and zero publication writes. **G5 and G9 are not complete.**
 | D2.2 | A superseded revision is rejected however often it returns (T5), and it clears any pending run. The history is append-only and bounded at 16. When it is full, a corroborated change stays pending instead of forgetting a revision. The store now also refuses an accepted `contentRevision` that is in the history. |
 | D2.3 | No provisional input form exists, and OpenF1 stays locked, so T7 cannot arise. |
 | D2.4 | Revisions are compared for equality only. A test shows that swapping which hash sorts first changes no decision. |
-| D2.5, D2.8 | A differing revision on a settled record is sighted once (T8). Its second sighting stages it (T9), and it is never applied. The staged slot is immutable. A staged or locked record takes **no** transition from any run, and T11-T11d stay unreachable. `classification.staged-correction` is its own event, distinct from the overwrite event. |
+| D2.5, D2.8 | A differing revision on a settled record is sighted once (T8). Its second sighting stages it (T9), and it is never applied. The staged slot is immutable. A staged or locked record takes **no** transition from any run, and T11-T11d stay unreachable. *(From any run, still. Since 2026-10-05, T11-T11c are reachable only through an operator verification: see E3.)* `classification.staged-correction` is its own event, distinct from the overwrite event. |
 | D2.6 | An identical revision confirms and changes neither the accepted content nor `sourceObservedAt` (T1). An identical refresh revision is recorded as unchanged. |
 | D2.7 | `classification.overwrite` fires on T3, and `refresh.overwrite` on a changed season-level revision. |
 | D2.9 | An event is a closed category and nothing else: no season, round, revision, instant or payload. |
@@ -1174,7 +1174,7 @@ record change needs a versioned decoder and a migration decision.
 | Independent stops | The hold and the durable block are separate from the transient `publicationDisposition`. Marking a run `publishing`, crashing, recovering and completing all leave them exactly as they were. |
 | Operator transitions | Two new store operations, each one fenced, version-checked and idempotent transaction. **`operate`**: `hold`, `release-hold` or `clear-block`, conditional on the inspected season-record version (0 creates the record, so a season can be held before its first run). **`dispose`** is T12: `accept-staged`, `accept-competing` or `retain-published`. It is conditional on the record version and on the exact accepted, staged and competing revisions the operator inspected, and it releases the backlog entry in the same transaction. A resent operation ID answers `already-applied` and writes nothing. The same ID for another action is refused as `operation-id-reused`. The pure transitions are in `ledger/operator.ts`, and the decoders for the new requests are in `ledger/requests.ts`. |
 | T12 semantics | Every disposition clears the staged, competing and pending slots and appends exactly one revision to the history. `accept-*` appends the displaced accepted revision. `retain-published` appends the staged revision, so it is rejected permanently (OD-4). A competing revision is cleared, not superseded. The history bound refuses a disposition and never evicts. A transient `classification-staged` or `classification-review-locked` block lifts, with publication due now, only when no other round of the season still waits for review. A hold, a durable block, other block reasons and a `publishing` slot are untouched. Nothing is published: the next run publishes through every guard, and only if upstream then serves the accepted revision. |
-| Storage invariants (`commit`) | `staged-correction-immutable`: a commit that clears or changes a stored staged or competing correction, writes `lastDisposition`, or carries any backlog removal. A competing slot may still be filled (T11b). `backlog-staged-mismatch`: a backlog entry is inserted only together with the newly staged slot of the same revision, and the reverse. `operator-state-immutable`: a commit that sets, changes or clears a hold or `lastOperatorAction`, or changes or clears a durable block. A run may set a durable block. `publication-stopped`: a publication **reservation** while a hold or durable block is set. |
+| Storage invariants (`commit`) | `staged-correction-immutable`: a commit that clears or changes a stored staged or competing correction, writes `lastDisposition`, or carries any backlog removal. A competing slot may still be filled (T11b). *(Superseded on 2026-10-05 by E3: only the `verify` operation fills it, and `commit` refuses any change to it.)* `backlog-staged-mismatch`: a backlog entry is inserted only together with the newly staged slot of the same revision, and the reverse. `operator-state-immutable`: a commit that sets, changes or clears a hold or `lastOperatorAction`, or changes or clears a durable block. A run may set a durable block. `publication-stopped`: a publication **reservation** while a hold or durable block is set. |
 | Every publishing path refuses | The **planner** plans no publication for a due publication alone, or for drift, while a stop is in force. A **manual** run answers `nothing-due` / `publication-stopped` with zero provider requests, even for a season held before its first calendar was observed. A **scheduled** calendar bootstrap still observes. **Cadence** checks and the weekly **refreshes** still observe, so the ledger keeps following upstream. The **publication half** checks the stop first, on the committed record, before anything is prepared, reserved or sent. It ends as `withheld` (`operator-hold` or `durable-block`), next-due `stopped`: an earlier block is kept, and a scheduled run clears its due time. The observation commit of a stopped season writes no `publishing` mark. **Recovery** resolves an unfinished publication as before and keeps both stops. The store's `publication-stopped` check backs all of these. |
 | OD-5 | A **settled** round whose reread returns a superseded revision, and a correction the full backlog could not stage (this run's `classification.backlog-capacity-exceeded`), now end `durably-blocked` instead of `cadence`. The run records `durableBlock` and clears its due time. It takes precedence over every other withholding decision in that run. An unsettled round serving a superseded revision keeps its own bounded cadence. |
 | OD-3 | `operator/rollback.ts`, `rollbackUnderHold`, dormant. It takes the season lease and refuses `not-held` before the rollback is reached. It refuses `run-in-progress`, `ledger-unavailable` and `lease-expired`. Otherwise it calls the existing rollback once, under the lease, and releases the lease on every path. The rollback is unchanged: the sequencer path runs the D8 republication through the D14/D15 guard. The hold is kept whatever the result. |
@@ -1261,6 +1261,7 @@ observation, outcome and operator code stay out of the bundle.
   - the daily-review procedure that OD-1 accepts for staging;
   - the runbook sections and the Backend Operations route table.
 - **PR-E3:** operator verification (T11-T11d) with the OD-7 content.
+  *(Implemented, dormant, on 2026-10-05: see E3.)*
 - **PR-G:** the production genesis design O-16 approves.
 - Before production: verified alert delivery (OD-1).
 - **O-9**, and running the A3.5 staging predecessor gate.
@@ -1402,7 +1403,291 @@ outcome code stay out of the bundle.
 **Still open:** connecting the orchestration to the scheduled handler, the
 ledger binding and resolver, and every other activation step; verified
 production alert delivery (OD-1); PR-E3 (OD-7); PR-G (O-16); O-9; running the
-A3.5 gate.
+A3.5 gate. *(PR-E3 is implemented, dormant, since 2026-10-05: see E3.)*
+
+### E3: operator verification of a staged correction (2026-10-05)
+
+PR-E3 of the operator disposition decision pack: T11-T11c and the OD-7
+content. **Nothing is bound, deployed, activated or run.** The resolver still
+answers `null`, so the route below answers `503`
+`reconciliation-unavailable` with `ledger-unbound` in every environment,
+having read nothing. **No verification has ever been sent to Jolpica.**
+Running one is provider contact, and each run needs its own authorization.
+
+**Owner decisions (2026-10-05).** The private E3 decision request (V-1 to
+V-5) was answered as follows:
+
+| # | Decision |
+|---|---|
+| V-1 | The accepted T11-T11c tracking is implemented. A verification may write only the observation and review fields those transitions need. It never disposes of a correction, changes accepted or published content, clears a hold or block, or publishes. Only an explicit operator verification may create a competing correction and the review lock. |
+| V-2 | The season's fenced lease and the record-version checks guard the write. An operation ID makes a repeated request safe. A stale target is refused without modifying the review fields. |
+| V-3 | The OD-7 display compares a fresh valid result with the active release's published race-results document. The base is labelled **`published`**, never `accepted`. Only counts, sorted canonical driver IDs and changed `RaceResult` field names are shown. When the authority or the document cannot support a coherent comparison, a closed `unavailable` reason is returned. |
+| V-4 | One provider request per verification, no retry. A failed response keeps T11's attempt accounting and changes no candidate or competing slot. A limiter deferral follows the existing deferral rule and is not a completed check. |
+| V-5 | A strict request: `season`, `round`, a UUID v4 `operationId` and `expectedStagedRevision`. Authentication comes before the ledger and the provider. The staged target, the review lock and the earliest verification time are checked before capacity is reserved. A record already locked for review is refused. |
+
+**Route.** `POST /internal/admin/reconciliation/verification`, behind
+`ADMIN_TOKEN`, with `Cache-Control: no-store`, and not in the public
+OpenAPI. Checks run in this fixed order, and nothing after a refusal is
+reached:
+
+1. authentication (the router);
+2. the method;
+3. the strict body `{season, round, operationId, expectedStagedRevision}`:
+   closed keys, a round from 1 to 100, a lowercase UUID v4 and a `sha256:`
+   revision;
+4. `coordinated` mode and a resolved ledger;
+5. the coordinated runtime's own composition gate, the same one a run passes:
+   limiter, sequencer authority and purge origin. A refused composition
+   builds nothing.
+
+Then, under the season's fenced lease, which is released on every path:
+
+1. a resent operation ID is answered from the ledger;
+2. the record must hold exactly `expectedStagedRevision` as its staged
+   revision, with its backlog entry;
+3. the record must not be locked for review (T11d);
+4. the round must have reached the planner's own earliest time, `anchor + 5h`;
+5. the lease must not have expired.
+
+Only then does it make **one** classification request through the composed
+runtime's coordinator, routing port, hardened client, pacer and global
+limiter (`requestClassification` in `composition.ts`, still the only module
+that imports a provider package). The results port sends one `GET`, with one
+attempt, no retry and no second page. The answer is recorded through a new
+store operation, `verify`. In one transaction, `verify` re-checks the lease,
+the record version, the staged target, the review lock, the backlog entry and
+the replay, and makes its one write.
+
+**Transitions** (`ledger/verification.ts`, in §10.4.1 evaluation order):
+
+| Observed | Transition | Written besides the attempt and `lastVerification` |
+|---|---|---|
+| A superseded revision | `superseded-rejected` (T5) | The candidate is cleared, and `consecutiveConfirmations` becomes 0. |
+| The accepted revision | `accepted-seen` (T11), or `candidate-discarded` (T11c) with a candidate pending | nothing, or the candidate is cleared |
+| The staged revision | `staged-seen` (T11), or `candidate-discarded` (T11c) | nothing, or the candidate is cleared |
+| The pending candidate | `candidate-corroborated` (T11b) | `competingCorrection` := the candidate, `firstSeenAt` from its first sighting, corroborated. The candidate is cleared, and the marker becomes `review_locked`. |
+| Any other revision | `candidate-observed` (T11), or `candidate-replaced` (T11c) | The candidate becomes that revision, first seen now. |
+| A failed request (any attempted failure: `5xx`, `429`, network, invalid payload, unresolved identity) | `check-failed` (T6) | nothing |
+
+Every attempted verification records `lastAttemptedAt` and clears
+`limiterDeferralUntil`. A successful one also records
+`lastSuccessfulObservationAt`. `lastVerification` holds the operation ID,
+instant, `shared-admin-token`, the staged revision asked about and the
+transition. It never holds a payload or a diff.
+
+A limiter **deferral** writes only `limiterDeferralUntil` (the existing
+rule), records no verification, and answers `429` `deferred`. A request that
+never left GridView (`not-attempted`) and a coordinator defect or malformed
+selection (`observation-refused`) record nothing.
+
+`verify` never writes:
+
+- the staged slot;
+- `contentRevision`, `publishedRevision` or the superseded history;
+- `reviewState` or `sourceObservedAt`;
+- the season record, so no hold, durable block, disposition or due time;
+- the backlog;
+- Workers KV, the sequencer or a cache.
+
+**Storage invariants tightened.** E1 let `commit` fill an empty competing
+slot, for T11b's sake. T11b is now `verify`, so `commit` refuses
+(`staged-correction-immutable`) any change to `competingCorrection`,
+including creating one. It also refuses any change to a staged record's
+candidate slot, and any write of `lastVerification`. Only an explicit
+operator verification can lock a record for review. Tests that need a
+competing slot for a disposition or an inspection plant it directly in
+storage.
+
+**OD-7 comparison** (`operator/comparison.ts`). It is made only for a fresh,
+valid observation, and only after the lease is released. It reads the
+season's authority from the sequencer and, when the season is `active` and
+authoritative, the active release's `grand-prix:{round}:results` document.
+The answer has these fields:
+
+- `base: "published"`;
+- `publishedIsAccepted`: whether that document's revision is the ledger's
+  `contentRevision`;
+- `counts`: observed entries, published entries, and how many drivers were
+  added, removed or changed;
+- `drivers`: sorted canonical driver IDs, added, removed and changed;
+- `resultFields`: the `RaceResult` field names that differ. `entries` is
+  named when membership, order or any entry differs;
+- `entryFields`: the `RaceResultEntry` field names that differ in a kept
+  entry.
+
+No value is ever shown: no position, points, time, status, name, revision
+or provider string.
+
+It is otherwise `unavailable` with one of these reasons:
+
+- `authority-unavailable`;
+- `authority-not-authoritative`;
+- `published-document-unavailable`: absent or unreadable, never treated as
+  empty;
+- `published-document-invalid`: another round, a malformed or repeated
+  driver ID, or a wrong envelope;
+- `observed-result-invalid`;
+- `no-observation`, for T6;
+- `not-repeated`, for a resent operation ID.
+
+The comparison is never logged, stored or cached.
+
+**Answers.**
+
+| Status | `data.status` |
+|---|---|
+| `200` | `verified`, or `already-applied` (a resent ID: no request, no write, `comparison.reason` `not-repeated`) |
+| `502` | `provider-failed` (T6, recorded), or `observation-refused` (nothing recorded) |
+| `429` | `deferred`, with `retryAt` |
+| `409` | `precondition-failed`: `operation-id-reused`, `not-staged`, `staged-revision-mismatch`, `backlog-entry-missing`, `review-locked`, `not-eligible`, `lease-expired`. Also `run-in-progress`, and `refused` with the ledger's closed reason. |
+| `503` | `reconciliation-unavailable`, `coordinated-runtime-unavailable`, `not-attempted`, `ledger-unavailable`, `outcome-unknown` (resend the same operation ID) |
+
+A verified answer carries the transition, the match (`superseded`,
+`accepted`, `staged`, `candidate`, `other`), the record's version, review
+state and markers, and the comparison. It carries no revision.
+
+The audit trail is one `warn` `reconciliation.verification` line per
+verification. It carries these closed values only:
+
+- the season, round, operation ID and `shared-admin-token`;
+- the outcome and the provider request count;
+- the transition and the match;
+- `compared`, or the comparison's closed reason;
+- any refusal reason or limiter retry instant.
+
+It never carries a revision, a driver ID, a field name or a count from the
+comparison. The read-only inspection now shows each round's
+`lastVerification`.
+
+**Choices made in implementation, not owner decisions:**
+
+1. **T11's "last-seen counter" does not exist.** The ledger has no such field,
+   so the staged revision seen again refreshes nothing durable, as pack A6
+   says.
+2. **The staged revision seen while a candidate is pending discards the
+   candidate**, as the accepted revision does. The candidate failed to
+   reappear (T11c), and the staged revision is never a candidate.
+3. **T5 precedes the T11 family**, as everywhere else in §10.4.1. A
+   superseded revision is never tracked, and it resets the confirmation
+   count.
+4. **The accepted revision seen again counts no confirmation.** T11 says it
+   "changes nothing".
+5. **A verification is not the sweep.** It advances neither `lastSweptAt`
+   nor `lastPriorityAttemptAt`.
+6. **Replay memory is one slot per record** (`lastVerification`), as E1's is.
+   Two things follow:
+   - A resend of the most recent ID, including after `outcome-unknown`,
+     makes no request and is never a second sighting.
+   - An older ID resent after a later verification of the same record is not
+     recognized. It is a new verification: a new request, whose answer is a
+     genuinely new response. The route takes no record version from the
+     operator (V-5), so no version check catches it.
+7. **The deferral rule is the existing one, with its existing effect.** The
+   planner defers the season's scheduled runs until the latest
+   `limiterDeferralUntil` of any record. A deferred verification therefore
+   defers them too, until the limiter's `retryAt`.
+8. **The verification holds the season lease** across its one request. A
+   scheduled tick in that window answers `run-in-progress` and sends nothing.
+9. **Eligibility is the planner's own `isEligible`** (`policy/cadence.ts`). A
+   staged record is always past it in practice, since staging needs
+   settlement. The check is real, and a planted future anchor proves it.
+10. **Bundle placement.** The one request lives in `composition.ts`, which
+    is still the only importer of either provider package. The
+    contribution-to-outcome mapping moved there from `observation/outcomes.ts`
+    and is shared. `classificationRevision` moved to
+    `classification-revision.ts`, re-exported by `observation/revisions.ts`,
+    so a verification's sighting and a run's hash the same way.
+    `policy/cadence.ts` is the one policy module now in the Worker bundle.
+    The store's reads moved to `ledger/reads.ts` to keep `store.ts` under 800
+    lines.
+
+**Tests.** 94 new tests; the suite is now 4,805 in 207 files.
+
+- Store `verify` (43): T11, T11b, T11c, T5, T6, deferral, replay, every
+  refusal and invalid requests, over the in-process and Durable Object
+  transports.
+- Comparison (14): the diff, the value boundary with marker values, an
+  order-only change, and every `unavailable` reason.
+- Worker route (34): over both ledger and sequencer transports, on a staged
+  correction reached through the real state machine (round 1 published as
+  A, settled, then C staged by two publication runs):
+  - first sighting, corroboration and the review lock;
+  - the OD-7 output, with recursive key allow-lists on answers and log lines
+    and a value-leak check against the published document;
+  - replay, and a reused ID;
+  - a stale, unstaged or unrecorded target;
+  - not eligible;
+  - four provider failures;
+  - deferral and its retry;
+  - an unavailable limiter;
+  - a held lease, a lost write answer, and an unreachable ledger;
+  - authentication, method and body refusals, a non-coordinated mode, and a
+    runtime that cannot compose.
+
+  Each test also checks that nothing else changed: the season record,
+  backlog, other rounds, staged slot, accepted and published revisions,
+  history, authority, active version, releases, guarded publications,
+  Workers KV writes and purges are unchanged.
+- Commit invariants (3), and the real-resolver `ledger-unbound` proof, which
+  now includes this route.
+
+Existing tests changed in these ways only:
+
+- fixtures gained `lastVerification: null`;
+- competing slots are planted rather than committed;
+- the D2.2 history loop no longer commits a competing slot;
+- the dormancy, bundle-graph and Durable Object command pins name the new
+  modules and edges.
+
+**Negative controls.** Each is a mutation of the final code, restored from a
+backup:
+
+| Mutation | Failed tests |
+|---|---|
+| The comparison exposes a points value with a changed driver | 4 |
+| The audit line carries the comparison | 2 |
+| Corroboration also changes the accepted revision | 4 |
+| Corroboration also clears the staged slot | 4 |
+| A failed request discards the candidate | 10 |
+| The store's replay check removed | 2 |
+| The route's replay check removed | 4 |
+| `commit` may create a competing slot again | 1 |
+| The eligibility check disabled | 2 |
+| A stale staged target checked only by the store, after the request | 2 |
+
+**Bundle.** `79575c4d…452a` (685,799 B) → `334fb7e5…89a4eb` (716,706 B),
+identical in all three environments. The binding reports are unchanged:
+staging `mock`, production `none`, and no ledger binding. The +30,907 B are:
+
+- the verification and comparison modules;
+- the ledger `verify` operation;
+- the request helper in `composition.ts`;
+- `classification-revision.ts`;
+- `policy/cadence.ts`;
+- the route.
+
+Observation and outcome code stay out of the bundle.
+
+**Still open:**
+
+- running any verification (provider contact, authorized each time);
+- connecting the orchestration to the scheduled handler, the ledger binding
+  and resolver, and every other activation step;
+- verified production alert delivery (OD-1);
+- PR-G (O-16);
+- O-9;
+- running the A3.5 gate.
+
+**Residual risks.**
+
+- Verification spends the shared limiter's capacity, because no separate
+  manual-recovery reserve exists (pack F9).
+- The comparison can only show what the active release serves. After a
+  rollback, that is not the accepted revision, which `publishedIsAccepted`
+  reports.
+- Replay memory is one slot per record (choice 6).
+
+The decision above is unchanged.
 
 ## Reopening conditions
 

@@ -106,6 +106,7 @@ Cloudflare Access remains a Phase 5B+ hardening option.
 - `POST /internal/admin/reconciliation/release-hold`
 - `POST /internal/admin/reconciliation/clear-block`
 - `POST /internal/admin/reconciliation/disposition`
+- `POST /internal/admin/reconciliation/verification`
 
 No state-changing route uses `GET`. None of these appears in the public
 OpenAPI document, and every response is `Cache-Control: no-store`.
@@ -912,6 +913,7 @@ the same `ADMIN_TOKEN`:
 | `/internal/admin/reconciliation/release-hold` | `POST` | Releases it; publication becomes due. |
 | `/internal/admin/reconciliation/clear-block` | `POST` | Clears a durable block; publication becomes due. |
 | `/internal/admin/reconciliation/disposition` | `POST` | T12 for one staged round. Publishes nothing. |
+| `/internal/admin/reconciliation/verification` | `POST` | T11-T11c for one staged round (PR-E3, ADR 0020 "E3"): **one** Jolpica request through the coordinated runtime, recording a candidate, a competing correction or a failed attempt, with the OD-7 comparison against the published document (counts, driver IDs, field names, no values). Decides and publishes nothing. |
 
 Each mutation names its season, a lowercase UUID v4 operation ID (a resend is
 `already-applied`) and the version it inspected. It runs one fenced ledger
