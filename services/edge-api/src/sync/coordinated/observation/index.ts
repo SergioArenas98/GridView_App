@@ -3,9 +3,11 @@
  * hands a publication plan to the publication half in `../outcome/` (PR-C4)
  * under the same lease.
  *
- * **Implemented, injected and not connected.** No Worker module imports this
- * package, `resolveReconciliationLedger` still answers `null`, and every
- * coordinated run still stops at `ledger-unbound` with zero provider requests.
+ * **Wired, and unbound.** Only the coordinated sync entry point
+ * (`../run.ts`) imports this package, behind a gate that needs every
+ * dependency. `resolveReconciliationLedger` still answers `null`, so every
+ * coordinated run stops at that gate as `ledger-unbound`, with zero provider
+ * requests.
  */
 
 export * from './observe';

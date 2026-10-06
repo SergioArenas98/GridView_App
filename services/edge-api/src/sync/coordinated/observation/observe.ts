@@ -3,12 +3,13 @@
  * observation half (steps 1-5; PR-C3) and, for a publication plan, the
  * publication half (steps 6-9; PR-C4, `../outcome/`).
  *
- * **Internal, injected and not connected.** No Worker module imports this
- * package. `runCoordinatedSync` does not call it, `resolveReconciliationLedger`
- * still answers `null`, and every scheduled and manual coordinated run is
- * still refused as `ledger-unbound` before any provider request. It is reached
- * only by a caller that hands it every dependency, which today means tests
- * with a local ledger and a local transport.
+ * **Wired, and unbound.** `runCoordinatedSync` - the Worker's scheduled
+ * handler and `POST /internal/admin/sync/full` in `coordinated` mode - hands
+ * it every run whose dependencies are all present, and nothing else calls it.
+ * `resolveReconciliationLedger` still answers `null`, so in every environment
+ * that entry point's gate refuses the run as `ledger-unbound` first and this
+ * function is never reached. Only tests, which supply a local ledger and a
+ * local transport, reach it today.
  *
  * One call is one run for one season:
  *

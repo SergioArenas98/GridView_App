@@ -1,72 +1,79 @@
 /**
- * The coordinated sync entry point skeleton: the manual/scheduled run kinds
- * (O-8), and the fact that no run sends anything in this change, however many
- * dependencies are bound.
+ * The coordinated sync entry point: the manual/scheduled run kinds (O-8), the
+ * gate in front of the orchestration, and the one delegation behind it.
+ *
+ * With no ledger - every environment - or any other dependency missing, the
+ * gate refuses before anything is composed, leased, reserved or sent. With
+ * every dependency present, the run is exactly one call of the §6.6
+ * orchestration. The Worker-level behaviour is in `entry-points/`.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CapturingLogger } from '../../../src/logging/logger';
-import type { ProviderRateLimiterClient } from '../../../src/providers/http/provider-rate-limiter';
-import { MemorySequencerHost } from '../../../src/publication/sequencer/hosts';
-import { FixedClock } from '../../../src/runtime/clock';
-import type { CoordinatedRuntimeDependencies } from '../../../src/sync/coordinated/composition';
-import {
-  LocalReconciliationLedger,
-  ReconciliationLedgerStore,
-} from '../../../src/sync/coordinated/ledger';
+import { composeCoordinatedRuntime } from '../../../src/sync/coordinated/composition';
 import { resolveReconciliationLedger } from '../../../src/sync/coordinated/ledger-port';
+import { observeCoordinatedSeason } from '../../../src/sync/coordinated/observation';
 import {
   coordinatedRunKind,
   runCoordinatedSync,
+  type CoordinatedSyncDependencies,
 } from '../../../src/sync/coordinated/run';
+import { FIRST_PUBLICATION, MINUTE, later } from './entry-points/support';
+import { ObservationHarness, PRE_SEASON, SEASON } from './observation/support';
+
+vi.mock('../../../src/sync/coordinated/composition', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('../../../src/sync/coordinated/composition')
+    >();
+  return {
+    ...actual,
+    composeCoordinatedRuntime: vi.fn(actual.composeCoordinatedRuntime),
+  };
+});
+vi.mock('../../../src/sync/coordinated/observation', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('../../../src/sync/coordinated/observation')
+    >();
+  return {
+    ...actual,
+    observeCoordinatedSeason: vi.fn(actual.observeCoordinatedSeason),
+  };
+});
+
+const compose = vi.mocked(composeCoordinatedRuntime);
+const observe = vi.mocked(observeCoordinatedSeason);
 
 const globalFetch = vi.fn(async () => {
   throw new Error('the global fetch must not be reached');
 });
 
 beforeEach(() => {
+  compose.mockClear();
+  observe.mockClear();
   globalFetch.mockClear();
   vi.stubGlobal('fetch', globalFetch);
 });
 
 afterEach(() => {
+  expect(globalFetch).not.toHaveBeenCalled();
   vi.unstubAllGlobals();
 });
 
+/** The harness's dependencies, as the Worker hands them to the entry. */
 function dependencies(
-  overrides: Partial<CoordinatedRuntimeDependencies>,
-): CoordinatedRuntimeDependencies & {
-  reservations: () => number;
-  requests: () => number;
-} {
-  let reservations = 0;
-  let requests = 0;
-  const limiter: ProviderRateLimiterClient = {
-    reserve: async (sourceId) => {
-      reservations += 1;
-      return { outcome: 'allowed', sourceId, headroom: [] };
-    },
-  };
+  harness: ObservationHarness,
+  overrides: Partial<CoordinatedSyncDependencies> = {},
+): CoordinatedSyncDependencies {
+  return { ...harness.dependencies(), ...overrides };
+}
+
+function traffic(harness: ObservationHarness) {
   return {
-    limiter,
-    authorityMode: 'sequencer',
-    guarded: {
-      publishGuarded: async () => {
-        throw new Error('not reached');
-      },
-    },
-    purgeOrigin: 'https://api.gridview.test',
-    ledger: resolveReconciliationLedger(),
-    transport: async () => {
-      requests += 1;
-      return new Response('{}', { status: 503 });
-    },
-    logger: new CapturingLogger(),
-    clock: new FixedClock(new Date('2026-09-27T12:00:00.000Z')),
-    ...overrides,
-    reservations: () => reservations,
-    requests: () => requests,
+    requests: harness.server.requests.length,
+    reservations: harness.limiter.reservations.length,
+    publishes: harness.publishGuarded.mock.calls.length,
   };
 }
 
@@ -86,49 +93,138 @@ describe('coordinated run kinds (O-8)', () => {
   });
 });
 
-describe('runCoordinatedSync', () => {
-  it('has no ledger to bind, so both triggers stop at ledger-unbound', async () => {
+describe('the gate in front of the orchestration', () => {
+  it('refuses both triggers as ledger-unbound with the resolver this change keeps', async () => {
+    const harness = await ObservationHarness.create();
     expect(resolveReconciliationLedger()).toBeNull();
+
     for (const trigger of ['scheduled', 'manual'] as const) {
-      const input = dependencies({});
       const outcome = await runCoordinatedSync(
-        { season: 2026, trigger },
-        input,
+        { season: SEASON, trigger },
+        dependencies(harness, { ledger: resolveReconciliationLedger() }),
       );
       expect(outcome).toEqual({
         status: 'coordinated-runtime-unavailable',
-        season: 2026,
+        season: SEASON,
         run: coordinatedRunKind(trigger),
         reasons: ['ledger-unbound'],
         providerRequests: 0,
       });
-      expect(input.reservations()).toBe(0);
-      expect(input.requests()).toBe(0);
     }
-    expect(globalFetch).not.toHaveBeenCalled();
+    expect(compose).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
+    expect(traffic(harness)).toEqual({
+      requests: 0,
+      reservations: 0,
+      publishes: 0,
+    });
+    expect(harness.host.committedKeys()).toEqual([]);
+    expect(
+      harness.logger.events.map((event) => [
+        event.operation,
+        event.syncTrigger,
+        event.coordinationMissingDependencies,
+      ]),
+    ).toEqual([
+      ['sync.coordinated.withheld', 'scheduled', ['ledger-unbound']],
+      ['sync.coordinated.withheld', 'manual', ['ledger-unbound']],
+    ]);
   });
 
-  it('sends nothing even when composed over a synthetic ledger: there is no planner', async () => {
-    const host = new MemorySequencerHost();
-    const ledger = new LocalReconciliationLedger(
-      new ReconciliationLedgerStore(host),
+  it('reports every missing dependency, and refuses a missing sequencer under a sequencer authority', async () => {
+    const harness = await ObservationHarness.create();
+
+    const nothing = await runCoordinatedSync(
+      { season: SEASON, trigger: 'manual' },
+      dependencies(harness, {
+        limiter: null,
+        authorityMode: 'legacy',
+        guarded: null,
+        purgeOrigin: null,
+        ledger: null,
+        sequencer: null,
+      }),
     );
-    const input = dependencies({ ledger });
-    const outcome = await runCoordinatedSync(
-      { season: 2026, trigger: 'manual' },
-      input,
+    const noSequencer = await runCoordinatedSync(
+      { season: SEASON, trigger: 'manual' },
+      dependencies(harness, { sequencer: null }),
     );
 
-    expect(outcome).toEqual({
-      status: 'not-planned',
-      season: 2026,
-      run: coordinatedRunKind('manual'),
-      providerRequests: 0,
+    expect(nothing).toMatchObject({
+      reasons: [
+        'limiter-unbound',
+        'authority-not-sequencer',
+        'purge-origin-missing',
+        'ledger-unbound',
+      ],
     });
-    expect(input.reservations()).toBe(0);
-    expect(input.requests()).toBe(0);
-    expect(globalFetch).not.toHaveBeenCalled();
-    // Composing over a ledger takes no lease and writes nothing to it.
-    expect(host.committedKeys()).toEqual([]);
+    expect(noSequencer).toMatchObject({
+      status: 'coordinated-runtime-unavailable',
+      reasons: ['authority-not-sequencer'],
+    });
+    expect(compose).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
+    expect(traffic(harness).reservations).toBe(0);
+  });
+
+  it('still reads a bound ledger for attention on a refused scheduled run, never on a manual one', async () => {
+    const harness = await ObservationHarness.create({ seed: 'unclassified' });
+    await harness.run(PRE_SEASON);
+    await harness.run(FIRST_PUBLICATION);
+    observe.mockClear();
+    harness.clock.set(later(FIRST_PUBLICATION, MINUTE));
+    const before = traffic(harness);
+
+    for (const trigger of ['scheduled', 'manual'] as const) {
+      harness.ledgerCalls.length = 0;
+      await runCoordinatedSync(
+        { season: SEASON, trigger },
+        dependencies(harness, { limiter: null }),
+      );
+      expect(harness.ledgerCalls, trigger).toEqual(
+        trigger === 'scheduled' ? ['readSeason'] : [],
+      );
+    }
+    expect(observe).not.toHaveBeenCalled();
+    expect(traffic(harness)).toEqual(before);
+  });
+});
+
+describe('the orchestration behind the gate', () => {
+  it('is exactly one call of the §6.6 orchestration, answered with the run kind', async () => {
+    const harness = await ObservationHarness.create();
+    harness.clock.set(PRE_SEASON);
+    const deps = dependencies(harness);
+    const controller = new AbortController();
+
+    const outcome = await runCoordinatedSync(
+      { season: SEASON, trigger: 'scheduled', signal: controller.signal },
+      deps,
+    );
+
+    expect(observe).toHaveBeenCalledTimes(1);
+    expect(observe.mock.calls[0]).toEqual([
+      { season: SEASON, trigger: 'scheduled', signal: controller.signal },
+      deps,
+    ]);
+    const { season, trigger, ...result } = (await observe.mock.results[0]!
+      .value) as Record<string, unknown>;
+    expect([season, trigger]).toEqual([SEASON, 'scheduled']);
+    expect(outcome).toEqual({
+      ...result,
+      season: SEASON,
+      run: coordinatedRunKind('scheduled'),
+    });
+    expect(outcome).toMatchObject({
+      status: 'observed',
+      plan: 'observation',
+      providerRequests: 1,
+    });
+    // The orchestration wrote the run's line; the entry wrote none of its own.
+    expect(
+      harness.logger.events
+        .filter((event) => event.operation.startsWith('sync.coordinated'))
+        .map((event) => event.operation),
+    ).toEqual(['sync.coordinated.observation']);
   });
 });

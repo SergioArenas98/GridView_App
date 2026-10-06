@@ -14,18 +14,20 @@
  * `ReconciliationLedger` Durable Object client. What to write - §10.4.1
  * transitions, corroboration, settling, due-work planning and the
  * publishability decision - is the pure policy in `policy/`. Only the
- * injected orchestration in `observation/` and `outcome/` commits through this
- * port: observations, the ordering-input reservation and the publication
- * outcome. The operator transitions (`operate`, `dispose`; PR-E1, `verify`;
- * PR-E3, and `rotateVerifications`; PR-E4) are reached only by the admin
- * reconciliation routes (PR-E2 to PR-E4), which also read the season to
- * inspect it. No Worker run
- * reaches any of it.
+ * orchestration in `observation/` and `outcome/` commits through this port:
+ * observations, the ordering-input reservation and the publication outcome.
+ * The Worker's scheduled handler and `POST /internal/admin/sync/full` reach
+ * that orchestration only through `runCoordinatedSync`, whose gate needs a
+ * ledger first. The operator transitions (`operate`, `dispose`; PR-E1,
+ * `verify`; PR-E3, and `rotateVerifications`; PR-E4) are reached only by the
+ * admin reconciliation routes (PR-E2 to PR-E4), which also read the season to
+ * inspect it.
  *
  * No binding, variable or test hook supplies a ledger to the runtime, so
  * `resolveReconciliationLedger` always answers `null`. Every coordinated run,
- * scheduled or manual, is therefore refused as `ledger-unbound` before any
- * provider request, and every operator route and the coordinated rollback
+ * scheduled or manual, is therefore refused as `ledger-unbound` at the entry
+ * point's gate - wired, but unbound - before any lease, provider request or
+ * publication write, and every operator route and the coordinated rollback
  * are refused as `ledger-unbound` before reading anything.
  */
 

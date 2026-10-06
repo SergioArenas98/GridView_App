@@ -1,8 +1,9 @@
 /**
- * The policy and planner are implemented but not connected: only the dormant
- * observation orchestration imports them, no Worker module imports that, and
- * they reach no network, Cloudflare, publication or wall-clock global. The
- * coordinated runtime still stops at `ledger-unbound`.
+ * The policy and planner are wired, and unbound: only the orchestration
+ * imports them, only the coordinated entry point imports that, and they reach
+ * no network, Cloudflare, publication or wall-clock global. The resolver
+ * still answers `null`, so every coordinated run stops at `ledger-unbound`
+ * before the planner is reached.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -20,12 +21,12 @@ const read = readSource;
 const policyFiles = () =>
   sourceFiles().filter((file) => file.startsWith(policyDir));
 
-describe('the reconciliation policy is not connected', () => {
-  it('is imported only by the dormant orchestration', () => {
+describe('the reconciliation policy is wired through one entry, unbound', () => {
+  it('is imported only by the orchestration', () => {
     // Every relative import is resolved, so an import spelled from a sibling
     // directory (`../policy`) is found too. The observation orchestration is
-    // itself imported by no Worker module (its own dormancy test), and the
-    // outcome half only by it.
+    // imported only by the coordinated entry point (its own dormancy test),
+    // and the outcome half only by it.
     // The one exception is the operator verification (PR-E3), which reads
     // the planner's eligibility rule (`cadence.ts`) and nothing else.
     expect(importersOf(policyDir)).toEqual([
@@ -41,7 +42,9 @@ describe('the reconciliation policy is not connected', () => {
         file.startsWith(policyDir),
       ),
     ).toEqual(['sync/coordinated/policy/cadence.ts']);
-    expect(importersOf('sync/coordinated/observation/')).toEqual([]);
+    expect(importersOf('sync/coordinated/observation/')).toEqual([
+      'sync/coordinated/run.ts',
+    ]);
     expect(importersOf('sync/coordinated/outcome/')).toEqual([
       'sync/coordinated/observation/observe.ts',
     ]);

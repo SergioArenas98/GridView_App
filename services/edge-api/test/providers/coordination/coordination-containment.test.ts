@@ -293,9 +293,11 @@ describe('the coordination seam is dormant', () => {
     // environment satisfies. The mock provider remains the whole-season
     // double the synchronization service uses in `mock`.
     //
-    // The dormant observation orchestration (PR-C3) reads the coordinator's
-    // typed run through the package index. It builds no coordinator - it uses
-    // the one the composition built - and no Worker module imports it.
+    // The observation orchestration (PR-C3) reads the coordinator's typed
+    // run through the package index by type only, and reads its one runtime
+    // helper through the composition. It builds no coordinator - it uses the
+    // one the composition built - and only the gated coordinated entry
+    // reaches it.
     expect(consumers).toEqual([
       'sync/coordinated/composition.ts',
       'sync/coordinated/observation/outcomes.ts',

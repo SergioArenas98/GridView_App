@@ -6,8 +6,9 @@
  * three ways at once, and each must stay at zero: the counting limiter
  * (`__PROVIDER_RATE_LIMITER`), the counting transport
  * (`__PROVIDER_TRANSPORT`) and a global `fetch` stub. A spy on
- * `composeCoordinatedRuntime` shows whether the coordinated composition was
- * reached at all.
+ * `runCoordinatedSync` shows whether the coordinated entry was reached and
+ * with what, and a spy on `composeCoordinatedRuntime` whether anything was
+ * composed: with no ledger, the entry refuses before composition.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,6 +25,7 @@ import { SequencedPublicationService } from '../../src/publication/sequenced/ser
 import { FixedClock } from '../../src/runtime/clock';
 import { MemorySnapshotStorage } from '../../src/storage/local';
 import { composeCoordinatedRuntime } from '../../src/sync/coordinated/composition';
+import { runCoordinatedSync } from '../../src/sync/coordinated/run';
 import {
   ReconciliationLedger,
   type LedgerNamespace,
@@ -53,7 +55,14 @@ vi.mock('../../src/sync/coordinated/composition', async (importOriginal) => {
   };
 });
 
+vi.mock('../../src/sync/coordinated/run', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../src/sync/coordinated/run')>();
+  return { ...actual, runCoordinatedSync: vi.fn(actual.runCoordinatedSync) };
+});
+
 const compose = vi.mocked(composeCoordinatedRuntime);
+const runSync = vi.mocked(runCoordinatedSync);
 const PUBLIC_BASE_URL = 'https://api.gridview.test';
 const ADMIN_TOKEN = 'local-test-token';
 
@@ -86,6 +95,7 @@ const transport = async (): Promise<Response> => {
 
 beforeEach(() => {
   compose.mockClear();
+  runSync.mockClear();
   globalFetch.mockClear();
   vi.stubGlobal('fetch', globalFetch);
   limiter = new CountingLimiter();
@@ -176,6 +186,7 @@ describe('the existing modes never reach the coordinated runtime', () => {
       const statuses = await driveEveryEntryPoint(harness.env);
 
       expect(statuses.every((status) => status < 500)).toBe(true);
+      expect(runSync).not.toHaveBeenCalled();
       expect(compose).not.toHaveBeenCalled();
       expect(traffic()).toEqual(none);
       expect(
@@ -261,11 +272,9 @@ describe('a selected coordinated mode fails closed without the ledger', () => {
       reasons: ['ledger-unbound'],
       providerRequests: 0,
     });
-    expect(compose).toHaveBeenCalledTimes(1);
-    expect(compose.mock.results[0]?.value).toEqual({
-      kind: 'unavailable',
-      reasons: ['ledger-unbound'],
-    });
+    // Refused at the entry's gate: nothing was composed.
+    expect(runSync).toHaveBeenCalledTimes(1);
+    expect(compose).not.toHaveBeenCalled();
     expect(traffic()).toEqual(none);
     // The mock provider is never used, nothing moved and nothing was recorded.
     expect(providerCalls(provider)).toBe(mockCalls);
@@ -295,12 +304,15 @@ describe('a selected coordinated mode fails closed without the ledger', () => {
 
     await worker.scheduled?.({} as ScheduledController, env);
 
-    expect(compose).toHaveBeenCalledTimes(1);
-    expect(compose.mock.calls[0]?.[0]).toMatchObject({
+    expect(runSync).toHaveBeenCalledTimes(1);
+    expect(runSync.mock.calls[0]?.[1]).toMatchObject({
       purgeOrigin: PUBLIC_BASE_URL,
       authorityMode: 'sequencer',
+      sequencer: ctx.port,
+      storage: ctx.storage,
       ledger: null,
     });
+    expect(compose).not.toHaveBeenCalled();
     expect(traffic()).toEqual(none);
     expect(await ctx.port.readAuthority(SEASON)).toEqual(before);
     const lines = logger.events.filter(
@@ -444,7 +456,7 @@ describe('the guarded publication a coordinated run would bind', () => {
 
     await worker.fetch(adminRequest('/internal/admin/sync/full'), env);
 
-    const guarded = compose.mock.calls[0]?.[0].guarded;
+    const guarded = runSync.mock.calls[0]?.[1].guarded;
     expect(guarded).toBeInstanceOf(SequencedPublicationService);
     // It is wired to this environment's sequencer: a guarded publication
     // against the active season commits there.
@@ -469,7 +481,7 @@ describe('the guarded publication a coordinated run would bind', () => {
 
     await worker.fetch(adminRequest('/internal/admin/sync/full'), env);
 
-    const guarded = compose.mock.calls[0]?.[0].guarded;
+    const guarded = runSync.mock.calls[0]?.[1].guarded;
     expect(guarded).toBeInstanceOf(SequencedPublicationService);
     const before = await ctx.storage.getActiveVersion(SEASON);
     const result = await guarded?.publishGuarded(
@@ -491,9 +503,10 @@ describe('the guarded publication a coordinated run would bind', () => {
 
     await worker.fetch(adminRequest('/internal/admin/sync/full'), harness.env);
 
-    expect(compose.mock.calls[0]?.[0]).toMatchObject({
+    expect(runSync.mock.calls[0]?.[1]).toMatchObject({
       authorityMode: 'legacy',
       guarded: null,
+      sequencer: null,
     });
   });
 });
@@ -565,10 +578,11 @@ describe('the ledger storage foundation binds nothing', () => {
     expect(
       ((await response.json()) as { data: { reasons: string[] } }).data.reasons,
     ).toEqual(['ledger-unbound']);
-    expect(compose).toHaveBeenCalledTimes(2);
-    for (const call of compose.mock.calls) {
-      expect(call[0].ledger).toBeNull();
+    expect(runSync).toHaveBeenCalledTimes(2);
+    for (const call of runSync.mock.calls) {
+      expect(call[1].ledger).toBeNull();
     }
+    expect(compose).not.toHaveBeenCalled();
     expect(
       logger.events
         .filter((event) => event.operation === 'sync.coordinated.withheld')
@@ -604,6 +618,7 @@ describe('the ledger storage foundation binds nothing', () => {
         harness.env,
       );
     }
+    expect(runSync).not.toHaveBeenCalled();
     expect(compose).not.toHaveBeenCalled();
     expect(traffic()).toEqual(none);
   });

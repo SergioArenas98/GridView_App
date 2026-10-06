@@ -24,13 +24,13 @@
  * mapping is refused, and the run commits nothing.
  */
 
-import {
-  coordinationFor,
-  type CoordinatedResource,
-  type CoordinationRun,
-  type ResourceCoordination,
+import type {
+  CoordinatedResource,
+  CoordinationRun,
+  ResourceCoordination,
 } from '../../../providers/coordination';
 import {
+  coordinationFor,
   selectedClassification,
   unselectedJolpicaOutcome,
 } from '../composition';

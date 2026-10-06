@@ -38,7 +38,10 @@ import { handleStatus } from './routes/status';
 import { resolveStorage } from './storage/factory';
 import type { CoordinatedRuntimeDependencies } from './sync/coordinated/composition';
 import { resolveReconciliationLedger } from './sync/coordinated/ledger-port';
-import { runCoordinatedSync } from './sync/coordinated/run';
+import {
+  runCoordinatedSync,
+  type CoordinatedSyncDependencies,
+} from './sync/coordinated/run';
 import { SynchronizationService } from './sync/sync-service';
 import { runtimeSnapshotValidator } from './validation/snapshot-validator';
 
@@ -123,12 +126,13 @@ export default {
             mode: 'coordinated',
             run: (season) =>
               runCoordinatedSync(
-                { season, trigger: 'manual' },
-                coordinatedDependencies(
+                { season, trigger: 'manual', ...runSignal(env) },
+                coordinatedSyncDependencies(
                   env,
                   authority,
                   guarded,
                   url.origin,
+                  storage,
                   logger,
                   clock,
                 ),
@@ -353,12 +357,13 @@ async function runScheduledCoordinated(
         ).guarded;
   const season = (await storage.getCurrentSeason()) ?? 2026;
   await runCoordinatedSync(
-    { season, trigger: 'scheduled' },
-    coordinatedDependencies(
+    { season, trigger: 'scheduled', ...runSignal(env) },
+    coordinatedSyncDependencies(
       env,
       authority,
       guarded,
       purgeOrigin,
+      storage,
       logger,
       clock,
     ),
@@ -369,6 +374,9 @@ async function runScheduledCoordinated(
  * The facts the coordinated composition gates on. Resolving them constructs
  * no transport, client or port and makes no request. The reconciliation
  * ledger has no binding yet, so it is always absent.
+ *
+ * `__PROVIDER_TRANSPORT` and `__PACER_SLEEP` are test hooks: with neither, a
+ * composed runtime sends through the runtime `fetch` and paces with a timer.
  */
 function coordinatedDependencies(
   env: Env,
@@ -386,9 +394,50 @@ function coordinatedDependencies(
     purgeOrigin,
     ledger: resolveReconciliationLedger(),
     transport: env.__PROVIDER_TRANSPORT,
+    sleep: env.__PACER_SLEEP,
     logger,
     clock,
   };
+}
+
+/**
+ * What a coordinated run reads beyond the gated facts: the sequencer the
+ * season's authority and active release are read from - present exactly when
+ * the authority is a reachable sequencer - and the storage the release's
+ * documents are read from. Resolving them constructs nothing either.
+ */
+function coordinatedSyncDependencies(
+  env: Env,
+  authority: PublicationAuthority,
+  guarded: GuardedPublicationCommands | null,
+  purgeOrigin: string | null,
+  storage: import('./storage/types').SnapshotStorage,
+  logger: import('./logging/logger').Logger,
+  clock: import('./runtime/clock').Clock,
+): CoordinatedSyncDependencies {
+  return {
+    ...coordinatedDependencies(
+      env,
+      authority,
+      guarded,
+      purgeOrigin,
+      logger,
+      clock,
+    ),
+    sequencer: authority.mode === 'sequencer' ? authority.port : null,
+    storage,
+  };
+}
+
+/**
+ * A coordinated run's cancellation, from the `__COORDINATED_RUN_SIGNAL` test
+ * hook only. No accepted decision defines a run budget or ties a run to its
+ * request's lifetime, so a deployed Worker never cancels one.
+ */
+function runSignal(env: Env): { readonly signal?: AbortSignal } {
+  return env.__COORDINATED_RUN_SIGNAL
+    ? { signal: env.__COORDINATED_RUN_SIGNAL }
+    : {};
 }
 
 /**

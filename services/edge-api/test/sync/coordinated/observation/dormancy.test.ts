@@ -1,11 +1,13 @@
 /**
- * The coordinated orchestration is implemented, injected and not connected.
+ * The coordinated orchestration is wired, and unbound.
  *
- * No Worker module imports it, the coordinated entry point still refuses every
- * run as `ledger-unbound`, it reaches the provider only through the composed
- * runtime, and it reaches publication only through the outcome half
- * (`../outcome/`, whose own dormancy test pins how). Bundle reachability is
- * proven by the bundler in `test/providers/provider-neutrality.test.ts`.
+ * Only the coordinated entry point (`run.ts`) imports it, and only the Worker
+ * entry point imports that. The resolver still answers `null`, so the entry
+ * point's gate refuses every run as `ledger-unbound` before the orchestration
+ * is reached. It reaches the provider only through the composed runtime, and
+ * publication only through the outcome half (`../outcome/`, whose own
+ * dormancy test pins how). Bundle reachability is proven by the bundler in
+ * `test/providers/provider-neutrality.test.ts`.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -22,8 +24,8 @@ const observationDir = 'sync/coordinated/observation/';
 const observationFiles = () =>
   sourceFiles().filter((file) => file.startsWith(observationDir));
 
-describe('the observation orchestration is not connected', () => {
-  it('is imported by no module outside itself', () => {
+describe('the observation orchestration is wired through one entry, unbound', () => {
+  it('is imported only by the coordinated entry point', () => {
     expect(observationFiles()).toEqual([
       'sync/coordinated/observation/index.ts',
       'sync/coordinated/observation/observe.ts',
@@ -31,12 +33,20 @@ describe('the observation orchestration is not connected', () => {
       'sync/coordinated/observation/published.ts',
       'sync/coordinated/observation/revisions.ts',
     ]);
-    expect(importersOf(observationDir)).toEqual([]);
+    expect(importersOf(observationDir)).toEqual(['sync/coordinated/run.ts']);
     expect(resolveReconciliationLedger()).toBeNull();
-    // The coordinated entry point is unchanged: it composes, and stops.
     expect(importsOf('sync/coordinated/run.ts')).toEqual([
       'logging/logger.ts',
+      'publication/sequencer/port.ts',
+      'storage/types.ts',
       'sync/coordinated/composition.ts',
+      'sync/coordinated/observation/index.ts',
+      'sync/coordinated/operator/attention.ts',
+    ]);
+    // The router imports only the outcome type it answers with.
+    expect(importersOf('sync/coordinated/run.ts')).toEqual([
+      'admin/router.ts',
+      'index.ts',
     ]);
   });
 

@@ -312,15 +312,6 @@ const allowedPackageEdges: readonly string[] = [
   `${compositionModule} -> ${dormantDir}index.ts (import-statement)`,
 ];
 
-/**
- * The dormant observation orchestration (PR-C3) reads the coordinator's typed
- * run through the coordination index. It is not reachable from the Worker
- * entry point, so this edge appears only when every module is an entry point.
- */
-const dormantObservationEdges: readonly string[] = [
-  'src/sync/coordinated/observation/outcomes.ts -> src/providers/coordination/index.ts (import-statement)',
-];
-
 function insidePackages(input: string): boolean {
   return input.startsWith(dormantDir) || input.startsWith(coordinationDir);
 }
@@ -487,9 +478,14 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     ]) {
       expect(inputs, module).toContain(module);
     }
-    // The coordinated sync entry point and the operator verification
-    // (PR-E3), which composes through the same gate for its one request.
+    // The coordinated sync entry point's gate (`run.ts` checks, it does not
+    // compose), the orchestration it hands every run to, and the operator
+    // verification (PR-E3), which composes through the same gate for its one
+    // request. The orchestration's mapping reads the coordinator's answer
+    // through helpers the composition exports.
     expect(importersOf(graph, compositionModule)).toEqual([
+      'src/sync/coordinated/observation/observe.ts',
+      'src/sync/coordinated/observation/outcomes.ts',
       'src/sync/coordinated/operator/verification.ts',
       'src/sync/coordinated/run.ts',
     ]);
@@ -497,21 +493,35 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
       workerEntryPoint,
     ]);
     // The C2 policy, the C3 observation orchestration and the C4 publication
-    // half - with the curated season metadata only it reads - are not in the
-    // Worker's graph, except the planner's eligibility rule the verification
-    // checks before its request (`policy/cadence.ts`, pure arithmetic).
+    // half - with the curated season metadata only it reads - are now in the
+    // Worker's graph, reached only through the coordinated sync entry point
+    // (and, for the planner's eligibility rule, the verification).
+    expect(
+      importersOf(graph, 'src/sync/coordinated/observation/index.ts'),
+    ).toEqual(['src/sync/coordinated/run.ts']);
+    expect(importersOf(graph, 'src/sync/coordinated/outcome/index.ts')).toEqual(
+      ['src/sync/coordinated/observation/observe.ts'],
+    );
+    for (const module of [
+      'src/sync/coordinated/observation/observe.ts',
+      'src/sync/coordinated/outcome/publish.ts',
+      'src/sync/coordinated/policy/planner.ts',
+    ]) {
+      expect(inputs, module).toContain(module);
+    }
     expect(
       inputs.filter(
         (input) =>
-          input.startsWith('src/sync/coordinated/policy/') ||
-          input.startsWith('src/sync/coordinated/observation/') ||
-          input.startsWith('src/sync/coordinated/outcome/') ||
           input.endsWith('season-metadata.development.json') ||
           input.endsWith('attribution/data-sources.json'),
       ),
-    ).toEqual(['src/sync/coordinated/policy/cadence.ts']);
+    ).toHaveLength(2);
+    // Outside the policy itself, the planner's eligibility rule is read only
+    // by the verification.
     expect(
-      importersOf(graph, 'src/sync/coordinated/policy/cadence.ts'),
+      importersOf(graph, 'src/sync/coordinated/policy/cadence.ts').filter(
+        (input) => !input.startsWith('src/sync/coordinated/policy/'),
+      ),
     ).toEqual(['src/sync/coordinated/operator/verification.ts']);
   });
 
@@ -521,9 +531,9 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
 
     // Every module outside the two packages is its own entry point, so an
     // edge from a module the Worker does not reach today is reported too.
-    expect(edgesIntoPackages(graph)).toEqual(
-      [...allowedPackageEdges, ...dormantObservationEdges].sort(),
-    );
+    // The orchestration imports only types from the coordination package,
+    // which the build erases, so no edge of its own appears.
+    expect(edgesIntoPackages(graph)).toEqual(allowedPackageEdges);
 
     // The enumeration is real, and it excludes exactly the two packages.
     expect(entryPoints).toContain(workerEntryPoint);
@@ -571,6 +581,9 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
       'SnapshotPublisher',
       'composeCoordinatedRuntime',
       'runCoordinatedSync',
+      'observeCoordinatedSeason',
+      'publishUnderLease',
+      'planRun',
       'PacedReservationClient',
       'JolpicaResourcePort',
       'MultiSourceCoordinator',

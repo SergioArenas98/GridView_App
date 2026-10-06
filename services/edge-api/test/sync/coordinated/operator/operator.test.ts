@@ -29,7 +29,7 @@ const operatorFiles = () =>
   sourceFiles().filter((file) => file.startsWith(operatorDir));
 
 describe('the operator package is connected only where PR-E2 connects it', () => {
-  it('is imported by the reconciliation routes and the orchestration alone, and the ledger is still unbound', () => {
+  it('is imported by the reconciliation routes, the orchestration and the entry gate alone, and the ledger is still unbound', () => {
     expect(operatorFiles()).toEqual([
       'sync/coordinated/operator/actions.ts',
       'sync/coordinated/operator/attention.ts',
@@ -44,10 +44,19 @@ describe('the operator package is connected only where PR-E2 connects it', () =>
       'admin/reconciliation-routes.ts',
       'admin/reconciliation-view.ts',
       'sync/coordinated/observation/observe.ts',
+      'sync/coordinated/run.ts',
     ]);
-    expect(importsOf('sync/coordinated/observation/observe.ts')).toContain(
-      'sync/coordinated/operator/attention.ts',
-    );
+    // Both read only the attention line: the orchestration after a run, the
+    // entry gate after a refused scheduled run with a ledger bound.
+    for (const reader of [
+      'sync/coordinated/observation/observe.ts',
+      'sync/coordinated/run.ts',
+    ]) {
+      expect(
+        importsOf(reader).filter((file) => file.startsWith(operatorDir)),
+        reader,
+      ).toEqual(['sync/coordinated/operator/attention.ts']);
+    }
     expect(resolveReconciliationLedger()).toBeNull();
   });
 
