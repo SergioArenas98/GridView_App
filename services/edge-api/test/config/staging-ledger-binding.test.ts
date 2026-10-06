@@ -113,9 +113,19 @@ describe('the committed reconciliation-ledger declaration, as Wrangler resolves 
   });
 
   it('fails closed where the binding is not declared', () => {
-    // A Worker built from development or production has no
-    // `RECONCILIATION_LEDGER` field at all.
-    expect(resolveReconciliationLedger({})).toBeNull();
+    // A namespace for every binding each environment declares, as a
+    // deployment of it would carry.
+    const boundEnv = (environment: '' | 'staging' | 'production') =>
+      Object.fromEntries(
+        bindingNames(resolved(environment)).map((name) => [
+          name,
+          countingNamespace(),
+        ]),
+      ) as Pick<Env, 'RECONCILIATION_LEDGER'>;
+    expect(resolveReconciliationLedger(boundEnv(''))).toBeNull();
+    expect(resolveReconciliationLedger(boundEnv('production'))).toBeNull();
+    // Only staging's declared bindings give the resolver a ledger.
+    expect(resolveReconciliationLedger(boundEnv('staging'))).not.toBeNull();
   });
 });
 
