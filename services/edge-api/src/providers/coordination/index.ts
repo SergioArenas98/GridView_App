@@ -109,6 +109,9 @@ export type {
   CoordinatedStandingsRound,
 } from './resource';
 
+export { recordLateAnswers } from './late-answers';
+export type { LateAnswerRecord } from './late-answers';
+
 export { deriveDriverSeasonEntries } from './driver-span-derivation';
 export type { DriverSpanDerivation } from './driver-span-derivation';
 

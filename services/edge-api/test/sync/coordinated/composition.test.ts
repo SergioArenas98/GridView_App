@@ -14,6 +14,7 @@ import type { GuardedPublicationCommands } from '../../../src/publication/comman
 import type {
   CoordinatedResource,
   CoordinationRun,
+  ProviderResourcePort,
 } from '../../../src/providers/coordination';
 import type {
   ProviderRateLimiterClient,
@@ -246,15 +247,33 @@ describe('a composed coordinated runtime', () => {
     expect(field(runtime.port, 'ports')).toEqual(runtime.ports);
   });
 
-  it('registers exactly one port, for jolpica, and none for OpenF1', () => {
+  it('registers exactly one port, for jolpica, and none for OpenF1', async () => {
     const runtime = composed();
     const registered = field(runtime.coordinator, 'ports') as ReadonlyMap<
       string,
-      unknown
+      ProviderResourcePort
     >;
 
     expect([...registered.keys()]).toEqual(['jolpica']);
-    expect(registered.get('jolpica')).toBe(runtime.port);
+    // The registration is a frozen pass-through to the routing port, which
+    // only notes an answer that arrives after the run's signal aborted.
+    const registration = registered.get('jolpica')!;
+    expect(registration.sourceId).toBe('jolpica');
+    expect(Object.isFrozen(registration)).toBe(true);
+    const routed = vi.spyOn(runtime.port, 'fetchResource');
+    const resource = {
+      kind: 'session-classification',
+      season: SEASON,
+      round: 3,
+      sessionType: 'sprint',
+    } as const;
+    const request = { source: 'jolpica', resource } as const;
+    expect(await registration.fetchResource(request)).toEqual(
+      await runtime.port.fetchResource(request),
+    );
+    expect(routed).toHaveBeenCalledTimes(2);
+    expect(routed.mock.calls[0]).toEqual([request]);
+    expect(runtime.answeredAfterCancellation(resource)).toBe(false);
     expect(registered.has('openf1')).toBe(false);
     // No bound is passed, so OpenF1 is locked by policy as well as unwired.
     expect(field(runtime.coordinator, 'eligibility')).toMatchObject({

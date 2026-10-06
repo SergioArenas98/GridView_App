@@ -23,7 +23,10 @@
  * 4. Ask the C2 planner what is due. **Nothing due sends nothing.**
  * 5. Execute that one plan through the single coordinator, which reaches
  *    Jolpica only through the one routing port, the hardened HTTP client, the
- *    per-run pacer and the global limiter the composition built.
+ *    per-run pacer and the global limiter the composition built. The run
+ *    budget (`../run-budget.ts`), started when the lease was acquired, bounds
+ *    it: its signal aborts the coordination at the coordination deadline,
+ *    and a run already past that deadline begins it cancelled.
  * 6. Map what each request produced onto the C2 policy, and commit the
  *    resulting records in one conditional ledger transaction under the lease.
  *    A publication run's commit also marks the season `publishing`, so a run
@@ -73,6 +76,11 @@ import {
   type CoordinatedUnavailableReason,
 } from '../composition';
 import { signalAttention } from '../operator/attention';
+import {
+  startRunBudget,
+  type RunBudget,
+  type RunBudgetTimer,
+} from '../run-budget';
 import type {
   LeaseGrant,
   LeaseToken,
@@ -129,7 +137,7 @@ export type LeaseReleaseResult = 'released' | 'refused' | 'unavailable';
 export interface CoordinatedObservationRequest {
   readonly season: number;
   readonly trigger: RunTrigger;
-  /** Caller cancellation, handed to the coordinator. */
+  /** Caller cancellation, linked into the run budget's signal. */
   readonly signal?: AbortSignal;
 }
 
@@ -140,6 +148,8 @@ export interface CoordinatedObservationDependencies extends CoordinatedRuntimeDe
   readonly storage: SnapshotStorage;
   /** The curated metadata source. Defaults to the bundled records (O-14). */
   readonly metadata?: (season: number) => CuratedSeasonMetadata | null;
+  /** How the run budget's coordination deadline is timed. Defaults to a timer. */
+  readonly budgetTimer?: RunBudgetTimer;
 }
 
 interface RunFields {
@@ -271,14 +281,28 @@ async function runUnderComposition(
     season: acquired.lease.season,
     fence: acquired.lease.fence,
   };
+  // The run budget starts here, on the Worker's clock, for both triggers.
+  const budget = startRunBudget({
+    startedAt: dependencies.clock.now(),
+    ...(dependencies.budgetTimer ? { timer: dependencies.budgetTimer } : {}),
+    ...(request.signal ? { linked: request.signal } : {}),
+  });
   let held: HeldOutcome;
   try {
-    held = await underLease(request, dependencies, runtime, acquired.lease);
+    held = await underLease(
+      request,
+      dependencies,
+      runtime,
+      acquired.lease,
+      budget,
+    );
   } catch (error) {
     // Released on every path, including a defect that throws.
+    budget.disarm();
     await release(runtime, lease);
     throw error;
   }
+  budget.disarm();
   const leaseRelease = await release(runtime, lease);
   return logged(dependencies.logger, { ...fields, ...held, leaseRelease });
 }
@@ -289,6 +313,7 @@ async function underLease(
   dependencies: CoordinatedObservationDependencies,
   runtime: CoordinatedRuntime,
   grant: LeaseGrant,
+  budget: RunBudget,
 ): Promise<HeldOutcome> {
   const lease: LeaseToken = { season: grant.season, fence: grant.fence };
 
@@ -333,7 +358,7 @@ async function underLease(
     return failure('coordination', 'lease-expired', null, 0);
   }
 
-  return observe(request, dependencies, runtime, grant, snapshot, plan);
+  return observe(dependencies, runtime, grant, budget, snapshot, plan);
 }
 
 /**
@@ -381,18 +406,22 @@ async function recover(
 }
 
 async function observe(
-  request: CoordinatedObservationRequest,
   dependencies: CoordinatedObservationDependencies,
   runtime: CoordinatedRuntime,
   grant: LeaseGrant,
+  budget: RunBudget,
   snapshot: LedgerSnapshot,
   plan: Exclude<RunPlan, { readonly kind: 'nothing-due' }>,
 ): Promise<HeldOutcome> {
   const lease: LeaseToken = { season: grant.season, fence: grant.fence };
+  budget.enterCoordination(dependencies.clock.now());
   const run = await runtime.coordinator.coordinate({
-    plan: { season: request.season, resources: plan.resources },
-    ...(request.signal ? { signal: request.signal } : {}),
+    plan: { season: grant.season, resources: plan.resources },
+    signal: budget.signal,
   });
+  // Nothing after coordination listens to the budget's signal: the intent
+  // gate is the budget's last word, and it reads the clock.
+  budget.disarm();
   // The observation instant is taken once every response has arrived, never
   // at planning: what the run records as attempted and observed must not
   // predate the responses it describes. The plan's slots are unaffected.
@@ -415,7 +444,11 @@ async function observe(
     );
   }
 
-  const mapped = await observationOutcomes(plan.resources, run);
+  const mapped = await observationOutcomes(
+    plan.resources,
+    run,
+    runtime.answeredAfterCancellation,
+  );
   if (mapped.kind === 'refused') {
     return failure('observation', mapped.reason, null, providerRequests);
   }
@@ -464,6 +497,7 @@ async function observe(
     clock: () => dependencies.clock.now(),
     lease,
     leaseExpiresAt: grant.expiresAt,
+    runStartedAt: budget.startedAt,
     plan,
     run,
     seasonOutcomes: mapped.seasonOutcomes,

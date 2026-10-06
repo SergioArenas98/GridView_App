@@ -10,7 +10,7 @@
  * | Decision | `publicationDueAt` | Disposition |
  * |---|---|---|
  * | `completed` (applied, or genuinely unchanged) | unchanged | cleared |
- * | `retry` (a transient failure, a cancellation) | now + 1 h | cleared, but an earlier block is kept |
+ * | `retry` (a transient failure, a cancellation, an exhausted run budget) | now + 1 h | cleared, but an earlier block is kept |
  * | `cadence` (only a later cadence check can change it) | that check, at least now + 1 h | cleared, but an earlier block is kept |
  * | `blocked` (operator action needed) | cleared | `blocked` with the reason |
  * | `durably-blocked` (an hourly loop otherwise; OD-5) | cleared | an earlier block is kept; `durableBlock` set |
@@ -103,9 +103,16 @@ export type CandidateGap =
   | 'inconsistent-references'
   | 'generation-failed';
 
-/** Why a candidate never reached the guarded publisher. Closed. */
+/**
+ * Why a candidate never reached the guarded publisher. Closed.
+ *
+ * `run-budget-exhausted` is the run budget's intent gate (RB-5): too late in
+ * the run, or too little lease left, to commit to publication. It is
+ * retried, and recorded nowhere but the run's answer and log line.
+ */
 export type WithheldCause =
   | 'cancelled'
+  | 'run-budget-exhausted'
   | 'metadata-unavailable'
   | PublicationStop
   | DurableBlockReason

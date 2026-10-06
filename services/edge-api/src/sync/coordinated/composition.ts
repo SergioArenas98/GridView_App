@@ -22,7 +22,10 @@
  * - one `JolpicaResourcePort`, the coordinator's single registration for
  *   source `jolpica`. **No OpenF1 port is registered** and no provisional
  *   session-end bound is passed, so OpenF1 stays locked by policy and absent
- *   by wiring;
+ *   by wiring. It is registered behind the coordination package's
+ *   `recordLateAnswers` pass-through, which only notes which resources it
+ *   answered after the run's signal had aborted (`answeredAfterCancellation`),
+ *   so a late answer is never accepted;
  * - one `MultiSourceCoordinator` at concurrency 1;
  * - one `CoordinatedSeasonPublication` bridge over the guarded sequenced
  *   publication the caller supplies. The bridge has no legacy fallback, and
@@ -46,7 +49,9 @@ import {
   MultiSourceCoordinator,
   attemptedFailureReasons,
   coordinationFor,
+  recordLateAnswers,
   type CoordinatedPayload,
+  type CoordinatedResource,
   type SourceContribution,
 } from '../../providers/coordination';
 import {
@@ -126,6 +131,14 @@ export interface CoordinatedRuntime {
   readonly coordinator: MultiSourceCoordinator;
   readonly publication: CoordinatedSeasonPublication;
   readonly ledger: ReconciliationLedgerPort;
+  /**
+   * Whether the routing port answered for `resource` only after the run's
+   * signal had aborted (RB-4 as amended, 2026-10-06). Such an answer - a
+   * request aborted in flight, or a response that arrived late - is a
+   * cancelled observation for the ledger policy, whatever it carried. Its
+   * request still counts in the run's accounting: it was sent.
+   */
+  answeredAfterCancellation(resource: CoordinatedResource): boolean;
 }
 
 export type CoordinatedRuntimeComposition =
@@ -189,8 +202,9 @@ export function composeCoordinatedRuntime(
     standings: new JolpicaStandingsPort({ client, logger }),
   });
   const port = new JolpicaResourcePort(ports);
+  const answers = recordLateAnswers(port);
   const coordinator = new MultiSourceCoordinator({
-    ports: [port],
+    ports: [answers.port],
     logger,
     maxConcurrentOperations: 1,
   });
@@ -209,6 +223,7 @@ export function composeCoordinatedRuntime(
       coordinator,
       publication,
       ledger,
+      answeredAfterCancellation: answers.answeredAfterAbort,
     }),
   };
 }

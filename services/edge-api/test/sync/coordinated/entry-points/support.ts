@@ -110,6 +110,8 @@ export class EntryPointHarness {
   private writes = 0;
   /** What the resolver answers for this harness's calls. */
   private binding: LedgerBinding = null;
+  /** Called before each `prepare` the Worker's sequencer port receives. */
+  onPrepare: () => void = () => {};
 
   private constructor(
     readonly harness: ObservationHarness,
@@ -192,8 +194,14 @@ export class EntryPointHarness {
     });
   }
 
-  /** One authenticated `POST /internal/admin/sync/full` at `at`. */
-  async manual(at: string): Promise<ManualAnswer> {
+  /**
+   * One authenticated `POST /internal/admin/sync/full` at `at`, optionally
+   * carrying the client's own `signal` - its connection.
+   */
+  async manual(
+    at: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<ManualAnswer> {
     let answer: Pick<ManualAnswer, 'status' | 'cacheControl' | 'body'> | null =
       null;
     const record = await this.record(at, async () => {
@@ -201,6 +209,7 @@ export class EntryPointHarness {
         new Request(`${PUBLIC_BASE_URL}/internal/admin/sync/full?season=2026`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
+          ...(options.signal ? { signal: options.signal } : {}),
         }),
         this.env,
       );
@@ -353,6 +362,7 @@ export class EntryPointHarness {
     const counted = Object.create(port) as Record<string, unknown>;
     counted.prepare = (request: never) => {
       this.prepares += 1;
+      this.onPrepare();
       return port.prepare(request);
     };
     counted.finalize = (request: never) => {
