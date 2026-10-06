@@ -22,7 +22,11 @@
  * (runtime activation decision O-8): a scheduled run serves what is due and
  * advances the due times it serves; a manual run is a forced publication run
  * whose observations are out of cadence - they corroborate nothing - and it
- * moves no due time.
+ * moves no due time. Both run under the same run budget (RB-1 to RB-3,
+ * `run-budget.ts`), which the orchestration starts when it acquires the
+ * lease. A run reads no client signal (RB-8): a disconnect is never a
+ * cooperative cancellation. A platform stop after one is a hard stop, which
+ * the existing recovery covers like any other.
  */
 
 import type { Logger } from '../../logging/logger';
@@ -38,6 +42,7 @@ import {
   type CoordinatedObservationResult,
 } from './observation';
 import { signalAttention } from './operator/attention';
+import type { RunBudgetTimer } from './run-budget';
 
 export type CoordinatedSyncTrigger = 'scheduled' | 'manual';
 
@@ -79,8 +84,10 @@ export interface CoordinatedSyncRequest {
   readonly season: number;
   readonly trigger: CoordinatedSyncTrigger;
   /**
-   * Caller cancellation, handed to the coordinator. No Worker entry point
-   * supplies one outside tests: no accepted decision defines a run budget.
+   * Caller cancellation, linked into the run budget's signal. No Worker entry
+   * point supplies one outside tests: the run budget is the only deployed
+   * cooperative cancellation source, and the client's signal is never read
+   * (RB-8).
    */
   readonly signal?: AbortSignal;
 }
@@ -94,6 +101,8 @@ export interface CoordinatedSyncDependencies extends CoordinatedRuntimeDependenc
   readonly sequencer: SeasonPublicationSequencerPort | null;
   /** Where the active release's documents are read from. */
   readonly storage: SnapshotStorage;
+  /** How the run budget's coordination deadline is timed. Defaults to a timer. */
+  readonly budgetTimer?: RunBudgetTimer;
 }
 
 type OrchestratedResult = Exclude<

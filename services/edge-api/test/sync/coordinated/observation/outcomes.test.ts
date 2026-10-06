@@ -276,3 +276,67 @@ describe('a selection', () => {
     });
   });
 });
+
+describe('an answer that arrived after the run signal aborted (RB-4 as amended)', () => {
+  const selected = {
+    resource: circuits,
+    jobCategory: 'profiles',
+    selection: {
+      outcome: 'selected',
+      source: 'jolpica',
+      role: 'reconciled',
+      payload: { kind: 'season-circuits', circuits: [] },
+    },
+    contributions: [],
+  } as unknown as ResourceCoordination;
+  const late = (resource: { kind: string }) =>
+    resource.kind === 'season-circuits';
+
+  it('is a cancelled observation, whatever it carried: a late response or a request aborted in flight', async () => {
+    const mapped = await observationOutcomes(
+      [circuits, race],
+      run([
+        selected,
+        unavailable(race, [
+          contribution(race, { reason: 'provider-unavailable' }),
+        ]),
+      ]),
+      (resource) => late(resource) || resource.kind === race.kind,
+    );
+    expect(mapped).toEqual({
+      kind: 'mapped',
+      seasonOutcomes: { circuits: { status: 'not-attempted' } },
+      classificationOutcomes: new Map([[3, { status: 'not-attempted' }]]),
+    });
+  });
+
+  it('leaves an answer that arrived before the abort as it was', async () => {
+    const mapped = await observationOutcomes(
+      [circuits, race],
+      run([
+        selected,
+        unavailable(race, [
+          contribution(race, { reason: 'provider-unavailable' }),
+        ]),
+      ]),
+      late,
+    );
+    expect(mapped).toMatchObject({
+      seasonOutcomes: { circuits: { status: 'not-attempted' } },
+      classificationOutcomes: new Map([[3, { status: 'failed' }]]),
+    });
+  });
+
+  it('still refuses the whole mapping for a defect', async () => {
+    const malformed = {
+      ...selected,
+      selection: {
+        ...selected.selection,
+        payload: { kind: 'season-participants', drivers: [] },
+      },
+    } as unknown as ResourceCoordination;
+    expect(
+      await observationOutcomes([circuits], run([malformed]), () => true),
+    ).toEqual({ kind: 'refused', reason: 'selection-malformed' });
+  });
+});

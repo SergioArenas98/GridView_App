@@ -12,9 +12,13 @@
  * 8. **The no-change gate** (O-12) skips the guarded publisher only when the
  *    digest equals the last publication's *and* a fresh authority read,
  *    taken after the candidate exists, still serves the recorded release. An
- *    authority that cannot be confirmed never skips. Otherwise the ordering
- *    input and digest are reserved in one fenced commit, and the prepared
- *    candidate goes to the guarded sequenced publisher **once**.
+ *    authority that cannot be confirmed never skips. Otherwise the run
+ *    budget's **intent gate** is checked (`../run-budget.ts`): a run too late,
+ *    or with too little lease left, withholds the candidate as
+ *    `run-budget-exhausted` and retries. Only then are the ordering input and
+ *    digest reserved in one fenced commit, and the prepared candidate goes to
+ *    the guarded sequenced publisher **once**. Nothing after that commit is
+ *    cancelled by the budget: a stop there is left to the recovery below.
  * 9. **The outcome commit** records what happened, with an explicit durable
  *    next-due decision for every path (`decisions.ts`), before the caller
  *    releases the lease.
@@ -50,6 +54,7 @@ import {
   type RunPlan,
   type SeasonOutcomes,
 } from '../policy';
+import { intentGateOpen } from '../run-budget';
 import {
   durableBlockReason,
   notApplied,
@@ -134,6 +139,8 @@ export interface PublicationStepInput {
   readonly clock: () => Date;
   readonly lease: LeaseToken;
   readonly leaseExpiresAt: LedgerInstant;
+  /** When the run budget started: the lease's acquisition, on `clock`. */
+  readonly runStartedAt: Date;
   readonly plan: Extract<RunPlan, { readonly kind: 'publication' }>;
   readonly run: CoordinationRun;
   readonly seasonOutcomes: SeasonOutcomes;
@@ -258,11 +265,19 @@ async function publishReserved(
   digest: string,
   orderingInput: LedgerInstant,
 ): Promise<PublicationStep> {
-  if (Date.parse(input.leaseExpiresAt) <= input.clock().getTime()) {
+  const now = input.clock();
+  if (Date.parse(input.leaseExpiresAt) <= now.getTime()) {
     // Nothing is sent under a lease that can no longer record the outcome.
     // The `publishing` slot the observation commit wrote makes the next run
     // find the publication due.
     return failure('publication', 'lease-expired', null, null);
+  }
+  if (!intentGateOpen(input.runStartedAt, now, input.leaseExpiresAt)) {
+    // The last point a budget can stop the run: nothing has been reserved or
+    // sent, and the lease still holds the outcome commit.
+    return settle(input, current, withheld('run-budget-exhausted'), {
+      decision: 'retry',
+    });
   }
   const since =
     current.record.publicationDisposition?.since ??

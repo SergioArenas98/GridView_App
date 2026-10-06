@@ -59,10 +59,17 @@ interface TestOnlyBindings {
    */
   __PACER_SLEEP?: import('../providers/http/reservation-pacer').PacerSleep;
   /**
-   * Cancels a coordinated run. Test-only: no accepted decision defines a run
-   * budget, so a deployed Worker supplies no signal and never cancels a run.
+   * Cancels a coordinated run, linked into its run budget's signal. Test-only:
+   * a deployed Worker's only cancellation source is the run budget.
    */
   __COORDINATED_RUN_SIGNAL?: AbortSignal;
+  /**
+   * How a coordinated run budget times its coordination deadline. Test-only:
+   * a test fires it from its own clock instead of waiting on a timer. Read
+   * only after every coordinated dependency gate has passed, and armed only
+   * once a run holds its lease.
+   */
+  __RUN_BUDGET_TIMER?: import('../sync/coordinated/run-budget').RunBudgetTimer;
 }
 
 /** Bindings and variables available to the Worker. */

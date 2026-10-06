@@ -17,6 +17,12 @@
  *   never reached is `not-attempted`. Neither counts as a check. That includes
  *   a multi-request execution interrupted by one of them after an earlier
  *   request of the same execution was sent: the execution did not complete.
+ * - **Anything answered after the run's signal aborted** is a cancelled
+ *   observation, `not-attempted`, whatever the answer carried (RB-4 as
+ *   amended, 2026-10-06): a request the run budget aborted in flight is not
+ *   a `failed` check, and a response that arrived after the deadline is never
+ *   accepted. Neither consumes a slot, corroborates, settles or reaches the
+ *   ceiling. Its request still counts in the run's accounting.
  *
  * A coordinator-side defect - an adapter that threw, a malformed answer, a
  * violated invariant, a missing coordination - and a selected payload that
@@ -125,10 +131,18 @@ async function outcomeOf(
     : { kind: 'outcome', outcome: { status: 'observed', revision, anchors } };
 }
 
+const cancelled = {
+  kind: 'outcome',
+  outcome: { status: 'not-attempted' },
+} as const;
+
 /** Maps one coordination run onto the outcomes of the plan it executed. */
 export async function observationOutcomes(
   resources: readonly PlannedResource[],
   run: CoordinationRun,
+  /** Whether the resource was answered only after the run's signal aborted. */
+  answeredAfterCancellation: (resource: CoordinatedResource) => boolean = () =>
+    false,
 ): Promise<ObservationMapping> {
   const season: Partial<
     Record<RefreshResource, CheckOutcome | CalendarOutcome>
@@ -139,8 +153,12 @@ export async function observationOutcomes(
     if (coordination === undefined) {
       return { kind: 'refused', reason: 'coordination-defect' };
     }
-    const mapped = await outcomeOf(resource, coordination);
-    if (mapped.kind === 'refused') return mapped;
+    const answered = await outcomeOf(resource, coordination);
+    // A defect still refuses the whole mapping, late or not.
+    if (answered.kind === 'refused') return answered;
+    const mapped = answeredAfterCancellation(resource as CoordinatedResource)
+      ? cancelled
+      : answered;
     if (resource.kind === 'session-classification') {
       classifications.set(resource.round, mapped.outcome as CheckOutcome);
     } else {

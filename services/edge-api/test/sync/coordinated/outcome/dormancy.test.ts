@@ -48,6 +48,7 @@ describe('the publication half is wired through one entry, unbound', () => {
       'sync/coordinated/composition.ts',
       'sync/coordinated/observation/index.ts',
       'sync/coordinated/operator/attention.ts',
+      'sync/coordinated/run-budget.ts',
     ]);
     // The router imports only the outcome type it answers with.
     expect(importersOf('sync/coordinated/run.ts')).toEqual([
@@ -80,6 +81,7 @@ describe('the publication half is wired through one entry, unbound', () => {
       'sync/coordinated/composition.ts',
       'sync/coordinated/ledger/model.ts',
       'sync/coordinated/policy/index.ts',
+      'sync/coordinated/run-budget.ts',
     ]);
   });
 
