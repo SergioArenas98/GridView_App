@@ -1425,6 +1425,9 @@ V-5) was answered as follows:
 | V-4 | One provider request per verification, no retry. A failed response keeps T11's attempt accounting and changes no candidate or competing slot. A limiter deferral follows the existing deferral rule and is not a completed check. |
 | V-5 | A strict request: `season`, `round`, a UUID v4 `operationId` and `expectedStagedRevision`. Authentication comes before the ledger and the provider. The staged target, the review lock and the earliest verification time are checked before capacity is reserved. A record already locked for review is refused. |
 
+*Amended 2026-10-06 by E4 (below): the V-5 body also requires
+`expectedVerificationGeneration`, checked before anything else.*
+
 **Route.** `POST /internal/admin/reconciliation/verification`, behind
 `ADMIN_TOKEN`, with `Cache-Control: no-store`, and not in the public
 OpenAPI. Checks run in this fixed order, and nothing after a refusal is
@@ -1591,7 +1594,10 @@ comparison. The read-only inspection now shows each round's
 
    A resend is therefore never a second sighting. A deferral is not
    recorded, so its ID stays usable. *(This replaces the one-slot design
-   PR #61 first opened with; see "Review correction" below.)*
+   PR #61 first opened with; see "Review correction" below.)* *(Narrowed
+   2026-10-06 by E4: this holds within the ID's verification generation. A
+   request from an earlier generation is refused
+   `verification-generation-mismatch`, sends nothing and writes nothing.)*
 7. **The deferral rule is the existing one, with its existing effect.** The
    planner defers the season's scheduled runs until the latest
    `limiterDeferralUntil` of any record. A deferred verification therefore
@@ -1701,7 +1707,8 @@ Observation and outcome code stay out of the bundle.
   reports.
 - A round that reaches 32 verifications can never be verified again. The
   history is never evicted, so freeing it needs an owner decision. Like a
-  full revision history, it is a dead end.
+  full revision history, it is a dead end. *(2026-10-06: E4 adds the explicit
+  recovery, an operator rotation into the next verification generation.)*
 
 **Review correction.** Codex raised one P1 on PR #61 at `9f906d9`, and it was
 valid. The first design remembered only each record's latest verification.
@@ -1715,6 +1722,283 @@ cover it. With the old search, the older-ID tests fail (6), and with a
 one-round search the cross-round tests fail (6).
 
 The decision above is unchanged.
+
+### E4: verification generation rotation (2026-10-06)
+
+PR-E4 gives E3's full verification history an explicit recovery path.
+**Nothing is bound, deployed, activated or run.** The resolver still answers
+`null`, so both new routes answer `503` `reconciliation-unavailable` with
+`ledger-unbound` in every environment, having read nothing. No rotation and
+no verification has ever run, and Jolpica was not contacted.
+
+**Why it was needed.** A read-only probe at `81e91d2` showed that nothing
+frees a full 32-entry history:
+
+- T12 keeps it;
+- `commit` refuses to change it;
+- re-staging the round does not help;
+- a Durable Object restart changes nothing.
+
+A round that reached 32 verifications could never be verified again (the E3
+residual risk).
+
+**Owner decisions (2026-10-06).** R-1 to R-7 of the private
+verification-history recovery decision pack were answered as follows:
+
+| # | Decision |
+|---|---|
+| R-1 | A persisted per-round verification generation. Every verification request names `expectedVerificationGeneration`. It is checked before transport or limiter use, and again inside the ledger transaction. A replay from an earlier generation returns `verification-generation-mismatch` with no provider request and no write. Within the current generation, a repeated operation returns `already-applied`. |
+| R-2 | ADR 0020 is amended with this narrower replay contract (below). Operation identity is defined within a generation. Bounded storage does not detect reuse of a UUID across every historical generation, and this ADR does not claim it does. The current-generation checks across rounds and action types are kept. |
+| R-3 | An authenticated rotation action. It requires an active operator hold, a full 32-entry history, a fenced season lease, and a matching record version, generation and history digest. It is refused while a competing correction has locked the record for review; T12 must resolve that first. |
+| R-4 | Rotation is one transaction. It clears only the verification history, increments the safe-integer generation and records a bounded reset receipt. It keeps the staged and candidate corrections, the accepted and published revisions, the superseded history, the attempt accounting, the backlog and Workers KV. It refuses safely when the generation cannot be incremented. |
+| R-5 | A read-only inspection and a private archive of the bounded history come first. The rotation request names the inspected history digest and explicitly acknowledges the archive. The answer is a receipt with the old and new generations, the digest and the count. The cleared entries are never returned after the write: a lost answer would lose that evidence. |
+| R-6 | A retry of the same rotation after a lost answer never rotates again. What an older rotation retry returns after a later rotation is documented (below). |
+| R-7 | Logs stay bounded, with no provider payload, revision value or cleared operation ID. |
+
+**The replay contract, amended.** This narrows E3 choice 6.
+
+- **Operation identity is defined within one generation.** Within the
+  current generation, an operation ID any verification of the season recorded
+  is answered `already-applied`, with no request and no write, however many
+  verifications came after it. The same ID for another round or staged
+  revision is `operation-id-reused`, as E3 defined.
+- **A request formed against any other generation is refused**
+  `verification-generation-mismatch` before anything else is matched. That
+  covers an earlier generation (a resend from before a rotation) and a
+  generation that does not exist yet. The route refuses it under the lease
+  before the limiter or the transport is used. The store's `verify` refuses
+  it again inside its transaction.
+- **G1 is unchanged: a resend is never executed again and never counted as a
+  second sighting.** A prior-generation resend now gets a refusal instead of
+  `already-applied`, but it still sends nothing and writes nothing.
+- **Bounded storage forgets a cleared generation's IDs.** A UUID used in a
+  cleared generation and sent again *naming the current generation* is a new
+  verification. Every generation is an authenticated, audited operator act,
+  and the runbook requires a new UUID for every verification.
+- **One namespace between verification and rotation.** A verification may
+  not reuse an ID a round's last rotation used. A rotation may not reuse an ID
+  of the current generation's verifications on any round, or another round's
+  last rotation. Hold, release, clear-block and disposition IDs keep their E1
+  one-slot rules; no new cross-check against them is added.
+- **E3's per-round request bound is now per generation:** at most 32 per
+  generation, and each new generation needs an operator rotation. The global
+  limiter applies throughout. No cap on rotations was set.
+
+**Model** (schema version 1, refined in place a fifth time, on the same
+grounds as E1 and E3: re-verified at `81e91d2`, no `wrangler.toml` has ever
+declared the class, and the resolver answers `null`):
+
+- `ClassificationRecord.verificationGeneration`: a safe integer, 0 until the
+  first rotation.
+- `ClassificationRecord.lastVerificationReset`: `null` exactly while the
+  generation is 0. Otherwise it holds the closed receipt
+  `{operationId, at, authMethod, fromGeneration, clearedCount,
+  clearedDigest}`.
+
+The decoder requires `fromGeneration + 1` to equal the generation,
+`clearedCount` to be 32, and the receipt's ID not to appear in the current
+history. `commit` refuses (`staged-correction-immutable`) any change to
+either field, and a first write that does not start at generation 0 with no
+receipt. `verify` and T12 spread the record and keep both.
+
+**The history digest.** It is `sha256:` followed by the lowercase hex SHA-256
+of the UTF-8 compact JSON of the canonical history. Each entry is
+`{operationId, at, authMethod, stagedRevision, transition}`, in that key
+order, oldest first. An operator recomputes it from an archived answer as
+`JSON.stringify(entries)`.
+
+**Routes** (behind `ADMIN_TOKEN`, `Cache-Control: no-store`, not in the
+public OpenAPI):
+
+- `GET /internal/admin/reconciliation/verification-history?season=YYYY&round=N`
+  is read-only, with no lease. It answers `200` with
+  `{status: "read", season, round, recordVersion, verificationGeneration,
+  count, historyDigest, entries, lastVerificationReset}`, or `404`
+  `not-recorded`. **It is the only answer that carries the digest**, so a
+  rotation can name one only after this read. Its `info` line names the
+  round and the outcome only.
+- `POST /internal/admin/reconciliation/verification-rotation` takes
+  `{season, round, operationId, expected: {recordVersion,
+  verificationGeneration, historyDigest}, historyArchived}`. `historyArchived`
+  must be `true`. `false` is refused `400` `history-archive-not-acknowledged`,
+  and any other unknown, missing or ill-typed field is `invalid-body`. No
+  runtime is composed, and no provider, limiter or sequencer can be reached.
+- The verification body (V-5) gains a required
+  `expectedVerificationGeneration`.
+- The inspection shows each round's `verificationGeneration` and
+  `lastVerificationReset`, the latter with `toGeneration`.
+
+**Rotation check order.** The route checks run first: authentication, method,
+strict body, then `coordinated` mode and a resolved ledger. Then the season
+lease is taken (`run-in-progress` if it is held) and released on every path.
+The store's `rotateVerifications` then checks, in its transaction:
+
+1. the lease fence and expiry;
+2. **the resend.** This round's receipt names the same operation ID:
+   - with the same `fromGeneration` and digest, the answer is
+     `already-applied` and nothing is written, even after the record moved on;
+   - otherwise it is `operation-id-reused`;
+3. the ID namespace above (`operation-id-reused`);
+4. a recorded round (`operator-precondition-failed`);
+5. the generation (`verification-generation-mismatch`);
+6. the record version (`version-conflict`);
+7. the archived digest (`verification-history-digest-mismatch`);
+8. an operator hold on the season (`operator-hold-required`);
+9. no competing correction (`review-locked`);
+10. a full history (`verification-history-not-full`);
+11. a generation below `Number.MAX_SAFE_INTEGER`
+    (`verification-generation-exhausted`).
+
+Only then does it write that one classification record:
+
+- an empty history;
+- the generation plus one;
+- the receipt;
+- the version plus one.
+
+Nothing else changes: the staged, candidate and competing slots, the markers,
+the attempt accounting, `limiterDeferralUntil`, the accepted, published and
+superseded revisions, `lastDisposition`, the season record (and so the hold),
+the backlog, Workers KV and the sequencer.
+
+**Lost answers and retries.**
+
+- **The same rotation, resent after `outcome-unknown`,** is `already-applied`
+  if it committed. Otherwise it applies, provided the version, generation and
+  digest still match. It never rotates twice.
+- **An older rotation, resent after a later rotation,** is refused
+  `verification-generation-mismatch` (step 5) and writes nothing. Only the
+  latest receipt is remembered, so the older ID is no longer recognized as a
+  resend. Its generation is behind, so it cannot apply. It answers
+  `operation-id-reused` instead only if that UUID was reused in the meantime.
+- **A verification left `outcome-unknown` before a rotation** gets
+  `verification-generation-mismatch` when resent after it. The runbook
+  therefore requires settling every such verification by resending it before
+  rotating. The archived history then shows whether it committed.
+
+**Answers.** `200` `applied` / `already-applied`, carrying the receipt
+(`operationId`, `at`, `authMethod`, `fromGeneration`, `toGeneration`,
+`clearedCount`, `clearedDigest`) and the season and round views, never the
+cleared entries. `409` `run-in-progress`, or `refused` with the reason. `503`
+`reconciliation-unavailable`, `ledger-unavailable` or `outcome-unknown`. A
+verification refused for its generation is `409` `precondition-failed`,
+`reason` `verification-generation-mismatch`, with `providerRequests: 0`.
+
+**Audit.** One `warn` `reconciliation.verification-rotation` line per rotation
+request carries only these:
+
+- the season, round, operation ID and `shared-admin-token`;
+- the outcome and any refusal reason;
+- `verificationGenerationFrom`, `verificationGenerationTo` and
+  `verificationClearedCount`;
+- the lease release.
+
+It never carries the digest, a revision, a cleared entry or a cleared
+operation ID. The receipt is durable in the ledger.
+
+**Choices made in implementation, not owner decisions:**
+
+1. **The digest is checked by the store against a read made just before its
+   transaction.** `crypto.subtle` is asynchronous and a storage transaction
+   is not, and no synchronous SHA-256 exists in the runtime without
+   `nodejs_compat`. The transaction re-reads the history and treats anything
+   other than exactly the hashed history as a digest mismatch, so it never
+   acts on a digest of another history. All checks and the one write stay in
+   that one transaction.
+2. **A dedicated read-only history route** is the archive source, and the
+   only place the digest appears. The inspection carries no digest.
+3. **The archive acknowledgement is a required boolean.** `false` has its own
+   closed problem, so an operator who has not archived is told why.
+4. **The check order** puts the generation before the version, so an older
+   rotation retry always reads as a generation mismatch.
+5. **A rotation needs no staged correction.** After T12 it prepares the round
+   for the next correction's verification.
+6. **`clearedCount` is always 32,** because only a full history rotates. The
+   field is kept because R-5 asks for the count.
+7. **The ledger's value primitives moved to `ledger/primitives.ts`**, which
+   `records.ts` re-exports, to keep `records.ts` under 800 lines without an
+   import cycle.
+
+**Tests.** 49 new tests; the suite is now 4,864 in 209 files.
+
+- Store, over both transports (31):
+  - rotation writes exactly the history, the generation and the receipt,
+    with every other key byte-equal, and the candidate kept;
+  - an earlier, current or future generation;
+  - a later corroboration of the kept candidate;
+  - a lost-answer resend, including after the record moved on, and the same
+    ID naming another history;
+  - an older rotation after a later one;
+  - a restart;
+  - a stale version, generation or digest, a history that is not full, no
+    hold, a review lock and generation overflow;
+  - the cross-round and verify/rotation ID namespace, and the stated
+    cross-generation limit;
+  - an unrecorded round, invalid requests and an expired lease;
+  - `commit` refusals, and strict decoding.
+- Worker route, over both transports on the real state machine (18):
+  - archive, rotate, and the generation-0 resend refused with no provider
+    request, no limiter reservation and only the lease taken and released;
+  - the rotation ID refused as a verification ID;
+  - the kept candidate corroborated in generation 1;
+  - key allow-lists on the audit line, and no digest, revision, cleared ID or
+    token in any log line;
+  - a lost answer;
+  - five ledger refusals;
+  - a held lease;
+  - authentication, method, body, query, archive-acknowledgement and mode
+    refusals, and an unrecorded round.
+- The real-resolver `ledger-unbound` proof now includes both routes.
+
+Existing tests changed in these ways only:
+
+- fixtures and verification requests gained the generation;
+- method, command and route lists name the new operation;
+- the inspection key allow-list names the two new fields;
+- the operator-package writer pin names `rotateVerifications`.
+
+**Negative controls.** Each is a mutation of the final code, restored from a
+backup:
+
+| Mutation | Failed tests |
+|---|---|
+| Rotation clears the history without raising the generation | 18 |
+| The route's generation check skipped | 2 |
+| The store's generation check skipped | 4 |
+| Both generation checks accept a later generation (`<` for `!==`) | 2 |
+| Rotation allowed on a history that is not full | 4 |
+| Rotation without an operator hold | 4 |
+| Rotation under a review lock | 4 |
+| Rotation ignores the archived digest | 4 |
+| Rotation ignores the record version | 4 |
+| Rotation also clears the candidate | 6 |
+| The rotation's resend slot removed | 6 |
+| The rotation's ID-namespace check removed | 2 |
+| `verify` accepts a rotation ID (store and route) | 4 |
+| `commit` may write the generation and its receipt | 2 |
+| A generation of `Number.MAX_SAFE_INTEGER` is raised | 2 |
+
+**Bundle.** `7a1a992d…e061a` (718,392 B) → `d8022e63…42e6` (736,707 B),
+identical in all three environments. The dry-runs report staging `mock`,
+production `none`, and no ledger binding. The +18,315 B are the two routes,
+the rotation operation, its decoders and the digest.
+
+**Still open:**
+
+- running any verification or rotation, and everything E3 lists as open.
+
+**Residual risks.**
+
+- A UUID reused across generations is not detected. The procedure (a new
+  UUID for every action) is the only guard.
+- A verification answer lost before a rotation can no longer be settled by
+  resending it after the rotation. Only the archived history shows whether
+  it committed.
+- Rotation needs an operator hold, so recovering verification capacity stops
+  the season's publication until the hold is released. Release is consent to
+  publish (E2).
+- Only the latest rotation per round is remembered. Earlier receipts live
+  only in the operator's private archive.
 
 ## Reopening conditions
 

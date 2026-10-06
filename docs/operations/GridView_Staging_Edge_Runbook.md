@@ -895,7 +895,9 @@ step 3). That authorization must name the route, staging and season 2026.
 | `/internal/admin/reconciliation/release-hold` | `POST` | same | Clears the hold and makes publication due now. **Release is consent**: the next tick publishes through every guard, including content a rollback replaced. |
 | `/internal/admin/reconciliation/clear-block` | `POST` | same | Clears a durable block (`classification-superseded` or `backlog-capacity-exceeded`) and makes publication due now. It never clears a hold. |
 | `/internal/admin/reconciliation/disposition` | `POST` | `{season, round, action, operationId, expected: {recordVersion, contentRevision, stagedRevision, competingRevision}}` | T12 for one staged round: `accept-staged`, `accept-competing` or `retain-published`. Releases its backlog slot. It publishes nothing. |
-| `/internal/admin/reconciliation/verification` | `POST` | `{season, round, operationId, expectedStagedRevision}` | PR-E3: **one Jolpica request** for one staged round, recording a candidate, a competing correction or a failed attempt (T11-T11c). Decides nothing. See "Operator verification" below. |
+| `/internal/admin/reconciliation/verification` | `POST` | `{season, round, operationId, expectedStagedRevision, expectedVerificationGeneration}` | PR-E3: **one Jolpica request** for one staged round, recording a candidate, a competing correction or a failed attempt (T11-T11c). Decides nothing. See "Operator verification" below. |
+| `/internal/admin/reconciliation/verification-history?season=YYYY&round=N` | `GET` | none; `season` and `round` are the only query parameters | PR-E4: reads one round's whole verification history and its `historyDigest`. Takes no lease and writes nothing. The archive source before a rotation. |
+| `/internal/admin/reconciliation/verification-rotation` | `POST` | `{season, round, operationId, expected: {recordVersion, verificationGeneration, historyDigest}, historyArchived: true}` | PR-E4: clears one round's **full** verification history into the next generation, under an operator hold. Reaches no provider. See "Verification-history rotation" below. |
 | `/internal/admin/rollback` | `POST` | `{version?}` (existing) | In `coordinated` mode only: runs the existing rollback once, **only while the season is held**, with D14/D15 unchanged. `mock` and `none` are unchanged. |
 
 - `season` is always named in the request. These routes never use
@@ -1014,17 +1016,19 @@ Deciding remains the disposition (T12) above.
 
 ```json
 {"season": 2026, "round": 3, "operationId": "<new lowercase UUID v4>",
- "expectedStagedRevision": "<stagedCorrection.revision from an inspection>"}
+ "expectedStagedRevision": "<stagedCorrection.revision from an inspection>",
+ "expectedVerificationGeneration": <verificationGeneration from the same inspection>}
 ```
 
 The checks run in this order: authentication, method, the strict body,
 `coordinated` mode and a bound ledger, and the coordinated runtime's own gate
 (limiter, sequencer authority, purge origin). Then, under the season lease:
 
-1. a resent operation ID;
-2. the staged revision and its backlog entry;
-3. the review lock;
-4. the round's earliest time (`anchor + 5h`).
+1. the round's verification generation (PR-E4);
+2. a resent operation ID;
+3. the staged revision and its backlog entry;
+4. the review lock;
+5. the round's earliest time (`anchor + 5h`).
 
 Only then is the one request sent, and it is never retried.
 
@@ -1039,7 +1043,8 @@ Only then is the one request sent, and it is never retried.
 | `429` | `deferred` | The limiter deferred the request until `retryAt`. Nothing was sent. Only that instant was recorded, which also defers the season's scheduled runs until then. | Retry after `retryAt` with the **same** operation ID. |
 | `409` | `precondition-failed`, `reason` `staged-revision-mismatch` / `not-staged` / `backlog-entry-missing` | The target is stale or not staged. Nothing was sent or written. | Inspect again. |
 | `409` | `precondition-failed`, `reason` `review-locked` | A competing correction already exists (T11d). Nothing was sent. | Dispose (T12). |
-| `409` | `precondition-failed`, `reason` `verification-history-full` | The round already has 32 verifications. Nothing was sent. | **Stop.** Owner decision. |
+| `409` | `precondition-failed`, `reason` `verification-history-full` | The round already has 32 verifications in this generation. Nothing was sent. | Only with an authorization for it: "Verification-history rotation" below. Otherwise stop. |
+| `409` | `precondition-failed`, `reason` `verification-generation-mismatch` | The request names another verification generation than the round's: a request formed before a rotation, or a stale or future value. Nothing was sent or written. | **Never edit an old request's generation to resend it.** Inspect again, and form a new verification with a **new** operation ID. |
 | `409` | `precondition-failed`, `reason` `not-eligible` / `lease-expired` / `operation-id-reused` | The round is not yet eligible, the lease ran out, or the ID named another target. | Wait, retry, or use a new ID. |
 | `409` | `run-in-progress` | A run or operator action holds the lease. Nothing was sent. | Retry later with the same ID. |
 | `503` | `coordinated-runtime-unavailable` / `not-attempted` / `ledger-unavailable` | Nothing was sent, or nothing is known to be written. | Fix the cause. Retry with the same ID. |
@@ -1062,12 +1067,15 @@ answer privately. **Never record the token.**
 
 **Limits.**
 
-- Every verification ID of the season is remembered. Resending any of them,
-  however old, answers `already-applied` and sends nothing. Use a **new** ID
-  for each intended verification.
-- A round holds at most 32 verifications, never evicted. The 33rd is
-  refused (`verification-history-full`), and freeing it needs an owner
-  decision.
+- Every verification ID of each round's **current generation** is
+  remembered. Resending any of them within its generation, however old,
+  answers `already-applied` and sends nothing. After a rotation, a request
+  from the earlier generation is refused `verification-generation-mismatch`
+  and sends nothing. Use a **new** ID for each intended verification: a
+  rotated generation's IDs are forgotten, so reusing one in the new
+  generation would be a new verification.
+- A round holds at most 32 verifications per generation. The 33rd is
+  refused (`verification-history-full`) until an authorized rotation.
 - The verification holds the season lease during its request. A scheduled
   tick in that window sends nothing (`run-in-progress`).
 - It spends the shared limiter's capacity. No reserve is set aside for
@@ -1077,7 +1085,81 @@ answer privately. **Never record the token.**
 outcome, the transition, the match, `compared` or the comparison's reason,
 the request count, the operation ID and `shared-admin-token`. It carries no
 revision, driver ID, field name or count. Inspection shows the round's
-`verificationCount` and its `lastVerification`.
+`verificationGeneration`, `verificationCount`, `lastVerification` and
+`lastVerificationReset`.
+
+### Verification-history rotation (prepared 2026-10-06, not deployed, never run)
+
+PR-E4 adds the read-only `GET /internal/admin/reconciliation/verification-history`
+and `POST /internal/admin/reconciliation/verification-rotation` (ADR 0020
+"E4"). They are in no deployed Worker, and today both answer `503`
+`reconciliation-unavailable`, having read nothing.
+
+**What it is for.** It is the only way to verify a round again after its
+history is full. It clears that round's 32 verifications, raises its
+`verificationGeneration` by one and records a receipt. It never touches the
+staged, candidate or competing slots, the accepted or published content, the
+backlog or Workers KV. It reaches no provider. **Every rotation needs its own
+written authorization** naming staging, season 2026 and the round.
+
+**Preconditions.** All of these must hold, or the rotation is refused and
+nothing is written:
+
+- an operator **hold** on the season, which stops its publication until it is
+  released;
+- a full history (32 entries);
+- no competing correction (`review_locked`). Dispose of it first (T12);
+- the record version, generation and history digest the operator archived.
+
+**Procedure:**
+
+1. **Settle every `outcome-unknown` verification of the round** by resending
+   it with its own operation ID until it answers. After a rotation, its
+   resend is refused `verification-generation-mismatch`, and only the archive
+   can show whether it committed.
+2. Inspect. If the season is not held, `hold` it with a new operation ID.
+3. `GET …/verification-history?season=2026&round=N`. **Archive the whole
+   answer privately, never in the repository**, with the request ID and the
+   date. It holds every entry: operation IDs, instants, the staged revision
+   asked about and each transition. Check the digest:
+   `sha256:` + the hex SHA-256 of `JSON.stringify(data.entries)` must equal
+   `data.historyDigest`.
+4. Send the rotation with a **new** UUID v4, copying `recordVersion`,
+   `verificationGeneration` and `historyDigest` from that archived answer, and
+   `"historyArchived": true`. Only send `true` once the archive is stored.
+5. Record the answer's receipt privately: `fromGeneration`, `toGeneration`,
+   `clearedCount` and `clearedDigest`. The answer never repeats the cleared
+   entries. The archive from step 3 is their only copy.
+6. Verify again only with a new authorization, the new
+   `expectedVerificationGeneration` and new operation IDs.
+7. Release the hold only when republishing whatever upstream then serves is
+   acceptable. Release is consent to publish.
+
+**Answers.**
+
+| HTTP | `data.status` / `error.message` | Meaning | Next step |
+|---|---|---|---|
+| `200` | `applied` | Rotated. `receipt` names both generations, the count and the digest. | Record the receipt privately. |
+| `200` | `already-applied` | This rotation was already applied. Nothing was written. | None. This is the answer to a safe resend. |
+| `400` | `history-archive-not-acknowledged` | `historyArchived` was `false`. Nothing was read. | Archive first (step 3). |
+| `400` | `invalid-body` / `invalid-season` / `invalid-round` / `body-too-large` | Refused before the ledger was read. | Fix the request. |
+| `404` | `not-recorded` (history read) | The ledger holds no record for the round. | Check the round. |
+| `409` | `run-in-progress` | A run or operator action holds the lease. | Retry later with the same request. |
+| `409` | `refused`, `verification-generation-mismatch` | Another generation than the round's. After a later rotation, **this is what an older rotation's resend gets**: it never rotates again. | Inspect; nothing was written. |
+| `409` | `refused`, `version-conflict` / `verification-history-digest-mismatch` | The record or its history changed since the archive. | Start again at step 1. |
+| `409` | `refused`, `operator-hold-required` | The season is not held. | Hold first (step 2). |
+| `409` | `refused`, `review-locked` | A competing correction exists. | Dispose of it (T12) first. |
+| `409` | `refused`, `verification-history-not-full` | Fewer than 32 entries. Rotation is never a routine reset. | None needed. |
+| `409` | `refused`, `verification-generation-exhausted` | The generation cannot be raised. | **Stop.** Owner decision. |
+| `409` | `refused`, `operation-id-reused` | The ID named a verification or another rotation, or the same ID named another history. | Use a new ID. |
+| `503` | `outcome-unknown` | The write's answer was lost. | **Resend the identical request.** It answers `already-applied` if it committed, and never rotates twice. |
+| `503` | `reconciliation-unavailable` / `ledger-unavailable` | Not `coordinated`, no ledger, or the ledger could not be reached. | Expected today; otherwise retry with the same request. |
+
+**Audit.** One `warn` `reconciliation.verification-rotation` line carries the
+outcome, any refusal reason, the generations, the cleared count, the
+operation ID and `shared-admin-token`. It never carries the digest, a
+revision or a cleared operation ID. The history read writes one `info` line
+naming only the round and the outcome.
 
 ## 7. Initial synchronization and publication
 
