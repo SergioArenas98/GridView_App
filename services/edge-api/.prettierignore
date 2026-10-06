@@ -6,3 +6,5 @@ package-lock.json
 worker-configuration.d.ts
 # Media dry-run output.
 .media-out/
+# Recorded baseline trace: one step per line, compared parsed (test/sync/baseline).
+test/sync/baseline/whole-season-trace.json
