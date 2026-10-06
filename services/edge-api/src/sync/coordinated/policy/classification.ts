@@ -120,6 +120,8 @@ export function newClassificationRecord(
     unstableSightings: 0,
     lastDisposition: null,
     verifications: [],
+    verificationGeneration: 0,
+    lastVerificationReset: null,
   };
 }
 

@@ -67,6 +67,8 @@ export function classification(
     unstableSightings: 0,
     lastDisposition: null,
     verifications: [],
+    verificationGeneration: 0,
+    lastVerificationReset: null,
     ...overrides,
   } as ClassificationRecord;
 }

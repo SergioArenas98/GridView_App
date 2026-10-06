@@ -14,8 +14,10 @@
  * 1. Take the lease. A lease someone else holds means a run or another
  *    operator action is in progress: nothing is read or sent.
  * 2. Check the target in the snapshot the lease was granted with, before any
- *    capacity is reserved: a resent operation ID is answered from the ledger
- *    and sends nothing; then the record must hold exactly the staged revision
+ *    capacity is reserved: the request must name the round's current
+ *    verification generation (PR-E4), so a resend from before a rotation
+ *    sends nothing; a resent operation ID of the generation is answered from
+ *    the ledger and sends nothing; then the record must hold exactly the staged revision
  *    the operator named, with its backlog entry, must not be locked for
  *    review (T11d), and its round must have reached the earliest time it may
  *    be asked for (`anchor + 5h`, the planner's own eligibility rule).
@@ -23,8 +25,9 @@
  *    coordinator, port, client, pacer and limiter (`requestClassification`).
  *    No retry.
  * 4. Record what it produced through the ledger's `verify` operation, which
- *    re-checks the lease, the record version, the staged target, the backlog
- *    entry and the replay in the same transaction as its one write
+ *    re-checks the lease, the generation, the record version, the staged
+ *    target, the backlog entry and the replay in the same transaction as its
+ *    one write
  *    (`../ledger/verification.ts`). A limiter deferral records only the retry
  *    instant; a request that never left GridView, or a coordinator defect,
  *    records nothing.
@@ -64,6 +67,8 @@ import type {
 } from '../ledger/model';
 import {
   recordedVerification,
+  rotationRound,
+  verificationGenerationOf,
   verificationMatch,
   verificationRefusal,
   type VerificationMatch,
@@ -84,6 +89,8 @@ export interface VerificationCommand {
   readonly operationId: OperationId;
   /** The staged revision the operator read from the inspection. */
   readonly expectedStagedRevision: RevisionHash;
+  /** The round's verification generation, read from the same inspection. */
+  readonly expectedVerificationGeneration: number;
 }
 
 export interface VerificationDependencies {
@@ -113,7 +120,15 @@ interface Composed {
 
 /** Why a verification was refused before any request. Closed. */
 export const verificationPreconditions = [
-  /** The operation ID already named a verification of another target. */
+  /**
+   * The request names another verification generation than the round's: a
+   * resend from before a rotation, or a stale or future generation (PR-E4).
+   */
+  'verification-generation-mismatch',
+  /**
+   * The operation ID already named a verification of another target, or a
+   * round's last rotation.
+   */
   'operation-id-reused',
   /** No record, or nothing staged on it. */
   'not-staged',
@@ -323,6 +338,18 @@ async function underLease(
     (entry) => entry.record.round === command.round,
   );
   const bare = (result: Held) => ({ result, compare: null });
+  // Before anything else, and so before the limiter or the transport: a
+  // request formed against another generation is never executed (PR-E4).
+  if (
+    command.expectedVerificationGeneration !==
+    verificationGenerationOf(stored?.record ?? null)
+  ) {
+    return bare({
+      status: 'precondition-failed',
+      reason: 'verification-generation-mismatch',
+      providerRequests: 0,
+    });
+  }
   const replay = replayed(command, snapshot, stored);
   if (replay !== null) return bare(replay);
   const precondition = preconditionFailure(
@@ -372,6 +399,7 @@ async function underLease(
     expected: {
       recordVersion: current.version,
       stagedRevision: command.expectedStagedRevision,
+      verificationGeneration: command.expectedVerificationGeneration,
     },
     observation,
   });
@@ -435,28 +463,29 @@ async function underLease(
 
 /**
  * A resent operation ID, answered from the ledger without any request: any
- * verification the season recorded, not only the latest, and on any round.
+ * verification of the generation the season recorded, not only the latest,
+ * and on any round. An ID a round's last rotation used is refused.
  */
 function replayed(
   command: VerificationCommand,
   snapshot: LedgerSnapshot,
   stored: Versioned<ClassificationRecord> | undefined,
 ): Held | null {
-  const prior = recordedVerification(
-    snapshot.classifications.map(({ record }) => record),
-    command.operationId,
-  );
+  const records = snapshot.classifications.map(({ record }) => record);
+  const reused: Held = {
+    status: 'precondition-failed',
+    reason: 'operation-id-reused',
+    providerRequests: 0,
+  };
+  if (rotationRound(records, command.operationId) !== null) return reused;
+  const prior = recordedVerification(records, command.operationId);
   if (prior === null) return null;
   const last = prior.verification;
   if (
     prior.round !== command.round ||
     last.stagedRevision !== command.expectedStagedRevision
   ) {
-    return {
-      status: 'precondition-failed',
-      reason: 'operation-id-reused',
-      providerRequests: 0,
-    };
+    return reused;
   }
   return {
     status: 'already-applied',

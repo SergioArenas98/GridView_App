@@ -27,6 +27,7 @@ import {
   type SeasonRecord,
   type VerificationObservation,
   type VerificationRequest,
+  type VerificationRotationRequest,
 } from './model';
 import {
   accepted,
@@ -350,9 +351,18 @@ export function decodeVerificationRequest(
     !isOperationId(value.operationId) ||
     !isOneOf(operatorAuthMethods, value.authMethod) ||
     !isObject(expected) ||
-    !hasExactKeys(expected, ['recordVersion', 'stagedRevision']) ||
+    !hasExactKeys(expected, [
+      'recordVersion',
+      'stagedRevision',
+      'verificationGeneration',
+    ]) ||
     !isBoundedInteger(expected.recordVersion, 1, Number.MAX_SAFE_INTEGER - 1) ||
-    !isSnapshotRevision(expected.stagedRevision)
+    !isSnapshotRevision(expected.stagedRevision) ||
+    !isBoundedInteger(
+      expected.verificationGeneration,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    )
   ) {
     return refused('invalid-request');
   }
@@ -364,7 +374,60 @@ export function decodeVerificationRequest(
     expected: {
       recordVersion: expected.recordVersion,
       stagedRevision: expected.stagedRevision,
+      verificationGeneration: expected.verificationGeneration,
     },
     observation,
+  });
+}
+
+const rotationKeys = [
+  'lease',
+  'round',
+  'operationId',
+  'authMethod',
+  'expected',
+] as const;
+const rotationExpectedKeys = [
+  'recordVersion',
+  'verificationGeneration',
+  'historyDigest',
+] as const;
+
+/** One rotation of one round's full verification history (PR-E4). */
+export function decodeVerificationRotationRequest(
+  value: unknown,
+): Decoding<VerificationRotationRequest> {
+  if (!isObject(value) || !hasExactKeys(value, rotationKeys)) {
+    return refused('invalid-request');
+  }
+  const lease = decodeLeaseToken(value.lease);
+  const expected = value.expected;
+  if (
+    lease === null ||
+    !isRound(value.round) ||
+    !isOperationId(value.operationId) ||
+    !isOneOf(operatorAuthMethods, value.authMethod) ||
+    !isObject(expected) ||
+    !hasExactKeys(expected, rotationExpectedKeys) ||
+    !isBoundedInteger(expected.recordVersion, 1, Number.MAX_SAFE_INTEGER - 1) ||
+    !isBoundedInteger(
+      expected.verificationGeneration,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    ) ||
+    !isSnapshotRevision(expected.historyDigest)
+  ) {
+    return refused('invalid-request');
+  }
+  return accepted({
+    lease,
+    round: value.round,
+    operationId: value.operationId,
+    authMethod: value.authMethod,
+    expected: {
+      recordVersion: expected.recordVersion,
+      verificationGeneration: expected.verificationGeneration,
+      historyDigest: expected.historyDigest,
+    },
   });
 }

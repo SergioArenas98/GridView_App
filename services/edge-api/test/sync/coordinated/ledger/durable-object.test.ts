@@ -145,6 +145,7 @@ describe('ReconciliationLedger durable object', () => {
       'operate',
       'dispose',
       'verify',
+      'rotate-verifications',
     ]);
   });
 

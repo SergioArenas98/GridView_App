@@ -27,7 +27,10 @@
  *
  * `blockConcurrencyWhile` is deliberately absent. Each command is one
  * synchronous storage transaction with no subrequest inside it, which the
- * input gate already serializes.
+ * input gate already serializes. `rotate-verifications` awaits one digest
+ * between a read and its transaction; the transaction re-reads everything it
+ * decides on and refuses a history that changed in between, so no
+ * interleaved command can make it act on stale state.
  */
 
 import {
@@ -50,6 +53,7 @@ import {
   type PublishedReconciliationOutcome,
   type PublishedReconciliationRequest,
   type VerificationRequest,
+  type VerificationRotationRequest,
 } from './model';
 import { hasExactLedgerKeys, isLedgerObject } from './records';
 import { ReconciliationLedgerStore, type LedgerStoreOptions } from './store';
@@ -73,6 +77,7 @@ export const ledgerCommands = [
   'operate',
   'dispose',
   'verify',
+  'rotate-verifications',
 ] as const;
 
 export type LedgerCommand = (typeof ledgerCommands)[number];
@@ -111,7 +116,7 @@ export class ReconciliationLedger {
       return jsonResponse({ error: 'invalid-command' }, 400);
     }
     try {
-      return jsonResponse(this.dispatch(body.command, body.payload), 200);
+      return jsonResponse(await this.dispatch(body.command, body.payload), 200);
     } catch {
       // A storage failure must never read as a decision, and the raw error -
       // which can embed a storage key or a stack - never crosses.
@@ -137,6 +142,8 @@ export class ReconciliationLedger {
         return this.store.dispose(payload);
       case 'verify':
         return this.store.verify(payload);
+      case 'rotate-verifications':
+        return this.store.rotateVerifications(payload);
     }
   }
 }
@@ -253,9 +260,23 @@ export class DurableObjectReconciliationLedger implements ReconciliationLedgerPo
     return this.transition('verify', request, request.lease.season);
   }
 
+  async rotateVerifications(
+    request: VerificationRotationRequest,
+  ): Promise<OperatorTransitionOutcome> {
+    return this.transition(
+      'rotate-verifications',
+      request,
+      request.lease.season,
+    );
+  }
+
   private async transition(
-    command: 'operate' | 'dispose' | 'verify',
-    request: OperatorActionRequest | DispositionRequest | VerificationRequest,
+    command: 'operate' | 'dispose' | 'verify' | 'rotate-verifications',
+    request:
+      | OperatorActionRequest
+      | DispositionRequest
+      | VerificationRequest
+      | VerificationRotationRequest,
     season: number,
   ): Promise<OperatorTransitionOutcome> {
     const value = await this.call(command, request);

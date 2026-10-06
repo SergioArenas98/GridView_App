@@ -103,6 +103,23 @@ const operatorRoutes: readonly [string, string, unknown?][] = [
       round: 3,
       operationId: OP[2],
       expectedStagedRevision: `sha256:${'b'.repeat(64)}`,
+      expectedVerificationGeneration: 0,
+    },
+  ],
+  ['GET', paths.verificationHistory(SEASON, 3)],
+  [
+    'POST',
+    paths.verificationRotation,
+    {
+      season: SEASON,
+      round: 3,
+      operationId: OP[3],
+      expected: {
+        recordVersion: 1,
+        verificationGeneration: 0,
+        historyDigest: `sha256:${'d'.repeat(64)}`,
+      },
+      historyArchived: true,
     },
   ],
 ];
@@ -182,6 +199,8 @@ describe('the real resolver leaves every operator route ledger-unbound', () => {
       'clear-block',
       'accept-staged',
       'verify',
+      'inspect-verification-history',
+      'rotate-verifications',
       'rollback',
     ]);
     for (const line of lines) {
@@ -219,6 +238,12 @@ describe('the real resolver leaves every operator route ledger-unbound', () => {
       {
         round: 3,
         operationId: OP[2],
+        operatorAuthMethod: 'shared-admin-token',
+      },
+      { round: 3, operationId: undefined, operatorAuthMethod: undefined },
+      {
+        round: 3,
+        operationId: OP[3],
         operatorAuthMethod: 'shared-admin-token',
       },
       {
