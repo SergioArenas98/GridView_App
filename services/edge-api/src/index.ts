@@ -435,8 +435,11 @@ function coordinatedSyncDependencies(
 /**
  * A coordinated run's caller cancellation, from the `__COORDINATED_RUN_SIGNAL`
  * test hook only. A deployed Worker's one cancellation source is the run
- * budget the orchestration starts under the lease; a run is deliberately not
- * tied to its request's lifetime (RB-8).
+ * budget the orchestration starts under the lease. The request's own signal
+ * is deliberately never read (RB-8): a disconnect is never a cooperative
+ * cancellation. The platform may still end the execution after one; that is
+ * a hard stop, which the existing lease, `publishing` mark and sidecar
+ * recovery cover.
  */
 function runSignal(env: Env): { readonly signal?: AbortSignal } {
   return env.__COORDINATED_RUN_SIGNAL

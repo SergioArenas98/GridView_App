@@ -24,7 +24,9 @@
  * whose observations are out of cadence - they corroborate nothing - and it
  * moves no due time. Both run under the same run budget (RB-1 to RB-3,
  * `run-budget.ts`), which the orchestration starts when it acquires the
- * lease. A manual run is not tied to its client's connection (RB-8).
+ * lease. A run reads no client signal (RB-8): a disconnect is never a
+ * cooperative cancellation. A platform stop after one is a hard stop, which
+ * the existing recovery covers like any other.
  */
 
 import type { Logger } from '../../logging/logger';
@@ -84,7 +86,8 @@ export interface CoordinatedSyncRequest {
   /**
    * Caller cancellation, linked into the run budget's signal. No Worker entry
    * point supplies one outside tests: the run budget is the only deployed
-   * cancellation source, and it is not the client's connection (RB-8).
+   * cooperative cancellation source, and the client's signal is never read
+   * (RB-8).
    */
   readonly signal?: AbortSignal;
 }

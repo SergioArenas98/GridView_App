@@ -788,8 +788,13 @@ is not a publication.** Read `data`:
 | `publication.cause: "run-budget-exhausted"` | The run reached the commit point too late, or with too little lease left | Same. Repeated occurrences mean the ledger or sequencer is slow: investigate before retrying by hand |
 | `publication.outcome: "published"` or `"unchanged"` | Completed | None |
 
-Disconnecting the client does not cancel a manual run, and does not shorten
-it.
+**Keep the connection open until the answer arrives.** The run never reads
+the client's connection, so a disconnect is not a cancellation. But the
+platform may end the execution after the client disconnects, which is a hard
+stop. Nothing is lost or duplicated: the lease expires within 10 minutes, a
+half-finished publication is resolved by the next run's recovery, and a
+release that was committed is recognized and not published again. A manual
+run in that window answers `run-in-progress`.
 
 **Two O-10 checks before activation (RB-7).** Neither has been done, and
 neither is authorized by this preparation:

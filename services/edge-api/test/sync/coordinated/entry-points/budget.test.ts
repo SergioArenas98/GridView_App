@@ -654,7 +654,10 @@ describe.each(sequencerTransports)(
         expect(timers.armed).toBe(armed);
       });
 
-      it('does not stop a manual run when its client disconnects (RB-8)', async () => {
+      // What this proves is that the Worker never reads the request's signal.
+      // A platform stop after a real disconnect is a hard stop, which these
+      // tests cannot reproduce; the recovery tests above cover its effects.
+      it('never reads the client signal of a manual run (RB-8)', async () => {
         const setup = await publicationDue(transport);
         const { harness } = setup;
         const client = new AbortController();

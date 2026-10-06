@@ -2194,7 +2194,7 @@ nothing is deployed, and **O-10, G5 and G9 are not complete**.
 | RB-5 | A closed cause, `run-budget-exhausted`, for an intent-gate refusal. |
 | RB-6 | The manual route's HTTP status rule is unchanged. |
 | RB-7 | Recorded as two activation checks (below). No `[limits]` change. |
-| RB-8 | A run is not tied to its client's connection. |
+| RB-8 | A run is not coupled to its client's connection: it reads no request signal. |
 
 **How it works** (`src/sync/coordinated/run-budget.ts`):
 
@@ -2279,8 +2279,18 @@ refusal before the orchestration, and `200` with the closed outcome
 otherwise. A budget-cancelled run answers `200` with `coordination:
 'cancelled'` and publication `withheld` / `cancelled`. An intent-gate refusal
 answers `200` with `withheld` / `run-budget-exhausted`. The operator must read
-the body. The Worker passes no request signal to the run, so a disconnected
-client neither cancels it nor shortens it.
+the body. The Worker passes no request signal to the run, so a disconnect is
+never a cooperative cancellation. It is not a guarantee that the run
+survives one: the platform may end a request's execution after its client
+disconnects, and `waitUntil` would extend it by at most 30 s. That is a hard
+stop, like a CPU or wall-clock kill, and the existing recovery covers it. The
+lease expires within 10 minutes, unexecuted checks stay due, a `publishing`
+mark makes the publication due, and a committed release is recognized
+through its sidecar, so it is not published twice. An operator keeps the
+connection open until the answer arrives. A durable background mechanism for
+manual runs (decision pack option 4) is not part of this decision.
+*(Corrected 2026-10-06, PR #64 review: the first wording said a disconnect
+neither cancels nor shortens a run.)*
 
 **RB-7: O-10 as two activation checks.** Neither is done or authorized here.
 
@@ -2316,8 +2326,8 @@ client neither cancels it nor shortens it.
    `__PACER_SLEEP` precedent.
 
 **Entry points, choice 2** ("no cancellation source") is superseded in part.
-The run budget is now the one deployed cancellation source, and it is not the
-client's connection.
+The run budget is now the one deployed cooperative cancellation source. The
+client's connection is not one.
 
 **Tests.** 49 new, for 4,957 in 215 files. The budget is driven through
 `worker.scheduled` and `worker.fetch` over both sequencer and ledger
@@ -2337,7 +2347,9 @@ cover:
   still completes, and a stall past the lease, which the existing recovery
   confirms without a second release;
 - no timer for a refused or `run-in-progress` run, the linked test-hook
-  signal, and a client disconnect that changes nothing.
+  signal, and a client signal the run never reads. A platform stop after a
+  real disconnect cannot be reproduced locally; its effects are the hard
+  stops the recovery tests cover.
 
 Unit tests pin the constants against `LEASE_TTL_MS` and the cron wall, the
 gate's two boundaries, the timer and the late-answer pass-through. The

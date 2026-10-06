@@ -21,8 +21,9 @@
  * reaches the guarded publication: its signal is handed to the coordinator
  * and nothing else, and its timer is disarmed as soon as coordination ends.
  *
- * The budget is not tied to a manual run's client connection (RB-8): it
- * bounds the run whatever the client does.
+ * The budget reads no client signal (RB-8): it bounds the run whatever the
+ * client does. A platform stop after a client disconnects is a hard stop,
+ * not a budget stop, and the existing recovery covers it.
  */
 
 /** From the start of the run to the abort of its coordination. */
