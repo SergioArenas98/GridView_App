@@ -39,7 +39,7 @@ import {
  *   publication run that never advances scheduled due times (O-8), through
  *   the same `runCoordinatedSync` the scheduled handler uses. It answers 503
  *   when the run is refused before the orchestration (`ledger-unbound` in
- *   every environment today), and otherwise 200 with the run's closed
+ *   every committed environment), and otherwise 200 with the run's closed
  *   outcome, as the whole-season sync answers 200 with its own result.
  *   `sync/resource` and `rebuild/home` are refused as `SYNC_MODE_UNSUPPORTED`,
  *   because a coordinated publication cannot be a subset of the season and
@@ -78,8 +78,10 @@ interface AdminContext {
   authority: PublicationAuthority;
   /**
    * The reconciliation ledger the operator routes and the coordinated
-   * rollback reach (PR-E2). Its ledger is `null` in every environment, so
-   * each of them refuses as `ledger-unbound` before reading anything.
+   * rollback reach (PR-E2). Its ledger is `null` wherever no
+   * `RECONCILIATION_LEDGER` namespace is bound, which is every committed
+   * environment, so each of them refuses there as `ledger-unbound` before
+   * reading anything.
    */
   reconciliation: OperatorReconciliation;
   clock: Clock;

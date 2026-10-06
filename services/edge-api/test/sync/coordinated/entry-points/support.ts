@@ -14,10 +14,11 @@
  * - the sequencer and storage, seeded and activated by the sequenced
  *   publication test support, in process or through the Durable Object
  *   client;
- * - the ledger the resolver answers. No environment field or test hook
- *   supplies one, so each test file replaces `resolveReconciliationLedger`
- *   with `vi.mock` and answers from a `vi.hoisted` holder: a fresh client
- *   over one in-memory host per Worker call, as a fresh isolate would build.
+ * - the ledger the resolver answers. Most test files replace
+ *   `resolveReconciliationLedger` with `vi.mock` and answer from a
+ *   `vi.hoisted` holder: a fresh client over one in-memory host per Worker
+ *   call, as a fresh isolate would build. `binding.test.ts` keeps the real
+ *   resolver and sets the Worker's `RECONCILIATION_LEDGER` binding instead.
  *
  * Nothing here can reach a provider or Cloudflare.
  */

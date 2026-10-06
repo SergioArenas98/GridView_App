@@ -25,6 +25,7 @@ import { runCoordinatedSync } from '../../../../src/sync/coordinated/run';
 import { sequencerTransports } from '../../../publication/sequenced/support';
 import {
   wholeSeasonTrace,
+  withoutInspectionReasons,
   type StepTrace,
 } from '../../baseline/whole-season-trace';
 import { OperatorLedger } from '../../../admin/reconciliation-support';
@@ -333,29 +334,3 @@ describe('mock and none with a ledger bound', () => {
     expect(observe).not.toHaveBeenCalled();
   });
 });
-
-const inspection = 'GET /internal/admin/reconciliation?season=2026';
-
-function withoutInspectionReasons(
-  trace: Record<string, StepTrace[]>,
-): Record<string, StepTrace[]> {
-  return Object.fromEntries(
-    Object.entries(trace).map(([key, steps]) => [
-      key,
-      steps.map((step) =>
-        step.step !== inspection || step.status !== 503
-          ? step
-          : {
-              ...step,
-              bodySha256: null,
-              logs: step.logs.map((line) => ({
-                ...line,
-                coordinationMissingDependencies: (
-                  (line.coordinationMissingDependencies as string[]) ?? []
-                ).filter((reason) => reason !== 'ledger-unbound'),
-              })),
-            },
-      ),
-    ]),
-  );
-}

@@ -23,14 +23,19 @@
  * admin reconciliation routes (PR-E2 to PR-E4), which also read the season to
  * inspect it.
  *
- * No binding, variable or test hook supplies a ledger to the runtime, so
- * `resolveReconciliationLedger` always answers `null`. Every coordinated run,
- * scheduled or manual, is therefore refused as `ledger-unbound` at the entry
- * point's gate - wired, but unbound - before any lease, provider request or
+ * `resolveReconciliationLedger` reads one optional Durable Object binding,
+ * `RECONCILIATION_LEDGER`, and fails closed: without a usable namespace there
+ * it answers `null`. **No committed environment declares that binding** - no
+ * `[exports.ReconciliationLedger]` entry, binding or migration exists in
+ * `wrangler.toml` - and no test hook supplies a ledger, so it answers `null`
+ * in every committed environment. Every coordinated run, scheduled or manual,
+ * is therefore refused as `ledger-unbound` at the entry point's gate - wired,
+ * but unbound - before any lease, limiter reservation, provider request or
  * publication write, and every operator route and the coordinated rollback
  * are refused as `ledger-unbound` before reading anything.
  */
 
+import type { Env } from '../../config/environment';
 import type {
   DispositionRequest,
   LeaseAcquisition,
@@ -46,6 +51,7 @@ import type {
   VerificationRequest,
   VerificationRotationRequest,
 } from './ledger/model';
+import { ledgerClientFor } from './ledger/durable-object';
 
 export interface ReconciliationLedgerPort {
   /** Brands the seam. */
@@ -107,9 +113,18 @@ export interface ReconciliationLedgerPort {
 }
 
 /**
- * Always `null`: no ledger is bound. It reads no binding and no test hook,
- * because this change declares neither.
+ * The ledger client for the running environment's `RECONCILIATION_LEDGER`
+ * binding, or `null` when it is absent or is not a Durable Object namespace.
+ *
+ * It reads that binding and nothing else: no provider mode, no test hook. A
+ * bound namespace activates nothing by itself - every coordinated path still
+ * needs `PROVIDER_MODE=coordinated` and its other gated dependencies - and
+ * resolving it performs no lookup. Binding availability is
+ * environment-specific (see `docs/technical/GridView_Environments.md`); no
+ * committed environment declares it.
  */
-export function resolveReconciliationLedger(): ReconciliationLedgerPort | null {
-  return null;
+export function resolveReconciliationLedger(
+  env: Pick<Env, 'RECONCILIATION_LEDGER'>,
+): ReconciliationLedgerPort | null {
+  return ledgerClientFor(env.RECONCILIATION_LEDGER);
 }

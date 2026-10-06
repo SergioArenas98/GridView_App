@@ -13,11 +13,12 @@
  * The class is a named export of the Worker entry point so that a later,
  * separately authorized change can register and bind it. **Exporting it
  * provisions nothing**: Wrangler uploads a Durable Object class's lifecycle
- * only from a declared `[exports.<Class>]` entry (or a migration), and this
- * change declares neither, nor any binding. No environment variable, test
- * hook or code path constructs the client below, and
- * `resolveReconciliationLedger` still answers `null`, so every coordinated run
- * stops at `ledger-unbound`.
+ * only from a declared `[exports.<Class>]` entry (or a migration), and no
+ * committed configuration declares either, nor any binding. The client below
+ * is constructed only by `ledgerClientFor`, which
+ * `resolveReconciliationLedger` calls with the optional `RECONCILIATION_LEDGER`
+ * binding. No committed environment declares that binding, so the resolver
+ * answers `null` there and every coordinated run stops at `ledger-unbound`.
  *
  * ## Why the classic `fetch` interface
  *
@@ -165,6 +166,38 @@ export interface LedgerNamespace {
   get(id: unknown): {
     fetch(url: string, init: RequestInit): Promise<Response>;
   };
+}
+
+/**
+ * Whether `binding` has the namespace surface the client needs. A binding
+ * Wrangler supplies as a Durable Object namespace always has it; a variable,
+ * a KV namespace or any other value under the same name does not.
+ */
+function isLedgerNamespace(binding: unknown): binding is LedgerNamespace {
+  if (typeof binding !== 'object' || binding === null) return false;
+  const candidate = binding as Partial<Record<keyof LedgerNamespace, unknown>>;
+  return (
+    typeof candidate.idFromName === 'function' &&
+    typeof candidate.get === 'function'
+  );
+}
+
+/**
+ * The ledger client for an environment's optional `RECONCILIATION_LEDGER`
+ * binding, or `null`.
+ *
+ * Fails closed: an absent binding, or one without a namespace's surface,
+ * answers `null` - the caller's `ledger-unbound` - and never a client that
+ * could act on something else. Constructing the client performs no lookup and
+ * sends nothing; a namespace that later fails to answer is the client's own
+ * bounded `unavailable` or `uncertain` outcome.
+ */
+export function ledgerClientFor(
+  binding: unknown,
+): ReconciliationLedgerPort | null {
+  return isLedgerNamespace(binding)
+    ? new DurableObjectReconciliationLedger(binding)
+    : null;
 }
 
 /**

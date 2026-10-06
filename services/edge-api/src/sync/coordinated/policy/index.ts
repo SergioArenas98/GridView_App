@@ -4,9 +4,9 @@
  * **Wired, and unbound.** Only the orchestration in `observation/` and
  * `outcome/` calls it (and the operator verification reads `cadence.ts`). The
  * coordinated sync entry point reaches the orchestration only behind a gate
- * that needs every dependency; `resolveReconciliationLedger` still answers
- * `null`, so every coordinated run stops there as `ledger-unbound`, with zero
- * provider requests.
+ * that needs every dependency; `resolveReconciliationLedger` answers `null` in
+ * every committed environment, so every coordinated run there stops as
+ * `ledger-unbound`, with zero provider requests.
  */
 
 export * from './cadence';

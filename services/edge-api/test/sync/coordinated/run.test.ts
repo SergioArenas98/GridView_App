@@ -94,14 +94,14 @@ describe('coordinated run kinds (O-8)', () => {
 });
 
 describe('the gate in front of the orchestration', () => {
-  it('refuses both triggers as ledger-unbound with the resolver this change keeps', async () => {
+  it('refuses both triggers as ledger-unbound with the resolver for an environment with no ledger binding', async () => {
     const harness = await ObservationHarness.create();
-    expect(resolveReconciliationLedger()).toBeNull();
+    expect(resolveReconciliationLedger({})).toBeNull();
 
     for (const trigger of ['scheduled', 'manual'] as const) {
       const outcome = await runCoordinatedSync(
         { season: SEASON, trigger },
-        dependencies(harness, { ledger: resolveReconciliationLedger() }),
+        dependencies(harness, { ledger: resolveReconciliationLedger({}) }),
       );
       expect(outcome).toEqual({
         status: 'coordinated-runtime-unavailable',
