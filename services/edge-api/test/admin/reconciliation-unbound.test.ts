@@ -7,7 +7,7 @@
  * The staging Worker here selects `coordinated` with every other dependency
  * bound: a counting limiter, a counting transport, a reachable sequencer
  * holding season 2026 `active`, and a purge origin. Only the ledger is
- * missing, because nothing can bind one.
+ * missing: this Worker environment carries no `RECONCILIATION_LEDGER`.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

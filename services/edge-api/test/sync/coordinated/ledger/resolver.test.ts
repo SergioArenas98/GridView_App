@@ -17,7 +17,7 @@ const asBinding = (value: unknown): Env['RECONCILIATION_LEDGER'] =>
   value as Env['RECONCILIATION_LEDGER'];
 
 describe('resolveReconciliationLedger', () => {
-  it('answers null without the binding, as in every committed environment', () => {
+  it('answers null without the binding, as in development and production', () => {
     expect(resolveReconciliationLedger({})).toBeNull();
     expect(
       resolveReconciliationLedger({ RECONCILIATION_LEDGER: undefined }),

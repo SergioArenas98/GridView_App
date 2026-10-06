@@ -7,9 +7,9 @@
  * The admin routes call the transitions and the rollback, and the injected
  * observation orchestration signals attention after a scheduled run (PR-E2),
  * importing `attention.ts` alone.
- * `resolveReconciliationLedger` answers `null` in every committed environment,
- * so every route built from one refuses as `ledger-unbound` before any of it
- * runs.
+ * No committed environment both selects `coordinated` and binds a ledger, so
+ * in each one every route refuses (`provider-mode-not-coordinated` or
+ * `ledger-unbound`) before any of it runs.
  */
 
 export * from './actions';

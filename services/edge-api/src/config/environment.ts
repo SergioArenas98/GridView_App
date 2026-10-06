@@ -130,9 +130,10 @@ export interface Env extends TestOnlyBindings {
   /**
    * Durable Object namespace backing the global reconciliation ledger (G9;
    * runtime activation decision O-6). Optional in the type because
-   * availability is environment-specific, and **no committed environment
-   * declares it**: `wrangler.toml` has no `[exports.ReconciliationLedger]`
-   * entry, binding or migration (see `docs/technical/GridView_Environments.md`).
+   * availability is environment-specific: `wrangler.toml` declares it, and
+   * registers its class, for `env.staging` only, and development and
+   * production declare neither. Declared is not deployed (see
+   * `docs/technical/GridView_Environments.md`).
    * The resolver fails closed: absent, or not a namespace, it answers `null`
    * and every coordinated run stops at `ledger-unbound`. A bound namespace
    * enables nothing by itself - the coordinated paths are reached only with
@@ -189,8 +190,8 @@ export class ConfigurationError extends Error {
  *   in staging and production only. **Admitting the value activates nothing.**
  *   No committed environment selects it. Even where it is selected, every
  *   coordinated run is refused before any provider request while no
- *   `RECONCILIATION_LEDGER` namespace is bound (`ledger-unbound`), and no
- *   committed environment binds one.
+ *   `RECONCILIATION_LEDGER` namespace is bound (`ledger-unbound`). Only
+ *   staging's committed configuration declares that binding.
  *
  * Any other value, and `coordinated` in development, is a `ConfigurationError`.
  */

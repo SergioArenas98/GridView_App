@@ -315,7 +315,9 @@ phase.
 production ([ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
 Bindings are not inherited by named environments, so each declares it; the
 SQLite `exports` entry is declared once, because SQLite-backed storage is what
-Durable Objects require on the Workers Free plan.
+Durable Objects require on the Workers Free plan. *(Since 2026-10-07 staging
+also declares its own `exports` table, which restates that entry; see
+"Reconciliation ledger binding: committed, not deployed" below.)*
 
 **The rate-limiter Durable Object is provisioned in staging only, and
 unused.** The 2026-09-12 staging deployment (version
@@ -341,10 +343,11 @@ or live:
 | production | `none` | not provisioned |
 
 Admitting the value activates nothing. Even where it is selected, the
-coordinated runtime needs a bound reconciliation ledger (G9), and no such
-binding exists. Every coordinated run therefore stops as `ledger-unbound`
-before any transport, client or port is constructed, with zero provider
-requests.
+coordinated runtime needs a bound reconciliation ledger (G9), and no deployed
+Worker has one. Wherever it is unbound, every coordinated run stops as
+`ledger-unbound` before any transport, client or port is constructed, with
+zero provider requests. *(Since 2026-10-07 staging's committed configuration
+declares the binding; see below. That is not a deployment.)*
 
 **Wired is not active (2026-10-06).** Since Implementation Plan §14.0.41,
 the scheduled handler and `POST /internal/admin/sync/full` in `coordinated`
@@ -352,22 +355,65 @@ mode reach the full reconciliation orchestration through one entry point.
 That entry point's gate needs the ledger. Since Implementation Plan §14.0.43,
 `resolveReconciliationLedger(env)` reads an optional `RECONCILIATION_LEDGER`
 Durable Object binding and fails closed: absent, or not a namespace, it
-answers `null`. **No environment declares that binding**, committed or live:
-`wrangler.toml` has no `[exports.ReconciliationLedger]` entry, ledger binding
-or migration. So in every environment the resolver answers `null`, and the
-orchestration is **wired but unbound**, and **active nowhere**. Active needs
-a deployed Worker that selects `coordinated` and resolves a bound ledger,
-and no environment has either.
+answers `null`. **No deployed Worker carries that binding.** The
+orchestration is **wired but unbound** in every deployed Worker, and
+**active nowhere**. Active needs a deployed Worker that selects
+`coordinated` and resolves a bound ledger, and no environment has either.
 
 | Environment | Orchestration | Ledger | Coordinated run outcome |
 |---|---|---|---|
 | development | `coordinated` is refused as a configuration error | none | never reached |
-| staging | wired in code; the live version predates it | none | not selected (`mock`); if selected, refused as `ledger-unbound` |
-| production | wired in code; never deployed | none | not selected (`none`); if selected, refused as `authority-not-sequencer` and `ledger-unbound` | The rate-limiter note above is otherwise unchanged. Once a
-coordinated run can pass that gate, the hardened client reserves through
-this namespace. Selecting `coordinated`, adding the ledger `[exports]` entry
-and binding, and changing the cron are each cutover-sensitive staging
-changes (runbook §6).
+| staging | wired in code; the live version predates it | committed, not deployed (below) | not selected (`mock`). The live version has no binding, so if selected there it is refused as `ledger-unbound` |
+| production | wired in code; never deployed | none | not selected (`none`); if selected, refused as `authority-not-sequencer` and `ledger-unbound` |
+
+The rate-limiter note above is otherwise unchanged. Once a coordinated run
+can pass that gate, the hardened client reserves through this namespace.
+Selecting `coordinated`, deploying the ledger registration and binding, and
+changing the cron are each cutover-sensitive staging changes (runbook §6).
+
+**Reconciliation ledger binding: committed, not deployed (2026-10-07).**
+`wrangler.toml` now registers the `ReconciliationLedger` class
+(`type = "durable-object"`, `storage = "sqlite"`) and declares the
+`RECONCILIATION_LEDGER` binding **for `env.staging` only**. Nothing has been
+deployed or provisioned. Three states must be kept apart:
+
+| State | Meaning | Staging | Development | Production |
+|---|---|---|---|---|
+| Committed | `wrangler.toml` on `master` declares the class registration and binding | **yes** | no | no |
+| Deployed | a live Worker version was uploaded with that declaration | **no**. The live version is `c297d260-…`, which predates it | local only | never deployed |
+| Provisioned | Cloudflare holds a `ReconciliationLedger` namespace for that Worker | **no** | not applicable | no |
+
+Only a separately authorized staging deployment moves staging from the
+first row to the other two. Merging this configuration does not.
+
+- **Why staging has its own `exports` table.** In Wrangler 4.112 `exports`
+  is inherited, not merged: a named environment that declares an `exports`
+  table replaces the top-level one. Staging therefore restates
+  `ProviderRateLimiter` and `SeasonPublicationSequencer` exactly and adds
+  `ReconciliationLedger`. Development and production keep inheriting the
+  top-level table, which does not name the ledger. Their resolved
+  configuration is byte-identical to before, so a production deployment
+  would neither create the class nor bind it. No migration is used: the
+  repository uses `exports`, and Wrangler treats the two forms as mutually
+  exclusive.
+- **What a staging deployment of it would do.** Create the ledger's staging
+  namespace and add the binding. Under `PROVIDER_MODE = "mock"` nothing else
+  would change. No code path looks the namespace up, so no ledger object is
+  created, no storage call is made, no provider request is sent and there is
+  no coordinated publication. The operator routes would refuse with
+  `provider-mode-not-coordinated` alone, instead of with
+  `provider-mode-not-coordinated` and `ledger-unbound`, and still read
+  nothing.
+- **Why that deployment is still cutover-sensitive.** It adds a Durable
+  Object binding, which runbook §6 lists as cutover-sensitive. Once it is
+  live, the ledger no longer gates staging. `PROVIDER_MODE = "mock"` would be
+  the only setting between staging and coordinated runs. Selecting
+  `coordinated` there would then lead to real lease, ledger and provider
+  activity rather than a `ledger-unbound` refusal. RB-7 check 1 (Workers
+  Paid) comes before it.
+- **Resolver behaviour elsewhere is unchanged.** Development and production
+  declare no binding, so `resolveReconciliationLedger` answers `null` there
+  and every coordinated path stays refused as `ledger-unbound`.
 
 `SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **`sequencer` in
 live staging** since 2026-09-15 (version `cccdcf11-…`, kept unchanged by
@@ -397,10 +443,11 @@ pointers, and production has never been deployed.**
 
 | Durable Object state | development | staging | production |
 |---|---|---|---|
-| `[exports]` entries (both classes) | shared, once | shared, once | shared, once |
+| `[exports]` entries | the two top-level entries | its own table (since 2026-10-07): the same two, restated exactly, plus `ReconciliationLedger` | the two top-level entries |
 | `PROVIDER_RATE_LIMITER` binding declared | yes (local `wrangler dev` only) | yes | yes |
 | `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | **none** |
-| Namespaces provisioned on Cloudflare | none | **both, 2026-09-12** (version `985115b7-…`); since 2026-09-15 the sequencer is looked up, and the rate limiter still is not | none - never deployed |
+| `RECONCILIATION_LEDGER` binding declared | none | **committed only** (2026-10-07); never deployed | **none** |
+| Namespaces provisioned on Cloudflare | none | **rate limiter and sequencer, 2026-09-12** (version `985115b7-…`); since 2026-09-15 the sequencer is looked up, and the rate limiter still is not. **No ledger namespace** | none - never deployed |
 | Authority mode set | no | **live: yes** (`sequencer`, since 2026-09-15, version `cccdcf11-…`, kept by `c297d260-…`); **committed: yes** (`sequencer`) | no |
 | Cutover control set | no | **live: yes** (`activate:2026`, since 2026-09-16, version `c297d260-…`; before it `seed:2026`, first deployed 2026-09-12 as version `00012c06-…`, absent only during the 2026-09-13 recovery window, restored as version `c35f99c0-…`, and kept by `cccdcf11-…`); **committed: yes** (`activate:2026`) | no |
 | Season 2026 cutover state | n/a | **`active` and authoritative** since 2026-09-16 (`admissionClosed: false`) | n/a |

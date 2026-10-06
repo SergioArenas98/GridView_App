@@ -6,11 +6,13 @@
  * **Wired, and unbound.** `runCoordinatedSync` - the Worker's scheduled
  * handler and `POST /internal/admin/sync/full` in `coordinated` mode - hands
  * it every run whose dependencies are all present, and nothing else calls it.
- * `resolveReconciliationLedger` answers `null` in every committed environment
- * (none binds `RECONCILIATION_LEDGER`), so there that entry point's gate
- * refuses the run as `ledger-unbound` first and this function is never
- * reached. Only tests, which supply a local ledger and a
- * local transport, reach it today.
+ * No committed environment both selects `coordinated` and binds
+ * `RECONCILIATION_LEDGER`: staging declares the binding under `mock`, and
+ * development and production declare none. So in every committed
+ * configuration either the mode check or that entry point's gate
+ * (`ledger-unbound`) stops a run first, and this function is never reached.
+ * Only tests, which supply a local ledger and a local transport, reach it
+ * today.
  *
  * One call is one run for one season:
  *
