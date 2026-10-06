@@ -6,8 +6,8 @@
  * `src/sync/coordinated/composition.ts`. That module is reachable from the
  * Worker, but it constructs nothing unless `PROVIDER_MODE` is `coordinated`
  * and every coordinated dependency is bound. No committed environment selects
- * that mode, and the reconciliation ledger it requires has no binding, so no
- * port here is constructed in any deployed configuration.
+ * that mode, and no deployed configuration binds the reconciliation ledger it
+ * requires, so no port here is constructed in any deployed configuration.
  *
  * It implements exactly six coordinated resources in five ports: the season
  * calendar, the season circuits, the season participants, the race

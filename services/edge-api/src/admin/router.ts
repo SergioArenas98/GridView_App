@@ -38,8 +38,8 @@ import {
  * - `coordinated`: `sync/full` is a manual coordinated run, a forced
  *   publication run that never advances scheduled due times (O-8), through
  *   the same `runCoordinatedSync` the scheduled handler uses. It answers 503
- *   when the run is refused before the orchestration (`ledger-unbound` in
- *   every committed environment), and otherwise 200 with the run's closed
+ *   when the run is refused before the orchestration (`ledger-unbound`
+ *   wherever no ledger is bound), and otherwise 200 with the run's closed
  *   outcome, as the whole-season sync answers 200 with its own result.
  *   `sync/resource` and `rebuild/home` are refused as `SYNC_MODE_UNSUPPORTED`,
  *   because a coordinated publication cannot be a subset of the season and
@@ -79,9 +79,9 @@ interface AdminContext {
   /**
    * The reconciliation ledger the operator routes and the coordinated
    * rollback reach (PR-E2). Its ledger is `null` wherever no
-   * `RECONCILIATION_LEDGER` namespace is bound, which is every committed
-   * environment, so each of them refuses there as `ledger-unbound` before
-   * reading anything.
+   * `RECONCILIATION_LEDGER` namespace is bound, and each of them refuses
+   * there as `ledger-unbound` before reading anything. Outside `coordinated`
+   * mode each refuses before reading anything whether or not one is bound.
    */
   reconciliation: OperatorReconciliation;
   clock: Clock;

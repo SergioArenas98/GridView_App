@@ -1,8 +1,9 @@
 /**
  * The ledger storage foundation is dormant: the class is exported, and the
- * resolver reads an optional `RECONCILIATION_LEDGER` binding, but no committed
- * configuration declares, registers or binds it, so the resolver answers
- * `null` in every committed environment.
+ * resolver reads an optional `RECONCILIATION_LEDGER` binding. Only the
+ * committed staging configuration registers the class and declares the
+ * binding, and that configuration has never been deployed. Development and
+ * production declare neither, so there the resolver answers `null`.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -42,7 +43,7 @@ function declarations(): string {
     .join('\n');
 }
 
-describe('the reconciliation ledger is exported, resolvable and not bound', () => {
+describe('the reconciliation ledger is exported, resolvable and declared for staging only', () => {
   it('is a named export of the Worker entry point', () => {
     expect(entryPoint.ReconciliationLedger).toBe(ReconciliationLedger);
     expect(source('src/index.ts')).toContain(
@@ -50,16 +51,27 @@ describe('the reconciliation ledger is exported, resolvable and not bound', () =
     );
   });
 
-  it('is declared by no exports entry, migration or binding in any environment', () => {
+  it('is registered and bound in staging only, with no migration', () => {
     const declared = declarations();
-    expect(declared).not.toMatch(/ReconciliationLedger/);
-    expect(declared).not.toMatch(/RECONCILIATION/i);
-    expect(declared).not.toMatch(/\[\[migrations\]\]/);
-    // The two existing registrations are the only ones.
+    // The top-level registrations, which development and production inherit,
+    // do not name it.
     expect(declared.match(/^\[exports\.[A-Za-z]+\]$/gm)).toEqual([
       '[exports.ProviderRateLimiter]',
       '[exports.SeasonPublicationSequencer]',
     ]);
+    // Staging's own table restates both and adds the ledger.
+    expect(declared.match(/^\[env\.[a-z]+\.exports\.[A-Za-z]+\]$/gm)).toEqual([
+      '[env.staging.exports.ProviderRateLimiter]',
+      '[env.staging.exports.SeasonPublicationSequencer]',
+      '[env.staging.exports.ReconciliationLedger]',
+    ]);
+    expect(declared).toContain(
+      '[[env.staging.durable_objects.bindings]]\nname = "RECONCILIATION_LEDGER"\nclass_name = "ReconciliationLedger"',
+    );
+    // Those two declarations are its only mentions.
+    expect(declared.match(/ReconciliationLedger/g)).toHaveLength(2);
+    expect(declared.match(/RECONCILIATION_LEDGER/g)).toHaveLength(1);
+    expect(declared).not.toMatch(/migrations/);
   });
 
   it('keeps every committed provider mode and the daily cron unchanged', () => {
@@ -93,9 +105,9 @@ describe('the reconciliation ledger is exported, resolvable and not bound', () =
     ]);
   });
 
-  it('answers null in every committed environment, none of which binds it', () => {
-    // No committed environment declares the binding (asserted above), so a
-    // Worker built from any of them has no `RECONCILIATION_LEDGER` field.
+  it('answers null in development and production, neither of which binds it', () => {
+    // Neither declares the binding (asserted above), so a Worker built from
+    // either has no `RECONCILIATION_LEDGER` field.
     expect(resolveReconciliationLedger({})).toBeNull();
     expect(
       resolveReconciliationLedger({ RECONCILIATION_LEDGER: undefined }),

@@ -8,17 +8,18 @@
  * leases live inside that one object, so unrelated seasons still never share a
  * lease.
  *
- * ## Exported, not bound
+ * ## Exported; registered and bound for staging only
  *
- * The class is a named export of the Worker entry point so that a later,
- * separately authorized change can register and bind it. **Exporting it
+ * The class is a named export of the Worker entry point. **Exporting it
  * provisions nothing**: Wrangler uploads a Durable Object class's lifecycle
- * only from a declared `[exports.<Class>]` entry (or a migration), and no
- * committed configuration declares either, nor any binding. The client below
- * is constructed only by `ledgerClientFor`, which
- * `resolveReconciliationLedger` calls with the optional `RECONCILIATION_LEDGER`
- * binding. No committed environment declares that binding, so the resolver
- * answers `null` there and every coordinated run stops at `ledger-unbound`.
+ * only from a declared `exports` entry (or a migration). `wrangler.toml`
+ * declares one, and the `RECONCILIATION_LEDGER` binding, for `env.staging`
+ * only; a deployment of that configuration, not the declaration, would
+ * provision the namespace. The client below is constructed only by
+ * `ledgerClientFor`, which `resolveReconciliationLedger` calls with that
+ * optional binding. Development and production declare no binding, so there
+ * the resolver answers `null` and every coordinated run stops at
+ * `ledger-unbound`.
  *
  * ## Why the classic `fetch` interface
  *
