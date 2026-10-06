@@ -2031,7 +2031,7 @@ not complete**.
 | State | Meaning | Where it holds |
 |---|---|---|
 | Implemented, injected | The code exists, and only tests call it. | C1 to E4, until this slice |
-| **Wired, unbound** | A Worker entry point reaches the code, behind a gate that needs a reconciliation ledger. `resolveReconciliationLedger()` answers `null`, so the gate refuses every run first. *(Since 2026-10-06, "Ledger resolver" below: `resolveReconciliationLedger(env)` answers `null` without a `RECONCILIATION_LEDGER` binding, which no environment declares.)* | **Every environment, from this slice** |
+| **Wired, unbound** | A Worker entry point reaches the code, behind a gate that needs a reconciliation ledger. `resolveReconciliationLedger()` answers `null`, so the gate refuses every run first. *(Since 2026-10-06, "Ledger resolver" below: `resolveReconciliationLedger(env)` answers `null` without a `RECONCILIATION_LEDGER` binding, which no environment declares.)* *(Since 2026-10-07, "Staging ledger binding" below: staging declares it, committed and not deployed; no deployed Worker has one.)* | **Every environment, from this slice** |
 | Active | A deployed Worker with `coordinated` selected resolves a bound ledger, and runs reach the orchestration and the provider. | Nowhere. It needs every activation step below. |
 
 **One path.** Both entry points call `runCoordinatedSync`. It checks every
@@ -2405,7 +2405,9 @@ hard-coded `null`. It reads one optional Durable Object binding,
 `[exports.ReconciliationLedger]` entry, binding or migration. It also changes
 no provider mode, no cron and no deployment configuration, and nothing is
 deployed or provisioned. No committed environment declares the binding, so
-the resolver still answers `null` in every one of them. Every coordinated run,
+the resolver still answers `null` in every one of them. *(Since 2026-10-07
+staging's committed configuration declares it, not deployed; "Staging
+ledger binding" below.)* Every coordinated run,
 scheduled or manual, still stops at `ledger-unbound` before any lease,
 limiter reservation, provider request or publication write. Every operator
 route and the coordinated rollback still refuse before reading anything.
@@ -2486,10 +2488,69 @@ because nothing constructed the client.
 
 **Still open, all needed before "active":** activation step 1; the ledger
 `[exports]` entry and per-environment binding, each a separately authorized,
-cutover-sensitive change; selecting `coordinated` and every deployment; the
+cutover-sensitive change *(committed for staging on 2026-10-07, not
+deployed; "Staging ledger binding" below)*; selecting `coordinated` and every deployment; the
 two RB-7 checks (O-10); the hourly cron; O-9; running the A3.5 gate; the
 first provider-backed run (O-15); verified production alert delivery (OD-1);
 PR-G (O-16). **O-10, G5 and G9 are not complete.**
+
+The decision above is unchanged.
+
+### Staging ledger binding: committed, not deployed (2026-10-07)
+
+**Configuration only.** `wrangler.toml` now registers the
+`ReconciliationLedger` class (`type = "durable-object"`,
+`storage = "sqlite"`) and declares the `RECONCILIATION_LEDGER` binding
+**for `env.staging` only**. Nothing is deployed or provisioned: the live
+staging version predates it, and no ledger namespace exists. Development
+and production declare neither. **No activation step is complete or
+authorized: activation step 1 stays open, and O-10, G5 and G9 are not
+complete.**
+
+**Why a staging `exports` table, not a top-level entry.** In Wrangler 4.112
+`exports` is inheritable: a named environment's own table replaces the
+top-level one rather than merging with it. A top-level
+`[exports.ReconciliationLedger]` (the form Implementation Plan §14.0.30
+sketched) would have put the class into production's resolved
+configuration, so a first production deployment would create it unbound,
+as it would `SeasonPublicationSequencer` today. Staging's table instead
+restates `ProviderRateLimiter` and `SeasonPublicationSequencer` exactly and
+adds the ledger. Development and production resolve to byte-identical
+configuration. No migration is used: the repository uses `exports`, and
+Wrangler treats the two as mutually exclusive. The cost is that the two
+restated entries must stay identical to the top-level ones, which a test
+pins through Wrangler's own configuration reader.
+
+**What the binding does and does not change.** The resolver is unchanged
+and still reads no provider mode ("Ledger resolver", choice 1). Once a
+staging deployment carries the binding, the ledger stops gating staging.
+`PROVIDER_MODE = "mock"` then keeps staging out of the coordinated paths:
+the scheduled run and `sync/full` take the whole-season path, every
+reconciliation route refuses `provider-mode-not-coordinated` before reading
+anything, and nothing looks the namespace up. That deployment is
+cutover-sensitive (staging runbook §6, "Reconciliation ledger binding"), and
+RB-7 check 1 comes before it.
+
+**Tests.** `test/config/staging-ledger-binding.test.ts` (7) reads the
+committed file through `unstable_readConfig`. It pins the staging
+registration and binding, the unchanged development and production
+configuration, and the restated entries. It drives the committed staging
+(`mock`) and production (`none`) variables, with a counting namespace
+bound, through the scheduled handler, `sync/full` and all eight
+reconciliation routes. Every run has zero lookups, reservations, transport
+or global `fetch` calls, guarded publications and `sync.coordinated` lines.
+The dormancy test now pins the staging-only declaration. Five negative
+controls fail 3 / 3 / 2 / 2 / 3 tests (Implementation Plan §14.0.44).
+
+**Bundle.** Unchanged: `052590b6…728d` (818,039 B) in all three
+environments. The staging dry-run now lists `RECONCILIATION_LEDGER`.
+
+**Still open, all needed before "active":** deploying the binding, a
+separately authorized cutover-sensitive staging deployment; activation step
+1; selecting `coordinated`; the two RB-7 checks (O-10); the hourly cron;
+O-9; running the A3.5 gate; the first provider-backed run (O-15); verified
+production alert delivery (OD-1); PR-G (O-16). **O-10, G5 and G9 are not
+complete.**
 
 The decision above is unchanged.
 
