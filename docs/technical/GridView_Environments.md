@@ -349,11 +349,15 @@ requests.
 **Wired is not active (2026-10-06).** Since Implementation Plan §14.0.41,
 the scheduled handler and `POST /internal/admin/sync/full` in `coordinated`
 mode reach the full reconciliation orchestration through one entry point.
-That entry point's gate needs the ledger, and `resolveReconciliationLedger()`
-still answers `null` in code. So in every environment, committed or live,
-the orchestration is **wired but unbound**, and **active nowhere**. Active
-needs a deployed Worker that selects `coordinated` and resolves a bound
-ledger, and no environment has either.
+That entry point's gate needs the ledger. Since Implementation Plan §14.0.43,
+`resolveReconciliationLedger(env)` reads an optional `RECONCILIATION_LEDGER`
+Durable Object binding and fails closed: absent, or not a namespace, it
+answers `null`. **No environment declares that binding**, committed or live:
+`wrangler.toml` has no `[exports.ReconciliationLedger]` entry, ledger binding
+or migration. So in every environment the resolver answers `null`, and the
+orchestration is **wired but unbound**, and **active nowhere**. Active needs
+a deployed Worker that selects `coordinated` and resolves a bound ledger,
+and no environment has either.
 
 | Environment | Orchestration | Ledger | Coordinated run outcome |
 |---|---|---|---|
@@ -361,8 +365,9 @@ ledger, and no environment has either.
 | staging | wired in code; the live version predates it | none | not selected (`mock`); if selected, refused as `ledger-unbound` |
 | production | wired in code; never deployed | none | not selected (`none`); if selected, refused as `authority-not-sequencer` and `ledger-unbound` | The rate-limiter note above is otherwise unchanged. Once a
 coordinated run can pass that gate, the hardened client reserves through
-this namespace. Selecting `coordinated`, adding a ledger binding and changing
-the cron are each cutover-sensitive staging changes (runbook §6).
+this namespace. Selecting `coordinated`, adding the ledger `[exports]` entry
+and binding, and changing the cron are each cutover-sensitive staging
+changes (runbook §6).
 
 `SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **`sequencer` in
 live staging** since 2026-09-15 (version `cccdcf11-…`, kept unchanged by

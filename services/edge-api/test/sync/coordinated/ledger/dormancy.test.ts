@@ -1,7 +1,8 @@
 /**
- * The ledger storage foundation is dormant: the class is exported, but no
- * configuration declares, registers or binds it, nothing constructs its
- * client, and the runtime resolver still answers `null`.
+ * The ledger storage foundation is dormant: the class is exported, and the
+ * resolver reads an optional `RECONCILIATION_LEDGER` binding, but no committed
+ * configuration declares, registers or binds it, so the resolver answers
+ * `null` in every committed environment.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -41,7 +42,7 @@ function declarations(): string {
     .join('\n');
 }
 
-describe('the reconciliation ledger is exported but not bound', () => {
+describe('the reconciliation ledger is exported, resolvable and not bound', () => {
   it('is a named export of the Worker entry point', () => {
     expect(entryPoint.ReconciliationLedger).toBe(ReconciliationLedger);
     expect(source('src/index.ts')).toContain(
@@ -73,14 +74,32 @@ describe('the reconciliation ledger is exported but not bound', () => {
     expect(declared).toContain('crons = ["17 3 * * *"]');
   });
 
-  it('has no environment field or test hook that could supply a ledger', () => {
-    expect(source('src/config/environment.ts')).not.toMatch(
-      /RECONCILIATION_LEDGER|ReconciliationLedger/,
-    );
+  it('reads one optional Durable Object binding and no test hook', () => {
+    const environment = source('src/config/environment.ts');
+    expect(environment.match(/RECONCILIATION_LEDGER\??:.*$/gm)).toEqual([
+      'RECONCILIATION_LEDGER?: DurableObjectNamespace;',
+    ]);
+    expect(environment).not.toMatch(/__RECONCILIATION/);
+    // The Worker never reads the binding itself: it reaches the ledger only
+    // through the resolver, with its env.
     expect(source('src/index.ts')).not.toMatch(
-      /__RECONCILIATION|RECONCILIATION_LEDGER/,
+      /__RECONCILIATION|\.RECONCILIATION_LEDGER|\['RECONCILIATION_LEDGER'\]/,
     );
-    expect(resolveReconciliationLedger()).toBeNull();
+    expect(
+      source('src/index.ts').match(/resolveReconciliationLedger\([^)]*\)/g),
+    ).toEqual([
+      'resolveReconciliationLedger(env)',
+      'resolveReconciliationLedger(env)',
+    ]);
+  });
+
+  it('answers null in every committed environment, none of which binds it', () => {
+    // No committed environment declares the binding (asserted above), so a
+    // Worker built from any of them has no `RECONCILIATION_LEDGER` field.
+    expect(resolveReconciliationLedger({})).toBeNull();
+    expect(
+      resolveReconciliationLedger({ RECONCILIATION_LEDGER: undefined }),
+    ).toBeNull();
   });
 
   it('is constructed only inside its own package', () => {

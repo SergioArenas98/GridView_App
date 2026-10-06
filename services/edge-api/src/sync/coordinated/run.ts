@@ -13,7 +13,8 @@
  *
  * Every dependency is checked first, and nothing that could make a request is
  * constructed unless all of them are present. `resolveReconciliationLedger`
- * still answers `null`, so in every environment this gate refuses the run as
+ * answers `null` unless a `RECONCILIATION_LEDGER` namespace is bound, and no
+ * committed environment binds one, so there this gate refuses the run as
  * `ledger-unbound`: no lease, no limiter reservation, no request and no
  * publication write. The orchestration below it is reachable only by a caller
  * that supplies a ledger, which today means tests.
@@ -134,7 +135,7 @@ export async function runCoordinatedSync(
   const missing = unavailableReasons(dependencies);
   if (missing.length > 0 || sequencer === null) {
     // The gate in front of the orchestration: with no ledger - every
-    // environment today - or any other dependency missing, nothing is
+    // committed environment - or any other dependency missing, nothing is
     // constructed, leased, reserved, sent or written.
     logWithheld(dependencies.logger, request, missing);
     // A degraded runtime must not silence a stopped season: with a ledger

@@ -7,9 +7,9 @@
  *
  * **Wired, and unbound.** Only the orchestration in `observation/` calls it,
  * and only the coordinated sync entry point calls that, behind a gate that
- * needs every dependency. `resolveReconciliationLedger` still answers `null`,
- * so every coordinated run stops at that gate as `ledger-unbound`, with zero
- * provider requests and no publication.
+ * needs every dependency. `resolveReconciliationLedger` answers `null` in
+ * every committed environment, so every coordinated run there stops at that
+ * gate as `ledger-unbound`, with zero provider requests and no publication.
  */
 
 export * from './decisions';

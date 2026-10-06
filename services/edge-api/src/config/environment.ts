@@ -127,6 +127,18 @@ export interface Env extends TestOnlyBindings {
    * resolver fails closed when it is absent.
    */
   PROVIDER_RATE_LIMITER?: DurableObjectNamespace;
+  /**
+   * Durable Object namespace backing the global reconciliation ledger (G9;
+   * runtime activation decision O-6). Optional in the type because
+   * availability is environment-specific, and **no committed environment
+   * declares it**: `wrangler.toml` has no `[exports.ReconciliationLedger]`
+   * entry, binding or migration (see `docs/technical/GridView_Environments.md`).
+   * The resolver fails closed: absent, or not a namespace, it answers `null`
+   * and every coordinated run stops at `ledger-unbound`. A bound namespace
+   * enables nothing by itself - the coordinated paths are reached only with
+   * `PROVIDER_MODE=coordinated` and every other gated dependency.
+   */
+  RECONCILIATION_LEDGER?: DurableObjectNamespace;
 }
 
 /**
@@ -176,8 +188,9 @@ export class ConfigurationError extends Error {
  * - `coordinated`: the coordinated runtime (`src/sync/coordinated/`), admitted
  *   in staging and production only. **Admitting the value activates nothing.**
  *   No committed environment selects it. Even where it is selected, every
- *   coordinated run is refused before any provider request while the
- *   reconciliation ledger is unbound (`ledger-unbound`).
+ *   coordinated run is refused before any provider request while no
+ *   `RECONCILIATION_LEDGER` namespace is bound (`ledger-unbound`), and no
+ *   committed environment binds one.
  *
  * Any other value, and `coordinated` in development, is a `ConfigurationError`.
  */

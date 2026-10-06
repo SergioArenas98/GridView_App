@@ -48,7 +48,7 @@ describe('the reconciliation policy is wired through one entry, unbound', () => 
     expect(importersOf('sync/coordinated/outcome/')).toEqual([
       'sync/coordinated/observation/observe.ts',
     ]);
-    expect(resolveReconciliationLedger()).toBeNull();
+    expect(resolveReconciliationLedger({})).toBeNull();
   });
 
   it('depends on the ledger model and nothing else', () => {

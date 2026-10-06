@@ -34,7 +34,7 @@ describe('the observation orchestration is wired through one entry, unbound', ()
       'sync/coordinated/observation/revisions.ts',
     ]);
     expect(importersOf(observationDir)).toEqual(['sync/coordinated/run.ts']);
-    expect(resolveReconciliationLedger()).toBeNull();
+    expect(resolveReconciliationLedger({})).toBeNull();
     expect(importsOf('sync/coordinated/run.ts')).toEqual([
       'logging/logger.ts',
       'publication/sequencer/port.ts',

@@ -40,7 +40,7 @@ describe('the publication half is wired through one entry, unbound', () => {
     expect(importersOf('sync/coordinated/observation/')).toEqual([
       'sync/coordinated/run.ts',
     ]);
-    expect(resolveReconciliationLedger()).toBeNull();
+    expect(resolveReconciliationLedger({})).toBeNull();
     expect(importsOf('sync/coordinated/run.ts')).toEqual([
       'logging/logger.ts',
       'publication/sequencer/port.ts',

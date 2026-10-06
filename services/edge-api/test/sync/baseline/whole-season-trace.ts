@@ -155,10 +155,15 @@ export function serializeTrace(trace: Record<string, StepTrace[]>): string {
   return `{\n${combos.join(',\n')}\n}\n`;
 }
 
-/** One combination's trace, from a fresh harness. */
+/**
+ * One combination's trace, from a fresh harness. `extra` adds fields to the
+ * Worker's environment - a binding no committed environment declares - and
+ * changes nothing else.
+ */
 export async function traceCombination(
   environment: string,
   providerMode: string | null,
+  extra: Partial<Env> = {},
 ): Promise<StepTrace[]> {
   let uuid = 0;
   const randomUUID = vi.spyOn(crypto, 'randomUUID').mockImplementation(() => {
@@ -187,6 +192,7 @@ export async function traceCombination(
         transportCalls += 1;
         return new Response('{}', { status: 503 });
       },
+      ...extra,
     };
     if (providerMode === null) delete env.PROVIDER_MODE;
 
@@ -246,13 +252,48 @@ export async function traceCombination(
 }
 
 /** Every combination's trace, keyed `environment/mode`. */
-export async function wholeSeasonTrace(): Promise<Record<string, StepTrace[]>> {
+export async function wholeSeasonTrace(
+  extra: Partial<Env> = {},
+): Promise<Record<string, StepTrace[]>> {
   const trace: Record<string, StepTrace[]> = {};
   for (const [environment, mode] of combinations) {
     trace[`${environment}/${mode ?? 'unset'}`] = await traceCombination(
       environment,
       mode,
+      extra,
     );
   }
   return trace;
+}
+
+const inspection = 'GET /internal/admin/reconciliation?season=2026';
+
+/**
+ * `trace` without the one answer a bound ledger changes: the read-only
+ * inspection route (PR-E2) lists `ledger-unbound` among its `503` reasons only
+ * while no ledger is resolved, so that reason and the body carrying it are
+ * dropped. Every other step is kept as it is.
+ */
+export function withoutInspectionReasons(
+  trace: Record<string, StepTrace[]>,
+): Record<string, StepTrace[]> {
+  return Object.fromEntries(
+    Object.entries(trace).map(([key, steps]) => [
+      key,
+      steps.map((step) =>
+        step.step !== inspection || step.status !== 503
+          ? step
+          : {
+              ...step,
+              bodySha256: null,
+              logs: step.logs.map((line) => ({
+                ...line,
+                coordinationMissingDependencies: (
+                  (line.coordinationMissingDependencies as string[]) ?? []
+                ).filter((reason) => reason !== 'ledger-unbound'),
+              })),
+            },
+      ),
+    ]),
+  );
 }

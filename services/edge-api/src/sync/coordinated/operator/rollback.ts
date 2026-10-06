@@ -16,8 +16,8 @@
  * there, and the hold stays.
  *
  * `POST /internal/admin/rollback` calls it in coordinated mode only (PR-E2).
- * `resolveReconciliationLedger` still answers `null` in every environment,
- * so there the route refuses before this is reached.
+ * `resolveReconciliationLedger` answers `null` in every committed
+ * environment, so there the route refuses before this is reached.
  */
 
 import type { PublicationResult } from '../../../publication/publisher';

@@ -513,11 +513,13 @@ describe('the guarded publication a coordinated run would bind', () => {
 
 /**
  * The ledger storage foundation (C1) adds a Durable Object class and its
- * client, and binds neither. Even an environment that carries a ledger-shaped
- * namespace under a plausible name reaches nothing: no code reads such a
- * field, so both entry points still stop at `ledger-unbound`.
+ * client, and no committed environment binds either. The resolver reads
+ * `RECONCILIATION_LEDGER` and nothing else: a ledger-shaped namespace under
+ * any other plausible name, or under a test-hook name, reaches nothing, so
+ * both entry points still stop at `ledger-unbound`. The bound name itself is
+ * covered through the entry points in `coordinated/entry-points/binding`.
  */
-describe('the ledger storage foundation binds nothing', () => {
+describe('the ledger is resolved from no field but its binding', () => {
   const storageWrites = [
     'writeVersionedDocument',
     'writeVersionInventory',
@@ -560,9 +562,11 @@ describe('the ledger storage foundation binds nothing', () => {
     };
     const withLedgerShapes = {
       ...env,
-      RECONCILIATION_LEDGER: namespace,
       __RECONCILIATION_LEDGER: namespace,
-    } as Env;
+      RECONCILIATION: namespace,
+      RECONCILIATION_LEDGER_NAMESPACE: namespace,
+      ReconciliationLedger: namespace,
+    } as unknown as Env;
     const writes = storageWrites.map((method) => vi.spyOn(ctx.storage, method));
     const prepare = vi.spyOn(ctx.port, 'prepare');
     const finalize = vi.spyOn(ctx.port, 'finalize');

@@ -57,7 +57,7 @@ describe('the operator package is connected only where PR-E2 connects it', () =>
         reader,
       ).toEqual(['sync/coordinated/operator/attention.ts']);
     }
-    expect(resolveReconciliationLedger()).toBeNull();
+    expect(resolveReconciliationLedger({})).toBeNull();
   });
 
   it('depends on exactly these modules', () => {

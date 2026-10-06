@@ -26,9 +26,10 @@
  * resolved ledger - and only then the ledger. The season always comes from
  * the request, never from `meta:current-season`.
  *
- * `resolveReconciliationLedger` answers `null` in every environment, so every
- * deployed Worker answers each of these `503` `reconciliation-unavailable`
- * with `ledger-unbound`, having read nothing.
+ * `resolveReconciliationLedger` answers `null` in every committed
+ * environment, none of which binds `RECONCILIATION_LEDGER`, so a Worker built
+ * from them answers each of these `503` `reconciliation-unavailable` with
+ * `ledger-unbound`, having read nothing.
  *
  * Nothing here publishes, sends a provider request, writes Workers KV or
  * purges a cache - except the coordinated rollback, which is the existing
@@ -122,7 +123,7 @@ export const RECONCILIATION_ROTATION_OPERATION =
 export interface OperatorReconciliation {
   /** Whether `PROVIDER_MODE` is `coordinated`. */
   readonly coordinated: boolean;
-  /** The resolved ledger; `null` in every environment today. */
+  /** The resolved ledger; `null` in every committed environment. */
   readonly ledger: ReconciliationLedgerPort | null;
   /** What a verification composes its one request from (PR-E3). */
   readonly verification: VerificationEnvironment;

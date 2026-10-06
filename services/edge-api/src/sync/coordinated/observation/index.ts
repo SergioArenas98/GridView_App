@@ -5,9 +5,9 @@
  *
  * **Wired, and unbound.** Only the coordinated sync entry point
  * (`../run.ts`) imports this package, behind a gate that needs every
- * dependency. `resolveReconciliationLedger` still answers `null`, so every
- * coordinated run stops at that gate as `ledger-unbound`, with zero provider
- * requests.
+ * dependency. `resolveReconciliationLedger` answers `null` in every committed
+ * environment, so every coordinated run there stops at that gate as
+ * `ledger-unbound`, with zero provider requests.
  */
 
 export * from './observe';

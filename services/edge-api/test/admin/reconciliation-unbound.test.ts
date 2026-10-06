@@ -125,8 +125,8 @@ const operatorRoutes: readonly [string, string, unknown?][] = [
 ];
 
 describe('the real resolver leaves every operator route ledger-unbound', () => {
-  it('still answers null', () => {
-    expect(resolveReconciliationLedger()).toBeNull();
+  it('answers null without a RECONCILIATION_LEDGER binding', () => {
+    expect(resolveReconciliationLedger({})).toBeNull();
   });
 
   it('refuses every operator route and the coordinated rollback, with no provider, publication or storage action', async () => {

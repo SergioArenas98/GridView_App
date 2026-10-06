@@ -1162,7 +1162,9 @@ bound or used in any environment:
 - no revision of `wrangler.toml` ever named `ReconciliationLedger` in an
   `[exports]` entry, a migration or a binding (`git log -S` finds none);
 - `resolveReconciliationLedger()` has always answered `null`, and `Env` has no
-  ledger field;
+  ledger field (true when written; since 2026-10-06 the resolver reads an
+  optional `RECONCILIATION_LEDGER` field that no environment binds, "Ledger
+  resolver" below);
 - staging's only deployed version, `c297d260-…`, was built from `36b0fd2`,
   which predates the ledger class (`a67278f`). Production runs provider mode
   `none`.
@@ -2029,7 +2031,7 @@ not complete**.
 | State | Meaning | Where it holds |
 |---|---|---|
 | Implemented, injected | The code exists, and only tests call it. | C1 to E4, until this slice |
-| **Wired, unbound** | A Worker entry point reaches the code, behind a gate that needs a reconciliation ledger. `resolveReconciliationLedger()` answers `null`, so the gate refuses every run first. | **Every environment, from this slice** |
+| **Wired, unbound** | A Worker entry point reaches the code, behind a gate that needs a reconciliation ledger. `resolveReconciliationLedger()` answers `null`, so the gate refuses every run first. *(Since 2026-10-06, "Ledger resolver" below: `resolveReconciliationLedger(env)` answers `null` without a `RECONCILIATION_LEDGER` binding, which no environment declares.)* | **Every environment, from this slice** |
 | Active | A deployed Worker with `coordinated` selected resolves a bound ledger, and runs reach the orchestration and the provider. | Nowhere. It needs every activation step below. |
 
 **One path.** Both entry points call `runCoordinatedSync`. It checks every
@@ -2388,6 +2390,106 @@ expired lease can still publish a redundant identical release (recovery
 answers `not-published` while another run's `prepare` is live), DO and KV
 calls have no timeouts, and the purge batch's connection accounting is
 undocumented. **O-10, G5 and G9 are not complete.**
+
+*(Superseded in part on 2026-10-06 by the "Ledger resolver" note below: a
+resolver that reads an optional `RECONCILIATION_LEDGER` binding now exists.
+The `[exports]` entry and binding, and everything else here, stay open.)*
+
+The decision above is unchanged.
+
+### Ledger resolver: an optional binding, failing closed (2026-10-06)
+
+**Preparatory work only.** `resolveReconciliationLedger` no longer answers a
+hard-coded `null`. It reads one optional Durable Object binding,
+`RECONCILIATION_LEDGER`, and fails closed. This change adds **no** Wrangler
+`[exports.ReconciliationLedger]` entry, binding or migration. It also changes
+no provider mode, no cron and no deployment configuration, and nothing is
+deployed or provisioned. No committed environment declares the binding, so
+the resolver still answers `null` in every one of them. Every coordinated run,
+scheduled or manual, still stops at `ledger-unbound` before any lease,
+limiter reservation, provider request or publication write. Every operator
+route and the coordinated rollback still refuse before reading anything.
+**No activation step is complete or authorized: activation step 1 stays
+open, and O-10, G5 and G9 are not complete.**
+
+**Shape**, following the existing `PROVIDER_RATE_LIMITER` and
+`SEASON_PUBLICATION_SEQUENCER` conventions:
+
+- `Env` gains an optional `RECONCILIATION_LEDGER?: DurableObjectNamespace`.
+- `ledgerClientFor(binding)` lives in `ledger/durable-object.ts`, the one
+  package that constructs ledger clients. It answers a
+  `DurableObjectReconciliationLedger` only for a value with a namespace's
+  `idFromName` and `get` functions. Anything else answers `null`, the
+  caller's `ledger-unbound`: an absent binding, `null`, a variable, a KV
+  namespace, or an object missing either function.
+- `resolveReconciliationLedger(env)` reads that one field. It reads no
+  provider mode and no test hook. Both Worker call sites now pass `env`.
+- Resolving performs **no lookup**: neither `idFromName` nor `get` is called
+  until the client's first command. A namespace that then fails (a throwing
+  `idFromName` or `get`, a rejected or `500` stub, an answer that is not a
+  ledger outcome) is the client's existing bounded `unavailable`. The run
+  stops at its lease as `failed` / `lease` / `ledger-unavailable`, with no
+  reservation, request or publication write.
+
+**Choices made in implementation:**
+
+1. The resolver does not check the provider mode. `mock` and `none` never
+   reach a coordinated path, and the operator routes refuse
+   `provider-mode-not-coordinated` first. A binding there is never looked
+   up: the baseline trace replays with a bound namespace and zero lookups.
+2. No `__RECONCILIATION_LEDGER` test hook was added. The real path is
+   testable through a local namespace double that dispatches to a real
+   `ReconciliationLedger` object, so a hook would only add an untested
+   second route. A hook-shaped or misnamed field is still ignored.
+3. The resolver lives in `ledger-port.ts`, where every existing `vi.mock`
+   of it points.
+
+**Tests** (32 new; 4,989 in 217 files):
+
+- `test/sync/coordinated/entry-points/binding.test.ts` (17) drives the real
+  Worker entry points with the real resolver, over the Durable Object
+  sequencer:
+  - no binding: `ledger-unbound`, zero traffic, an empty ledger host;
+  - a usable binding: the bootstrap observation and the first publication,
+    a `200` manual run, and the inspection route served from the bound
+    ledger;
+  - seven unusable bindings, each answering `ledger-unbound` untouched;
+  - five failing namespaces, each stopping at the lease;
+  - `mock` and `none` with a binding: the baseline trace, with zero
+    lookups.
+- `test/sync/coordinated/ledger/resolver.test.ts` (14) covers the resolver
+  and factory.
+- The dormancy test now pins one optional `Env` field, no test hook, and two
+  `resolveReconciliationLedger(env)` call sites in `index.ts`. It still pins
+  no `[exports]` entry, binding, migration, `coordinated` mode or cron
+  change.
+- `coordinated-runtime.test.ts` keeps proving that ledger-shaped namespaces
+  under other names, or under a hook name, reach nothing.
+
+**Negative controls**, each restored from a backup:
+
+| Mutation | Tests failing |
+|---|---|
+| The resolver answers `null` again | 11 |
+| The namespace shape check removed | 14 |
+| A `__RECONCILIATION_LEDGER` hook also accepted | 1 |
+| The run's dependencies ignore the binding | 8 |
+| An eager lookup at resolution | 5 |
+| The whole-season scheduled path reads the bound ledger | 1 |
+
+**Bundle.** `9feebe7e…4625` (807,475 B) → `052590b6…728d` (818,039 B),
+identical in all three environments. Binding reports are unchanged: staging
+lists only `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER`, and
+`wrangler types` generates no ledger field. The +10,564 B are the Durable
+Object client and its wire decoders. Until now these were tree-shaken,
+because nothing constructed the client.
+
+**Still open, all needed before "active":** activation step 1; the ledger
+`[exports]` entry and per-environment binding, each a separately authorized,
+cutover-sensitive change; selecting `coordinated` and every deployment; the
+two RB-7 checks (O-10); the hourly cron; O-9; running the A3.5 gate; the
+first provider-backed run (O-15); verified production alert delivery (OD-1);
+PR-G (O-16). **O-10, G5 and G9 are not complete.**
 
 The decision above is unchanged.
 

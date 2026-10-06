@@ -924,7 +924,10 @@ published newer versions since the 2026-09-16 activation.
 - It does not observe Jolpica's real pre-season response. It cannot detect a
   table that lost its last row with `total` lowered to match.
 - It is not a substitute for any other activation prerequisite: O-9, O-15,
-  O-16, the ledger binding and resolver, and the cron change all stay open.
+  O-16, the ledger `[exports]` entry and binding, and the cron change all
+  stay open. (The resolver that would read the binding exists since
+  2026-10-06, Implementation Plan §14.0.43; with no binding it answers
+  `null`.)
 
 ### Reconciliation operator routes and attention line (prepared 2026-10-05, not deployed, never run)
 
