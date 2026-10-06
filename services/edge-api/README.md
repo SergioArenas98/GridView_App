@@ -126,8 +126,9 @@ Staging config lives in `wrangler.toml` (`[env.staging]`): Worker
 > `coordinated` in code, but no environment selects it, and selecting it is a
 > separate authorization. In that mode both sync entry points are wired to
 > the reconciliation orchestration (Implementation Plan §14.0.41), but its
-> ledger is unbound, so every coordinated run is refused as `ledger-unbound`:
-> wired, not active. Season 2026 was
+> ledger is unbound. The resolver reads an optional `RECONCILIATION_LEDGER`
+> binding (§14.0.43), which no environment declares, so every coordinated
+> run is refused as `ledger-unbound`: wired, not active. Season 2026 was
 > **activated on 2026-09-16** and is `active` and authoritative: its
 > publication and rollback run through the sequencer, and the legacy
 > `active:2026` / `previous:2026` pointers are unchanged but no longer

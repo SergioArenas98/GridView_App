@@ -1763,14 +1763,15 @@ Coverage:
 
 The reconciliation orchestration (ADR 0020, C3/C4) is now **wired** to the
 Worker's scheduled handler and `POST /internal/admin/sync/full` in
-`coordinated` mode. It is **not active**: the resolver answers `null`, so the
+`coordinated` mode. It is **not active**: the resolver answers `null` without
+a `RECONCILIATION_LEDGER` binding, which no environment declares, so the
 entry point's gate refuses every run in every environment. The tests keep
 the two states apart.
 
 **Wired: the orchestration through the real entry points.** These are in
 `services/edge-api/test/sync/coordinated/entry-points/`. They run over both
 sequencer and ledger transports, with the resolver's answer injected by
-`vi.mock`. No environment field or test hook supplies a ledger. Everything
+`vi.mock`. No test hook supplies a ledger. Everything
 below `worker.scheduled` and `worker.fetch` is real: the mode check, the
 Worker's own guarded sequenced publication, the gate, the composition, the
 lease, the planner and the outcome commit. Only the Jolpica transport, the
@@ -1797,9 +1798,30 @@ limiter double, the pacer's sleep and the clock are local, and a global
 Spies show which path each call took. No call reaches
 `SynchronizationService`.
 
+**The resolver's binding (since 2026-10-06, Implementation Plan §14.0.43).**
+`binding.test.ts` replaces nothing: the Worker reads its own
+`RECONCILIATION_LEDGER` through the real resolver. The namespace is a local
+double that dispatches to a real `ReconciliationLedger` object over the
+harness's host, so every command crosses the real Durable Object client. The
+cases are:
+
+- no binding, which stops at `ledger-unbound` with zero traffic;
+- a usable binding, which reaches the bootstrap observation, the first
+  publication, a manual run and the inspection route;
+- seven values that are not a namespace, each `ledger-unbound` and
+  untouched;
+- five namespaces whose lookup or answer fails, each stopping at the lease
+  before any reservation, request or publication write;
+- `mock` and `none` with a binding, which replay the baseline trace with
+  zero lookups.
+
+`test/sync/coordinated/ledger/resolver.test.ts` covers the resolver and its
+factory alone.
+
 **Unbound: the gate.** `test/sync/coordinated/run.test.ts` covers the gate
 and the single delegation. `test/sync/coordinated-runtime.test.ts` proves
-the real `null` resolver refuses both triggers before composition, with zero
+the real resolver, given ledger-shaped namespaces under any name but
+`RECONCILIATION_LEDGER`, refuses both triggers before composition, with zero
 reservations, requests and publication writes. The dormancy tests and
 `provider-neutrality.test.ts` pin the graph: the orchestration is imported
 only by `run.ts`, and the composition stays the only Worker module that
