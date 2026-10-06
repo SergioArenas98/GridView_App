@@ -756,8 +756,54 @@ provider request**:
   is not active: without a bound ledger the gate refuses first, so nothing
   is leased, reserved, requested or published. Binding a ledger is its own
   activation step and its own authorization;
+- since 2026-10-06 every run the gate admits is bounded by the run budget
+  ("Coordinated run budget" below), and the O-10 checks there come first;
 - `sync/resource` and `rebuild/home` answer 409 `SYNC_MODE_UNSUPPORTED`;
 - mock synchronization stops, so the last published release keeps serving.
+
+### Coordinated run budget (prepared 2026-10-06, not deployed)
+
+Since 2026-10-06 every coordinated run, scheduled or manual, runs under one
+**run budget** (Implementation Plan §14.0.42; ADR 0020, "Run budget"). Like
+the rest of the orchestration it is wired and unbound. With no ledger bound,
+the gate refuses every run before the budget starts.
+
+| Phase | Bound | What a run that hits it does |
+|---|---|---|
+| Provider requests | 240 s after the lease is acquired | Stops sending. A request in flight is aborted. It counts as sent, but the ledger records nothing for it. A publication run is withheld as `cancelled` |
+| Commit to publication | At most 300 s elapsed, and at least 300 s left on the lease | Withheld as `run-budget-exhausted`. Nothing is reserved, prepared or written |
+| After that commit | None | Runs to completion. A stall is resolved by the next run's recovery |
+
+Both withheld outcomes retry the same way. A scheduled run makes the
+publication due again one hour later. A manual run moves no due time, and the
+next scheduled tick decides.
+
+**Reading a manual run's answer.** `POST /internal/admin/sync/full` still
+answers `503` only when the gate refuses the run before it starts. **A `200`
+is not a publication.** Read `data`:
+
+| `data` | Meaning | Action |
+|---|---|---|
+| `coordination: "cancelled"`, `publication.cause: "cancelled"` | The 240 s provider deadline passed. Only requests answered before it were recorded | Check provider latency in the logs. The scheduled retry is automatic |
+| `publication.cause: "run-budget-exhausted"` | The run reached the commit point too late, or with too little lease left | Same. Repeated occurrences mean the ledger or sequencer is slow: investigate before retrying by hand |
+| `publication.outcome: "published"` or `"unchanged"` | Completed | None |
+
+Disconnecting the client does not cancel a manual run, and does not shorten
+it.
+
+**Two O-10 checks before activation (RB-7).** Neither has been done, and
+neither is authorized by this preparation:
+
+1. **Before enabling the coordinated environment** (selecting `coordinated`
+   or binding the ledger, activation step 3), the owner confirms in the
+   Cloudflare dashboard that the account is on **Workers Paid**. Coordinated
+   mode is not viable on the Free plan.
+2. **Before enabling the hourly cron** (step 6), record the real CPU time of
+   the first separately authorized staging runs (step 4). Record it per run
+   type (nothing due, observation, unchanged publication, publication), as
+   p50 and maximum, from the dashboard's CPU-time metrics or `wrangler tail`.
+   Staging has invocation logs off. Change `[limits] cpu_ms` only if that
+   measurement calls for it, under its own authorization.
 
 ### A3.5 standings predecessor gate (prepared 2026-09-29, not deployed, never run)
 

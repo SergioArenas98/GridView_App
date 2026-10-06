@@ -897,6 +897,11 @@ session's UTC start.
 | Limiter deferral, including one that interrupts a two-request execution | `deferred` with its `retryAt` | Only `limiterDeferralUntil`, and no slot. A scheduled tick sends nothing before `retryAt`. |
 | Cancelled, limiter unavailable, or never reached | `not-attempted` | Nothing |
 
+*(Amended 2026-10-06, "Run budget" below: a request the run's signal
+aborted in flight, and a response that arrived after the abort, are also
+`not-attempted`. They are not `failed` (T6), although the request was
+sent and still counts in the run's accounting.)*
+
 **Fail closed.** None of the following commits any observation or publishes
 anything, and the lease is still given back:
 
@@ -2163,6 +2168,214 @@ The modules the verification already reached also grew a little.
 - the first provider-backed run (step 4, data-level irreversible, O-15);
 - verified production alert delivery (OD-1), and PR-G (O-16);
 - an owner decision on a run budget, if one is wanted.
+
+*(Superseded in part on 2026-10-06, and true when written. The "Run
+budget" note below records the owner's run-budget decision (RB-1 to RB-8)
+and implements it, superseding choice 2 in part. O-10 itself stays open as
+two activation checks. Everything else here stays open.)*
+
+The decision above is unchanged.
+
+### Run budget: one bound for both triggers (2026-10-06)
+
+Implementation Plan §14.0.42 records this slice. It gives the wired, unbound
+orchestration a run budget, under the owner's answers to the private O-10
+run-budget decision pack (2026-10-06). The orchestration is still **wired,
+not active**: no ledger is bound, no environment selects `coordinated`,
+nothing is deployed, and **O-10, G5 and G9 are not complete**.
+
+**Owner decisions (2026-10-06):**
+
+| # | Decision |
+|---|---|
+| RB-1, RB-3 | Adopt a run budget, the same for scheduled and manual runs. |
+| RB-2 | Abort the provider phase **240 s** after lease acquisition. Immediately before committing to publication, require elapsed time **≤ 300 s** and **≥ 300 s** left on the lease. |
+| RB-4, **modified** | A request the budget aborts in flight is still a **sent request for limiter accounting**, but a **cancelled observation for ledger policy** (amendment below). |
+| RB-5 | A closed cause, `run-budget-exhausted`, for an intent-gate refusal. |
+| RB-6 | The manual route's HTTP status rule is unchanged. |
+| RB-7 | Recorded as two activation checks (below). No `[limits]` change. |
+| RB-8 | A run is not tied to its client's connection. |
+
+**How it works** (`src/sync/coordinated/run-budget.ts`):
+
+1. **Start.** The budget starts when the run acquires its lease, on the
+   Worker's clock. Its timer is armed there and nowhere earlier: a run
+   refused at the gate, or answered `run-in-progress`, arms nothing.
+2. **The coordination deadline**, 240 s after the start, aborts the run's
+   own `AbortSignal`. That signal is handed to the coordinator and nothing
+   else. A run whose coordination has not begun by the deadline begins it
+   already cancelled, so it reserves and sends nothing. A
+   `__COORDINATED_RUN_SIGNAL` test signal is linked into the same signal.
+3. **The intent gate** runs in the publication half immediately before the
+   reservation commit, after the hold and durable-block stops, the
+   publishability decision and the no-change gate, and after the existing
+   expired-lease check. It is open while at most 300 s have elapsed **and** at
+   least 300 s remain on the lease. When it is closed, the run withholds the
+   candidate as `run-budget-exhausted` and makes the existing `retry`
+   decision through the outcome commit, under the still-valid lease:
+   - scheduled: `publicationDueAt` = now + 1 h;
+   - manual: no due time moves (O-8);
+   - in both, the `publishing` mark is cleared and an earlier block is kept.
+
+   The candidate existed only in memory. Nothing was reserved, prepared or
+   written.
+4. **No cancellation after intent.** The timer is disarmed as soon as
+   coordination returns. Nothing in the guarded publication, `finalize`'s
+   single re-drive, the outcome commit or the lease release reads the
+   budget. A stall in that phase is left to the existing recovery: the
+   sidecar, the sequencer's prepare TTL and the D5 cleanup.
+
+**Constants.** 240 s < 300 s, and 300 s + 300 s = `LEASE_TTL_MS` (600 s),
+which is under the 15-minute Cron Trigger wall. A test pins all three
+against the ledger's constant.
+
+#### Amendment to C2/C3 accounting: a budget abort is a cancelled observation (RB-4, 2026-10-06)
+
+The decision pack recommended counting an in-flight request aborted at the
+deadline as a T6 `failed` check, because it was sent. The owner modified
+that. **The interpretation recorded here is binding on the orchestration's
+mapping:**
+
+> Any resource the routing port answered only **after the run's signal
+> aborted** is a cancelled observation, `not-attempted`, whatever it carried.
+> That covers a request aborted in flight and a response that arrived after
+> the deadline. It is not a completed or failed cadence check. It adds no
+> corroboration, cannot settle or trigger the 14-day ceiling, and its
+> payload is never accepted. Its request still counts as sent.
+
+**Checked against the accepted rules:**
+
+| Accepted rule | Consistent? |
+|---|---|
+| C3: "only a completed request is a check" | Yes. An aborted request did not complete, and a late answer completed after the run stopped accepting answers. |
+| C3: a cancellation is `not-attempted` and records nothing | Yes. This extends the cancellation row from "before sending" to "answered after the abort". |
+| C3: an execution interrupted after an earlier request was sent is `not-attempted` | Yes, the same precedent. A sent request does not make a check. |
+| C2 T6: a sent-and-failed request consumes a slot | Not applicable. T6 is a provider outcome (an upstream error, a timeout, a `429`, an invalid payload). A budget abort is GridView's own stop. |
+| C2 choice 4: the ceiling never fires on a deferred or cancelled check | Yes. A `not-attempted` outcome returns before any cadence step, so slot 17 is not consumed. |
+| C2 D2.1: only a cadence check returning a revision corroborates | Yes. A late payload is never mapped to `observed`. |
+| O-8: manual runs move no due time | Yes. Nothing here moves a due time. |
+
+**Before this amendment** the code did otherwise. A run-signal abort in
+flight surfaced from the HTTP boundary as an attempted `cancelled` failure.
+The port answered it as `failed` (`provider-unavailable`), and the C3 mapping
+recorded T6 `failed`. That consumed the slot and, at slot 17, reached the
+ceiling. A response that arrived despite the abort was selected and recorded
+as `observed`.
+
+**Where it is enforced.** ADR 0023's port and coordinator vocabulary is
+unchanged: the contribution still says `attempted`, the run's accounting
+still counts the request, and the Durable Object limiter reservation was
+consumed when it was made. The Jolpica routing port is registered through a
+pass-through in the coordination package, `recordLateAnswers`. It answers
+exactly what the port answers and only notes which resources were answered
+after the request's signal aborted. The orchestration's mapping
+(`observation/outcomes.ts`) then records those resources as `not-attempted`.
+A coordinator-side defect still refuses the whole mapping first.
+
+The C3 failure-accounting table above is read with this amendment.
+
+**Answers (RB-6, RB-8).** `sync/full` keeps the PR-B rule: `503` only for a
+refusal before the orchestration, and `200` with the closed outcome
+otherwise. A budget-cancelled run answers `200` with `coordination:
+'cancelled'` and publication `withheld` / `cancelled`. An intent-gate refusal
+answers `200` with `withheld` / `run-budget-exhausted`. The operator must read
+the body. The Worker passes no request signal to the run, so a disconnected
+client neither cancels it nor shortens it.
+
+**RB-7: O-10 as two activation checks.** Neither is done or authorized here.
+
+1. **Before enabling the coordinated environment** (activation step 3,
+   before selecting `coordinated` or binding the ledger), the owner verifies
+   that the Cloudflare account is on **Workers Paid**. The decision pack
+   found the Free plan infeasible: 10 ms of CPU, a 50-subrequest reading and
+   1,000 KV writes a day.
+2. **Before enabling the hourly cron** (O-7, step 6), real CPU time is
+   measured on the first separately authorized staging runs (step 4), per
+   run type, from dashboard metrics or `wrangler tail`. Staging has
+   invocation logs off. `[limits] cpu_ms` is set only if that measurement
+   argues for it.
+
+**Choices made in implementation, not owner decisions:**
+
+1. The budget's start is the Worker's clock right after `acquireLease`
+   answers. The lease's own `expiresAt` stays the ledger's. On one clock the
+   lease half of the gate implies the elapsed half; the elapsed half decides
+   alone only when the ledger's clock runs ahead of the Worker's.
+2. The intent gate sits after the existing expired-lease check. A lease that
+   has already expired still fails as `lease-expired` and leaves the
+   `publishing` mark to recovery, as before. Only a valid lease can carry the
+   outcome commit the budget's `retry` needs.
+3. The no-change gate (O-12) is not budgeted. It commits to no publication,
+   and its settlement is one outcome commit.
+4. A late answer is recognized per resource, by the time the port answered,
+   not by its contents. A defect in a late answer still refuses the mapping.
+5. A budget refusal logs at `info`, like every other withheld `retry`. The
+   cause is in `publicationReason`.
+6. A test hook, `__RUN_BUDGET_TIMER`, read only after the gate, lets a
+   Worker-level test fire the deadline from its own clock. That is the
+   `__PACER_SLEEP` precedent.
+
+**Entry points, choice 2** ("no cancellation source") is superseded in part.
+The run budget is now the one deployed cancellation source, and it is not the
+client's connection.
+
+**Tests.** 49 new, for 4,957 in 215 files. The budget is driven through
+`worker.scheduled` and `worker.fetch` over both sequencer and ledger
+transports (`test/sync/coordinated/entry-points/budget.test.ts`). The
+deadline is fired from the harness clock through `__RUN_BUDGET_TIMER`, and
+the ledger, transport and sequencer port only move that clock. The tests
+cover:
+
+- a deadline before any request, for both triggers;
+- a deadline during a request, with a transport that honours the abort and
+  one that answers late;
+- a cancelled check at the final slot, which does not reach the ceiling;
+- the intent gate past 300 s (under a skewed ledger clock) and at exactly
+  300 s, and the lease reserve at exactly 300 s and 1 ms short of it;
+- the durable scheduled retry, and manual due times left unmoved;
+- a publication pushed past both deadlines after the intent commit, which
+  still completes, and a stall past the lease, which the existing recovery
+  confirms without a second release;
+- no timer for a refused or `run-in-progress` run, the linked test-hook
+  signal, and a client disconnect that changes nothing.
+
+Unit tests pin the constants against `LEASE_TTL_MS` and the cron wall, the
+gate's two boundaries, the timer and the late-answer pass-through. The
+existing entry-point, orchestration and baseline-trace tests pass unchanged.
+The dormancy allow-lists name the one new module, `run-budget.ts`.
+
+**Negative controls.** Each is a mutation of the final code, restored from a backup.
+
+| Mutation | Failed tests |
+|---|---|
+| The run signal is not handed to the coordinator | 23 |
+| The intent gate is removed | 6 |
+| The intent gate is moved after the intent commit | 4 |
+| The budget is re-checked after the intent commit, cancelling a prepared publication | 4 |
+| The budget applies to scheduled runs only | 14 |
+| A gate refusal skips the outcome commit and leaves `publishing` | 6 |
+| The intent deadline is raised so the budget no longer fits the lease | 2 |
+| A budget-cancelled manual run answers `503` | 4 |
+| The budget starts from `Date.now()` instead of the run clock | 9 |
+| A timer is armed before the gate | 10 |
+| Late answers are mapped as they came (RB-4 as first drafted) | 10 |
+| The pass-through records no late answer | 11 |
+| The timer stays armed after coordination | 4 |
+
+**Bundle.** `e866e387…c4cb` (804,240 B) → `9feebe7e…4625` (807,475 B),
+identical in all three environments. Binding reports are unchanged: staging
+`mock`, production `none`, and no ledger binding. The +3,235 B are the
+budget module, the late-answer pass-through and the gate.
+
+**Still open, all needed before "active":** the RB-7 checks; the ledger
+`[exports]` entry, binding and resolver; selecting `coordinated` and every
+deployment; the hourly cron; O-9; running the A3.5 gate; the first
+provider-backed run (O-15); verified production alert delivery (OD-1); PR-G
+(O-16). The pack's residual observations stay open: an overlap after an
+expired lease can still publish a redundant identical release (recovery
+answers `not-published` while another run's `prepare` is live), DO and KV
+calls have no timeouts, and the purge batch's connection accounting is
+undocumented. **O-10, G5 and G9 are not complete.**
 
 The decision above is unchanged.
 

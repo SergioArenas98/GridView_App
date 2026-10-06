@@ -1782,8 +1782,13 @@ limiter double, the pacer's sleep and the clock are local, and a global
 - a guarded publication with curated metadata and the ordering input;
 - unchanged content confirmed without publishing;
 - scheduled versus manual confirmation and due-time accounting;
-- cancellation, through the test-only `__COORDINATED_RUN_SIGNAL`, because no
-  deployed Worker cancels a run;
+- cancellation, through the test-only `__COORDINATED_RUN_SIGNAL`, which is
+  linked into the run budget's signal;
+- the run budget (`budget.test.ts`, since 2026-10-06): its deadline is fired
+  from the harness clock through the test-only `__RUN_BUDGET_TIMER`. It
+  covers a deadline before and during a request, late responses, the intent
+  gate and its lease boundary, durable retries and manual due times, and no
+  cancellation once preparation can start;
 - limiter deferral, a failed provider request, a failed ledger commit and a
   held lease;
 - held and durably blocked seasons, and backlog levels 47, 48 and 60 of 60;
