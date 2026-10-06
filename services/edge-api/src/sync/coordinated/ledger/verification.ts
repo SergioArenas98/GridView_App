@@ -20,10 +20,19 @@
  *   `lastSuccessfulObservationAt`, `limiterDeferralUntil`);
  * - the markers, recomputed, and one appended `verifications` entry.
  *
- * Every completed verification is kept, at most `MAXIMUM_VERIFICATIONS` per
- * resource and never evicted, so any operation ID resent later - however many
- * verifications came after it, and on whichever round - is recognized and
- * never counted as a second sighting (`recordedVerification`).
+ * Every completed verification of the current generation is kept, at most
+ * `MAXIMUM_VERIFICATIONS` per resource and never evicted, so an operation ID
+ * resent later within its generation - however many verifications came after
+ * it, and on whichever round - is recognized and never counted as a second
+ * sighting (`recordedVerification`). A request formed against another
+ * generation is refused before anything else (`verification-generation-
+ * mismatch`), so a resend from before a rotation is never executed either.
+ *
+ * Rotation (PR-E4, `rotationRefusal` and `rotatedRecord`) is the one way out
+ * of a full history: under an operator hold, for a full history the operator
+ * archived (named by `verificationHistoryDigest`), it clears the history,
+ * raises the generation by one and records a bounded receipt. It writes
+ * nothing else.
  *
  * It never touches the staged slot, the accepted (`contentRevision`) or
  * published revision, the superseded history, the backlog, the season record
@@ -42,11 +51,14 @@ import {
   type ClassificationMarker,
   type ClassificationRecord,
   type LedgerInstant,
+  type LedgerRejectionReason,
   type OperationId,
   type RevisionHash,
   type VerificationRecord,
   type VerificationRequest,
+  type VerificationRotationRequest,
   type VerificationTransition,
+  type Versioned,
 } from './model';
 
 /** Which revision of the record an observation matched. Closed. */
@@ -96,6 +108,122 @@ export function recordedVerification(
     }
   }
   return null;
+}
+
+/** A round's verification generation: 0 for a round with no record yet. */
+export function verificationGenerationOf(
+  record: ClassificationRecord | null,
+): number {
+  return record?.verificationGeneration ?? 0;
+}
+
+/**
+ * The round whose last rotation used `operationId`, or `null`. Only the
+ * latest rotation of each round is remembered: the receipt is one slot.
+ */
+export function rotationRound(
+  records: readonly ClassificationRecord[],
+  operationId: OperationId,
+): number | null {
+  return (
+    records.find(
+      (record) => record.lastVerificationReset?.operationId === operationId,
+    )?.round ?? null
+  );
+}
+
+/**
+ * A verification history in its canonical form: every entry built field by
+ * field in a fixed key order, oldest first. This is exactly what the
+ * read-only history route answers as `entries`.
+ */
+export function canonicalVerificationHistory(
+  verifications: readonly VerificationRecord[],
+): VerificationRecord[] {
+  return verifications.map((entry) => ({
+    operationId: entry.operationId,
+    at: entry.at,
+    authMethod: entry.authMethod,
+    stagedRevision: entry.stagedRevision,
+    transition: entry.transition,
+  }));
+}
+
+/**
+ * `sha256:` and the lowercase hex SHA-256 of the UTF-8 compact JSON of the
+ * canonical history: what an operator recomputes from an archived answer's
+ * `entries` (`JSON.stringify(entries)`), and what a rotation must name.
+ */
+export async function verificationHistoryDigest(
+  verifications: readonly VerificationRecord[],
+): Promise<RevisionHash> {
+  const bytes = new TextEncoder().encode(
+    JSON.stringify(canonicalVerificationHistory(verifications)),
+  );
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return `sha256:${[...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+/**
+ * Why a stored record cannot be rotated as `request` asks, or `null` when it
+ * can, in this order: the generation, the record version, the archived
+ * digest, the operator hold, the review lock (T12 resolves it first), a full
+ * history, and a generation that can still be raised.
+ *
+ * `historyDigest` is the digest of the stored history, or `null` when the
+ * history changed after it was hashed.
+ */
+export function rotationRefusal(
+  stored: Versioned<ClassificationRecord>,
+  request: VerificationRotationRequest,
+  historyDigest: RevisionHash | null,
+  held: boolean,
+): LedgerRejectionReason | null {
+  const record = stored.record;
+  const expected = request.expected;
+  if (expected.verificationGeneration !== record.verificationGeneration) {
+    return 'verification-generation-mismatch';
+  }
+  if (expected.recordVersion !== stored.version) return 'version-conflict';
+  if (historyDigest === null || historyDigest !== expected.historyDigest) {
+    return 'verification-history-digest-mismatch';
+  }
+  if (!held) return 'operator-hold-required';
+  if (record.competingCorrection !== null) return 'review-locked';
+  if (record.verifications.length < MAXIMUM_VERIFICATIONS) {
+    return 'verification-history-not-full';
+  }
+  return record.verificationGeneration < Number.MAX_SAFE_INTEGER
+    ? null
+    : 'verification-generation-exhausted';
+}
+
+/**
+ * The record a rotation leaves: an empty history, the next generation and
+ * its receipt. Every other field - the staged, candidate and competing
+ * slots, the attempt accounting, the accepted, published and superseded
+ * revisions and the disposition - is kept exactly.
+ */
+export function rotatedRecord(
+  record: ClassificationRecord,
+  request: VerificationRotationRequest,
+  at: LedgerInstant,
+): ClassificationRecord {
+  return {
+    ...record,
+    verifications: [],
+    verificationGeneration: record.verificationGeneration + 1,
+    lastVerificationReset: {
+      operationId: request.operationId,
+      at,
+      authMethod: request.authMethod,
+      fromGeneration: record.verificationGeneration,
+      clearedCount: record.verifications.length,
+      clearedDigest: request.expected.historyDigest,
+    },
+  };
 }
 
 /**

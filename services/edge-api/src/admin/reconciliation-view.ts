@@ -17,11 +17,14 @@ import type {
   ClassificationRecord,
   CorrectionSlot,
   VerificationRecord,
+  VerificationResetRecord,
   LedgerSnapshot,
   PublicationDisposition,
+  RevisionHash,
   SeasonRecord,
   Versioned,
 } from '../sync/coordinated/ledger/model';
+import { canonicalVerificationHistory } from '../sync/coordinated/ledger/verification';
 import { backlogAttention } from '../sync/coordinated/operator';
 
 export function seasonView(snapshot: LedgerSnapshot) {
@@ -128,11 +131,60 @@ export function roundView({
             authMethod: record.lastDisposition.authMethod,
             stagedRevision: record.lastDisposition.stagedRevision,
           },
-    /** How many verifications the round recorded (PR-E3), of at most 32. */
+    /**
+     * What a verification's `expectedVerificationGeneration` and a rotation's
+     * `expected.verificationGeneration` must name (PR-E4).
+     */
+    verificationGeneration: record.verificationGeneration,
+    /** How many verifications this generation recorded, of at most 32. */
     verificationCount: record.verifications.length,
     /** The last completed verification: closed values, no diff. */
     lastVerification: verificationView(record.verifications.at(-1) ?? null),
+    /** The last rotation's receipt, or `null` at generation 0. */
+    lastVerificationReset: resetView(record.lastVerificationReset),
   };
+}
+
+function resetView(reset: VerificationResetRecord | null) {
+  return reset === null
+    ? null
+    : {
+        operationId: reset.operationId,
+        at: reset.at,
+        authMethod: reset.authMethod,
+        fromGeneration: reset.fromGeneration,
+        toGeneration: reset.fromGeneration + 1,
+        clearedCount: reset.clearedCount,
+        clearedDigest: reset.clearedDigest,
+      };
+}
+
+/**
+ * One round's whole verification history (PR-E4): what an operator archives
+ * privately before a rotation, and the values the rotation must name.
+ * `entries` is the canonical history, so `historyDigest` is recomputable
+ * from an archived answer as `sha256:` and the hex SHA-256 of
+ * `JSON.stringify(entries)`.
+ */
+export function verificationHistoryView(
+  { version, record }: Versioned<ClassificationRecord>,
+  historyDigest: RevisionHash,
+) {
+  return {
+    season: record.season,
+    round: record.round,
+    recordVersion: version,
+    verificationGeneration: record.verificationGeneration,
+    count: record.verifications.length,
+    historyDigest,
+    entries: canonicalVerificationHistory(record.verifications),
+    lastVerificationReset: resetView(record.lastVerificationReset),
+  };
+}
+
+/** A rotation's receipt, as the rotation route answers it. */
+export function rotationReceipt(record: ClassificationRecord) {
+  return resetView(record.lastVerificationReset);
 }
 
 function verificationView(verification: VerificationRecord | null) {

@@ -48,7 +48,6 @@ import {
   type DispositionRecord,
   type DurableBlock,
   type LeaseRecord,
-  type LedgerRejectionReason,
   type OperatorActionRecord,
   type OperatorHold,
   type PublishedReconciliation,
@@ -56,8 +55,36 @@ import {
   type RefreshResource,
   type SeasonRecord,
   type VerificationRecord,
+  type VerificationResetRecord,
   type Versioned,
 } from './model';
+import {
+  accepted,
+  hasExactKeys,
+  isBoundedInteger,
+  isFence,
+  isInstantOrNull,
+  isLedgerInstant,
+  isObject,
+  isOneOf,
+  isOperationId,
+  isRevisionOrNull,
+  isRound,
+  refused,
+  type Decoding,
+} from './primitives';
+
+export {
+  accepted,
+  isBoundedInteger,
+  isFence,
+  isLedgerInstant,
+  isOneOf,
+  isOperationId,
+  isRound,
+  refused,
+  type Decoding,
+} from './primitives';
 
 /** Storage keys. Every key is derived from a decoded record, never from input text. */
 export const ledgerKeys = {
@@ -71,82 +98,6 @@ export const ledgerKeys = {
   // One entry per classification resource: the capacity counts resources.
   backlog: (season: number, round: number) => `backlog:${season}:${round}`,
 } as const;
-
-const instantPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
-/** A canonical UTC instant, exactly as `toISOString` spells it. */
-export function isLedgerInstant(value: unknown): value is string {
-  if (typeof value !== 'string' || !instantPattern.test(value)) return false;
-  const parsed = Date.parse(value);
-  return !Number.isNaN(parsed) && new Date(parsed).toISOString() === value;
-}
-
-export function isRound(value: unknown): value is number {
-  return isBoundedInteger(value, 1, MAXIMUM_ROUND);
-}
-
-export function isFence(value: unknown): value is number {
-  return isBoundedInteger(value, 1, Number.MAX_SAFE_INTEGER);
-}
-
-export function isBoundedInteger(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-): value is number {
-  return (
-    typeof value === 'number' &&
-    Number.isSafeInteger(value) &&
-    value >= minimum &&
-    value <= maximum
-  );
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/** Exactly these own keys: nothing missing, nothing extra. */
-function hasExactKeys(
-  value: Record<string, unknown>,
-  keys: readonly string[],
-): boolean {
-  const own = Object.keys(value);
-  return (
-    own.length === keys.length &&
-    keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
-  );
-}
-
-export function isOneOf<T extends string>(
-  values: readonly T[],
-  value: unknown,
-): value is T {
-  return (
-    typeof value === 'string' && (values as readonly string[]).includes(value)
-  );
-}
-
-function isInstantOrNull(value: unknown): value is string | null {
-  return value === null || isLedgerInstant(value);
-}
-
-function isRevisionOrNull(value: unknown): value is string | null {
-  return value === null || isSnapshotRevision(value);
-}
-
-/** A decoding result that says why a record was refused. */
-export type Decoding<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly reason: LedgerRejectionReason };
-
-export function refused<T>(reason: LedgerRejectionReason): Decoding<T> {
-  return { ok: false, reason };
-}
-
-export function accepted<T>(value: T): Decoding<T> {
-  return { ok: true, value };
-}
 
 const correctionKeys = ['revision', 'firstSeenAt', 'uncorroborated'] as const;
 
@@ -167,14 +118,6 @@ function decodeCorrection(value: unknown): CorrectionSlot | null | 'invalid' {
     firstSeenAt: value.firstSeenAt,
     uncorroborated: value.uncorroborated,
   };
-}
-
-const operationIdPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-
-/** A lowercase UUID v4: bounded, and never a name or a credential. */
-export function isOperationId(value: unknown): value is string {
-  return typeof value === 'string' && operationIdPattern.test(value);
 }
 
 const dispositionKeys = [
@@ -259,6 +202,62 @@ function decodeVerifications(value: unknown): VerificationRecord[] | null {
   return ids.size === verifications.length ? verifications : null;
 }
 
+const resetKeys = [
+  'operationId',
+  'at',
+  'authMethod',
+  'fromGeneration',
+  'clearedCount',
+  'clearedDigest',
+] as const;
+
+/**
+ * A rotation receipt (PR-E4). Rotation clears only a full history, so it
+ * always records `MAXIMUM_VERIFICATIONS` cleared entries.
+ */
+function decodeVerificationReset(
+  value: unknown,
+): VerificationResetRecord | null | 'invalid' {
+  if (value === null) return null;
+  if (!isObject(value) || !hasExactKeys(value, resetKeys)) return 'invalid';
+  if (
+    !isOperationId(value.operationId) ||
+    !isLedgerInstant(value.at) ||
+    !isOneOf(operatorAuthMethods, value.authMethod) ||
+    !isBoundedInteger(value.fromGeneration, 0, Number.MAX_SAFE_INTEGER - 1) ||
+    value.clearedCount !== MAXIMUM_VERIFICATIONS ||
+    !isSnapshotRevision(value.clearedDigest)
+  ) {
+    return 'invalid';
+  }
+  return {
+    operationId: value.operationId,
+    at: value.at,
+    authMethod: value.authMethod,
+    fromGeneration: value.fromGeneration,
+    clearedCount: value.clearedCount,
+    clearedDigest: value.clearedDigest,
+  };
+}
+
+/**
+ * The generation and its receipt agree: no receipt exactly at generation 0,
+ * a receipt for exactly the previous generation otherwise, and a rotation ID
+ * that no verification of the current generation also carries.
+ */
+function isCoherentGeneration(
+  generation: unknown,
+  reset: VerificationResetRecord | null,
+  verifications: readonly VerificationRecord[],
+): generation is number {
+  if (!isBoundedInteger(generation, 0, Number.MAX_SAFE_INTEGER)) return false;
+  if (reset === null) return generation === 0;
+  return (
+    reset.fromGeneration + 1 === generation &&
+    !verifications.some((entry) => entry.operationId === reset.operationId)
+  );
+}
+
 /** Sorted in `classificationMarkers` order, each at most once. */
 function decodeMarkers(value: unknown): ClassificationMarker[] | null {
   if (!Array.isArray(value) || value.length > classificationMarkers.length) {
@@ -327,6 +326,8 @@ const classificationKeys = [
   'unstableSightings',
   'lastDisposition',
   'verifications',
+  'verificationGeneration',
+  'lastVerificationReset',
 ] as const;
 
 export function decodeClassificationRecord(
@@ -342,6 +343,7 @@ export function decodeClassificationRecord(
   const competing = decodeCorrection(value.competingCorrection);
   const lastDisposition = decodeDispositionRecord(value.lastDisposition);
   const verifications = decodeVerifications(value.verifications);
+  const reset = decodeVerificationReset(value.lastVerificationReset);
   if (
     value.schemaVersion !== LEDGER_SCHEMA_VERSION ||
     value.kind !== 'classification' ||
@@ -375,6 +377,8 @@ export function decodeClassificationRecord(
     competing === 'invalid' ||
     lastDisposition === 'invalid' ||
     verifications === null ||
+    reset === 'invalid' ||
+    !isCoherentGeneration(value.verificationGeneration, reset, verifications) ||
     !isInstantOrNull(value.sourceObservedAt) ||
     !isInstantOrNull(value.settledAt) ||
     !(
@@ -419,6 +423,8 @@ export function decodeClassificationRecord(
     unstableSightings: value.unstableSightings,
     lastDisposition,
     verifications,
+    verificationGeneration: value.verificationGeneration,
+    lastVerificationReset: reset,
   });
 }
 

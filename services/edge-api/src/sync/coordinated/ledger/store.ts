@@ -31,7 +31,9 @@
  * - **Review tracking belongs to verification.** A commit can never create a
  *   competing correction, write a verification record, or change the
  *   candidate slot of a staged record. Only `verify` (T11-T11c) does, so only
- *   an explicit operator verification can lock a record for review.
+ *   an explicit operator verification can lock a record for review. Nor can
+ *   a commit change the verification generation or its receipt: only
+ *   `rotateVerifications` (PR-E4) does.
  * - **Operator state belongs to operators.** A commit can never set, change
  *   or clear a hold or the last operator action, and can set a durable block
  *   but never change or clear one. Only `operate` does.
@@ -100,10 +102,16 @@ import {
   decodeReconciliationRequest,
   decodeSeasonRequest,
   decodeVerificationRequest,
+  decodeVerificationRotationRequest,
 } from './requests';
 import {
   applyOperatorVerification,
   recordedVerification,
+  rotatedRecord,
+  rotationRefusal,
+  rotationRound,
+  verificationGenerationOf,
+  verificationHistoryDigest,
 } from './verification';
 
 /** The storage host: SQLite-backed Durable Object storage, or its in-memory double. */
@@ -423,11 +431,15 @@ export class ReconciliationLedgerStore {
    * It writes that classification record and nothing else: no season record,
    * no backlog entry, and never the staged slot, the accepted or published
    * revision or the history (`verification.ts`). A deferral records only the
-   * limiter's retry instant and no verification. An operation ID any
-   * verification of the season already recorded is answered
-   * `already-applied` and writes nothing, so one response is never counted
-   * as two sightings; the same ID for another round or staged revision is
-   * refused.
+   * limiter's retry instant and no verification.
+   *
+   * The generation is checked first: a request formed against another
+   * verification generation is refused, so a resend from before a rotation is
+   * never executed (PR-E4). Within the generation, an operation ID any
+   * verification of the season recorded is answered `already-applied` and
+   * writes nothing, so one response is never counted as two sightings; the
+   * same ID for another round or staged revision, or an ID a round's last
+   * rotation used, is refused.
    */
   verify(payload: unknown): OperatorTransitionOutcome {
     return this.transact((store) => {
@@ -438,10 +450,17 @@ export class ReconciliationLedgerStore {
       const now = this.now();
       requireLease(store, request.lease, now);
 
-      const prior = recordedVerification(
-        readClassifications(store, season).map(({ record }) => record),
-        request.operationId,
-      );
+      const records = readClassifications(store, season);
+      const current = records.map(({ record }) => record);
+      const stored =
+        records.find(({ record }) => record.round === request.round) ?? null;
+      if (
+        request.expected.verificationGeneration !==
+        verificationGenerationOf(stored?.record ?? null)
+      ) {
+        refuse('verification-generation-mismatch');
+      }
+      const prior = recordedVerification(current, request.operationId);
       if (prior !== null) {
         if (
           prior.round !== request.round ||
@@ -454,7 +473,9 @@ export class ReconciliationLedgerStore {
           snapshot: readSnapshot(store, season, now),
         };
       }
-      const stored = readClassification(store, season, request.round);
+      if (rotationRound(current, request.operationId) !== null) {
+        refuse('operation-id-reused');
+      }
       if (stored === null) refuse('operator-precondition-failed');
       if (request.expected.recordVersion !== stored.version) {
         refuse('version-conflict');
@@ -477,6 +498,85 @@ export class ReconciliationLedgerStore {
       store.put(ledgerKeys.classification(season, request.round), {
         version: stored.version + 1,
         record: step.record,
+      });
+      return { outcome: 'applied', snapshot: readSnapshot(store, season, now) };
+    });
+  }
+
+  /**
+   * PR-E4: rotates one round's full verification history into the next
+   * generation, under the season's fenced lease and an operator hold, for the
+   * exact history the operator archived. It writes that classification record
+   * and nothing else: an empty history, the generation plus one, and a
+   * bounded receipt (`rotatedRecord`).
+   *
+   * A resent operation ID - the same rotation after a lost answer - is
+   * answered `already-applied` from the receipt and writes nothing, even
+   * after the version moved. Only the latest rotation is remembered, so an
+   * older rotation resent after a later one fails its generation check
+   * instead: no rotation ever applies twice.
+   *
+   * `crypto.subtle` is asynchronous and a storage transaction is not, so the
+   * stored history is hashed from a read made just before the transaction.
+   * The transaction makes every check and the one write, and treats any
+   * history other than exactly the hashed one as a digest mismatch.
+   */
+  async rotateVerifications(
+    payload: unknown,
+  ): Promise<OperatorTransitionOutcome> {
+    const decoded = decodeVerificationRotationRequest(payload);
+    if (!decoded.ok) return { outcome: 'rejected', reason: decoded.reason };
+    const request = decoded.value;
+    const season = request.lease.season;
+    const read = this.transact((store) => ({
+      history:
+        readClassification(store, season, request.round)?.record
+          .verifications ?? [],
+    }));
+    if ('outcome' in read) return read;
+    const digest = await verificationHistoryDigest(read.history);
+
+    return this.transact((store) => {
+      const now = this.now();
+      requireLease(store, request.lease, now);
+
+      const records = readClassifications(store, season);
+      const current = records.map(({ record }) => record);
+      const stored =
+        records.find(({ record }) => record.round === request.round) ?? null;
+      const reset = stored?.record.lastVerificationReset ?? null;
+      if (reset !== null && reset.operationId === request.operationId) {
+        if (
+          reset.fromGeneration !== request.expected.verificationGeneration ||
+          reset.clearedDigest !== request.expected.historyDigest
+        ) {
+          refuse('operation-id-reused');
+        }
+        return {
+          outcome: 'already-applied',
+          snapshot: readSnapshot(store, season, now),
+        };
+      }
+      // One namespace with the generation's verifications and every other
+      // round's last rotation.
+      if (
+        recordedVerification(current, request.operationId) !== null ||
+        rotationRound(current, request.operationId) !== null
+      ) {
+        refuse('operation-id-reused');
+      }
+      if (stored === null) refuse('operator-precondition-failed');
+      const refusal = rotationRefusal(
+        stored,
+        request,
+        same(stored.record.verifications, read.history) ? digest : null,
+        readSeasonRecord(store, season)?.record.operatorHold != null,
+      );
+      if (refusal !== null) refuse(refusal);
+
+      store.put(ledgerKeys.classification(season, request.round), {
+        version: stored.version + 1,
+        record: rotatedRecord(stored.record, request, now.toISOString()),
       });
       return { outcome: 'applied', snapshot: readSnapshot(store, season, now) };
     });
@@ -652,7 +752,9 @@ function checkClassificationWrite(
         next.candidateFirstSeenAt !== before.candidateFirstSeenAt)) ||
     !same(next.competingCorrection, before?.competingCorrection ?? null) ||
     !same(next.lastDisposition, before?.lastDisposition ?? null) ||
-    !same(next.verifications, before?.verifications ?? [])
+    !same(next.verifications, before?.verifications ?? []) ||
+    next.verificationGeneration !== verificationGenerationOf(before) ||
+    !same(next.lastVerificationReset, before?.lastVerificationReset ?? null)
   ) {
     refuse('staged-correction-immutable');
   }

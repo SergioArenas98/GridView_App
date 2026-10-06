@@ -19,9 +19,11 @@
  * `durableBlock` and `lastOperatorAction`, and
  * `ClassificationRecord.lastDisposition`. PR-E3 refined it a fourth time, on
  * the same grounds (re-verified at `086ed06`), with
- * `ClassificationRecord.verifications`. After the first deploy that
- * resolves a ledger, any change needs a versioned decoder and a migration
- * decision instead.
+ * `ClassificationRecord.verifications`. PR-E4 refined it a fifth time, on the
+ * same grounds (re-verified at `81e91d2`), with
+ * `ClassificationRecord.verificationGeneration` and `lastVerificationReset`.
+ * After the first deploy that resolves a ledger, any change needs a versioned
+ * decoder and a migration decision instead.
  *
  * Every stored value is bounded and closed: identifiers, canonical UTC
  * instants, bounded counters, closed states and `sha256:` revision hashes.
@@ -63,11 +65,13 @@ export const BACKLOG_WARNING_THRESHOLD = 48;
 export const SUPERSEDED_REVISION_CAPACITY = 16;
 
 /**
- * The most operator verifications one classification resource records. They
- * are never evicted: every operation ID stays recognizable, so a resend is
- * never a second sighting, and a full history refuses further verification
- * (`verification-history-full`). It also bounds the provider requests
- * verifications can make for one round.
+ * The most operator verifications one classification resource records in one
+ * verification generation. Within it they are never evicted, so every
+ * operation ID of the generation stays recognizable and a resend is never a
+ * second sighting; a full history refuses further verification
+ * (`verification-history-full`) until an operator rotation (PR-E4) opens the
+ * next generation. It bounds the provider requests verifications can make for
+ * one round per generation.
  */
 export const MAXIMUM_VERIFICATIONS = 32;
 
@@ -214,6 +218,22 @@ export interface VerificationRecord {
 }
 
 /**
+ * The receipt of a resource's last verification-history rotation (PR-E4):
+ * what was cleared, never the cleared entries. `clearedDigest` is the
+ * `verificationHistoryDigest` of the cleared history, which the operator
+ * archived and named.
+ */
+export interface VerificationResetRecord {
+  readonly operationId: OperationId;
+  readonly at: LedgerInstant;
+  readonly authMethod: OperatorAuthMethod;
+  /** The generation cleared; the record's generation is this plus one. */
+  readonly fromGeneration: number;
+  readonly clearedCount: number;
+  readonly clearedDigest: RevisionHash;
+}
+
+/**
  * One race classification resource, key `classification:{season}:{round}`.
  *
  * `publishedRevision` is a **cache** of the authoritative release. An ordinary
@@ -261,11 +281,21 @@ export interface ClassificationRecord {
   /** Written only by the T12 `dispose` operation, never by a commit. */
   readonly lastDisposition: DispositionRecord | null;
   /**
-   * Every completed verification, oldest first, at most
-   * `MAXIMUM_VERIFICATIONS`, never evicted and each operation ID once.
-   * Written only by the `verify` operation (T11-T11c), never by a commit.
+   * Every completed verification of the current generation, oldest first, at
+   * most `MAXIMUM_VERIFICATIONS` and each operation ID once. Appended only by
+   * `verify` (T11-T11c), cleared only by `rotateVerifications`, never written
+   * by a commit.
    */
   readonly verifications: readonly VerificationRecord[];
+  /**
+   * 0 until the first rotation, then one more per rotation. A verification
+   * names the generation it was formed against, so one from another
+   * generation is refused before any provider request. Written only by
+   * `rotateVerifications`, which is also the only writer of the receipt.
+   */
+  readonly verificationGeneration: number;
+  /** `null` exactly while the generation is 0. */
+  readonly lastVerificationReset: VerificationResetRecord | null;
 }
 
 /** The season-level resources carried as refresh state. */
@@ -577,6 +607,16 @@ export const ledgerRejectionReasons = [
   'review-locked',
   /** The resource already holds `MAXIMUM_VERIFICATIONS` verifications. */
   'verification-history-full',
+  /** The request names another verification generation than the stored one. */
+  'verification-generation-mismatch',
+  /** A rotation of a history that is not full: never a routine reset. */
+  'verification-history-not-full',
+  /** The stored history is not the one whose digest the operator named. */
+  'verification-history-digest-mismatch',
+  /** The generation is `Number.MAX_SAFE_INTEGER` and cannot be raised. */
+  'verification-generation-exhausted',
+  /** A rotation needs an active operator hold on the season. */
+  'operator-hold-required',
   'state-corrupt',
 ] as const;
 export type LedgerRejectionReason = (typeof ledgerRejectionReasons)[number];
@@ -694,8 +734,27 @@ export interface VerificationRequest {
   readonly expected: {
     readonly recordVersion: number;
     readonly stagedRevision: RevisionHash;
+    /** The generation the operator formed the request against. */
+    readonly verificationGeneration: number;
   };
   readonly observation: VerificationObservation;
+}
+
+/**
+ * One rotation of a full verification history (PR-E4). Every `expected`
+ * value must equal the stored record; `historyDigest` is the digest of the
+ * history the operator inspected and archived.
+ */
+export interface VerificationRotationRequest {
+  readonly lease: LeaseToken;
+  readonly round: number;
+  readonly operationId: OperationId;
+  readonly authMethod: OperatorAuthMethod;
+  readonly expected: {
+    readonly recordVersion: number;
+    readonly verificationGeneration: number;
+    readonly historyDigest: RevisionHash;
+  };
 }
 
 /**

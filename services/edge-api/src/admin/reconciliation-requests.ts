@@ -27,6 +27,7 @@ import type {
   DispositionCommand,
   SeasonActionCommand,
   VerificationCommand,
+  VerificationRotationCommand,
 } from '../sync/coordinated/operator';
 
 /** The largest body any operator route reads. Far above every valid one. */
@@ -34,7 +35,12 @@ export const MAXIMUM_OPERATOR_BODY_CHARACTERS = 2048;
 
 /** Why a request was refused before anything was read. Closed. */
 export type OperatorRequestProblem =
-  'invalid-season' | 'invalid-body' | 'body-too-large';
+  | 'invalid-season'
+  | 'invalid-round'
+  | 'invalid-body'
+  | 'body-too-large'
+  /** A rotation whose `historyArchived` is `false` (PR-E4). */
+  | 'history-archive-not-acknowledged';
 
 export type Decoded<T> =
   | { readonly ok: true; readonly value: T }
@@ -56,6 +62,36 @@ export function decodeInspectionQuery(url: URL): Decoded<number> {
     return invalid('invalid-season');
   }
   return { ok: true, value: Number(raw) };
+}
+
+/**
+ * `?season=YYYY&round=N` and nothing else: the read-only verification history
+ * of one round (PR-E4).
+ */
+export function decodeHistoryQuery(
+  url: URL,
+): Decoded<{ readonly season: number; readonly round: number }> {
+  const keys = [...url.searchParams.keys()].sort();
+  const season = url.searchParams.get('season');
+  const round = url.searchParams.get('round');
+  if (
+    keys.length !== 2 ||
+    keys[0] !== 'round' ||
+    keys[1] !== 'season' ||
+    season === null ||
+    !/^\d{4}$/.test(season) ||
+    !isSeason(Number(season))
+  ) {
+    return invalid('invalid-season');
+  }
+  if (
+    round === null ||
+    !/^[1-9]\d{0,2}$/.test(round) ||
+    !isRound(Number(round))
+  ) {
+    return invalid('invalid-round');
+  }
+  return { ok: true, value: { season: Number(season), round: Number(round) } };
 }
 
 /** The request body as JSON, bounded, or the closed reason it is not. */
@@ -176,12 +212,14 @@ const verificationKeys = [
   'round',
   'operationId',
   'expectedStagedRevision',
+  'expectedVerificationGeneration',
 ] as const;
 
 /**
- * `{season, round, operationId, expectedStagedRevision}` for one operator
- * verification (PR-E3), where `expectedStagedRevision` is the staged revision
- * the operator read from the inspection.
+ * `{season, round, operationId, expectedStagedRevision,
+ * expectedVerificationGeneration}` for one operator verification (PR-E3,
+ * amended by PR-E4), where both expected values are the round's staged
+ * revision and verification generation from one inspection.
  */
 export function decodeVerification(
   body: unknown,
@@ -192,7 +230,12 @@ export function decodeVerification(
     !isSeason(body.season) ||
     !isRound(body.round) ||
     !isOperationId(body.operationId) ||
-    !isSnapshotRevision(body.expectedStagedRevision)
+    !isSnapshotRevision(body.expectedStagedRevision) ||
+    !isBoundedInteger(
+      body.expectedVerificationGeneration,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    )
   ) {
     return invalid('invalid-body');
   }
@@ -203,6 +246,68 @@ export function decodeVerification(
       round: body.round,
       operationId: body.operationId,
       expectedStagedRevision: body.expectedStagedRevision,
+      expectedVerificationGeneration: body.expectedVerificationGeneration,
+    },
+  };
+}
+
+const rotationKeys = [
+  'season',
+  'round',
+  'operationId',
+  'expected',
+  'historyArchived',
+] as const;
+const rotationExpectedKeys = [
+  'recordVersion',
+  'verificationGeneration',
+  'historyDigest',
+] as const;
+
+/**
+ * `{season, round, operationId, expected: {recordVersion,
+ * verificationGeneration, historyDigest}, historyArchived}` for one rotation
+ * of a full verification history (PR-E4). `expected` is copied from the
+ * read-only history answer the operator archived, and `historyArchived` must
+ * be `true`: the operator's explicit statement that it was archived
+ * privately. `false` is refused as its own problem.
+ */
+export function decodeVerificationRotation(
+  body: unknown,
+): Decoded<VerificationRotationCommand> {
+  if (!isObject(body) || !hasExactKeys(body, rotationKeys)) {
+    return invalid('invalid-body');
+  }
+  const expected = body.expected;
+  if (
+    !isSeason(body.season) ||
+    !isRound(body.round) ||
+    !isOperationId(body.operationId) ||
+    typeof body.historyArchived !== 'boolean' ||
+    !isObject(expected) ||
+    !hasExactKeys(expected, rotationExpectedKeys) ||
+    !isBoundedInteger(expected.recordVersion, 1, Number.MAX_SAFE_INTEGER - 1) ||
+    !isBoundedInteger(
+      expected.verificationGeneration,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    ) ||
+    !isSnapshotRevision(expected.historyDigest)
+  ) {
+    return invalid('invalid-body');
+  }
+  if (!body.historyArchived) return invalid('history-archive-not-acknowledged');
+  return {
+    ok: true,
+    value: {
+      season: body.season,
+      round: body.round,
+      operationId: body.operationId,
+      expected: {
+        recordVersion: expected.recordVersion,
+        verificationGeneration: expected.verificationGeneration,
+        historyDigest: expected.historyDigest,
+      },
     },
   };
 }

@@ -208,6 +208,7 @@ describe.each(sequencerTransports)(
           'operate',
           'dispose',
           'verify',
+          'rotateVerifications',
         ] as const) {
           wrapped[method] = (request: never) => {
             ledgerCalls.push(method);
@@ -260,6 +261,7 @@ describe.each(sequencerTransports)(
         round: 1,
         operationId,
         expectedStagedRevision: setup.staged,
+        expectedVerificationGeneration: 0,
         ...overrides,
       });
     }
@@ -851,6 +853,7 @@ describe.each(sequencerTransports)(
         round: 1,
         operationId: OPS[0],
         expectedStagedRevision: setup.staged,
+        expectedVerificationGeneration: 0,
       };
 
       for (const token of [null, 'wrong-token']) {

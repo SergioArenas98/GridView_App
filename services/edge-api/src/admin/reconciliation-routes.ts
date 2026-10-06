@@ -9,6 +9,8 @@
  * POST /internal/admin/reconciliation/clear-block
  * POST /internal/admin/reconciliation/disposition
  * POST /internal/admin/reconciliation/verification
+ * GET  /internal/admin/reconciliation/verification-history?season=YYYY&round=N
+ * POST /internal/admin/reconciliation/verification-rotation
  * ```
  *
  * Plus, in coordinated mode only, the hold-gated `POST /internal/admin/rollback`
@@ -35,7 +37,8 @@
  * runtime and writes only the verified classification record. The
  * verification also needs that runtime to compose: without the limiter, the
  * sequencer authority or a purge origin it answers `503`
- * `coordinated-runtime-unavailable` before reading the ledger.
+ * `coordinated-runtime-unavailable` before reading the ledger. The
+ * verification history read and the rotation (PR-E4) reach no provider.
  */
 
 import { jsonResponse } from '../http/envelope';
@@ -50,28 +53,34 @@ import type {
   SeasonOperatorAction,
 } from '../sync/coordinated/ledger/model';
 import type { ReconciliationLedgerPort } from '../sync/coordinated/ledger-port';
+import { verificationHistoryDigest } from '../sync/coordinated/ledger/verification';
 import {
   OPERATOR_AUTH_METHOD,
   disposeUnderLease,
   operateUnderLease,
   rollbackUnderHold,
+  rotateUnderLease,
   verifyUnderLease,
   type OperatorActionResult,
   type VerificationResult,
 } from '../sync/coordinated/operator';
 import {
   decodeDisposition,
+  decodeHistoryQuery,
   decodeInspectionQuery,
   decodeSeasonAction,
   decodeVerification,
+  decodeVerificationRotation,
   readOperatorBody,
   type OperatorRequestProblem,
 } from './reconciliation-requests';
 import {
   backlogView,
   inspectionView,
+  rotationReceipt,
   roundView,
   seasonView,
+  verificationHistoryView,
 } from './reconciliation-view';
 
 export const reconciliationInspectPath = '/internal/admin/reconciliation';
@@ -79,6 +88,10 @@ export const reconciliationDispositionPath =
   '/internal/admin/reconciliation/disposition';
 export const reconciliationVerificationPath =
   '/internal/admin/reconciliation/verification';
+export const reconciliationVerificationHistoryPath =
+  '/internal/admin/reconciliation/verification-history';
+export const reconciliationVerificationRotationPath =
+  '/internal/admin/reconciliation/verification-rotation';
 
 const seasonActionPaths: Readonly<Record<string, SeasonOperatorAction>> = {
   '/internal/admin/reconciliation/hold': 'hold',
@@ -91,6 +104,8 @@ export function isReconciliationPath(pathname: string): boolean {
     pathname === reconciliationInspectPath ||
     pathname === reconciliationDispositionPath ||
     pathname === reconciliationVerificationPath ||
+    pathname === reconciliationVerificationHistoryPath ||
+    pathname === reconciliationVerificationRotationPath ||
     Object.hasOwn(seasonActionPaths, pathname)
   );
 }
@@ -100,6 +115,8 @@ export const RECONCILIATION_OPERATOR_OPERATION =
   'reconciliation.operator-action';
 export const RECONCILIATION_VERIFICATION_OPERATION =
   'reconciliation.verification';
+export const RECONCILIATION_ROTATION_OPERATION =
+  'reconciliation.verification-rotation';
 
 /** What the operator routes reach the ledger through. */
 export interface OperatorReconciliation {
@@ -137,17 +154,22 @@ export async function handleReconciliationRequest(
   url: URL,
   context: ReconciliationRouteContext,
 ): Promise<Response> {
+  const history = url.pathname === reconciliationVerificationHistoryPath;
   const inspect = url.pathname === reconciliationInspectPath;
-  const method = inspect ? 'GET' : 'POST';
+  const method = inspect || history ? 'GET' : 'POST';
   if (request.method !== method) {
     return methodNotAllowed(context.requestId, method);
   }
   if (inspect) return handleInspection(url, context);
+  if (history) return handleVerificationHistory(url, context);
 
   const body = await readOperatorBody(request);
   if (!body.ok) return invalidRequest(context.requestId, body.problem);
   if (url.pathname === reconciliationVerificationPath) {
     return handleVerification(body.value, context);
+  }
+  if (url.pathname === reconciliationVerificationRotationPath) {
+    return handleVerificationRotation(body.value, context);
   }
   const action = seasonActionPaths[url.pathname];
   if (action !== undefined) {
@@ -227,6 +249,158 @@ async function handleInspection(
     read.outcome === 'rejected' ? 409 : 503,
     read.outcome === 'rejected' ? { status, reason: read.reason } : { status },
   );
+}
+
+/**
+ * `GET /internal/admin/reconciliation/verification-history?season=&round=`
+ * (PR-E4): one round's whole verification history and its digest, read
+ * without a lease and writing nothing. It is what an operator archives
+ * privately before a rotation, and the only answer that carries the digest
+ * a rotation must name. The audit line names the round and the outcome
+ * only: never an entry, an operation ID, a revision or the digest.
+ */
+async function handleVerificationHistory(
+  url: URL,
+  context: ReconciliationRouteContext,
+): Promise<Response> {
+  const query = decodeHistoryQuery(url);
+  if (!query.ok) return invalidRequest(context.requestId, query.problem);
+  const { season, round } = query.value;
+  const operatorAction = 'inspect-verification-history';
+  const ledger = available(context, { season, round, operatorAction });
+  if (ledger instanceof Response) return ledger;
+
+  const read = await ledger.readSeason(season);
+  const entry =
+    read.outcome === 'read'
+      ? (read.snapshot.classifications.find(
+          (candidate) => candidate.record.round === round,
+        ) ?? null)
+      : null;
+  const status =
+    read.outcome === 'read'
+      ? entry === null
+        ? 'not-recorded'
+        : 'read'
+      : read.outcome === 'rejected'
+        ? 'refused'
+        : 'ledger-unavailable';
+  context.logger.info({
+    operation: RECONCILIATION_INSPECT_OPERATION,
+    requestId: context.requestId,
+    season,
+    round,
+    operatorAction,
+    operatorOutcome: status,
+    ...(read.outcome === 'rejected' ? { ledgerRejection: read.reason } : {}),
+  });
+  if (entry !== null) {
+    return data(context.requestId, 200, {
+      status,
+      ...verificationHistoryView(
+        entry,
+        await verificationHistoryDigest(entry.record.verifications),
+      ),
+    });
+  }
+  if (read.outcome === 'read') {
+    return data(context.requestId, 404, { status, season, round });
+  }
+  return data(
+    context.requestId,
+    read.outcome === 'rejected' ? 409 : 503,
+    read.outcome === 'rejected' ? { status, reason: read.reason } : { status },
+  );
+}
+
+/**
+ * `POST /internal/admin/reconciliation/verification-rotation` (PR-E4): one
+ * rotation of a round's full verification history into the next generation.
+ * No runtime is composed and no provider can be reached. The ledger makes
+ * every check in the rotation's one transaction: the lease, the generation,
+ * the record version, the archived history's digest, the operator hold, the
+ * review lock, a full history and a generation that can still be raised.
+ *
+ * The answer's receipt names both generations, the cleared count and the
+ * digest, never the cleared entries: those were archived from the history
+ * route before, so a lost answer loses no evidence. The audit line carries
+ * counters and closed values only.
+ */
+async function handleVerificationRotation(
+  body: unknown,
+  context: ReconciliationRouteContext,
+): Promise<Response> {
+  const command = decodeVerificationRotation(body);
+  if (!command.ok) return invalidRequest(context.requestId, command.problem);
+  const { season, round, operationId } = command.value;
+  const audit = {
+    season,
+    round,
+    operatorAction: 'rotate-verifications',
+    operationId,
+  };
+  const ledger = available(context, mutation(audit));
+  if (ledger instanceof Response) return ledger;
+
+  const result = await rotateUnderLease(ledger, command.value);
+  const stored =
+    'snapshot' in result
+      ? result.snapshot.classifications.find(
+          (entry) => entry.record.round === round,
+        )
+      : undefined;
+  const receipt = stored === undefined ? null : rotationReceipt(stored.record);
+  const leaseRelease =
+    'leaseRelease' in result && result.leaseRelease !== null
+      ? result.leaseRelease
+      : null;
+  context.logger.warn({
+    operation: RECONCILIATION_ROTATION_OPERATION,
+    requestId: context.requestId,
+    ...audit,
+    operatorAuthMethod: OPERATOR_AUTH_METHOD,
+    operatorOutcome: result.status,
+    ...(result.status === 'refused' ? { ledgerRejection: result.reason } : {}),
+    ...(receipt === null
+      ? {}
+      : {
+          verificationGenerationFrom: receipt.fromGeneration,
+          verificationGenerationTo: receipt.toGeneration,
+          verificationClearedCount: receipt.clearedCount,
+        }),
+    ...(leaseRelease === null ? {} : { leaseRelease }),
+  });
+  const answered = {
+    status: result.status,
+    action: audit.operatorAction,
+    operationId,
+    season,
+    round,
+  };
+  switch (result.status) {
+    case 'applied':
+    case 'already-applied':
+      return data(context.requestId, 200, {
+        ...answered,
+        receipt,
+        state: {
+          ...seasonView(result.snapshot),
+          round: stored === undefined ? null : roundView(stored),
+        },
+        leaseRelease,
+      });
+    case 'run-in-progress':
+      return data(context.requestId, 409, answered);
+    case 'refused':
+      return data(context.requestId, 409, {
+        ...answered,
+        reason: result.reason,
+        leaseRelease,
+      });
+    case 'ledger-unavailable':
+    case 'outcome-unknown':
+      return data(context.requestId, 503, { ...answered, leaseRelease });
+  }
 }
 
 /**

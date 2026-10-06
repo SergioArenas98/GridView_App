@@ -1,7 +1,8 @@
 /**
  * The operator transitions, each under the season's lease (PR-E2): one
- * season-level action (hold, release the hold, clear a durable block), or
- * one T12 disposition of a staged correction.
+ * season-level action (hold, release the hold, clear a durable block), one
+ * T12 disposition of a staged correction, or one rotation of a round's full
+ * verification history (PR-E4).
  *
  * Each call takes the season's fenced lease, makes exactly one ledger
  * operation with it, and gives it back on every path. The ledger makes every
@@ -12,7 +13,8 @@
  *
  * Nothing here publishes, reads a provider or writes anything but the
  * ledger. A released hold, a cleared block or a disposition only makes
- * publication due; the next run publishes through every guard.
+ * publication due; the next run publishes through every guard. A rotation
+ * makes nothing due: it only lets the round be verified again.
  */
 
 import type {
@@ -54,6 +56,22 @@ export interface DispositionCommand {
     readonly contentRevision: RevisionHash;
     readonly stagedRevision: RevisionHash;
     readonly competingRevision: RevisionHash | null;
+  };
+}
+
+/**
+ * One rotation of a round's full verification history (PR-E4). `expected`
+ * names the record the operator inspected and the digest of the history
+ * they archived from the read-only history route.
+ */
+export interface VerificationRotationCommand {
+  readonly season: number;
+  readonly round: number;
+  readonly operationId: OperationId;
+  readonly expected: {
+    readonly recordVersion: number;
+    readonly verificationGeneration: number;
+    readonly historyDigest: RevisionHash;
   };
 }
 
@@ -114,6 +132,21 @@ export function disposeUnderLease(
       lease,
       round: command.round,
       action: command.action,
+      operationId: command.operationId,
+      authMethod: OPERATOR_AUTH_METHOD,
+      expected: command.expected,
+    }),
+  );
+}
+
+export function rotateUnderLease(
+  ledger: ReconciliationLedgerPort,
+  command: VerificationRotationCommand,
+): Promise<OperatorActionResult> {
+  return underLease(ledger, command.season, (lease) =>
+    ledger.rotateVerifications({
+      lease,
+      round: command.round,
       operationId: command.operationId,
       authMethod: OPERATOR_AUTH_METHOD,
       expected: command.expected,

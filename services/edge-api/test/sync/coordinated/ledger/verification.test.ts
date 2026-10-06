@@ -157,7 +157,11 @@ describe.each(transports)(
         round: ROUND,
         operationId,
         authMethod: 'shared-admin-token',
-        expected: { recordVersion: entry.version, stagedRevision: STAGED },
+        expected: {
+          recordVersion: entry.version,
+          stagedRevision: STAGED,
+          verificationGeneration: 0,
+        },
         observation,
         ...overrides,
       });
@@ -402,7 +406,11 @@ describe.each(transports)(
 
       expect(
         await verify(fixture, observed(B), OP[0], {
-          expected: { recordVersion: 2, stagedRevision: rev('other-staged') },
+          expected: {
+            recordVersion: 2,
+            stagedRevision: rev('other-staged'),
+            verificationGeneration: 0,
+          },
         }),
       ).toEqual({ outcome: 'rejected', reason: 'operation-id-reused' });
       expect(committedBytes(fixture.host)).toBe(bytes);
@@ -456,7 +464,11 @@ describe.each(transports)(
           round: 4,
           operationId: OP[0],
           authMethod: 'shared-admin-token',
-          expected: { recordVersion: 1, stagedRevision: STAGED },
+          expected: {
+            recordVersion: 1,
+            stagedRevision: STAGED,
+            verificationGeneration: 0,
+          },
           observation: observed(B),
         }),
       ).toEqual({ outcome: 'rejected', reason: 'operation-id-reused' });
@@ -488,12 +500,24 @@ describe.each(transports)(
     it.each([
       [
         'a stale staged target',
-        { expected: { recordVersion: 1, stagedRevision: rev('stale') } },
+        {
+          expected: {
+            recordVersion: 1,
+            stagedRevision: rev('stale'),
+            verificationGeneration: 0,
+          },
+        },
         'operator-precondition-failed',
       ],
       [
         'a stale record version',
-        { expected: { recordVersion: 7, stagedRevision: STAGED } },
+        {
+          expected: {
+            recordVersion: 7,
+            stagedRevision: STAGED,
+            verificationGeneration: 0,
+          },
+        },
         'version-conflict',
       ],
       ['an unrecorded round', { round: 9 }, 'operator-precondition-failed'],
@@ -539,7 +563,11 @@ describe.each(transports)(
             round,
             operationId: OP[0],
             authMethod: 'shared-admin-token',
-            expected: { recordVersion: 1, stagedRevision: STAGED },
+            expected: {
+              recordVersion: 1,
+              stagedRevision: STAGED,
+              verificationGeneration: 0,
+            },
             observation: observed(B),
           }),
         ).toEqual({ outcome: 'rejected', reason });
@@ -582,7 +610,13 @@ describe.each(transports)(
       ['a token as the auth method', { authMethod: 'Bearer local-test-token' }],
       [
         'record version 0',
-        { expected: { recordVersion: 0, stagedRevision: STAGED } },
+        {
+          expected: {
+            recordVersion: 0,
+            stagedRevision: STAGED,
+            verificationGeneration: 0,
+          },
+        },
       ],
     ])('refuses a request with %s', async (_, change) => {
       const fixture = await setup();
@@ -594,7 +628,11 @@ describe.each(transports)(
         round: ROUND,
         operationId: OP[0],
         authMethod: 'shared-admin-token',
-        expected: { recordVersion: entry.version, stagedRevision: STAGED },
+        expected: {
+          recordVersion: entry.version,
+          stagedRevision: STAGED,
+          verificationGeneration: 0,
+        },
         observation: observed(B),
         ...(change as object),
       } as VerificationRequest);

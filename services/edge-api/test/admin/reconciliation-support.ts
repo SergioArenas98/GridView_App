@@ -48,6 +48,7 @@ export const ledgerMethods = [
   'operate',
   'dispose',
   'verify',
+  'rotateVerifications',
 ] as const;
 export type LedgerMethod = (typeof ledgerMethods)[number];
 
@@ -239,6 +240,9 @@ export const paths = {
   clearBlock: '/internal/admin/reconciliation/clear-block',
   disposition: '/internal/admin/reconciliation/disposition',
   verification: '/internal/admin/reconciliation/verification',
+  verificationHistory: (season: number, round: number) =>
+    `/internal/admin/reconciliation/verification-history?season=${season}&round=${round}`,
+  verificationRotation: '/internal/admin/reconciliation/verification-rotation',
   rollback: (season: number) => `/internal/admin/rollback?season=${season}`,
 } as const;
 

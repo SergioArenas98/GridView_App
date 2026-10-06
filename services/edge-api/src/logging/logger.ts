@@ -153,6 +153,14 @@ export interface LogEvent {
   verificationTransition?: string;
   verificationMatch?: string;
   verificationComparison?: string;
+  /**
+   * A verification-history rotation's generations and how many entries it
+   * cleared (PR-E4). Counters only: never a cleared entry, operation ID,
+   * revision or digest.
+   */
+  verificationGenerationFrom?: number;
+  verificationGenerationTo?: number;
+  verificationClearedCount?: number;
 }
 
 export interface Logger {

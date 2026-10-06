@@ -88,7 +88,7 @@ describe('the operator package is connected only where PR-E2 connects it', () =>
     ).toEqual(['sync/coordinated/policy/cadence.ts']);
   });
 
-  it('writes only through operate, dispose and verify, publishes only through the rollback it is handed, and reads no global', () => {
+  it('writes only through operate, dispose, verify and rotateVerifications, publishes only through the rollback it is handed, and reads no global', () => {
     for (const file of operatorFiles()) {
       const code = readSource(file);
       expect(code, file).not.toMatch(
@@ -99,7 +99,7 @@ describe('the operator package is connected only where PR-E2 connects it', () =>
       );
     }
     const writers = operatorFiles().filter((file) =>
-      /\.(operate|dispose|verify)\(/.test(readSource(file)),
+      /\.(operate|dispose|verify|rotateVerifications)\(/.test(readSource(file)),
     );
     expect(writers).toEqual([
       'sync/coordinated/operator/actions.ts',
@@ -120,6 +120,12 @@ describe('the operator package is connected only where PR-E2 connects it', () =>
     const actions = readSource('sync/coordinated/operator/actions.ts');
     expect(actions.match(/ledger\.operate\(/g)).toHaveLength(1);
     expect(actions.match(/ledger\.dispose\(/g)).toHaveLength(1);
+    // PR-E4: one rotation, one ledger write, and no provider request.
+    expect(actions.match(/ledger\.rotateVerifications\(/g)).toHaveLength(1);
+    expect(actions).not.toMatch(
+      /requestClassification|composeCoordinatedRuntime/,
+    );
+    expect(verification).not.toMatch(/rotateVerifications\(/);
     const rollback = readSource('sync/coordinated/operator/rollback.ts');
     expect(rollback.match(/dependencies\.rollback\(/g)).toHaveLength(2);
     // The attention signal reads once and writes nothing.
