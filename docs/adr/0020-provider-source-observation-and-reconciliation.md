@@ -1362,6 +1362,10 @@ reason and the backlog count, and nothing else. A manual run writes none.
   scheduled handler still calls `runCoordinatedSync`, which stops at
   composition, so **no deployed Worker can write it**. Connecting the
   orchestration is an activation step.
+  *(Superseded in part on 2026-10-06 by "Entry points" below: the scheduled
+  handler now reaches the orchestration through `runCoordinatedSync`, behind
+  a gate that needs a bound ledger. No ledger is bound, so no deployed Worker
+  can write the line yet.)*
 
 **Tests.** 133 new tests (4,711 in 204 files). Through the Worker entry point,
 with the resolver's answer injected by `vi.mock` (no environment field or
@@ -2005,6 +2009,162 @@ valid. The implementation plan, the source of truth for phases, had no E4
 phase. §14.0.40 now records the phase, its acceptance criteria and its
 status, with a status-table row and a forward note in §14.0.39. The change is
 documentation only; the code is unchanged.
+
+### Entry points: the orchestration wired, and unbound (2026-10-06)
+
+Implementation Plan §14.0.41 records this slice. It connects the C3/C4
+orchestration to the Worker's two coordinated entry points: the scheduled
+handler and `POST /internal/admin/sync/full` in `coordinated` mode. **The
+orchestration is now wired, but it is not active.** No ledger is bound, no
+environment selects `coordinated`, nothing is deployed, and **G5 and G9 are
+not complete**.
+
+**Three states, kept apart in every document:**
+
+| State | Meaning | Where it holds |
+|---|---|---|
+| Implemented, injected | The code exists, and only tests call it. | C1 to E4, until this slice |
+| **Wired, unbound** | A Worker entry point reaches the code, behind a gate that needs a reconciliation ledger. `resolveReconciliationLedger()` answers `null`, so the gate refuses every run first. | **Every environment, from this slice** |
+| Active | A deployed Worker with `coordinated` selected resolves a bound ledger, and runs reach the orchestration and the provider. | Nowhere. It needs every activation step below. |
+
+**One path.** Both entry points call `runCoordinatedSync`. It checks every
+dependency first: the limiter, a reachable sequencer authority with its
+guarded publication, a purge origin and the ledger. Only when all are
+present does it hand the run to `observeCoordinatedSeason`, with the
+sequencer and storage the Worker resolved. That function holds the §6.6 run
+end to end: lease, reconciliation, recovery, the G5 planner, one
+coordination, the G9 observation commit and, for a publication plan, the
+publication half. The publication half covers publishability, the O-12
+no-change gate, the O-13 ordering input, O-14 metadata, the hold and
+durable-block stops, one guarded publication and the outcome commit. There
+is no second publication path, and `SynchronizationService` and the legacy
+publisher are never reached in `coordinated` mode.
+
+**The two triggers.** The accepted O-8 semantics live in the orchestration,
+and the entry points only name the trigger:
+
+- **Scheduled**: it serves only what is due, and advances the due times it
+  serves. Its cadence checks count confirmations and corroborate. It ends
+  with the attention read (E2).
+- **Manual**: a forced publication run. Its observations are out of cadence:
+  a first write counts no confirmation, and a differing revision is not
+  applied. It moves no due time, ignores the limiter deferral (the limiter
+  still decides), is refused as `publication-stopped` on a held or durably
+  blocked season before any request, and writes no attention line.
+
+**The gate.** It runs before composition, so a refused run constructs no
+pacer, client, transport, port, coordinator or bridge. It takes no lease and
+makes no limiter reservation, provider request or publication write. A
+refusal writes the existing bounded `sync.coordinated.withheld` line, and
+`sync/full` answers `503` with the closed reasons. With the resolver
+unchanged, that is every coordinated run in every environment, with the
+reason `ledger-unbound`. Production also reports `authority-not-sequencer`.
+A refused **scheduled** run with a ledger bound still reads it once for the
+attention line, so a degraded runtime cannot silence a stopped season. That
+is the rule E2 set for the orchestration's own refusals.
+
+**Answers.** A run the orchestration handles writes its one
+`sync.coordinated.observation` line (and, when scheduled, the attention
+line). `sync/full` answers `200` with the closed outcome:
+
+- `observed`, with the plan, coordination status, request count, policy
+  event counts, publication result and lease release;
+- `nothing-due`, with its reason;
+- `run-in-progress`;
+- `failed`, with stage and closed failure.
+
+Each answer also carries the run kind. That `200` is the router's existing
+rule (PR-B): only a refusal before the orchestration is a `503`. It is the
+same rule as the whole-season sync, which answers `200` with its own result.
+
+**`mock` and `none` are unchanged.** A trace recorded from the baseline
+source (`192e83d`), before any source change, covers the scheduled handler,
+every admin route and the public reads. It covers every environment and mode
+combination: `mock`, `none`, unset and the refused ones. Each step records
+the answer and body hash, the mock provider requests, the storage calls in
+order, the log lines and the coordinated traffic counters. The trace is
+reproduced exactly. With a ledger bound, it is also exact, except that the
+read-only E2 inspection route no longer lists `ledger-unbound`.
+
+**Choices made in implementation, not owner decisions:**
+
+1. The gate runs before composition, and a refusal there keeps the
+   `sync.coordinated.withheld` line. An orchestrated run keeps the
+   orchestration's `sync.coordinated.observation` line. One run writes one
+   of the two, never both.
+2. **No cancellation source.** The orchestration defines what a cancelled
+   run records (`retry`, `publicationDueAt` = now + 1 h for a scheduled run;
+   no due time for a manual one). But no accepted decision gives a Worker
+   entry point a reason to cancel. The decision pack's five-minute run budget
+   (§7) was a recommendation, and O-8 did not adopt it. A deployed Worker
+   therefore never cancels a run. The cancelled path is driven through the
+   real entry points only by a test hook, `__COORDINATED_RUN_SIGNAL`. A run
+   budget, or tying a manual run to its request's lifetime, needs an owner
+   decision.
+3. `__PACER_SLEEP` is a test hook, read only after the gate, so a Worker-level
+   test advances its own clock instead of sleeping.
+4. The orchestration's mapping reads `coordinationFor` through the
+   composition, and imports only types from the coordination package. The
+   composition therefore stays the only Worker module that imports either
+   provider package by value (ADR 0022 A9 allow-list, unchanged).
+
+**Tests.** 44 new tests, for 4,908 in 212 files. Everything is driven through
+`worker.scheduled` and `worker.fetch`, over both sequencer and ledger
+transports. The resolver's answer is injected by `vi.mock`, because no
+environment field or test hook supplies a ledger. They cover:
+
+- the missing-ledger path;
+- a due bootstrap observation and nothing due;
+- a guarded publication with curated metadata and the ordering input, and
+  unchanged content confirmed without publishing;
+- scheduled versus manual confirmation and due-time accounting;
+- cancellation, limiter deferral, a failed provider request, a failed ledger
+  commit and a held lease;
+- held and durably blocked seasons, and backlog levels 47, 48 and 60 of 60;
+- production's legacy authority, with and without a ledger;
+- the baseline trace, with and without a ledger.
+
+The dormancy tests now pin the wiring: the orchestration is imported only by
+`run.ts`, `run.ts` only by the Worker entry point (and, for a type, the
+router), and the resolver answers `null`.
+
+**Negative controls.** Each is a mutation of the final code, restored from a
+backup:
+
+| Mutation | Failed tests |
+|---|---|
+| The gate skipped, so a null ledger reaches the orchestration | 9 |
+| A fallback ledger supplied when the resolver answers `null` | 12 |
+| The runtime composed before the gate | 11 |
+| `sync/full` takes the whole-season path in `coordinated` mode | 43 |
+| The scheduled handler takes the whole-season path in `coordinated` mode | 37 |
+| A manual run sent as a scheduled one | 29 |
+| The attention read dropped from a refused scheduled run | 4 |
+| One extra storage read in the whole-season scheduled path | 2 |
+
+**Bundle.** `d8022e63…42e6` (736,707 B) → `e866e387…c4cb` (804,240 B),
+identical in all three environments. Binding reports are unchanged: staging
+`mock`, production `none`, and no ledger binding. The +67,533 B are 18
+modules now reachable from the Worker:
+
+- the policy, the observation orchestration and the outcome half;
+- the two curated records O-14 reads.
+
+The modules the verification already reached also grew a little.
+
+**Still open, all needed before "active":**
+
+- the ledger's `[exports]` entry, binding and a resolver that reads it;
+- selecting `coordinated` in staging, and deploying it (activation steps 2
+  and 3, each separately authorized and cutover-sensitive);
+- the hourly cron (O-7, step 6);
+- O-9, and O-10 (plan limits and CPU, before step 3);
+- running the A3.5 staging predecessor gate;
+- the first provider-backed run (step 4, data-level irreversible, O-15);
+- verified production alert delivery (OD-1), and PR-G (O-16);
+- an owner decision on a run budget, if one is wanted.
+
+The decision above is unchanged.
 
 ## Reopening conditions
 

@@ -2,8 +2,10 @@
  * The per-run composition of the coordinated runtime.
  *
  * This is the **only** runtime module outside `src/providers/jolpica/` and
- * `src/providers/coordination/` that imports either package. The dormancy
- * tests pin that as an exact allow-list.
+ * `src/providers/coordination/` that imports either package by value. The
+ * orchestration in `observation/` imports only types from the coordination
+ * package, which the build erases. The dormancy tests pin that as an exact
+ * allow-list.
  *
  * Composition is gated. `composeCoordinatedRuntime` checks every required
  * dependency first, and only when all of them are present does it construct
@@ -67,6 +69,13 @@ import {
 } from '../../providers/jolpica';
 import type { Clock } from '../../runtime/clock';
 import type { ReconciliationLedgerPort } from './ledger-port';
+
+/**
+ * The coordinator's per-resource lookup, for the orchestration's mapping of a
+ * run onto the policy (`observation/outcomes.ts`). Re-exported here so this
+ * module stays the only runtime module that imports either package by value.
+ */
+export { coordinationFor };
 
 /**
  * Why a coordinated run cannot start, in the fixed order they are checked.

@@ -751,6 +751,11 @@ provider request**:
 - every scheduled run writes one `sync.coordinated.withheld` warn line with
   `coordinationMissingDependencies` including `ledger-unbound`;
 - `POST /internal/admin/sync/full` answers 503 with the same closed reasons;
+- since 2026-10-06 both entry points are **wired** to the reconciliation
+  orchestration (Implementation Plan §14.0.41), behind that same gate. Wired
+  is not active: without a bound ledger the gate refuses first, so nothing
+  is leased, reserved, requested or published. Binding a ledger is its own
+  activation step and its own authorization;
 - `sync/resource` and `rebuild/home` answer 409 `SYNC_MODE_UNSUPPORTED`;
 - mock synchronization stops, so the last published release keeps serving.
 
@@ -960,9 +965,11 @@ run while a season is held, durably blocked, or the global review backlog
 holds at least 48 of its 60 slots: `warn`, or `error` at 60 of 60. It
 carries `season`, `reconciliationAttention` (closed conditions),
 `durableBlockReason`, `backlogCount` and `backlogCapacity`, and nothing else.
-**It is written only by the coordinated orchestration, which the scheduled
-handler does not call yet.** No deployed Worker can write it. Connecting the
-orchestration is an activation step.
+**It is written only by the coordinated orchestration.** Since 2026-10-06
+the scheduled handler is wired to it, behind a gate that needs a bound
+ledger (Implementation Plan §14.0.41). No ledger is bound and no deployed
+Worker carries the wiring, so no deployed Worker can write it yet. Binding
+the ledger and deploying are activation steps.
 
 **Staging daily review (OD-1).** OD-1 accepts a daily operator review for
 staging. **It is not alert delivery**: nothing pages anyone, and production

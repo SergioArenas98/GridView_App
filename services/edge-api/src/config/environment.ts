@@ -52,6 +52,17 @@ interface TestOnlyBindings {
    * coordinated dependency gate has passed.
    */
   __PROVIDER_TRANSPORT?: import('../providers/http/provider-http-client').ProviderTransport;
+  /**
+   * How a composed coordinated runtime's reservation pacer waits. Test-only:
+   * a test advances its own clock instead of sleeping on a timer. Read only
+   * after every coordinated dependency gate has passed.
+   */
+  __PACER_SLEEP?: import('../providers/http/reservation-pacer').PacerSleep;
+  /**
+   * Cancels a coordinated run. Test-only: no accepted decision defines a run
+   * budget, so a deployed Worker supplies no signal and never cancels a run.
+   */
+  __COORDINATED_RUN_SIGNAL?: AbortSignal;
 }
 
 /** Bindings and variables available to the Worker. */

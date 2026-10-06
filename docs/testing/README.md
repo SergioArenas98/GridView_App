@@ -1759,6 +1759,66 @@ Coverage:
   single-provider path, and no module outside `providers/coordination/`
   references the coordination package.
 
+## Coordinated entry points: wired, unbound (Phase 9B, 2026-10-06)
+
+The reconciliation orchestration (ADR 0020, C3/C4) is now **wired** to the
+Worker's scheduled handler and `POST /internal/admin/sync/full` in
+`coordinated` mode. It is **not active**: the resolver answers `null`, so the
+entry point's gate refuses every run in every environment. The tests keep
+the two states apart.
+
+**Wired: the orchestration through the real entry points.** These are in
+`services/edge-api/test/sync/coordinated/entry-points/`. They run over both
+sequencer and ledger transports, with the resolver's answer injected by
+`vi.mock`. No environment field or test hook supplies a ledger. Everything
+below `worker.scheduled` and `worker.fetch` is real: the mode check, the
+Worker's own guarded sequenced publication, the gate, the composition, the
+lease, the planner and the outcome commit. Only the Jolpica transport, the
+limiter double, the pacer's sleep and the clock are local, and a global
+`fetch` stub fails any network attempt. The scenarios are:
+
+- the missing-ledger path;
+- a due bootstrap observation, and nothing due;
+- a guarded publication with curated metadata and the ordering input;
+- unchanged content confirmed without publishing;
+- scheduled versus manual confirmation and due-time accounting;
+- cancellation, through the test-only `__COORDINATED_RUN_SIGNAL`, because no
+  deployed Worker cancels a run;
+- limiter deferral, a failed provider request, a failed ledger commit and a
+  held lease;
+- held and durably blocked seasons, and backlog levels 47, 48 and 60 of 60;
+- production's legacy authority, with and without a ledger.
+
+Spies show which path each call took. No call reaches
+`SynchronizationService`.
+
+**Unbound: the gate.** `test/sync/coordinated/run.test.ts` covers the gate
+and the single delegation. `test/sync/coordinated-runtime.test.ts` proves
+the real `null` resolver refuses both triggers before composition, with zero
+reservations, requests and publication writes. The dormancy tests and
+`provider-neutrality.test.ts` pin the graph: the orchestration is imported
+only by `run.ts`, and the composition stays the only Worker module that
+imports a provider package by value.
+
+**`mock` and `none` unchanged.** The trace in
+`test/sync/baseline/whole-season-trace.json` was recorded from the baseline
+source (`192e83d`) before any source change. It covers every entry point in
+every environment and mode combination. `whole-season-trace.test.ts`
+replays it and requires the identical trace: answers and body hashes, mock
+provider requests, storage calls in order, log lines and zero coordinated
+traffic. The entry-point tests replay it again with a ledger bound.
+
+Eight negative controls each made tests fail and were restored byte for byte
+(Implementation Plan §14.0.41):
+
+- the gate skipped;
+- a fallback ledger;
+- composing before the gate;
+- either entry point taking the whole-season path in `coordinated` mode;
+- a manual run sent as scheduled;
+- the attention read dropped;
+- one extra whole-season storage read.
+
 ## Provider outbound boundary and rate limiter (Phase 9B-2)
 
 75 Edge tests under `services/edge-api/test/providers/` and

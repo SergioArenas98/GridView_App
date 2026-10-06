@@ -923,8 +923,9 @@ operation under the season lease. In `coordinated` mode,
 `reconciliation-unavailable` today. The answers, the procedures and the
 staging daily review are in the staging runbook. The
 `reconciliation.attention` line those reviews look for is written only by
-the coordinated orchestration, which no deployed Worker runs. **No alert
-delivery exists.**
+the coordinated orchestration. Since 2026-10-06 the scheduled handler is
+wired to it, but behind a gate that needs the unbound ledger, so no Worker
+writes the line yet. **No alert delivery exists.**
 
 ### Operational expectations
 
@@ -1098,6 +1099,27 @@ written only on the full success path). It logs operational metadata only. It is
 verified by `test/sync/scheduled-handler.test.ts` and
 `test/sync/synchronization.test.ts` (the safe local mechanism — no remote trigger,
 no cron change). See `../operations/GridView_Staging_Edge_Runbook.md` §13.
+
+That is the `mock` and `none` path, and it is unchanged. In `coordinated`
+mode (selected nowhere), the scheduled handler and
+`POST /internal/admin/sync/full` instead call one entry point,
+`runCoordinatedSync` (Implementation Plan §14.0.41). It checks every
+coordinated dependency, and only then hands the run to the reconciliation
+orchestration (ADR 0020, C3/C4).
+
+- **Scheduled** runs serve only due work and advance due times.
+- **Manual** runs are forced publication runs that move no due time.
+
+The reconciliation ledger is unbound, so today every coordinated run is
+refused before anything is composed:
+
+- a manual run answers `503` `coordinated-runtime-unavailable` with
+  `ledger-unbound`;
+- a scheduled run writes one `sync.coordinated.withheld` warn line.
+
+Once a ledger is bound, a run the orchestration handles writes one
+`sync.coordinated.observation` line, and `sync/full` answers `200` with its
+closed outcome. The orchestration is **wired, not active**.
 
 ## Staging decisions (settled in Phase 5B)
 

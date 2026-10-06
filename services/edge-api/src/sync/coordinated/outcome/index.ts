@@ -5,10 +5,11 @@
  * commit, plus the resolution of a publication a previous run left
  * unfinished.
  *
- * **Implemented, injected and not connected.** Only the injected
- * orchestration in `observation/` calls it. No Worker module imports either,
- * `resolveReconciliationLedger` still answers `null`, and every coordinated
- * run still stops at `ledger-unbound` with zero provider requests.
+ * **Wired, and unbound.** Only the orchestration in `observation/` calls it,
+ * and only the coordinated sync entry point calls that, behind a gate that
+ * needs every dependency. `resolveReconciliationLedger` still answers `null`,
+ * so every coordinated run stops at that gate as `ledger-unbound`, with zero
+ * provider requests and no publication.
  */
 
 export * from './decisions';

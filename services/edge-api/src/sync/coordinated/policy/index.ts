@@ -1,10 +1,12 @@
 /**
  * The G9 reconciliation policy and G5 due-work planner (PR-C2).
  *
- * **Implemented, not connected.** Only the injected orchestration in
- * `observation/` and `outcome/` calls it, and no Worker module imports any of
- * them: `resolveReconciliationLedger` still answers `null`, and every
- * coordinated run still stops at `ledger-unbound` with zero provider requests.
+ * **Wired, and unbound.** Only the orchestration in `observation/` and
+ * `outcome/` calls it (and the operator verification reads `cadence.ts`). The
+ * coordinated sync entry point reaches the orchestration only behind a gate
+ * that needs every dependency; `resolveReconciliationLedger` still answers
+ * `null`, so every coordinated run stops there as `ledger-unbound`, with zero
+ * provider requests.
  */
 
 export * from './cadence';
