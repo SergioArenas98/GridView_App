@@ -2000,6 +2000,12 @@ the rotation operation, its decoders and the digest.
 - Only the latest rotation per round is remembered. Earlier receipts live
   only in the operator's private archive.
 
+**Review correction.** Codex raised one P1 on PR #62 at `bb9c686`, and it was
+valid. The implementation plan, the source of truth for phases, had no E4
+phase. §14.0.40 now records the phase, its acceptance criteria and its
+status, with a status-table row and a forward note in §14.0.39. The change is
+documentation only; the code is unchanged.
+
 ## Reopening conditions
 
 | Trigger | Consequence |
