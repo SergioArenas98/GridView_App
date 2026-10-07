@@ -912,7 +912,8 @@ shorten it.
 > entry is created for it. D10 itself is unchanged, and any other unmapped
 > row still fails the whole resource. The season-2026 dataset then holds 94
 > exact mappings, 97 approved evidence identities and three
-> acknowledgements.
+> acknowledgements. The curator approved the identity and mapping on
+> 2026-10-08.
 
 `PROVIDER_MODE` still admits exactly `mock` and `none`, staging is `mock` and
 production is `none`. Nothing here authorizes a provider request, deployment,
