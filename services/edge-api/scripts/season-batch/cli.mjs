@@ -16,21 +16,14 @@
 // Exit codes: 0 generated, 1 refused, 2 usage error.
 
 import { execFileSync } from 'node:child_process';
-import {
-  mkdtemp,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { build } from 'esbuild';
 
+import { readBounded } from './bounded-read.mjs';
 import {
   parseArguments,
   pathRefusal,
@@ -100,20 +93,39 @@ async function loadGenerator() {
   }
 }
 
-async function readCapture(captureDirectory, decodeCaptureManifest) {
-  const manifestPath = join(captureDirectory, captureManifestFile);
-  let text;
+/**
+ * Reads one capture file within `limit` bytes, or refuses: `oversized` and
+ * `not-a-file` map to their own closed reasons, anything unopenable to
+ * `unreadable`. Nothing is written before every file has been read.
+ */
+async function readCaptureFile(path, limit, reasons) {
+  let read;
   try {
-    if ((await stat(manifestPath)).size > maximumManifestBytes) {
-      refuse('capture-malformed', 'manifest-too-large');
-    }
-    text = await readFile(manifestPath, 'utf8');
+    read = await readBounded(path, limit);
   } catch {
-    refuse('capture-unreadable');
+    refuse(reasons.unreadable);
   }
+  if (!read.ok) {
+    refuse(read.reason === 'oversized' ? reasons.oversized : reasons.notAFile);
+  }
+  return read.bytes;
+}
+
+async function readCapture(captureDirectory, decodeCaptureManifest) {
+  const manifestBytes = await readCaptureFile(
+    join(captureDirectory, captureManifestFile),
+    maximumManifestBytes,
+    {
+      oversized: 'capture-manifest-oversized',
+      notAFile: 'capture-unreadable',
+      unreadable: 'capture-unreadable',
+    },
+  );
   let capture;
   try {
-    capture = JSON.parse(text);
+    capture = JSON.parse(
+      new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes),
+    );
   } catch {
     refuse('capture-malformed', 'not-json');
   }
@@ -122,23 +134,31 @@ async function readCapture(captureDirectory, decodeCaptureManifest) {
 
   // The directory holds the manifest and exactly the files it names: an
   // extra file means the capture was not assembled as recorded.
-  const named = new Set(decoded.manifest.responses.map((entry) => entry.file));
+  const entries = decoded.manifest.responses;
+  const named = new Set(entries.map((entry) => entry.file));
   const present = await readdir(captureDirectory);
   for (const entry of present) {
     if (entry !== captureManifestFile && !named.has(entry)) {
       refuse('capture-body-unexpected');
     }
   }
+  // Each body is read within its declared size, which the decoder already
+  // capped at the HTTP client's response limit. A longer file is refused
+  // here, unread past the bound; a shorter one fails its digest check.
   const bodies = new Map();
-  for (const file of named) {
-    try {
-      bodies.set(
-        file,
-        new Uint8Array(await readFile(join(captureDirectory, file))),
-      );
-    } catch {
-      refuse('capture-body-missing');
-    }
+  for (const entry of entries) {
+    bodies.set(
+      entry.file,
+      await readCaptureFile(
+        join(captureDirectory, entry.file),
+        entry.byteLength,
+        {
+          oversized: 'capture-body-oversized',
+          notAFile: 'capture-body-missing',
+          unreadable: 'capture-body-missing',
+        },
+      ),
+    );
   }
   return { capture, bodies };
 }

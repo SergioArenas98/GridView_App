@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  appendFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -312,5 +314,71 @@ describe('season-batch CLI: end to end, offline', () => {
     expect(status).toBe(1);
     expect(report.failure).toBe('classification-rounds-mismatch');
     expect(() => readFileSync(join(root, 'out', 'artifact.json'))).toThrow();
+  }, 60_000);
+});
+
+describe('season-batch CLI: bounded reads', () => {
+  function refused(root) {
+    return run([
+      '--capture',
+      join(root, 'capture'),
+      '--out',
+      join(root, 'out'),
+      '--allow-dirty-tree',
+    ]);
+  }
+
+  it.each([
+    ['one byte', 1],
+    ['3 MiB, beyond the client response limit', 3 * 1024 * 1024],
+  ])(
+    'refuses a body file longer than its declared size by %s, writing nothing',
+    (_label, extra) => {
+      const root = scratch();
+      const capture = join(root, 'capture');
+      writeCapture(capture);
+      // The manifest still declares the recorded size; the file is replaced.
+      appendFileSync(join(capture, 'drivers.json'), Buffer.alloc(extra, 0x20));
+      const { status, report } = refused(root);
+      expect(status).toBe(1);
+      expect(report).toEqual({
+        ok: false,
+        failure: 'capture-body-oversized',
+        detail: null,
+      });
+      expect(existsSync(join(root, 'out'))).toBe(false);
+    },
+    60_000,
+  );
+
+  it('refuses a capture.json over 1 MiB before parsing it, writing nothing', () => {
+    const root = scratch();
+    const capture = join(root, 'capture');
+    writeCapture(capture);
+    // Still valid JSON: only the bound can refuse it.
+    appendFileSync(
+      join(capture, 'capture.json'),
+      Buffer.alloc(1024 * 1024, 0x20),
+    );
+    const { status, report } = refused(root);
+    expect(status).toBe(1);
+    expect(report).toEqual({
+      ok: false,
+      failure: 'capture-manifest-oversized',
+      detail: null,
+    });
+    expect(existsSync(join(root, 'out'))).toBe(false);
+  }, 60_000);
+
+  it('refuses a body path that is not a regular file', () => {
+    const root = scratch();
+    const capture = join(root, 'capture');
+    writeCapture(capture);
+    rmSync(join(capture, 'drivers.json'));
+    mkdirSync(join(capture, 'drivers.json'));
+    const { status, report } = refused(root);
+    expect(status).toBe(1);
+    expect(report.failure).toBe('capture-body-missing');
+    expect(existsSync(join(root, 'out'))).toBe(false);
   }, 60_000);
 });

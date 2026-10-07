@@ -31,6 +31,14 @@ and short names, so a link into the repository is refused. The output
 directory must not exist, or must be empty. Both files are written, or
 neither: a lone artifact left by a failed manifest write is removed.
 
+Every file is read within a strict byte bound, on one open handle and
+into a buffer allocated for that bound. `capture.json` must be at most
+1 MiB. Each body must be at most its declared `byteLength`, which is itself
+capped at the HTTP client's 2 MiB response limit. A larger file is
+refused as `capture-manifest-oversized` or `capture-body-oversized`. It is
+never read in full, and nothing is written. There is no stat-then-read, so
+replacing a file between the two cannot bypass the bound.
+
 The CLI prints the summary and the capture digest. Check that digest against
 the capture you meant to replay: `capture.json` has no external integrity
 anchor of its own.
@@ -79,7 +87,7 @@ and no file is written:
 | Stage        | Refusal                                                                                                                       |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
 | Manifest     | Malformed manifest, an unknown field, a URL outside `https://api.jolpi.ca/ergast/f1/{season}/`, a repeated URL or file        |
-| Body files   | A missing or extra body file, a size or SHA-256 mismatch, any non-200 recording                                               |
+| Body files   | A missing, extra, non-regular or oversized body file, a size or SHA-256 mismatch, any non-200 recording                       |
 | Replay       | A request with no recording, a recording requested twice, a recording never requested                                         |
 | Coordination | A run that did not complete. Every resource is selected only from a payload the ports validated (ADR 0024).                   |
 | Assembly     | Any assembly gap: unavailable resource, missing round classification, A3.5 standings incoherence, inconsistent references     |
