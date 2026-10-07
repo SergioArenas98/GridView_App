@@ -1113,8 +1113,10 @@ A day without a review leaves a stopped season unseen until the next one
 ### Operator verification (prepared 2026-10-05, deployed in Stage A 2026-10-07, never run)
 
 PR-E3 adds `POST /internal/admin/reconciliation/verification` (ADR 0020
-"E3"). It is in no deployed Worker. Like the routes above, it answers `503`
-`reconciliation-unavailable` today, having read nothing.
+"E3"). Since Stage A (2026-10-07, version `cc8d9a54-…`) the deployed staging
+Worker contains it, and it has never been called. Like the routes above, it
+answers `503` `reconciliation-unavailable` today, having read nothing,
+because staging is on `mock` and no ledger is bound.
 
 **A verification is a Jolpica request.** Once a ledger is bound, each call
 can send one real classification request. **Every verification needs its own
@@ -1216,8 +1218,10 @@ revision, driver ID, field name or count. Inspection shows the round's
 
 PR-E4 adds the read-only `GET /internal/admin/reconciliation/verification-history`
 and `POST /internal/admin/reconciliation/verification-rotation` (ADR 0020
-"E4"). They are in no deployed Worker, and today both answer `503`
-`reconciliation-unavailable`, having read nothing.
+"E4"). Since Stage A (2026-10-07, version `cc8d9a54-…`) the deployed staging
+Worker contains both, and neither has been called. Today both answer `503`
+`reconciliation-unavailable`, having read nothing, because staging is on
+`mock` and no ledger is bound.
 
 **What it is for.** It is the only way to verify a round again after its
 history is full. It clears that round's 32 verifications, raises its
@@ -1432,7 +1436,8 @@ active release, or names another constructor for one of those facts. There is
 no rollback exemption. See section 6, "Publication guard deployment (prepared
 2026-09-27, deployed in Stage A 2026-10-07)".
 
-**In `coordinated` mode (prepared 2026-10-05, not deployed),** a Worker that
+**In `coordinated` mode (prepared 2026-10-05, deployed in Stage A
+2026-10-07, never selected),** a Worker that
 contains PR-E2 runs this rollback only while an operator holds the season,
 under the season's lease. Otherwise it answers `409` `publication-not-held`
 without reaching the publisher. With no ledger bound, which is every
