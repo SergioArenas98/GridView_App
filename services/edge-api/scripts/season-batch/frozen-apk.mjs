@@ -1,11 +1,15 @@
 // GridView frozen-data test APK build: local, test-only.
 //
-//   npm run season-batch:frozen-apk -- --fixtures <dir> --work <dir> \
-//     --out <dir> [--commit <rev>] [--prepare-only]
+//   npm run season-batch:frozen-apk -- --batch <dir> \
+//     --manifest-sha256 <hex> --origin <provider-capture|synthetic> \
+//     --fixtures <dir> --work <dir> --out <dir> [--commit <rev>] [--prepare-only]
 //
 // 1. Verifies the converted fixture directory against its own descriptor
-//    (`frozen-dataset.json`): exactly the listed files, each with its size and
-//    SHA-256.
+//    (`frozen-dataset.json`), then reconverts the reviewed batch with the
+//    converter CLI into a private temporary directory and requires the
+//    fixture directory to be exactly that conversion, byte for byte. An
+//    edited fixture, a relabelled origin or a swapped set is refused even if
+//    its descriptor was edited to match.
 // 2. Exports the committed tree of `--commit` (default `HEAD`) with
 //    `git archive` into `--work`, a new directory outside this repository.
 //    The repository's working tree, index and refs are never touched.
@@ -27,11 +31,13 @@ import { createHash } from 'node:crypto';
 import {
   copyFile,
   mkdir,
+  mkdtemp,
   readdir,
   readFile,
   rm,
   writeFile,
 } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,10 +47,12 @@ import {
   buildUsage,
   descriptorFile,
   directoriesRefusal,
+  exportLauncherRefusal,
   frozenApkName,
   frozenBuildApk,
   frozenBuildSteps,
   parseBuildArguments,
+  sameFixtureSet,
   verifyFixtureSet,
   workPathRefusal,
 } from './fixtures-guards.mjs';
@@ -71,6 +79,78 @@ async function absent(path) {
     if (error?.code === 'ENOENT') return true;
     throw error;
   }
+}
+
+/** Every file in `directory`, by name, or `null` if any cannot be read. */
+async function readDirectoryFiles(directory) {
+  try {
+    const files = new Map();
+    for (const entry of await readdir(directory)) {
+      const read = await readBounded(
+        join(directory, entry),
+        maximumFixtureBytes,
+      );
+      if (!read.ok) return null;
+      files.set(entry, read.bytes);
+    }
+    return files;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reconverts the batch with the converter CLI, which applies every converter
+ * and contract check, and requires `fixtures` to equal its output exactly.
+ */
+async function requireReconversion(parsed, batch, fixtures) {
+  // `refuse` exits the process, which skips `finally`: the private copy is
+  // removed first, and only then is the outcome acted on.
+  const scratch = await mkdtemp(join(tmpdir(), 'gridview-frozen-reconvert-'));
+  let outcome;
+  try {
+    outcome = await reconversionOutcome(parsed, batch, fixtures, scratch);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+  if (!outcome.ok) refuse(outcome.failure, outcome.detail);
+}
+
+async function reconversionOutcome(parsed, batch, fixtures, scratch) {
+  const out = join(scratch, 'fixtures');
+  const converted = spawnSync(
+    process.execPath,
+    [
+      join(here, 'fixtures-cli.mjs'),
+      '--batch',
+      batch,
+      '--out',
+      out,
+      '--manifest-sha256',
+      parsed.manifestSha256,
+      '--origin',
+      parsed.origin,
+    ],
+    { encoding: 'utf8' },
+  );
+  if (converted.status !== 0) {
+    const line = converted.stdout.trim().split('\n').at(-1) ?? '';
+    let detail = null;
+    try {
+      detail = JSON.parse(line).failure ?? null;
+    } catch {
+      // No report: the conversion itself failed.
+    }
+    return { ok: false, failure: 'batch-not-convertible', detail };
+  }
+  const expected = await readDirectoryFiles(out);
+  const actual = await readDirectoryFiles(fixtures);
+  if (expected === null || actual === null) {
+    return { ok: false, failure: 'fixtures-unreadable', detail: null };
+  }
+  return sameFixtureSet(expected, actual)
+    ? { ok: true }
+    : { ok: false, failure: 'fixtures-not-reproduced', detail: null };
 }
 
 async function readFixtures(directory) {
@@ -133,6 +213,8 @@ async function exportTree(commit, work) {
 
 /** Replaces the export's fixture assets with the verified fixtures. */
 async function inject(work, descriptorBytes, files) {
+  const launcher = exportLauncherRefusal(await readdir(work));
+  if (launcher !== null) refuse(launcher);
   const pubspec = await readFile(join(work, 'pubspec.yaml'), 'utf8');
   if (!/^ {4}- assets\/dev_fixtures\/$/m.test(pubspec)) {
     refuse('export-unexpected');
@@ -170,12 +252,14 @@ async function main() {
     report({ ok: false, failure: 'usage', detail: parsed.reason });
     process.exit(2);
   }
+  let batch;
   let fixtures;
   let work;
   let out;
   let root;
   try {
     // Physical paths: a link or junction into the repository is refused too.
+    batch = await physicalPath(parsed.batch);
     fixtures = await physicalPath(parsed.fixtures);
     work = await physicalPath(parsed.work);
     out = await physicalPath(parsed.out);
@@ -183,7 +267,10 @@ async function main() {
   } catch {
     refuse('path-unresolvable');
   }
-  const refusal = directoriesRefusal({ fixtures, work, output: out }, root);
+  const refusal = directoriesRefusal(
+    { batch, fixtures, work, output: out },
+    root,
+  );
   if (refusal !== null) refuse(refusal);
   const tooLong = workPathRefusal(work, process.platform);
   if (tooLong !== null) refuse(tooLong);
@@ -191,6 +278,7 @@ async function main() {
   if (!(await absent(out))) refuse('output-exists');
 
   const { descriptor, descriptorBytes, files } = await readFixtures(fixtures);
+  await requireReconversion(parsed, batch, fixtures);
   const commit = await exportTree(parsed.commit, work);
   await inject(work, descriptorBytes, files);
 

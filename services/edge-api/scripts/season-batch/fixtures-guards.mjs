@@ -16,7 +16,7 @@ export const convertUsage =
   'Usage: npm run season-batch:fixtures -- --batch <dir> --out <dir> --manifest-sha256 <hex> --origin <provider-capture|synthetic>';
 
 export const buildUsage =
-  'Usage: npm run season-batch:frozen-apk -- --fixtures <dir> --work <dir> --out <dir> [--commit <rev>] [--prepare-only]';
+  'Usage: npm run season-batch:frozen-apk -- --batch <dir> --manifest-sha256 <hex> --origin <provider-capture|synthetic> --fixtures <dir> --work <dir> --out <dir> [--commit <rev>] [--prepare-only]';
 
 /**
  * Parses `--name value` pairs and bare flags. Every option is single-use;
@@ -82,19 +82,45 @@ export function parseConvertArguments(argv) {
 }
 
 /**
+ * The build re-declares the batch, the reviewed manifest SHA-256 and the
+ * origin, and reconverts the batch: the fixture directory must be exactly
+ * that conversion, so it cannot be edited, relabelled or swapped, even with a
+ * matching descriptor.
+ *
  * @param {readonly string[]} argv
- * @returns {{ ok: true, fixtures: string, work: string, out: string, commit: string, prepareOnly: boolean } | { ok: false, reason: string }}
+ * @returns {{ ok: true, batch: string, manifestSha256: string, origin: string, fixtures: string, work: string, out: string, commit: string, prepareOnly: boolean } | { ok: false, reason: string }}
  */
 export function parseBuildArguments(argv) {
   const parsed = parse(
     argv,
-    ['--fixtures', '--work', '--out', '--commit'],
+    [
+      '--batch',
+      '--manifest-sha256',
+      '--origin',
+      '--fixtures',
+      '--work',
+      '--out',
+      '--commit',
+    ],
     ['--prepare-only'],
   );
   if (!parsed.ok) return parsed;
   const { values, flags } = parsed;
-  for (const name of ['--fixtures', '--work', '--out']) {
+  for (const name of [
+    '--batch',
+    '--manifest-sha256',
+    '--origin',
+    '--fixtures',
+    '--work',
+    '--out',
+  ]) {
     if (!(name in values)) return { ok: false, reason: 'missing-argument' };
+  }
+  if (!sha256Pattern.test(values['--manifest-sha256'])) {
+    return { ok: false, reason: 'manifest-sha256-invalid' };
+  }
+  if (!['provider-capture', 'synthetic'].includes(values['--origin'])) {
+    return { ok: false, reason: 'origin-invalid' };
   }
   const commit = values['--commit'] ?? 'HEAD';
   // A revision name only: never an option or a path git could reinterpret.
@@ -103,6 +129,9 @@ export function parseBuildArguments(argv) {
   }
   return {
     ok: true,
+    batch: values['--batch'],
+    manifestSha256: values['--manifest-sha256'],
+    origin: values['--origin'],
     fixtures: values['--fixtures'],
     work: values['--work'],
     out: values['--out'],
@@ -215,6 +244,11 @@ export function decodeDescriptor(value) {
       'documentCount',
     ]) ||
     !sha256Pattern.test(String(value.batch.manifestSha256)) ||
+    !sha256Pattern.test(String(value.batch.artifactSha256)) ||
+    !sha256Pattern.test(String(value.batch.captureDigest)) ||
+    !/^[0-9a-f]{40}$/.test(String(value.batch.generatorCommit)) ||
+    typeof value.batch.version !== 'string' ||
+    !Number.isSafeInteger(value.batch.documentCount) ||
     !Array.isArray(value.files) ||
     value.files.length === 0
   ) {
@@ -339,5 +373,37 @@ export const maximumWindowsWorkPath = 80;
 export function workPathRefusal(work, platform) {
   return platform === 'win32' && work.length > maximumWindowsWorkPath
     ? 'work-path-too-long'
+    : null;
+}
+
+/**
+ * Whether two fixture directories hold exactly the same files, byte for byte.
+ *
+ * @param {ReadonlyMap<string, Uint8Array>} expected
+ * @param {ReadonlyMap<string, Uint8Array>} actual
+ */
+export function sameFixtureSet(expected, actual) {
+  if (expected.size !== actual.size) return false;
+  for (const [name, bytes] of expected) {
+    const other = actual.get(name);
+    if (other === undefined || other.byteLength !== bytes.byteLength) {
+      return false;
+    }
+    if (!bytes.every((byte, index) => byte === other[index])) return false;
+  }
+  return true;
+}
+
+/**
+ * A launcher at the export root would run instead of the real `flutter`,
+ * because the Windows shell searches the working directory first.
+ *
+ * @param {readonly string[]} entries the export root's entries
+ */
+export function exportLauncherRefusal(entries) {
+  return entries.some((entry) =>
+    /^flutter(?:\.(?:bat|cmd|exe|com|ps1))?$/i.test(entry),
+  )
+    ? 'export-launcher-present'
     : null;
 }

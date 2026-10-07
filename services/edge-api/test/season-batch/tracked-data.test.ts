@@ -31,6 +31,8 @@ const sampleFixtures = [
 
 const privateKinds =
   /"kind"\s*:\s*"gridview-(?:jolpica-capture|season-batch|season-batch-manifest|frozen-dataset|frozen-apk-build)"/;
+/** Files that can hold a recorded response or a converted document. */
+const dataFile = /\.(?:json|jsonl|ndjson|txt)$/i;
 /** A Jolpica (Ergast-format) response body. */
 const providerBody = /"MRData"\s*:/;
 /** The fixed request id every converted envelope carries. */
@@ -53,7 +55,7 @@ export function trackedDataViolations(
     ) {
       violations.push(`${path}: not a committed sample fixture`);
     }
-    if (!name.endsWith('.json')) continue;
+    if (!dataFile.test(name)) continue;
     const text = read(path);
     if (privateKinds.test(text)) violations.push(`${path}: private batch kind`);
     if (providerBody.test(text)) violations.push(`${path}: provider response`);
@@ -103,6 +105,8 @@ describe('tracked repository: no real or converted data', () => {
       'private/manifest.json': '{"kind":"gridview-season-batch-manifest"}',
       'docs/notes.json': '{"requestId": "frozen-abc"}',
       'out/gridview-staging-frozen.apk': '',
+      'private/races.ndjson': '{"MRData": {}}',
+      'private/notes.txt': '"requestId": "frozen-abc"',
     };
     const read = (path: string): string => files[path] ?? '';
 
@@ -132,6 +136,8 @@ describe('tracked repository: no real or converted data', () => {
       ['private/races.json', ['private/races.json: provider response']],
       ['private/manifest.json', ['private/manifest.json: private batch kind']],
       ['docs/notes.json', ['docs/notes.json: converted envelope']],
+      ['private/races.ndjson', ['private/races.ndjson: provider response']],
+      ['private/notes.txt', ['private/notes.txt: converted envelope']],
       [
         'out/gridview-staging-frozen.apk',
         ['out/gridview-staging-frozen.apk: package'],

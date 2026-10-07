@@ -9,6 +9,7 @@ import {
   join,
   relative,
   resolve,
+  sep,
 } from 'node:path';
 
 export const usage =
@@ -60,7 +61,9 @@ export function parseArguments(argv) {
  */
 export function isInside(candidate, root) {
   const path = relative(resolve(root), resolve(candidate));
-  return path === '' || (!path.startsWith('..') && !isAbsolute(path));
+  // Only a whole `..` segment leaves `root`: a child named `..x` is inside.
+  const leaves = path === '..' || path.startsWith(`..${sep}`);
+  return path === '' || (!leaves && !isAbsolute(path));
 }
 
 /**

@@ -18,13 +18,16 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   decodeDescriptor,
   directoriesRefusal,
+  exportLauncherRefusal,
   frozenApkName,
   frozenBuildSteps,
   parseBuildArguments,
   parseConvertArguments,
+  sameFixtureSet,
   verifyFixtureSet,
   workPathRefusal,
 } from '../../scripts/season-batch/fixtures-guards.mjs';
+import { isInside } from '../../scripts/season-batch/cli-guards.mjs';
 import { generateSeasonBatch } from '../../scripts/season-batch/generate.ts';
 import { inputFor } from './support.ts';
 
@@ -182,11 +185,27 @@ describe('frozen fixtures CLI: arguments', () => {
     expect(parseConvertArguments(argv)).toEqual({ ok: false, reason });
   });
 
+  const buildBase = [
+    '--batch',
+    'b',
+    '--manifest-sha256',
+    sha,
+    '--origin',
+    'synthetic',
+    '--fixtures',
+    'f',
+    '--work',
+    'w',
+    '--out',
+    'o',
+  ];
+
   it('accepts the build arguments, defaulting to HEAD', () => {
-    expect(
-      parseBuildArguments(['--fixtures', 'f', '--work', 'w', '--out', 'o']),
-    ).toEqual({
+    expect(parseBuildArguments(buildBase)).toEqual({
       ok: true,
+      batch: 'b',
+      manifestSha256: sha,
+      origin: 'synthetic',
       fixtures: 'f',
       work: 'w',
       out: 'o',
@@ -196,12 +215,7 @@ describe('frozen fixtures CLI: arguments', () => {
     expect(
       parseBuildArguments([
         '--prepare-only',
-        '--fixtures',
-        'f',
-        '--work',
-        'w',
-        '--out',
-        'o',
+        ...buildBase,
         '--commit',
         'master',
       ]),
@@ -209,31 +223,18 @@ describe('frozen fixtures CLI: arguments', () => {
   });
 
   it.each([
-    [['--fixtures', 'f', '--work', 'w'], 'missing-argument'],
+    [['--fixtures', 'f', '--work', 'w', '--out', 'o'], 'missing-argument'],
+    [[...buildBase, '--commit', '--out'], 'missing-value'],
+    [[...buildBase, '--commit', '-c'], 'commit-invalid'],
+    [[...buildBase, '--commit', 'a b'], 'commit-invalid'],
+    [[...buildBase, '--flavor', 'production'], 'unknown-argument'],
     [
-      ['--fixtures', 'f', '--work', 'w', '--out', 'o', '--commit', '--out'],
-      'missing-value',
+      buildBase.map((value) => (value === sha ? 'ABC' : value)),
+      'manifest-sha256-invalid',
     ],
     [
-      ['--fixtures', 'f', '--work', 'w', '--out', 'o', '--commit', '-c'],
-      'commit-invalid',
-    ],
-    [
-      ['--fixtures', 'f', '--work', 'w', '--out', 'o', '--commit', 'a b'],
-      'commit-invalid',
-    ],
-    [
-      [
-        '--fixtures',
-        'f',
-        '--work',
-        'w',
-        '--out',
-        'o',
-        '--flavor',
-        'production',
-      ],
-      'unknown-argument',
+      buildBase.map((value) => (value === 'synthetic' ? 'real' : value)),
+      'origin-invalid',
     ],
   ])('refuses build arguments %j', (argv, reason) => {
     expect(parseBuildArguments(argv)).toEqual({ ok: false, reason });
@@ -459,30 +460,40 @@ describe('frozen fixtures: descriptor verification', () => {
 });
 
 describe('frozen build: prepare-only export', () => {
-  function convertedDirectory(root, origin = 'synthetic') {
-    const out = join(root, 'fixtures');
-    expect(
-      convert(writeBatch(join(root, 'batch')), out, { origin }).status,
-    ).toBe(0);
-    return out;
+  /** A reviewed batch and its conversion, under `root`. */
+  function converted(root, origin = 'synthetic') {
+    const batchDirectory = writeBatch(join(root, 'batch'));
+    const fixtures = join(root, 'fixtures');
+    expect(convert(batchDirectory, fixtures, { origin }).status).toBe(0);
+    return { batchDirectory, fixtures };
   }
 
-  it('exports the committed tree and injects exactly the fixtures', () => {
-    const root = scratch();
-    const fixtures = convertedDirectory(root);
-    const work = join(root, 'work');
-    const before = readDirectory(
-      join(repositoryRoot, 'assets', 'dev_fixtures'),
-    );
-    const result = run(builder, [
+  function build(root, paths, overrides = {}) {
+    return run(builder, [
+      '--batch',
+      paths.batchDirectory,
+      '--manifest-sha256',
+      overrides.sha ?? sha256(batch.manifest),
+      '--origin',
+      overrides.origin ?? 'synthetic',
       '--fixtures',
-      fixtures,
+      paths.fixtures,
       '--work',
-      work,
+      overrides.work ?? join(root, 'work'),
       '--out',
       join(root, 'apk'),
       '--prepare-only',
     ]);
+  }
+
+  it('exports the committed tree and injects exactly the fixtures', () => {
+    const root = scratch();
+    const paths = converted(root);
+    const work = join(root, 'work');
+    const before = readDirectory(
+      join(repositoryRoot, 'assets', 'dev_fixtures'),
+    );
+    const result = build(root, paths);
     expect(result.status).toBe(0);
     expect(result.report).toMatchObject({
       ok: true,
@@ -490,9 +501,7 @@ describe('frozen build: prepare-only export', () => {
     });
     expect(result.report.prepared.commit).toMatch(/^[0-9a-f]{40}$/);
     const injected = readDirectory(join(work, 'assets', 'dev_fixtures'));
-    expect([...injected.keys()].sort()).toEqual(
-      [...readDirectory(fixtures).keys()].sort(),
-    );
+    expect(injected).toEqual(readDirectory(paths.fixtures));
     expect(existsSync(join(work, 'pubspec.yaml'))).toBe(true);
     expect(existsSync(join(root, 'apk'))).toBe(false);
     // The repository's own sample fixtures are untouched.
@@ -503,38 +512,120 @@ describe('frozen build: prepare-only export', () => {
 
   it('refuses a fixture directory that its descriptor does not describe', () => {
     const root = scratch();
-    const fixtures = convertedDirectory(root);
-    writeFileSync(join(fixtures, 'home.json'), '{}');
-    const result = run(builder, [
-      '--fixtures',
-      fixtures,
-      '--work',
-      join(root, 'work'),
-      '--out',
-      join(root, 'apk'),
-      '--prepare-only',
-    ]);
-    expect(result.report).toMatchObject({
+    const paths = converted(root);
+    writeFileSync(join(paths.fixtures, 'home.json'), '{}');
+    expect(build(root, paths).report).toMatchObject({
       ok: false,
       failure: 'fixture-digest-mismatch',
     });
     expect(existsSync(join(root, 'work'))).toBe(false);
   });
 
+  it('refuses an edited fixture even when its descriptor was edited to match', () => {
+    const root = scratch();
+    const paths = converted(root);
+    const edited = new TextEncoder().encode('{"data":{},"meta":{}}\n');
+    writeFileSync(join(paths.fixtures, 'home.json'), edited);
+    const path = join(paths.fixtures, 'frozen-dataset.json');
+    const descriptor = JSON.parse(readFileSync(path, 'utf8'));
+    const entry = descriptor.files.find((file) => file.name === 'home.json');
+    entry.byteLength = edited.byteLength;
+    entry.sha256 = sha256(edited);
+    writeFileSync(path, JSON.stringify(descriptor));
+    expect(build(root, paths).report).toMatchObject({
+      ok: false,
+      failure: 'fixtures-not-reproduced',
+    });
+    expect(existsSync(join(root, 'work'))).toBe(false);
+  });
+
+  it('refuses a synthetic conversion relabelled as a provider capture', () => {
+    const root = scratch();
+    const paths = converted(root, 'synthetic');
+    const path = join(paths.fixtures, 'frozen-dataset.json');
+    const descriptor = JSON.parse(readFileSync(path, 'utf8'));
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...descriptor,
+        origin: 'provider-capture',
+        sources: ['jolpica'],
+      }),
+    );
+    expect(
+      build(root, paths, { origin: 'provider-capture' }).report,
+    ).toMatchObject({ ok: false, failure: 'fixtures-not-reproduced' });
+  });
+
+  it('refuses a build declaring another origin than the conversion', () => {
+    const root = scratch();
+    const paths = converted(root, 'provider-capture');
+    expect(build(root, paths, { origin: 'synthetic' }).report).toMatchObject({
+      ok: false,
+      failure: 'fixtures-not-reproduced',
+    });
+  });
+
+  it('refuses a batch other than the reviewed one', () => {
+    const root = scratch();
+    const paths = converted(root);
+    expect(build(root, paths, { sha: '0'.repeat(64) }).report).toEqual({
+      ok: false,
+      failure: 'batch-not-convertible',
+      detail: 'manifest-digest-mismatch',
+    });
+    expect(existsSync(join(root, 'work'))).toBe(false);
+  });
+
   it('refuses a work directory inside the repository', () => {
     const root = scratch();
-    const fixtures = convertedDirectory(root);
-    const result = run(builder, [
-      '--fixtures',
-      fixtures,
-      '--work',
-      join(repositoryRoot, 'build', 'frozen-work'),
-      '--out',
-      join(root, 'apk'),
-      '--prepare-only',
-    ]);
-    expect(result.report).toMatchObject({
-      failure: 'work-inside-repository',
-    });
+    const paths = converted(root);
+    expect(
+      build(root, paths, { work: join(repositoryRoot, 'build', 'frozen-work') })
+        .report,
+    ).toMatchObject({ failure: 'work-inside-repository' });
+  });
+});
+
+describe('frozen build: guards', () => {
+  it('treats a child named like a parent reference as inside the repository', () => {
+    expect(isInside(join(repositoryRoot, '..x'), repositoryRoot)).toBe(true);
+    expect(isInside(join(repositoryRoot, '..', 'x'), repositoryRoot)).toBe(
+      false,
+    );
+    expect(
+      directoriesRefusal(
+        { output: join(repositoryRoot, '..fixtures') },
+        repositoryRoot,
+      ),
+    ).toBe('output-inside-repository');
+  });
+
+  it('refuses an export that carries its own flutter launcher', () => {
+    for (const name of [
+      'flutter',
+      'flutter.bat',
+      'FLUTTER.CMD',
+      'flutter.exe',
+    ]) {
+      expect(exportLauncherRefusal(['pubspec.yaml', name])).toBe(
+        'export-launcher-present',
+      );
+    }
+    expect(exportLauncherRefusal(['pubspec.yaml', 'flutter_test'])).toBeNull();
+  });
+
+  it('compares fixture sets byte for byte', () => {
+    const a = new Map([['x.json', new Uint8Array([1, 2])]]);
+    expect(
+      sameFixtureSet(a, new Map([['x.json', new Uint8Array([1, 2])]])),
+    ).toBe(true);
+    expect(
+      sameFixtureSet(a, new Map([['x.json', new Uint8Array([1, 3])]])),
+    ).toBe(false);
+    expect(
+      sameFixtureSet(a, new Map([['y.json', new Uint8Array([1, 2])]])),
+    ).toBe(false);
+    expect(sameFixtureSet(a, new Map())).toBe(false);
   });
 });
