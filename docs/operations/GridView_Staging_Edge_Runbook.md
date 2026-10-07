@@ -649,7 +649,18 @@ Full record:
 operator decision**. Production has never been deployed and is not authorized
 for deployment by anything above.
 
-### Publication guard deployment (prepared 2026-09-27, not deployed)
+### Publication guard deployment (prepared 2026-09-27, deployed in Stage A 2026-10-07)
+
+> **Deployed 2026-10-07 (Stage A).** Staging version `cc8d9a54-…`, from
+> operator-recorded source `3228725`, carries the code of this subsection
+> and the six after it: the publication guard, the coordinated runtime
+> composition, the run budget, the A3.5 gate, the operator routes, the
+> verification and the rotation. Staging stays on `mock` with no ledger
+> bound, so none of them is active. The A3.5 gate, the verification and
+> the rotation have never been run. The only operator route called is one
+> `inspect` GET, which answered `503` `reconciliation-unavailable`. Where
+> a subsection below describes that deploy as still ahead, it records the
+> state before Stage A.
 
 The ADR 0026 D14-D16 publication guard now exists on the sequenced publication
 path (Implementation Plan §14.0.26; ADR 0025 D4, "Amendment (2026-09-27): the
@@ -732,7 +743,7 @@ the operator must hold explicit, separate authorization. It must name:
 
 Merging the pull request does not authorize the deployment.
 
-### Coordinated runtime composition (prepared 2026-09-27, not deployed)
+### Coordinated runtime composition (prepared 2026-09-27, deployed in Stage A 2026-10-07)
 
 The dormant coordinated runtime composition is in `master` (Implementation
 Plan §14.0.29). It changes no committed var, cron or binding: staging stays
@@ -768,7 +779,7 @@ provider request**:
 - `sync/resource` and `rebuild/home` answer 409 `SYNC_MODE_UNSUPPORTED`;
 - mock synchronization stops, so the last published release keeps serving.
 
-### Coordinated run budget (prepared 2026-10-06, not deployed)
+### Coordinated run budget (prepared 2026-10-06, deployed in Stage A 2026-10-07)
 
 Since 2026-10-06 every coordinated run, scheduled or manual, runs under one
 **run budget** (Implementation Plan §14.0.42; ADR 0020, "Run budget"). Like
@@ -861,7 +872,7 @@ In Wrangler 4.112 an environment's `exports` table replaces the top-level
 one rather than merging with it, so a staging-only declaration must restate
 `ProviderRateLimiter` and `SeasonPublicationSequencer` exactly.
 
-### A3.5 standings predecessor gate (prepared 2026-09-29, not deployed, never run)
+### A3.5 standings predecessor gate (prepared 2026-09-29, deployed in Stage A 2026-10-07, never run)
 
 ADR 0023 A3.5 item 2 lets an empty standings candidate replace only a release
 with no classified race round. That keeps a published non-empty table from
@@ -890,11 +901,10 @@ GET /internal/admin/publication/standings-predecessor?season=2026
 
 **Preconditions.**
 
-1. The deployed staging Worker must contain the gate. Version `c297d260-…`
-   (from `36b0fd2`) does **not**. The deploy that adds it also carries the
-   publication guard and the coordinated runtime composition above, so it is
-   cutover-sensitive and needs the explicit, separate authorization those
-   subsections describe. Merging does not authorize it.
+1. The deployed staging Worker must contain the gate. **Met since
+   2026-10-07:** Stage A version `cc8d9a54-…` (operator-recorded source
+   `3228725`) contains it, so running it needs no further deploy. Before
+   that, version `c297d260-…` (from `36b0fd2`) did not.
 2. Running the gate is a separate, explicit operator step. It must name
    staging, season 2026 and this read-only check.
 3. `SEASON_PUBLICATION_AUTHORITY` must still be `sequencer`, and season 2026
@@ -980,7 +990,7 @@ published newer versions since the 2026-09-16 activation.
   2026-10-06, Implementation Plan §14.0.43. No environment declares the
   binding, so the resolver answers `null` everywhere; Stage B is parked.)
 
-### Reconciliation operator routes and attention line (prepared 2026-10-05, not deployed, never run)
+### Reconciliation operator routes and attention line (prepared 2026-10-05, deployed in Stage A 2026-10-07, refusing)
 
 PR-E2 adds the operator surface for the coordinated runtime's reconciliation
 ledger (ADR 0020 "E2"). Since Stage A (2026-10-07, version `cc8d9a54-…`)
@@ -1100,7 +1110,7 @@ runs the orchestration with a bound ledger, once a day:
 A day without a review leaves a stopped season unseen until the next one
 (residual risk R7).
 
-### Operator verification (prepared 2026-10-05, not deployed, never run)
+### Operator verification (prepared 2026-10-05, deployed in Stage A 2026-10-07, never run)
 
 PR-E3 adds `POST /internal/admin/reconciliation/verification` (ADR 0020
 "E3"). It is in no deployed Worker. Like the routes above, it answers `503`
@@ -1202,7 +1212,7 @@ revision, driver ID, field name or count. Inspection shows the round's
 `verificationGeneration`, `verificationCount`, `lastVerification` and
 `lastVerificationReset`.
 
-### Verification-history rotation (prepared 2026-10-06, not deployed, never run)
+### Verification-history rotation (prepared 2026-10-06, deployed in Stage A 2026-10-07, never run)
 
 PR-E4 adds the read-only `GET /internal/admin/reconciliation/verification-history`
 and `POST /internal/admin/reconciliation/verification-rotation` (ADR 0020
@@ -1318,7 +1328,7 @@ For a sequencer-active season (season 2026 in staging), a Worker that contains
 the publication guard refuses a candidate that loses a classified round or a
 participation fact of the active release, or that changes one of its
 constructors. See section 6, "Publication guard deployment (prepared
-2026-09-27, not deployed)".
+2026-09-27, deployed in Stage A 2026-10-07)".
 
 ## 8. Public smoke tests
 
@@ -1420,7 +1430,7 @@ release (ADR 0025 D8). A Worker that contains the publication guard refuses a
 rollback whose target lacks a classified round or a participation fact of the
 active release, or names another constructor for one of those facts. There is
 no rollback exemption. See section 6, "Publication guard deployment (prepared
-2026-09-27, not deployed)".
+2026-09-27, deployed in Stage A 2026-10-07)".
 
 **In `coordinated` mode (prepared 2026-10-05, not deployed),** a Worker that
 contains PR-E2 runs this rollback only while an operator holds the season,
