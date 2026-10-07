@@ -23,6 +23,7 @@ import {
   parseBuildArguments,
   parseConvertArguments,
   verifyFixtureSet,
+  workPathRefusal,
 } from '../../scripts/season-batch/fixtures-guards.mjs';
 import { generateSeasonBatch } from '../../scripts/season-batch/generate.ts';
 import { inputFor } from './support.ts';
@@ -278,6 +279,15 @@ describe('frozen build: separation from the normal build', () => {
     ]);
     const all = frozenBuildSteps.flat().join(' ');
     expect(all).not.toMatch(/production|--release|appbundle|API_BASE_URL/);
+  });
+
+  it('refuses an export root too deep for the Windows path limit', () => {
+    const deep = `C:\\${'a'.repeat(90)}`;
+    expect(workPathRefusal(deep, 'win32')).toBe('work-path-too-long');
+    expect(workPathRefusal(deep, 'linux')).toBeNull();
+    expect(
+      workPathRefusal('C:\\Users\\me\\.gridview\\frozen\\work', 'win32'),
+    ).toBeNull();
   });
 
   it('names the APK by origin, capture date and reviewed manifest', () => {

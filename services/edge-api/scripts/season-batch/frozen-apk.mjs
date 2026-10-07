@@ -46,6 +46,7 @@ import {
   frozenBuildSteps,
   parseBuildArguments,
   verifyFixtureSet,
+  workPathRefusal,
 } from './fixtures-guards.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -184,6 +185,8 @@ async function main() {
   }
   const refusal = directoriesRefusal({ fixtures, work, output: out }, root);
   if (refusal !== null) refuse(refusal);
+  const tooLong = workPathRefusal(work, process.platform);
+  if (tooLong !== null) refuse(tooLong);
   if (!(await absent(work))) refuse('work-exists');
   if (!(await absent(out))) refuse('output-exists');
 

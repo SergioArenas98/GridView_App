@@ -322,3 +322,22 @@ export function frozenApkName(descriptor) {
   const manifest = descriptor.batch.manifestSha256.slice(0, 12);
   return `gridview-staging-${kind}-${date}-${manifest}.apk`;
 }
+
+/**
+ * The longest export path the Windows build accepts. Flutter writes shader
+ * and asset intermediates about 120 characters below the export root, so a
+ * deeper root breaks the 260-character Windows path limit part-way through
+ * Gradle. The repository's own checkout path is shorter than this.
+ */
+export const maximumWindowsWorkPath = 80;
+
+/**
+ * @param {string} work physical path
+ * @param {string} platform `process.platform`
+ * @returns {string | null}
+ */
+export function workPathRefusal(work, platform) {
+  return platform === 'win32' && work.length > maximumWindowsWorkPath
+    ? 'work-path-too-long'
+    : null;
+}
