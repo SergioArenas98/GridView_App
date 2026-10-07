@@ -2031,7 +2031,7 @@ not complete**.
 | State | Meaning | Where it holds |
 |---|---|---|
 | Implemented, injected | The code exists, and only tests call it. | C1 to E4, until this slice |
-| **Wired, unbound** | A Worker entry point reaches the code, behind a gate that needs a reconciliation ledger. `resolveReconciliationLedger()` answers `null`, so the gate refuses every run first. *(Since 2026-10-06, "Ledger resolver" below: `resolveReconciliationLedger(env)` answers `null` without a `RECONCILIATION_LEDGER` binding, which no environment declares.)* *(Since 2026-10-07, "Staging ledger binding" below: staging declares it, committed and not deployed; no deployed Worker has one.)* | **Every environment, from this slice** |
+| **Wired, unbound** | A Worker entry point reaches the code, behind a gate that needs a reconciliation ledger. `resolveReconciliationLedger()` answers `null`, so the gate refuses every run first. *(Since 2026-10-06, "Ledger resolver" below: `resolveReconciliationLedger(env)` answers `null` without a `RECONCILIATION_LEDGER` binding, which no environment declares.)* *(On 2026-10-07 a staging declaration was committed and removed the same day before any deployment; "Staging ledger binding" below.)* | **Every environment, from this slice** |
 | Active | A deployed Worker with `coordinated` selected resolves a bound ledger, and runs reach the orchestration and the provider. | Nowhere. It needs every activation step below. |
 
 **One path.** Both entry points call `runCoordinatedSync`. It checks every
@@ -2405,9 +2405,9 @@ hard-coded `null`. It reads one optional Durable Object binding,
 `[exports.ReconciliationLedger]` entry, binding or migration. It also changes
 no provider mode, no cron and no deployment configuration, and nothing is
 deployed or provisioned. No committed environment declares the binding, so
-the resolver still answers `null` in every one of them. *(Since 2026-10-07
-staging's committed configuration declares it, not deployed; "Staging
-ledger binding" below.)* Every coordinated run,
+the resolver still answers `null` in every one of them. *(A staging declaration
+committed on 2026-10-07 was removed the same day before any deployment;
+"Staging ledger binding" below.)* Every coordinated run,
 scheduled or manual, still stops at `ledger-unbound` before any lease,
 limiter reservation, provider request or publication write. Every operator
 route and the coordinated rollback still refuse before reading anything.
@@ -2488,8 +2488,8 @@ because nothing constructed the client.
 
 **Still open, all needed before "active":** activation step 1; the ledger
 `[exports]` entry and per-environment binding, each a separately authorized,
-cutover-sensitive change *(committed for staging on 2026-10-07, not
-deployed; "Staging ledger binding" below)*; selecting `coordinated` and every deployment; the
+cutover-sensitive change *(committed for staging on 2026-10-07 and removed
+the same day; Stage B parked; "Staging ledger binding" below)*; selecting `coordinated` and every deployment; the
 two RB-7 checks (O-10); the hourly cron; O-9; running the A3.5 gate; the
 first provider-backed run (O-15); verified production alert delivery (OD-1);
 PR-G (O-16). **O-10, G5 and G9 are not complete.**
@@ -2497,6 +2497,21 @@ PR-G (O-16). **O-10, G5 and G9 are not complete.**
 The decision above is unchanged.
 
 ### Staging ledger binding: committed, not deployed (2026-10-07)
+
+> **Superseded 2026-10-07: removed before any deployment; Stage B parked.**
+> The declaration below was taken out of `wrangler.toml` the same day
+> (Implementation Plan §14.0.45). It was never deployed and no ledger
+> namespace was ever provisioned. The owner's no-cost requirement
+> authorizes no Workers Paid plan and no other paid service, the account
+> is on Workers Free, and the ledger serves only `coordinated` mode, which
+> RB-7 check 1 puts behind Workers Paid. Deploying it (Stage B) is
+> therefore parked, with the coordinated runtime. Staging again resolves
+> to the two Durable Objects that Stage A deployed (version `cc8d9a54-…`,
+> operator-recorded source `3228725`), and development and production
+> are unchanged. The class export, the dormant ledger implementation and
+> the resolver stay. `test/config/staging-ledger-binding.test.ts` became
+> `test/config/ledger-binding-absent.test.ts`, which pins the absence.
+> The analysis below is kept for a future, separately decided Stage B.
 
 **Configuration only.** `wrangler.toml` now registers the
 `ReconciliationLedger` class (`type = "durable-object"`,

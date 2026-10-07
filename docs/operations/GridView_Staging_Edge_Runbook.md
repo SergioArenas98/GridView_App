@@ -69,7 +69,7 @@ actually live.
 | Cron trigger | `17 3 * * *` |
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
-| Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`); since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`) the sequencer is looked up, and the rate limiter still is not. **`RECONCILIATION_LEDGER`: committed only** (2026-10-07, with staging's own `exports` table registering `ReconciliationLedger`); **not deployed, no namespace provisioned**, so committed and live differ here. See "Reconciliation ledger binding (prepared 2026-10-07, not deployed)" in section 6 and `../technical/GridView_Environments.md` |
+| Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`); since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`) the sequencer is looked up, and the rate limiter still is not. Stage A (2026-10-07, version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275`) kept both. **No `RECONCILIATION_LEDGER` binding**, committed or live: a staging-only declaration committed on 2026-10-07 was removed the same day before any deployment, and Stage B is parked under the no-cost requirement. See "Reconciliation ledger binding (committed and removed 2026-10-07; Stage B parked)" in section 6 and `../technical/GridView_Environments.md` |
 | `SEASON_PUBLICATION_CUTOVER_CONTROL` | **Committed: `activate:2026`**, prepared on 2026-09-15 after the season-2026 seed committed; see "Season-2026 seed record and activation phase (2026-09-15)" in section 6. Before that, `master` carried `seed:2026`, restored by the reclosure configuration (PR #24). **Live: `activate:2026`**, since 2026-09-16 (version `c297d260-c81b-4110-bdf2-7572e1206af3`), so committed and live match again. The earlier `seed:2026` was first deployed on 2026-09-12 from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93` (version `00012c06-6c09-4b2f-b24c-02d6e51ec08d`). It was absent only during the separately authorized recovery window on 2026-09-13 (reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`). The reclosure deployment from `549bb5f3f3ee3963727a816b96fa39752355e9cd` restored it the same day as version `c35f99c0-9e89-4dd7-8fbe-449d295fb567` at 100% traffic, and version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` kept it on 2026-09-15. Season 2026's legacy publication and rollback admission was **closed** from 2026-09-12, and `activate:2026` kept it closed until the activation. **Season 2026 was activated on 2026-09-16**, so `admissionClosed` is now `false` and its publication and rollback run through the sequencer, never through the legacy pointers; see "Recovery window record (2026-09-13)" and "Season-2026 activation-phase deployment and activation (2026-09-16)" in section 6. Any change to the live value is cutover-sensitive (section 6). Neither phase activates anything by itself. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
 | `SEASON_PUBLICATION_AUTHORITY` | **Committed: `sequencer`**, staging only, prepared on 2026-09-15 for the approved season-2026 seed. **Live: `sequencer`** since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`), kept unchanged by version `c297d260-c81b-4110-bdf2-7572e1206af3` on 2026-09-16; every earlier live version lacked it. A later deployment that omits or changes it is cutover-sensitive (section 6). See "Season-2026 seed authority (prepared 2026-09-15, not deployed)" and "Season-2026 seed record and activation phase (2026-09-15)" in section 6. |
 
@@ -143,16 +143,15 @@ In Windows PowerShell, run the dry-run as
 
 The dry-run bundles the Worker and resolves bindings without uploading anything
 (`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV), the
-`PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` and (since 2026-10-07)
-`RECONCILIATION_LEDGER` Durable Objects,
+`PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
 plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL`,
 `SEASON_PUBLICATION_CUTOVER_CONTROL` (`activate:2026`, live since 2026-09-16)
 and `SEASON_PUBLICATION_AUTHORITY` (`sequencer`, live since 2026-09-15) vars.
 Committed and live now match for both, and for `PROVIDER_MODE` (`mock`) and the
-cron. **The Durable Object bindings no longer match**: the dry-run adds
-`RECONCILIATION_LEDGER`, which no live version carries, so any staging
-deploy of `master` from 2026-10-07 on is cutover-sensitive on that count
-alone. That is necessary, not sufficient: a
+cron, and the Durable Object bindings match the live Stage A version
+(`cc8d9a54-…`). *(A `RECONCILIATION_LEDGER` binding committed on 2026-10-07
+was removed the same day before any deployment; see "Reconciliation ledger
+binding" in section 6.)* That is necessary, not sufficient: a
 deploy of `master` is ordinary under the section 6 gate only if no later
 subsection of section 6 marks the code it carries as cutover-sensitive. The
 publication guard and the coordinated runtime composition both do, so a
@@ -168,9 +167,10 @@ cutover-sensitive gate below is checked.
 > **Amended 2026-09-27: the gate compares five things, not two.** Besides
 > the two vars below, a deploy is cutover-sensitive when the dry-run and the
 > live version differ in `PROVIDER_MODE`, in the cron trigger, or in any
-> Durable Object binding (added, removed or renamed). That includes the
-> reconciliation-ledger binding, committed for staging on 2026-10-07 and not
-> deployed (see "Reconciliation ledger binding" below). Each of these changes when, how and from
+> Durable Object binding (added, removed or renamed). That includes any
+> future reconciliation-ledger binding, which no environment declares and
+> which is parked (see "Reconciliation ledger binding" below). Each of these
+> changes when, how and from
 > where season-2026 publications run. The comparison procedure, the
 > authorization it requires and the rule that merging authorizes nothing are
 > unchanged. Selecting `PROVIDER_MODE = "coordinated"` is a separate
@@ -649,7 +649,18 @@ Full record:
 operator decision**. Production has never been deployed and is not authorized
 for deployment by anything above.
 
-### Publication guard deployment (prepared 2026-09-27, not deployed)
+### Publication guard deployment (prepared 2026-09-27, deployed in Stage A 2026-10-07)
+
+> **Deployed 2026-10-07 (Stage A).** Staging version `cc8d9a54-…`, from
+> operator-recorded source `3228725`, carries the code of this subsection
+> and the six after it: the publication guard, the coordinated runtime
+> composition, the run budget, the A3.5 gate, the operator routes, the
+> verification and the rotation. Staging stays on `mock` with no ledger
+> bound, so none of them is active. The A3.5 gate, the verification and
+> the rotation have never been run. The only operator route called is one
+> `inspect` GET, which answered `503` `reconciliation-unavailable`. Where
+> a subsection below describes that deploy as still ahead, it records the
+> state before Stage A.
 
 The ADR 0026 D14-D16 publication guard now exists on the sequenced publication
 path (Implementation Plan §14.0.26; ADR 0025 D4, "Amendment (2026-09-27): the
@@ -732,13 +743,14 @@ the operator must hold explicit, separate authorization. It must name:
 
 Merging the pull request does not authorize the deployment.
 
-### Coordinated runtime composition (prepared 2026-09-27, not deployed)
+### Coordinated runtime composition (prepared 2026-09-27, deployed in Stage A 2026-10-07)
 
 The dormant coordinated runtime composition is in `master` (Implementation
 Plan §14.0.29). It changes no committed var, cron or binding: staging stays
 `PROVIDER_MODE = "mock"`, the cron stays `17 3 * * *`, and no ledger binding
-exists. *(Since 2026-10-07 a ledger binding is committed for staging, and it
-has not been deployed; see "Reconciliation ledger binding" below.)* **Treat a deploy that carries it as cutover-sensitive anyway**, under
+exists. *(A staging ledger binding committed on 2026-10-07 was removed the
+same day before any deployment; see "Reconciliation ledger binding" below.)*
+**Treat a deploy that carries it as cutover-sensitive anyway**, under
 the same authorization the publication guard needs:
 
 - `/v1/status` now reads season 2026's active version from the sequencer, not
@@ -767,7 +779,7 @@ provider request**:
 - `sync/resource` and `rebuild/home` answer 409 `SYNC_MODE_UNSUPPORTED`;
 - mock synchronization stops, so the last published release keeps serving.
 
-### Coordinated run budget (prepared 2026-10-06, not deployed)
+### Coordinated run budget (prepared 2026-10-06, deployed in Stage A 2026-10-07)
 
 Since 2026-10-06 every coordinated run, scheduled or manual, runs under one
 **run budget** (Implementation Plan §14.0.42; ADR 0020, "Run budget"). Like
@@ -802,11 +814,14 @@ half-finished publication is resolved by the next run's recovery, and a
 release that was committed is recognized and not published again. A manual
 run in that window answers `run-in-progress`.
 
-**Two O-10 checks before activation (RB-7).** Neither has been done, and
-neither is authorized by this preparation:
+**Two O-10 checks before activation (RB-7).** Neither is authorized by this
+preparation. *(2026-10-07: the owner answered check 1 from the dashboard.
+The account is on **Workers Free**, and the no-cost requirement authorizes
+no upgrade, so the coordinated environment, the ledger binding and Stage B
+are parked. Check 2 has not been done.)*
 
 1. **Before enabling the coordinated environment** (selecting `coordinated`
-   or deploying the ledger binding, activation step 3), the owner confirms in the
+   or binding the ledger, activation step 3), the owner confirms in the
    Cloudflare dashboard that the account is on **Workers Paid**. Coordinated
    mode is not viable on the Free plan.
 2. **Before enabling the hourly cron** (step 6), record the real CPU time of
@@ -816,79 +831,48 @@ neither is authorized by this preparation:
    Staging has invocation logs off. Change `[limits] cpu_ms` only if that
    measurement calls for it, under its own authorization.
 
-### Reconciliation ledger binding (prepared 2026-10-07, not deployed)
+### Reconciliation ledger binding (committed and removed 2026-10-07; Stage B parked)
 
-Since 2026-10-07 `wrangler.toml` registers the `ReconciliationLedger`
-Durable Object class (SQLite storage) and declares the `RECONCILIATION_LEDGER`
-binding **for `env.staging` only**. It is **committed, not deployed**. The
-live staging version (`c297d260-…`) predates it, and no ledger namespace
-exists. Development and production declare neither, and their resolved
-configuration is unchanged.
+**No environment declares the ledger, and none ever deployed it.** On
+2026-10-07 `wrangler.toml` briefly gave staging its own `exports` table
+registering the `ReconciliationLedger` class, plus the
+`RECONCILIATION_LEDGER` binding (Implementation Plan §14.0.44). It was
+removed the same day, before any deployment (§14.0.45). The dormant ledger
+implementation, its class export and the fail-closed resolver stay in the
+code.
 
-**Committed, deployed and provisioned are three different states.**
+**Why Stage B is parked.** Stage B was the deployment that would have
+provisioned the ledger's staging namespace. The owner's no-cost requirement
+(2026-10-07) authorizes no Workers Paid plan and no other paid service, and
+the account is on Workers Free. The ledger serves only `coordinated` mode,
+which RB-7 check 1 puts behind Workers Paid ("Coordinated run budget"
+above). Provisioning it would gain nothing, and it would permanently block
+`wrangler rollback` to every earlier version. The coordinated runtime is
+parked with it.
 
-| State | Today | What changes it |
-|---|---|---|
-| Committed (`master`) | yes | this preparation (merging changes nothing live) |
-| Deployed (live version carries the binding) | **no** | a separately authorized `wrangler deploy --env staging` |
-| Provisioned (a staging ledger namespace exists) | **no** | that same deployment, which creates it |
+**What staging is now.** Stage A deployed version `cc8d9a54-…` on
+2026-10-07 from operator-recorded source `3228725`, with the
+`PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` bindings only.
+Wrangler's resolved staging configuration on `master` is again identical to
+that source's, and the section 5 dry-run lists the same two Durable Object
+bindings. `test/config/ledger-binding-absent.test.ts` pins this through
+Wrangler's own configuration reader. A staging deploy of `master` no longer
+adds a binding on that count.
 
-Confirm the live side read-only before believing either of the last two
-rows: `npm exec -- wrangler deployments status --env staging`, then
-`npm exec -- wrangler versions view <version-id> --env staging`, and look
-for `RECONCILIATION_LEDGER` among its bindings.
+Confirm the live side read-only: `npm exec -- wrangler deployments status
+--env staging`, then `npm exec -- wrangler versions view <version-id> --env
+staging`, and check that `RECONCILIATION_LEDGER` is not among its bindings.
+The live Worker exports the `ReconciliationLedger` class as code (it shows
+as a named handler), and that provisions nothing.
 
-**Why staging has its own `exports` table.** In Wrangler 4.112 an
-environment's `exports` table replaces the top-level one rather than merging
-with it. Staging's table restates `ProviderRateLimiter` and
-`SeasonPublicationSequencer` exactly and adds `ReconciliationLedger`, so the
-class is declared for staging alone and production never inherits it. Keep
-the restated entries identical to the top-level ones. Dropping one from
-staging's table would drop a provisioned class from what a staging deploy
-uploads. `test/config/staging-ledger-binding.test.ts` checks this through
-Wrangler's own configuration reader. No `[[migrations]]` block is used.
+**Reopening Stage B** needs a new owner decision on cost first, then its
+own authorization as a cutover-sensitive deploy that names staging, the
+reviewed commit, the binding and class, and `PROVIDER_MODE` staying `mock`.
+In Wrangler 4.112 an environment's `exports` table replaces the top-level
+one rather than merging with it, so a staging-only declaration must restate
+`ProviderRateLimiter` and `SeasonPublicationSequencer` exactly.
 
-**A future staging deployment carrying it is cutover-sensitive.** The
-section 6 gate already says so, because the dry-run adds a Durable Object
-binding. The section 5 dry-run lists `RECONCILIATION_LEDGER`, and the live
-version does not. Treat the deploy as cutover-sensitive even though
-`SEASON_PUBLICATION_CUTOVER_CONTROL`, `SEASON_PUBLICATION_AUTHORITY`,
-`PROVIDER_MODE` and the cron are all unchanged:
-
-- It provisions a new staging Durable Object namespace. That is the
-  "binding the ledger" part of activation step 3, and RB-7 check 1 (Workers
-  Paid, "Coordinated run budget" above) comes before it.
-- Once it is live, the ledger no longer gates staging. `PROVIDER_MODE =
-  "mock"` is then the only setting that keeps staging from real lease,
-  ledger and Jolpica activity. A later deploy that selects `coordinated` is
-  no longer refused as `ledger-unbound`.
-- The operator routes answer differently. Under `mock` with the binding
-  live, they refuse with `provider-mode-not-coordinated` alone, not with
-  `provider-mode-not-coordinated` and `ledger-unbound`.
-- The deploy carries everything else in `master`: the publication guard,
-  the coordinated runtime composition and the later preparations above.
-  Each of those is cutover-sensitive on its own.
-
-The authorization must name: staging, the reviewed commit, the addition of
-the `RECONCILIATION_LEDGER` binding and `ReconciliationLedger` class, and
-`PROVIDER_MODE` staying `mock`. **Merging authorizes none of it.**
-
-**What it does under `mock` once deployed, and why that is not activation.**
-Nothing reads the ledger outside `coordinated` mode. With the binding live
-and staging on `mock`:
-
-- the scheduled run and `POST /internal/admin/sync/full` take the existing
-  whole-season mock path;
-- every reconciliation route refuses before reading anything;
-- no code looks the namespace up. No ledger object is ever created, no
-  ledger storage call is made, no provider request is sent and nothing is
-  published through the coordinated path.
-
-The local tests prove this for the committed staging (`mock`) and production
-(`none`) variables with a namespace bound. Their evidence is local, not
-from a deployment.
-
-### A3.5 standings predecessor gate (prepared 2026-09-29, not deployed, never run)
+### A3.5 standings predecessor gate (prepared 2026-09-29, deployed in Stage A 2026-10-07, never run)
 
 ADR 0023 A3.5 item 2 lets an empty standings candidate replace only a release
 with no classified race round. That keeps a published non-empty table from
@@ -917,11 +901,10 @@ GET /internal/admin/publication/standings-predecessor?season=2026
 
 **Preconditions.**
 
-1. The deployed staging Worker must contain the gate. Version `c297d260-…`
-   (from `36b0fd2`) does **not**. The deploy that adds it also carries the
-   publication guard and the coordinated runtime composition above, so it is
-   cutover-sensitive and needs the explicit, separate authorization those
-   subsections describe. Merging does not authorize it.
+1. The deployed staging Worker must contain the gate. **Met since
+   2026-10-07:** Stage A version `cc8d9a54-…` (operator-recorded source
+   `3228725`) contains it, so running it needs no further deploy. Before
+   that, version `c297d260-…` (from `36b0fd2`) did not.
 2. Running the gate is a separate, explicit operator step. It must name
    staging, season 2026 and this read-only check.
 3. `SEASON_PUBLICATION_AUTHORITY` must still be `sequencer`, and season 2026
@@ -1002,26 +985,23 @@ published newer versions since the 2026-09-16 activation.
 - It does not observe Jolpica's real pre-season response. It cannot detect a
   table that lost its last row with `total` lowered to match.
 - It is not a substitute for any other activation prerequisite: O-9, O-15,
-  O-16, deploying the ledger `[exports]` entry and binding, and the cron
-  change all stay open. (The resolver that would read the binding exists
-  since 2026-10-06, Implementation Plan §14.0.43. The staging binding is
-  committed since 2026-10-07 and not deployed, so no deployed Worker has
-  one, and the resolver answers `null` there.)
+  O-16, the ledger `[exports]` entry and binding, and the cron change all
+  stay open. (The resolver that would read the binding exists since
+  2026-10-06, Implementation Plan §14.0.43. No environment declares the
+  binding, so the resolver answers `null` everywhere; Stage B is parked.)
 
-### Reconciliation operator routes and attention line (prepared 2026-10-05, not deployed, never run)
+### Reconciliation operator routes and attention line (prepared 2026-10-05, deployed in Stage A 2026-10-07, refusing)
 
 PR-E2 adds the operator surface for the coordinated runtime's reconciliation
-ledger (ADR 0020 "E2"). It is in no deployed Worker. Staging's deployed
-version (`c297d260-…`) predates it, and staging stays on `mock`.
+ledger (ADR 0020 "E2"). Since Stage A (2026-10-07, version `cc8d9a54-…`)
+the deployed staging Worker contains it, and staging stays on `mock`.
 
-**Today every one of these routes refuses.** No deployed Worker binds a
-ledger (staging's binding is committed, not deployed), so a Worker that
-contains them answers each `503` with
+**Today every one of these routes refuses.** No environment binds a
+ledger (Stage B is parked), so a Worker that contains them answers each
+`503` with
 `data.status` `reconciliation-unavailable` and reads nothing. On `mock` or
 `none` the reasons are `provider-mode-not-coordinated` and `ledger-unbound`.
-On `coordinated` the reason is `ledger-unbound` alone. Once the committed
-staging binding is deployed, `mock` answers `provider-mode-not-coordinated`
-alone. That is the expected
+On `coordinated` the reason is `ledger-unbound` alone. That is the expected
 answer, not a fault. **Do not send a mutating request to staging** until a
 separate authorization covers the deploy that binds the ledger (activation
 step 3). That authorization must name the route, staging and season 2026.
@@ -1103,8 +1083,9 @@ carries `season`, `reconciliationAttention` (closed conditions),
 `durableBlockReason`, `backlogCount` and `backlogCapacity`, and nothing else.
 **It is written only by the coordinated orchestration.** Since 2026-10-06
 the scheduled handler is wired to it, behind a gate that needs a bound
-ledger (Implementation Plan §14.0.41). No deployed Worker binds a ledger
-or carries the wiring, so no deployed Worker can write it yet. Binding
+ledger (Implementation Plan §14.0.41). Since Stage A the staging Worker
+carries the wiring, but no deployed Worker binds a ledger, so none can
+write it yet. Binding
 the ledger and deploying are activation steps.
 
 **Staging daily review (OD-1).** OD-1 accepts a daily operator review for
@@ -1129,11 +1110,13 @@ runs the orchestration with a bound ledger, once a day:
 A day without a review leaves a stopped season unseen until the next one
 (residual risk R7).
 
-### Operator verification (prepared 2026-10-05, not deployed, never run)
+### Operator verification (prepared 2026-10-05, deployed in Stage A 2026-10-07, never run)
 
 PR-E3 adds `POST /internal/admin/reconciliation/verification` (ADR 0020
-"E3"). It is in no deployed Worker. Like the routes above, it answers `503`
-`reconciliation-unavailable` today, having read nothing.
+"E3"). Since Stage A (2026-10-07, version `cc8d9a54-…`) the deployed staging
+Worker contains it, and it has never been called. Like the routes above, it
+answers `503` `reconciliation-unavailable` today, having read nothing,
+because staging is on `mock` and no ledger is bound.
 
 **A verification is a Jolpica request.** Once a ledger is bound, each call
 can send one real classification request. **Every verification needs its own
@@ -1231,12 +1214,14 @@ revision, driver ID, field name or count. Inspection shows the round's
 `verificationGeneration`, `verificationCount`, `lastVerification` and
 `lastVerificationReset`.
 
-### Verification-history rotation (prepared 2026-10-06, not deployed, never run)
+### Verification-history rotation (prepared 2026-10-06, deployed in Stage A 2026-10-07, never run)
 
 PR-E4 adds the read-only `GET /internal/admin/reconciliation/verification-history`
 and `POST /internal/admin/reconciliation/verification-rotation` (ADR 0020
-"E4"). They are in no deployed Worker, and today both answer `503`
-`reconciliation-unavailable`, having read nothing.
+"E4"). Since Stage A (2026-10-07, version `cc8d9a54-…`) the deployed staging
+Worker contains both, and neither has been called. Today both answer `503`
+`reconciliation-unavailable`, having read nothing, because staging is on
+`mock` and no ledger is bound.
 
 **What it is for.** It is the only way to verify a round again after its
 history is full. It clears that round's 32 verifications, raises its
@@ -1347,7 +1332,7 @@ For a sequencer-active season (season 2026 in staging), a Worker that contains
 the publication guard refuses a candidate that loses a classified round or a
 participation fact of the active release, or that changes one of its
 constructors. See section 6, "Publication guard deployment (prepared
-2026-09-27, not deployed)".
+2026-09-27, deployed in Stage A 2026-10-07)".
 
 ## 8. Public smoke tests
 
@@ -1449,9 +1434,10 @@ release (ADR 0025 D8). A Worker that contains the publication guard refuses a
 rollback whose target lacks a classified round or a participation fact of the
 active release, or names another constructor for one of those facts. There is
 no rollback exemption. See section 6, "Publication guard deployment (prepared
-2026-09-27, not deployed)".
+2026-09-27, deployed in Stage A 2026-10-07)".
 
-**In `coordinated` mode (prepared 2026-10-05, not deployed),** a Worker that
+**In `coordinated` mode (prepared 2026-10-05, deployed in Stage A
+2026-10-07, never selected),** a Worker that
 contains PR-E2 runs this rollback only while an operator holds the season,
 under the season's lease. Otherwise it answers `409` `publication-not-held`
 without reaching the publisher. With no ledger bound, which is every

@@ -1,9 +1,13 @@
 /**
- * The committed `RECONCILIATION_LEDGER` binding: declared for staging only,
- * as Wrangler itself resolves `wrangler.toml`, and inert under the committed
- * `mock` and `none` provider modes even where a ledger namespace is bound.
+ * No committed environment declares the `RECONCILIATION_LEDGER` binding or
+ * registers the `ReconciliationLedger` class, as Wrangler itself resolves
+ * `wrangler.toml`. Staging resolves to the two Durable Object registrations
+ * and bindings that Stage A deployed on 2026-10-07; the staging-only ledger
+ * declaration committed the day before was removed under the no-cost
+ * requirement, which parks Stage B. The committed `mock` and `none` provider
+ * modes stay inert even where a ledger namespace is bound.
  *
- * Committed is not deployed. `unstable_readConfig` only reads the file:
+ * `unstable_readConfig` only reads the file:
  * nothing here deploys, provisions or contacts Cloudflare, and nothing can
  * reach a provider.
  */
@@ -14,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unstable_readConfig } from 'wrangler';
 
+import rawConfig from '../../wrangler.toml?raw';
 import worker, { type Env } from '../../src/index';
 import { MemoryCachePurgeAdapter } from '../../src/cache/purge';
 import { CapturingLogger } from '../../src/logging/logger';
@@ -57,33 +62,25 @@ function bindingNames(config: ReturnType<typeof resolved>): string[] {
   );
 }
 
-describe('the committed reconciliation-ledger declaration, as Wrangler resolves it', () => {
-  it('registers the class and binds RECONCILIATION_LEDGER in staging, with no migration', () => {
+describe('the committed configuration declares no reconciliation ledger, as Wrangler resolves it', () => {
+  it('resolves staging to the two Durable Objects Stage A deployed, with no migration', () => {
     const staging = resolved('staging');
-    expect(staging.exports).toEqual({
-      ...topLevelExports,
-      ReconciliationLedger: sqlite,
-    });
+    expect(staging.exports).toEqual(topLevelExports);
     expect(staging.durable_objects.bindings).toEqual([
       { name: 'PROVIDER_RATE_LIMITER', class_name: 'ProviderRateLimiter' },
       {
         name: 'SEASON_PUBLICATION_SEQUENCER',
         class_name: 'SeasonPublicationSequencer',
       },
-      { name: 'RECONCILIATION_LEDGER', class_name: 'ReconciliationLedger' },
     ]);
     expect(staging.migrations).toEqual([]);
   });
 
-  it('restates the two top-level registrations in staging unchanged', () => {
-    // A named environment's `exports` table replaces the top-level one, so
-    // staging must carry both existing classes exactly as declared above it.
-    const restated = Object.fromEntries(
-      Object.entries(resolved('staging').exports).filter(
-        ([name]) => name !== 'ReconciliationLedger',
-      ),
-    );
-    expect(restated).toEqual(resolved('').exports);
+  it('gives staging no exports table of its own, so it inherits the top-level one', () => {
+    // A named environment's `exports` table would replace the top-level one;
+    // without one, staging resolves to exactly the top-level registrations.
+    expect(rawConfig).not.toMatch(/^\[env\.[a-z]+\.exports/m);
+    expect(resolved('staging').exports).toEqual(resolved('').exports);
     expect(resolved('').exports).toEqual(topLevelExports);
   });
 
@@ -112,7 +109,7 @@ describe('the committed reconciliation-ledger declaration, as Wrangler resolves 
     expect(resolved('').triggers.crons).toBeUndefined();
   });
 
-  it('fails closed where the binding is not declared', () => {
+  it('fails closed in every environment, none of which declares the binding', () => {
     // A namespace for every binding each environment declares, as a
     // deployment of it would carry.
     const boundEnv = (environment: '' | 'staging' | 'production') =>
@@ -122,10 +119,20 @@ describe('the committed reconciliation-ledger declaration, as Wrangler resolves 
           countingNamespace(),
         ]),
       ) as Pick<Env, 'RECONCILIATION_LEDGER'>;
-    expect(resolveReconciliationLedger(boundEnv(''))).toBeNull();
-    expect(resolveReconciliationLedger(boundEnv('production'))).toBeNull();
-    // Only staging's declared bindings give the resolver a ledger.
-    expect(resolveReconciliationLedger(boundEnv('staging'))).not.toBeNull();
+    for (const environment of ['', 'staging', 'production'] as const) {
+      expect(
+        resolveReconciliationLedger(boundEnv(environment)),
+        environment,
+      ).toBeNull();
+    }
+    // The same namespace under the ledger's own name would be resolved, so
+    // the nulls above come from the configuration, not from the namespace.
+    expect(
+      resolveReconciliationLedger({
+        RECONCILIATION_LEDGER:
+          countingNamespace() as unknown as DurableObjectNamespace,
+      }),
+    ).not.toBeNull();
   });
 });
 
@@ -238,6 +245,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * No environment binds the ledger (asserted above). Should a later,
+ * separately authorized change bind one, the committed provider modes must
+ * still never reach it.
+ */
 describe('the committed provider modes with a bound RECONCILIATION_LEDGER namespace', () => {
   it.each(['staging', 'production'] as const)(
     'the committed %s variables never look the ledger up, request a provider or publish through the coordinated path',

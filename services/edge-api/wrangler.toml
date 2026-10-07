@@ -4,11 +4,8 @@
 # by environment and is recorded in docs/technical/GridView_Environments.md -
 # a declaration in this file is not evidence that anything is provisioned:
 # - `env.staging` is deployed to Cloudflare (first in Phase 5B, 2026-07-20).
-#   The 2026-09-12 staging deployment provisioned the `PROVIDER_RATE_LIMITER`
-#   and `SEASON_PUBLICATION_SEQUENCER` bindings declared for it below. The
-#   `RECONCILIATION_LEDGER` binding and its class registration are committed
-#   for staging only and have never been deployed, so no staging namespace
-#   exists for them.
+#   The 2026-09-12 staging deployment provisioned both Durable Object bindings
+#   declared for it below; no code path in that configuration looks either up.
 # - `env.production` is declared only and has never been deployed: no
 #   production Worker, KV or Durable Object namespace, R2 bucket, route,
 #   domain or secret exists.
@@ -129,42 +126,6 @@ class_name = "ProviderRateLimiter"
 [[env.staging.durable_objects.bindings]]
 name = "SEASON_PUBLICATION_SEQUENCER"
 class_name = "SeasonPublicationSequencer"
-
-# Reconciliation ledger (ADR 0020 G9, runtime activation decision O-6) -
-# COMMITTED FOR STAGING ONLY. NOT DEPLOYED, NOT PROVISIONED. Committing these
-# entries deploys nothing, and deploying them would select nothing.
-#
-# `exports` is inherited, not merged: a named environment that declares its
-# own `exports` table replaces the top-level one. Staging therefore restates
-# both top-level registrations unchanged and adds `ReconciliationLedger`, so
-# the class is declared for staging alone. Development and production keep
-# inheriting the top-level table, which does not name it, so a production
-# deployment would neither create the class nor bind it. Keep the two
-# restated entries identical to the top-level ones: dropping one here would
-# drop an already-provisioned class from what a staging deployment uploads.
-#
-# A staging deployment carrying these entries creates the ledger's staging
-# namespace and adds a Durable Object binding. That deployment is
-# cutover-sensitive (staging runbook, section 6) and needs its own explicit
-# authorization; merging authorizes nothing. Once deployed, every path that
-# uses the ledger is still gated on a provider mode that no environment
-# selects. Under `mock`, no code path looks the namespace up, so there is no
-# ledger storage call, no provider request and no reconciliation publication.
-[env.staging.exports.ProviderRateLimiter]
-type = "durable-object"
-storage = "sqlite"
-
-[env.staging.exports.SeasonPublicationSequencer]
-type = "durable-object"
-storage = "sqlite"
-
-[env.staging.exports.ReconciliationLedger]
-type = "durable-object"
-storage = "sqlite"
-
-[[env.staging.durable_objects.bindings]]
-name = "RECONCILIATION_LEDGER"
-class_name = "ReconciliationLedger"
 
 [env.staging.secrets]
 required = ["ADMIN_TOKEN"]

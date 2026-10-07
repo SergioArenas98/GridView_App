@@ -5,7 +5,7 @@
  * holds the run lease, the per-round review state and the due times that
  * decide which requests a run makes.
  *
- * **The storage protocol is defined; nothing uses it.** The operations below
+ * **The storage protocol is defined; nothing binds it.** The operations below
  * are the storage foundation (C1): transactional reads, fenced season leases,
  * conditional commits, the global backlog capacity and reconciliation of the
  * published-revision cache from the authoritative release. They are
@@ -25,15 +25,14 @@
  *
  * `resolveReconciliationLedger` reads one optional Durable Object binding,
  * `RECONCILIATION_LEDGER`, and fails closed: without a usable namespace there
- * it answers `null`. **Only `env.staging` declares that binding** in
- * `wrangler.toml`, and only under `PROVIDER_MODE = "mock"`; development and
- * production declare none, and no test hook supplies a ledger. Without a
- * bound namespace every coordinated run, scheduled or manual, is refused as
- * `ledger-unbound` at the entry point's gate - wired, but unbound - before
- * any lease, limiter reservation, provider request or publication write, and
- * every operator route and the coordinated rollback are refused as
- * `ledger-unbound` before reading anything. Outside `coordinated` mode none
- * of them reads the ledger, bound or not.
+ * it answers `null`. **No committed environment declares that binding** - no
+ * `[exports.ReconciliationLedger]` entry, binding or migration exists in
+ * `wrangler.toml` - and no test hook supplies a ledger, so it answers `null`
+ * in every committed environment. Every coordinated run, scheduled or manual,
+ * is therefore refused as `ledger-unbound` at the entry point's gate - wired,
+ * but unbound - before any lease, limiter reservation, provider request or
+ * publication write, and every operator route and the coordinated rollback
+ * are refused as `ledger-unbound` before reading anything.
  */
 
 import type { Env } from '../../config/environment';
@@ -121,7 +120,8 @@ export interface ReconciliationLedgerPort {
  * bound namespace activates nothing by itself - every coordinated path still
  * needs `PROVIDER_MODE=coordinated` and its other gated dependencies - and
  * resolving it performs no lookup. Binding availability is
- * environment-specific (see `docs/technical/GridView_Environments.md`).
+ * environment-specific (see `docs/technical/GridView_Environments.md`); no
+ * committed environment declares it.
  */
 export function resolveReconciliationLedger(
   env: Pick<Env, 'RECONCILIATION_LEDGER'>,

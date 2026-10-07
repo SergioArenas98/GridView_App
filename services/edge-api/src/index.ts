@@ -55,7 +55,7 @@ export type { Env };
  * Exporting it does not provision or start anything, and where a deployment has
  * bound the namespace nothing reserves through it. Only a composed coordinated
  * runtime reserves, and composition requires `PROVIDER_MODE=coordinated` plus
- * a bound reconciliation ledger, which no committed environment combines.
+ * a bound reconciliation ledger, which no committed environment binds.
  * Provider requests are governed by that mode and those dependencies, not by
  * this export or its binding.
  */
@@ -83,16 +83,13 @@ export { SeasonPublicationSequencer } from './publication/sequencer/durable-obje
  * The global reconciliation ledger's Durable Object class (G9 storage
  * foundation, runtime activation decision O-6).
  *
- * **Exported is not provisioned, and bound would not be used.** Wrangler
- * provisions a Durable Object class only from a declared `exports` entry or a
- * migration, so this export alone creates no namespace. `wrangler.toml`
- * registers the class and declares the `RECONCILIATION_LEDGER` binding for
- * `env.staging` only. Development and production declare neither, so there
- * `resolveReconciliationLedger` answers `null` and every coordinated run stops
- * at `ledger-unbound`. Where a namespace is bound, every path that uses it is
- * still reached only with `PROVIDER_MODE=coordinated`, which no committed
- * environment selects. Which environment has the namespace provisioned is
- * recorded in `docs/technical/GridView_Environments.md`.
+ * **Exported is not registered, and registered would not be bound.** No
+ * `[exports.ReconciliationLedger]` entry, migration or binding declares it in
+ * any environment, and Wrangler provisions a Durable Object class only from
+ * such a declaration, so this export creates no namespace. Its client is
+ * constructed only for a bound `RECONCILIATION_LEDGER` namespace, which no
+ * committed environment declares, so `resolveReconciliationLedger` answers
+ * `null` and every coordinated run still stops at `ledger-unbound`.
  */
 export { ReconciliationLedger } from './sync/coordinated/ledger/durable-object';
 
@@ -179,9 +176,8 @@ export default {
           // The operator routes and the coordinated rollback (PR-E2), and
           // the verification (PR-E3), which composes the coordinated runtime
           // from the same gated dependencies as a run. Without a bound
-          // `RECONCILIATION_LEDGER` the resolver answers `null`, so each
-          // refuses as `ledger-unbound`; outside `coordinated` each refuses
-          // before reading the ledger, bound or not.
+          // `RECONCILIATION_LEDGER` - every committed environment - the
+          // resolver answers `null`, so each refuses as `ledger-unbound`.
           reconciliation: {
             coordinated: coordinatedMode(config),
             ledger: resolveReconciliationLedger(env),
@@ -381,7 +377,7 @@ async function runScheduledCoordinated(
  * no transport or port, performs no Durable Object lookup and makes no
  * request; a bound namespace yields only its client. The reconciliation
  * ledger is present only for a bound `RECONCILIATION_LEDGER` namespace, which
- * only staging's committed configuration declares; elsewhere it is absent.
+ * no committed environment declares, so there it is absent.
  *
  * `__PROVIDER_TRANSPORT` and `__PACER_SLEEP` are test hooks: with neither, a
  * composed runtime sends through the runtime `fetch` and paces with a timer.

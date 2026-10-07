@@ -1764,12 +1764,15 @@ Coverage:
 The reconciliation orchestration (ADR 0020, C3/C4) is now **wired** to the
 Worker's scheduled handler and `POST /internal/admin/sync/full` in
 `coordinated` mode. It is **not active**: the resolver answers `null` without
-a `RECONCILIATION_LEDGER` binding, which no deployed Worker has, so the
-entry point's gate refuses every run there. *(Since 2026-10-07 staging's
-committed configuration declares the binding under `mock`;
-`test/config/staging-ledger-binding.test.ts` proves that configuration, and
-production's `none`, never look a bound namespace up.)* The tests keep
-the two states apart.
+a `RECONCILIATION_LEDGER` binding, which no environment declares, so the
+entry point's gate refuses every run in every environment. *(A staging
+declaration committed on 2026-10-07 was removed the same day before any
+deployment. `test/config/ledger-binding-absent.test.ts` pins, through
+Wrangler's own configuration reader, that no environment declares the
+binding or registers the class, and that staging resolves to the two
+Durable Objects Stage A deployed. It also proves the committed staging
+(`mock`) and production (`none`) variables never look a bound namespace
+up.)* The tests keep the two states apart.
 
 **Wired: the orchestration through the real entry points.** These are in
 `services/edge-api/test/sync/coordinated/entry-points/`. They run over both
