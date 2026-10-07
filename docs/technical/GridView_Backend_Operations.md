@@ -919,8 +919,7 @@ Each mutation names its season, a lowercase UUID v4 operation ID (a resend is
 `already-applied`) and the version it inspected. It runs one fenced ledger
 operation under the season lease. In `coordinated` mode,
 `POST /internal/admin/rollback` also requires an operator hold (OD-3).
-**No deployed Worker binds the ledger** (staging's binding is committed
-since 2026-10-07, not deployed), so every one of these answers `503`
+**No environment binds the ledger**, so every one of these answers `503`
 `reconciliation-unavailable` today. The answers, the procedures and the
 staging daily review are in the staging runbook. The
 `reconciliation.attention` line those reviews look for is written only by
@@ -1111,8 +1110,8 @@ orchestration (ADR 0020, C3/C4).
 - **Scheduled** runs serve only due work and advance due times.
 - **Manual** runs are forced publication runs that move no due time.
 
-The reconciliation ledger is unbound in every deployed Worker, so today
-every coordinated run is refused before anything is composed:
+The reconciliation ledger is unbound, so today every coordinated run is
+refused before anything is composed:
 
 - a manual run answers `503` `coordinated-runtime-unavailable` with
   `ledger-unbound`;

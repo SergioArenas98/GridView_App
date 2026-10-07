@@ -268,7 +268,7 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 | Environment | Worker name | State |
 |---|---|---|
 | development | `gridview-api-dev` | Local `wrangler dev` only |
-| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`). Redeployed twice more on 2026-09-13, for the season-2026 recovery window: reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, then reclosure version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, carrying `seed:2026`. Redeployed on 2026-09-15 as version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`, which adds `SEASON_PUBLICATION_AUTHORITY = "sequencer"` and keeps `seed:2026`. Redeployed on 2026-09-16 as version `c297d260-c81b-4110-bdf2-7572e1206af3`, which keeps `sequencer` and moves the control to `activate:2026`; season 2026 was activated that day, and this version is current. See the Durable Object state below. |
+| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`). Redeployed twice more on 2026-09-13, for the season-2026 recovery window: reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, then reclosure version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, carrying `seed:2026`. Redeployed on 2026-09-15 as version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`, which adds `SEASON_PUBLICATION_AUTHORITY = "sequencer"` and keeps `seed:2026`. Redeployed on 2026-09-16 as version `c297d260-c81b-4110-bdf2-7572e1206af3`, which keeps `sequencer` and moves the control to `activate:2026`; season 2026 was activated that day. Redeployed on 2026-10-07 as version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275` (Stage A; operator-recorded source `3228725`), which keeps every var, the cron and both Durable Object bindings, and is current. See the Durable Object state below. |
 | production | `gridview-api-production` | Not provisioned |
 
 > **Staging: public availability observed; administrative state not verified.**
@@ -315,9 +315,10 @@ phase.
 production ([ADR 0021](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md)).
 Bindings are not inherited by named environments, so each declares it; the
 SQLite `exports` entry is declared once, because SQLite-backed storage is what
-Durable Objects require on the Workers Free plan. *(Since 2026-10-07 staging
-also declares its own `exports` table, which restates that entry; see
-"Reconciliation ledger binding: committed, not deployed" below.)*
+Durable Objects require on the Workers Free plan. *(A staging-only `exports`
+table that restated it, committed on 2026-10-07, was removed the same day
+before any deployment; see "Reconciliation ledger binding: removed, Stage B
+parked" below.)*
 
 **The rate-limiter Durable Object is provisioned in staging only, and
 unused.** The 2026-09-12 staging deployment (version
@@ -339,15 +340,15 @@ or live:
 | Environment | Committed (`wrangler.toml`) | Live |
 |---|---|---|
 | development | unset (`mock`) | local only |
-| staging | `mock` | `mock` (version `c297d260-…`, which predates the `coordinated` value) |
+| staging | `mock` | `mock` (version `cc8d9a54-…`, Stage A, 2026-10-07; it admits the `coordinated` value and does not select it) |
 | production | `none` | not provisioned |
 
 Admitting the value activates nothing. Even where it is selected, the
 coordinated runtime needs a bound reconciliation ledger (G9), and no deployed
 Worker has one. Wherever it is unbound, every coordinated run stops as
 `ledger-unbound` before any transport, client or port is constructed, with
-zero provider requests. *(Since 2026-10-07 staging's committed configuration
-declares the binding; see below. That is not a deployment.)*
+zero provider requests. No committed environment declares the binding either;
+see "Reconciliation ledger binding: removed, Stage B parked" below.
 
 **Wired is not active (2026-10-06).** Since Implementation Plan §14.0.41,
 the scheduled handler and `POST /internal/admin/sync/full` in `coordinated`
@@ -363,57 +364,59 @@ orchestration is **wired but unbound** in every deployed Worker, and
 | Environment | Orchestration | Ledger | Coordinated run outcome |
 |---|---|---|---|
 | development | `coordinated` is refused as a configuration error | none | never reached |
-| staging | wired in code; the live version predates it | committed, not deployed (below) | not selected (`mock`). The live version has no binding, so if selected there it is refused as `ledger-unbound` |
+| staging | wired in code and in the live version (`cc8d9a54-…`, Stage A) | none: not declared, not deployed, not provisioned (below) | not selected (`mock`); if selected, refused as `ledger-unbound` |
 | production | wired in code; never deployed | none | not selected (`none`); if selected, refused as `authority-not-sequencer` and `ledger-unbound` |
 
 The rate-limiter note above is otherwise unchanged. Once a coordinated run
 can pass that gate, the hardened client reserves through this namespace.
-Selecting `coordinated`, deploying the ledger registration and binding, and
+Selecting `coordinated`, adding the ledger registration and binding, and
 changing the cron are each cutover-sensitive staging changes (runbook §6).
 
-**Reconciliation ledger binding: committed, not deployed (2026-10-07).**
-`wrangler.toml` now registers the `ReconciliationLedger` class
-(`type = "durable-object"`, `storage = "sqlite"`) and declares the
-`RECONCILIATION_LEDGER` binding **for `env.staging` only**. Nothing has been
-deployed or provisioned. Three states must be kept apart:
+**Reconciliation ledger binding: removed, Stage B parked (2026-10-07).**
+No committed environment declares the `RECONCILIATION_LEDGER` binding or
+registers the `ReconciliationLedger` class, and none has ever been deployed
+or provisioned. The dormant ledger implementation, its class export and the
+fail-closed resolver stay in the code.
 
-| State | Meaning | Staging | Development | Production |
-|---|---|---|---|---|
-| Committed | `wrangler.toml` on `master` declares the class registration and binding | **yes** | no | no |
-| Deployed | a live Worker version was uploaded with that declaration | **no**. The live version is `c297d260-…`, which predates it | local only | never deployed |
-| Provisioned | Cloudflare holds a `ReconciliationLedger` namespace for that Worker | **no** | not applicable | no |
+> **Superseded 2026-10-07.** The staging-only declaration committed earlier
+> that day (Implementation Plan §14.0.44: a staging `exports` table
+> restating the two top-level entries and adding `ReconciliationLedger`,
+> plus the binding) was **removed before any deployment** (§14.0.45). The
+> owner's no-cost requirement authorizes no Workers Paid plan and no other
+> paid service. The ledger serves only `coordinated` mode, which the O-10
+> run-budget assessment found infeasible on Workers Free, so deploying the
+> binding (Stage B) is **parked**, and so is the coordinated runtime.
 
-Only a separately authorized staging deployment moves staging from the
-first row to the other two. Merging this configuration does not.
+| State | Staging | Development | Production |
+|---|---|---|---|
+| Committed (`wrangler.toml` on `master` declares the class registration and binding) | **no** (declared 2026-10-07, removed the same day) | no | no |
+| Deployed (a live Worker version carries the binding) | **no**: no staging version ever has | local only | never deployed |
+| Provisioned (Cloudflare holds a `ReconciliationLedger` namespace) | **no** | not applicable | no |
 
-- **Why staging has its own `exports` table.** In Wrangler 4.112 `exports`
-  is inherited, not merged: a named environment that declares an `exports`
-  table replaces the top-level one. Staging therefore restates
-  `ProviderRateLimiter` and `SeasonPublicationSequencer` exactly and adds
-  `ReconciliationLedger`. Development and production keep inheriting the
-  top-level table, which does not name the ledger. Their resolved
-  configuration is byte-identical to before, so a production deployment
-  would neither create the class nor bind it. No migration is used: the
-  repository uses `exports`, and Wrangler treats the two forms as mutually
-  exclusive.
-- **What a staging deployment of it would do.** Create the ledger's staging
-  namespace and add the binding. Under `PROVIDER_MODE = "mock"` nothing else
-  would change. No code path looks the namespace up, so no ledger object is
-  created, no storage call is made, no provider request is sent and there is
-  no coordinated publication. The operator routes would refuse with
-  `provider-mode-not-coordinated` alone, instead of with
-  `provider-mode-not-coordinated` and `ledger-unbound`, and still read
-  nothing.
-- **Why that deployment is still cutover-sensitive.** It adds a Durable
-  Object binding, which runbook §6 lists as cutover-sensitive. Once it is
-  live, the ledger no longer gates staging. `PROVIDER_MODE = "mock"` would be
-  the only setting between staging and coordinated runs. Selecting
-  `coordinated` there would then lead to real lease, ledger and provider
-  activity rather than a `ledger-unbound` refusal. RB-7 check 1 (Workers
-  Paid) comes before it.
-- **Resolver behaviour elsewhere is unchanged.** Development and production
-  declare no binding, so `resolveReconciliationLedger` answers `null` there
-  and every coordinated path stays refused as `ledger-unbound`.
+- **Staging matches Stage A.** Stage A deployed version `cc8d9a54-…` on
+  2026-10-07 from operator-recorded source `3228725`, with the
+  `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` bindings and
+  no ledger binding. Wrangler's resolved staging configuration on `master`
+  is again identical to that source's, and development and production
+  resolve exactly as before the declaration was added.
+- **What the live Worker carries.** It exports the `ReconciliationLedger`
+  class as code, which provisions nothing: Wrangler creates a Durable Object
+  namespace only from a declared `exports` entry or a migration. On
+  2026-10-07, read-only checks found no `RECONCILIATION_LEDGER` binding in
+  any of the ten staging versions, and exactly two Durable Object
+  namespaces on the account (rate limiter and sequencer).
+- **If Stage B is ever reopened**, it needs a new owner decision on cost
+  first, then a separately authorized, cutover-sensitive change (runbook
+  §6). Wrangler 4.112 treats `exports` as inherited, not merged: a named
+  environment's own `exports` table replaces the top-level one. A
+  staging-only declaration must therefore restate `ProviderRateLimiter` and
+  `SeasonPublicationSequencer` exactly, and a top-level
+  `[exports.ReconciliationLedger]` entry would reach production's resolved
+  configuration. Once a ledger class is created, `wrangler rollback` to any
+  earlier version is blocked for good.
+- **Resolver behaviour is unchanged.** With no binding declared anywhere,
+  `resolveReconciliationLedger` answers `null` in every environment, and
+  every coordinated path stays refused as `ledger-unbound`.
 
 `SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **`sequencer` in
 live staging** since 2026-09-15 (version `cccdcf11-…`, kept unchanged by
@@ -443,10 +446,10 @@ pointers, and production has never been deployed.**
 
 | Durable Object state | development | staging | production |
 |---|---|---|---|
-| `[exports]` entries | the two top-level entries | its own table (since 2026-10-07): the same two, restated exactly, plus `ReconciliationLedger` | the two top-level entries |
+| `[exports]` entries (both classes) | shared, once | shared, once (a staging-only table adding `ReconciliationLedger` was committed and removed on 2026-10-07, never deployed) | shared, once |
 | `PROVIDER_RATE_LIMITER` binding declared | yes (local `wrangler dev` only) | yes | yes |
 | `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | **none** |
-| `RECONCILIATION_LEDGER` binding declared | none | **committed only** (2026-10-07); never deployed | **none** |
+| `RECONCILIATION_LEDGER` binding declared | none | **none** (committed and removed on 2026-10-07, never deployed; Stage B parked) | **none** |
 | Namespaces provisioned on Cloudflare | none | **rate limiter and sequencer, 2026-09-12** (version `985115b7-…`); since 2026-09-15 the sequencer is looked up, and the rate limiter still is not. **No ledger namespace** | none - never deployed |
 | Authority mode set | no | **live: yes** (`sequencer`, since 2026-09-15, version `cccdcf11-…`, kept by `c297d260-…`); **committed: yes** (`sequencer`) | no |
 | Cutover control set | no | **live: yes** (`activate:2026`, since 2026-09-16, version `c297d260-…`; before it `seed:2026`, first deployed 2026-09-12 as version `00012c06-…`, absent only during the 2026-09-13 recovery window, restored as version `c35f99c0-…`, and kept by `cccdcf11-…`); **committed: yes** (`activate:2026`) | no |
