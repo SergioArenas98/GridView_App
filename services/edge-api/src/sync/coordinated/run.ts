@@ -13,12 +13,11 @@
  *
  * Every dependency is checked first, and nothing that could make a request is
  * constructed unless all of them are present. `resolveReconciliationLedger`
- * answers `null` unless a `RECONCILIATION_LEDGER` namespace is bound, and on
- * `null` this gate refuses the run as `ledger-unbound`: no lease, no limiter
- * reservation, no request and no publication write. Only staging's committed
- * configuration declares the binding, and it selects `mock`, which never
- * calls this function. The orchestration below it is reachable only by a
- * caller that supplies a ledger, which today means tests.
+ * answers `null` unless a `RECONCILIATION_LEDGER` namespace is bound, and no
+ * committed environment binds one, so there this gate refuses the run as
+ * `ledger-unbound`: no lease, no limiter reservation, no request and no
+ * publication write. The orchestration below it is reachable only by a caller
+ * that supplies a ledger, which today means tests.
  *
  * The two triggers differ only in what the orchestration does with them
  * (runtime activation decision O-8): a scheduled run serves what is due and

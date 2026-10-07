@@ -157,8 +157,8 @@ export function serializeTrace(trace: Record<string, StepTrace[]>): string {
 
 /**
  * One combination's trace, from a fresh harness. `extra` adds fields to the
- * Worker's environment - such as a ledger binding, which the traced
- * environments do not carry - and changes nothing else.
+ * Worker's environment - a binding no committed environment declares - and
+ * changes nothing else.
  */
 export async function traceCombination(
   environment: string,

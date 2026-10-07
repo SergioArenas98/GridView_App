@@ -218,8 +218,8 @@ describe('the existing modes never reach the coordinated runtime', () => {
 /**
  * Staging selecting `coordinated`, with every dependency this change can bind:
  * the limiter, a reachable sequencer holding season 2026 `active`, and a purge
- * origin. Only the reconciliation ledger is missing: this Worker environment
- * carries no `RECONCILIATION_LEDGER`.
+ * origin. Only the reconciliation ledger is missing, because nothing can bind
+ * one yet.
  */
 async function selectedStaging(
   options: { control?: string; cutover?: 'active' | 'seeded' } = {},
@@ -513,11 +513,10 @@ describe('the guarded publication a coordinated run would bind', () => {
 
 /**
  * The ledger storage foundation (C1) adds a Durable Object class and its
- * client; only staging's committed configuration binds the class. The
- * resolver reads `RECONCILIATION_LEDGER` and nothing else: a ledger-shaped
- * namespace under any other plausible name, or under a test-hook name,
- * reaches nothing, so both entry points still stop at `ledger-unbound`. The
- * bound name itself is
+ * client, and no committed environment binds either. The resolver reads
+ * `RECONCILIATION_LEDGER` and nothing else: a ledger-shaped namespace under
+ * any other plausible name, or under a test-hook name, reaches nothing, so
+ * both entry points still stop at `ledger-unbound`. The bound name itself is
  * covered through the entry points in `coordinated/entry-points/binding`.
  */
 describe('the ledger is resolved from no field but its binding', () => {

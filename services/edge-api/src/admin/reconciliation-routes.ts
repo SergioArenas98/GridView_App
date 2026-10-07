@@ -26,13 +26,10 @@
  * resolved ledger - and only then the ledger. The season always comes from
  * the request, never from `meta:current-season`.
  *
- * `resolveReconciliationLedger` answers `null` wherever no
- * `RECONCILIATION_LEDGER` namespace is bound, and there each of these answers
- * `503` `reconciliation-unavailable` with `ledger-unbound`, having read
- * nothing. Binding availability is environment-specific (see
- * `docs/technical/GridView_Environments.md`). Where a namespace is bound but
- * the mode is `mock` or `none`, each refuses with
- * `provider-mode-not-coordinated` alone, again having read nothing.
+ * `resolveReconciliationLedger` answers `null` in every committed
+ * environment, none of which binds `RECONCILIATION_LEDGER`, so a Worker built
+ * from them answers each of these `503` `reconciliation-unavailable` with
+ * `ledger-unbound`, having read nothing.
  *
  * Nothing here publishes, sends a provider request, writes Workers KV or
  * purges a cache - except the coordinated rollback, which is the existing
@@ -126,7 +123,7 @@ export const RECONCILIATION_ROTATION_OPERATION =
 export interface OperatorReconciliation {
   /** Whether `PROVIDER_MODE` is `coordinated`. */
   readonly coordinated: boolean;
-  /** The resolved ledger; `null` wherever no namespace is bound. */
+  /** The resolved ledger; `null` in every committed environment. */
   readonly ledger: ReconciliationLedgerPort | null;
   /** What a verification composes its one request from (PR-E3). */
   readonly verification: VerificationEnvironment;
