@@ -35,10 +35,14 @@ still calls Jolpica `dormant`.
 |---|---|---|
 | Generate | `npm run season-batch:generate -- --capture <dir> --out <dir>` | `artifact.json`, `manifest.json` |
 | Convert | `npm run season-batch:fixtures -- --batch <dir> --out <dir> --manifest-sha256 <hex> --origin provider-capture` | fixture envelopes + `frozen-dataset.json` |
-| Build | `npm run season-batch:frozen-apk -- --fixtures <dir> --work <dir> --out <dir>` | APK + `build-record.json` |
+| Build | `npm run season-batch:frozen-apk -- --batch <dir> --manifest-sha256 <hex> --origin provider-capture --fixtures <dir> --work <dir> --out <dir>` | APK + `build-record.json` |
 
 All three run from `services/edge-api/` and refuse any directory inside the
-repository (after resolving links and junctions). The converter writes all
+repository (after resolving links and junctions). The build re-declares the
+batch, the reviewed manifest SHA-256 and the origin, reconverts the batch
+itself and requires the fixture directory to be exactly that conversion, so
+an edited fixture, a relabelled origin or a swapped set is refused even when
+its descriptor was edited to match. The converter writes all
 files or none. The build exports the committed tree with `git archive` into
 `--work`, replaces only `assets/dev_fixtures/` there, runs
 `flutter test test/frozen_data/bundled_fixtures_test.dart` against the
@@ -59,6 +63,14 @@ through Gradle. `$HOME/.gridview/frozen/<date>/work` is short enough.
 `--origin` is declared, never inferred. Use `provider-capture` only for a
 real, authorized capture. `synthetic` (test material) keeps the app's "Sample
 data" label and credits no source.
+
+**The origin cannot be checked from the data.** The generator accepts only
+`api.jolpi.ca` URLs, so a synthetic batch and a real one look alike. A real
+capture converted as `synthetic` by mistake would be labelled "Sample data",
+and its Jolpica card would keep the `dormant` status line, although the card
+still names Jolpica F1 with its licence, modification and non-endorsement
+notices. Declare `provider-capture` in both step 5 and step 6, and check the
+banner after installing (step 7).
 
 ## 1. Prepare (no network)
 
@@ -180,7 +192,9 @@ generated from a dirty tree.
 ## 6. Build (offline apart from Flutter and Gradle dependencies)
 
 ```bash
-npm run season-batch:frozen-apk -- --fixtures "$D/fixtures" --work "$D/work" --out "$D/apk"
+npm run season-batch:frozen-apk -- --batch "$D/batch" \
+  --manifest-sha256 <reviewed manifest sha256> --origin provider-capture \
+  --fixtures "$D/fixtures" --work "$D/work" --out "$D/apk"
 ```
 
 `$D/apk/` then holds `gridview-staging-frozen-<date>-<manifest12>.apk` and

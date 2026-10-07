@@ -171,9 +171,10 @@ The full procedure, including the separately authorized capture, is
   and SHA-256 and tells the app what the data is. `status.json` is not
   produced: the Worker computes `/v1/status`. All files are written, or none
   (17 closed refusals in `fixtureConversionFailures`, plus CLI refusals).
-- `npm run season-batch:frozen-apk -- --fixtures <dir> --work <dir> --out <dir> [--commit <rev>] [--prepare-only]`
+- `npm run season-batch:frozen-apk -- --batch <dir> --manifest-sha256 <hex> --origin <provider-capture|synthetic> --fixtures <dir> --work <dir> --out <dir> [--commit <rev>] [--prepare-only]`
   (`frozen-apk.mjs`). It verifies the fixture directory against its
-  descriptor, exports the committed tree with `git archive` into `--work`,
+  descriptor, reconverts the batch and requires the fixture directory to be
+  exactly that conversion, byte for byte, exports the committed tree with `git archive` into `--work`,
   replaces only the export's `assets/dev_fixtures/`, runs
   `test/frozen_data/bundled_fixtures_test.dart` there and builds
   `flutter build apk --debug --flavor staging` with `APP_ENV=staging` and
