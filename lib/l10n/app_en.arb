@@ -500,6 +500,20 @@
   "@mockDataBanner": {
     "description": "Banner shown in dev/staging builds that use fixture data."
   },
+  "frozenDataBanner": "Frozen test data captured {date} — not live, no updates",
+  "@frozenDataBanner": {
+    "description": "Banner shown in a test-only build that bundles a frozen snapshot of captured data instead of sample data. The data never changes.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "2026-10-08"
+      }
+    }
+  },
+  "unverifiedDataBanner": "Test data of unverified origin — not live results",
+  "@unverifiedDataBanner": {
+    "description": "Banner shown in a fixture build whose bundled data could not be identified as sample or captured data."
+  },
   "lastUpdatedLabel": "Updated {time}",
   "@lastUpdatedLabel": {
     "description": "Caption showing when a resource was last synchronised successfully.",
@@ -1392,6 +1406,20 @@
   "@settingsDataSourceUnavailable": {
     "description": "The data source is not configured in this build."
   },
+  "settingsDataSourceFrozen": "Frozen test data captured {date}",
+  "@settingsDataSourceFrozen": {
+    "description": "The app is reading a bundled frozen snapshot of captured data, fixed at the capture date.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "2026-10-08"
+      }
+    }
+  },
+  "settingsDataSourceUnverified": "Test data of unverified origin",
+  "@settingsDataSourceUnverified": {
+    "description": "The app is reading bundled test data whose origin could not be identified."
+  },
   "settingsDataApiVersion": "API version",
   "@settingsDataApiVersion": {
     "description": "Label for the API version."
@@ -1495,6 +1523,16 @@
   "settingsSourceStatusActive": "GridView retrieves data from this source.",
   "@settingsSourceStatusActive": {
     "description": "Status of a credited data source that GridView retrieves data from."
+  },
+  "settingsSourceStatusFrozen": "This test build contains a fixed snapshot of data from this source, captured {date}. It receives no updates.",
+  "@settingsSourceStatusFrozen": {
+    "description": "Status of a credited data source in a test-only build that bundles a frozen snapshot of its data. Must not claim live retrieval.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "2026-10-08"
+      }
+    }
   },
   "settingsSourceModified": "Where GridView uses data from this source, it transforms, normalizes and combines that data with independently curated information, so what you see is not the original data.",
   "@settingsSourceModified": {

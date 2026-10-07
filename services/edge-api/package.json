@@ -17,6 +17,8 @@
     "validate:fixtures": "node scripts/validate-fixtures.mjs",
     "validate:worker-config": "wrangler types worker-configuration.d.ts --include-runtime false",
     "season-batch:generate": "node scripts/season-batch/cli.mjs",
+    "season-batch:fixtures": "node scripts/season-batch/fixtures-cli.mjs",
+    "season-batch:frozen-apk": "node scripts/season-batch/frozen-apk.mjs",
     "media:dry-run": "node --experimental-strip-types scripts/media/cli.ts dry-run --base-url https://media.gridview.invalid --out .media-out",
     "validate": "npm run validate:openapi && npm run validate:content && npm run validate:fixtures && npm run validate:worker-config",
     "smoke:staging": "node scripts/staging-smoke.mjs",

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../shared/application/fixture_data_identity_provider.dart';
 import '../../shared/application/providers.dart';
 import '../../shared/domain/entities/media.dart';
 import '../../shared/presentation/domain_status.dart';
@@ -12,6 +13,7 @@ import '../../shared/presentation/widgets/screen_sections.dart';
 import '../application/data_source_attributions.dart';
 import '../domain/data_source_attribution.dart';
 import 'widgets/data_source_attribution_card.dart';
+import 'widgets/fixture_data_label.dart';
 import 'widgets/settings_rows.dart';
 
 /// The credits GridView is required to show, built from the actually-configured
@@ -34,6 +36,10 @@ class AcknowledgementsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final bool usesMockData = ref.watch(usesMockDataProvider);
+    final String? fixtureLabel = fixtureDataSourceLabel(
+      l10n,
+      ref.watch(fixtureDataIdentityProvider).value,
+    );
     final AsyncValue<List<MediaAttribution>> credits = ref.watch(
       mediaAttributionsProvider,
     );
@@ -61,7 +67,7 @@ class AcknowledgementsScreen extends ConsumerWidget {
                 GvSettingsField(
                   label: l10n.settingsDataSource,
                   value: usesMockData
-                      ? l10n.settingsDataSourceSample
+                      ? fixtureLabel ?? l10n.settingsDataSourceSample
                       : l10n.settingsDataSourceRemote,
                 ),
               ],
