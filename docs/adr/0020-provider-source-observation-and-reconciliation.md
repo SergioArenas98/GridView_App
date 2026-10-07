@@ -1027,6 +1027,13 @@ curated 2026 dataset version. Any later change to the curated 2026 identities
 or provider mappings requires a new dataset version. The season label is
 display metadata and does not imply FIA endorsement.
 
+*Reissue proposed, 2026-10-07:* curating the off-calendar circuit `jeddah`
+(Provider Evaluation §8.13) changes the curated 2026 identities and
+mappings, so `datasetVersion` becomes `2026.10.07.1`. `2026.09.29.1` is
+retired, never reused. The new value awaits curator confirmation together
+with the identity; the season label is unchanged. *Confirmed 2026-10-08:*
+the curator approved `2026.10.07.1` together with the identity.
+
 **Every ending makes a durable next-due decision.**
 
 | Ending | Decision |

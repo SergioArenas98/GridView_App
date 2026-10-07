@@ -818,12 +818,14 @@ describe('the drivers reach the normalized contract', () => {
 
 describe('nothing outside the driver dataset moved', () => {
   it('pins the final dataset totals', () => {
-    expect(mappingDocument.mappings).toHaveLength(93);
-    expect(evidenceCorpus.identities).toHaveLength(96);
+    // 93 / 96 / 3 when this dataset merged; the 2026-10-07 off-calendar
+    // circuit `jeddah` (Provider Evaluation §8.13) added one of each.
+    expect(mappingDocument.mappings).toHaveLength(94);
+    expect(evidenceCorpus.identities).toHaveLength(97);
     expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
   });
 
-  it('leaves constructors, events and circuits at 11 / 23 / 23', () => {
+  it('leaves constructors, events and circuits at 11 / 23 / 24', () => {
     const count = (entity: string) =>
       mappingDocument.mappings.filter(
         (record) => record.source === 'jolpica' && record.entity === entity,
@@ -833,8 +835,8 @@ describe('nothing outside the driver dataset moved', () => {
     expect(count('constructor')).toBe(11);
     expect(canonical.event.size).toBe(23);
     expect(count('event')).toBe(23);
-    expect(canonical.circuit.size).toBe(23);
-    expect(count('circuit')).toBe(23);
+    expect(canonical.circuit.size).toBe(24);
+    expect(count('circuit')).toBe(24);
   });
 });
 

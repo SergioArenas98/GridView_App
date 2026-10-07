@@ -54,6 +54,7 @@ import {
   SEASON,
   allowingLimiter,
   countingLimiter,
+  curatedEventLocators,
   deferringLimiter,
   failingTransport,
   forbiddenTransport,
@@ -231,8 +232,10 @@ describe('normalization of season circuits', () => {
   });
 
   it('resolves every curated 2026 circuitId through the curated mappings', async () => {
+    // 24 circuit-resource rows: the 23 calendar circuits plus `jeddah`, which
+    // no 2026 race uses (gap M8).
     const mappings = curatedCircuitMappings();
-    expect(mappings).toHaveLength(23);
+    expect(mappings).toHaveLength(24);
 
     const { outcome } = await fetchCircuits(
       circuitsEnvelope(fullSeasonCircuitRows()),
@@ -280,7 +283,7 @@ describe('normalization of season circuits', () => {
     const identityOnly = curatedRegistryRows().filter(
       (row) => Object.keys(row).sort().join(',') === 'id,name',
     );
-    expect(identityOnly).toHaveLength(17);
+    expect(identityOnly).toHaveLength(18);
     const identityOnlyIds = new Set(identityOnly.map((row) => String(row.id)));
 
     const { outcome } = await fetchCircuits(
@@ -294,7 +297,7 @@ describe('normalization of season circuits', () => {
     );
 
     const circuits = circuitsOf(outcome);
-    expect(circuits).toHaveLength(17);
+    expect(circuits).toHaveLength(18);
     for (const circuit of circuits) {
       expect(Object.keys(circuit).sort()).toEqual(
         [...DECLARED_CIRCUIT_KEYS].sort(),
@@ -336,7 +339,7 @@ describe('normalization of season circuits', () => {
     const source = await provider.fetchSeasonSource(2026, ['season-calendar']);
     const curated = curatedCircuits();
 
-    expect(source.circuits).toHaveLength(23);
+    expect(source.circuits).toHaveLength(24);
     for (const mockCircuit of source.circuits) {
       expect({ ...curated.get(mockCircuit.id), media: null }).toEqual({
         ...mockCircuit,
@@ -376,19 +379,66 @@ describe('normalization of season circuits', () => {
 
 describe('the M8 row-count observation', () => {
   /**
-   * Provider Evaluation §8.4 recorded 24 circuits for a 23-race calendar and
-   * left the difference unexplained (M8, DATA-04). The accepted rule that
-   * decides the resource is ADR 0022 D10: every provider row must resolve, and
-   * no row is ever dropped from an otherwise accepted resource. So a 24th row
-   * without a curated mapping fails the whole resource - it is neither
-   * filtered out against the calendar nor carried with an invented identity.
+   * Provider Evaluation §8.4 recorded 24 circuit-resource rows for a 23-race
+   * calendar (M8, DATA-04). §8.13 identifies the 24th row as `jeddah`, which
+   * no 2026 race uses, and curates it as a circuit identity only. The rule
+   * that decides the resource is unchanged, ADR 0022 D10: every provider row
+   * must resolve, and no row is ever dropped from an otherwise accepted
+   * resource. So any further row without a curated mapping still fails the
+   * whole resource - it is neither filtered out against the calendar nor
+   * carried with an invented identity.
    */
-  it('fails the whole resource when a 24th row has no curated mapping', async () => {
+  it('resolves 24 circuit-resource rows against 23 calendar races', async () => {
+    const calendarCircuits = new Set(
+      curatedEventLocators().map((locator) => locator.circuitId),
+    );
+    const rows = fullSeasonCircuitRows();
+    const resourceCircuits = rows.map((row) => String(row.circuitId));
+
+    expect(curatedEventLocators()).toHaveLength(23);
+    expect(calendarCircuits.size).toBe(23);
+    expect(resourceCircuits).toHaveLength(24);
+    // Exactly one row is off the calendar, and it is `jeddah`.
+    expect(
+      resourceCircuits.filter((circuitId) => !calendarCircuits.has(circuitId)),
+    ).toEqual(['jeddah']);
+
+    const { outcome } = await fetchCircuits(circuitsEnvelope(rows));
+
+    const circuits = circuitsOf(outcome);
+    expect(circuits).toHaveLength(24);
+    expect(circuits.at(-1)?.id).toBe('jeddah-corniche');
+  });
+
+  it('fails the whole resource when the jeddah row has no curated mapping', async () => {
+    // Without the reviewed mapping the real 24th row is exactly the M8
+    // failure the 2026-10-07 capture hit: the whole resource fails.
+    const registry = registryWith(
+      curatedMappingDocumentsCircuitRecords().filter(
+        (mapping) =>
+          (mapping as { providerValue: unknown }).providerValue !== 'jeddah',
+      ),
+    );
+
+    const { outcome, logger } = await fetchCircuits(
+      circuitsEnvelope(fullSeasonCircuitRows()),
+      { registry },
+    );
+
+    expectMappingFailure(outcome);
+    const signals = logger.events.filter(
+      (event) => event.operation === 'provider.mapping.resolve',
+    );
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.providerMappingValue).toBe('jeddah');
+  });
+
+  it('fails the whole resource when a 25th row has no curated mapping', async () => {
     const rows = [
       ...fullSeasonCircuitRows(),
       circuitRow('synthetic_unmapped_venue', syntheticDescription),
     ];
-    expect(rows).toHaveLength(24);
+    expect(rows).toHaveLength(25);
 
     const { outcome, logger } = await fetchCircuits(circuitsEnvelope(rows));
 
@@ -408,8 +458,8 @@ describe('the M8 row-count observation', () => {
 
   it('carries an extra row that is curated, without comparing to the calendar', async () => {
     // A synthetic curated identity stands in for a reviewed mapping. The
-    // resource is not trimmed to the 23 calendar circuits: membership is the
-    // provider's rows, each resolved.
+    // resource is not trimmed to the 24 resource rows, let alone the 23 calendar
+    // circuits: membership is the provider's rows, each resolved.
     const registry = registryWith(
       [
         ...curatedMappingDocumentsCircuitRecords(),
@@ -431,7 +481,7 @@ describe('the M8 row-count observation', () => {
     );
 
     const normalized = circuitsOf(outcome);
-    expect(normalized).toHaveLength(24);
+    expect(normalized).toHaveLength(25);
     expect(normalized.at(-1)?.id).toBe('synthetic-extra-venue');
   });
 

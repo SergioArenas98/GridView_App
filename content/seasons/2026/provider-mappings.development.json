@@ -553,6 +553,15 @@
       "note": "Jolpica separates words with an underscore and GridView with a hyphen. Converting one into the other would be slug minting, which is forbidden; the pair is curated instead."
     },
     {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "jeddah",
+      "gridviewId": "jeddah-corniche",
+      "evidence": "GridView_Provider_Evaluation.md 8.13 circuit jeddah - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/circuits/?limit=100 at 2026-10-07T22:41:15Z, HTTP 200, SHA-256 ece55e51feca4b9ebfadaaf85e93aa271a6dcfd613f7d406f54723de116f8a08; observed Circuit.circuitId, row 7 of 24, no round.",
+      "note": "The 24th row of the 2026 circuit resource (gap M8). No 2026 calendar round uses this circuit, so it is a circuit identity only: no event, round or season entry exists for it. The canonical ID names the venue, not the city, so a later Saudi venue cannot collide with it."
+    },
+    {
       "source": "openf1",
       "entity": "driver",
       "providerField": "driver_number",

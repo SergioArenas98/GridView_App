@@ -161,7 +161,7 @@ describe('the release-wide ordering input (O-13)', () => {
 describe('curated season metadata (O-14)', () => {
   it('reads the curated dataset version, the attribution record and the label', () => {
     expect(curatedSeasonMetadata(2026)).toEqual({
-      contentVersion: '2026.09.29.1',
+      contentVersion: '2026.10.07.1',
       mediaVersion: null,
       attributionVersion: 'data-sources-v1',
       seasonLabel: '2026 FIA Formula One World Championship',

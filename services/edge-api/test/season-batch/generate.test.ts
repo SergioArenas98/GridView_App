@@ -11,6 +11,11 @@ import { generateSnapshotSet } from '../../src/snapshots/generator';
 import { deriveParticipationGuard } from '../../src/publication/guard/participation-guard';
 import type { StoredSnapshot } from '../../src/storage/types';
 import {
+  circuitRow,
+  circuitsEnvelope,
+  fullSeasonCircuitRows,
+} from '../providers/jolpica/circuits-support';
+import {
   COMMIT,
   fixtureCapture,
   inputFor,
@@ -66,7 +71,7 @@ describe('season-batch generator: a complete capture', () => {
       season: 2026,
       observedAt: OBSERVED_AT,
       version: '20260316120000000-batch',
-      documentCount: 102,
+      documentCount: 103,
       calendarRounds: 23,
       classifiedRounds: [1, 2, 3],
       participationFacts: 24,
@@ -415,6 +420,46 @@ describe('season-batch generator: fails closed', () => {
       body.MRData.RaceTable.Races[0]!.Results[0]!.Driver.driverId =
         'unmapped_driver';
       entry.body = utf8Text(body);
+    });
+    expect(await refusal(inputFor(capture))).toEqual({
+      failure: 'assembly-withheld',
+      detail: 'resource-unavailable',
+    });
+  });
+
+  it('carries the off-calendar jeddah circuit as a circuit, never as an event', async () => {
+    // Gap M8: the circuit resource has 24 rows for a 23-race calendar. The
+    // 24th is curated as a circuit identity only, so it is published as a
+    // circuit and invents no race, round or season entry.
+    const artifact = parsed((await generated()).artifact.text) as {
+      source: {
+        circuits: { id: string }[];
+        calendar: { circuitId: string }[];
+      };
+    };
+    const circuitIds = artifact.source.circuits.map((circuit) => circuit.id);
+
+    expect(circuitIds).toHaveLength(24);
+    expect(circuitIds).toContain('jeddah-corniche');
+    expect(artifact.source.calendar).toHaveLength(23);
+    expect(
+      artifact.source.calendar.map((event) => event.circuitId),
+    ).not.toContain('jeddah-corniche');
+  });
+
+  it('still withholds the whole season when an extra circuit row is unmapped', async () => {
+    // ADR 0022 D10 is unchanged: curating jeddah resolves that one row, and
+    // any other unmapped row still fails the whole circuit resource.
+    const capture = edited((value) => {
+      const entry = value.responses.find(
+        (response) => response.url === urls.circuits,
+      )!;
+      entry.body = utf8Text(
+        circuitsEnvelope([
+          ...fullSeasonCircuitRows(),
+          circuitRow('synthetic_unmapped_venue'),
+        ]),
+      );
     });
     expect(await refusal(inputFor(capture))).toEqual({
       failure: 'assembly-withheld',
