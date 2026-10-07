@@ -93,13 +93,13 @@ credential is used. Use Git Bash.
 UA='GridView/1.0 (+https://github.com/SergioArenas98/GridView_App)'
 B='https://api.jolpi.ca/ergast/f1/2026'
 cd "$D/capture"
-get() { curl -sS --fail -A "$UA" -D "$1.headers" -o "$1" "$2"; sleep 1; }
-get calendar.json              "$B/races/?limit=100"
-get circuits.json              "$B/circuits/?limit=100"
-get drivers.json               "$B/drivers/?limit=100"
-get constructors.json          "$B/constructors/?limit=100"
-get driver-standings.json      "$B/driverstandings/?limit=100"
-get constructor-standings.json "$B/constructorstandings/?limit=100"
+get() { curl -sS --fail -A "$UA" -D "$1.headers" -o "$1" "$2" || return; sleep 1; }
+get calendar.json              "$B/races/?limit=100" || exit 1
+get circuits.json              "$B/circuits/?limit=100" || exit 1
+get drivers.json               "$B/drivers/?limit=100" || exit 1
+get constructors.json          "$B/constructors/?limit=100" || exit 1
+get driver-standings.json      "$B/driverstandings/?limit=100" || exit 1
+get constructor-standings.json "$B/constructorstandings/?limit=100" || exit 1
 ```
 
 Then fetch the race results of **exactly** the rounds whose race started at
@@ -112,7 +112,7 @@ ROUNDS=$(node -e '
   const cutoff = Date.now() - 5 * 3600 * 1000;
   console.log(races.filter(r => Date.parse(`${r.date}T${r.time ?? "00:00:00Z"}`) <= cutoff).map(r => r.round).join(" "));')
 echo "$ROUNDS"
-for r in $ROUNDS; do get "results-$(printf %02d "$r").json" "$B/$r/results/?limit=100"; done
+for r in $ROUNDS; do get "results-$(printf %02d "$r").json" "$B/$r/results/?limit=100" || exit 1; done
 ```
 
 Write `capture.json` from what was received, with `observedAt` set now that
