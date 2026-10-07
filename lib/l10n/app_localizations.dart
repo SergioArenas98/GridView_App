@@ -794,6 +794,18 @@ abstract class AppLocalizations {
   /// **'Sample data — not live results'**
   String get mockDataBanner;
 
+  /// Banner shown in a test-only build that bundles a frozen snapshot of captured data instead of sample data. The data never changes.
+  ///
+  /// In en, this message translates to:
+  /// **'Frozen test data captured {date} — not live, no updates'**
+  String frozenDataBanner(String date);
+
+  /// Banner shown in a fixture build whose bundled data could not be identified as sample or captured data.
+  ///
+  /// In en, this message translates to:
+  /// **'Test data of unverified origin — not live results'**
+  String get unverifiedDataBanner;
+
   /// Caption showing when a resource was last synchronised successfully.
   ///
   /// In en, this message translates to:
@@ -1916,6 +1928,18 @@ abstract class AppLocalizations {
   /// **'Not configured'**
   String get settingsDataSourceUnavailable;
 
+  /// The app is reading a bundled frozen snapshot of captured data, fixed at the capture date.
+  ///
+  /// In en, this message translates to:
+  /// **'Frozen test data captured {date}'**
+  String settingsDataSourceFrozen(String date);
+
+  /// The app is reading bundled test data whose origin could not be identified.
+  ///
+  /// In en, this message translates to:
+  /// **'Test data of unverified origin'**
+  String get settingsDataSourceUnverified;
+
   /// Label for the API version.
   ///
   /// In en, this message translates to:
@@ -2071,6 +2095,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'GridView retrieves data from this source.'**
   String get settingsSourceStatusActive;
+
+  /// Status of a credited data source in a test-only build that bundles a frozen snapshot of its data. Must not claim live retrieval.
+  ///
+  /// In en, this message translates to:
+  /// **'This test build contains a fixed snapshot of data from this source, captured {date}. It receives no updates.'**
+  String settingsSourceStatusFrozen(String date);
 
   /// Licence modification notice (CC BY-NC-SA 4.0 indicate-changes duty) for a credited data source.
   ///

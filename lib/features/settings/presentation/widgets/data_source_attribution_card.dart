@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/theme.dart';
 import '../../../../l10n/app_localizations.dart';
+import '../../../shared/application/fixture_data_identity_provider.dart';
+import '../../../shared/domain/fixture_data_identity.dart';
 import '../../../shared/presentation/widgets/screen_sections.dart';
 import '../../application/external_links.dart';
 import '../../domain/data_source_attribution.dart';
@@ -25,18 +27,16 @@ class DataSourceAttributionCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final ExternalLink? terms = source.termsLink;
+    final FixtureDataIdentity? fixtureData = ref
+        .watch(fixtureDataIdentityProvider)
+        .value;
     return GvInfoCard(
       key: ValueKey<String>('data-source-${source.sourceId}'),
       children: <Widget>[
         _Notices(
           source: source,
           lines: <String>[
-            switch (source.status) {
-              // A dormant source is credited without claiming that data from
-              // it is being served.
-              DataSourceStatus.dormant => l10n.settingsSourceStatusDormant,
-              DataSourceStatus.active => l10n.settingsSourceStatusActive,
-            },
+            _status(l10n, fixtureData),
             l10n.settingsSourceModified,
             l10n.settingsSourceLicenseNotice(source.name, source.licenseName),
             l10n.settingsSourceNotEndorsed(source.name),
@@ -84,6 +84,27 @@ class DataSourceAttributionCard extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  /// Whether GridView retrieves data from this source, in this build.
+  ///
+  /// A test-only frozen-data build bundles a fixed snapshot of the source's
+  /// data, so it says exactly that, with the capture date, whatever the
+  /// record's status: it neither claims live retrieval nor that no data from
+  /// the source is shown. Every other build follows the record.
+  String _status(AppLocalizations l10n, FixtureDataIdentity? fixtureData) {
+    if (fixtureData case FrozenCaptureData(
+      :final Set<String> sourceIds,
+      :final DateTime capturedAt,
+    ) when sourceIds.contains(source.sourceId)) {
+      return l10n.settingsSourceStatusFrozen(captureDateLabel(capturedAt));
+    }
+    return switch (source.status) {
+      // A dormant source is credited without claiming that data from it is
+      // being served.
+      DataSourceStatus.dormant => l10n.settingsSourceStatusDormant,
+      DataSourceStatus.active => l10n.settingsSourceStatusActive,
+    };
   }
 
   /// A link as the reader sees it: host and path, without the scheme or a

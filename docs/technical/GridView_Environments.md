@@ -145,6 +145,32 @@ shell and any cached content always render first, one run starts after the first
 frame, and refreshes follow server-provided freshness rather than any
 environment-specific interval.
 
+### Frozen-data test builds (test only)
+
+A fixture build normally bundles the committed sample fixtures and shows the
+"Sample data" banner. A **test-only frozen-data build** replaces them, in a
+throwaway `git archive` export outside the repository, with fixtures
+converted from one reviewed Jolpica capture
+(`../operations/GridView_Frozen_Test_APK_Runbook.md`). It is a staging debug
+APK with `APP_ENV=staging` and `DATA_SOURCE=fixture`: the selection truth
+table above is unchanged, and production still never constructs the fixture
+source.
+
+What the app shows is decided by the bundled descriptor
+`assets/dev_fixtures/frozen-dataset.json`, which only the converter writes
+and the repository never contains. `fixtureDataIdentityProvider` reads it,
+and only when the build serves fixtures:
+
+| Bundled data | Banner | Settings → Data source | Jolpica credit |
+|---|---|---|---|
+| No descriptor (the committed samples) | Sample data — not live results | Sample data | record status (`dormant`) |
+| `origin: synthetic` | Sample data — not live results | Sample data | record status (`dormant`) |
+| `origin: provider-capture` | Frozen test data captured <date> — not live, no updates | Frozen test data captured <date> | a fixed snapshot captured <date>, no updates; licence CC BY-NC-SA 4.0 |
+| A descriptor that cannot be read | Test data of unverified origin — not live results | Test data of unverified origin | record status |
+
+**Such a build shows a fixed snapshot and receives no live updates.** It
+talks to no GridView service and to no provider.
+
 ## Firebase
 
 - The production Firebase configuration

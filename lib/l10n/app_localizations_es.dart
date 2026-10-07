@@ -393,6 +393,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get mockDataBanner => 'Datos de muestra — no son resultados reales';
 
   @override
+  String frozenDataBanner(String date) {
+    return 'Datos de prueba congelados capturados el $date — no son en directo ni se actualizan';
+  }
+
+  @override
+  String get unverifiedDataBanner =>
+      'Datos de prueba de origen no verificado — no son resultados reales';
+
+  @override
   String lastUpdatedLabel(String time) {
     return 'Actualizado $time';
   }
@@ -1043,6 +1052,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsDataSourceUnavailable => 'Sin configurar';
 
   @override
+  String settingsDataSourceFrozen(String date) {
+    return 'Datos de prueba congelados capturados el $date';
+  }
+
+  @override
+  String get settingsDataSourceUnverified =>
+      'Datos de prueba de origen no verificado';
+
+  @override
   String get settingsDataApiVersion => 'Versión de la API';
 
   @override
@@ -1127,6 +1145,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get settingsSourceStatusActive =>
       'GridView obtiene datos de esta fuente.';
+
+  @override
+  String settingsSourceStatusFrozen(String date) {
+    return 'Esta versión de prueba contiene una instantánea fija de datos de esta fuente, capturada el $date. No recibe actualizaciones.';
+  }
 
   @override
   String get settingsSourceModified =>

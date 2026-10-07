@@ -152,3 +152,34 @@ any future guarded publication.
 
 Generated data is derived from Jolpica F1 (CC BY-NC-SA 4.0). Keep it private
 until its use is decided.
+
+## Frozen test-data APK (test only)
+
+Two more offline tools turn a reviewed batch into a test-only staging APK.
+The full procedure, including the separately authorized capture, is
+`docs/operations/GridView_Frozen_Test_APK_Runbook.md`.
+
+- `npm run season-batch:fixtures -- --batch <dir> --out <dir> --manifest-sha256 <hex> --origin <provider-capture|synthetic>`
+  (`fixtures-cli.mjs`, `fixtures.ts`). It requires the batch directory to hold
+  exactly `artifact.json` and `manifest.json`, the manifest to be the reviewed
+  bytes and generated from a clean tree, the artifact and every document to
+  match their digests, and the documents to regenerate exactly from the
+  artifact's `source`. It maps each document to the file name
+  `FixtureGridViewApi` loads, as `{ data, meta: { ...meta, requestId } }`,
+  exactly the Worker's public envelope, and validates each against the OpenAPI
+  contract. It adds `frozen-dataset.json`, which lists every file with its size
+  and SHA-256 and tells the app what the data is. `status.json` is not
+  produced: the Worker computes `/v1/status`. All files are written, or none
+  (17 closed refusals in `fixtureConversionFailures`, plus CLI refusals).
+- `npm run season-batch:frozen-apk -- --batch <dir> --manifest-sha256 <hex> --origin <provider-capture|synthetic> --fixtures <dir> --work <dir> --out <dir> [--commit <rev>] [--prepare-only]`
+  (`frozen-apk.mjs`). It verifies the fixture directory against its
+  descriptor, reconverts the batch and requires the fixture directory to be
+  exactly that conversion, byte for byte, exports the committed tree with `git archive` into `--work`,
+  replaces only the export's `assets/dev_fixtures/`, runs
+  `test/frozen_data/bundled_fixtures_test.dart` there and builds
+  `flutter build apk --debug --flavor staging` with `APP_ENV=staging` and
+  `DATA_SOURCE=fixture`. The production flavor and release signing are never
+  used, and nothing is written inside the repository.
+
+`--origin` is declared by the operator and never inferred. A `synthetic`
+batch keeps the app's "Sample data" label and credits no source.

@@ -389,6 +389,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mockDataBanner => 'Sample data — not live results';
 
   @override
+  String frozenDataBanner(String date) {
+    return 'Frozen test data captured $date — not live, no updates';
+  }
+
+  @override
+  String get unverifiedDataBanner =>
+      'Test data of unverified origin — not live results';
+
+  @override
   String lastUpdatedLabel(String time) {
     return 'Updated $time';
   }
@@ -1035,6 +1044,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDataSourceUnavailable => 'Not configured';
 
   @override
+  String settingsDataSourceFrozen(String date) {
+    return 'Frozen test data captured $date';
+  }
+
+  @override
+  String get settingsDataSourceUnverified => 'Test data of unverified origin';
+
+  @override
   String get settingsDataApiVersion => 'API version';
 
   @override
@@ -1117,6 +1134,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsSourceStatusActive =>
       'GridView retrieves data from this source.';
+
+  @override
+  String settingsSourceStatusFrozen(String date) {
+    return 'This test build contains a fixed snapshot of data from this source, captured $date. It receives no updates.';
+  }
 
   @override
   String get settingsSourceModified =>

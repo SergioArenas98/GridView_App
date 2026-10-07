@@ -10,11 +10,14 @@ import '../../../core/observability/observability_activation.dart';
 import '../../../core/observability/observability_providers.dart';
 import '../../../core/theme/theme.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../shared/application/fixture_data_identity_provider.dart';
 import '../../shared/application/providers.dart';
+import '../../shared/domain/fixture_data_identity.dart';
 import '../../shared/presentation/widgets/screen_scaffold.dart';
 import '../../shared/presentation/widgets/screen_sections.dart';
 import '../application/app_info.dart';
 import '../application/external_links.dart';
+import 'widgets/fixture_data_label.dart';
 import 'widgets/settings_rows.dart';
 
 /// Padding shared by the read-only Settings information screens.
@@ -40,6 +43,9 @@ class DataSettingsScreen extends ConsumerWidget {
     final AppEnvironment environment = ref.watch(appEnvironmentProvider);
     final DataSourceMode mode = ref.watch(dataSourceModeProvider);
     final bool usesMockData = ref.watch(usesMockDataProvider);
+    final FixtureDataIdentity? fixtureData = ref
+        .watch(fixtureDataIdentityProvider)
+        .value;
     final int? season = ref.watch(currentSeasonProvider).value;
 
     return GvScreenScaffold(
@@ -55,7 +61,7 @@ class DataSettingsScreen extends ConsumerWidget {
               ),
               GvSettingsField(
                 label: l10n.settingsDataSource,
-                value: _dataSource(l10n, mode, usesMockData),
+                value: _dataSource(l10n, mode, usesMockData, fixtureData),
               ),
               GvSettingsField(
                 label: l10n.settingsDataApiVersion,
@@ -87,8 +93,12 @@ class DataSettingsScreen extends ConsumerWidget {
     AppLocalizations l10n,
     DataSourceMode mode,
     bool usesMockData,
+    FixtureDataIdentity? fixtureData,
   ) {
-    if (usesMockData) return l10n.settingsDataSourceSample;
+    if (usesMockData) {
+      return fixtureDataSourceLabel(l10n, fixtureData) ??
+          l10n.settingsDataSourceSample;
+    }
     return switch (mode) {
       DataSourceMode.remote => l10n.settingsDataSourceRemote,
       DataSourceMode.fixture => l10n.settingsDataSourceUnavailable,

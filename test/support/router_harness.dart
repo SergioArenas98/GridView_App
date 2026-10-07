@@ -21,9 +21,11 @@ import 'package:gridview/features/settings/application/app_info.dart';
 import 'package:gridview/features/settings/application/data_source_attributions.dart';
 import 'package:gridview/features/settings/application/external_links.dart';
 import 'package:gridview/features/settings/domain/data_source_attribution.dart';
+import 'package:gridview/features/shared/application/fixture_data_identity_provider.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/domain/entities/media.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
+import 'package:gridview/features/shared/domain/fixture_data_identity.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
 import 'package:gridview/l10n/app_localizations.dart';
 
@@ -223,6 +225,10 @@ Future<GoRouter> pumpApp(
   /// record is read, so screens show exactly what the app ships.
   Future<DataSourceAttributions> Function()? dataSourceAttributions,
 
+  /// What the bundled fixture data is. By default the real bundle is read, so
+  /// a [mockData] build shows exactly what the committed fixtures are.
+  FixtureDataIdentity? fixtureData,
+
   /// The observability surface. Defaults to the inert one, so no test reports,
   /// traces or reaches Firebase unless it deliberately asks for a fake.
   Observability observability = const Observability.disabled(),
@@ -295,6 +301,10 @@ Future<GoRouter> pumpApp(
         appEnvironmentProvider.overrideWithValue(environment),
         observabilityProvider.overrideWithValue(observability),
         usesMockDataProvider.overrideWithValue(mockData),
+        if (fixtureData != null)
+          fixtureDataIdentityProvider.overrideWith(
+            (Ref ref) async => fixtureData,
+          ),
         // Home, Calendar and Standings are season-scoped. Widget tests replace
         // the data layer with fakes, so the season they render is supplied
         // directly rather than resolved from a database these tests never open.

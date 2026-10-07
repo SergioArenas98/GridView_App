@@ -17,6 +17,12 @@ Operational documentation for GridView.
   checks must run, and why string similarity and slug minting are forbidden.
   **Dormant:** no deployed or application path consumes the registry.
 
+- `GridView_Frozen_Test_APK_Runbook.md` — the test-only frozen-data APK: a
+  separately authorized Jolpica capture, offline generation, owner review,
+  conversion to fixtures and a staging debug APK built from a throwaway
+  `git archive` export. The APK shows a fixed snapshot and receives no live
+  updates. **Procedure only:** never run against real data yet.
+
 Planned:
 
 - Incident runbook.

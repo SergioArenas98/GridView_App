@@ -1,20 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/theme.dart';
 import '../../../../l10n/app_localizations.dart';
+import '../../application/fixture_data_identity_provider.dart';
+import '../../domain/fixture_data_identity.dart';
 
 /// A persistent, clearly-visible banner shown in dev/staging builds that serve
 /// fixture data, so sample data is never mistaken for authoritative results.
 /// Never shown in production (the provider wiring reports mock = false there).
-class MockDataBanner extends StatelessWidget {
+///
+/// A test-only frozen-data build is labelled as frozen captured data with its
+/// capture date. Until the bundled data is identified, and for sample data,
+/// the sample wording is shown: it never claims more than is known.
+class MockDataBanner extends ConsumerWidget {
   const MockDataBanner({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final GvSemanticColors colors = context.gvColors;
+    final String label = switch (ref.watch(fixtureDataIdentityProvider).value) {
+      FrozenCaptureData(:final DateTime capturedAt) => l10n.frozenDataBanner(
+        captureDateLabel(capturedAt),
+      ),
+      UnverifiedFixtureData() => l10n.unverifiedDataBanner,
+      SampleFixtureData() || null => l10n.mockDataBanner,
+    };
     return Semantics(
-      label: l10n.mockDataBanner,
+      label: label,
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: GvSpacing.md,
@@ -35,7 +49,7 @@ class MockDataBanner extends StatelessWidget {
             const SizedBox(width: GvSpacing.sm),
             Expanded(
               child: Text(
-                l10n.mockDataBanner,
+                label,
                 style: context.gvText.label.copyWith(
                   color: context.gvColors.textSecondary,
                 ),
