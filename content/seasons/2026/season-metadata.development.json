@@ -4,6 +4,6 @@
   "status": "development",
   "note": "Curated metadata for provider-backed 2026 snapshots (runtime activation decision O-14). Read only by the dormant coordinated publication orchestration; no environment publishes it. Both values are curator-owned: the label follows the Domain Model's Season.label example, and the dataset version must be re-issued whenever the curated 2026 registries or provider mappings change.",
   "season": 2026,
-  "datasetVersion": "2026.09.29.1",
+  "datasetVersion": "2026.10.07.1",
   "seasonLabel": "2026 FIA Formula One World Championship"
 }

@@ -422,7 +422,7 @@ describe('required case 51 - approved identities cannot be silently omitted', ()
 describe('a curated registry identity is unique or the whole set is refused', () => {
   const circuits = read('content', 'registries', 'circuits.mock.json').circuits;
 
-  it('accepts the committed 23 circuit identities', () => {
+  it('accepts the committed 24 circuit identities', () => {
     const { problems, ids } = validateRegistryDocumentSet(
       'circuit-registry',
       'circuits',
@@ -430,7 +430,7 @@ describe('a curated registry identity is unique or the whole set is refused', ()
     );
 
     expect(problems).toEqual([]);
-    expect(ids.size).toBe(23);
+    expect(ids.size).toBe(24);
   });
 
   it('rejects a duplicated canonical id and decides no canonical set', () => {

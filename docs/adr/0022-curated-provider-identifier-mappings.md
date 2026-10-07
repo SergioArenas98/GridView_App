@@ -901,6 +901,18 @@ shorten it.
 > 2026-08-19 (Provider Evaluation §8.1) and one authorized calendar-evidence
 > `GET` on 2026-09-19 (§8.8). GridView's application code, the Worker provider
 > client and the rate limiter have made **no** provider request.
+>
+> **Note 2026-10-07 - M8 identified, D10 unchanged.** The first recorded
+> response of `/2026/circuits/` (Provider Evaluation §8.13) has 24
+> circuit-resource rows against 23 calendar races. The 24th is `jeddah`,
+> which no 2026 round uses. With no mapping for it, the whole
+> `season-circuits` resource failed exactly as D10 requires. A reviewed
+> change proposes the canonical circuit `jeddah-corniche` and the exact
+> mapping, as a circuit identity only: no event, locator, round or season
+> entry is created for it. D10 itself is unchanged, and any other unmapped
+> row still fails the whole resource. The season-2026 dataset then holds 94
+> exact mappings, 97 approved evidence identities and three
+> acknowledgements.
 
 `PROVIDER_MODE` still admits exactly `mock` and `none`, staging is `mock` and
 production is `none`. Nothing here authorizes a provider request, deployment,

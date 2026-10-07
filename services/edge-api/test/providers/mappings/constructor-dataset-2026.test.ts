@@ -642,9 +642,10 @@ describe('nothing outside the constructor dataset moved', () => {
   it('pins the dataset totals, including the later driver dataset', () => {
     // 62 / 66 / 4 when this dataset merged; the 2026-09-23 driver dataset
     // added 31 driver mappings and 30 driver evidence identities and removed
-    // the Jolpica `antonelli` acknowledgement.
-    expect(mappingDocument.mappings).toHaveLength(93);
-    expect(evidenceCorpus.identities).toHaveLength(96);
+    // the Jolpica `antonelli` acknowledgement. The 2026-10-07 off-calendar
+    // circuit `jeddah` (Provider Evaluation §8.13) added one of each.
+    expect(mappingDocument.mappings).toHaveLength(94);
+    expect(evidenceCorpus.identities).toHaveLength(97);
     expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
   });
 
@@ -670,15 +671,17 @@ describe('nothing outside the constructor dataset moved', () => {
     });
   });
 
-  it('leaves events and circuits fully mapped at 23 / 23', () => {
+  it('leaves events and circuits fully mapped at 23 / 24', () => {
+    // 23 calendar events; 24 circuits, the 23 calendar circuits plus the
+    // off-calendar `jeddah` row of the circuit resource (§8.13).
     const count = (entity: string) =>
       mappingDocument.mappings.filter((record) => record.entity === entity)
         .length;
 
     expect(canonical.event.size).toBe(23);
     expect(count('event')).toBe(23);
-    expect(canonical.circuit.size).toBe(23);
-    expect(count('circuit')).toBe(23);
+    expect(canonical.circuit.size).toBe(24);
+    expect(count('circuit')).toBe(24);
   });
 });
 

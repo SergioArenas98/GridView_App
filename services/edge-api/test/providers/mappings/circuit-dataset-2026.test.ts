@@ -1,8 +1,9 @@
 /**
  * The curated 2026 Jolpica circuit dataset.
  *
- * Pins all 23 season-2026 circuit associations a curator has approved, in the
- * two passes Provider Evaluation §8.8.1 records:
+ * Pins all 24 season-2026 circuit associations: the 23 calendar circuits a
+ * curator approved in the two passes Provider Evaluation §8.8.1 records, and
+ * the one off-calendar circuit §8.13 records:
  *
  * - `albert_park` from §8.4, plus the five approved on 2026-09-19 whose
  *   canonical GridView circuit already existed. Those were **mapping decisions
@@ -11,10 +12,14 @@
  *   curated circuit to the registry. Every canonical ID and display name is
  *   curator-authored: no provider name became an identity, no alias exists and
  *   no provider value was normalised into an ID.
+ * - `jeddah`, the 24th row of the 2026 circuit resource (gap M8), proposed on
+ *   2026-10-07 for curator review. No 2026 race uses it, so it is a circuit
+ *   identity only: there are 24 circuit-resource rows and 23 calendar races.
  *
- * `PRE_EXISTING`, `MAPPED_2026_09_19` and `APPROVED_IDENTITIES` below are that
- * curator decision row for row, so changing any association or any canonical
- * name means changing it here in the same reviewed commit.
+ * `PRE_EXISTING`, `MAPPED_2026_09_19`, `APPROVED_IDENTITIES` and
+ * `OFF_CALENDAR_IDENTITIES` below are those decisions row for row, so changing
+ * any association or any canonical name means changing it here in the same
+ * reviewed commit.
  *
  * A complete mapping dataset is not an adapter. Nothing consumes any of this:
  * no Jolpica adapter exists, and the registry stays dormant.
@@ -177,6 +182,43 @@ const APPROVED_IDENTITIES: readonly CuratedIdentity[] = (
   name,
 }));
 
+/** The exact circuit-resource response hash §8.13 records (2026-10-07). */
+const CIRCUIT_RESOURCE_HASH =
+  'ece55e51feca4b9ebfadaaf85e93aa271a6dcfd613f7d406f54723de116f8a08';
+
+/** The response `Date` §8.13 records for that response. */
+const CIRCUIT_RESOURCE_OBSERVED_AT = '2026-10-07T22:41:15Z';
+
+interface OffCalendarIdentity {
+  readonly row: number;
+  readonly circuitId: string;
+  readonly circuitName: string;
+  readonly locality: string;
+  readonly country: string;
+  readonly gridviewId: string;
+  readonly name: string;
+}
+
+/**
+ * The circuit-resource rows no 2026 calendar round uses, exactly as §8.13
+ * tabulates them: the provider row (its position among the 24, and what it
+ * says) and the proposed canonical identity. Nothing here is an event.
+ */
+const OFF_CALENDAR_IDENTITIES: readonly OffCalendarIdentity[] = [
+  {
+    row: 7,
+    circuitId: 'jeddah',
+    circuitName: 'Jeddah Corniche Circuit',
+    locality: 'Jeddah',
+    country: 'Saudi Arabia',
+    gridviewId: 'jeddah-corniche',
+    name: 'Jeddah Corniche Circuit',
+  },
+];
+
+/** The 2026 dataset version issued with the off-calendar identity (O-14). */
+const DATASET_VERSION = '2026.10.07.1';
+
 /** The one circuit mapping that predates both passes. */
 const ALREADY_MAPPED = {
   providerValue: 'albert_park',
@@ -194,6 +236,9 @@ const ALL_ASSOCIATIONS: readonly (readonly [string, string])[] = [
   ...APPROVED_IDENTITIES.map(
     (row) => [row.circuitId, row.gridviewId] as readonly [string, string],
   ),
+  ...OFF_CALENDAR_IDENTITIES.map(
+    (row) => [row.circuitId, row.gridviewId] as readonly [string, string],
+  ),
 ];
 
 /** The six identities the curated circuit registry held before this dataset. */
@@ -206,10 +251,13 @@ const PRE_EXISTING: readonly (readonly [string, string])[] = [
   ['suzuka', 'Suzuka International Racing Course'],
 ];
 
-/** The whole curated circuit registry after this dataset: 6 + 17. */
+/** The whole curated circuit registry after this dataset: 6 + 17 + 1. */
 const EXPECTED_REGISTRY: readonly (readonly [string, string])[] = [
   ...PRE_EXISTING,
   ...APPROVED_IDENTITIES.map(
+    (row) => [row.gridviewId, row.name] as readonly [string, string],
+  ),
+  ...OFF_CALENDAR_IDENTITIES.map(
     (row) => [row.gridviewId, row.name] as readonly [string, string],
   ),
 ];
@@ -365,11 +413,11 @@ function evidenceFor(providerValue: string): string {
 // ---------------------------------------------------------------------------
 
 describe('the curated circuit registry', () => {
-  it('holds exactly the six pre-existing identities plus the approved 17', () => {
+  it('holds exactly the six pre-existing identities, the approved 17 and jeddah-corniche', () => {
     const ids = circuitRegistry.map((entry) => entry.id as string);
 
-    expect(ids).toHaveLength(23);
-    expect(new Set(ids).size).toBe(23);
+    expect(ids).toHaveLength(24);
+    expect(new Set(ids).size).toBe(24);
     expect([...ids].sort()).toEqual(EXPECTED_REGISTRY.map(([id]) => id).sort());
   });
 
@@ -385,13 +433,18 @@ describe('the curated circuit registry', () => {
   it('gives every new row exactly `id` and `name`, and nothing else', () => {
     // No locality, country, coordinates, length, corner count, direction,
     // first-Grand-Prix year or lap record: GridView does not own those facts
-    // for these venues, and an identity does not need them.
-    const approved = new Set(APPROVED_IDENTITIES.map((row) => row.gridviewId));
+    // for these venues, and an identity does not need them. The locality,
+    // country and coordinates Jolpica reports for `jeddah` stay in §8.13.
+    const approved = new Set(
+      [...APPROVED_IDENTITIES, ...OFF_CALENDAR_IDENTITIES].map(
+        (row) => row.gridviewId,
+      ),
+    );
     const newRows = circuitRegistry.filter((entry) =>
       approved.has(entry.id as string),
     );
 
-    expect(newRows).toHaveLength(17);
+    expect(newRows).toHaveLength(18);
     for (const row of newRows) {
       expect(Object.keys(row).sort(), String(row.id)).toEqual(['id', 'name']);
     }
@@ -428,16 +481,16 @@ describe('the curated circuit registry', () => {
 });
 
 describe('the 2026 Jolpica circuit mappings', () => {
-  it('are exactly 23 Jolpica circuitId records in a 2026 file', () => {
+  it('are exactly 24 Jolpica circuitId records in a 2026 file', () => {
     expect(mappingDocument.season).toBe(2026);
-    expect(circuitMappings).toHaveLength(23);
+    expect(circuitMappings).toHaveLength(24);
     for (const record of circuitMappings) {
       expect(record.source).toBe('jolpica');
       expect(record.providerField).toBe('circuitId');
     }
   });
 
-  it('are exactly the 23 approved associations', () => {
+  it('are exactly the 24 curated associations', () => {
     expect(
       circuitMappings
         .map((record) => [String(record.providerValue), record.gridviewId])
@@ -534,9 +587,9 @@ describe('the 2026 Jolpica circuit mappings', () => {
 });
 
 describe('the 2026 circuit evidence corpus', () => {
-  it('records exactly the 23 mapped identities', () => {
+  it('records exactly the 24 mapped identities', () => {
     expect(evidenceCorpus.season).toBe(2026);
-    expect(circuitIdentities).toHaveLength(23);
+    expect(circuitIdentities).toHaveLength(24);
     expect(
       circuitIdentities.map((record) => record.providerValue).sort(),
     ).toEqual(ALL_ASSOCIATIONS.map(([from]) => from).sort());
@@ -606,6 +659,28 @@ describe('the 2026 circuit evidence corpus', () => {
     }
   });
 
+  it('gives the off-calendar identity the §8.13 circuit-resource evidence', () => {
+    for (const row of OFF_CALENDAR_IDENTITIES) {
+      const evidence = evidenceFor(row.circuitId);
+
+      expect(evidence, row.circuitId).toContain(
+        `GridView_Provider_Evaluation.md 8.13 circuit ${row.circuitId} -`,
+      );
+      // The circuit resource, not the calendar: no race cites this row.
+      expect(evidence, row.circuitId).toContain(
+        'https://api.jolpi.ca/ergast/f1/2026/circuits/?limit=100',
+      );
+      expect(evidence, row.circuitId).toContain(CIRCUIT_RESOURCE_HASH);
+      expect(evidence, row.circuitId).toContain(CIRCUIT_RESOURCE_OBSERVED_AT);
+      expect(evidence, row.circuitId).toContain(`row ${row.row} of 24`);
+      expect(evidence, row.circuitId).toContain('no round.');
+      expect(evidence, row.circuitId).not.toContain(RESPONSE_HASH);
+      expect(evidence, row.circuitId).toContain('Jolpica F1');
+      expect(evidence, row.circuitId).toContain('CC BY-NC-SA 4.0');
+      expect(evidence, row.circuitId).not.toContain('.gridview');
+    }
+  });
+
   it('reuses the hungaroring identity rather than duplicating it', () => {
     // It was already an approved identity while it was acknowledged. The
     // dataset updated that one record to the §8.8 observation now backing its
@@ -672,8 +747,8 @@ describe('nothing outside the circuit dataset moved', () => {
     expect(mappingDocument.mappings).toHaveLength(
       OTHER_MAPPINGS.length + ALL_ASSOCIATIONS.length + 23,
     );
-    expect(mappingDocument.mappings).toHaveLength(93);
-    expect(evidenceCorpus.identities).toHaveLength(96);
+    expect(mappingDocument.mappings).toHaveLength(94);
+    expect(evidenceCorpus.identities).toHaveLength(97);
     expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
   });
 
@@ -824,7 +899,136 @@ describe('the repository-owned evidence record (Provider Evaluation §8.8.1)', (
   });
 });
 
+describe('the off-calendar circuit (Provider Evaluation §8.13)', () => {
+  const evaluation = readRepoFile(
+    'docs',
+    'technical',
+    'GridView_Provider_Evaluation.md',
+  );
+  const start = evaluation.indexOf('### 8.13 ');
+  const section = evaluation.slice(start, evaluation.indexOf('\n---\n', start));
+  const flat = section.replace(/\s+/g, ' ');
+
+  it('records the observation, its licence and the row-count distinction', () => {
+    expect(start).toBeGreaterThan(0);
+    for (const fact of [
+      CIRCUIT_RESOURCE_HASH,
+      CIRCUIT_RESOURCE_OBSERVED_AT,
+      'https://api.jolpi.ca/ergast/f1/2026/circuits/?limit=100',
+      'Jolpica F1',
+      'CC BY-NC-SA 4.0',
+      '**24 circuit-resource rows**',
+      '**23 calendar races**',
+      '**94 exact mappings**',
+      '**97 approved evidence identities**',
+      '**three acknowledgements**',
+      `\`${DATASET_VERSION}\``,
+      'proposed for curator review',
+      '**No additional provider request was made.**',
+      'ADR 0022 D10 is unchanged',
+    ]) {
+      expect(flat, fact).toContain(fact);
+    }
+  });
+
+  it('is reconstructed exactly by the committed off-calendar table', () => {
+    const rows = [
+      ...section.matchAll(
+        /^\| (\d+) of 24 \| `([^`]+)` \| `([^`]+)` \| `([^`]+)`, `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|$/gm,
+      ),
+    ].map(
+      ([
+        ,
+        row,
+        circuitId,
+        circuitName,
+        locality,
+        country,
+        gridviewId,
+        name,
+      ]) => ({
+        row: Number(row),
+        circuitId: String(circuitId),
+        circuitName: String(circuitName),
+        locality: String(locality),
+        country: String(country),
+        gridviewId: String(gridviewId),
+        name: String(name),
+      }),
+    );
+
+    expect(rows).toEqual(OFF_CALENDAR_IDENTITIES);
+    for (const row of rows) {
+      expect(resolvedCircuit(row.circuitId), row.circuitId).toBe(
+        row.gridviewId,
+      );
+      expect(
+        circuitRegistry.find((entry) => entry.id === row.gridviewId)?.name,
+        row.gridviewId,
+      ).toBe(row.name);
+    }
+  });
+
+  it('invents no race, round or season entry for an off-calendar circuit', () => {
+    const offCalendar = new Set(
+      OFF_CALENDAR_IDENTITIES.map((row) => row.circuitId),
+    );
+    const offCalendarIds = OFF_CALENDAR_IDENTITIES.map((row) => row.gridviewId);
+    // No event locator names the provider circuit...
+    const locators = mappingDocument.mappings
+      .filter(isEvent)
+      .map((record) => record.providerValue as { circuitId: string });
+    expect(locators).toHaveLength(23);
+    for (const locator of locators) {
+      expect(offCalendar.has(locator.circuitId), locator.circuitId).toBe(false);
+    }
+    // ...and no curated event, entry or override names the identity.
+    for (const file of [
+      ['registries', 'events.development.json'],
+      ['seasons', '2026', 'driver-entries.mock.json'],
+      ['seasons', '2026', 'constructor-entries.mock.json'],
+      ['seasons', '2026', 'overrides.mock.json'],
+    ]) {
+      const text = readRepoFile('content', ...file);
+      for (const id of offCalendarIds) {
+        expect(text, `${file.join('/')} ${id}`).not.toContain(id);
+      }
+      expect(text, file.join('/')).not.toContain('jeddah');
+    }
+  });
+
+  it('issues a new 2026 dataset version for the changed identities (O-14)', () => {
+    const metadata = JSON.parse(
+      readRepoFile(
+        'content',
+        'seasons',
+        '2026',
+        'season-metadata.development.json',
+      ),
+    ) as { datasetVersion: string };
+
+    expect(metadata.datasetVersion).toBe(DATASET_VERSION);
+    // A version is never reused: the initial curated version is retired.
+    expect(metadata.datasetVersion).not.toBe('2026.09.29.1');
+  });
+});
+
 describe('a defective dataset is rejected', () => {
+  it('leaves jeddah unresolved when its mapping is removed', () => {
+    // The registry stays structurally valid without the mapping: nothing
+    // requires a canonical circuit to be targeted. What fails is the lookup,
+    // and the circuits port turns that into a whole-resource failure.
+    const without = registryOf(
+      mappingDocument.mappings.filter(
+        (record) => record.providerValue !== 'jeddah',
+      ),
+    );
+
+    expect(without.problems).toEqual([]);
+    expect(without.resolve(circuitKey('jeddah')).outcome).toBe('unresolved');
+    expect(resolvedCircuit('jeddah')).toBe('jeddah-corniche');
+  });
+
   it('fails the row pin when a target is swapped between two circuits', () => {
     // The deliberate mismatch: `spa` pointed at Monza's identity. It is still
     // a structurally valid record against an existing canonical circuit, so
@@ -888,14 +1092,14 @@ describe('a defective dataset is rejected', () => {
   it('carries no duplicate canonical identity', () => {
     // Build-time rejection of a duplicate lives in the content validator and
     // is asserted against it in test/scripts/provider-mapping-rules.test.mjs.
-    // What this file owns is the committed dataset: 23 rows, 23 identities.
+    // What this file owns is the committed dataset: 24 rows, 24 identities.
     const ids = circuitRegistry.map((entry) => entry.id as string);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(canonical.circuit.size).toBe(23);
+    expect(canonical.circuit.size).toBe(24);
   });
 
   it('fails closed when a curated identity is removed from the registry', () => {
-    // The mirror of the duplicate: every one of the 23 targets must exist, so
+    // The mirror of the duplicate: every one of the 24 targets must exist, so
     // dropping any single identity invalidates the whole registry.
     for (const [providerValue, gridviewId] of ALL_ASSOCIATIONS) {
       const without = registryOf(mappingDocument.mappings, SEASON, {
@@ -942,7 +1146,7 @@ describe('validation needs nothing outside the repository', () => {
   it('reconstructs every association from committed content alone', () => {
     // This whole file reads only the repository, so a green run *is* the
     // proof: the raw capture is never opened.
-    expect(ALL_ASSOCIATIONS).toHaveLength(23);
+    expect(ALL_ASSOCIATIONS).toHaveLength(24);
     for (const [providerValue, gridviewId] of ALL_ASSOCIATIONS) {
       expect(resolvedCircuit(providerValue), providerValue).toBe(gridviewId);
     }

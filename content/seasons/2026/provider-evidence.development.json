@@ -469,6 +469,13 @@
       "evidence": "GridView_Provider_Evaluation.md 8.8 circuit yas_marina - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; observed Circuit.circuitId, round 23."
     },
     {
+      "source": "jolpica",
+      "entity": "circuit",
+      "providerField": "circuitId",
+      "providerValue": "jeddah",
+      "evidence": "GridView_Provider_Evaluation.md 8.13 circuit jeddah - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/circuits/?limit=100 at 2026-10-07T22:41:15Z, HTTP 200, SHA-256 ece55e51feca4b9ebfadaaf85e93aa271a6dcfd613f7d406f54723de116f8a08; observed Circuit.circuitId, row 7 of 24, no round."
+    },
+    {
       "source": "openf1",
       "entity": "driver",
       "providerField": "driver_number",

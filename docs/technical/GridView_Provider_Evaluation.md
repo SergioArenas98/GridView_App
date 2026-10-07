@@ -48,6 +48,7 @@
 | 1.15 | 2026-09-27 | **Phase 9B: the §10.4.1 state machine and the event-aware planner are implemented as pure, dormant policy** (Implementation Plan §14.0.31; [ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) C2 note). They are not connected to any runtime, and no provider or Cloudflare resource was contacted. Owner decisions O-3, O-4, O-5(a) and O-7 (a planning target only) are recorded. O-3 raises the modelled Jolpica cost of a race check from 3 requests to `6 + k + d` (§11.1 note). The weekly eight-slot sweep of §10.4.1 is subsumed by full-backfill publication runs. `PROVIDER_MODE` still admits exactly `mock` and `none`, and G5 and G9 are not complete. |
 | 1.16 | 2026-09-28 | **Phase 9B: the minimum Jolpica attribution surfaces exist** (§7.6.2 note; Implementation Plan §14.0.32). A repository-owned, per-source record (`content/attribution/data-sources.json`, version `data-sources-v1`) credits Jolpica F1 with a link to the project, its terms, CC BY-NC-SA 4.0 and its link, the modification notice, a non-endorsement notice and Jolpica's warranty-disclaimer notice; the Flutter Acknowledgements screen renders it and the OpenAPI `info` carries the equivalent notice, replacing the "GridView-owned snapshots" wording and the blanket "Proprietary" licence label (§7.6.4). Jolpica is recorded as **dormant**, so neither surface claims that provider data is served. OpenF1 is not credited, because no OpenF1 adapter exists; its entry is added with its adapter. Jolpica's `TERMS.md` was re-read on 2026-09-28 and is unchanged since 27 August 2025. **No Jolpica API request was made**, and no provider or Cloudflare resource was contacted. This prepares the surfaces only: it is not a legal conclusion about commercial use, it does not complete the §15.3 licence-compliance sweep, and it does not authorize staging activation. Owner decision **O-9** still requires an explicit activation decision. |
 | 1.17 | 2026-09-28 | **Phase 9B: standings round coherence is implemented, dormant** ([ADR 0023 A3.5](../adr/0023-multi-source-provider-coordination.md#a35---standings-publication-rules) item 1; Implementation Plan §14.0.33). No provider-evaluation conclusion changes. §8.12 keeps its dated account and gains a note; §10.1's standings note now states that the port carries the round internally, that round coherence is decided, and that the port is bundled but constructed in no committed configuration and has made no provider request. The read-only staging predecessor gate is not implemented and still blocks staging activation. The empty pre-season response is unobserved. No provider or Cloudflare resource was contacted. |
+| 1.18 | 2026-10-07 | **Phase 9B: gap M8 is identified, and the off-calendar circuit is proposed for curation** (§8.13; Implementation Plan §14.0.48). The first owner-authorised frozen-APK capture (22 `GET`s, 2026-10-07) recorded `https://api.jolpi.ca/ergast/f1/2026/circuits/?limit=100` for the first time: **24 circuit-resource rows against 23 calendar races**. The 24th row is `jeddah` (Jeddah Corniche Circuit, Saudi Arabia), which no 2026 round uses. Because it had no curated mapping, the whole `season-circuits` resource failed and the offline generator withheld the season (ADR 0022 D10). A canonical identity `jeddah-corniche` and the exact mapping are proposed for curator review, as a circuit only, with no event, round or season entry. ADR 0022 D10 is unchanged, and the 2026 dataset version is reissued as `2026.10.07.1` (O-14). **No additional provider request was made.** |
 
 ---
 
@@ -872,7 +873,7 @@ recent session whose end time was more than 30 minutes in the past:
 | Constructor standings | **Yes** | `/2026/constructorstandings/` — 11 rows at `round` 11 with `position`, `points`, `wins`, full `Constructor`. |
 | Drivers | **Yes** | `/2026/drivers/` — **31 rows** for 2026, against 22 on the grid at any one race. Strong evidence of substantial mid-season driver churn, which the season-scoped endpoint captures. |
 | Constructors | **Yes** | `/2026/constructors/` — 11 rows with `constructorId`, `name`, `nationality`. |
-| Circuits | **Yes** | `/2026/circuits/` — 24 rows with `circuitId`, `circuitName` and `Location`. Note 24 circuits against 23 races; the discrepancy is unexplained and is listed as a mapping check in §8.7. **Status 2026-09-22 (v1.7):** still unexplained; the dormant `season-circuits` port resolves every returned row through the curated mapping and fails closed on an unmapped one (§8.7 M8). |
+| Circuits | **Yes** | `/2026/circuits/` — 24 rows with `circuitId`, `circuitName` and `Location`. Note 24 circuits against 23 races; the discrepancy is unexplained and is listed as a mapping check in §8.7. **Status 2026-09-22 (v1.7):** still unexplained; the dormant `season-circuits` port resolves every returned row through the curated mapping and fails closed on an unmapped one (§8.7 M8). **Status 2026-10-07 (v1.18):** identified. The 24th row is `jeddah`, a circuit no 2026 round uses (§8.13). |
 | Stable identifiers | **Yes** | Lower-case string slugs: `driverId` (`norris`, `antonelli`), `constructorId` (`mclaren`, `mercedes`), `circuitId` (`hungaroring`, `albert_park`). These are the natural anchor for GridView's own IDs. |
 | Update timestamps | **No** | Ergast-compatible payloads carry none. `Last-Modified` equals `Date` on every response, so it reports generation time, not data-change time (§8.6). |
 | Recoverability | **Yes** | Database dumps are published; the free non-commercial tier is available 14 days after upload with no authentication (§12.4). |
@@ -955,7 +956,7 @@ Consequences:
 | M5 | **OpenF1 sessions include pre-season testing** | `session_name` values include `Day 1`, `Day 2`, `Day 3`. These must be filtered out of the Grand Prix calendar. |
 | M6 | **No update timestamps anywhere** (§8.6) | Provenance must record GridView's own fetch time; "has this changed?" can only be answered by content comparison. |
 | M7 | **OpenF1 `country_code` on drivers is deprecated and was null** | Documented for removal at the end of the 2026 season. Must not be depended on. |
-| M8 | **Jolpica `/2026/circuits/` returned 24 for 23 races** | Unexplained. Must be reconciled against the calendar rather than assumed one-to-one. **Status 2026-09-22 (v1.7): still open and unexplained.** The dormant `season-circuits` port assumes no row count and does not filter against the calendar: under ADR 0022 D10 every returned row must resolve through a curated mapping, so an extra row with none fails the whole resource as `mapping-failure` until a reviewed mapping lands on separately authorized evidence. Whether every calendar circuit is present remains the season preflight's `event-circuit` relation (ADR 0023). The identity of the 24th row is recorded nowhere in this repository. |
+| M8 | **Jolpica `/2026/circuits/` returned 24 for 23 races** | Unexplained. Must be reconciled against the calendar rather than assumed one-to-one. **Status 2026-09-22 (v1.7): still open and unexplained.** The dormant `season-circuits` port assumes no row count and does not filter against the calendar: under ADR 0022 D10 every returned row must resolve through a curated mapping, so an extra row with none fails the whole resource as `mapping-failure` until a reviewed mapping lands on separately authorized evidence. Whether every calendar circuit is present remains the season preflight's `event-circuit` relation (ADR 0023). The identity of the 24th row is recorded nowhere in this repository. **Status 2026-10-07 (v1.18): identified, and proposed for curation (§8.13).** The circuit resource has **24 rows** and the calendar **23 races**: the extra row is `jeddah`, which no 2026 round uses. It is curated as a circuit identity (`jeddah-corniche`) with no event, round or season entry. The rule is unchanged: any other unmapped row still fails the whole resource. |
 | M9 | **Jolpica `/last` and `/next` are date-derived** | A public issue records `/current/last` returning the previous round on a Sunday evening after a race, reported and later fixed. Explicit `season/round` addressing should be preferred over `last`/`next`. |
 | M10 | **Jolpica pagination** | `limit` defaults to 30 and caps at 100. **The 31-driver season result exceeds the default and is silently truncated without an explicit `limit`; the 23-race calendar does not.** An earlier draft said both did, which was wrong. Season-scoped queries should still pass `limit` explicitly — a calendar can grow past 30 and the cost of being explicit is nil — but only the participant endpoints are known to need it today. |
 | M11 | **Whether OpenF1 revises `date_end` after an overrun is `unverified`** | A red-flagged or delayed session actually ends later, which moves the live-window boundary. Anchoring on the scheduled end alone would place a request inside the paid live window. Because the revision behaviour is unverified, the detect-and-re-anchor backstop (§10.2 rule 4) **cannot be relied on to notice the overrun**. The operative control is therefore §10.2 rule 3: fetch only from a justified upper bound, otherwise **skip the provisional fetch** and wait for reconciliation. Both are Phase 9B requirements. |
@@ -1217,7 +1218,8 @@ and above is unchanged.
   scheduler, so no deployed or application path consumes it. **The complete
   Jolpica adapter remains unimplemented.**
 - §8.4's 24 circuits against 23 races (M8) is not explained by this response,
-  which carries 23 distinct `circuitId`s.
+  which carries 23 distinct `circuitId`s. *Superseded 2026-10-07 (v1.18): the
+  circuit resource itself, recorded in §8.13, explains it.*
 - **Only two dormant, fixture-tested Jolpica ports exist** - `season-calendar`
   (v1.6, Implementation Plan §14.0.16) and `season-circuits` (v1.7,
   Implementation Plan §14.0.17) - *superseded 2026-09-24 (v1.11): a third,
@@ -1646,6 +1648,77 @@ as `standings-round-incoherent`. Empty replacement follows from that rule and
 the D14 guard only while the active predecessor is itself coherent. The
 read-only staging gate that must verify this is not implemented. The empty
 pre-season shape is still unobserved, and no provider request was made.)*
+
+### 8.13 2026 circuit-resource observation and the off-calendar circuit (2026-10-07)
+
+**Source and licence.** Jolpica F1 (`https://api.jolpi.ca/ergast/f1/`), used
+under its published CC BY-NC-SA 4.0 licence with the attribution recorded in
+§7.2, §7.3 and [ADR 0019](../adr/0019-formula-one-provider-legal-gate.md).
+
+**Request.** One response of the first owner-authorised frozen-APK capture
+(Frozen Test APK runbook step 2): 22 sequential public `GET`s on 2026-10-07,
+from 22:41:14Z to 22:41:44Z, at least one second apart, with no retry and
+no credential. Every response was HTTP 200 `application/json`. This section
+records only the circuit resource,
+`GET https://api.jolpi.ca/ergast/f1/2026/circuits/?limit=100`, response
+`Date` 2026-10-07T22:41:15Z, 5,300 bytes, SHA-256
+`ece55e51feca4b9ebfadaaf85e93aa271a6dcfd613f7d406f54723de116f8a08`, one
+complete page (`limit "100"`, `offset "0"`, `total "24"`). It is the first
+time this endpoint was recorded since §8.4. The raw capture is preserved
+privately and is **not** committed. The calendar response of the same
+capture is byte-identical to the §8.8 response (SHA-256
+`87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed`).
+
+**What was observed.** The circuit resource has **24 circuit-resource
+rows**; the calendar has **23 calendar races**. 23 rows are exactly the 23
+calendar `circuitId`s already curated in §8.8.1. The 24th is the row below,
+which no 2026 round uses: the calendar's round 16, "Bahrain Grand Prix in
+Malaysia", is at `sepang`, and no 2026 round is at `jeddah`. This explains
+M8 (§8.7). Because `jeddah` had no curated mapping, the dormant
+`season-circuits` port failed the whole resource (`provider_mapping_unresolved`)
+and the offline season-batch generator withheld the season as
+`assembly-withheld` / `resource-unavailable`.
+
+| Row | `circuitId` | `circuitName` | `locality`, `country` | Proposed GridView ID | Proposed display name |
+|---|---|---|---|---|---|
+| 7 of 24 | `jeddah` | `Jeddah Corniche Circuit` | `Jeddah`, `Saudi Arabia` | `jeddah-corniche` | `Jeddah Corniche Circuit` |
+
+**Proposal, 2026-10-07, proposed for curator review.** A canonical circuit
+identity `jeddah-corniche`, display name "Jeddah Corniche Circuit", and the
+exact mapping Jolpica `circuitId` `jeddah` → `jeddah-corniche` for season
+2026, with evidence citing this section. The ID names the venue, not the
+city, in the style of `marina-bay` and `las-vegas-strip`, so a later Saudi
+venue cannot collide with it. It was checked against every curated
+registry (circuits, events, drivers, constructors) and duplicates no
+identity. Like the 17 identities of §8.8.1, the registry row carries only
+`id` and `name`; the provider's locality, country and coordinates are not
+committed as GridView facts.
+
+**What it is not.** It is a **circuit identity only**. No 2026 calendar
+round uses it, so no event identity, event locator, round, season entry or
+override exists or was invented for it. The calendar, the event registry
+and the 23 event mappings are unchanged.
+
+**Rule unchanged.** ADR 0022 D10 is unchanged: every circuit-resource row
+must resolve through a curated mapping, no row is dropped from an otherwise
+accepted resource, and any other unmapped row still fails the whole
+resource. The port is not filtered against the calendar and compares no row
+count.
+
+**Dataset totals.** The season-2026 dataset now holds **94 exact mappings**
+(24 Jolpica circuit mappings), **97 approved evidence identities** and
+**three acknowledgements**. The curated circuit registry holds 24
+identities. Because curated 2026 identities and mappings changed, the 2026
+dataset version is reissued as `2026.10.07.1` (O-14; Implementation Plan
+§14.0.48).
+
+**No additional provider request was made.** Every value above was read
+offline from the preserved capture, whose hashes were re-verified first.
+
+**Limits of this evidence.** It is a point-in-time observation. Why Jolpica
+lists a circuit no 2026 round uses is not established; this section records
+that it does. If a later response adds, drops or renames a circuit row, the
+resource fails closed until another reviewed update.
 
 ---
 

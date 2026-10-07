@@ -155,6 +155,10 @@
     {
       "id": "yas-marina",
       "name": "Yas Marina Circuit"
+    },
+    {
+      "id": "jeddah-corniche",
+      "name": "Jeddah Corniche Circuit"
     }
   ]
 }
