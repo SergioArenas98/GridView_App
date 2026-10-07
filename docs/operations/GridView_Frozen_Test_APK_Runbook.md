@@ -203,14 +203,27 @@ build stops if the bundled-fixture load test fails in the export.
 
 ## 7. Install on the phone
 
+**Always install on a clean staging package.** The app keeps its local
+database across an in-place update (`adb install -r`). A snapshot already
+cached by an earlier staging or frozen build is kept whenever its
+`sourceUpdatedAt` is newer than the frozen capture's, because the app
+rejects older data (`SnapshotConflict`). Screens would then show that cached
+data under the frozen banner. So remove the staging package, and its data,
+first:
+
 ```bash
 adb devices                                   # the reference phone only
-adb install -r "$D/apk/gridview-staging-frozen-<date>-<manifest12>.apk"
+adb shell pm list packages com.sejuma.gridview.staging
+adb uninstall com.sejuma.gridview.staging     # only if the line above printed it
+adb shell pm list packages com.sejuma.gridview.staging   # must print nothing
+adb install "$D/apk/gridview-staging-frozen-<date>-<manifest12>.apk"
 ```
 
-If an earlier staging build was signed with a different debug key, the
-install fails with a signature mismatch: `adb uninstall
-com.sejuma.gridview.staging` first, which deletes that build's local data.
+Uninstalling deletes everything the installed staging build stored. If that
+installation is evidence for anything, for example a staging client
+baseline, decide about it before removing it. The production app
+(`com.sejuma.gridview`) is a different package and is not touched. Never use
+`-r` for a frozen build, and repeat this step for every new frozen APK.
 
 On the phone, check: the banner reads "Frozen test data captured <date> — not
 live, no updates" on Home, Calendar, Standings, Explore and a Grand Prix;
