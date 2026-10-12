@@ -1562,7 +1562,7 @@ abstract class AppLocalizations {
   /// **'Current Grand Prix'**
   String get homeCurrentGrandPrix;
 
-  /// Hero section title when the featured event is already completed.
+  /// Hero section title when the featured event is completed or has a classified race result. It names the event, never its lifecycle status.
   ///
   /// In en, this message translates to:
   /// **'Latest Grand Prix'**
@@ -1699,6 +1699,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Result unavailable'**
   String get homeResultUnavailable;
+
+  /// Shown on the latest-result card when the event has a classified race result that Home has not loaded locally.
+  ///
+  /// In en, this message translates to:
+  /// **'Classified result available — open the Grand Prix to view it'**
+  String get homeResultNotLoaded;
 
   /// Shown when the calendar is available and the season legitimately has no further scheduled events.
   ///

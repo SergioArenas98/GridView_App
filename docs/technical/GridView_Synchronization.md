@@ -869,14 +869,30 @@ the three can never disagree. It is pure and takes an injected clock.
 
 1. An event **in progress** wins — either the server says so, or today falls
    inside its `[startDate, endDate]` window.
-2. Otherwise the earliest still-eligible event dated on or after today, with
-   `round` as the stable tie-breaker.
+2. Otherwise the earliest still-eligible event ahead of now, with `round` as
+   the stable tie-breaker.
 3. Otherwise none.
 
-**Cancelled** events are never relevant. **Completed** events are never
-upcoming. **Postponed** events stay eligible while they still carry a date on or
-after today — they remain on the calendar, only moved. Missing or malformed
-dates make an event ineligible for the date rules; they never throw.
+**Cancelled** events are never relevant. **Completed** events, and events with a
+classified race result (`hasResults`), are never upcoming, and never in progress
+either: a result outranks an `in_progress` status or a date window. The upcoming
+list uses the same pairwise rule as the next event (repeated selection), so its
+first entry is always the Calendar's next event. **Postponed** events
+stay eligible while they still carry a date on or after today — they remain on
+the calendar, only moved. For an authoritative status "ahead" means a start date
+on or after today, and missing or malformed dates make the event ineligible;
+they never throw.
+
+An **`unknown`** status (the Jolpica calendar, ADR 0022 A6) is placed by
+explicit chronology only (ADR 0022 A11): the stored race session's UTC start,
+else published weekend dates, else its position after the last event already
+settled or behind now and no earlier than the season's published
+`currentRound` (which the server computed from every race time). `resolveLatestCompletedEvent` takes any event with a classified result, and an
+`unknown` event only then, never because its dates passed; the status itself is
+never rewritten. Home keeps the server's focus unless it is an
+`unknown`, unsettled event whose own race start has passed
+(`hasFeaturedEventLapsed`); it then uses this same rule, so Home and Calendar
+still name the same event.
 
 ### 12.5 Calendar presentation states
 

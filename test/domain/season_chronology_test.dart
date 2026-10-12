@@ -35,10 +35,37 @@ void main() {
     });
 
     test('is null when nothing has finished yet', () {
+      // Authoritative statuses with no classified result: the date rule
+      // decides, and before the season nothing has ended.
       expect(
-        resolveLatestCompletedEvent(seasonEvents(), DateTime.utc(2026, 1, 1)),
+        resolveLatestCompletedEvent(<GrandPrix>[
+          event(
+            round: 11,
+            startDate: '2026-07-03',
+            endDate: '2026-07-05',
+            status: EventStatus.completed,
+          ),
+          event(round: 12, startDate: '2026-07-10', endDate: '2026-07-12'),
+        ], DateTime.utc(2026, 1, 1)),
         isNull,
       );
+    });
+
+    test('a classified result counts under an authoritative status too', () {
+      // The classification arrived before the lifecycle status was refreshed:
+      // the event is not upcoming, so it must still be the latest result.
+      final List<GrandPrix> events = <GrandPrix>[
+        belgianGrandPrix(
+          round: 13,
+          status: EventStatus.scheduled,
+          hasResults: true,
+          startDate: '2026-07-24',
+          endDate: '2026-07-26',
+        ),
+      ];
+      final DateTime duringWeekend = DateTime.utc(2026, 7, 26, 18);
+      expect(resolveLatestCompletedEvent(events, duringWeekend)!.round, 13);
+      expect(resolveUpcomingEvents(events, duringWeekend), isEmpty);
     });
 
     test('an event ending today is not yet "completed"', () {
@@ -166,6 +193,45 @@ void main() {
         resolveUpcomingEvents(<GrandPrix>[event(round: 20)], now),
         isEmpty,
       );
+    });
+
+    test('a rescheduled round is listed by its date, not its round', () {
+      final List<GrandPrix> events = <GrandPrix>[
+        event(round: 17, startDate: '2026-11-13', endDate: '2026-11-15'),
+        event(round: 18, startDate: '2026-10-23', endDate: '2026-10-25'),
+        event(round: 19, startDate: '2026-10-30', endDate: '2026-11-01'),
+      ];
+      final DateTime october = DateTime.utc(2026, 10, 7);
+      expect(
+        resolveUpcomingEvents(events, october).map((GrandPrix e) => e.round),
+        <int>[18, 19, 17],
+      );
+      // The first upcoming event is always the Calendar's next one.
+      expect(resolveRelevantEvent(events, october)!.event.round, 18);
+    });
+
+    test('partial dates follow the same selection as the generator', () {
+      // Round 2 has no date and only compares by round; rounds 1 and 3
+      // compare by date. Mirrors the generator's season-chronology case.
+      GrandPrix unknown(int round, {String? startDate, String? endDate}) =>
+          calendarEntry(
+            round: round,
+            name: 'Round $round Grand Prix',
+            status: EventStatus.unknown,
+            startDate: startDate,
+            endDate: endDate,
+          ).grandPrix;
+      final List<GrandPrix> events = <GrandPrix>[
+        unknown(1, startDate: '2026-11-01', endDate: '2026-11-03'),
+        unknown(2),
+        unknown(3, startDate: '2026-10-01', endDate: '2026-10-03'),
+      ];
+      final DateTime september = DateTime.utc(2026, 9, 1);
+      expect(
+        resolveUpcomingEvents(events, september).map((GrandPrix e) => e.round),
+        <int>[3, 1, 2],
+      );
+      expect(resolveRelevantEvent(events, september)!.event.round, 3);
     });
 
     test('the returned list is unmodifiable', () {

@@ -252,7 +252,7 @@
   },
   "homeLatestGrandPrix": "Último Gran Premio",
   "@homeLatestGrandPrix": {
-    "description": "Hero section title when the featured event is already completed."
+    "description": "Hero section title when the featured event is completed or has a classified race result. It names the event, never its lifecycle status."
   },
   "homeRaceWeekend": "Fin de semana de carrera",
   "@homeRaceWeekend": {
@@ -365,6 +365,10 @@
   "homeResultUnavailable": "Resultado no disponible",
   "@homeResultUnavailable": {
     "description": "Shown when no classification is cached for the latest event."
+  },
+  "homeResultNotLoaded": "Hay un resultado clasificado: abre el Gran Premio para verlo",
+  "@homeResultNotLoaded": {
+    "description": "Shown on the latest-result card when the event has a classified race result that Home has not loaded locally."
   },
   "homeNoUpcomingEvents": "No hay próximos eventos",
   "@homeNoUpcomingEvents": {

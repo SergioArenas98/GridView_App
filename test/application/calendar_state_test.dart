@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/features/calendar/application/calendar_state.dart';
 import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
+import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/shared/domain/freshness_evaluator.dart';
 
@@ -21,6 +22,7 @@ CalendarState _state({
   ApiFailure? lastFailure,
   bool syncSettled = true,
   DateTime? now,
+  int? seasonCurrentRound,
 }) => computeCalendarState(
   season: season,
   seasonReady: seasonReady,
@@ -33,6 +35,7 @@ CalendarState _state({
   lastFailure: lastFailure,
   syncSettled: syncSettled,
   now: now ?? DateTime.utc(2026, 7, 18, 12, 5),
+  seasonCurrentRound: seasonCurrentRound,
 );
 
 /// An accepted bootstrap that applied [season]'s collections.
@@ -150,6 +153,27 @@ void main() {
   });
 
   group('ready', () {
+    test('the published currentRound bounds an undated unknown calendar', () {
+      // Jolpica-shaped: unknown statuses, no dates, round 1 classified. The
+      // server published currentRound 3, having seen round 2's race start.
+      final List<CalendarEntry> events = <CalendarEntry>[
+        for (int round = 1; round <= 4; round++)
+          calendarEntry(
+            round: round,
+            name: 'Round $round Grand Prix',
+            status: EventStatus.unknown,
+            hasResults: round == 1,
+          ),
+      ];
+      final CalendarReady unbounded =
+          _state(events: events, metadata: synced) as CalendarReady;
+      expect(unbounded.relevant!.event.round, 2);
+      final CalendarReady bounded =
+          _state(events: events, metadata: synced, seasonCurrentRound: 3)
+              as CalendarReady;
+      expect(bounded.relevant!.event.round, 3);
+    });
+
     test('cached events render with the relevant event resolved', () {
       final CalendarState state = _state(
         events: calendarFixture(),

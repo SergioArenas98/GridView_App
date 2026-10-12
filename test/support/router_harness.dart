@@ -17,6 +17,7 @@ import 'package:gridview/core/preferences/preferences_repository.dart';
 import 'package:gridview/core/theme/gridview_theme.dart';
 import 'package:gridview/core/time/device_time_zone.dart';
 import 'package:gridview/core/widgets/widgets.dart';
+import 'package:gridview/features/calendar/application/calendar_providers.dart';
 import 'package:gridview/features/settings/application/app_info.dart';
 import 'package:gridview/features/settings/application/data_source_attributions.dart';
 import 'package:gridview/features/settings/application/external_links.dart';
@@ -24,6 +25,7 @@ import 'package:gridview/features/settings/domain/data_source_attribution.dart';
 import 'package:gridview/features/shared/application/fixture_data_identity_provider.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/domain/entities/media.dart';
+import 'package:gridview/features/shared/domain/entities/season.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/shared/domain/fixture_data_identity.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
@@ -313,6 +315,11 @@ Future<GoRouter> pumpApp(
         ),
         currentSeasonProvider.overrideWith(
           (Ref ref) => Stream<int?>.value(currentSeason),
+        ),
+        // The Calendar reads the stored season row only for its published
+        // currentRound; with no row the shared rule simply has no floor.
+        calendarSeasonProvider.overrideWith(
+          (Ref ref, int season) => Stream<Season?>.value(null),
         ),
         // The persisted materialization/freshness record. By default every
         // resource reads as successfully synchronised and fresh, so screens

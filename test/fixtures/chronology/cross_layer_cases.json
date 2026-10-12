@@ -1,0 +1,58 @@
+{
+  "description": "Synthetic season-chronology cases shared by the Edge API generator test (services/edge-api/test/snapshots/cross-layer-chronology.test.ts) and the Flutter Home/Calendar test (test/database/cross_layer_chronology_test.dart). The generator sees every event with its race session; the phone stores the calendar summaries, the Season row, the Home focus with its race session, and race sessions only for the rounds listed in phone.storedRaceRounds. ADR 0022 A11.",
+  "cases": [
+    {
+      "name": "a dated round rescheduled after two later rounds",
+      "referenceInstant": "2026-10-07T22:41:45.852Z",
+      "events": [
+        { "round": 16, "status": "completed", "hasResults": true, "startDate": "2026-10-02", "endDate": "2026-10-04", "race": "2026-10-04T07:00:00Z" },
+        { "round": 17, "status": "scheduled", "hasResults": false, "startDate": "2026-11-13", "endDate": "2026-11-15", "race": "2026-11-15T12:00:00Z" },
+        { "round": 18, "status": "scheduled", "hasResults": false, "startDate": "2026-10-23", "endDate": "2026-10-25", "race": "2026-10-25T20:00:00Z" },
+        { "round": 19, "status": "scheduled", "hasResults": false, "startDate": "2026-10-30", "endDate": "2026-11-01", "race": "2026-11-01T20:00:00Z" },
+        { "round": 20, "status": "scheduled", "hasResults": false, "startDate": "2026-11-20", "endDate": "2026-11-22", "race": "2026-11-22T04:00:00Z" }
+      ],
+      "server": { "featuredRound": 18, "currentRound": 18, "latestRound": 16, "upcomingRounds": [18, 19, 17] },
+      "phone": { "storedRaceRounds": [], "homeFocusRound": 18, "homeUpcomingRounds": [19, 17, 20], "calendarNextRound": 18, "calendarInProgress": false, "latestRound": 16 }
+    },
+    {
+      "name": "a Jolpica-shaped round rescheduled after two later rounds, its race time not stored on the phone",
+      "referenceInstant": "2026-10-07T22:41:45.852Z",
+      "events": [
+        { "round": 16, "status": "unknown", "hasResults": true, "startDate": null, "endDate": null, "race": "2026-10-04T07:00:00Z" },
+        { "round": 17, "status": "unknown", "hasResults": false, "startDate": null, "endDate": null, "race": "2026-11-15T12:00:00Z" },
+        { "round": 18, "status": "unknown", "hasResults": false, "startDate": null, "endDate": null, "race": "2026-10-25T20:00:00Z" },
+        { "round": 19, "status": "unknown", "hasResults": false, "startDate": null, "endDate": null, "race": "2026-11-01T20:00:00Z" },
+        { "round": 20, "status": "unknown", "hasResults": false, "startDate": null, "endDate": null, "race": "2026-11-22T04:00:00Z" },
+        { "round": 21, "status": "unknown", "hasResults": false, "startDate": null, "endDate": null, "race": "2026-11-29T13:00:00Z" }
+      ],
+      "server": { "featuredRound": 18, "currentRound": 18, "latestRound": 16, "upcomingRounds": [18, 19, 17] },
+      "phone": { "storedRaceRounds": [], "homeFocusRound": 18, "homeUpcomingRounds": [19, 20, 21], "calendarNextRound": 18, "calendarInProgress": false, "latestRound": 16 }
+    },
+    {
+      "name": "the same Jolpica-shaped season after the rescheduled round's Grand Prix screen was opened",
+      "referenceInstant": "2026-10-07T22:41:45.852Z",
+      "events": [
+        { "round": 16, "status": "unknown", "hasResults": true, "startDate": null, "endDate": null, "race": "2026-10-04T07:00:00Z" },
+        { "round": 17, "status": "unknown", "hasResults": false, "startDate": null, "endDate": null, "race": "2026-11-15T12:00:00Z" },
+        { "round": 18, "status": "unknown", "hasResults": false, "startDate": null, "endDate": null, "race": "2026-10-25T20:00:00Z" },
+        { "round": 19, "status": "unknown", "hasResults": false, "startDate": null, "endDate": null, "race": "2026-11-01T20:00:00Z" },
+        { "round": 20, "status": "unknown", "hasResults": false, "startDate": null, "endDate": null, "race": "2026-11-22T04:00:00Z" },
+        { "round": 21, "status": "unknown", "hasResults": false, "startDate": null, "endDate": null, "race": "2026-11-29T13:00:00Z" }
+      ],
+      "server": { "featuredRound": 18, "currentRound": 18, "latestRound": 16, "upcomingRounds": [18, 19, 17] },
+      "phone": { "storedRaceRounds": [17], "homeFocusRound": 18, "homeUpcomingRounds": [17, 19, 20], "calendarNextRound": 18, "calendarInProgress": false, "latestRound": 16 }
+    },
+    {
+      "name": "a classified result while the authoritative status is still in_progress",
+      "referenceInstant": "2026-10-11T18:00:00Z",
+      "events": [
+        { "round": 16, "status": "completed", "hasResults": true, "startDate": "2026-10-02", "endDate": "2026-10-04", "race": "2026-10-04T07:00:00Z" },
+        { "round": 17, "status": "in_progress", "hasResults": true, "startDate": "2026-10-09", "endDate": "2026-10-11", "race": "2026-10-11T12:00:00Z" },
+        { "round": 18, "status": "scheduled", "hasResults": false, "startDate": "2026-10-23", "endDate": "2026-10-25", "race": "2026-10-25T20:00:00Z" },
+        { "round": 19, "status": "scheduled", "hasResults": false, "startDate": "2026-10-30", "endDate": "2026-11-01", "race": "2026-11-01T20:00:00Z" }
+      ],
+      "server": { "featuredRound": 18, "currentRound": 18, "latestRound": 17, "upcomingRounds": [18, 19] },
+      "phone": { "storedRaceRounds": [], "homeFocusRound": 18, "homeUpcomingRounds": [19], "calendarNextRound": 18, "calendarInProgress": false, "latestRound": 17 }
+    }
+  ]
+}

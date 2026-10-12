@@ -4,6 +4,7 @@ import '../../shared/application/providers.dart';
 import '../../shared/application/refresh_status.dart';
 import '../../shared/domain/entities/calendar_entry.dart';
 import '../../shared/domain/entities/resource_key.dart';
+import '../../shared/domain/entities/season.dart';
 import '../../shared/domain/entities/sync_state.dart';
 import '../../sync/application/resource_refresh_status.dart';
 import '../../sync/application/sync_providers.dart';
@@ -19,6 +20,14 @@ import 'calendar_state.dart';
 final calendarCacheProvider = StreamProvider.family<List<CalendarEntry>, int>(
   (Ref ref, int season) =>
       ref.watch(calendarRepositoryProvider).watchCalendar(season),
+);
+
+/// The stored season row for one season, read for its published
+/// `currentRound`, which bounds where the shared chronology may place an
+/// undated `unknown` event (ADR 0022 A11).
+final calendarSeasonProvider = StreamProvider.family<Season?, int>(
+  (Ref ref, int season) =>
+      ref.watch(seasonRepositoryProvider).watchSeason(season),
 );
 
 /// Owns the Calendar's *presentation* refresh status — never its content.
@@ -102,8 +111,10 @@ final Provider<CalendarState> calendarStateProvider = Provider<CalendarState>((
 
   AsyncValue<List<CalendarEntry>>? events;
   AsyncValue<ResourceSyncState?>? metadata;
+  AsyncValue<Season?>? seasonRow;
   if (year != null) {
     events = ref.watch(calendarCacheProvider(year));
+    seasonRow = ref.watch(calendarSeasonProvider(year));
     metadata = ref.watch(resourceSyncStateProvider(ResourceKey.calendar(year)));
   }
   // Bootstrap's own record. It is read for one thing only — whether an accepted
@@ -125,5 +136,6 @@ final Provider<CalendarState> calendarStateProvider = Provider<CalendarState>((
     lastFailure: status.lastFailure,
     syncSettled: sync is! AppSyncIdle && sync is! AppSyncRunning,
     now: now,
+    seasonCurrentRound: seasonRow?.value?.currentRound,
   );
 });

@@ -561,6 +561,10 @@ Verified consequences at `88f3b18`:
   (`lib/features/shared/domain/relevant_event.dart`) and tolerate `unknown`,
   and status presentation renders no label for it
   (`lib/features/shared/presentation/domain_status.dart`).
+  *Amended 2026-10-12 by A11:* date-only rules could not place an `unknown`
+  calendar at all, so both the generator and the client now place it by the
+  race session's explicit start and `hasResults`, still without inferring
+  completion from the clock.
 
 ### A7 - `hasResults` is owned by season assembly
 
@@ -796,6 +800,123 @@ rule does not recognize classifies as `unknown` and is carried by its actual
 sessions array, which stays correct and complete. The rule fails towards saying
 less, never towards inventing a category.
 
+### A11 - Season chronology for `unknown` statuses (Home, Calendar, `currentRound`)
+
+*Added 2026-10-12, after the first real frozen-data APK (Implementation Plan
+§14.0.49).*
+
+**Defect.** A6 and A8 publish every Jolpica event with `status: unknown` and
+`startDate`/`endDate` `null`. The generator still chose Home's
+`featuredEvent`, `upcomingEvents` and `latestCompletedEvent`, and
+`Season.currentRound`, by "first event that is not `completed`", and the
+client chose Calendar's relevant event, Home's upcoming list and the latest
+finished event from weekend dates alone. Over the 2026-10-07 capture
+(classified rounds 1-16, observed `2026-10-07T22:41:45.852Z`) Home therefore
+featured **round 1** as the next Grand Prix with rounds 1-3 as upcoming and no
+latest result, while Calendar highlighted nothing: the two disagreed, and both
+were wrong.
+
+**Decision.** One chronology rule, implemented twice with the same shape:
+`services/edge-api/src/snapshots/season-chronology.ts` at the generation
+instant, and `lib/features/shared/domain/relevant_event.dart` at the device
+clock.
+
+1. **Settled** means authoritatively `completed`, **or** `hasResults` (a
+   selected, classified race result, A7). Settling is a fact about results,
+   not a lifecycle: the event's `unknown` status is published and shown
+   unchanged, and nothing is ever rewritten to `completed`.
+2. **Authoritative statuses keep their rule.** Any status other than
+   `unknown` is not second-guessed by the clock: the generator keeps treating
+   every event that is not settled as ahead, cancelled and postponed included,
+   and the client keeps its date-based rules for them. The mock's documents
+   are byte-identical. The one change for authoritative data is an event that
+   has `hasResults` with a status other than `completed`: it is now settled
+   rather than ahead.
+3. **An `unknown` event is placed only by explicit chronology**, in this order:
+   - its race session's UTC start instant (`Session.startTime` of the
+     `race` session, which A8 guarantees for every Jolpica event): ahead while
+     strictly after the reference instant, behind once it has passed;
+   - else its published weekend dates, when a source supplies them;
+   - else, having no chronology of its own, its position in the delivered
+     chronology: it is ahead only when its round follows every event already
+     settled or behind the reference instant. On the device it must also be
+     at or after the published `Season.currentRound`: the generator computed
+     that round from every race time, while the device stores race times only
+     for the Home focus and for Grand Prix screens it opened. Without this
+     floor, a round whose race had started without a classification when the
+     snapshot was generated would look ahead on the Calendar while Home
+     featured the round after it.
+4. **Next** is the earliest event ahead: by start date (the race date standing
+   in for an event without dates) when both events have one, else by round, so
+   a rescheduled round is ordered by its explicit start on both sides. On the
+   client an authoritative `in_progress` event, or a date window containing
+   today, still wins first, and a cancelled event is skipped; the generator
+   keeps its old behaviour for an authoritative cancelled event. **Latest
+   result** is the settled event that ended last (by end date when both have
+   one, else by round). On the client a classified result counts under any
+   status, so an event is never in no bucket while its status catches up; an
+   authoritative event without one still needs a past end date. Home features
+   the next event, else the latest settled event, else (for an authoritative
+   calendar only) the final event as before; an `unknown` calendar with neither
+   features nothing. `Season.currentRound` is the next event's round, or `null`.
+5. **A race that has started without a classification** is neither next nor
+   latest: it is not claimed as upcoming, and it is not claimed as finished.
+   So from the race's start until its result is classified, Home features the
+   following round. No grace period is added, because any length would be a
+   manufactured time; an authoritative `in_progress` status, when a source
+   supplies one, keeps the event current.
+6. **An aging snapshot.** The client keeps the server's Home focus unless that
+   focus is `unknown`, unsettled, and its own stored race start has passed
+   (`hasFeaturedEventLapsed`). Then Home falls back to the same relevant event
+   the Calendar highlights, else to the latest settled event. Elapsed time
+   never completes anything; it only stops a past race from being called next.
+7. **Labels describe results, not lifecycles.** The hero says "Latest Grand
+   Prix" for a settled focus, the latest-result card keeps the event's own
+   status chip ("Status unknown"), and, when no classification is cached
+   locally, says that a classified result is available on the Grand Prix
+   screen instead of "Result unavailable".
+
+**What this does not do.** It manufactures no `startDate`, `endDate`, time,
+timezone or status; it adds no field, enum member or schema version; and it
+changes no Drift schema. The Calendar document itself is unchanged: it carries
+no race times, so on the device an undated `unknown` event is placed by rule
+3's last case unless its race session is stored (the Home focus always is).
+**Residual:** an aging snapshot can therefore still list a later round as
+upcoming after its real race date, because nothing on the device says when it
+was; the frozen-data banner already states that the data is not live.
+
+**One ordering, both layers.** The next event and every position of the
+upcoming list come from one repeated selection, on the generator
+(`orderByStart`) and on the client (`_earliest`): scan in delivered order and
+take a later candidate only when it is strictly earlier, by start date (the
+race date standing in) when both have one, else by round. The pairwise rule is
+partial, so a sort could order a mix of dated and undated events differently
+on each side; the selection cannot. The client's first upcoming event is
+therefore always the Calendar's next event.
+
+**A rescheduled round** (moved after later rounds) is ordered by its dates
+wherever the device holds them: a dated calendar lists it exactly as the
+generator does. In a Jolpica-shaped season the device holds only the Home
+focus's race time. A rescheduled round whose race time is not stored sits
+before the published `currentRound`, so rule 3's floor keeps it off the
+upcoming list rather than calling it next. The device cannot tell it from a
+race that started without a classification. It appears once its Grand Prix
+screen is opened (its race time is then stored), but its position among later
+undated rounds is then by round. Home and the Calendar still agree on the next
+event in every case. The shared cases in
+`test/fixtures/chronology/cross_layer_cases.json` pin both layers to these
+outcomes.
+
+**A classified result outranks an `in_progress` status.** An event with
+`hasResults` whose authoritative status still reads `in_progress` is settled
+on both layers: the generator does not count it as ahead, and the client does
+not highlight it as live (Calendar) or as a race weekend (Home phase), unless
+one of its stored sessions is itself live. Its published status is shown
+unchanged.
+
+**Verified 2026-10-12** by an offline replay of the private 2026-10-07 capture
+(no provider request): see Implementation Plan §14.0.49.
+
 ### Rejected alternatives
 
 | Alternative                                  | Why rejected                                                                                                          |
@@ -828,6 +949,7 @@ a future adapter must satisfy.
 | `hasResults` derivation in assembly          | **Not implemented**; the preflight and assembly are unchanged (A7). *Implemented 2026-09-26 (Implementation Plan §14.0.25) in dormant season assembly; the preflight is unchanged.* |
 | Jolpica **season-calendar** port              | **Implemented, fixture-tested and dormant** (2026-09-20); not registered, not constructed by any production composition and absent from the Worker bundle |
 | Weekend-format rule (A10)                     | **Decided and implemented** (2026-09-20), in the same change that records it. Three-way evidence rule; no enum, contract or runtime change |
+| Season chronology for `unknown` statuses (A11) | **Decided and implemented** (2026-10-12) in the generator and the client; no contract, enum, schema or Drift change |
 | Jolpica **season-circuits** port             | **Implemented, fixture-tested and dormant** (2026-09-22, Implementation Plan §14.0.17); a separate port that answers only `season-circuits`, resolving every `circuitId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |
 | Jolpica **season-participants** port         | **Implemented, fixture-tested and dormant** (2026-09-24, Implementation Plan §14.0.21); two sequential requests resolving every `driverId` and `constructorId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |
 | Jolpica race **session-classification** port | **Implemented, fixture-tested and dormant** (2026-09-26, Implementation Plan §14.0.22, [ADR 0023 A2](0023-multi-source-provider-coordination.md#amendment-a2---jolpica-race-result-normalization)); one request per round, resolving the event locator, every `driverId` and every `constructorId` through the curated mapping under D10. Not registered, not constructed by any production composition and absent from the Worker bundle |

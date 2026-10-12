@@ -156,6 +156,7 @@ CalendarState computeCalendarState({
   required ApiFailure? lastFailure,
   required bool syncSettled,
   required DateTime now,
+  int? seasonCurrentRound,
 }) {
   final FreshnessState? freshness = metadata?.lastSuccessAt == null
       ? null
@@ -172,6 +173,7 @@ CalendarState computeCalendarState({
       relevant: resolveRelevantEvent(
         events.map((CalendarEntry e) => e.grandPrix),
         now,
+        seasonCurrentRound: seasonCurrentRound,
       ),
       freshness: freshness,
       lastSuccessAt: metadata?.lastSuccessAt,
