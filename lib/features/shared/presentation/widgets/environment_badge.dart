@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/environment/app_environment.dart';
@@ -8,8 +9,8 @@ import '../../application/providers.dart';
 /// A small non-production build badge (e.g. `DEV` / `STAGING`) that identifies
 /// the running environment in-app, independently of the "Sample data" fixture
 /// banner. It is never shown in production (the label returns nothing there),
-/// and is rendered by [EnvironmentBadgeOverlay] as an overlay so it never
-/// affects layout, navigation or safe areas.
+/// and is rendered by [EnvironmentBadgeOverlay] in a strip of its own so it
+/// never covers a screen's title.
 class GvEnvironmentBadge extends ConsumerWidget {
   const GvEnvironmentBadge({super.key});
 
@@ -42,35 +43,57 @@ class GvEnvironmentBadge extends ConsumerWidget {
   }
 }
 
-/// Overlays [child] with a [GvEnvironmentBadge] at the top centre. The badge
-/// sits inside the safe area and ignores pointer events, so it never covers the
-/// system insets, blocks the floating navigation, or intercepts content taps.
-/// In production the badge renders nothing, so the overlay is a no-op there.
-class EnvironmentBadgeOverlay extends StatelessWidget {
+/// Places a [GvEnvironmentBadge] in a strip above [child] in non-production
+/// builds.
+///
+/// The strip takes the top safe area (the status bar) and the badge's own
+/// height, and [child] lays out below it with no top padding left to consume.
+/// Every app bar therefore starts under the badge instead of beneath it, so the
+/// badge can never overlap a title, whatever the screen, language or text size.
+/// The strip ignores pointer events and adopts the app bar's colours and system
+/// overlay style, so the status bar stays legible.
+///
+/// In production the badge does not exist and [child] is returned unchanged,
+/// so production layout is exactly what it would be without this widget.
+class EnvironmentBadgeOverlay extends ConsumerWidget {
   const EnvironmentBadgeOverlay({super.key, required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(appEnvironmentProvider).isProduction) return child;
+
+    final ThemeData theme = Theme.of(context);
+    final SystemUiOverlayStyle? overlayStyle =
+        theme.appBarTheme.systemOverlayStyle;
+    final Widget strip = Material(
+      key: const ValueKey<String>('environment-badge-strip'),
+      color: theme.appBarTheme.backgroundColor ?? theme.scaffoldBackgroundColor,
+      child: SafeArea(
+        bottom: false,
+        child: IgnorePointer(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: GvSpacing.xs),
+            child: const Center(child: GvEnvironmentBadge()),
+          ),
+        ),
+      ),
+    );
+    return Column(
       children: <Widget>[
-        child,
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: SafeArea(
-            bottom: false,
-            child: IgnorePointer(
-              child: Padding(
-                padding: const EdgeInsets.only(top: GvSpacing.xs),
-                child: const Align(
-                  alignment: Alignment.topCenter,
-                  child: GvEnvironmentBadge(),
-                ),
-              ),
-            ),
+        if (overlayStyle == null)
+          strip
+        else
+          AnnotatedRegion<SystemUiOverlayStyle>(
+            value: overlayStyle,
+            child: strip,
+          ),
+        Expanded(
+          child: MediaQuery.removePadding(
+            context: context,
+            removeTop: true,
+            child: child,
           ),
         ),
       ],

@@ -7,6 +7,7 @@ import 'package:gridview/features/settings/application/external_links.dart';
 import 'package:gridview/features/settings/presentation/acknowledgements_screen.dart';
 import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/media.dart';
+import 'package:gridview/features/shared/domain/fixture_data_identity.dart';
 
 import '../support/router_harness.dart';
 
@@ -37,8 +38,16 @@ Future<void> _pumpSettings(
   double textScale = 1.0,
   Size surfaceSize = _device,
   List<MediaAttribution> mediaAttributions = const <MediaAttribution>[],
+  bool mockData = false,
+  FixtureDataIdentity? fixtureData,
+  bool environmentBadge = false,
+  EdgeInsets padding = EdgeInsets.zero,
 }) => pumpApp(
   tester,
+  mockData: mockData,
+  fixtureData: fixtureData,
+  environmentBadge: environmentBadge,
+  padding: padding,
   initialLocation: location,
   locale: locale,
   preferences: preferences,
@@ -55,6 +64,14 @@ Future<void> _pumpSettings(
   // output stable.
   clock: DateTime.utc(2026, 7, 18, 12, 10),
   deviceTimeZone: 'UTC',
+);
+
+/// The frozen capture the reference-phone build carried.
+final FrozenCaptureData _frozenCapture = FrozenCaptureData(
+  capturedAt: DateTime.utc(2026, 10, 7, 22, 41, 45, 852),
+  season: 2026,
+  sourceIds: const <String>{'jolpica'},
+  manifestSha256: 'ab' * 32,
 );
 
 Future<void> _expectGolden(WidgetTester tester, String name) => expectLater(
@@ -102,6 +119,52 @@ void main() {
   ) async {
     await _pumpSettings(tester, location: '/settings/data');
     await _expectGolden(tester, 'settings_data');
+  });
+
+  // A frozen provider-capture build states its capture date and that it does
+  // not update, instead of the offline explanation's download promise.
+  testWidgets('golden: data and updates in a frozen build, English', (
+    WidgetTester tester,
+  ) async {
+    await _pumpSettings(
+      tester,
+      location: '/settings/data',
+      mockData: true,
+      fixtureData: _frozenCapture,
+    );
+    await _expectGolden(tester, 'settings_data_frozen_en');
+  });
+
+  testWidgets('golden: data and updates in a frozen build, Spanish', (
+    WidgetTester tester,
+  ) async {
+    await _pumpSettings(
+      tester,
+      location: '/settings/data',
+      mockData: true,
+      fixtureData: _frozenCapture,
+      preferences: AppPreferences.defaults.copyWith(
+        language: AppLanguagePreference.spanish,
+      ),
+    );
+    await _expectGolden(tester, 'settings_data_frozen_es');
+  });
+
+  // The STAGING badge in its own strip above a long title, on a compact phone
+  // at 200% text with a status-bar inset: the case where it used to overlap.
+  testWidgets('golden: acknowledgements with the staging badge at 200% text', (
+    WidgetTester tester,
+  ) async {
+    await _pumpSettings(
+      tester,
+      location: '/settings/acknowledgements',
+      environment: AppEnvironment.staging,
+      environmentBadge: true,
+      padding: const EdgeInsets.only(top: 24),
+      textScale: 2.0,
+      surfaceSize: const Size(320, 640),
+    );
+    await _expectGolden(tester, 'settings_acknowledgements_staging_badge');
   });
 
   testWidgets('golden: application information', (WidgetTester tester) async {

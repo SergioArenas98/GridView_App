@@ -7,6 +7,7 @@ import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/app/router/app_router.dart';
 import 'package:gridview/core/media/media_image_loader.dart';
 import 'package:gridview/core/media/media_loader_scope.dart';
+import 'package:gridview/core/network/data_source_config.dart';
 import 'package:gridview/core/observability/observability.dart';
 import 'package:gridview/core/observability/observability_providers.dart';
 import 'package:gridview/core/preferences/locale_resolution.dart';
@@ -28,6 +29,7 @@ import 'package:gridview/features/shared/domain/entities/media.dart';
 import 'package:gridview/features/shared/domain/entities/season.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/shared/domain/fixture_data_identity.dart';
+import 'package:gridview/features/shared/presentation/widgets/environment_badge.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
 import 'package:gridview/l10n/app_localizations.dart';
 
@@ -92,6 +94,7 @@ class TestApp extends ConsumerWidget {
     this.disableAnimations = false,
     this.padding = EdgeInsets.zero,
     this.mediaLoader,
+    this.environmentBadge = false,
   });
 
   final GoRouter router;
@@ -107,6 +110,11 @@ class TestApp extends ConsumerWidget {
   /// that are not about media cannot accidentally reach the network. A media
   /// test supplies a fake and then asserts exactly which requests it caused.
   final MediaImageLoader? mediaLoader;
+
+  /// Whether to install the [EnvironmentBadgeOverlay] exactly as [GridViewApp]
+  /// does. Off by default so screen tests and goldens keep measuring the
+  /// screens themselves; badge layout tests opt in.
+  final bool environmentBadge;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -134,7 +142,9 @@ class TestApp extends ConsumerWidget {
         Widget content = MediaQuery.withClampedTextScaling(
           minScaleFactor: textScale,
           maxScaleFactor: textScale,
-          child: child!,
+          child: environmentBadge
+              ? EnvironmentBadgeOverlay(child: child!)
+              : child!,
         );
         if (disableAnimations || padding != EdgeInsets.zero) {
           final MediaQueryData data = MediaQuery.of(context);
@@ -234,6 +244,14 @@ Future<GoRouter> pumpApp(
   /// The observability surface. Defaults to the inert one, so no test reports,
   /// traces or reaches Firebase unless it deliberately asks for a fake.
   Observability observability = const Observability.disabled(),
+
+  /// Installs the environment badge strip as the real app does. Off by default;
+  /// see [TestApp.environmentBadge].
+  bool environmentBadge = false,
+
+  /// The build's `DATA_SOURCE` mode. Omit it and the build define is read
+  /// (remote in tests); [mockData] alone controls the fixture banner.
+  DataSourceMode? dataSourceMode,
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
@@ -303,6 +321,8 @@ Future<GoRouter> pumpApp(
         appEnvironmentProvider.overrideWithValue(environment),
         observabilityProvider.overrideWithValue(observability),
         usesMockDataProvider.overrideWithValue(mockData),
+        if (dataSourceMode != null)
+          dataSourceModeProvider.overrideWithValue(dataSourceMode),
         if (fixtureData != null)
           fixtureDataIdentityProvider.overrideWith(
             (Ref ref) async => fixtureData,
@@ -356,6 +376,7 @@ Future<GoRouter> pumpApp(
         disableAnimations: disableAnimations,
         padding: padding,
         mediaLoader: mediaLoader,
+        environmentBadge: environmentBadge,
       ),
     ),
   );

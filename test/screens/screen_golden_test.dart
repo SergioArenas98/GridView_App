@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
@@ -79,6 +80,28 @@ void main() {
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/grand_prix_detail_loaded.png'),
+    );
+  });
+
+  // The STAGING badge in its own strip above the Grand Prix title, in Spanish
+  // on a compact phone at 130% text with a status-bar inset.
+  testWidgets('golden: grand prix detail with the staging badge, compact', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(
+      tester,
+      initialLocation: '/calendar/2026/13',
+      surfaceSize: const Size(320, 568),
+      locale: const Locale('es'),
+      textScale: 1.3,
+      environment: AppEnvironment.staging,
+      environmentBadge: true,
+      padding: const EdgeInsets.only(top: 24),
+      disableAnimations: true,
+    );
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/grand_prix_detail_staging_badge_es.png'),
     );
   });
 

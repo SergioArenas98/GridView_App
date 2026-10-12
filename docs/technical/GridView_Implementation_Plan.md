@@ -3225,6 +3225,23 @@ change.** Decision: [ADR 0022 A11](../adr/0022-curated-provider-identifier-mappi
 | Residual | The calendar document carries no race times, so on the device an undated round is placed by its position. An aging snapshot therefore keeps calling round 18 next after its real date (the 2026-12-31 replay still shows 18), unless its Grand Prix screen was opened. The frozen banner states that the data does not update. Carrying race times in the calendar summary would need a contract and Drift change and was not made. |
 | **Still open** | Review and merge; then, if wanted, a batch regenerated from the merged `master`, the owner's review, conversion, build and install (runbook steps 3-7). The installed `79b13dd` APK keeps the old behaviour. |
 
+### 14.0.50 Frozen-APK UI findings - Flutter only, no data or contract change
+
+Prepared on **2026-10-12** from `master` `f2be701` (PR #71). **Flutter
+presentation, tests and documentation. No contract, OpenAPI, Drift schema,
+fixture, registry, Edge API or Android change. Nothing was deployed, no APK
+was rebuilt or installed, and there was no Jolpica, staging or phone
+request.** Trigger: the 2026-10-12 install of the `f2be701` frozen APK on the
+reference phone (runbook §7).
+
+| Item | Status |
+|---|---|
+| Data and updates | The explanation under the card promised that new information downloads on start and refresh. That is false for every `DATA_SOURCE=fixture` build. Only `DATA_SOURCE=remote` keeps `settingsDataOfflineExplanation` unchanged. A fixture build (fixture mode, or fixture data served) shows `settingsDataFrozenExplanation` (en and es) when its descriptor is a `provider-capture` (`FrozenCaptureData`), with the capture date and a statement that nothing updates. Every other fixture build shows `settingsDataBundledExplanation` (en and es), which says the bundled data does not download updates and never calls it captured. That covers the committed sample fixtures, synthetic batches, data of unverified origin, data not yet identified, and production refusing fixture mode. |
+| Environment badge | The DEV/STAGING badge floated at the top centre over the app bar and covered titles (Grand Prix detail, Acknowledgements, Spanish "Clasificaciones"). It also had no `Material` ancestor, so its text rendered with the yellow debug underline. `EnvironmentBadgeOverlay` now gives the badge its own strip in non-production builds. The strip takes the top safe area and the app bar's colour and system overlay style, and the app lays out below it with the top padding removed. In production it returns the app unchanged. |
+| Team colours and driver codes | Traced to the data, not the app. A frozen batch takes colours and codes only from the curated registries (ADR 0022 D5, ADR 0026 D2 and D8). These give colours to 6 of the 11 constructors and codes to 7 of the 2026 drivers, and the app shows exactly those. Standings rows have no code slot, by design. Nothing was changed or invented. The gap and its curation decision are recorded in the runbook §7. |
+| Tests | `test/app/environment_badge_layout_test.dart` (93 cases). Seven screens × 320×568 and 360×640 × en and es × 1.0, 1.3 and 2.0 text scale, with a 24 px status-bar inset. Each case checks that the badge stays clear of the status bar, that every app bar starts below the badge at exactly toolbar height, and that no app-bar text overlaps the badge. Also: a DEV case, the strip ignoring taps, and the production layout. Against the old overlay the staging cases fail. Nine Data and updates explanation cases in `test/frozen_data/frozen_label_test.dart`: frozen en/es, sample, synthetic, unverified, bundled es, production in fixture mode, and remote en/es with the mode pinned. The five bundled cases fail against the first wording. `pumpApp` gained an optional `dataSourceMode` override. None of the three Data and updates goldens changed: `settings_data` is a remote build and the other two are frozen. Four new goldens rendered on Linux by `render-canonical-goldens.yml`: `settings_data_frozen_en`, `settings_data_frozen_es`, `settings_acknowledgements_staging_badge` (320×640, 200%) and `grand_prix_detail_staging_badge_es` (320×568, 130%). The test host's `environmentBadge` flag defaults to off, so every existing golden is unchanged. |
+| **Still open** | Review and merge. A frozen APK built from the merged `master` would show the fixes. The installed `f2be701` APK keeps the old behaviour. Curated team colours and driver codes need an owner decision. |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in

@@ -77,12 +77,37 @@ class DataSettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: GvSpacing.lg),
           Text(
-            l10n.settingsDataOfflineExplanation,
+            _explanation(l10n, mode, usesMockData, fixtureData),
             style: context.gvText.bodyM,
           ),
         ],
       ),
     );
+  }
+
+  /// How the data stays current.
+  ///
+  /// Only a build that reads the GridView service (`DATA_SOURCE=remote`)
+  /// downloads anything, so only it promises downloads. A fixture build never
+  /// updates: a frozen capture states its capture date, and any other bundled
+  /// data (sample, synthetic, unverified or not yet identified) says so
+  /// neutrally. Fixture data is served only in fixture mode, so either signal
+  /// identifies a fixture build; production refuses fixture mode but is still
+  /// not promised downloads.
+  String _explanation(
+    AppLocalizations l10n,
+    DataSourceMode mode,
+    bool usesMockData,
+    FixtureDataIdentity? fixtureData,
+  ) {
+    if (mode == DataSourceMode.remote && !usesMockData) {
+      return l10n.settingsDataOfflineExplanation;
+    }
+    return switch (fixtureData) {
+      FrozenCaptureData(:final DateTime capturedAt) when usesMockData =>
+        l10n.settingsDataFrozenExplanation(captureDateLabel(capturedAt)),
+      _ => l10n.settingsDataBundledExplanation,
+    };
   }
 
   /// The active source, described in product terms.

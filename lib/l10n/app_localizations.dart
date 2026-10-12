@@ -1964,11 +1964,23 @@ abstract class AppLocalizations {
   /// **'Not available yet'**
   String get settingsDataCurrentSeasonUnresolved;
 
-  /// Explains the offline-first behaviour.
+  /// Explains the offline-first behaviour of a build that reads the GridView service (DATA_SOURCE=remote).
   ///
   /// In en, this message translates to:
   /// **'GridView keeps the season on your device, so it opens and works without a connection. New information is downloaded when the app starts and when you refresh.'**
   String get settingsDataOfflineExplanation;
+
+  /// Replaces the offline explanation in a build that serves bundled fixture data (DATA_SOURCE=fixture) that is not a dated frozen capture: sample, synthetic or unverified data. Must not promise downloads or updates, and must not call the data captured.
+  ///
+  /// In en, this message translates to:
+  /// **'This build uses data bundled with the app. It does not download updates: nothing new arrives when the app starts or when you refresh.'**
+  String get settingsDataBundledExplanation;
+
+  /// Replaces the offline explanation in a test-only build that bundles a frozen snapshot of captured data. Must not promise downloads or updates.
+  ///
+  /// In en, this message translates to:
+  /// **'This test build contains a fixed snapshot of data captured {date}. It does not update: nothing new is downloaded when the app starts or when you refresh.'**
+  String settingsDataFrozenExplanation(String date);
 
   /// Label for the application name.
   ///

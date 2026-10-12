@@ -233,8 +233,31 @@ baseline, decide about it before removing it. The production app
 
 On the phone, check: the banner reads "Frozen test data captured <date> — not
 live, no updates" on Home, Calendar, Standings, Explore and a Grand Prix;
-Settings → Data source names the same date; Acknowledgements credits Jolpica
-F1 with the frozen-snapshot status and the CC BY-NC-SA 4.0 licence.
+Settings → Data and updates names the same date, and the text below the card
+says this build does not update and downloads nothing new. Only a
+`DATA_SOURCE=remote` build says "new information is downloaded". Other
+fixture builds (sample, synthetic or unverified data) say neutrally that the
+bundled data does not download updates. Acknowledgements credits
+Jolpica F1 with the frozen-snapshot status and the CC BY-NC-SA 4.0 licence.
+The STAGING badge sits in its own strip under the status bar, above every app
+bar, so it never covers a title. A build older than §14.0.50 of the
+Implementation Plan still shows the badge over the titles and the download
+promise.
+
+**Team colours and driver codes are a known data gap, not a defect.** The app
+draws a team colour bar only where the data carries a colour, and Explore
+shows a driver code only where the data carries one. Neither is invented. A
+frozen batch takes both from the curated registries
+(`content/registries/constructors.mock.json`, `drivers.mock.json`). Provider
+codes, names and colours are never used (ADR 0022 D5, ADR 0026 D2 and D8). At
+`f2be701` those registries give a colour to six constructors (Red Bull,
+Ferrari, Mercedes, McLaren, Alpine, Audi/`sauber`) and none to Aston Martin,
+Cadillac, Haas, Racing Bulls or Williams. Of the 2026 drivers, only Verstappen,
+Leclerc, Hamilton, Norris, Piastri, Russell and Colapinto have a code. So rows
+for those five teams have no bar and sit slightly further left, and most
+drivers have no code. Standings rows never show a code: the standings row has
+no code slot, by design. Filling the gap needs a curation decision on approved
+colours and codes. It does not need an app change.
 
 **What Home and Calendar should show.** Jolpica publishes no lifecycle status
 and no weekend dates (ADR 0022 A6, A8), so every round reads "Status unknown"
