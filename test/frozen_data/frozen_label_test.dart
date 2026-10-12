@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gridview/app/environment/app_environment.dart';
+import 'package:gridview/core/network/data_source_config.dart';
 import 'package:gridview/features/shared/domain/fixture_data_identity.dart';
 import 'package:gridview/features/shared/presentation/widgets/mock_data_banner.dart';
 
@@ -27,6 +29,9 @@ const String _offlineExplanation =
     'GridView keeps the season on your device, so it opens and works without '
     'a connection. New information is downloaded when the app starts and when '
     'you refresh.';
+const String _bundledExplanation =
+    'This build uses data bundled with the app. It does not download updates: '
+    'nothing new arrives when the app starts or when you refresh.';
 const String _frozenExplanation =
     'This test build contains a fixed snapshot of data captured 2026-10-08. It '
     'does not update: nothing new is downloaded when the app starts or when '
@@ -43,6 +48,8 @@ Future<void> _pump(
   bool mockData = true,
   FixtureDataIdentity? fixtureData,
   Locale locale = const Locale('en'),
+  DataSourceMode? dataSourceMode,
+  AppEnvironment environment = AppEnvironment.development,
 }) async {
   await pumpApp(
     tester,
@@ -50,6 +57,8 @@ Future<void> _pump(
     mockData: mockData,
     fixtureData: fixtureData,
     locale: locale,
+    dataSourceMode: dataSourceMode,
+    environment: environment,
     surfaceSize: _tall,
     disableAnimations: true,
   );
@@ -213,10 +222,16 @@ void main() {
 
     testWidgets('a frozen build states its capture date and promises no '
         'downloads', (WidgetTester tester) async {
-      await _pump(tester, location: '/settings/data', fixtureData: _frozen);
+      await _pump(
+        tester,
+        location: '/settings/data',
+        dataSourceMode: DataSourceMode.fixture,
+        fixtureData: _frozen,
+      );
 
       expect(find.text(_frozenExplanation), findsOneWidget);
       expect(find.text(_offlineExplanation), findsNothing);
+      expect(find.text(_bundledExplanation), findsNothing);
       expect(
         _texts(tester).join(' '),
         isNot(contains('New information is downloaded')),
@@ -247,26 +262,72 @@ void main() {
       );
     });
 
-    testWidgets('the committed sample fixtures keep the offline explanation', (
-      WidgetTester tester,
-    ) async {
-      await _pump(tester, location: '/settings/data');
+    // Every DATA_SOURCE=fixture build that is not a dated frozen capture: the
+    // bundled data never downloads updates, and it is never called captured.
+    final Map<String, FixtureDataIdentity?> bundled =
+        <String, FixtureDataIdentity?>{
+          'the committed sample fixtures': null,
+          'a synthetic batch': const SampleFixtureData(),
+          'data of unverified origin': const UnverifiedFixtureData(),
+        };
+    for (final MapEntry<String, FixtureDataIdentity?> data in bundled.entries) {
+      testWidgets('${data.key} say the bundled data does not update', (
+        WidgetTester tester,
+      ) async {
+        await _pump(
+          tester,
+          location: '/settings/data',
+          dataSourceMode: DataSourceMode.fixture,
+          fixtureData: data.value,
+        );
 
-      expect(find.text(_offlineExplanation), findsOneWidget);
-      expect(find.text(_frozenExplanation), findsNothing);
-    });
+        expect(find.text(_bundledExplanation), findsOneWidget);
+        expect(find.text(_offlineExplanation), findsNothing);
+        expect(find.text(_frozenExplanation), findsNothing);
+        expect(_texts(tester).join(' '), isNot(contains('captured')));
+      });
+    }
 
-    testWidgets('a synthetic batch keeps the offline explanation', (
+    testWidgets('bundled data explains itself in Spanish', (
       WidgetTester tester,
     ) async {
       await _pump(
         tester,
         location: '/settings/data',
-        fixtureData: const SampleFixtureData(),
+        dataSourceMode: DataSourceMode.fixture,
+        fixtureData: const UnverifiedFixtureData(),
+        locale: const Locale('es'),
       );
 
-      expect(find.text(_offlineExplanation), findsOneWidget);
-      expect(_texts(tester).join(' '), isNot(contains('captured')));
+      expect(
+        find.text(
+          'Esta versión usa datos incluidos en la aplicación. No descarga '
+          'actualizaciones: no llega información nueva al abrir la aplicación '
+          'ni al actualizar.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        _texts(tester).join(' '),
+        isNot(contains('La información nueva se descarga')),
+      );
+    });
+
+    testWidgets('a production build set to fixtures promises no downloads', (
+      WidgetTester tester,
+    ) async {
+      // Production refuses fixture mode and serves nothing, but the build was
+      // still not configured for the GridView service.
+      await _pump(
+        tester,
+        location: '/settings/data',
+        environment: AppEnvironment.production,
+        dataSourceMode: DataSourceMode.fixture,
+        mockData: false,
+      );
+
+      expect(find.text(_bundledExplanation), findsOneWidget);
+      expect(find.text(_offlineExplanation), findsNothing);
     });
 
     testWidgets('the normal API build keeps the offline explanation', (
@@ -277,6 +338,7 @@ void main() {
       await _pump(
         tester,
         location: '/settings/data',
+        dataSourceMode: DataSourceMode.remote,
         mockData: false,
         fixtureData: _frozen,
       );
@@ -291,6 +353,7 @@ void main() {
       await _pump(
         tester,
         location: '/settings/data',
+        dataSourceMode: DataSourceMode.remote,
         mockData: false,
         locale: const Locale('es'),
       );

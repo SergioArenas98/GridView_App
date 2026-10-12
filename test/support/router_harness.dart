@@ -7,6 +7,7 @@ import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/app/router/app_router.dart';
 import 'package:gridview/core/media/media_image_loader.dart';
 import 'package:gridview/core/media/media_loader_scope.dart';
+import 'package:gridview/core/network/data_source_config.dart';
 import 'package:gridview/core/observability/observability.dart';
 import 'package:gridview/core/observability/observability_providers.dart';
 import 'package:gridview/core/preferences/locale_resolution.dart';
@@ -247,6 +248,10 @@ Future<GoRouter> pumpApp(
   /// Installs the environment badge strip as the real app does. Off by default;
   /// see [TestApp.environmentBadge].
   bool environmentBadge = false,
+
+  /// The build's `DATA_SOURCE` mode. Omit it and the build define is read
+  /// (remote in tests); [mockData] alone controls the fixture banner.
+  DataSourceMode? dataSourceMode,
 }) async {
   if (surfaceSize != null) {
     await tester.binding.setSurfaceSize(surfaceSize);
@@ -316,6 +321,8 @@ Future<GoRouter> pumpApp(
         appEnvironmentProvider.overrideWithValue(environment),
         observabilityProvider.overrideWithValue(observability),
         usesMockDataProvider.overrideWithValue(mockData),
+        if (dataSourceMode != null)
+          dataSourceModeProvider.overrideWithValue(dataSourceMode),
         if (fixtureData != null)
           fixtureDataIdentityProvider.overrideWith(
             (Ref ref) async => fixtureData,

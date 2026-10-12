@@ -234,8 +234,10 @@ baseline, decide about it before removing it. The production app
 On the phone, check: the banner reads "Frozen test data captured <date> — not
 live, no updates" on Home, Calendar, Standings, Explore and a Grand Prix;
 Settings → Data and updates names the same date, and the text below the card
-says this build does not update and downloads nothing new, instead of the
-normal "new information is downloaded" explanation; Acknowledgements credits
+says this build does not update and downloads nothing new. Only a
+`DATA_SOURCE=remote` build says "new information is downloaded". Other
+fixture builds (sample, synthetic or unverified data) say neutrally that the
+bundled data does not download updates. Acknowledgements credits
 Jolpica F1 with the frozen-snapshot status and the CC BY-NC-SA 4.0 licence.
 The STAGING badge sits in its own strip under the status bar, above every app
 bar, so it never covers a title. A build older than §14.0.50 of the

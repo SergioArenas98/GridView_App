@@ -1078,6 +1078,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'GridView guarda la temporada en tu dispositivo, así que se abre y funciona sin conexión. La información nueva se descarga al abrir la aplicación y al actualizar.';
 
   @override
+  String get settingsDataBundledExplanation =>
+      'Esta versión usa datos incluidos en la aplicación. No descarga actualizaciones: no llega información nueva al abrir la aplicación ni al actualizar.';
+
+  @override
   String settingsDataFrozenExplanation(String date) {
     return 'Esta versión de prueba contiene una instantánea fija de datos capturados el $date. No se actualiza: no se descarga información nueva al abrir la aplicación ni al actualizar.';
   }
