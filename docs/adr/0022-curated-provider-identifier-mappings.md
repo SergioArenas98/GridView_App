@@ -827,9 +827,11 @@ clock.
    unchanged, and nothing is ever rewritten to `completed`.
 2. **Authoritative statuses keep their rule.** Any status other than
    `unknown` is not second-guessed by the clock: the generator keeps treating
-   every event that is not settled as ahead (so mock and future authoritative
-   sources produce byte-identical documents), and the client keeps its
-   date-based rules for them.
+   every event that is not settled as ahead, cancelled and postponed included,
+   and the client keeps its date-based rules for them. The mock's documents
+   are byte-identical. The one change for authoritative data is an event that
+   has `hasResults` with a status other than `completed`: it is now settled
+   rather than ahead.
 3. **An `unknown` event is placed only by explicit chronology**, in this order:
    - its race session's UTC start instant (`Session.startTime` of the
      `race` session, which A8 guarantees for every Jolpica event): ahead while
@@ -837,15 +839,26 @@ clock.
    - else its published weekend dates, when a source supplies them;
    - else, having no chronology of its own, its position in the delivered
      chronology: it is ahead only when its round follows every event already
-     settled or behind the reference instant.
-4. **Next** is the first event ahead that is neither settled nor cancelled (on
-   the client an authoritative `in_progress` event, or a date window containing
-   today, still wins first). **Latest result** is the last settled event. Home features the next
+     settled or behind the reference instant. On the device it must also be
+     at or after the published `Season.currentRound`: the generator computed
+     that round from every race time, while the device stores race times only
+     for the Home focus and for Grand Prix screens it opened. Without this
+     floor, a round whose race had started without a classification when the
+     snapshot was generated would look ahead on the Calendar while Home
+     featured the round after it.
+4. **Next** is the first event ahead (on the client an authoritative
+   `in_progress` event, or a date window containing today, still wins first,
+   and a cancelled event is skipped; the generator keeps its old behaviour for
+   an authoritative cancelled event). **Latest result** is the last settled event. Home features the next
    event, else the latest settled event, else (for an authoritative calendar
    only) the final event as before; an `unknown` calendar with neither features
    nothing. `Season.currentRound` is the next event's round, or `null`.
 5. **A race that has started without a classification** is neither next nor
    latest: it is not claimed as upcoming, and it is not claimed as finished.
+   So from the race's start until its result is classified, Home features the
+   following round. No grace period is added, because any length would be a
+   manufactured time; an authoritative `in_progress` status, when a source
+   supplies one, keeps the event current.
 6. **An aging snapshot.** The client keeps the server's Home focus unless that
    focus is `unknown`, unsettled, and its own stored race start has passed
    (`hasFeaturedEventLapsed`). Then Home falls back to the same relevant event

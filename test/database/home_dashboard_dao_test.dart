@@ -340,6 +340,49 @@ void main() {
       expect(round17.hasResults, isFalse);
     });
 
+    test(
+      'a round the server placed behind stays behind on the device',
+      () async {
+        // Generated after round 17's race started but before its result was
+        // classified: the server featured 18 and published currentRound 18.
+        // The phone has no race time for 17.
+        await db.calendarDao.replaceCalendar(2026, <GrandPrix>[
+          for (int round = 1; round <= 23; round++) jolpicaEvent(round),
+        ], const <Circuit>[]);
+        await db.seasonDao.upsertSeason(
+          Season(
+            year: 2026,
+            status: SeasonStatus.active,
+            isCurrent: true,
+            currentRound: 18,
+          ),
+        );
+        await writeHomeSnapshot(
+          featured: jolpicaEvent(
+            18,
+            sessions: <Session>[
+              Session(
+                id: '2026-round-18-grand-prix-race',
+                type: SessionType.race,
+                startTime: DateTime.utc(2026, 10, 25, 20),
+                status: SessionStatus.unknown,
+              ),
+            ],
+          ),
+        );
+
+        final HomeDashboardView view = (await dao.readDashboard(capture))!;
+        expect(view.focus!.round, 18);
+        expect(view.latestCompleted!.round, 16);
+        expect(view.upcoming.map((CalendarEntry e) => e.round), <int>[
+          19,
+          20,
+          21,
+        ]);
+        expect(await calendarNext(capture), 18);
+      },
+    );
+
     test('a lapsed final round falls back to the latest result', () async {
       await writeJolpicaSeason(lastRound: 17);
       final DateTime aged = DateTime.utc(2026, 10, 12, 9);

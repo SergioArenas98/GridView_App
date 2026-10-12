@@ -220,6 +220,9 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     final RelevantEvent? relevant = resolveRelevantEvent(
       await calendar(season),
       now,
+      seasonCurrentRound: (await attachedDatabase.seasonDao.readSeason(
+        season,
+      ))?.currentRound,
     );
     return relevant?.event;
   }

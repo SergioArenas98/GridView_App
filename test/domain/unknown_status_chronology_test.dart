@@ -184,6 +184,55 @@ void main() {
     });
   });
 
+  group('the published season currentRound', () {
+    // Generated just after round 17's race started, before its result was
+    // classified: the server saw the race time, placed 17 behind and published
+    // currentRound 18. The device stores no race time for 17.
+    final List<GrandPrix> season = frozenSeason()
+        .map((GrandPrix e) => e.round == 17 ? event(17) : e)
+        .toList();
+
+    test(
+      'without it, an undated unclassified round would still look ahead',
+      () {
+        expect(resolveRelevantEvent(season, capture)!.event.round, 17);
+      },
+    );
+
+    test('with it, Calendar and Home agree on the published next round', () {
+      expect(
+        resolveRelevantEvent(
+          season,
+          capture,
+          seasonCurrentRound: 18,
+        )!.event.round,
+        18,
+      );
+      expect(
+        rounds(resolveUpcomingEvents(season, capture, seasonCurrentRound: 18)),
+        <int>[18, 19, 20],
+      );
+      // Round 17 is neither upcoming nor the latest result.
+      expect(resolveLatestCompletedEvent(season, capture)!.round, 16);
+    });
+
+    test('it never overrides an event whose own chronology says ahead', () {
+      // A stored race start in the future keeps the event ahead.
+      final List<GrandPrix> timed = <GrandPrix>[
+        event(16, hasResults: true),
+        event(17, raceStart: DateTime.utc(2026, 10, 11, 12)),
+      ];
+      expect(
+        resolveRelevantEvent(
+          timed,
+          capture,
+          seasonCurrentRound: 18,
+        )!.event.round,
+        17,
+      );
+    });
+  });
+
   group('a season with no future races', () {
     test('nothing is next and the final classified round is latest', () {
       final List<GrandPrix> season = frozenSeason(classifiedThrough: 23);

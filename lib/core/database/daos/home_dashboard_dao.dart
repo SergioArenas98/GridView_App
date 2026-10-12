@@ -106,8 +106,9 @@ class HomeDashboardDao extends DatabaseAccessor<GridViewDatabase>
     final List<CalendarEntry> entries = await attachedDatabase.calendarDao
         .calendarEntries(season);
 
+    final int? currentRound = seasonRow?.currentRound;
     final HomeFocus? focus = await _withHeroMedia(
-      _resolveFocus(entries, snapshot.focusRound, now),
+      _resolveFocus(entries, snapshot.focusRound, now, currentRound),
     );
     final CalendarEntry? latest = _entryFor(
       entries,
@@ -131,6 +132,7 @@ class HomeDashboardDao extends DatabaseAccessor<GridViewDatabase>
                 now,
                 excludeRound: focus?.round,
                 limit: kHomeUpcomingEventLimit,
+                seasonCurrentRound: currentRound,
               )
               .map((GrandPrix e) => _entryFor(entries, e.round)!)
               .toList(growable: false),
@@ -189,6 +191,7 @@ class HomeDashboardDao extends DatabaseAccessor<GridViewDatabase>
     List<CalendarEntry> entries,
     int? focusRound,
     DateTime now,
+    int? seasonCurrentRound,
   ) {
     final Iterable<GrandPrix> events = entries.map(
       (CalendarEntry e) => e.grandPrix,
@@ -210,7 +213,11 @@ class HomeDashboardDao extends DatabaseAccessor<GridViewDatabase>
       // through to the calendar rather than render a fabricated event.
     }
     final GrandPrix? fallback =
-        resolveRelevantEvent(events, now)?.event ??
+        resolveRelevantEvent(
+          events,
+          now,
+          seasonCurrentRound: seasonCurrentRound,
+        )?.event ??
         (lapsed ? resolveLatestCompletedEvent(events, now) : null);
     if (fallback == null) return null;
     final CalendarEntry entry = _entryFor(entries, fallback.round)!;

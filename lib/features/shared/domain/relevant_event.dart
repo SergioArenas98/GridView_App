@@ -38,7 +38,13 @@ class RelevantEvent {
 ///   ([isEventSettled]), are never upcoming.
 /// - Missing or malformed dates simply make an event ineligible for the
 ///   date-based rules; they never throw.
-RelevantEvent? resolveRelevantEvent(Iterable<GrandPrix> events, DateTime now) {
+/// - [seasonCurrentRound] is the season's published `currentRound`; see
+///   [resolveUpcomingEvents].
+RelevantEvent? resolveRelevantEvent(
+  Iterable<GrandPrix> events,
+  DateTime now, {
+  int? seasonCurrentRound,
+}) {
   final List<GrandPrix> all = events.toList(growable: false);
   final String today = utcDateString(now);
 
@@ -52,7 +58,7 @@ RelevantEvent? resolveRelevantEvent(Iterable<GrandPrix> events, DateTime now) {
   }
   if (live != null) return RelevantEvent(event: live, inProgress: true);
 
-  final int horizon = _horizonRound(all, now, today);
+  final int horizon = _horizonRound(all, now, today, seasonCurrentRound);
   GrandPrix? next;
   for (final GrandPrix event in all) {
     if (!_isUpcomingCandidate(event, now, today, horizon)) continue;
@@ -104,7 +110,11 @@ GrandPrix? resolveLatestCompletedEvent(
 ///   the race session's UTC start instant, strictly after [now]; else the
 ///   published weekend dates, the last day on or after today; else, with no
 ///   chronology of its own, a round after every event already settled or
-///   behind [now] in the delivered chronology. No date or time is
+///   behind [now] in the delivered chronology — and never before
+///   [seasonCurrentRound], the season's published `currentRound`. The server
+///   computed that round with every event's race time, which the device only
+///   stores for some, so a round it already placed behind (a race that started
+///   without a classification yet) stays behind here too. No date or time is
 ///   manufactured;
 /// - [excludeRound] drops the round already featured elsewhere on the screen,
 ///   so the same Grand Prix is never shown twice;
@@ -117,11 +127,12 @@ List<GrandPrix> resolveUpcomingEvents(
   DateTime now, {
   int? excludeRound,
   int limit = 3,
+  int? seasonCurrentRound,
 }) {
   if (limit <= 0) return const <GrandPrix>[];
   final List<GrandPrix> all = events.toList(growable: false);
   final String today = utcDateString(now);
-  final int horizon = _horizonRound(all, now, today);
+  final int horizon = _horizonRound(all, now, today, seasonCurrentRound);
   final List<GrandPrix> upcoming = <GrandPrix>[];
   for (final GrandPrix event in all) {
     if (excludeRound != null && event.round == excludeRound) continue;
@@ -192,9 +203,15 @@ bool _isAhead(GrandPrix event, DateTime now, String today, int horizon) {
 }
 
 /// The highest round already behind [now]: settled, or with an explicit race
-/// start or a published last day before it. `0` when none is.
-int _horizonRound(Iterable<GrandPrix> events, DateTime now, String today) {
-  int horizon = 0;
+/// start or a published last day before it, and at least the round before the
+/// published [seasonCurrentRound]. `0` when none is.
+int _horizonRound(
+  Iterable<GrandPrix> events,
+  DateTime now,
+  String today,
+  int? seasonCurrentRound,
+) {
+  int horizon = seasonCurrentRound == null ? 0 : seasonCurrentRound - 1;
   for (final GrandPrix event in events) {
     if (event.round <= horizon) continue;
     if (isEventSettled(event) || _isBehind(event, now, today)) {
