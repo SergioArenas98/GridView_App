@@ -23,6 +23,14 @@ const String _dormant =
 const String _frozenStatus =
     'This test build contains a fixed snapshot of data from this source, '
     'captured 2026-10-08. It receives no updates.';
+const String _offlineExplanation =
+    'GridView keeps the season on your device, so it opens and works without '
+    'a connection. New information is downloaded when the app starts and when '
+    'you refresh.';
+const String _frozenExplanation =
+    'This test build contains a fixed snapshot of data captured 2026-10-08. It '
+    'does not update: nothing new is downloaded when the app starts or when '
+    'you refresh.';
 
 List<String> _texts(WidgetTester tester) => tester
     .widgetList<Text>(find.byType(Text))
@@ -201,6 +209,100 @@ void main() {
       await _pump(tester, location: '/settings/data');
 
       expect(find.text('Sample data'), findsOneWidget);
+    });
+
+    testWidgets('a frozen build states its capture date and promises no '
+        'downloads', (WidgetTester tester) async {
+      await _pump(tester, location: '/settings/data', fixtureData: _frozen);
+
+      expect(find.text(_frozenExplanation), findsOneWidget);
+      expect(find.text(_offlineExplanation), findsNothing);
+      expect(
+        _texts(tester).join(' '),
+        isNot(contains('New information is downloaded')),
+      );
+    });
+
+    testWidgets('a frozen build explains itself in Spanish', (
+      WidgetTester tester,
+    ) async {
+      await _pump(
+        tester,
+        location: '/settings/data',
+        fixtureData: _frozen,
+        locale: const Locale('es'),
+      );
+
+      expect(
+        find.text(
+          'Esta versión de prueba contiene una instantánea fija de datos '
+          'capturados el 2026-10-08. No se actualiza: no se descarga '
+          'información nueva al abrir la aplicación ni al actualizar.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        _texts(tester).join(' '),
+        isNot(contains('La información nueva se descarga')),
+      );
+    });
+
+    testWidgets('the committed sample fixtures keep the offline explanation', (
+      WidgetTester tester,
+    ) async {
+      await _pump(tester, location: '/settings/data');
+
+      expect(find.text(_offlineExplanation), findsOneWidget);
+      expect(find.text(_frozenExplanation), findsNothing);
+    });
+
+    testWidgets('a synthetic batch keeps the offline explanation', (
+      WidgetTester tester,
+    ) async {
+      await _pump(
+        tester,
+        location: '/settings/data',
+        fixtureData: const SampleFixtureData(),
+      );
+
+      expect(find.text(_offlineExplanation), findsOneWidget);
+      expect(_texts(tester).join(' '), isNot(contains('captured')));
+    });
+
+    testWidgets('the normal API build keeps the offline explanation', (
+      WidgetTester tester,
+    ) async {
+      // A frozen descriptor cannot matter to a build that does not serve
+      // fixtures: the explanation follows the data the app actually reads.
+      await _pump(
+        tester,
+        location: '/settings/data',
+        mockData: false,
+        fixtureData: _frozen,
+      );
+
+      expect(find.text(_offlineExplanation), findsOneWidget);
+      expect(find.text(_frozenExplanation), findsNothing);
+    });
+
+    testWidgets('the normal API build keeps the Spanish offline explanation', (
+      WidgetTester tester,
+    ) async {
+      await _pump(
+        tester,
+        location: '/settings/data',
+        mockData: false,
+        locale: const Locale('es'),
+      );
+
+      expect(
+        find.text(
+          'GridView guarda la temporada en tu dispositivo, así que se abre y '
+          'funciona sin conexión. La información nueva se descarga al abrir la '
+          'aplicación y al actualizar.',
+        ),
+        findsOneWidget,
+      );
     });
   });
 }

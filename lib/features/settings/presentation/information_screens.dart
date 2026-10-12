@@ -77,13 +77,26 @@ class DataSettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: GvSpacing.lg),
           Text(
-            l10n.settingsDataOfflineExplanation,
+            _explanation(l10n, usesMockData, fixtureData),
             style: context.gvText.bodyM,
           ),
         ],
       ),
     );
   }
+
+  /// How the data stays current. A frozen capture never updates, so it states
+  /// its capture date instead of promising downloads; every other build keeps
+  /// the offline-first explanation.
+  String _explanation(
+    AppLocalizations l10n,
+    bool usesMockData,
+    FixtureDataIdentity? fixtureData,
+  ) => switch (fixtureData) {
+    FrozenCaptureData(:final DateTime capturedAt) when usesMockData =>
+      l10n.settingsDataFrozenExplanation(captureDateLabel(capturedAt)),
+    _ => l10n.settingsDataOfflineExplanation,
+  };
 
   /// The active source, described in product terms.
   ///

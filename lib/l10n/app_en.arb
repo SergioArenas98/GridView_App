@@ -1440,6 +1440,16 @@
   "@settingsDataOfflineExplanation": {
     "description": "Explains the offline-first behaviour."
   },
+  "settingsDataFrozenExplanation": "This test build contains a fixed snapshot of data captured {date}. It does not update: nothing new is downloaded when the app starts or when you refresh.",
+  "@settingsDataFrozenExplanation": {
+    "description": "Replaces the offline explanation in a test-only build that bundles a frozen snapshot of captured data. Must not promise downloads or updates.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "2026-10-07"
+      }
+    }
+  },
   "settingsAboutApplication": "Application",
   "@settingsAboutApplication": {
     "description": "Label for the application name."

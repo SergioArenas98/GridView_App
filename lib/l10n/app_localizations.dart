@@ -1970,6 +1970,12 @@ abstract class AppLocalizations {
   /// **'GridView keeps the season on your device, so it opens and works without a connection. New information is downloaded when the app starts and when you refresh.'**
   String get settingsDataOfflineExplanation;
 
+  /// Replaces the offline explanation in a test-only build that bundles a frozen snapshot of captured data. Must not promise downloads or updates.
+  ///
+  /// In en, this message translates to:
+  /// **'This test build contains a fixed snapshot of data captured {date}. It does not update: nothing new is downloaded when the app starts or when you refresh.'**
+  String settingsDataFrozenExplanation(String date);
+
   /// Label for the application name.
   ///
   /// In en, this message translates to:

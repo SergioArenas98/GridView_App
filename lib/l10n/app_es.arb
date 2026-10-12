@@ -465,6 +465,7 @@
   "settingsDataCurrentSeason": "Temporada actual",
   "settingsDataCurrentSeasonUnresolved": "Todavía no disponible",
   "settingsDataOfflineExplanation": "GridView guarda la temporada en tu dispositivo, así que se abre y funciona sin conexión. La información nueva se descarga al abrir la aplicación y al actualizar.",
+  "settingsDataFrozenExplanation": "Esta versión de prueba contiene una instantánea fija de datos capturados el {date}. No se actualiza: no se descarga información nueva al abrir la aplicación ni al actualizar.",
   "settingsAboutApplication": "Aplicación",
   "settingsAboutBuild": "Compilación",
   "settingsAboutUnofficial": "GridView es una aplicación independiente. No está asociada, respaldada ni afiliada a la Fórmula 1, la FIA ni a ningún equipo.",
