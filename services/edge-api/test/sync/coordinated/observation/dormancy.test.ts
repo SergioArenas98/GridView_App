@@ -33,7 +33,17 @@ describe('the observation orchestration is wired through one entry, unbound', ()
       'sync/coordinated/observation/published.ts',
       'sync/coordinated/observation/revisions.ts',
     ]);
-    expect(importersOf(observationDir)).toEqual(['sync/coordinated/run.ts']);
+    // The one other importer is the guarded staging ingest, which reads the
+    // pure calendar-anchor rule (`revisions.ts`) and nothing else.
+    expect(importersOf(observationDir)).toEqual([
+      'ingest/batch-verification.ts',
+      'sync/coordinated/run.ts',
+    ]);
+    expect(
+      importsOf('ingest/batch-verification.ts').filter((file) =>
+        file.startsWith(observationDir),
+      ),
+    ).toEqual(['sync/coordinated/observation/revisions.ts']);
     expect(resolveReconciliationLedger({})).toBeNull();
     expect(importsOf('sync/coordinated/run.ts')).toEqual([
       'logging/logger.ts',

@@ -61,6 +61,7 @@ import type { GeneratedSnapshotSet } from '../../snapshots/generator';
 import type { ContentManifest } from '../../contract/types';
 import type {
   GuardedPublicationCommands,
+  GuardedPublicationOptions,
   PublicationCommands,
 } from '../commands';
 import type {
@@ -212,7 +213,10 @@ export class SequencedPublicationService
    * season that is not `active` differs from `publish`: it is refused, with no
    * write, rather than delegated.
    */
-  async publishGuarded(set: GeneratedSnapshotSet): Promise<PublicationResult> {
+  async publishGuarded(
+    set: GeneratedSnapshotSet,
+    options: GuardedPublicationOptions = {},
+  ): Promise<PublicationResult> {
     const authority = await this.activeAuthority(set.season);
     if (authority === null) {
       this.logger.warn({
@@ -226,6 +230,29 @@ export class SequencedPublicationService
         set.version,
         null,
         'guard-authority-not-sequenced',
+      );
+    }
+    const expected = options.expectedActiveVersion;
+    if (
+      expected !== undefined &&
+      authority !== 'unavailable' &&
+      authority.activeVersion !== expected
+    ) {
+      // The caller reviewed its candidate against another release. Refused
+      // from the authority read alone: nothing is compared, prepared or
+      // written. From here on the guard and the `prepare` CAS bind to
+      // `authority.activeVersion`, which is `expected`.
+      this.logger.warn({
+        operation: 'publication.guard.rejected',
+        season: set.season,
+        failureCategory: 'guard-predecessor-stale',
+        publicationStatus: 'ordinary-publication',
+      });
+      return rejection(
+        set.season,
+        set.version,
+        authority.activeVersion,
+        'guard-predecessor-stale',
       );
     }
     return this.publishToAuthority(set, authority);

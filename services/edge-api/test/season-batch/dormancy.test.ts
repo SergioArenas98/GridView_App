@@ -30,8 +30,10 @@ function generatorSources(): { file: string; text: string }[] {
 
 describe('season-batch generator: dormancy', () => {
   it('is reachable from no Worker source file', () => {
+    // The Worker names the batch format (its guarded staging ingest reads
+    // batches), but never imports the generator or any other script.
     const importers = sourceFiles().filter((file) =>
-      readSource(file).includes('season-batch'),
+      /(?:from|import)\s*\(?\s*'[^']*scripts\//.test(readSource(file)),
     );
     expect(importers).toEqual([]);
   });

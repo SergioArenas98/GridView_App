@@ -1,6 +1,7 @@
 import type { CachePurgeAdapter } from '../cache/purge';
 import type { Env } from '../config/environment';
 import { jsonResponse } from '../http/envelope';
+import type { SeasonBatchIngest } from '../ingest/service';
 import type { Logger } from '../logging/logger';
 import type { PublicationAuthority } from '../publication/authority';
 import type { PublicationCommands } from '../publication/commands';
@@ -26,6 +27,10 @@ import {
   isReconciliationPath,
   type OperatorReconciliation,
 } from './reconciliation-routes';
+import {
+  handleSeasonIngestRequest,
+  seasonIngestPath,
+} from './season-ingest-route';
 import {
   handleStandingsPredecessorRequest,
   standingsPredecessorPath,
@@ -84,6 +89,12 @@ interface AdminContext {
    * reading anything.
    */
   reconciliation: OperatorReconciliation;
+  /**
+   * The guarded staging ingest of a reviewed season batch. Always
+   * constructed, and disabled by its own admission: no committed environment
+   * sets `SEASON_BATCH_INGEST`, so it refuses before reading a body.
+   */
+  ingest: SeasonBatchIngest;
   clock: Clock;
 }
 
@@ -109,6 +120,14 @@ export async function handleAdminRequest(
   // Also names its season explicitly, and is read-only.
   if (url.pathname === standingsPredecessorPath) {
     return handleStandingsPredecessorRequest(request, url, context);
+  }
+  // Names its season in the validated body, and admits nothing by default.
+  if (url.pathname === seasonIngestPath) {
+    return handleSeasonIngestRequest(
+      request,
+      context.ingest,
+      context.requestId,
+    );
   }
   // Names its season explicitly too, and validates it before any ledger read.
   if (isReconciliationPath(url.pathname)) {

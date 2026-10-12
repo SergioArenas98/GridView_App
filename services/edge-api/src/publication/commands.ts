@@ -39,7 +39,25 @@ export interface PublicationCommands {
  * `finalize` run exactly as they do for `PublicationCommands.publish`.
  */
 export interface GuardedPublicationCommands {
-  publishGuarded(set: GeneratedSnapshotSet): Promise<PublicationResult>;
+  publishGuarded(
+    set: GeneratedSnapshotSet,
+    options?: GuardedPublicationOptions,
+  ): Promise<PublicationResult>;
+}
+
+export interface GuardedPublicationOptions {
+  /**
+   * The active release the caller reviewed its candidate against. When given,
+   * a season whose authoritative active version is any other is refused as
+   * `guard-predecessor-stale` before anything is read or written, and the
+   * D14/D15 comparison and the `prepare` CAS then bind to exactly this
+   * version. A retry after a commit - reported or not - therefore finds its
+   * own release active and is refused instead of minting a duplicate.
+   *
+   * Absent, the predecessor is whatever is authoritative when the
+   * publication starts, as for coordinated publication.
+   */
+  readonly expectedActiveVersion?: string;
 }
 
 /**

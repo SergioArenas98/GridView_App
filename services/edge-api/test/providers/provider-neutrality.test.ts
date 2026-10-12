@@ -308,6 +308,10 @@ const jolpicaPortModules: readonly string[] = [
  * its index and nothing else does.
  */
 const allowedPackageEdges: readonly string[] = [
+  // The guarded staging ingest re-runs assembly's pure referential preflight
+  // (`validateSeasonReferences`) on a submitted source. It reaches no port,
+  // coordinator, transport or limiter.
+  `src/ingest/source-validation.ts -> ${coordinationDir}season-integrity.ts (import-statement)`,
   `${compositionModule} -> ${coordinationDir}index.ts (import-statement)`,
   `${compositionModule} -> ${dormantDir}index.ts (import-statement)`,
 ];
@@ -517,12 +521,16 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
       ),
     ).toHaveLength(2);
     // Outside the policy itself, the planner's eligibility rule is read only
-    // by the verification.
+    // by the verification and by the guarded staging ingest's completeness
+    // check.
     expect(
       importersOf(graph, 'src/sync/coordinated/policy/cadence.ts').filter(
         (input) => !input.startsWith('src/sync/coordinated/policy/'),
       ),
-    ).toEqual(['src/sync/coordinated/operator/verification.ts']);
+    ).toEqual([
+      'src/ingest/batch-verification.ts',
+      'src/sync/coordinated/operator/verification.ts',
+    ]);
   });
 
   it('lets no other runtime module import either package', async () => {

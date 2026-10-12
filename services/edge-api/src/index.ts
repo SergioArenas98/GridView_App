@@ -12,6 +12,7 @@ import {
   type RuntimeConfig,
 } from './config/environment';
 import { errorResponse } from './http/envelope';
+import { SeasonBatchIngest } from './ingest/service';
 import { consoleLogger } from './logging/logger';
 import {
   resolvePublicationAuthority,
@@ -173,6 +174,17 @@ export default {
             retry: env.__CUTOVER_RETRY,
           }),
           authority,
+          // Always constructed, and disabled by its own admission: with no
+          // `SEASON_BATCH_INGEST` it refuses before reading a body.
+          ingest: new SeasonBatchIngest({
+            environment: config.environment,
+            providerMode: config.providerMode,
+            enabledSeason: env.SEASON_BATCH_INGEST,
+            guarded,
+            clock,
+            logger,
+            requestId,
+          }),
           // The operator routes and the coordinated rollback (PR-E2), and
           // the verification (PR-E3), which composes the coordinated runtime
           // from the same gated dependencies as a run. Without a bound
@@ -494,7 +506,9 @@ function runSignal(env: Env): { readonly signal?: AbortSignal } {
  * at all. It is `null` under every other authority. The guarded entry point
  * has no legacy fallback and refuses any season whose sequencer authority is
  * not `active`, so exposing it outside the cutover admission boundary admits
- * nothing that boundary refuses. Only the coordinated runtime reads it.
+ * nothing that boundary refuses. Only the coordinated runtime and the guarded
+ * staging season-batch ingest (itself disabled by `SEASON_BATCH_INGEST`) read
+ * it.
  */
 function buildPublicationCommands(
   authority: PublicationAuthority,

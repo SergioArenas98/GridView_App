@@ -113,6 +113,17 @@ export interface Env extends TestOnlyBindings {
   SEASON_PUBLICATION_SEQUENCER?: DurableObjectNamespace;
   PUBLIC_BASE_URL?: string;
   ADMIN_TOKEN?: string;
+  /**
+   * The one season the guarded staging ingest of a reviewed season batch
+   * accepts (`POST /internal/admin/season/ingest`). **Unset in every committed
+   * environment**, which disables the route: it refuses before reading a
+   * body. Even when set, it admits nothing outside `staging`, under
+   * `PROVIDER_MODE=coordinated`, without a reachable sequencer, or while the
+   * bundled attribution record calls the batch's source anything but
+   * `active`. A value that is not a four-digit season with curated metadata
+   * is refused as `ingest-misconfigured`, never read as a different season.
+   */
+  SEASON_BATCH_INGEST?: string;
   MOCK_PROVIDER_FAILURE?: string;
   MOCK_PROVIDER_INVALID_DATA?: string;
   MOCK_PROVIDER_SOURCE_UPDATED_AT?: string;

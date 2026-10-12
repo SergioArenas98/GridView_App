@@ -1,5 +1,5 @@
 /**
- * Deterministic JSON text for season-batch outputs, and their digests.
+ * Deterministic JSON text for season batches, and their digests.
  *
  * The same value always yields the same bytes, whatever order its keys were
  * built in: object keys are sorted by UTF-8 byte order, indentation is two
@@ -12,7 +12,7 @@
  * a non-plain object - is refused rather than silently converted.
  */
 
-import { compareUtf8 } from '../../src/publication/canonical/ordering';
+import { compareUtf8 } from '../publication/canonical/ordering';
 
 export class CanonicalJsonError extends Error {
   constructor() {
