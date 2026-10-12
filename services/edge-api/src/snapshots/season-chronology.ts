@@ -21,11 +21,16 @@ import type { GrandPrix } from '../contract/types';
  */
 export interface SeasonChronology {
   /**
-   * Events still ahead or in progress, in delivered (round) order. The first
-   * is the next race; the generator never re-sorts it.
+   * Events still ahead or in progress, earliest first: by start date (the race
+   * date standing in when an event has no dates) when both events have one,
+   * else by round. This is the client's `resolveRelevantEvent` ordering, so a
+   * rescheduled round is next on both sides.
    */
   ahead: GrandPrix[];
-  /** The last event, in delivered order, with a result or a completed status. */
+  /**
+   * The latest event with a result or a completed status: by end date when
+   * both events have one, else by round, as the client's latest-event rule.
+   */
   latestSettled: GrandPrix | null;
   /** The event Home features: next race, else latest settled, else none. */
   featured: GrandPrix | null;
@@ -38,12 +43,16 @@ export function resolveSeasonChronology(
   const at = Date.parse(referenceInstant);
   const today = new Date(at).toISOString().slice(0, 10);
   const horizon = horizonRound(events, at, today);
-  const ahead = events.filter(
-    (event) =>
-      !isSettled(event) &&
-      (event.status !== 'unknown' || isAhead(event, at, today, horizon)),
-  );
-  const latestSettled = events.filter(isSettled).at(-1) ?? null;
+  // Array.prototype.sort is stable, so events the ordering cannot compare
+  // keep their delivered (round) order.
+  const ahead = events
+    .filter(
+      (event) =>
+        !isSettled(event) &&
+        (event.status !== 'unknown' || isAhead(event, at, today, horizon)),
+    )
+    .sort(byStart);
+  const latestSettled = events.filter(isSettled).sort(byEnd).at(-1) ?? null;
   return {
     ahead,
     latestSettled,
@@ -116,6 +125,41 @@ function isBehind(event: GrandPrix, at: number, today: string): boolean {
 function authoritativeLast(events: readonly GrandPrix[]): GrandPrix | null {
   const last = events.at(-1);
   return last !== undefined && last.status !== 'unknown' ? last : null;
+}
+
+function byStart(a: GrandPrix, b: GrandPrix): number {
+  return byDateThenRound(startDayOf(a), startDayOf(b), a, b);
+}
+
+function byEnd(a: GrandPrix, b: GrandPrix): number {
+  return byDateThenRound(
+    calendarDate(a.endDate),
+    calendarDate(b.endDate),
+    a,
+    b,
+  );
+}
+
+function byDateThenRound(
+  aDay: string | null,
+  bDay: string | null,
+  a: GrandPrix,
+  b: GrandPrix,
+): number {
+  if (aDay !== null && bDay !== null && aDay !== bDay) {
+    return aDay < bDay ? -1 : 1;
+  }
+  return a.round - b.round;
+}
+
+/** The published start date, else the UTC date of the explicit race start. */
+function startDayOf(event: GrandPrix): string | null {
+  const start = calendarDate(event.startDate);
+  if (start !== null) return start;
+  const raceStart = raceStartOf(event);
+  return raceStart === null
+    ? null
+    : new Date(raceStart).toISOString().slice(0, 10);
 }
 
 function calendarDate(value: string | null): string | null {

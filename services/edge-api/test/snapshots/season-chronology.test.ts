@@ -243,6 +243,41 @@ describe('resolveSeasonChronology', () => {
     expect(chronology.featured?.round).toBe(17);
   });
 
+  it('a rescheduled round is ordered by its explicit start, not its round', () => {
+    const events = [
+      event({ round: 16, hasResults: true, race: '2026-10-04T07:00:00Z' }),
+      event({ round: 17, race: '2026-11-15T12:00:00Z' }),
+      event({ round: 18, race: '2026-10-25T20:00:00Z' }),
+      event({ round: 19, race: '2026-11-01T20:00:00Z' }),
+    ];
+
+    const chronology = resolveSeasonChronology(events, CAPTURE_INSTANT);
+
+    expect(chronology.featured?.round).toBe(18);
+    expect(rounds(chronology.ahead)).toEqual([18, 19, 17]);
+  });
+
+  it('the latest settled event is the one that ended last', () => {
+    const events = [
+      event({
+        round: 5,
+        status: 'completed',
+        startDate: '2026-05-29',
+        endDate: '2026-05-31',
+      }),
+      event({
+        round: 6,
+        status: 'completed',
+        startDate: '2026-05-01',
+        endDate: '2026-05-03',
+      }),
+    ];
+
+    expect(
+      resolveSeasonChronology(events, CAPTURE_INSTANT).latestSettled?.round,
+    ).toBe(5);
+  });
+
   it('an authoritative completed season keeps featuring its final event', () => {
     const events = [
       event({ round: 1, status: 'completed' }),

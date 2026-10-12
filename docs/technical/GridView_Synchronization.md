@@ -884,9 +884,9 @@ An **`unknown`** status (the Jolpica calendar, ADR 0022 A6) is placed by
 explicit chronology only (ADR 0022 A11): the stored race session's UTC start,
 else published weekend dates, else its position after the last event already
 settled or behind now and no earlier than the season's published
-`currentRound` (which the server computed from every race time). `resolveLatestCompletedEvent` takes an `unknown` event
-only when it has a classified result, never because its dates passed, and the
-status itself is never rewritten. Home keeps the server's focus unless it is an
+`currentRound` (which the server computed from every race time). `resolveLatestCompletedEvent` takes any event with a classified result, and an
+`unknown` event only then, never because its dates passed; the status itself is
+never rewritten. Home keeps the server's focus unless it is an
 `unknown`, unsettled event whose own race start has passed
 (`hasFeaturedEventLapsed`); it then uses this same rule, so Home and Calendar
 still name the same event.

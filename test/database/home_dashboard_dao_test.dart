@@ -215,7 +215,24 @@ void main() {
     );
 
     test('no completed event yields none', () async {
-      await writeCalendar();
+      // Authoritative statuses without classified results: before the season
+      // the date rule finds nothing finished. (A classified result would count
+      // whatever the clock says.)
+      await db.calendarDao.replaceCalendar(2026, <GrandPrix>[
+        calendarEntry(
+          round: 11,
+          name: 'Round 11 Grand Prix',
+          startDate: '2026-07-03',
+          endDate: '2026-07-05',
+          status: EventStatus.completed,
+        ).grandPrix,
+        calendarEntry(
+          round: 12,
+          name: 'Round 12 Grand Prix',
+          startDate: '2026-07-10',
+          endDate: '2026-07-12',
+        ).grandPrix,
+      ], const <Circuit>[]);
       await writeHomeSnapshot();
       expect(
         (await dao.readDashboard(DateTime.utc(2026, 1, 1)))!.latestCompleted,

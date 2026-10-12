@@ -35,10 +35,37 @@ void main() {
     });
 
     test('is null when nothing has finished yet', () {
+      // Authoritative statuses with no classified result: the date rule
+      // decides, and before the season nothing has ended.
       expect(
-        resolveLatestCompletedEvent(seasonEvents(), DateTime.utc(2026, 1, 1)),
+        resolveLatestCompletedEvent(<GrandPrix>[
+          event(
+            round: 11,
+            startDate: '2026-07-03',
+            endDate: '2026-07-05',
+            status: EventStatus.completed,
+          ),
+          event(round: 12, startDate: '2026-07-10', endDate: '2026-07-12'),
+        ], DateTime.utc(2026, 1, 1)),
         isNull,
       );
+    });
+
+    test('a classified result counts under an authoritative status too', () {
+      // The classification arrived before the lifecycle status was refreshed:
+      // the event is not upcoming, so it must still be the latest result.
+      final List<GrandPrix> events = <GrandPrix>[
+        belgianGrandPrix(
+          round: 13,
+          status: EventStatus.scheduled,
+          hasResults: true,
+          startDate: '2026-07-24',
+          endDate: '2026-07-26',
+        ),
+      ];
+      final DateTime duringWeekend = DateTime.utc(2026, 7, 26, 18);
+      expect(resolveLatestCompletedEvent(events, duringWeekend)!.round, 13);
+      expect(resolveUpcomingEvents(events, duringWeekend), isEmpty);
     });
 
     test('an event ending today is not yet "completed"', () {

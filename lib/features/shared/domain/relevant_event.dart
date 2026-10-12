@@ -74,9 +74,12 @@ RelevantEvent? resolveRelevantEvent(
 /// end date descending when both events have one, with `round` as the stable
 /// tie-breaker; nothing is inferred from list position.
 ///
-/// What counts as finished depends on whether the status is authoritative:
-/// - an **authoritative** status keeps the date rule: the end date is strictly
-///   before today, and an event with no usable end date is not a candidate;
+/// What counts as finished:
+/// - a classified race result (`hasResults`, ADR 0022 A7), under any status —
+///   the same evidence that removes an event from the upcoming rules;
+/// - otherwise, for an **authoritative** status, the date rule: the end date
+///   is strictly before today, and an event with no usable end date is not a
+///   candidate;
 /// - an **`unknown`** status (ADR 0022 A6) is never finished because time
 ///   passed. Only a classified race result (`hasResults`, A7) makes it a
 ///   candidate, and its status stays `unknown`: the result is the fact, not a
@@ -229,7 +232,10 @@ bool _isBehind(GrandPrix event, DateTime now, String today) {
 }
 
 bool _isFinished(GrandPrix event, String today) {
-  if (event.status == EventStatus.unknown) return event.hasResults;
+  // A classified result is finished evidence under any status, so an event is
+  // never dropped from every bucket while its status catches up.
+  if (event.hasResults) return true;
+  if (event.status == EventStatus.unknown) return false;
   final String? end = calendarDateOf(event.endDate);
   return end != null && end.compareTo(today) < 0;
 }

@@ -846,13 +846,19 @@ clock.
      floor, a round whose race had started without a classification when the
      snapshot was generated would look ahead on the Calendar while Home
      featured the round after it.
-4. **Next** is the first event ahead (on the client an authoritative
-   `in_progress` event, or a date window containing today, still wins first,
-   and a cancelled event is skipped; the generator keeps its old behaviour for
-   an authoritative cancelled event). **Latest result** is the last settled event. Home features the next
-   event, else the latest settled event, else (for an authoritative calendar
-   only) the final event as before; an `unknown` calendar with neither features
-   nothing. `Season.currentRound` is the next event's round, or `null`.
+4. **Next** is the earliest event ahead: by start date (the race date standing
+   in for an event without dates) when both events have one, else by round, so
+   a rescheduled round is ordered by its explicit start on both sides. On the
+   client an authoritative `in_progress` event, or a date window containing
+   today, still wins first, and a cancelled event is skipped; the generator
+   keeps its old behaviour for an authoritative cancelled event. **Latest
+   result** is the settled event that ended last (by end date when both have
+   one, else by round). On the client a classified result counts under any
+   status, so an event is never in no bucket while its status catches up; an
+   authoritative event without one still needs a past end date. Home features
+   the next event, else the latest settled event, else (for an authoritative
+   calendar only) the final event as before; an `unknown` calendar with neither
+   features nothing. `Season.currentRound` is the next event's round, or `null`.
 5. **A race that has started without a classification** is neither next nor
    latest: it is not claimed as upcoming, and it is not claimed as finished.
    So from the race's start until its result is classified, Home features the
