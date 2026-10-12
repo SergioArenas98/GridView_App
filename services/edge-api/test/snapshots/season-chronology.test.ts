@@ -257,6 +257,42 @@ describe('resolveSeasonChronology', () => {
     expect(rounds(chronology.ahead)).toEqual([18, 19, 17]);
   });
 
+  it('partial dates are ordered by the same selection as the client', () => {
+    // Round 2 has no date, so it only compares by round; rounds 1 and 3
+    // compare by date. A sort can order this cycle differently from the
+    // client's scan; the generator must not.
+    const events = [
+      event({ round: 1, startDate: '2026-11-01', endDate: '2026-11-03' }),
+      event({ round: 2 }),
+      event({ round: 3, startDate: '2026-10-01', endDate: '2026-10-03' }),
+    ];
+
+    const chronology = resolveSeasonChronology(events, '2026-09-01T00:00:00Z');
+
+    expect(rounds(chronology.ahead)).toEqual([3, 1, 2]);
+    expect(chronology.featured?.round).toBe(3);
+  });
+
+  it('a classified result settles an event still marked in_progress', () => {
+    const events = [
+      event({
+        round: 17,
+        status: 'in_progress',
+        hasResults: true,
+        startDate: '2026-10-09',
+        endDate: '2026-10-11',
+      }),
+      event({ round: 18, status: 'scheduled' }),
+    ];
+
+    const chronology = resolveSeasonChronology(events, '2026-10-11T18:00:00Z');
+
+    expect(chronology.featured?.round).toBe(18);
+    expect(chronology.latestSettled?.round).toBe(17);
+    expect(chronology.latestSettled?.status).toBe('in_progress');
+    expect(rounds(chronology.ahead)).toEqual([18]);
+  });
+
   it('the latest settled event is the one that ended last', () => {
     const events = [
       event({

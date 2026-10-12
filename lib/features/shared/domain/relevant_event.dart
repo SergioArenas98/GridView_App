@@ -35,7 +35,8 @@ class RelevantEvent {
 ///   against a non-postponed event, because the round tie-breaker is applied to
 ///   the delivered chronology rather than to their status.
 /// - **Completed** events, and events with a classified race result
-///   ([isEventSettled]), are never upcoming.
+///   ([isEventSettled]), are never upcoming, and never in progress either:
+///   a result outranks an `in_progress` status or a date window.
 /// - Missing or malformed dates simply make an event ineligible for the
 ///   date-based rules; they never throw.
 /// - [seasonCurrentRound] is the season's published `currentRound`; see
@@ -51,6 +52,10 @@ RelevantEvent? resolveRelevantEvent(
   GrandPrix? live;
   for (final GrandPrix event in all) {
     if (event.status == EventStatus.cancelled) continue;
+    // A classified race result outranks an `in_progress` status or a date
+    // window: the generator already treats the event as settled. Its
+    // published status is left as it is.
+    if (isEventSettled(event)) continue;
     if (!_isInProgress(event, today)) continue;
     // The latest qualifying event wins, mirroring the local "current session"
     // rule: a later round can only be live if the earlier one has finished.
@@ -59,11 +64,10 @@ RelevantEvent? resolveRelevantEvent(
   if (live != null) return RelevantEvent(event: live, inProgress: true);
 
   final int horizon = _horizonRound(all, now, today, seasonCurrentRound);
-  GrandPrix? next;
-  for (final GrandPrix event in all) {
-    if (!_isUpcomingCandidate(event, now, today, horizon)) continue;
-    if (next == null || _isEarlier(event, next)) next = event;
-  }
+  final GrandPrix? next = _earliest(<GrandPrix>[
+    for (final GrandPrix event in all)
+      if (_isUpcomingCandidate(event, now, today, horizon)) event,
+  ]);
   return next == null ? null : RelevantEvent(event: next, inProgress: false);
 }
 
@@ -97,7 +101,7 @@ GrandPrix? resolveLatestCompletedEvent(
   return latest;
 }
 
-/// The season's upcoming events at [now], in the delivered calendar order.
+/// The season's upcoming events at [now], earliest first.
 ///
 /// Policy, applied in exactly one place so Home cannot disagree with the
 /// Calendar screen:
@@ -123,8 +127,12 @@ GrandPrix? resolveLatestCompletedEvent(
 ///   so the same Grand Prix is never shown twice;
 /// - [limit] bounds the result; a non-positive limit returns nothing.
 ///
-/// The delivered chronology is authoritative: the input order is preserved and
-/// nothing is re-sorted by name or identifier.
+/// Order is the one [resolveRelevantEvent] uses to pick the next event, so the
+/// first upcoming event is always the Calendar's next one: by start date when
+/// both events have one (a stored race date standing in for an event without
+/// published dates), else by round. Only facts the device holds are used — an
+/// event whose race time is not stored keeps its delivered round position —
+/// and nothing is re-sorted by name or identifier.
 List<GrandPrix> resolveUpcomingEvents(
   Iterable<GrandPrix> events,
   DateTime now, {
@@ -136,14 +144,31 @@ List<GrandPrix> resolveUpcomingEvents(
   final List<GrandPrix> all = events.toList(growable: false);
   final String today = utcDateString(now);
   final int horizon = _horizonRound(all, now, today, seasonCurrentRound);
+  final List<GrandPrix> remaining = <GrandPrix>[
+    for (final GrandPrix event in all)
+      if (event.round != excludeRound &&
+          _isUpcomingCandidate(event, now, today, horizon))
+        event,
+  ];
   final List<GrandPrix> upcoming = <GrandPrix>[];
-  for (final GrandPrix event in all) {
-    if (excludeRound != null && event.round == excludeRound) continue;
-    if (!_isUpcomingCandidate(event, now, today, horizon)) continue;
-    upcoming.add(event);
-    if (upcoming.length == limit) break;
+  while (upcoming.length < limit) {
+    final GrandPrix? next = _earliest(remaining);
+    if (next == null) break;
+    upcoming.add(next);
+    remaining.removeWhere((GrandPrix e) => identical(e, next));
   }
   return List<GrandPrix>.unmodifiable(upcoming);
+}
+
+/// The earliest of [candidates] under [_isEarlier], scanning in delivered
+/// order. The single selection behind both the next event and every position
+/// of the upcoming list, mirrored by the generator's `orderByStart`.
+GrandPrix? _earliest(List<GrandPrix> candidates) {
+  GrandPrix? earliest;
+  for (final GrandPrix event in candidates) {
+    if (earliest == null || _isEarlier(event, earliest)) earliest = event;
+  }
+  return earliest;
 }
 
 /// Whether [event] is settled: authoritatively `completed`, or carrying a

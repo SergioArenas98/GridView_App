@@ -23,13 +23,16 @@ export interface SeasonChronology {
   /**
    * Events still ahead or in progress, earliest first: by start date (the race
    * date standing in when an event has no dates) when both events have one,
-   * else by round. This is the client's `resolveRelevantEvent` ordering, so a
-   * rescheduled round is next on both sides.
+   * else by round. Built by the same repeated selection as the client's
+   * `resolveRelevantEvent`/`resolveUpcomingEvents` (`_earliest`), so a
+   * rescheduled round is ordered identically on both sides whenever both hold
+   * the same dates.
    */
   ahead: GrandPrix[];
   /**
    * The latest event with a result or a completed status: by end date when
-   * both events have one, else by round, as the client's latest-event rule.
+   * both events have one, else by round, selected in delivered order exactly
+   * as the client's latest-event rule does.
    */
   latestSettled: GrandPrix | null;
   /** The event Home features: next race, else latest settled, else none. */
@@ -43,16 +46,20 @@ export function resolveSeasonChronology(
   const at = Date.parse(referenceInstant);
   const today = new Date(at).toISOString().slice(0, 10);
   const horizon = horizonRound(events, at, today);
-  // Array.prototype.sort is stable, so events the ordering cannot compare
-  // keep their delivered (round) order.
-  const ahead = events
-    .filter(
+  const ahead = orderByStart(
+    events.filter(
       (event) =>
         !isSettled(event) &&
         (event.status !== 'unknown' || isAhead(event, at, today, horizon)),
-    )
-    .sort(byStart);
-  const latestSettled = events.filter(isSettled).sort(byEnd).at(-1) ?? null;
+    ),
+  );
+  let latestSettled: GrandPrix | null = null;
+  for (const event of events) {
+    if (!isSettled(event)) continue;
+    if (latestSettled === null || byEnd(event, latestSettled) > 0) {
+      latestSettled = event;
+    }
+  }
   return {
     ahead,
     latestSettled,
@@ -125,6 +132,26 @@ function isBehind(event: GrandPrix, at: number, today: string): boolean {
 function authoritativeLast(events: readonly GrandPrix[]): GrandPrix | null {
   const last = events.at(-1);
   return last !== undefined && last.status !== 'unknown' ? last : null;
+}
+
+/**
+ * Repeated selection of the earliest remaining event, scanning in delivered
+ * order and replacing the current pick only when a later candidate is strictly
+ * earlier. The pairwise rule is partial (an event without a start date only
+ * compares by round), so a sort could order such events differently from the
+ * client; this is the client's `_earliest` step for step.
+ */
+function orderByStart(candidates: readonly GrandPrix[]): GrandPrix[] {
+  const remaining = [...candidates];
+  const ordered: GrandPrix[] = [];
+  while (remaining.length > 0) {
+    let pick = 0;
+    for (let index = 1; index < remaining.length; index += 1) {
+      if (byStart(remaining[index]!, remaining[pick]!) < 0) pick = index;
+    }
+    ordered.push(...remaining.splice(pick, 1));
+  }
+  return ordered;
 }
 
 function byStart(a: GrandPrix, b: GrandPrix): number {

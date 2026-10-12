@@ -885,6 +885,35 @@ no race times, so on the device an undated `unknown` event is placed by rule
 upcoming after its real race date, because nothing on the device says when it
 was; the frozen-data banner already states that the data is not live.
 
+**One ordering, both layers.** The next event and every position of the
+upcoming list come from one repeated selection, on the generator
+(`orderByStart`) and on the client (`_earliest`): scan in delivered order and
+take a later candidate only when it is strictly earlier, by start date (the
+race date standing in) when both have one, else by round. The pairwise rule is
+partial, so a sort could order a mix of dated and undated events differently
+on each side; the selection cannot. The client's first upcoming event is
+therefore always the Calendar's next event.
+
+**A rescheduled round** (moved after later rounds) is ordered by its dates
+wherever the device holds them: a dated calendar lists it exactly as the
+generator does. In a Jolpica-shaped season the device holds only the Home
+focus's race time. A rescheduled round whose race time is not stored sits
+before the published `currentRound`, so rule 3's floor keeps it off the
+upcoming list rather than calling it next. The device cannot tell it from a
+race that started without a classification. It appears once its Grand Prix
+screen is opened (its race time is then stored), but its position among later
+undated rounds is then by round. Home and the Calendar still agree on the next
+event in every case. The shared cases in
+`test/fixtures/chronology/cross_layer_cases.json` pin both layers to these
+outcomes.
+
+**A classified result outranks an `in_progress` status.** An event with
+`hasResults` whose authoritative status still reads `in_progress` is settled
+on both layers: the generator does not count it as ahead, and the client does
+not highlight it as live (Calendar) or as a race weekend (Home phase), unless
+one of its stored sessions is itself live. Its published status is shown
+unchanged.
+
 **Verified 2026-10-12** by an offline replay of the private 2026-10-07 capture
 (no provider request): see Implementation Plan §14.0.49.
 

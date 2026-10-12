@@ -139,6 +139,31 @@ void main() {
       expect(event.status, EventStatus.unknown);
     });
 
+    test('a classified result outranks an in_progress status', () {
+      final GrandPrix event = belgianGrandPrix(
+        status: EventStatus.inProgress,
+        hasResults: true,
+      );
+      expect(phaseOf(event, now: duringWeekend), HomeTemporalPhase.postRace);
+      expect(event.status, EventStatus.inProgress);
+    });
+
+    test('a live session still leads even with a result', () {
+      final GrandPrix event = belgianGrandPrix(
+        status: EventStatus.inProgress,
+        hasResults: true,
+        sessions: <Session>[raceSessionBelgian(status: SessionStatus.live)],
+      );
+      expect(
+        phaseOf(
+          event,
+          now: duringWeekend,
+          sessionFocus: resolveHomeSessionFocus(event.sessions, duringWeekend),
+        ),
+        HomeTemporalPhase.raceWeekend,
+      );
+    });
+
     test(
       'elapsed time alone never makes an unknown-status focus post-race',
       () {

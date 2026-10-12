@@ -131,6 +131,37 @@ void main() {
       expect(relevant, isNull);
     });
 
+    test('a classified result outranks an in_progress status', () {
+      // The generator already treats round 12 as settled; the phone must not
+      // highlight it as live, and its status is left as published.
+      final GrandPrix settled = calendarEntry(
+        round: 12,
+        name: 'Round 12 Grand Prix',
+        startDate: '2026-07-18',
+        endDate: '2026-07-20',
+        status: EventStatus.inProgress,
+        hasResults: true,
+      ).grandPrix;
+      final RelevantEvent? relevant = resolveRelevantEvent(<GrandPrix>[
+        settled,
+        _event(round: 13, startDate: '2026-07-24', endDate: '2026-07-26'),
+      ], now);
+
+      expect(relevant!.event.round, 13);
+      expect(relevant.inProgress, isFalse);
+      expect(settled.status, EventStatus.inProgress);
+      expect(resolveLatestCompletedEvent(<GrandPrix>[settled], now)!.round, 12);
+    });
+
+    test('an in_progress event without a result is still live', () {
+      final RelevantEvent? relevant = resolveRelevantEvent(<GrandPrix>[
+        _event(round: 12, status: EventStatus.inProgress),
+        _event(round: 13, startDate: '2026-07-24', endDate: '2026-07-26'),
+      ], now);
+      expect(relevant!.event.round, 12);
+      expect(relevant.inProgress, isTrue);
+    });
+
     test('an empty calendar resolves to no relevant event', () {
       expect(resolveRelevantEvent(const <GrandPrix>[], now), isNull);
     });

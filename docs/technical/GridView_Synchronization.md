@@ -874,7 +874,10 @@ the three can never disagree. It is pure and takes an injected clock.
 3. Otherwise none.
 
 **Cancelled** events are never relevant. **Completed** events, and events with a
-classified race result (`hasResults`), are never upcoming. **Postponed** events
+classified race result (`hasResults`), are never upcoming, and never in progress
+either: a result outranks an `in_progress` status or a date window. The upcoming
+list uses the same pairwise rule as the next event (repeated selection), so its
+first entry is always the Calendar's next event. **Postponed** events
 stay eligible while they still carry a date on or after today — they remain on
 the calendar, only moved. For an authoritative status "ahead" means a start date
 on or after today, and missing or malformed dates make the event ineligible;
