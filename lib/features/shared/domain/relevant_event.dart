@@ -1,5 +1,6 @@
 import 'entities/enums.dart';
 import 'entities/grand_prix.dart';
+import 'entities/session.dart';
 
 /// The relevant event of a season and *why* it is relevant.
 class RelevantEvent {
@@ -22,8 +23,9 @@ class RelevantEvent {
 /// Priority:
 /// 1. an event currently in progress — the server said so, or today falls inside
 ///    its `[startDate, endDate]` window;
-/// 2. otherwise the earliest still-eligible event dated on or after today
-///    (`startDate`, with `round` as the stable tie-breaker);
+/// 2. otherwise the earliest still-eligible event ahead of [now], by start
+///    date — the race date standing in for an
+///    `unknown` event without dates — with `round` as the stable tie-breaker;
 /// 3. otherwise none.
 ///
 /// Policy notes:
@@ -32,14 +34,16 @@ class RelevantEvent {
 ///   after today: they remain on the calendar, only moved. They never win a tie
 ///   against a non-postponed event, because the round tie-breaker is applied to
 ///   the delivered chronology rather than to their status.
-/// - **Completed** events are never upcoming.
+/// - **Completed** events, and events with a classified race result
+///   ([isEventSettled]), are never upcoming.
 /// - Missing or malformed dates simply make an event ineligible for the
 ///   date-based rules; they never throw.
 RelevantEvent? resolveRelevantEvent(Iterable<GrandPrix> events, DateTime now) {
+  final List<GrandPrix> all = events.toList(growable: false);
   final String today = utcDateString(now);
 
   GrandPrix? live;
-  for (final GrandPrix event in events) {
+  for (final GrandPrix event in all) {
     if (event.status == EventStatus.cancelled) continue;
     if (!_isInProgress(event, today)) continue;
     // The latest qualifying event wins, mirroring the local "current session"
@@ -48,41 +52,38 @@ RelevantEvent? resolveRelevantEvent(Iterable<GrandPrix> events, DateTime now) {
   }
   if (live != null) return RelevantEvent(event: live, inProgress: true);
 
+  final int horizon = _horizonRound(all, now, today);
   GrandPrix? next;
-  for (final GrandPrix event in events) {
-    if (event.status == EventStatus.cancelled) continue;
-    if (event.status == EventStatus.completed) continue;
-    final String? start = calendarDateOf(event.startDate);
-    if (start == null || start.compareTo(today) < 0) continue;
-    if (next == null || _isEarlier(event, start, next)) next = event;
+  for (final GrandPrix event in all) {
+    if (!_isUpcomingCandidate(event, now, today, horizon)) continue;
+    if (next == null || _isEarlier(event, next)) next = event;
   }
   return next == null ? null : RelevantEvent(event: next, inProgress: false);
 }
 
-/// The season's most recently finished event at [now]: the latest event whose
-/// end date is strictly before today.
+/// The season's most recently finished event at [now].
 ///
 /// The single rule shared by the calendar query and the Home dashboard, so the
 /// two can never name a different "latest completed Grand Prix". Ordering is by
-/// end date descending with `round` as the stable tie-breaker; an event with no
-/// usable end date is simply not a candidate, and nothing is inferred from list
-/// position.
+/// end date descending when both events have one, with `round` as the stable
+/// tie-breaker; nothing is inferred from list position.
+///
+/// What counts as finished depends on whether the status is authoritative:
+/// - an **authoritative** status keeps the date rule: the end date is strictly
+///   before today, and an event with no usable end date is not a candidate;
+/// - an **`unknown`** status (ADR 0022 A6) is never finished because time
+///   passed. Only a classified race result (`hasResults`, A7) makes it a
+///   candidate, and its status stays `unknown`: the result is the fact, not a
+///   lifecycle.
 GrandPrix? resolveLatestCompletedEvent(
   Iterable<GrandPrix> events,
   DateTime now,
 ) {
   final String today = utcDateString(now);
   GrandPrix? latest;
-  String? latestEnd;
   for (final GrandPrix event in events) {
-    final String? end = calendarDateOf(event.endDate);
-    if (end == null || end.compareTo(today) >= 0) continue;
-    if (latest == null ||
-        end.compareTo(latestEnd!) > 0 ||
-        (end == latestEnd && event.round > latest.round)) {
-      latest = event;
-      latestEnd = end;
-    }
+    if (!_isFinished(event, today)) continue;
+    if (latest == null || _isLater(event, latest)) latest = event;
   }
   return latest;
 }
@@ -93,9 +94,18 @@ GrandPrix? resolveLatestCompletedEvent(
 /// Calendar screen:
 /// - **cancelled** events are excluded — a cancelled race is not something the
 ///   user is waiting for (its status stays visible on the Calendar itself);
-/// - **completed** events are excluded;
+/// - **completed** events, and events with a classified race result, are
+///   excluded;
 /// - **postponed** events are kept, so their real status stays visible;
-/// - an event with no usable start date is excluded rather than guessed at;
+/// - an event is kept only while it is ahead of [now]. An **authoritative**
+///   status keeps the date rule (a start date on or after today), so such an
+///   event with no usable start date is excluded rather than guessed at. An
+///   **`unknown`** status (ADR 0022 A6) is placed by explicit chronology only:
+///   the race session's UTC start instant, strictly after [now]; else the
+///   published weekend dates, the last day on or after today; else, with no
+///   chronology of its own, a round after every event already settled or
+///   behind [now] in the delivered chronology. No date or time is
+///   manufactured;
 /// - [excludeRound] drops the round already featured elsewhere on the screen,
 ///   so the same Grand Prix is never shown twice;
 /// - [limit] bounds the result; a non-positive limit returns nothing.
@@ -109,19 +119,106 @@ List<GrandPrix> resolveUpcomingEvents(
   int limit = 3,
 }) {
   if (limit <= 0) return const <GrandPrix>[];
+  final List<GrandPrix> all = events.toList(growable: false);
   final String today = utcDateString(now);
+  final int horizon = _horizonRound(all, now, today);
   final List<GrandPrix> upcoming = <GrandPrix>[];
-  for (final GrandPrix event in events) {
-    if (event.status == EventStatus.cancelled) continue;
-    if (event.status == EventStatus.completed) continue;
+  for (final GrandPrix event in all) {
     if (excludeRound != null && event.round == excludeRound) continue;
-    final String? start = calendarDateOf(event.startDate);
-    if (start == null || start.compareTo(today) < 0) continue;
+    if (!_isUpcomingCandidate(event, now, today, horizon)) continue;
     upcoming.add(event);
     if (upcoming.length == limit) break;
   }
   return List<GrandPrix>.unmodifiable(upcoming);
 }
+
+/// Whether [event] is settled: authoritatively `completed`, or carrying a
+/// classified race result (`hasResults`, ADR 0022 A7).
+///
+/// Settled says nothing new about the lifecycle: an `unknown` event with a
+/// result keeps its `unknown` status and is presented as such.
+bool isEventSettled(GrandPrix event) =>
+    event.status == EventStatus.completed || event.hasResults;
+
+/// The explicit UTC start of the event's race session, when one is stored.
+///
+/// Only a non-cancelled session of type `race` with a delivered start instant
+/// counts; no time is ever derived from a date, another session or the clock.
+DateTime? raceStartOf(GrandPrix event) {
+  for (final Session session in event.sessions) {
+    if (session.type != SessionType.race) continue;
+    if (session.status == SessionStatus.cancelled) continue;
+    final DateTime? start = session.startTime;
+    if (start != null) return start;
+  }
+  return null;
+}
+
+/// Whether a featured event can no longer be presented as the next one at
+/// [now]: its status is `unknown`, it has no classified result, and its own
+/// race start instant has passed.
+///
+/// This is how an aging snapshot stops calling a past race "next" without
+/// claiming it completed. An authoritative status is never second-guessed here.
+bool hasFeaturedEventLapsed(GrandPrix event, DateTime now) {
+  if (event.status != EventStatus.unknown || isEventSettled(event)) {
+    return false;
+  }
+  final DateTime? raceStart = raceStartOf(event);
+  return raceStart != null && !raceStart.isAfter(now);
+}
+
+bool _isUpcomingCandidate(
+  GrandPrix event,
+  DateTime now,
+  String today,
+  int horizon,
+) {
+  if (event.status == EventStatus.cancelled) return false;
+  if (isEventSettled(event)) return false;
+  return _isAhead(event, now, today, horizon);
+}
+
+bool _isAhead(GrandPrix event, DateTime now, String today, int horizon) {
+  if (event.status != EventStatus.unknown) {
+    final String? start = calendarDateOf(event.startDate);
+    return start != null && start.compareTo(today) >= 0;
+  }
+  final DateTime? raceStart = raceStartOf(event);
+  if (raceStart != null) return raceStart.isAfter(now);
+  final String? lastDay = _lastDayOf(event);
+  if (lastDay != null) return lastDay.compareTo(today) >= 0;
+  return event.round > horizon;
+}
+
+/// The highest round already behind [now]: settled, or with an explicit race
+/// start or a published last day before it. `0` when none is.
+int _horizonRound(Iterable<GrandPrix> events, DateTime now, String today) {
+  int horizon = 0;
+  for (final GrandPrix event in events) {
+    if (event.round <= horizon) continue;
+    if (isEventSettled(event) || _isBehind(event, now, today)) {
+      horizon = event.round;
+    }
+  }
+  return horizon;
+}
+
+bool _isBehind(GrandPrix event, DateTime now, String today) {
+  final DateTime? raceStart = raceStartOf(event);
+  if (raceStart != null) return !raceStart.isAfter(now);
+  final String? lastDay = _lastDayOf(event);
+  return lastDay != null && lastDay.compareTo(today) < 0;
+}
+
+bool _isFinished(GrandPrix event, String today) {
+  if (event.status == EventStatus.unknown) return event.hasResults;
+  final String? end = calendarDateOf(event.endDate);
+  return end != null && end.compareTo(today) < 0;
+}
+
+String? _lastDayOf(GrandPrix event) =>
+    calendarDateOf(event.endDate) ?? calendarDateOf(event.startDate);
 
 bool _isInProgress(GrandPrix event, String today) {
   if (event.status == EventStatus.inProgress) return true;
@@ -131,12 +228,35 @@ bool _isInProgress(GrandPrix event, String today) {
   return start.compareTo(today) <= 0 && today.compareTo(end) <= 0;
 }
 
-bool _isEarlier(GrandPrix candidate, String candidateStart, GrandPrix current) {
-  final String? currentStart = calendarDateOf(current.startDate);
-  if (currentStart == null) return true;
-  final int byDate = candidateStart.compareTo(currentStart);
-  if (byDate != 0) return byDate < 0;
+/// Earlier by start date when both events have one; otherwise by round.
+bool _isEarlier(GrandPrix candidate, GrandPrix current) {
+  final String? candidateStart = _chronologyDateOf(candidate);
+  final String? currentStart = _chronologyDateOf(current);
+  if (candidateStart != null && currentStart != null) {
+    final int byDate = candidateStart.compareTo(currentStart);
+    if (byDate != 0) return byDate < 0;
+  }
   return candidate.round < current.round;
+}
+
+/// Later by end date when both events have one; otherwise by round.
+bool _isLater(GrandPrix candidate, GrandPrix current) {
+  final String? candidateEnd = calendarDateOf(candidate.endDate);
+  final String? currentEnd = calendarDateOf(current.endDate);
+  if (candidateEnd != null && currentEnd != null) {
+    final int byDate = candidateEnd.compareTo(currentEnd);
+    if (byDate != 0) return byDate > 0;
+  }
+  return candidate.round > current.round;
+}
+
+/// The start date used for ordering: the published start date, else the UTC
+/// date of the explicit race start.
+String? _chronologyDateOf(GrandPrix event) {
+  final String? start = calendarDateOf(event.startDate);
+  if (start != null) return start;
+  final DateTime? raceStart = raceStartOf(event);
+  return raceStart == null ? null : utcDateString(raceStart);
 }
 
 bool _roundIsAfter(GrandPrix candidate, GrandPrix current) =>

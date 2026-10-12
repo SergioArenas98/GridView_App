@@ -556,8 +556,61 @@ void main() {
       await pumpHome(tester);
       expect(find.text('Latest result'), findsOneWidget);
       expect(find.text('Italian Grand Prix'), findsWidgets);
-      expect(find.text('Result unavailable'), findsOneWidget);
+      // The event has a classified result Home has not loaded: the card says
+      // one exists rather than calling it unavailable.
+      expect(
+        find.text(
+          'Classified result available — open the Grand Prix to view it',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Result unavailable'), findsNothing);
     });
+
+    testWidgets(
+      'an event with no classified result and nothing cached says so',
+      (WidgetTester tester) async {
+        await pumpHome(
+          tester,
+          dashboard: homeDashboardFixture(
+            latestCompleted: calendarEntry(
+              round: 12,
+              name: 'Italian Grand Prix',
+              startDate: '2026-07-10',
+              endDate: '2026-07-12',
+              status: EventStatus.completed,
+            ),
+          ),
+        );
+        expect(find.text('Result unavailable'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'an unknown-status event with a result is labelled by its result, not as completed',
+      (WidgetTester tester) async {
+        await pumpHome(
+          tester,
+          dashboard: homeDashboardFixture(
+            latestCompleted: calendarEntry(
+              round: 16,
+              name: 'Azerbaijan Grand Prix',
+              status: EventStatus.unknown,
+              hasResults: true,
+            ),
+          ),
+        );
+        expect(find.text('Latest result'), findsOneWidget);
+        expect(find.text('Status unknown'), findsWidgets);
+        expect(find.text('Completed'), findsNothing);
+        expect(
+          find.text(
+            'Classified result available — open the Grand Prix to view it',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
 
     testWidgets('safe race-result enrichment names the winner', (
       WidgetTester tester,

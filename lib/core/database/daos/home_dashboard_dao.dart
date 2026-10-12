@@ -179,29 +179,41 @@ class HomeDashboardDao extends DatabaseAccessor<GridViewDatabase>
   /// one. Only when the snapshot names **no** focus round at all does the shared
   /// relevant-event rule supply a safe calendar fallback, which is also what the
   /// Calendar screen highlights.
+  ///
+  /// One exception keeps an aging snapshot truthful: a focus whose status is
+  /// `unknown`, which has no classified result and whose own race start has
+  /// passed ([hasFeaturedEventLapsed]) can no longer be shown as next. It is
+  /// replaced by the same calendar fallback, else by the latest event with a
+  /// result — never by marking it completed.
   HomeFocus? _resolveFocus(
     List<CalendarEntry> entries,
     int? focusRound,
     DateTime now,
   ) {
+    final Iterable<GrandPrix> events = entries.map(
+      (CalendarEntry e) => e.grandPrix,
+    );
+    bool lapsed = false;
     if (focusRound != null) {
       final CalendarEntry? entry = _entryFor(entries, focusRound);
       if (entry != null) {
-        return HomeFocus(
-          grandPrix: entry.grandPrix,
-          circuit: entry.circuit,
-          source: HomeFocusSource.homeSnapshot,
-        );
+        lapsed = hasFeaturedEventLapsed(entry.grandPrix, now);
+        if (!lapsed) {
+          return HomeFocus(
+            grandPrix: entry.grandPrix,
+            circuit: entry.circuit,
+            source: HomeFocusSource.homeSnapshot,
+          );
+        }
       }
       // A focus round whose event row is gone is an inconsistent cache; fall
       // through to the calendar rather than render a fabricated event.
     }
-    final RelevantEvent? relevant = resolveRelevantEvent(
-      entries.map((CalendarEntry e) => e.grandPrix),
-      now,
-    );
-    if (relevant == null) return null;
-    final CalendarEntry entry = _entryFor(entries, relevant.event.round)!;
+    final GrandPrix? fallback =
+        resolveRelevantEvent(events, now)?.event ??
+        (lapsed ? resolveLatestCompletedEvent(events, now) : null);
+    if (fallback == null) return null;
+    final CalendarEntry entry = _entryFor(entries, fallback.round)!;
     return HomeFocus(
       grandPrix: entry.grandPrix,
       circuit: entry.circuit,

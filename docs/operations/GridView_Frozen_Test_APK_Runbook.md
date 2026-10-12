@@ -173,6 +173,12 @@ Read `$D/batch/manifest.json` and check:
 5. `attribution` names Jolpica F1, `CC BY-NC-SA 4.0` and the licence URL.
 6. Spot-check `artifact.json` for one finished round: winner, podium and
    championship leaders against an independent source.
+7. Check the season chronology in the generated `home` and `season`
+   documents (ADR 0022 A11): `featuredEvent` and `currentRound` are the first
+   round whose race starts after `capture.observedAt`, `latestCompletedEvent`
+   is the last classified round, and `upcomingEvents` starts at the featured
+   round. Every calendar `status` stays `unknown` and every `startDate` and
+   `endDate` stays `null`: nothing is completed or dated by the generator.
 
 Record the manifest SHA-256 you reviewed: it is the converter's
 `--manifest-sha256`, and any later change to the manifest is refused.
@@ -229,6 +235,32 @@ On the phone, check: the banner reads "Frozen test data captured <date> — not
 live, no updates" on Home, Calendar, Standings, Explore and a Grand Prix;
 Settings → Data source names the same date; Acknowledgements credits Jolpica
 F1 with the frozen-snapshot status and the CC BY-NC-SA 4.0 licence.
+
+**What Home and Calendar should show.** Jolpica publishes no lifecycle status
+and no weekend dates (ADR 0022 A6, A8), so every round reads "Status unknown"
+and no weekend date range is shown. That is correct, not a defect. Rounds are
+placed instead by each race's explicit UTC start and by whether a classified
+race result exists (A11):
+
+- Home's "Next Grand Prix" and the round the Calendar marks as next are the
+  same: the first round whose race starts after the capture. For the
+  2026-10-07 capture that is round 17 (Singapore). Home's latest result is
+  round 16, and the upcoming list starts at round 18. Round 1 is never
+  upcoming.
+- A round with a classified result shows "Latest Grand Prix" or "Latest
+  result", keeps "Status unknown", and says a classified result is available
+  until its result is opened. Nothing is ever labelled "Completed".
+- **The snapshot ages.** Once the phone's clock passes the featured round's
+  race start, Home and Calendar both move on to the next round. The passed
+  round is neither completed nor promoted to the latest result, because the
+  frozen data has no result for it. Later rounds whose Grand Prix screen was
+  never opened have no race time on the phone, so they stay in the upcoming
+  list in calendar order even after their real dates. The banner is the
+  reminder that nothing updates.
+- An APK built before this rule (for example the `79b13dd` build, SHA-256
+  `04613441…7804`) still shows round 1 as next. The fix needs a batch
+  regenerated from a `master` that contains it, then a new conversion and build
+  (steps 3-6), because both the generated Home document and the app changed.
 
 ## 8. Afterwards
 

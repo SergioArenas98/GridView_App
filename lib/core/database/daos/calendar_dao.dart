@@ -224,8 +224,10 @@ class CalendarDao extends DatabaseAccessor<GridViewDatabase>
     return relevant?.event;
   }
 
-  /// The most recently finished event of the season: the latest event whose
-  /// end date is strictly before [now].
+  /// The most recently finished event of the season at [now]: for an
+  /// authoritative status, the latest event whose end date is strictly before
+  /// [now]; for an `unknown` status, only an event with a classified race
+  /// result, never one whose dates merely passed.
   ///
   /// Like [nextEvent], the rule itself lives in the shared domain
   /// ([resolveLatestCompletedEvent]) so the Calendar and the Home dashboard can

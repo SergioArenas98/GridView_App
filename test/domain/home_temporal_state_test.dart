@@ -126,6 +126,35 @@ void main() {
         reason: 'the authoritative status is not overridden by the dates',
       );
     });
+
+    test('an unknown-status focus with a classified result is post-race', () {
+      final GrandPrix event = belgianGrandPrix(
+        status: EventStatus.unknown,
+        hasResults: true,
+        startDate: null,
+        endDate: null,
+      );
+      expect(phaseOf(event, now: afterWeekend), HomeTemporalPhase.postRace);
+      // The phase never rewrites the status it was derived from.
+      expect(event.status, EventStatus.unknown);
+    });
+
+    test(
+      'elapsed time alone never makes an unknown-status focus post-race',
+      () {
+        expect(
+          phaseOf(
+            belgianGrandPrix(
+              status: EventStatus.unknown,
+              startDate: null,
+              endDate: null,
+            ),
+            now: afterWeekend,
+          ),
+          HomeTemporalPhase.preEvent,
+        );
+      },
+    );
   });
 
   group('safe presentation of unusual data', () {

@@ -24,6 +24,10 @@ import {
 } from '../contract/participation';
 import { addSeconds } from '../runtime/clock';
 import type { ProviderSeasonSource } from '../providers/formula-one-provider';
+import {
+  resolveSeasonChronology,
+  type SeasonChronology,
+} from './season-chronology';
 import type {
   SnapshotDocumentName,
   StoredMeta,
@@ -44,7 +48,10 @@ export function generateSnapshotSet(
   version: string,
 ): GeneratedSnapshotSet {
   const staleAfter = addSeconds(generatedAt, 15 * 60);
-  const season = seasonData(source);
+  // One reading of the season's chronology at the generation instant, shared
+  // by the season document and Home so the two can never disagree.
+  const chronology = resolveSeasonChronology(source.calendar, generatedAt);
+  const season = seasonData(source, chronology);
   const calendar = source.calendar.map((event) =>
     summaryForEvent(event, source),
   );
@@ -94,7 +101,7 @@ export function generateSnapshotSet(
   const freshness = freshnessFor(source, generatedAt, staleAfter);
   const home = homeData(
     calendar,
-    source.calendar,
+    chronology,
     driverStandings,
     constructorStandings,
     freshness,
@@ -217,7 +224,10 @@ export function generateSnapshotSet(
   };
 }
 
-function seasonData(source: ProviderSeasonSource): Season {
+function seasonData(
+  source: ProviderSeasonSource,
+  chronology: SeasonChronology,
+): Season {
   const rounds = source.calendar.map((event) => event.round);
   const dates = source.calendar
     .flatMap((event) => [event.startDate, event.endDate])
@@ -229,40 +239,38 @@ function seasonData(source: ProviderSeasonSource): Season {
     startDate: dates[0] ?? null,
     endDate: dates.at(-1) ?? null,
     roundCount: rounds.length,
-    currentRound:
-      source.calendar.find((event) => event.status !== 'completed')?.round ??
-      null,
+    currentRound: chronology.ahead[0]?.round ?? null,
     isCurrent: true,
   };
 }
 
 function homeData(
   calendar: GrandPrixSummary[],
-  events: GrandPrix[],
+  chronology: SeasonChronology,
   driverStandings: ProviderSeasonSource['driverStandings'],
   constructorStandings: ProviderSeasonSource['constructorStandings'],
   freshness: DataFreshness,
 ): HomeData {
-  const featuredEvent =
-    calendar.find((event) => event.status !== 'completed') ??
-    calendar.at(-1) ??
-    null;
-  const fullFeatured = events.find(
-    (event) => event.round === featuredEvent?.round,
-  );
+  const summaryOf = (event: GrandPrix | null): GrandPrixSummary | null =>
+    event === null
+      ? null
+      : (calendar.find((summary) => summary.round === event.round) ?? null);
+  const featured = chronology.featured;
   return {
     freshness,
-    featuredEvent,
+    featuredEvent: summaryOf(featured),
     featuredSession:
-      fullFeatured?.sessions.find((session) => session.type === 'race') ?? null,
-    latestCompletedEvent:
-      [...calendar].reverse().find((event) => event.status === 'completed') ??
-      null,
+      featured?.sessions.find((session) => session.type === 'race') ?? null,
+    // The latest event with a classified race result or an authoritative
+    // completion. Its summary keeps its own status: a result never turns an
+    // `unknown` status into `completed`.
+    latestCompletedEvent: summaryOf(chronology.latestSettled),
     driverLeader: driverStandings[0] ?? null,
     constructorLeader: constructorStandings[0] ?? null,
-    upcomingEvents: calendar
-      .filter((event) => event.status !== 'completed')
-      .slice(0, 3),
+    upcomingEvents: chronology.ahead
+      .slice(0, 3)
+      .map((event) => summaryOf(event))
+      .filter((summary): summary is GrandPrixSummary => summary !== null),
   };
 }
 

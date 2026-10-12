@@ -262,6 +262,96 @@ void main() {
     });
   });
 
+  group('unknown-status chronology (ADR 0022 A6-A9)', () {
+    // A Jolpica-shaped season: every status `unknown`, no weekend dates,
+    // classified rounds 1-16. The Home snapshot features round 17 with its
+    // race session, which is the only race time the phone stores.
+    final DateTime capture = DateTime.utc(2026, 10, 7, 22, 41, 45, 852);
+
+    GrandPrix jolpicaEvent(int round, {List<Session> sessions = const []}) =>
+        calendarEntry(
+          round: round,
+          name: 'Round $round Grand Prix',
+          status: EventStatus.unknown,
+          hasResults: round <= 16,
+          sessions: sessions,
+        ).grandPrix;
+
+    GrandPrix featured17() => jolpicaEvent(
+      17,
+      sessions: <Session>[
+        Session(
+          id: '2026-round-17-grand-prix-race',
+          type: SessionType.race,
+          startTime: DateTime.utc(2026, 10, 11, 12),
+          status: SessionStatus.unknown,
+        ),
+      ],
+    );
+
+    Future<void> writeJolpicaSeason({int lastRound = 23}) async {
+      await db.calendarDao.replaceCalendar(2026, <GrandPrix>[
+        for (int round = 1; round <= lastRound; round++) jolpicaEvent(round),
+      ], const <Circuit>[]);
+      await writeHomeSnapshot(featured: featured17());
+    }
+
+    Future<int?> calendarNext(DateTime at) async =>
+        (await db.calendarDao.nextEvent(2026, at))?.round;
+
+    test(
+      'at the capture instant Home and Calendar agree on round 17',
+      () async {
+        await writeJolpicaSeason();
+
+        final HomeDashboardView view = (await dao.readDashboard(capture))!;
+        expect(view.focus!.round, 17);
+        expect(view.focus!.source, HomeFocusSource.homeSnapshot);
+        expect(view.latestCompleted!.round, 16);
+        expect(view.latestCompleted!.grandPrix.status, EventStatus.unknown);
+        expect(view.upcoming.map((CalendarEntry e) => e.round), <int>[
+          18,
+          19,
+          20,
+        ]);
+        expect(await calendarNext(capture), 17);
+      },
+    );
+
+    test('an aging snapshot moves Home on with the Calendar', () async {
+      await writeJolpicaSeason();
+      final DateTime aged = DateTime.utc(2026, 10, 12, 9);
+
+      final HomeDashboardView view = (await dao.readDashboard(aged))!;
+      expect(view.focus!.round, 18);
+      expect(view.focus!.source, HomeFocusSource.calendarFallback);
+      expect(view.latestCompleted!.round, 16);
+      expect(view.upcoming.map((CalendarEntry e) => e.round), <int>[
+        19,
+        20,
+        21,
+      ]);
+      expect(await calendarNext(aged), 18);
+      // Round 17 is neither completed nor promoted to the latest result.
+      final GrandPrix round17 = (await db.calendarDao.calendar(
+        2026,
+      )).firstWhere((GrandPrix e) => e.round == 17);
+      expect(round17.status, EventStatus.unknown);
+      expect(round17.hasResults, isFalse);
+    });
+
+    test('a lapsed final round falls back to the latest result', () async {
+      await writeJolpicaSeason(lastRound: 17);
+      final DateTime aged = DateTime.utc(2026, 10, 12, 9);
+
+      final HomeDashboardView view = (await dao.readDashboard(aged))!;
+      expect(view.focus!.round, 16);
+      expect(view.focus!.source, HomeFocusSource.calendarFallback);
+      expect(view.upcoming, isEmpty);
+      expect(await calendarNext(aged), isNull);
+    });
+  });
+
   group('championship leaders', () {
     Future<void> writeDriverStandings(List<DriverStanding> rows) =>
         db.standingsDao.replaceDriverStandings(2026, rows);

@@ -17,8 +17,9 @@ enum HomeTemporalPhase {
   /// current session leads; otherwise the next session of the weekend does.
   raceWeekend,
 
-  /// The featured event is completed — the authoritative Home focus is a
-  /// finished event. The latest result summary gains prominence.
+  /// The featured event is authoritatively completed, or has a classified race
+  /// result. The latest result summary gains prominence. A result never
+  /// promotes an `unknown` status: the event keeps it and is labelled so.
   postRace,
 }
 
@@ -33,7 +34,8 @@ enum HomeTemporalPhase {
 /// 1. a **live** session, or an event the server says is `in_progress`, is a
 ///    race weekend. Authoritative live status outranks the calendar dates,
 ///    because the server knows about delays the dates cannot express;
-/// 2. a **completed** event is post-race;
+/// 2. a **completed** event, or one with a classified race result
+///    (`hasResults`), is post-race;
 /// 3. otherwise, today falling inside `[startDate, endDate]` is a race weekend;
 /// 4. otherwise pre-event.
 ///
@@ -50,7 +52,9 @@ HomeTemporalPhase resolveHomeTemporalPhase({
   if (event.status == EventStatus.inProgress) {
     return HomeTemporalPhase.raceWeekend;
   }
-  if (event.status == EventStatus.completed) return HomeTemporalPhase.postRace;
+  if (event.status == EventStatus.completed || event.hasResults) {
+    return HomeTemporalPhase.postRace;
+  }
   if (_isWithinWeekend(event, now)) return HomeTemporalPhase.raceWeekend;
   return HomeTemporalPhase.preEvent;
 }

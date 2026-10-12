@@ -927,6 +927,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeResultUnavailable => 'Resultado no disponible';
 
   @override
+  String get homeResultNotLoaded =>
+      'Hay un resultado clasificado: abre el Gran Premio para verlo';
+
+  @override
   String get homeNoUpcomingEvents => 'No hay próximos eventos';
 
   @override

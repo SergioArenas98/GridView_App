@@ -16,8 +16,9 @@ import '../home_formatting.dart';
 /// date all come from the calendar and are useful on their own. Result
 /// enrichment is strictly additive —
 ///
-/// - a missing cached result shows localized "result unavailable" copy and never
-///   turns the card into an error;
+/// - a missing cached result never turns the card into an error. When the event
+///   has a classified race result (`hasResults`) the card says one exists and
+///   where to read it; otherwise it shows localized "result unavailable" copy;
 /// - a winner is shown only when exactly one authoritative, resolved entry held
 ///   a confirmed position 1 in the **race** classification; a sprint winner is
 ///   never substituted, and no winner is taken from a row's position in the list;
@@ -63,8 +64,10 @@ class HomeLatestResultCard extends StatelessWidget {
         statusLabel,
         if (winner != null)
           '${l10n.homeWinnerLabel}, ${winner.name}'
+        else if (resultStatus != null)
+          l10n.homeWinnerUnavailable
         else
-          l10n.homeWinnerUnavailable,
+          _uncachedResultMessage(l10n),
         if (resultStatus != null) resultStatusLabel(l10n, resultStatus),
       ].join(', '),
       child: ExcludeSemantics(
@@ -129,9 +132,9 @@ class HomeLatestResultCard extends StatelessWidget {
                 Text(
                   // A cached classification that named no resolvable winner is
                   // a different fact from having no classification at all.
-                  resultStatus == null
-                      ? l10n.homeResultUnavailable
-                      : l10n.homeWinnerUnavailable,
+                  resultStatus != null
+                      ? l10n.homeWinnerUnavailable
+                      : _uncachedResultMessage(l10n),
                   style: context.gvText.bodyM.copyWith(
                     color: context.gvColors.textSecondary,
                   ),
@@ -142,4 +145,12 @@ class HomeLatestResultCard extends StatelessWidget {
       ),
     );
   }
+
+  /// With no classification cached, what the card can truthfully say: a
+  /// published classified result exists (open the Grand Prix to read it), or
+  /// no result is available.
+  String _uncachedResultMessage(AppLocalizations l10n) =>
+      module.event.grandPrix.hasResults
+      ? l10n.homeResultNotLoaded
+      : l10n.homeResultUnavailable;
 }
