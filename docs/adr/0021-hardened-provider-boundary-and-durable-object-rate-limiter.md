@@ -2,6 +2,9 @@
 
 - Status: Accepted
 - Date: 2026-08-23
+- Amended: [A1](#amendment-a1---the-operator-run-jolpica-capture) (2026-10-13) -
+  the operator-run Jolpica capture for reviewed season batches (decision pack
+  2026-10-07, DP-9)
 
 > **What this ADR does not do.** It creates no provider adapter, sends no
 > provider request, unlocks no provider mode, provisions no Cloudflare
@@ -166,6 +169,101 @@ SQLite-backed storage is required for Durable Objects on the Workers Free
 plan. Bindings are not inherited by named environments, so development,
 staging and production each declare the binding; `exports` is declared once.
 
+## Amendment A1 - The operator-run Jolpica capture
+
+- Date: 2026-10-13
+- Status: Accepted when merged (decision pack "Real Jolpica data in a test APK
+  at zero cost", 2026-10-07, DP-9)
+- Amends: the Decision's first item, "every future real provider request must
+  pass" the hardened boundary, and therefore the Durable Object limiter. It
+  changes nothing in D1-D3 for any request a Worker sends.
+
+### Why
+
+The curated-batch path (decision pack Option 3; Implementation Plan §14.0.46,
+§14.0.51) brings Jolpica data to staging without the Worker sending a provider
+request. The operator captures the responses from their own machine, the
+offline generator turns them into a reviewed batch, and the guarded staging
+ingest publishes it. Those capture requests leave GridView through neither the
+hardened client nor the Durable Object, so the Decision's "every" no longer
+holds as written. This amendment records the second path, bounds it, and keeps
+the two from sharing Jolpica's budget.
+
+### A1.1 - Scope
+
+| Rule | |
+|---|---|
+| Source | Jolpica only. OpenF1 has no capture path. |
+| Client | The capture procedure in the Frozen Test APK runbook, step 2, run by hand by the operator. **No capture tool exists in this repository**; no Worker, cron trigger or CI runner captures. |
+| Authorization | Each capture is separately authorized (DP-3). The procedure is never run in a loop or on a schedule. |
+| Size | The six season-level requests plus one race classification per eligible round: at most 6 + the season's race count (29 for 2026's 23 races). The generator refuses any other URL set. |
+| Credential | None. The capture sends no `Authorization` header, cookie or token. |
+
+### A1.2 - Hardening, rule by rule
+
+Some D2 rules are enforced in code when the capture is **replayed**: the
+generator's replay transport answers the hardened `ProviderHttpClient` with the
+recorded status, content type and body, so the client's own response checks
+run on every recorded response. The rest are enforced by the procedure.
+
+| D2 rule | How the operator capture meets it | Enforced by |
+|---|---|---|
+| D2.1, D2.2 origin and path | Every URL is built from the fixed base `https://api.jolpi.ca/ergast/f1/{season}`. The generator refuses any recorded URL outside that prefix, and any repeated, unrequested or missing one. | Code (generation) and procedure |
+| D2.3 query encoding | Fixed literal queries (`?limit=100`) only. | Procedure |
+| D2.4 GET only | `curl` issues `GET`; the replay refuses any other method. | Code (generation) and procedure |
+| D2.6 no redirects | `curl` without `-L`, and `--max-redirs 0`; the procedure stops on any status but 200, a 3xx included. Any recording that is not HTTP 200 also refuses the capture at generation. | Code (generation) and procedure |
+| D2.7 10-second timeout | `--max-time 10` per request. | Procedure |
+| D2.8 no automatic retry | No `--retry`; the first non-200 answer or transport failure stops the capture, and the runbook forbids retrying in a loop. | Procedure |
+| D2.9 headers | `Accept: application/json` and the reviewed constant `User-Agent`; nothing else. | Procedure |
+| D2.10 content type | The recorded `Content-Type` passes through the client's check at replay. | Code (generation) |
+| D2.11 2 MiB body cap | `--max-filesize 2097152` while capturing; at replay each body is read within its declared `byteLength`, itself capped at the client's 2 MiB. | Code (generation) and procedure |
+| D2.12 JSON after the bounded read | The client parses each replayed body only after its bounded read. | Code (generation) |
+| D2.13 429 | A 429 stops the capture; the capture is not re-run before the authorization allows it. `Retry-After` is not parsed. | Procedure |
+| D2.14 no provider body in logs | Capture and batch stay outside the repository (generator path guard; `test/season-batch/tracked-data.test.ts`); responses and logs of the ingest carry no provider data. | Code and procedure |
+
+### A1.3 - Pacing (the in-process limiter)
+
+The Durable Object is not consulted. The capture paces itself: **one request in
+flight, sequential, at least one second between requests** (`sleep 1` after
+each). That is at most 1 request per second against Jolpica's 4, and at most 29
+requests per capture against its 500 per hour. DP-9 named this "an in-process
+limiter"; it is a property of the procedure, not of code, and the amendment does
+not claim otherwise.
+
+### A1.4 - Mutually exclusive with coordinated mode
+
+The Durable Object's budget assumes it is GridView's only Jolpica client. Its
+pacer admits a reservation every 260 ms; a concurrent capture would add up to
+one request per second, which can exceed 4 per second in one rolling second.
+The two paths are therefore never live together:
+
+- the guarded ingest refuses `PROVIDER_MODE = coordinated` before reading the
+  body (`provider-mode-coordinated`), so a capture has no use while staging is
+  coordinated;
+- no committed environment selects `coordinated` while the attribution record
+  calls Jolpica `active`, because that record's public wording says no Worker
+  retrieves Jolpica data (`test/contract/api-licensing-notice.test.ts`);
+- the operator never captures while any deployed environment runs
+  `coordinated`.
+
+Selecting `coordinated` anywhere therefore needs a new decision that retires or
+re-bounds this path, and new attribution wording.
+
+### A1.5 - What does not change
+
+D1, D2 and D3 hold unchanged for every request a Worker sends: the hardened
+client and the Durable Object remain the only way a Worker can reach a
+provider. Production never captures and never ingests. Nothing in this
+amendment sends a request, authorizes a capture or deploys anything.
+
+### Implementation status (2026-10-13)
+
+The Frozen Test APK runbook's capture step now passes `--proto =https`,
+`--max-redirs 0`, `--max-time 10`, `--max-filesize 2097152` and
+`Accept: application/json`, and stops on any status but 200. A1.2's code-enforced rules already exist in the
+generator (Implementation Plan §14.0.46). No capture was run for this
+amendment.
+
 ## References
 
 - [Workers Rate Limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
@@ -174,5 +272,6 @@ staging and production each declare the binding; `exports` is declared once.
 - [Workers `fetch`](https://developers.cloudflare.com/workers/runtime-apis/fetch/)
 - [Jolpica F1 documentation](https://github.com/jolpica/jolpica-f1/blob/main/docs/README.md)
 - [OpenF1](https://openf1.org/)
-- [ADR 0019](0019-formula-one-provider-legal-gate.md), [ADR 0020](0020-provider-source-observation-and-reconciliation.md)
+- [ADR 0019](0019-formula-one-provider-legal-gate.md), [ADR 0020](0020-provider-source-observation-and-reconciliation.md), [ADR 0023 A4](0023-multi-source-provider-coordination.md#amendment-a4---operator-run-season-batches)
+- [GridView_Frozen_Test_APK_Runbook.md](../operations/GridView_Frozen_Test_APK_Runbook.md) step 2
 - [GridView_Provider_Evaluation.md](../technical/GridView_Provider_Evaluation.md) §9.1, §9.2, §11.4, §14.4

@@ -1308,14 +1308,22 @@ each separate, explicitly authorized steps.
 | `environment-not-permitted` | `ENVIRONMENT` is not `staging`. Production never ingests. |
 | `provider-mode-coordinated` | `PROVIDER_MODE = coordinated`: never a second provider budget. |
 | `authority-not-sequenced` | The publication authority is not a reachable sequencer. |
-| `attribution-not-active` | `content/attribution/data-sources.json` does not credit Jolpica as `active`. **Today it is `dormant`**, so even an enabled Worker refuses every batch until a separate change activates the record (DP-7, O-9). |
+| `attribution-not-active` | The Worker's bundled `content/attribution/data-sources.json` does not credit Jolpica as `active` exactly once. The committed record is `data-sources-v2`, `active` (DP-7, O-9); a Worker built before it (every deployed Worker today bundles `data-sources-v1`, `dormant`) refuses every batch. |
 
-**Preconditions for a real submission, all separately authorized:** the
-attribution record activated (and the app's wording with it); a staging
+**Preconditions for a real submission, all separately authorized:** a Worker
+bundling the `active` attribution record (`data-sources-v2`, committed); a staging
 configuration change setting `SEASON_BATCH_INGEST = "2026"` (and, if decided,
 DP-6's `PROVIDER_MODE = "none"`); its preflighted deployment; one authorized
 capture and a batch generated from a clean tree at the deployed commit. After
 the first real release staging cannot return to mock data for 2026 (D14).
+
+**Between the deployment and the first batch.** A Worker that can accept a
+batch already bundles the `active` record, but staging still serves the mock
+dataset. Nothing public is wrong in that window: the app's credit and the API
+notice say only that Jolpica data reaches GridView through operator-run
+batches, never that it is shown, and `/v1/content/manifest` keeps reporting the
+mock dataset's `attributionVersion` `1` until a batch commits. Do not describe
+staging as serving Jolpica data before step 6 passes.
 
 **Procedure.** Every command runs from `services/edge-api`; every file stays
 outside the repository.
@@ -1348,7 +1356,10 @@ outside the repository.
    and versions privately. Record the invocation's CPU time from the dashboard
    or `wrangler tail`.
 6. Verify `/v1/status`, the calendar, results and standings against the
-   manifest summary, then read the cutover status again.
+   manifest summary, then read the cutover status again. Check that
+   `GET /v1/content/manifest` now reports `attributionVersion`
+   `data-sources-v2`: that is the public signal that the release carries
+   Jolpica F1-derived data (it read `1`, the mock dataset, before).
 
 **Responses** (`{ data, requestId }`, `Cache-Control: no-store`):
 

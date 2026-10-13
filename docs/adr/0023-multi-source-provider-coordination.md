@@ -19,6 +19,9 @@
 - Amended: [A3](#amendment-a3---jolpica-standings-normalization)
   (2026-09-27) - Jolpica driver and constructor standings normalization and
   curator decisions S-1 to S-13
+- Amended: [A4](#amendment-a4---operator-run-season-batches)
+  (2026-10-13) - operator-run, reviewed season batches as the only path for
+  Jolpica data to reach staging, and their attribution (DP-9, O-9)
 
 ## Context
 
@@ -2015,6 +2018,85 @@ Running it, and the decision it gates, are separately authorized operator
 steps (staging runbook, "A3.5 standings predecessor gate"). O-9, O-15, O-16
 and runtime activation remain open. No provider or Cloudflare resource was
 contacted.
+
+## Amendment A4 - Operator-run season batches
+
+- Date: 2026-10-13
+- Status: Accepted when merged (decision pack "Real Jolpica data in a test APK
+  at zero cost", 2026-10-07, DP-9; attribution O-9 / DP-7)
+- Amends: D11 and D14 as they apply to Jolpica data reaching a Worker. Nothing
+  in D1-D13, A1, A2 or A3 changes for the coordinated runtime.
+
+### Why
+
+D14 keeps the coordinated seam dormant in the Worker, and the ledger binding
+the coordinated runtime needs (Stage B) is parked under the owner's no-cost
+requirement (Implementation Plan §14.0.45). The curated
+batch path runs the **same** ports, coordinator and assembly, but offline, over
+recorded responses, and publishes the result through a separate guarded
+staging ingest (Implementation Plan §14.0.46, §14.0.51). D11 says publication
+stays exactly where it was and D14 that no port runs in the Worker; neither
+anticipated a second, operator-run route by which coordinated output reaches
+publication. This amendment records it and its limits.
+
+### A4.1 - Where coordination runs
+
+- The five Jolpica ports, the coordinator and `assembleSeasonSource` run only
+  in the offline generator (`npm run season-batch:generate`), at the commit the
+  manifest records, over a capture made under ADR 0021 A1. Its only transport
+  replays the recorded responses into the hardened client; `fetch` is disabled.
+- In the Worker the seam stays as D14 and its status notes describe it: no
+  committed environment selects `coordinated`, and no port runs there.
+- The ledger-backed checks a single capture cannot have (settling
+  confirmations, staged corrections, review locks) are replaced by the owner's
+  review of the manifest. The D14-D16 publication guard still applies.
+
+### A4.2 - How a batch reaches publication
+
+| Rule | |
+|---|---|
+| Route | `POST /internal/admin/season/ingest`, admin-authenticated, disabled unless `SEASON_BATCH_INGEST` names the season. No committed environment sets it. |
+| Environment | Staging only. Production refuses (`environment-not-permitted`) whatever is set. |
+| Exclusivity | Refused under `PROVIDER_MODE = coordinated` (`provider-mode-coordinated`), so a batch and the coordinated runtime never both publish a season or share Jolpica's budget (ADR 0021 A1.4). |
+| Authority | Guarded only: `publishGuarded` through the sequencer, with `expectedActiveVersion`, the D14/D15 guard and the `prepare` CAS. No legacy path, no break-glass. |
+| What is published | Never the submitted documents. The Worker re-verifies the batch and regenerates the documents from its `source` at its own clock. |
+| Cadence | Manual and separately authorized each time (DP-3), outside the nightly cron window (staging runbook §6). A standing cadence (DP-10) is not decided here. |
+
+### A4.3 - Attribution
+
+- A batch is credited under the attribution record its generator bundled; the
+  ingest refuses any other record version (`attribution-mismatch`), and refuses
+  every batch while the Worker's own record does not call the source `active`
+  (`attribution-not-active`).
+- O-9 is taken by `data-sources-v2`, which changes Jolpica's status alone from
+  `dormant` to `active`. `active` here means **published only through these
+  batches**: the app's credit and the API notice both say that no Worker
+  retrieves Jolpica data automatically.
+- **Truthful before the first batch.** A Worker that can accept a batch must
+  already bundle the `active` record, and it serves the mock dataset until the
+  first batch commits. No surface may therefore claim that Jolpica data is
+  being shown. The app's credit is conditional ("any data from it that
+  GridView shows ..."). The API notice points at the per-release signal: a
+  release carries Jolpica-derived data only when its content manifest's
+  `attributionVersion` is the record's version (`data-sources-v2` or later). The
+  mock dataset's `1` carries none.
+- The ADR 0019 obligations (non-commercial use, per-source attribution,
+  modification and unofficial notices, ShareAlike) become live at the first
+  committed batch, because staging is publicly reachable.
+
+### A4.4 - What does not change
+
+D1-D13, A1-A3, the D14 dormancy of the Worker's coordinated seam, G5 and G9
+(open), and the activation decisions O-3 to O-8 and O-10 to O-16 for the
+coordinated runtime. Selecting `coordinated` anywhere needs a new decision that
+retires or re-bounds this path, and new attribution wording.
+
+### Implementation status (2026-10-13)
+
+The generator (§14.0.46) and the ingest (§14.0.51) are merged. The ingest is
+disabled in every committed environment, and no deployed Worker contains it.
+`data-sources-v2` is committed, not deployed. No capture, deployment or
+submission was made for this amendment.
 
 ## Consequences
 

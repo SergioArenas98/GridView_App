@@ -26,8 +26,10 @@ reviewed Jolpica capture.
   private, and decide on any sharing separately.
 
 The normal app is unchanged: production never serves fixtures, a normal
-fixture build is labelled "Sample data", and the bundled attribution record
-still calls Jolpica `dormant`.
+fixture build is labelled "Sample data", and its Jolpica card shows the bundled
+record's status line. Since `data-sources-v2` that is the `active` line, which
+says data from Jolpica F1 reaches GridView only in operator-run batches and
+never claims that any is shown.
 
 ## Tools (all offline except step 2)
 
@@ -67,7 +69,8 @@ data" label and credits no source.
 **The origin cannot be checked from the data.** The generator accepts only
 `api.jolpi.ca` URLs, so a synthetic batch and a real one look alike. A real
 capture converted as `synthetic` by mistake would be labelled "Sample data",
-and its Jolpica card would keep the `dormant` status line, although the card
+and its Jolpica card would show the record's batch-only status line instead of
+the frozen one, although the card
 still names Jolpica F1 with its licence, modification and non-endorsement
 notices. Declare `provider-capture` in both step 5 and step 6, and check the
 banner after installing (step 7).
@@ -89,11 +92,21 @@ Only after an explicit authorization for this capture. Around 22 `GET`s at
 round 16; one per second keeps far inside Jolpica's published limits. No
 credential is used. Use Git Bash.
 
+This is the operator-run capture of
+[ADR 0021 A1](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md#amendment-a1---the-operator-run-jolpica-capture):
+one request at a time, at least one second apart, HTTPS only, no redirects
+followed, a 10-second limit and a 2 MiB cap per request, no retry. **Never
+capture while any deployed environment runs `PROVIDER_MODE = coordinated`**
+(A1.4).
+
 ```bash
 UA='GridView/1.0 (+https://github.com/SergioArenas98/GridView_App)'
 B='https://api.jolpi.ca/ergast/f1/2026'
 cd "$D/capture"
-get() { curl -sS --fail -A "$UA" -D "$1.headers" -o "$1" "$2" || return; sleep 1; }
+# Stops on anything but HTTP 200: --fail alone lets a 3xx through.
+get() { code=$(curl -sS --fail --proto =https --max-redirs 0 --max-time 10 --max-filesize 2097152 \
+  -H 'Accept: application/json' -A "$UA" -D "$1.headers" -o "$1" -w '%{http_code}' "$2") || return
+  [ "$code" = 200 ] || { echo "HTTP $code for $2" >&2; return 1; }; sleep 1; }
 get calendar.json              "$B/races/?limit=100" || exit 1
 get circuits.json              "$B/circuits/?limit=100" || exit 1
 get drivers.json               "$B/drivers/?limit=100" || exit 1
