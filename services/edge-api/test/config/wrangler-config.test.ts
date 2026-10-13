@@ -30,7 +30,7 @@ describe('wrangler staging configuration', () => {
     );
     expect(config).toMatch(/\[env\.staging\][\s\S]*workers_dev = true/);
     expect(config).toMatch(
-      /\[env\.staging\.vars\][\s\S]*ENVIRONMENT = "staging"[\s\S]*PROVIDER_MODE = "mock"[\s\S]*PUBLIC_BASE_URL = "https:\/\/gridview-api-staging\.sejuma18\.workers\.dev"/,
+      /\[env\.staging\.vars\][\s\S]*ENVIRONMENT = "staging"[\s\S]*PROVIDER_MODE = "none"[\s\S]*PUBLIC_BASE_URL = "https:\/\/gridview-api-staging\.sejuma18\.workers\.dev"/,
     );
     expect(config).toMatch(
       /\[\[env\.staging\.kv_namespaces\]\][\s\S]*binding = "GRIDVIEW_DATA"[\s\S]*id = "1d0fb55486a745a1ad12e03d9f04942b"/,
@@ -123,12 +123,16 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
   // deliberately.
 
   it('selects exactly activate:2026 and sequencer after the three base staging variables', () => {
+    // `PROVIDER_MODE` moved from `mock` to `none`, and `SEASON_BATCH_INGEST`
+    // was added, by the staging season-batch ingest configuration
+    // (`staging-season-batch-ingest.test.ts`); the cutover values did not move.
     expect(assignments(stagingVarsBlock(config))).toEqual([
       'ENVIRONMENT = "staging"',
-      'PROVIDER_MODE = "mock"',
+      'PROVIDER_MODE = "none"',
       'PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"',
       'SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"',
       'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
+      'SEASON_BATCH_INGEST = "2026"',
     ]);
     // The seed phase is no longer configured anywhere.
     expect(config).not.toMatch(/^[^#\n]*"seed:/m);
@@ -159,7 +163,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
   it('resolves the staging variables to the season 2026 activation phase under the sequencer authority', () => {
     const resolved = resolvedVars(stagingVarsBlock(config));
     expect(resolved.environment).toBe('staging');
-    expect(resolved.providerMode).toBe('mock');
+    expect(resolved.providerMode).toBe('none');
     expect(resolved.publicationAuthorityMode).toBe('sequencer');
     expect(resolved.publicationCutoverControl).toEqual({
       kind: 'activate',

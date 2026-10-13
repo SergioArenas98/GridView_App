@@ -64,8 +64,10 @@ describe('the reconciliation ledger is exported, resolvable and not bound', () =
 
   it('keeps every committed provider mode and the daily cron unchanged', () => {
     const declared = declarations();
+    // `none` since the staging season-batch ingest configuration (`mock`
+    // before); both stay off the coordinated path.
     expect(declared).toMatch(
-      /\[env\.staging\.vars\][\s\S]*PROVIDER_MODE = "mock"/,
+      /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\nPROVIDER_MODE = "none"\n/,
     );
     expect(declared).toMatch(
       /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,

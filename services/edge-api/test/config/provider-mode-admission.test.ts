@@ -96,8 +96,9 @@ describe('PROVIDER_MODE admission', () => {
     const modes = [...wrangler.matchAll(/^PROVIDER_MODE = "([^"]*)"/gm)].map(
       (match) => match[1],
     );
-    // Staging `mock` and production `none`; development leaves it unset.
-    expect(modes).toEqual(['mock', 'none']);
+    // Staging `none` (it was `mock` until the season-batch ingest
+    // configuration) and production `none`; development leaves it unset.
+    expect(modes).toEqual(['none', 'none']);
     expect(wrangler).not.toContain('coordinated');
   });
 });
