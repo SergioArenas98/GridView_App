@@ -2069,9 +2069,12 @@ publication. This amendment records it and its limits.
   every batch while the Worker's own record does not call the source `active`
   (`attribution-not-active`).
 - O-9 is taken by `data-sources-v2`, which changes Jolpica's status alone from
-  `dormant` to `active`. `active` here means **published only through these
-  batches**: the app's credit and the API notice both say that no Worker
-  retrieves Jolpica data automatically.
+  `dormant` to `active`; the owner accepted this meaning on 2026-10-13.
+  `active` here means Jolpica-derived data is **eligible for publication only
+  through these batches**. It does not mean that a Worker retrieves Jolpica
+  data: the app's credit and the API notice both say that none does
+  automatically. Nor does it mean that the release being served contains
+  Jolpica data; that release's `attributionVersion` says so (below).
 - **Truthful before the first batch.** A Worker that can accept a batch must
   already bundle the `active` record, and it serves the mock dataset until the
   first batch commits. No surface may therefore claim that Jolpica data is

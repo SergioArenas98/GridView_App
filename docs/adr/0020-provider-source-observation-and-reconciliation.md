@@ -1014,7 +1014,8 @@ unchanged. A reservation stays consumed when its publication is not applied.
 `datasetVersion` of a new curated record,
 `content/seasons/2026/season-metadata.development.json`. `seasonLabel` is the
 same record's label. `attributionVersion` is the `version` of
-`content/attribution/data-sources.json` (`data-sources-v1`), and `mediaVersion`
+`content/attribution/data-sources.json` (`data-sources-v1` when O-14 was
+decided; `data-sources-v2` since O-9, 2026-10-13), and `mediaVersion`
 is `null`. Nothing comes from a provider response. A season without exactly
 one valid record is `blocked` as `metadata-unavailable`. The record's two
 values are curator-owned. `validate:content` checks the record's schema and

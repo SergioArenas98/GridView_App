@@ -734,8 +734,9 @@ documentation-only pass.
 >
 > **Note 2026-10-13 (v1.19).** O-9 is taken for the operator-run batch path:
 > `data-sources-v2` records Jolpica F1 as `active`, its status alone changed.
-> `active` means data from it reaches GridView only through operator-run,
-> reviewed batches ([ADR 0023 A4](../adr/0023-multi-source-provider-coordination.md#amendment-a4---operator-run-season-batches)),
+> `active` (accepted by the owner on 2026-10-13) means data from it is eligible
+> to reach GridView only through operator-run, reviewed batches, not that the
+> served release contains any ([ADR 0023 A4](../adr/0023-multi-source-provider-coordination.md#amendment-a4---operator-run-season-batches)),
 > never through a Worker request. Because a Worker that can accept a batch
 > bundles the `active` record before the first batch exists, neither surface
 > claims that Jolpica data is shown. The record's `version` is now what a
