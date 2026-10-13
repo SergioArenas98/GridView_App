@@ -298,7 +298,13 @@ describe('the coordination seam is dormant', () => {
     // helper through the composition. It builds no coordinator - it uses the
     // one the composition built - and only the gated coordinated entry
     // reaches it.
+    //
+    // The guarded staging ingest re-validates a submitted source with the
+    // pure referential preflight, and names the calendar payload type. It
+    // builds no coordinator and calls no port.
     expect(consumers).toEqual([
+      'ingest/batch-verification.ts',
+      'ingest/source-validation.ts',
       'sync/coordinated/composition.ts',
       'sync/coordinated/observation/outcomes.ts',
       'sync/coordinated/observation/revisions.ts',
@@ -335,7 +341,11 @@ describe('the coordination seam is dormant', () => {
       })
       .sort();
 
+    // The one other caller is the guarded staging ingest of a reviewed season
+    // batch, which - like the bridge - has no legacy alternative and names no
+    // bridge.
     expect(callers).toEqual([
+      'ingest/service.ts',
       'publication/commands.ts',
       'publication/sequenced/service.ts',
       'sync/coordinated/composition.ts',

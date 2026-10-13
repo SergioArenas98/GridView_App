@@ -38,7 +38,7 @@ import {
   CanonicalJsonError,
   sha256Hex,
   utf8,
-} from './canonical-json';
+} from '../../src/ingest/canonical-json';
 import {
   artifactKind,
   manifestKind,

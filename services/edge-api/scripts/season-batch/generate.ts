@@ -35,6 +35,14 @@
  */
 
 import dataSources from '../../../../content/attribution/data-sources.json';
+import {
+  artifactFile,
+  artifactKind,
+  batchVersion,
+  manifestFile,
+  manifestKind,
+  seasonBatchSchemaVersion,
+} from '../../src/ingest/batch-format';
 import { CapturingLogger } from '../../src/logging/logger';
 import { assembleSeasonSource } from '../../src/providers/coordination/season-assembly';
 import { MultiSourceCoordinator } from '../../src/providers/coordination/coordinator';
@@ -74,18 +82,21 @@ import {
   CanonicalJsonError,
   sha256Hex,
   utf8,
-} from './canonical-json';
+} from '../../src/ingest/canonical-json';
 import {
   replayLimiter,
   replayTransport,
   type RecordedResponse,
 } from './replay';
 
-export const artifactKind = 'gridview-season-batch';
-export const manifestKind = 'gridview-season-batch-manifest';
-export const seasonBatchSchemaVersion = 1;
-export const artifactFile = 'artifact.json';
-export const manifestFile = 'manifest.json';
+export {
+  artifactFile,
+  artifactKind,
+  batchVersion,
+  manifestFile,
+  manifestKind,
+  seasonBatchSchemaVersion,
+};
 
 const gitCommitPattern = /^[0-9a-f]{40}$/;
 
@@ -202,11 +213,6 @@ function selectedCalendar(run: CoordinationRun): CoordinatedPayload | null {
       : null;
   }
   return null;
-}
-
-/** A release label that names its capture instant and its origin. */
-export function batchVersion(observedAt: string): string {
-  return `${observedAt.replace(/[-:.TZ]/g, '')}-batch`;
 }
 
 async function verifiedRecordings(

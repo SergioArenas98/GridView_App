@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CanonicalJsonError,
   canonicalJson,
-} from '../../scripts/season-batch/canonical-json';
+} from '../../src/ingest/canonical-json';
 import {
   decodeCaptureManifest,
   maximumCapturedResponses,

@@ -376,6 +376,25 @@ Worker has one. Wherever it is unbound, every coordinated run stops as
 zero provider requests. No committed environment declares the binding either;
 see "Reconciliation ledger binding: removed, Stage B parked" below.
 
+**`SEASON_BATCH_INGEST`, committed (2026-10-12), never deployed.** It names
+the one season the guarded staging ingest of a reviewed season batch accepts
+(`POST /internal/admin/season/ingest`, Implementation Plan §14.0.51). **No
+environment sets it**, committed or live, so the route refuses every request
+as `ingest-disabled` before reading its body:
+
+| Environment | Committed (`wrangler.toml`) | Live |
+|---|---|---|
+| development | unset | local only |
+| staging | unset | unset (Stage A `cc8d9a54-…` predates the route) |
+| production | unset | not provisioned |
+
+Setting it enables nothing by itself. The ingest also refuses outside
+`ENVIRONMENT = staging`, under `PROVIDER_MODE = coordinated`, without a
+reachable sequencer, and while `content/attribution/data-sources.json` calls
+Jolpica anything but `active` (today it is `dormant`). Enabling it on staging
+is a configuration change and a deployment, each separately authorized; see
+the staging runbook, section 6, "Guarded season-batch ingest".
+
 **Wired is not active (2026-10-06).** Since Implementation Plan §14.0.41,
 the scheduled handler and `POST /internal/admin/sync/full` in `coordinated`
 mode reach the full reconciliation orchestration through one entry point.

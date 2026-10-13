@@ -27,9 +27,11 @@ describe('the reconciliation policy is wired through one entry, unbound', () => 
     // directory (`../policy`) is found too. The observation orchestration is
     // imported only by the coordinated entry point (its own dormancy test),
     // and the outcome half only by it.
-    // The one exception is the operator verification (PR-E3), which reads
-    // the planner's eligibility rule (`cadence.ts`) and nothing else.
+    // The exceptions are the operator verification (PR-E3) and the guarded
+    // staging ingest, which each read the planner's eligibility rule
+    // (`cadence.ts`) and nothing else.
     expect(importersOf(policyDir)).toEqual([
+      'ingest/batch-verification.ts',
       'sync/coordinated/observation/observe.ts',
       'sync/coordinated/observation/outcomes.ts',
       'sync/coordinated/observation/revisions.ts',
@@ -42,10 +44,18 @@ describe('the reconciliation policy is wired through one entry, unbound', () => 
         file.startsWith(policyDir),
       ),
     ).toEqual(['sync/coordinated/policy/cadence.ts']);
+    expect(
+      importsOf('ingest/batch-verification.ts').filter((file) =>
+        file.startsWith(policyDir),
+      ),
+    ).toEqual(['sync/coordinated/policy/cadence.ts']);
     expect(importersOf('sync/coordinated/observation/')).toEqual([
+      'ingest/batch-verification.ts',
       'sync/coordinated/run.ts',
     ]);
     expect(importersOf('sync/coordinated/outcome/')).toEqual([
+      'ingest/batch-verification.ts',
+      'ingest/service.ts',
       'sync/coordinated/observation/observe.ts',
     ]);
     expect(resolveReconciliationLedger({})).toBeNull();

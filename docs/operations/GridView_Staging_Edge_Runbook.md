@@ -1289,6 +1289,111 @@ operation ID and `shared-admin-token`. It never carries the digest, a
 revision or a cleared operation ID. The history read writes one `info` line
 naming only the round and the outcome.
 
+### Guarded season-batch ingest (prepared 2026-10-12, not deployed, disabled)
+
+`POST /internal/admin/season/ingest` publishes **one operator-reviewed season
+batch** (the offline generator's `artifact.json` and `manifest.json`) to
+staging, through the guarded sequencer only. Implementation Plan §14.0.51.
+**It is disabled in every committed environment** and no deployed Worker
+contains it. Nothing in this section is authorized by the change that added
+it: enabling it, deploying it, capturing real data and submitting a batch are
+each separate, explicitly authorized steps.
+
+**What it refuses before reading the body** (`409`, `stage: admission`):
+
+| Reason | When |
+|---|---|
+| `ingest-disabled` | `SEASON_BATCH_INGEST` is unset or empty (every committed environment). |
+| `ingest-misconfigured` | The value is not a four-digit season with curated metadata. |
+| `environment-not-permitted` | `ENVIRONMENT` is not `staging`. Production never ingests. |
+| `provider-mode-coordinated` | `PROVIDER_MODE = coordinated`: never a second provider budget. |
+| `authority-not-sequenced` | The publication authority is not a reachable sequencer. |
+| `attribution-not-active` | `content/attribution/data-sources.json` does not credit Jolpica as `active`. **Today it is `dormant`**, so even an enabled Worker refuses every batch until a separate change activates the record (DP-7, O-9). |
+
+**Preconditions for a real submission, all separately authorized:** the
+attribution record activated (and the app's wording with it); a staging
+configuration change setting `SEASON_BATCH_INGEST = "2026"` (and, if decided,
+DP-6's `PROVIDER_MODE = "none"`); its preflighted deployment; one authorized
+capture and a batch generated from a clean tree at the deployed commit. After
+the first real release staging cannot return to mock data for 2026 (D14).
+
+**Procedure.** Every command runs from `services/edge-api`; every file stays
+outside the repository.
+
+1. Generate and review the batch (Frozen Test APK runbook, steps 2-4). Record
+   the manifest's SHA-256 you reviewed.
+2. Read the active release, authenticated:
+   `GET /internal/admin/publication/cutover/status?season=2026`. Record
+   `activeVersion`. Do not continue if an operation is prepared.
+3. Build the request body offline. It runs the Worker's own verification and
+   refuses with the Worker's closed reason; nothing is sent:
+
+   ```text
+   npm run season-batch:submission -- --batch <batch-dir> --manifest-sha256 <reviewed-hex> --expected-active-version <activeVersion> --out <file>
+   ```
+
+   It prints the summary, `submissionSha256` and `attributionStatus` (the
+   local record's; the Worker needs `active`). The real R16 batch makes a
+   body of about 0.4 MB; the Worker reads at most 2 MiB.
+4. Send it **once**, outside 03:00-03:45Z (the nightly cron holds the
+   sequencer then), with the token decrypted into process memory only (section
+   4), for example:
+
+   ```powershell
+   curl.exe -sS -X POST -H "Authorization: Bearer $token" -H "Content-Type: application/json" --data-binary "@<file>" https://gridview-api-staging.sejuma18.workers.dev/internal/admin/season/ingest
+   ```
+
+   Never put the token in a file, a command history or a log.
+5. Read the response (table below) and record the request ID, status, reason
+   and versions privately. Record the invocation's CPU time from the dashboard
+   or `wrangler tail`.
+6. Verify `/v1/status`, the calendar, results and standings against the
+   manifest summary, then read the cutover status again.
+
+**Responses** (`{ data, requestId }`, `Cache-Control: no-store`):
+
+| HTTP | `data` | Meaning | Next step |
+|---|---|---|---|
+| `200` | `publication.status: applied` | Committed. `publication.version` is the new active release. | Verify (step 6). |
+| `409` | `publication.reason: guard-predecessor-stale` | The active release is not `expectedActiveVersion`. Nothing was written. **This is also what a resend of a batch that already committed gets.** | Read the status. If the active release is yours, stop. Otherwise review again against the new release. |
+| `409` | `guard-round-coverage-regression`, `guard-participation-fact-removed`, `guard-constructor-replaced` | D14/D15 refused it. Nothing was written. | Investigate; no break-glass exists. |
+| `409` | `older-source-updated-at` | The batch's capture is older than the release. Benign no-op. | None. |
+| `409` | `sequencer-prepare-rejected` | Usually another operation in progress. Nothing committed. | Resend the same body later. |
+| `409` | `sequencer-authority-unavailable` (status `failed`) | Whether it committed is unknown. | Wait 15 min, read the status, resend the same body once: it publishes, or is refused as stale if it had committed. |
+| `409` | `admission` reasons | See the table above. | Fix the configuration (separately authorized). |
+| `422` | `stage: verification`, a closed reason | The batch failed verification. Nothing was written. | Fix the batch; step 3 shows the same reason offline. |
+| `400` / `413` | `submission-malformed`, `season-not-enabled` / `submission-oversized` | Not read past the bound or not a submission. | Rebuild with step 3. |
+
+**Retries are safe by construction.** The body names the release it was
+reviewed against, the guard and `prepare` bind to it, and any other active
+release refuses the request before anything is written. Resending the same
+body therefore either publishes exactly once or is refused as stale. Two
+different submissions against the same release commit at most one.
+
+**Workers Free CPU risk.** Free allows 10 ms CPU per request, with
+undocumented flexibility for invocations that *infrequently* run over.
+Measured locally (Node 24, warm, real R16 batch, 116 documents) the ingest's
+own work is about **150-233 ms**: verification 87-139 ms (mostly canonical
+serialization of the 650 KB artifact and its documents, plus about 120 SHA-256 digests),
+the existing publication plan 55-85 ms, generation and validation about 5 ms.
+That is 15-25 times the nominal limit, and the Worker figure is unmeasured:
+the first submission must record it. If the platform ends the invocation
+(`exceededCpu`, Error 1102) or the client disconnects:
+
+- before `prepare`, nothing changed;
+- after `prepare` and before `finalize`, the operation expires after 15
+  minutes and the next `prepare` collects its partial candidate; the prior
+  release keeps serving;
+- after `finalize`, the release committed but was not reported.
+
+In every case: wait at least 15 minutes, read the cutover status, and resend
+the same body once. It is refused as stale if it had committed. Never resend
+in a loop. If it is killed again, stop: the ingest cannot complete on Free and
+that is an owner decision. Each content-changing publication writes about 120
+KV keys of the 1,000 per day Free allows; allow at most three submissions per
+UTC day. The post-commit cache purge exceeds Free's Cache API budget and
+reports `purge-failed`, as the nightly cron does (section 15).
+
 ## 7. Initial synchronization and publication
 
 **Not for season 2026 between the deploy of a `SEASON_PUBLICATION_CUTOVER_CONTROL`

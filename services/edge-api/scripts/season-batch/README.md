@@ -135,9 +135,9 @@ Worker would publish for the same responses:
   `generatedAt` from its clock. It takes `sourceUpdatedAt` from
   `nextOrderingInput`, which never goes backwards past the season's last
   ordering input.
-- So every document's `meta` differs. A future ingest regenerates its
-  documents from `source` with its own instants. It does not publish these
-  documents.
+- So every document's `meta` differs. The guarded staging ingest
+  regenerates its documents from `source` at its own clock, with the capture
+  instant as the ordering input. It does not publish these documents.
 - The plan is the runtime's publication plan as a manual run: every eligible
   round, with no cadence slots. The runtime builds its plan from anchors kept
   in the ledger.
@@ -183,3 +183,25 @@ The full procedure, including the separately authorized capture, is
 
 `--origin` is declared by the operator and never inferred. A `synthetic`
 batch keeps the app's "Sample data" label and credits no source.
+
+## Submission builder (guarded staging ingest)
+
+`npm run season-batch:submission -- --batch <dir> --manifest-sha256 <hex> --expected-active-version <version> --out <file>`
+(`submission-cli.mjs`, `submission-guards.mjs`, `submission.ts`) turns one
+reviewed batch into the exact request body of
+`POST /internal/admin/season/ingest`, the guarded staging ingest in
+`src/ingest/`. It first runs **the Worker's own batch verification**
+(`verifySeasonBatch`) on the batch, so a batch the Worker would refuse is
+refused here with the same closed reason and no file is written. It never
+overwrites a file, refuses a batch or output inside this repository, sends
+nothing and reads no credential. It reports the local attribution record's
+status for the source: the Worker refuses every batch while its own record is
+not `active`.
+
+The ingest never publishes the submitted documents. It requires them to be
+exactly what its generator makes of the submitted `source` at the batch's own
+instant, then regenerates them from that `source` at its own clock. The
+procedure, the responses and the Workers Free CPU risk are in the staging
+runbook, section 6, "Guarded season-batch ingest". The batch file formats are
+defined once, in `src/ingest/batch-format.ts`, and canonical JSON in
+`src/ingest/canonical-json.ts`.

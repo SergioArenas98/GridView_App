@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { canonicalJson, utf8 } from '../../scripts/season-batch/canonical-json';
+import { canonicalJson, utf8 } from '../../src/ingest/canonical-json';
 import {
   convertSeasonBatch,
   descriptorFile,
