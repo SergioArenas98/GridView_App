@@ -18,6 +18,7 @@ import { generateSnapshotSet } from '../../src/snapshots/generator';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
 import {
   portWith,
+  recording,
   sequencedContext,
   sequencerTransports,
   type SequencedContext,
@@ -26,6 +27,7 @@ import {
 import {
   BATCH_OBSERVED_AT,
   copy,
+  impossibleInstantBatch,
   ingestContext,
   ingestFor,
   ingestOnce,
@@ -489,6 +491,27 @@ describe.each(sequencerTransports)(
         stage: 'verification',
         reason: 'document-digest-mismatch',
       });
+      expect(ctx.storage.writeLog).toHaveLength(writes);
+      expect(await activeVersion(ctx)).toBe(SEED_VERSION);
+    });
+
+    it('refuses an impossible capture instant before any sequencer call or write', async () => {
+      const impossible = await impossibleInstantBatch();
+      const ctx = await context();
+      const { port, calls } = recording(ctx.port);
+      const writes = ctx.storage.writeLog.length;
+
+      const outcome = await ingestOnce(
+        ingestFor(ctx, serviceWith(ctx, port)),
+        submissionFor(impossible, SEED_VERSION),
+      );
+
+      expect(outcome).toEqual({
+        outcome: 'refused',
+        stage: 'verification',
+        reason: 'manifest-malformed',
+      });
+      expect(calls).toEqual([]);
       expect(ctx.storage.writeLog).toHaveLength(writes);
       expect(await activeVersion(ctx)).toBe(SEED_VERSION);
     });

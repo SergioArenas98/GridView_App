@@ -9,6 +9,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { buildSubmission } from '../../scripts/season-batch/submission';
 import { decodeSubmission } from '../../src/ingest/submission';
 import {
+  impossibleInstantBatch,
   ingestContext,
   ingestFor,
   ingestOnce,
@@ -94,6 +95,23 @@ describe('season-batch submission builder', () => {
     expect(
       await buildSubmission(input({ now: new Date('2026-03-01T00:00:00Z') })),
     ).toEqual({ ok: false, failure: 'batch-from-future' });
+  });
+
+  it('refuses an impossible calendar instant before writing a body', async () => {
+    const impossible = await impossibleInstantBatch();
+    expect(
+      await buildSubmission(
+        input({
+          manifestBytes: new TextEncoder().encode(
+            canonicalJson(impossible.manifest),
+          ),
+          artifactBytes: new TextEncoder().encode(
+            canonicalJson(impossible.artifact),
+          ),
+          reviewedManifestSha256: impossible.manifestSha256,
+        }),
+      ),
+    ).toEqual({ ok: false, failure: 'manifest-malformed' });
   });
 
   it('refuses an unreadable batch or an invalid expected version', async () => {

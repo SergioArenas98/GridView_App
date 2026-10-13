@@ -116,6 +116,34 @@ export function recaptured(manifest: Json): void {
   );
 }
 
+/** The calendar date `Date.parse` silently rolls `2026-02-31` over to. */
+const ROLLED_OVER_AT = '2026-03-03T12:00:00.000Z';
+export const IMPOSSIBLE_OBSERVED_AT = '2026-02-31T12:00:00.000Z';
+
+/**
+ * A generator batch respelled at the impossible instant `2026-02-31`, and
+ * otherwise consistent: every instant, release label and document carries the
+ * impossible spelling, and every document, capture and artifact digest is
+ * recomputed over it. It is generated at the instant `Date.parse` reads the
+ * impossible one as, so a validator that trusts `Date.parse` finds nothing
+ * else wrong with it. Only the synthetic round 1 (2026-03-01) is eligible.
+ */
+export async function impossibleInstantBatch(): Promise<Batch> {
+  const real = await syntheticBatch([1], ROLLED_OVER_AT);
+  const compact = (instant: string) => instant.replace(/[-:.TZ]/g, '');
+  const respelled = (value: Json): Json =>
+    JSON.parse(
+      canonicalJson(value)
+        .replaceAll(ROLLED_OVER_AT, IMPOSSIBLE_OBSERVED_AT)
+        .replaceAll(compact(ROLLED_OVER_AT), compact(IMPOSSIBLE_OBSERVED_AT)),
+    ) as Json;
+  const manifest = respelled(real.manifest);
+  const artifact = respelled(real.artifact);
+  rehashDocuments(manifest, artifact);
+  recaptured(manifest);
+  return reanchored(manifest, artifact);
+}
+
 export interface SubmissionOverrides {
   readonly expectedActiveVersion?: string;
   readonly season?: number;

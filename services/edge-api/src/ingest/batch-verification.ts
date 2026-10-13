@@ -151,12 +151,19 @@ function isCount(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
+/**
+ * A canonical UTC instant, exactly as `toISOString` spells it, round-tripped.
+ *
+ * `Date.parse` rolls an impossible calendar date over (`2026-02-31` reads as
+ * March 3), so parsing alone would admit a batch the sequencer's canonical
+ * instant validation later rejects. Only a value that is its own
+ * `toISOString` is a real instant; a leap second is refused as well, since the
+ * generator can never spell one.
+ */
 function isInstant(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    instantPattern.test(value) &&
-    !Number.isNaN(Date.parse(value))
-  );
+  if (typeof value !== 'string' || !instantPattern.test(value)) return false;
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed) && new Date(parsed).toISOString() === value;
 }
 
 function isDigest(value: unknown): value is string {

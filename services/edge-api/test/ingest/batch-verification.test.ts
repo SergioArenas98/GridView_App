@@ -16,6 +16,8 @@ import { curatedSeasonMetadata } from '../../src/sync/coordinated/outcome/metada
 import {
   BATCH_OBSERVED_AT,
   copy,
+  IMPOSSIBLE_OBSERVED_AT,
+  impossibleInstantBatch,
   reanchored,
   recaptured,
   rehashDocuments,
@@ -220,6 +222,34 @@ describe('season batch verification', () => {
         }),
       ),
     ).toBe('artifact-inconsistent');
+  });
+
+  it('refuses an impossible calendar instant, even fully rehashed', async () => {
+    const impossible = await impossibleInstantBatch();
+    expect(impossible.manifest.capture).toMatchObject({
+      observedAt: IMPOSSIBLE_OBSERVED_AT,
+    });
+    expect(impossible.artifact.observedAt).toBe(IMPOSSIBLE_OBSERVED_AT);
+    expect(await failure(impossible)).toBe('manifest-malformed');
+  });
+
+  it('refuses a capture instant that does not round-trip', async () => {
+    for (const observedAt of [
+      '2026-04-31T12:00:00.000Z',
+      '2025-02-29T12:00:00.000Z',
+      '2026-03-16T24:00:00.000Z',
+      '2026-03-16T23:59:60.000Z',
+      '2026-13-01T12:00:00.000Z',
+    ]) {
+      expect(
+        await failure(
+          manifestEdit((manifest) => {
+            (manifest.capture as Json).observedAt = observedAt;
+            recaptured(manifest);
+          }),
+        ),
+      ).toBe('manifest-malformed');
+    }
   });
 
   it('refuses a batch captured after the Worker clock', async () => {
