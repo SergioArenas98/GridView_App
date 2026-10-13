@@ -107,7 +107,9 @@ MOCK_PROVIDER_INVALID_DATA=true
 Staging config lives in `wrangler.toml` (`[env.staging]`): Worker
 `gridview-api-staging` at `https://gridview-api-staging.sejuma18.workers.dev`
 (`workers_dev`), KV `GRIDVIEW_DATA` (`1d0fb55486a745a1ad12e03d9f04942b`),
-`PROVIDER_MODE = mock`, `PUBLIC_BASE_URL` set, and cron `17 3 * * *` (03:17 UTC).
+`PROVIDER_MODE = none` with `SEASON_BATCH_INGEST = "2026"` (committed
+2026-10-13, not deployed; live staging still runs `mock`), `PUBLIC_BASE_URL`
+set, and cron `17 3 * * *` (03:17 UTC).
 
 > **Pass the runbook's section 6 gate before every staging deploy.** The gate
 > compares `SEASON_PUBLICATION_CUTOVER_CONTROL`,

@@ -8,8 +8,12 @@ Scope and constraints:
 
 - Staging only. Production is **not** deployed in Phase 5B. Do not create the
   production Worker, a production KV namespace, a custom domain or a DNS route.
-- The staging Worker serves mock provider data (`PROVIDER_MODE = mock`); it is
-  not backed by a live Formula 1 provider.
+- The **deployed** staging Worker serves mock provider data
+  (`PROVIDER_MODE = mock`); it is not backed by a live Formula 1 provider.
+  **Committed** staging has carried `PROVIDER_MODE = none` and
+  `SEASON_BATCH_INGEST = "2026"` since 2026-10-13 and is not deployed: a Worker
+  built from it has no provider at all and receives season data only through
+  the guarded season-batch ingest (section 6, "Guarded season-batch ingest").
 - Secrets are referenced by **name only**. No token, account credential or
   provider key appears in this document or in the repository.
 
@@ -64,7 +68,8 @@ actually live.
 | KV binding | `GRIDVIEW_DATA` |
 | KV namespace id | `1d0fb55486a745a1ad12e03d9f04942b` |
 | `ENVIRONMENT` | `staging` |
-| `PROVIDER_MODE` | `mock` (permanent staging config) |
+| `PROVIDER_MODE` | **Committed: `none`** since 2026-10-13 (decision pack 2026-10-07 DP-6(b)); `mock` before. **Live: `mock`** (Stage A version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275`). They differ, so the next deploy is cutover-sensitive (section 6). |
+| `SEASON_BATCH_INGEST` | **Committed: `2026`** since 2026-10-13 (decision pack PR-4); unset before. **Live: unset**; Stage A predates the route. See "Guarded season-batch ingest" in section 6. |
 | `PUBLIC_BASE_URL` | `https://gridview-api-staging.sejuma18.workers.dev` |
 | Cron trigger | `17 3 * * *` |
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
@@ -144,12 +149,15 @@ In Windows PowerShell, run the dry-run as
 The dry-run bundles the Worker and resolves bindings without uploading anything
 (`--dry-run: exiting now`). Expected bindings: `GRIDVIEW_DATA` (KV), the
 `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` Durable Objects,
-plus the `ENVIRONMENT`, `PROVIDER_MODE`, `PUBLIC_BASE_URL`,
-`SEASON_PUBLICATION_CUTOVER_CONTROL` (`activate:2026`, live since 2026-09-16)
-and `SEASON_PUBLICATION_AUTHORITY` (`sequencer`, live since 2026-09-15) vars.
-Committed and live now match for both, and for `PROVIDER_MODE` (`mock`) and the
-cron, and the Durable Object bindings match the live Stage A version
-(`cc8d9a54-…`). *(A `RECONCILIATION_LEDGER` binding committed on 2026-10-07
+plus the `ENVIRONMENT`, `PROVIDER_MODE` (`none`), `PUBLIC_BASE_URL`,
+`SEASON_PUBLICATION_CUTOVER_CONTROL` (`activate:2026`, live since 2026-09-16),
+`SEASON_PUBLICATION_AUTHORITY` (`sequencer`, live since 2026-09-15) and
+`SEASON_BATCH_INGEST` (`2026`, never live) vars.
+Committed and live match for the two cutover vars and the cron, and the
+Durable Object bindings match the live Stage A version (`cc8d9a54-…`).
+**`PROVIDER_MODE` does not match** since 2026-10-13 (committed `none`, live
+`mock`), and the dry-run adds `SEASON_BATCH_INGEST`; see "Guarded season-batch
+ingest" in section 6 for that deployment's checks. *(A `RECONCILIATION_LEDGER` binding committed on 2026-10-07
 was removed the same day before any deployment; see "Reconciliation ledger
 binding" in section 6.)* That is necessary, not sufficient: a
 deploy of `master` is ordinary under the section 6 gate only if no later
@@ -746,9 +754,10 @@ Merging the pull request does not authorize the deployment.
 ### Coordinated runtime composition (prepared 2026-09-27, deployed in Stage A 2026-10-07)
 
 The dormant coordinated runtime composition is in `master` (Implementation
-Plan §14.0.29). It changes no committed var, cron or binding: staging stays
-`PROVIDER_MODE = "mock"`, the cron stays `17 3 * * *`, and no ledger binding
-exists. *(A staging ledger binding committed on 2026-10-07 was removed the
+Plan §14.0.29). It changes no committed var, cron or binding: staging stayed
+`PROVIDER_MODE = "mock"` (committed `none` since 2026-10-13, by the
+season-batch ingest configuration), the cron stays `17 3 * * *`, and no ledger
+binding exists. *(A staging ledger binding committed on 2026-10-07 was removed the
 same day before any deployment; see "Reconciliation ledger binding" below.)*
 **Treat a deploy that carries it as cutover-sensitive anyway**, under
 the same authorization the publication guard needs:
@@ -1289,21 +1298,24 @@ operation ID and `shared-admin-token`. It never carries the digest, a
 revision or a cleared operation ID. The history read writes one `info` line
 naming only the round and the outcome.
 
-### Guarded season-batch ingest (prepared 2026-10-12, not deployed, disabled)
+### Guarded season-batch ingest (prepared 2026-10-12, staging configuration committed 2026-10-13, not deployed)
 
 `POST /internal/admin/season/ingest` publishes **one operator-reviewed season
 batch** (the offline generator's `artifact.json` and `manifest.json`) to
 staging, through the guarded sequencer only. Implementation Plan §14.0.51.
-**It is disabled in every committed environment** and no deployed Worker
-contains it. Nothing in this section is authorized by the change that added
-it: enabling it, deploying it, capturing real data and submitting a batch are
-each separate, explicitly authorized steps.
+**Committed staging enables it** since 2026-10-13 (`SEASON_BATCH_INGEST =
+"2026"`, with `PROVIDER_MODE = "none"`; decision pack 2026-10-07 PR-4 and
+DP-6(b)). Development and production leave it unset. **No deployed Worker
+contains it**: live staging is still Stage A (`cc8d9a54-…`), which predates the
+route. Nothing in this section is authorized by the changes that added the
+route or committed its configuration: deploying it, capturing real data and
+submitting a batch are each separate, explicitly authorized steps.
 
 **What it refuses before reading the body** (`409`, `stage: admission`):
 
 | Reason | When |
 |---|---|
-| `ingest-disabled` | `SEASON_BATCH_INGEST` is unset or empty (every committed environment). |
+| `ingest-disabled` | `SEASON_BATCH_INGEST` is unset or empty (committed development and production; every deployed Worker). |
 | `ingest-misconfigured` | The value is not a four-digit season with curated metadata. |
 | `environment-not-permitted` | `ENVIRONMENT` is not `staging`. Production never ingests. |
 | `provider-mode-coordinated` | `PROVIDER_MODE = coordinated`: never a second provider budget. |
@@ -1311,11 +1323,128 @@ each separate, explicitly authorized steps.
 | `attribution-not-active` | The Worker's bundled `content/attribution/data-sources.json` does not credit Jolpica as `active` exactly once. The committed record is `data-sources-v2`, `active` (DP-7, O-9); a Worker built before it (every deployed Worker today bundles `data-sources-v1`, `dormant`) refuses every batch. |
 
 **Preconditions for a real submission, all separately authorized:** a Worker
-bundling the `active` attribution record (`data-sources-v2`, committed); a staging
-configuration change setting `SEASON_BATCH_INGEST = "2026"` (and, if decided,
-DP-6's `PROVIDER_MODE = "none"`); its preflighted deployment; one authorized
-capture and a batch generated from a clean tree at the deployed commit. After
-the first real release staging cannot return to mock data for 2026 (D14).
+bundling the `active` attribution record (`data-sources-v2`, committed); the
+staging configuration setting `SEASON_BATCH_INGEST = "2026"` and
+`PROVIDER_MODE = "none"` (committed 2026-10-13); its preflighted deployment
+(deploy checks below); one authorized capture and a batch generated from a
+clean tree at the deployed commit. After the first real release staging
+cannot return to mock data for 2026 (D14; "No way back to the mock release"
+below).
+
+**The committed configuration, as Wrangler resolves it and the Worker runs
+it.** `test/config/staging-season-batch-ingest.test.ts` reads
+`wrangler.toml` through `unstable_readConfig` and drives the real Worker entry
+points with the resolved variables over an in-process sequencer:
+
+- **Staging** resolves to exactly `ENVIRONMENT = staging`,
+  `PROVIDER_MODE = none`, the unchanged `PUBLIC_BASE_URL`, `activate:2026`,
+  `sequencer` and `SEASON_BATCH_INGEST = 2026`. The cron (`17 3 * * *`), the KV
+  binding, the two Durable Object bindings and their `exports` are unchanged,
+  with no migration and no `RECONCILIATION_LEDGER`.
+- **Development and production** variables are unchanged (`ENVIRONMENT`
+  only; `ENVIRONMENT` and `PROVIDER_MODE = none`).
+- **No mock publication.** Under the staging variables the scheduled handler,
+  `sync/full`, `sync/resource` and `rebuild/home` construct no mock provider,
+  call no publication command (legacy, sequenced or guarded), write only the
+  season's sync-state key, leave the active release unchanged and record
+  `sync.failed` `provider-unavailable` with zero provider calls. The same
+  scheduled run with the live value `mock` does build and publish a mock
+  candidate, so the test can see one.
+- **Production cannot ingest.** An authenticated, valid submission is refused
+  as `ingest-disabled` before its body is read. With `SEASON_BATCH_INGEST` and
+  a reachable sequencer added by hand it is still refused, as
+  `environment-not-permitted`, before its body is read.
+- **Staging stays authenticated and guarded.** A missing or wrong token, or a
+  Worker without `ADMIN_TOKEN`, gets `401` before the body is read. A reviewed
+  batch publishes through `publishGuarded` only, bound to its
+  `expectedActiveVersion`. Its resend is refused as `guard-predecessor-stale`
+  with no write. Without a reachable sequencer it is refused as
+  `authority-not-sequenced`, never through the legacy publisher. A rollback to
+  the release the batch replaced is refused as `guard-round-coverage-regression`.
+
+**Deploy checks for this configuration.** The deployment is
+**cutover-sensitive** under the section 6 gate: the dry-run and live
+`PROVIDER_MODE` differ (`none` against `mock`). It needs explicit, separate
+authorization naming `PROVIDER_MODE = none`, `SEASON_BATCH_INGEST = 2026`,
+the unchanged `activate:2026` and `sequencer`, staging, and the reviewed
+commit. Merging the configuration PR authorizes none of it. Every step below
+is read-only until step 6.
+
+1. **Clean source.** Build from a `git archive` copy of the reviewed merge
+   commit, as Stage A was, never from a working tree. Run `npm ci`,
+   `npm run validate` and `npm test` there.
+2. **Dry-run.** `npm exec -- wrangler deploy --dry-run --env staging`, with
+   `WRANGLER_SEND_METRICS=false`. Confirm exactly these vars: `ENVIRONMENT`
+   `staging`, `PROVIDER_MODE` `none`, `PUBLIC_BASE_URL`,
+   `SEASON_PUBLICATION_CUTOVER_CONTROL` `activate:2026`,
+   `SEASON_PUBLICATION_AUTHORITY` `sequencer`, `SEASON_BATCH_INGEST` `2026`.
+   Confirm exactly these bindings: `GRIDVIEW_DATA`, `PROVIDER_RATE_LIMITER`,
+   `SEASON_PUBLICATION_SEQUENCER`. Confirm no `RECONCILIATION_LEDGER` and no
+   exports or migration change. Record the bundle's SHA-256 and size.
+3. **Compare with live.** `npm exec -- wrangler deployments status --env
+   staging` must show `cc8d9a54-…` at 100%. Then `npm exec -- wrangler versions
+   view cc8d9a54-e2ed-4475-8696-d2e5ec66b275 --env staging`. The five-thing
+   gate must differ in `PROVIDER_MODE` only. The cutover control, the
+   authority, the cron and the Durable Object bindings must be identical; the
+   added `SEASON_BATCH_INGEST` is the only other variable change.
+4. **Rollback target.** `npm exec -- wrangler versions list --env staging`
+   must list `cc8d9a54-…`. Staging keeps at most 10 versions, so the upload
+   drops the oldest; `cc8d9a54-…` is the newest and stays. The deployment
+   changes no Durable Object class and no `exports`, so
+   `wrangler rollback cc8d9a54-e2ed-4475-8696-d2e5ec66b275 --env staging`
+   remains available. Until a batch commits, that rollback restores the
+   previous state completely.
+5. **Secret and window.** `npm exec -- wrangler secret list --env staging`
+   lists `ADMIN_TOKEN` (names only). Deploy outside 03:00-03:45Z, so the
+   upload cannot overlap the nightly run.
+6. **Deploy** (authorized only): `npm exec -- wrangler deploy --env staging`.
+   Record the version id, then confirm `deployments status` shows it at 100%
+   and `cc8d9a54-…` is still listed.
+7. **Immediately after (read-only, public).** `/v1/status` answers `200`.
+   The content ETags are unchanged; `/v1/status`'s may change once.
+   `GET /v1/content/manifest` still reports `attributionVersion` `1`, the mock
+   dataset. Optionally, one authenticated
+   `POST /internal/admin/season/ingest` with the body `{}` must answer `400`
+   `submission-malformed`. That proves admission passed (no
+   `ingest-disabled`, `attribution-not-active` or `authority-not-sequenced`)
+   and it writes nothing. Any `409` `admission` reason stops the procedure.
+8. **The next nightly run (03:17Z), read-only.** Expect one `sync.failed`
+   line with `failureCategory` `provider-unavailable` and
+   `providerCallCount` `0`. Expect no `sync.started`, no `publication.*` line
+   and no `exceededCpu`. Expect unchanged content ETags and active version. A
+   `publication.*` line or a mock refresh means the deployed Worker is not this
+   configuration: roll back (step 4) and investigate.
+
+**What `none` changes in staging.** Nothing rebuilds the season any more, so
+staging serves the last mock release (`pm1-…`) unchanged until a batch commits.
+Its Home chronology (next and latest event) stays as of that last mock run.
+`/v1/status` `lastSuccessfulSyncAt` stops advancing, and `snapshotAgeSeconds`
+keeps growing. After a batch, Home and freshness stay as of that batch's
+publication, because the ingest writes no sync state and nothing regenerates
+the release between batches. The nightly cron costs about two KV writes (the
+sync-state key) and no generation, against about 73-131 ms CPU per mock run
+before. `/internal/admin/rollback` and `cache/purge` are unchanged.
+
+**No way back to the mock release.** The first real publication is
+one-way for season 2026 in staging (DP-5):
+
+- `POST /internal/admin/rollback` to the mock release is refused by D14
+  (`guard-round-coverage-regression`): the mock release's classified rounds
+  end at round 12, and a real batch at round 16 or later classifies rounds the
+  mock release lacks. There is no rollback exemption and no
+  break-glass (C1/C4 are not built).
+- No mock candidate can follow it. Under `none` none is built. A Worker
+  rolled back to `cc8d9a54-…` (`mock`) builds one every night, and the guard
+  refuses it every night (`sync.failed`, `publication.guard.rejected`).
+- `wrangler rollback` to `cc8d9a54-…` stays possible after a batch, but it is
+  a code and configuration rollback only. The real release keeps serving, the
+  ingest route disappears and the nightly guard refusals above begin.
+- A wrong real release is corrected only by a later reviewed batch that is a
+  superset of it, or by a guarded rollback to an earlier *real* release.
+  Never by returning to mock.
+
+Treat the first accepted submission as irreversible, and do not send it
+until DP-5 is accepted in writing.
 
 **Between the deployment and the first batch.** A Worker that can accept a
 batch already bundles the `active` record, but staging still serves the mock
@@ -1405,6 +1534,17 @@ KV keys of the 1,000 per day Free allows; allow at most three submissions per
 UTC day. The post-commit cache purge exceeds Free's Cache API budget and
 reports `purge-failed`, as the nightly cron does (section 15).
 
+**What the committed configuration changes for CPU (2026-10-13).** Nothing
+for public reads. The nightly cron stops generating and publishing, so the
+73-131 ms mock run becomes a few KV operations. That removes the only
+invocation that has shown, in production use, that Free tolerates an overrun
+(131 ms, 2026-10-08 soak, not terminated), and it leaves the ingest as the
+only heavy invocation. That tolerance is evidence, not a guarantee, and it
+says nothing about a 150-233 ms run. If the ingest proves impossible on Free
+before any batch has committed, `wrangler rollback` to `cc8d9a54-…` (deploy
+check 4) restores the nightly mock publication. Without that rollback,
+staging keeps serving the last mock release unchanged.
+
 ## 7. Initial synchronization and publication
 
 **Not for season 2026 between the deploy of a `SEASON_PUBLICATION_CUTOVER_CONTROL`
@@ -1435,8 +1575,11 @@ curl -i -X POST https://gridview-api-staging.sejuma18.workers.dev/internal/admin
 To make the first release deterministic, the mock provider accepts **temporary**
 override variables for a single seeding deploy — `MOCK_PROVIDER_SOURCE_UPDATED_AT`
 and `MOCK_PROVIDER_CONTENT_VERSION`. These are seeding aids only and **must not**
-be committed as permanent `[env.staging.vars]`; the permanent staging provider
-configuration is `PROVIDER_MODE = mock`. After seeding, redeploy without the
+be committed as permanent `[env.staging.vars]`. The deployed staging provider
+configuration is `PROVIDER_MODE = mock`; the committed one has been `none`
+since 2026-10-13, and under `none` this endpoint publishes nothing (it fails as
+`provider-unavailable`), so a Worker built from it is seeded only by the
+guarded season-batch ingest (section 6). After seeding, redeploy without the
 overrides so the committed configuration is authoritative.
 
 A successful publication writes the full versioned document set, the
@@ -1564,6 +1707,11 @@ earlier release, and after the first real staging publication D14/C1 refuse a
 rollback to the mock baseline (O-15). The procedure is in section 6,
 "Reconciliation operator routes and attention line".
 
+**After the first ingested batch** (committed staging configuration,
+2026-10-13, not deployed), the same D14 rule refuses a rollback to the mock
+release as `guard-round-coverage-regression`. That is one-way; see "No way back
+to the mock release" under "Guarded season-batch ingest" in section 6.
+
 ## 12. Observability and redaction
 
 The observability helper tails the deployed Worker while it drives a full
@@ -1619,11 +1767,20 @@ caller's would be. **Since the 2026-09-16 activation, season 2026 is `active`
 and authoritative, so a scheduled season-2026 publication is admitted and runs
 through the sequencer, never through the legacy pointers** (section 6).
 
+**Under the committed `PROVIDER_MODE = none` (2026-10-13, not deployed)** the
+scheduled handler builds no provider. Every run records `sync.failed`
+`provider-unavailable` with zero provider calls, writes only the season's
+sync-state key and never reaches a publisher, so it can neither publish nor be
+refused by the guard. Jobs fall due by their last *success*, which never
+advances under `none`, so this repeats every night. See "Guarded season-batch
+ingest" in section 6, deploy check 8.
+
 Verify with the local test suite (the safe mechanism — no remote trigger, no
 cron change):
 
 ```text
 npm test -- test/sync/scheduled-handler.test.ts test/sync/synchronization.test.ts
+npm test -- test/config/staging-season-batch-ingest.test.ts   # the committed `none` configuration
 ```
 
 Do not trigger the schedule by editing the cron to a high-frequency cadence.

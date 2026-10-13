@@ -361,12 +361,13 @@ unused.** The 2026-09-12 staging deployment (version
 production has never been deployed and has none. Provisioning is not use: no
 provider adapter exists and no production module constructs the hardened
 provider client, so nothing reserves through it. What keeps staging off the
-network is `PROVIDER_MODE = mock` plus the absence of any live adapter - not
-the binding. Wherever the namespace is unbound, every provider reservation
+network is a `PROVIDER_MODE` that selects no live provider (`mock` live;
+`none` committed since 2026-10-13) - not the binding. Wherever the namespace is unbound, every provider reservation
 resolves to `unavailable` - the fail-closed default, under which no outbound
 provider request can be issued at all.
 
-**`PROVIDER_MODE`, committed and live (2026-09-27).** The code admits `mock`,
+**`PROVIDER_MODE`, committed and live (2026-09-27; staging committed value
+changed 2026-10-13).** The code admits `mock`,
 `none` and `coordinated` (Implementation Plan §14.0.29). `coordinated` is
 admitted only when `ENVIRONMENT` is `staging` or `production`, and is a
 configuration error in development. **No environment selects it**, committed
@@ -375,7 +376,7 @@ or live:
 | Environment | Committed (`wrangler.toml`) | Live |
 |---|---|---|
 | development | unset (`mock`) | local only |
-| staging | `mock` | `mock` (version `cc8d9a54-…`, Stage A, 2026-10-07; it admits the `coordinated` value and does not select it) |
+| staging | `none` since 2026-10-13 (decision pack DP-6(b), with `SEASON_BATCH_INGEST` below); `mock` before | `mock` (version `cc8d9a54-…`, Stage A, 2026-10-07; it admits the `coordinated` value and does not select it) |
 | production | `none` | not provisioned |
 
 Admitting the value activates nothing. Even where it is selected, the
@@ -385,17 +386,25 @@ Worker has one. Wherever it is unbound, every coordinated run stops as
 zero provider requests. No committed environment declares the binding either;
 see "Reconciliation ledger binding: removed, Stage B parked" below.
 
-**`SEASON_BATCH_INGEST`, committed (2026-10-12), never deployed.** It names
-the one season the guarded staging ingest of a reviewed season batch accepts
-(`POST /internal/admin/season/ingest`, Implementation Plan §14.0.51). **No
-environment sets it**, committed or live, so the route refuses every request
-as `ingest-disabled` before reading its body:
+**`SEASON_BATCH_INGEST`, code committed (2026-10-12); staging value
+committed (2026-10-13); never deployed.** It names the one season the guarded
+staging ingest of a reviewed season batch accepts
+(`POST /internal/admin/season/ingest`, Implementation Plan §14.0.51). The only
+accepted value is a four-digit season with curated season metadata, so
+`2026`; anything else is refused as `ingest-misconfigured`. **Only committed
+staging sets it, and no deployed Worker carries it.** Wherever it is unset the
+route refuses every request as `ingest-disabled` before reading its body:
 
 | Environment | Committed (`wrangler.toml`) | Live |
 |---|---|---|
 | development | unset | local only |
-| staging | unset | unset (Stage A `cc8d9a54-…` predates the route) |
+| staging | `2026` since 2026-10-13 (decision pack PR-4); unset before | unset (Stage A `cc8d9a54-…` predates the route) |
 | production | unset | not provisioned |
+
+The same staging change commits `PROVIDER_MODE = none` (table above), so a
+Worker deployed from it builds no provider: its nightly cron and the manual
+whole-season sync fail fast as `provider-unavailable` and never build or
+publish a mock candidate. Its only source of season data is the ingest.
 
 Setting it enables nothing by itself. The ingest also refuses outside
 `ENVIRONMENT = staging`, under `PROVIDER_MODE = coordinated`, without a
@@ -443,7 +452,7 @@ orchestration is **wired but unbound** in every deployed Worker, and
 | Environment | Orchestration | Ledger | Coordinated run outcome |
 |---|---|---|---|
 | development | `coordinated` is refused as a configuration error | none | never reached |
-| staging | wired in code and in the live version (`cc8d9a54-…`, Stage A) | none: not declared, not deployed, not provisioned (below) | not selected (`mock`); if selected, refused as `ledger-unbound` |
+| staging | wired in code and in the live version (`cc8d9a54-…`, Stage A) | none: not declared, not deployed, not provisioned (below) | not selected (live `mock`, committed `none`); if selected, refused as `ledger-unbound` |
 | production | wired in code; never deployed | none | not selected (`none`); if selected, refused as `authority-not-sequencer` and `ledger-unbound` |
 
 The rate-limiter note above is otherwise unchanged. Once a coordinated run
