@@ -230,10 +230,11 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
     );
   });
 
-  it('keeps staging on mock and production on none', () => {
+  it('keeps production on none and commits staging to none (mock until the ingest configuration)', () => {
     expect(wrangler).toMatch(
-      /\[env\.staging\.vars\][\s\S]*PROVIDER_MODE = "mock"/,
+      /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\n(?:#.*\n)*PROVIDER_MODE = "none"\n/,
     );
+    expect(wrangler).not.toMatch(/^PROVIDER_MODE = "mock"/m);
     expect(wrangler).toMatch(
       /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
     );
@@ -254,8 +255,9 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
     expect(wrangler).not.toContain('[[d1_databases]]');
     expect(wrangler).not.toContain('[[r2_buckets]]');
     expect(wrangler).not.toContain('[[queues');
-    // The staging cron is unchanged.
-    expect(wrangler).toContain('crons = ["17 3 * * *"]');
+    // The staging cron is an explicit empty list since the season-batch
+    // ingest configuration.
+    expect(wrangler).toContain('crons = []');
   });
 
   it('exports the Durable Object class from the Worker module', () => {

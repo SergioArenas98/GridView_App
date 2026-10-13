@@ -142,8 +142,10 @@ describe('wrangler.toml declares the sequencer surface and selects it in staging
     expect(declaredConfig).toMatch(
       /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
     );
+    // Staging moved from `mock` to `none` with the season-batch ingest
+    // configuration; that change is pinned in `staging-season-batch-ingest.test.ts`.
     expect(declaredConfig).toMatch(
-      /\[env\.staging\.vars\][\s\S]*PROVIDER_MODE = "mock"/,
+      /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\nPROVIDER_MODE = "none"\n/,
     );
   });
 });

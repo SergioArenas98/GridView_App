@@ -4,8 +4,9 @@
  * `wrangler.toml`. Staging resolves to the two Durable Object registrations
  * and bindings that Stage A deployed on 2026-10-07; the staging-only ledger
  * declaration committed the day before was removed under the no-cost
- * requirement, which parks Stage B. The committed `mock` and `none` provider
- * modes stay inert even where a ledger namespace is bound.
+ * requirement, which parks Stage B. The committed provider mode - `none` in
+ * staging (`mock` until the season-batch ingest configuration) and in
+ * production - stays inert even where a ledger namespace is bound.
  *
  * `unstable_readConfig` only reads the file:
  * nothing here deploys, provisions or contacts Cloudflare, and nothing can
@@ -95,16 +96,17 @@ describe('the committed configuration declares no reconciliation ledger, as Wran
     }
   });
 
-  it('keeps staging on mock, production on none and the cron unchanged', () => {
+  it('keeps staging and production on none, with no scheduled trigger anywhere', () => {
     const staging = resolved('staging');
     const production = resolved('production');
-    expect(staging.vars.PROVIDER_MODE).toBe('mock');
+    expect(staging.vars.PROVIDER_MODE).toBe('none');
     expect(production.vars).toEqual({
       ENVIRONMENT: 'production',
       PROVIDER_MODE: 'none',
     });
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
-    expect(staging.triggers.crons).toEqual(['17 3 * * *']);
+    // Explicitly empty since the season-batch ingest configuration.
+    expect(staging.triggers.crons).toEqual([]);
     expect(production.triggers.crons).toBeUndefined();
     expect(resolved('').triggers.crons).toBeUndefined();
   });
@@ -280,9 +282,7 @@ describe('the committed provider modes with a bound RECONCILIATION_LEDGER namesp
           return new Response('{}', { status: 503 });
         },
       } as Env;
-      expect(env.PROVIDER_MODE).toBe(
-        environment === 'staging' ? 'mock' : 'none',
-      );
+      expect(env.PROVIDER_MODE).toBe('none');
       const wholeSeason = vi.spyOn(SynchronizationService.prototype, 'run');
       const guarded = vi.spyOn(
         SequencedPublicationService.prototype,

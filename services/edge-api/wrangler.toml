@@ -26,7 +26,8 @@ ENVIRONMENT = "development"
 # 2026-09-12 staging deployment, and production has never been deployed. No
 # provider adapter exists and no production module constructs the provider
 # HTTP client, so nothing looks the binding up. Staging cannot reach a live
-# provider because `PROVIDER_MODE = "mock"` and no live adapter exists - not
+# provider because its `PROVIDER_MODE` selects no live provider (committed
+# `none` since the season-batch ingest configuration; `mock` before) - not
 # because of this binding. Wherever the namespace is absent, the resolver fails
 # closed and no provider request is issued.
 [[durable_objects.bindings]]
@@ -77,7 +78,16 @@ preview_urls = false
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-PROVIDER_MODE = "mock"
+# No provider (decision pack 2026-10-07 DP-6(b)). COMMITTED, NOT DEPLOYED:
+# live staging still runs `mock` (Stage A version `cc8d9a54-…`). With `none`
+# the whole-season sync routes (`POST /internal/admin/sync/full` and the
+# others) and the scheduled handler build no provider and fail fast as
+# `provider-unavailable`, so they never construct, guard or publish a mock
+# candidate. No schedule invokes that handler: the staging triggers below are
+# empty. The only way season data reaches staging is the
+# guarded season-batch ingest below. Changing this value from the live one is
+# cutover-sensitive (staging runbook, section 6).
+PROVIDER_MODE = "none"
 PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
 
 # Season 2026 cutover phase (ADR 0025 D12) - ACTIVATION PHASE, LIVE IN STAGING
@@ -110,6 +120,21 @@ SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"
 # do not set it.
 SEASON_PUBLICATION_AUTHORITY = "sequencer"
 
+# The one season the guarded season-batch ingest accepts
+# (`POST /internal/admin/season/ingest`, decision pack 2026-10-07 PR-4).
+# STAGING ONLY; COMMITTED, NOT DEPLOYED. The value must be exactly the
+# four-digit season `2026`, which has curated season metadata; anything else
+# (`2026 `, `2099`, `abcd`) is refused as `ingest-misconfigured`. Setting it
+# admits nothing by itself: the route still needs `ADMIN_TOKEN`, refuses
+# outside staging and under a live-provider `PROVIDER_MODE`, needs the
+# reachable sequencer above, and needs a bundled attribution record that
+# credits Jolpica as `active`. Every admitted batch then publishes through the
+# D14-D16 guard and the `prepare` CAS bound to the submission's
+# `expectedActiveVersion`. Deploying it and submitting a batch are each
+# separately authorized (staging runbook, section 6, "Guarded season-batch
+# ingest"). Development and production do not set it.
+SEASON_BATCH_INGEST = "2026"
+
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.staging.durable_objects.bindings]]
 name = "PROVIDER_RATE_LIMITER"
@@ -134,8 +159,21 @@ required = ["ADMIN_TOKEN"]
 binding = "GRIDVIEW_DATA"
 id = "1d0fb55486a745a1ad12e03d9f04942b"
 
+# No scheduled trigger. COMMITTED, NOT DEPLOYED: live staging still runs the
+# nightly `17 3 * * *` (Stage A version `cc8d9a54-…`). Under
+# `PROVIDER_MODE = "none"` that run could only record `sync.failed` and
+# rewrite the season's failure state every night, so the season-batch ingest
+# configuration removes it.
+#
+# The empty list is deliberate and must stay explicit. Wrangler replaces the
+# Worker's schedules on deploy only when `crons` is set: an empty list removes
+# every schedule, while an absent key leaves the live one in place. Schedules
+# are script settings, not part of a version, so neither this deploy nor a
+# later `wrangler rollback` to an earlier version restores
+# `17 3 * * *`; restoring it is a separate `wrangler triggers deploy`
+# (staging runbook, section 6, "Guarded season-batch ingest").
 [env.staging.triggers]
-crons = ["17 3 * * *"]
+crons = []
 
 [env.staging.observability]
 enabled = true
