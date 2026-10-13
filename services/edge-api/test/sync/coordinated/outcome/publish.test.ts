@@ -196,7 +196,7 @@ describe.each(sequencerTransports)(
       expect(manifest?.data).toMatchObject({
         contentVersion: '2026.10.07.1',
         mediaVersion: null,
-        attributionVersion: 'data-sources-v1',
+        attributionVersion: 'data-sources-v2',
       });
       const seasonDocument = await harness.storage.readVersionedDocument(
         SEASON,

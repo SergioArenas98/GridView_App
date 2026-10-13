@@ -43,10 +43,23 @@ info:
     GridView, and states that it does not guarantee uptime, availability or
     correctness of its data.
 
-    **Current state.** No GridView runtime retrieves data from Jolpica F1 yet:
-    production serves no provider data, and staging serves GridView's mock
-    dataset. This notice is published ahead of any activation, which remains a
-    separate, explicit decision. It will be kept current if other sources are
+    **How Jolpica F1 data reaches GridView.** No GridView Worker retrieves data
+    from Jolpica F1 automatically, on a schedule or in answer to a request.
+    Jolpica F1-derived data reaches this service only as an operator-run batch:
+    GridView's operator captures the responses by hand, reviews them offline
+    and submits the batch to staging, which publishes it only if it passes
+    verification and the publication guard. Production accepts no batch and
+    serves no provider data. A batch is fixed at its capture instant and
+    changes only when a new batch is published, so it can lag behind Jolpica
+    F1.
+
+    **Which responses carry it.** Every release names its attribution version
+    in the content manifest (`GET /v1/content/manifest`, `attributionVersion`).
+    A release published from a Jolpica F1 batch carries the version of the
+    attribution record below that it was credited under, `data-sources-v2` or
+    later. A release with any other value contains no Jolpica F1-derived data:
+    GridView's mock dataset carries `1`, and staging serves it until a first
+    batch is published. This notice will be kept current if other sources are
     added.
 
     **GridView's own work.** The GridView application and edge API source code
@@ -66,8 +79,7 @@ info:
 
     The per-source attribution GridView shows is held in the repository record
     `content/attribution/data-sources.json` (attribution version
-    `data-sources-v1`). The `attributionVersion` field in responses is not yet
-    bound to that record.
+    `data-sources-v2`).
   contact:
     name: GridView
   license:

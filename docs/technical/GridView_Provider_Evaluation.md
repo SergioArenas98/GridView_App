@@ -49,6 +49,7 @@
 | 1.16 | 2026-09-28 | **Phase 9B: the minimum Jolpica attribution surfaces exist** (§7.6.2 note; Implementation Plan §14.0.32). A repository-owned, per-source record (`content/attribution/data-sources.json`, version `data-sources-v1`) credits Jolpica F1 with a link to the project, its terms, CC BY-NC-SA 4.0 and its link, the modification notice, a non-endorsement notice and Jolpica's warranty-disclaimer notice; the Flutter Acknowledgements screen renders it and the OpenAPI `info` carries the equivalent notice, replacing the "GridView-owned snapshots" wording and the blanket "Proprietary" licence label (§7.6.4). Jolpica is recorded as **dormant**, so neither surface claims that provider data is served. OpenF1 is not credited, because no OpenF1 adapter exists; its entry is added with its adapter. Jolpica's `TERMS.md` was re-read on 2026-09-28 and is unchanged since 27 August 2025. **No Jolpica API request was made**, and no provider or Cloudflare resource was contacted. This prepares the surfaces only: it is not a legal conclusion about commercial use, it does not complete the §15.3 licence-compliance sweep, and it does not authorize staging activation. Owner decision **O-9** still requires an explicit activation decision. |
 | 1.17 | 2026-09-28 | **Phase 9B: standings round coherence is implemented, dormant** ([ADR 0023 A3.5](../adr/0023-multi-source-provider-coordination.md#a35---standings-publication-rules) item 1; Implementation Plan §14.0.33). No provider-evaluation conclusion changes. §8.12 keeps its dated account and gains a note; §10.1's standings note now states that the port carries the round internally, that round coherence is decided, and that the port is bundled but constructed in no committed configuration and has made no provider request. The read-only staging predecessor gate is not implemented and still blocks staging activation. The empty pre-season response is unobserved. No provider or Cloudflare resource was contacted. |
 | 1.18 | 2026-10-07 | **Phase 9B: gap M8 is identified, and the off-calendar circuit is proposed for curation** (§8.13; Implementation Plan §14.0.48). The first owner-authorised frozen-APK capture (22 `GET`s, 2026-10-07) recorded `https://api.jolpi.ca/ergast/f1/2026/circuits/?limit=100` for the first time: **24 circuit-resource rows against 23 calendar races**. The 24th row is `jeddah` (Jeddah Corniche Circuit, Saudi Arabia), which no 2026 round uses. Because it had no curated mapping, the whole `season-circuits` resource failed and the offline generator withheld the season (ADR 0022 D10). A canonical identity `jeddah-corniche` and the exact mapping are proposed for curator review, as a circuit only, with no event, round or season entry. ADR 0022 D10 is unchanged, and the 2026 dataset version is reissued as `2026.10.07.1` (O-14). **No additional provider request was made.** |
+| 1.19 | 2026-10-13 | **Phase 9B: Jolpica F1 is credited `active`, for operator-run batches only** (§7.6.2 note; Implementation Plan §14.0.52; [ADR 0021 A1](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md#amendment-a1---the-operator-run-jolpica-capture), [ADR 0023 A4](../adr/0023-multi-source-provider-coordination.md#amendment-a4---operator-run-season-batches)). `data-sources-v2` changes only Jolpica's status, `dormant` to `active` (O-9, DP-7). The app and API wording say no Worker retrieves Jolpica data automatically and never claim that any is shown; a release carries it only when its content manifest's `attributionVersion` is the record's version. No provider-evaluation conclusion changes; nothing was captured, deployed or submitted. |
 
 ---
 
@@ -730,6 +731,17 @@ documentation-only pass.
 > machine-readable attribution endpoint was added. The source is recorded as
 > **dormant**, and moving it to `active` belongs to the explicit activation
 > decision (O-9), which this work does not take.
+>
+> **Note 2026-10-13 (v1.19).** O-9 is taken for the operator-run batch path:
+> `data-sources-v2` records Jolpica F1 as `active`, its status alone changed.
+> `active` (accepted by the owner on 2026-10-13) means data from it is eligible
+> to reach GridView only through operator-run, reviewed batches, not that the
+> served release contains any ([ADR 0023 A4](../adr/0023-multi-source-provider-coordination.md#amendment-a4---operator-run-season-batches)),
+> never through a Worker request. Because a Worker that can accept a batch
+> bundles the `active` record before the first batch exists, neither surface
+> claims that Jolpica data is shown. The record's `version` is now what a
+> batch release publishes as `attributionVersion`, and the API notice names it
+> as the per-release signal. Element 1 (OpenF1) stays absent.
 
 #### 7.6.3 ShareAlike
 

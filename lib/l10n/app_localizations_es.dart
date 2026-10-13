@@ -1157,7 +1157,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsSourceStatusActive =>
-      'GridView obtiene datos de esta fuente.';
+      'GridView no obtiene datos de esta fuente de forma automática. Los datos de esta fuente que GridView pueda mostrar los ha capturado, revisado y publicado manualmente el operador de GridView, por lotes, así que solo cambian cuando se publica un lote nuevo y pueden ir con retraso respecto a la fuente.';
 
   @override
   String settingsSourceStatusFrozen(String date) {

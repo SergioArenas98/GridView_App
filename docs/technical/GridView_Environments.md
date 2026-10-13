@@ -163,10 +163,19 @@ and only when the build serves fixtures:
 
 | Bundled data | Banner | Settings → Data source | Jolpica credit |
 |---|---|---|---|
-| No descriptor (the committed samples) | Sample data — not live results | Sample data | record status (`dormant`) |
-| `origin: synthetic` | Sample data — not live results | Sample data | record status (`dormant`) |
+| No descriptor (the committed samples) | Sample data — not live results | Sample data | record status (`active` since `data-sources-v2`: batch-only line, no claim that data is shown) |
+| `origin: synthetic` | Sample data — not live results | Sample data | record status (as above) |
 | `origin: provider-capture` | Frozen test data captured <date> — not live, no updates | Frozen test data captured <date> | a fixed snapshot captured <date>, no updates; licence CC BY-NC-SA 4.0 |
 | A descriptor that cannot be read | Test data of unverified origin — not live results | Test data of unverified origin | record status |
+
+"Record status" is the attribution record bundled into the APK, so it is the
+record of the commit the APK was built from. Since `data-sources-v2`
+(2026-10-13) the committed record credits Jolpica `active`: its data is
+eligible for publication through operator-captured, reviewed batches only.
+That line says GridView does not retrieve the data automatically and never
+claims that any is shown, because a sample-data build shows none. An APK built
+from an earlier commit bundles `data-sources-v1` and shows the `dormant` line
+instead.
 
 **Such a build shows a fixed snapshot and receives no live updates.** It
 talks to no GridView service and to no provider.
@@ -390,10 +399,35 @@ as `ingest-disabled` before reading its body:
 
 Setting it enables nothing by itself. The ingest also refuses outside
 `ENVIRONMENT = staging`, under `PROVIDER_MODE = coordinated`, without a
-reachable sequencer, and while `content/attribution/data-sources.json` calls
-Jolpica anything but `active` (today it is `dormant`). Enabling it on staging
+reachable sequencer, and while the record bundled in the Worker
+(`content/attribution/data-sources.json`) calls Jolpica anything but
+`active`: committed `active`, deployed `dormant` (see "Jolpica attribution"
+below). Enabling it on staging
 is a configuration change and a deployment, each separately authorized; see
 the staging runbook, section 6, "Guarded season-batch ingest".
+
+**Jolpica attribution: committed record, deployed Worker and served release
+(2026-10-13).** These are three separate facts, and only the last one says
+whether Jolpica data is being served:
+
+| Environment | Committed record (`content/attribution/data-sources.json`) | Record bundled in the deployed Worker | Served release (`GET /v1/content/manifest`, `attributionVersion`) |
+|---|---|---|---|
+| development | `data-sources-v2`, Jolpica `active` | local only | mock dataset, `1` |
+| staging | `data-sources-v2`, Jolpica `active` | `data-sources-v1`, Jolpica `dormant` (Stage A `cc8d9a54-…`, built from `3228725`) | mock dataset, `1` (from the code; not read live) |
+| production | `data-sources-v2`, Jolpica `active` | not provisioned | none |
+
+`active` (O-9, DP-7; the owner accepted this meaning on 2026-10-13) means only
+that Jolpica F1-derived data is eligible for publication through
+operator-captured, reviewed batches. It does not mean that a Worker retrieves
+Jolpica data, and it does not mean that the release being served contains
+any. The served release's `attributionVersion` identifies what was actually
+published: a release contains Jolpica F1-derived data only when it is
+`data-sources-v2` or later. **No environment serves such a release.** The
+deployed staging Worker would refuse a batch twice over: it predates the
+ingest route, and it bundles the `dormant` record. Changing that takes a
+staging deployment of a commit that bundles `data-sources-v2` (DP-4), with
+`SEASON_BATCH_INGEST` set (DP-6), and then an accepted batch, each separately
+authorized.
 
 **Wired is not active (2026-10-06).** Since Implementation Plan §14.0.41,
 the scheduled handler and `POST /internal/admin/sync/full` in `coordinated`

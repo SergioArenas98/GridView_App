@@ -7,12 +7,27 @@ import 'package:gridview/features/settings/application/external_links.dart';
 import 'package:gridview/features/settings/domain/data_source_attribution.dart';
 import 'package:gridview/features/settings/presentation/acknowledgements_screen.dart';
 import 'package:gridview/features/settings/presentation/widgets/settings_rows.dart';
+import 'package:gridview/l10n/app_localizations.dart';
 
 import '../support/a11y_harness.dart';
 import '../support/component_harness.dart';
 import '../support/router_harness.dart';
 
 const Size _tall = Size(400, 1800);
+
+/// The credit of an `active` source (O-9): published only in operator-run
+/// batches, and true whether or not a batch has been published yet.
+const String _batchOnlyEn =
+    'GridView does not retrieve data from this source automatically. Any data '
+    'from it that GridView shows was captured, reviewed and published by '
+    "GridView's operator, by hand and in batches, so it changes only when a "
+    'new batch is published and can lag behind the source.';
+const String _batchOnlyEs =
+    'GridView no obtiene datos de esta fuente de forma automática. Los datos '
+    'de esta fuente que GridView pueda mostrar los ha capturado, revisado y '
+    'publicado manualmente el operador de GridView, por lotes, así que solo '
+    'cambian cuando se publica un lote nuevo y pueden ir con retraso respecto '
+    'a la fuente.';
 
 Future<void> pumpSettings(
   WidgetTester tester, {
@@ -571,14 +586,10 @@ void main() {
       expect(find.text('Jolpica F1'), findsOneWidget);
 
       final String all = renderedText(tester).join(' ');
-      // Dormant: credited, but never presented as the source of served data.
-      expect(
-        all,
-        contains(
-          'Not connected yet. GridView does not currently retrieve data from '
-          'this source automatically.',
-        ),
-      );
+      // Active (O-9): published only in operator-run batches. The credit is
+      // true before the first batch too, so it never says data is shown.
+      expect(all, contains(_batchOnlyEn));
+      expect(all, isNot(contains('Not connected yet')));
       expect(all, isNot(contains('GridView retrieves data from this source.')));
       // The modification, licence and non-endorsement notices.
       expect(
@@ -626,6 +637,55 @@ void main() {
       }
     });
 
+    testWidgets('credits Jolpica F1 in Spanish as published only in batches', (
+      WidgetTester tester,
+    ) async {
+      await pumpSettings(
+        tester,
+        location: '/settings/acknowledgements',
+        locale: const Locale('es'),
+      );
+      await tester.pumpAndSettle();
+
+      final String all = renderedText(tester).join(' ');
+      expect(all, contains('Jolpica F1'));
+      expect(all, contains(_batchOnlyEs));
+      expect(all, isNot(contains('Todavía no está conectada')));
+      expect(all, isNot(contains('GridView obtiene datos de esta fuente.')));
+      expect(
+        all,
+        contains(
+          'Los datos de Jolpica F1 se publican con la licencia CC BY-NC-SA 4.0.',
+        ),
+      );
+    });
+
+    // Both locales: the active credit denies automatic retrieval, describes
+    // the batch path and its lag, and never asserts that data is shown.
+    for (final (Locale locale, String text) in <(Locale, String)>[
+      (const Locale('en'), _batchOnlyEn),
+      (const Locale('es'), _batchOnlyEs),
+    ]) {
+      test('the ${locale.languageCode} active credit stays true before the '
+          'first batch', () async {
+        final AppLocalizations l10n = await AppLocalizations.delegate.load(
+          locale,
+        );
+        expect(l10n.settingsSourceStatusActive, text);
+        final String lower = text.toLowerCase();
+        for (final String claim in <String>[
+          'live',
+          'real-time',
+          'en directo',
+          'en tiempo real',
+          'retrieves data from this source.',
+          'obtiene datos de esta fuente.',
+        ]) {
+          expect(lower, isNot(contains(claim)), reason: claim);
+        }
+      });
+    }
+
     testWidgets('the source, terms and licence rows open exactly the recorded '
         'links', (WidgetTester tester) async {
       final RecordingExternalLinkLauncher launcher =
@@ -656,7 +716,7 @@ void main() {
       ]);
     });
 
-    testWidgets('an active source is described as retrieved, and supplied '
+    testWidgets('an active source is described as batch-only, and supplied '
         'notices are retained', (WidgetTester tester) async {
       await pumpSettings(
         tester,
@@ -685,7 +745,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final String all = renderedText(tester).join(' ');
-      expect(all, contains('GridView retrieves data from this source.'));
+      expect(all, contains(_batchOnlyEn));
       expect(all, isNot(contains('Not connected yet')));
       expect(all, contains('(c) Example Contributors'));
       expect(all, contains('Example Creator'));
@@ -694,6 +754,46 @@ void main() {
         find.byKey(const ValueKey<String>('data-source-example-terms')),
         findsNothing,
       );
+    });
+
+    testWidgets('a dormant source is credited as not connected', (
+      WidgetTester tester,
+    ) async {
+      await pumpSettings(
+        tester,
+        location: '/settings/acknowledgements',
+        dataSourceAttributions: () async =>
+            DataSourceAttributions.fromJson(<String, Object?>{
+              'kind': 'data-source-attribution',
+              'version': 'data-sources-v9',
+              'sources': <Object?>[
+                <String, Object?>{
+                  'sourceId': 'example',
+                  'name': 'Example Source',
+                  'sourceUrl': 'https://example.org/project',
+                  'termsUrl': null,
+                  'licenseName': 'CC BY-NC-SA 4.0',
+                  'licenseTitle': 'Example licence title',
+                  'licenseUrl': 'https://example.org/licence',
+                  'status': 'dormant',
+                  'copyrightNotice': null,
+                  'warrantyDisclaimerNotice': null,
+                  'creatorDesignation': null,
+                },
+              ],
+            }),
+      );
+      await tester.pumpAndSettle();
+
+      final String all = renderedText(tester).join(' ');
+      expect(
+        all,
+        contains(
+          'Not connected yet. GridView does not currently retrieve data from '
+          'this source automatically.',
+        ),
+      );
+      expect(all, isNot(contains(_batchOnlyEn)));
     });
 
     testWidgets('an unreadable record says so and never reads as no sources', (

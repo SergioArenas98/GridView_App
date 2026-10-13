@@ -87,7 +87,7 @@ describe('season-batch generator: a complete capture', () => {
         generatedAt: OBSERVED_AT,
         sourceUpdatedAt: OBSERVED_AT,
         mediaVersion: null,
-        attributionVersion: 'data-sources-v1',
+        attributionVersion: 'data-sources-v2',
       },
     });
     expect(manifest).toMatchObject({
@@ -105,7 +105,7 @@ describe('season-batch generator: a complete capture', () => {
       attribution: {
         name: 'Jolpica F1',
         licenseName: 'CC BY-NC-SA 4.0',
-        recordVersion: 'data-sources-v1',
+        recordVersion: 'data-sources-v2',
       },
     });
     expect(sha256(new TextEncoder().encode(result.artifact.text))).toBe(

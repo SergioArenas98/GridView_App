@@ -12,7 +12,7 @@ import '../information_screens.dart' show openExternalLink;
 import 'settings_rows.dart';
 
 /// The attribution one data source is owed (GridView_Provider_Evaluation.md
-/// §7.6.2): its name, whether GridView retrieves data from it yet, the
+/// §7.6.2): its name, how data from it can reach GridView, the
 /// modification and licence notices, any notice the licensor supplied, and
 /// links to the project, its terms and the licence.
 ///
@@ -86,7 +86,7 @@ class DataSourceAttributionCard extends ConsumerWidget {
     );
   }
 
-  /// Whether GridView retrieves data from this source, in this build.
+  /// How data from this source can reach this build.
   ///
   /// A test-only frozen-data build bundles a fixed snapshot of the source's
   /// data, so it says exactly that, with the capture date, whatever the
@@ -100,8 +100,8 @@ class DataSourceAttributionCard extends ConsumerWidget {
       return l10n.settingsSourceStatusFrozen(captureDateLabel(capturedAt));
     }
     return switch (source.status) {
-      // A dormant source is credited without claiming that data from it is
-      // being served.
+      // Neither claims that data from the source is being served: the build
+      // cannot know whether the service has published a batch yet.
       DataSourceStatus.dormant => l10n.settingsSourceStatusDormant,
       DataSourceStatus.active => l10n.settingsSourceStatusActive,
     };

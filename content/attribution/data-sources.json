@@ -1,7 +1,7 @@
 {
   "$schema": "../schemas/data-source-attribution.schema.json",
   "kind": "data-source-attribution",
-  "version": "data-sources-v1",
+  "version": "data-sources-v2",
   "sources": [
     {
       "sourceId": "jolpica",
@@ -11,7 +11,7 @@
       "licenseName": "CC BY-NC-SA 4.0",
       "licenseTitle": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International",
       "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
-      "status": "dormant",
+      "status": "active",
       "copyrightNotice": null,
       "warrantyDisclaimerNotice": "Jolpica F1 does not guarantee uptime, availability or correctness of the data.",
       "creatorDesignation": null

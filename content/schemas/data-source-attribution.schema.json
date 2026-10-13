@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gridview.local/schemas/data-source-attribution.schema.json",
   "title": "GridView data-source attribution record",
-  "description": "The repository-owned, per-source attribution GridView shows for third-party data it relies on (ADR 0019 decision 5; GridView_Provider_Evaluation.md §7.6.2). Attribution is held as data rather than hard-coded strings so a licensor-supplied copyright notice, warranty-disclaimer notice or creator designation can be added, and a source removed on the licensor's request (CC BY-NC-SA 4.0 §3(a)(3)), without changing application code. The Flutter Acknowledgements screen renders this file; the edge API does not read it yet. Localized explanatory copy (status, modification and non-endorsement notices) lives in the application's localization files, never here.",
+  "description": "The repository-owned, per-source attribution GridView shows for third-party data it relies on (ADR 0019 decision 5; GridView_Provider_Evaluation.md §7.6.2). Attribution is held as data rather than hard-coded strings so a licensor-supplied copyright notice, warranty-disclaimer notice or creator designation can be added, and a source removed on the licensor's request (CC BY-NC-SA 4.0 §3(a)(3)), without changing application code. The Flutter Acknowledgements screen renders this file. The edge API reads it to label provider-backed releases and to admit the guarded staging season-batch ingest; it never serves the file itself. Localized explanatory copy (status, modification and non-endorsement notices) lives in the application's localization files, never here.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "version", "sources"],
@@ -10,7 +10,7 @@
     "kind": { "const": "data-source-attribution" },
     "version": {
       "type": "string",
-      "description": "Identifies the exact content of this record: every source entry and every field of each entry. Any change to that content, including adding or removing a source or changing a link, licence, notice or status, requires a new version, and a version is never reused for different content. `npm run validate:content` enforces the binding through a pinned content digest per version. This is the value a later SeasonSnapshotMetadata.attributionVersion will carry; nothing publishes it yet.",
+      "description": "Identifies the exact content of this record: every source entry and every field of each entry. Any change to that content, including adding or removing a source or changing a link, licence, notice or status, requires a new version, and a version is never reused for different content. `npm run validate:content` enforces the binding through a pinned content digest per version. A release published from this source's data carries this value as its `attributionVersion`, which the content manifest exposes; a release with any other value carries no data credited here.",
       "pattern": "^data-sources-v[1-9][0-9]*$"
     },
     "sources": {
@@ -83,7 +83,7 @@
           "description": "Link to the licence."
         },
         "status": {
-          "description": "`dormant`: no GridView runtime retrieves data from this source yet, so the screen must not claim that live data from it is being served. `active`: GridView retrieves and serves data derived from it. Moving to `active` is an explicit activation decision, not a side effect of this file.",
+          "description": "`dormant`: no path exists for data from this source to reach GridView, so the screen must not claim that data from it is being served. `active`: data derived from it may reach GridView only through operator-run, reviewed batches (ADR 0021 amendment A1, ADR 0023 amendment A4); no Worker retrieves it automatically, and the wording must stay true before the first batch is published. Moving to `active` is an explicit activation decision (O-9), not a side effect of this file; a status meaning automatic retrieval would be a new decision and a new value.",
           "enum": ["dormant", "active"]
         },
         "copyrightNotice": {

@@ -18,6 +18,7 @@ import {
   sha256,
   syntheticBatch,
   type Batch,
+  type Json,
 } from '../ingest/support';
 import { canonicalJson } from '../../src/ingest/canonical-json';
 
@@ -52,9 +53,8 @@ describe('season-batch submission builder', () => {
       manifestSha256: batch.manifestSha256,
       classifiedRounds: [1, 2, 3],
       submissionSha256: sha256(result.text),
-      // The committed record calls the source dormant: the Worker will refuse
-      // until a later change activates it.
-      attributionStatus: 'not-active',
+      // The committed record calls the source active (data-sources-v2).
+      attributionStatus: 'active',
     });
 
     const ctx = await ingestContext();
@@ -68,11 +68,14 @@ describe('season-batch submission builder', () => {
     });
   });
 
-  it('reports an active record as active', async () => {
-    const result = await buildSubmission(
-      input({ attributionRecord: activeAttribution() }),
-    );
-    expect(result.ok && result.summary.attributionStatus).toBe('active');
+  it('reports a record that does not credit the source as active as not active', async () => {
+    const dormant = activeAttribution();
+    dormant.sources = (dormant.sources as Json[]).map((source) => ({
+      ...source,
+      status: 'dormant',
+    }));
+    const result = await buildSubmission(input({ attributionRecord: dormant }));
+    expect(result.ok && result.summary.attributionStatus).toBe('not-active');
   });
 
   it('refuses any manifest but the reviewed one', async () => {
