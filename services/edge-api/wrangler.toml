@@ -80,9 +80,11 @@ preview_urls = false
 ENVIRONMENT = "staging"
 # No provider (decision pack 2026-10-07 DP-6(b)). COMMITTED, NOT DEPLOYED:
 # live staging still runs `mock` (Stage A version `cc8d9a54-…`). With `none`
-# the nightly cron and `POST /internal/admin/sync/full` build no provider and
-# fail fast as `provider-unavailable`, so they never construct, guard or
-# publish a mock candidate. The only way season data reaches staging is the
+# the whole-season sync routes (`POST /internal/admin/sync/full` and the
+# others) and the scheduled handler build no provider and fail fast as
+# `provider-unavailable`, so they never construct, guard or publish a mock
+# candidate. No schedule invokes that handler: the staging triggers below are
+# empty. The only way season data reaches staging is the
 # guarded season-batch ingest below. Changing this value from the live one is
 # cutover-sensitive (staging runbook, section 6).
 PROVIDER_MODE = "none"
@@ -157,8 +159,21 @@ required = ["ADMIN_TOKEN"]
 binding = "GRIDVIEW_DATA"
 id = "1d0fb55486a745a1ad12e03d9f04942b"
 
+# No scheduled trigger. COMMITTED, NOT DEPLOYED: live staging still runs the
+# nightly `17 3 * * *` (Stage A version `cc8d9a54-…`). Under
+# `PROVIDER_MODE = "none"` that run could only record `sync.failed` and
+# rewrite the season's failure state every night, so the season-batch ingest
+# configuration removes it.
+#
+# The empty list is deliberate and must stay explicit. Wrangler replaces the
+# Worker's schedules on deploy only when `crons` is set: an empty list removes
+# every schedule, while an absent key leaves the live one in place. Schedules
+# are script settings, not part of a version, so neither this deploy nor a
+# later `wrangler rollback` to an earlier version restores
+# `17 3 * * *`; restoring it is a separate `wrangler triggers deploy`
+# (staging runbook, section 6, "Guarded season-batch ingest").
 [env.staging.triggers]
-crons = ["17 3 * * *"]
+crons = []
 
 [env.staging.observability]
 enabled = true

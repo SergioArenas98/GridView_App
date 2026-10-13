@@ -401,10 +401,20 @@ route refuses every request as `ingest-disabled` before reading its body:
 | staging | `2026` since 2026-10-13 (decision pack PR-4); unset before | unset (Stage A `cc8d9a54-…` predates the route) |
 | production | unset | not provisioned |
 
-The same staging change commits `PROVIDER_MODE = none` (table above), so a
-Worker deployed from it builds no provider: its nightly cron and the manual
-whole-season sync fail fast as `provider-unavailable` and never build or
-publish a mock candidate. Its only source of season data is the ingest.
+The same staging change commits `PROVIDER_MODE = none` (table above) and an
+explicitly empty cron list, so a Worker deployed from it builds no provider
+and has no schedule. Its manual whole-season sync fails fast as
+`provider-unavailable` and never builds or publishes a mock candidate. Its
+only source of season data is the ingest.
+
+**Staging cron, committed and live (2026-10-13).** Committed: none
+(`[env.staging.triggers] crons = []`). Live: `17 3 * * *` (Stage A). The
+empty list is deliberate: `wrangler deploy` replaces a Worker's schedules
+only when `crons` is set, so an absent key would keep the live schedule.
+Schedules are script settings, not part of a version, so a `wrangler
+rollback` to `cc8d9a54-…` would not bring `17 3 * * *` back. That takes a
+separate `wrangler triggers deploy` (staging runbook, section 3). Development
+and production declare no trigger, unchanged.
 
 Setting it enables nothing by itself. The ingest also refuses outside
 `ENVIRONMENT = staging`, under `PROVIDER_MODE = coordinated`, without a

@@ -255,8 +255,9 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
     expect(wrangler).not.toContain('[[d1_databases]]');
     expect(wrangler).not.toContain('[[r2_buckets]]');
     expect(wrangler).not.toContain('[[queues');
-    // The staging cron is unchanged.
-    expect(wrangler).toContain('crons = ["17 3 * * *"]');
+    // The staging cron is an explicit empty list since the season-batch
+    // ingest configuration.
+    expect(wrangler).toContain('crons = []');
   });
 
   it('exports the Durable Object class from the Worker module', () => {

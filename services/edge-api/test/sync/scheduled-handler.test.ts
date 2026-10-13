@@ -9,7 +9,8 @@ import {
   seedPublishedSnapshot,
 } from '../support/edge-harness';
 
-// The deployed staging cron is `17 3 * * *` (see wrangler.toml). These tests
+// The deployed staging cron is `17 3 * * *`; committed staging schedules
+// nothing (`crons = []` in wrangler.toml). These tests
 // exercise the real `scheduled()` export through the in-memory harness — the
 // safest local mechanism — instead of triggering the remote schedule, so they
 // never touch staging KV, never need the admin token, and never change the

@@ -96,7 +96,7 @@ describe('the committed configuration declares no reconciliation ledger, as Wran
     }
   });
 
-  it('keeps staging and production on none and the cron unchanged', () => {
+  it('keeps staging and production on none, with no scheduled trigger anywhere', () => {
     const staging = resolved('staging');
     const production = resolved('production');
     expect(staging.vars.PROVIDER_MODE).toBe('none');
@@ -105,7 +105,8 @@ describe('the committed configuration declares no reconciliation ledger, as Wran
       PROVIDER_MODE: 'none',
     });
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
-    expect(staging.triggers.crons).toEqual(['17 3 * * *']);
+    // Explicitly empty since the season-batch ingest configuration.
+    expect(staging.triggers.crons).toEqual([]);
     expect(production.triggers.crons).toBeUndefined();
     expect(resolved('').triggers.crons).toBeUndefined();
   });

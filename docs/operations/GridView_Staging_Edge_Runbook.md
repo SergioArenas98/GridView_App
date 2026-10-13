@@ -10,10 +10,11 @@ Scope and constraints:
   production Worker, a production KV namespace, a custom domain or a DNS route.
 - The **deployed** staging Worker serves mock provider data
   (`PROVIDER_MODE = mock`); it is not backed by a live Formula 1 provider.
-  **Committed** staging has carried `PROVIDER_MODE = none` and
-  `SEASON_BATCH_INGEST = "2026"` since 2026-10-13 and is not deployed: a Worker
-  built from it has no provider at all and receives season data only through
-  the guarded season-batch ingest (section 6, "Guarded season-batch ingest").
+  **Committed** staging has carried `PROVIDER_MODE = none`,
+  `SEASON_BATCH_INGEST = "2026"` and an empty cron list (`crons = []`) since
+  2026-10-13 and is not deployed: a Worker built from it has no provider and no
+  schedule, and receives season data only through the guarded season-batch
+  ingest (section 6, "Guarded season-batch ingest").
 - Secrets are referenced by **name only**. No token, account credential or
   provider key appears in this document or in the repository.
 
@@ -71,7 +72,7 @@ actually live.
 | `PROVIDER_MODE` | **Committed: `none`** since 2026-10-13 (decision pack 2026-10-07 DP-6(b)); `mock` before. **Live: `mock`** (Stage A version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275`). They differ, so the next deploy is cutover-sensitive (section 6). |
 | `SEASON_BATCH_INGEST` | **Committed: `2026`** since 2026-10-13 (decision pack PR-4); unset before. **Live: unset**; Stage A predates the route. See "Guarded season-batch ingest" in section 6. |
 | `PUBLIC_BASE_URL` | `https://gridview-api-staging.sejuma18.workers.dev` |
-| Cron trigger | `17 3 * * *` |
+| Cron trigger | **Committed: none** (`crons = []`, explicitly empty) since 2026-10-13; `17 3 * * *` before. **Live: `17 3 * * *`** (Stage A). The empty list is what removes the live schedule on deploy; an absent key would keep it. See section 3. |
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
 | Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`); since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`) the sequencer is looked up, and the rate limiter still is not. Stage A (2026-10-07, version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275`) kept both. **No `RECONCILIATION_LEDGER` binding**, committed or live: a staging-only declaration committed on 2026-10-07 was removed the same day before any deployment, and Stage B is parked under the no-cost requirement. See "Reconciliation ledger binding (committed and removed 2026-10-07; Stage B parked)" in section 6 and `../technical/GridView_Environments.md` |
@@ -96,6 +97,26 @@ ever edited, redeploy and re-confirm it with:
 ```text
 npm exec -- wrangler deployments list --env staging
 ```
+
+**Committed: no schedule (2026-10-13, not deployed).** The season-batch ingest
+configuration sets `[env.staging.triggers] crons = []`. Under
+`PROVIDER_MODE = none` a nightly run could only record `sync.failed` and
+rewrite the season's failure state, so it is removed rather than left
+running. Three Wrangler facts govern this (checked in the pinned Wrangler
+4.112 source and the 2026-10-07 trigger test):
+
+- **`wrangler deploy` replaces the schedules only when `crons` is set.** An
+  empty list replaces them with none; an **absent** `crons` key leaves the
+  live `17 3 * * *` in place. Keep the empty list explicit.
+- **Schedules are script settings, not part of a version.** On 2026-10-07 a
+  `wrangler triggers deploy` changed them with no version upload. So
+  `wrangler rollback <version>` restores that version's code and variables,
+  **not** its schedule. Never assume a Worker rollback restores a trigger.
+- **Restoring the old schedule is its own step:** `npm exec -- wrangler
+  triggers deploy --env staging`, run from a configuration that carries
+  `crons = ["17 3 * * *"]` (for example a `git archive` copy of `3228725`, as
+  on 2026-10-07). Then confirm it in the dashboard (Worker → Settings →
+  Triggers). That is a cutover-sensitive change of its own (section 6).
 
 ## 4. Secrets
 
@@ -153,11 +174,13 @@ plus the `ENVIRONMENT`, `PROVIDER_MODE` (`none`), `PUBLIC_BASE_URL`,
 `SEASON_PUBLICATION_CUTOVER_CONTROL` (`activate:2026`, live since 2026-09-16),
 `SEASON_PUBLICATION_AUTHORITY` (`sequencer`, live since 2026-09-15) and
 `SEASON_BATCH_INGEST` (`2026`, never live) vars.
-Committed and live match for the two cutover vars and the cron, and the
-Durable Object bindings match the live Stage A version (`cc8d9a54-…`).
-**`PROVIDER_MODE` does not match** since 2026-10-13 (committed `none`, live
-`mock`), and the dry-run adds `SEASON_BATCH_INGEST`; see "Guarded season-batch
-ingest" in section 6 for that deployment's checks. *(A `RECONCILIATION_LEDGER` binding committed on 2026-10-07
+Committed and live match for the two cutover vars, and the Durable Object
+bindings match the live Stage A version (`cc8d9a54-…`). **`PROVIDER_MODE` and
+the cron do not match** since 2026-10-13 (committed `none` and no schedule;
+live `mock` and `17 3 * * *`), and the dry-run adds `SEASON_BATCH_INGEST`. The
+dry-run output lists no schedule either way, so read the committed cron from
+`wrangler.toml`. See "Guarded season-batch ingest" in section 6 for that
+deployment's checks. *(A `RECONCILIATION_LEDGER` binding committed on 2026-10-07
 was removed the same day before any deployment; see "Reconciliation ledger
 binding" in section 6.)* That is necessary, not sufficient: a
 deploy of `master` is ordinary under the section 6 gate only if no later
@@ -1338,12 +1361,16 @@ points with the resolved variables over an in-process sequencer:
 
 - **Staging** resolves to exactly `ENVIRONMENT = staging`,
   `PROVIDER_MODE = none`, the unchanged `PUBLIC_BASE_URL`, `activate:2026`,
-  `sequencer` and `SEASON_BATCH_INGEST = 2026`. The cron (`17 3 * * *`), the KV
+  `sequencer` and `SEASON_BATCH_INGEST = 2026`. Its triggers resolve to
+  exactly `{ crons: [] }`: no schedule, stated explicitly (section 3). The KV
   binding, the two Durable Object bindings and their `exports` are unchanged,
   with no migration and no `RECONCILIATION_LEDGER`.
 - **Development and production** variables are unchanged (`ENVIRONMENT`
-  only; `ENVIRONMENT` and `PROVIDER_MODE = none`).
-- **No mock publication.** Under the staging variables the scheduled handler,
+  only; `ENVIRONMENT` and `PROVIDER_MODE = none`), and neither declares a
+  trigger, as before. `[env.staging.triggers]` is the only triggers table.
+- **No mock publication.** No schedule invokes the scheduled handler, and
+  even if one did, for example a trigger restored separately, it builds
+  nothing. Under the staging variables the scheduled handler,
   `sync/full`, `sync/resource` and `rebuild/home` construct no mock provider,
   call no publication command (legacy, sequenced or guarded), write only the
   season's sync-state key, leave the active release unchanged and record
@@ -1363,11 +1390,12 @@ points with the resolved variables over an in-process sequencer:
   the release the batch replaced is refused as `guard-round-coverage-regression`.
 
 **Deploy checks for this configuration.** The deployment is
-**cutover-sensitive** under the section 6 gate: the dry-run and live
-`PROVIDER_MODE` differ (`none` against `mock`). It needs explicit, separate
-authorization naming `PROVIDER_MODE = none`, `SEASON_BATCH_INGEST = 2026`,
-the unchanged `activate:2026` and `sequencer`, staging, and the reviewed
-commit. Merging the configuration PR authorizes none of it. Every step below
+**cutover-sensitive** under the section 6 gate: the committed and live
+`PROVIDER_MODE` differ (`none` against `mock`), and so does the cron (none
+against `17 3 * * *`). It needs explicit, separate authorization naming
+`PROVIDER_MODE = none`, `SEASON_BATCH_INGEST = 2026`, the removal of the
+`17 3 * * *` schedule, the unchanged `activate:2026` and `sequencer`, staging,
+and the reviewed commit. Merging the configuration PR authorizes none of it. Every step below
 is read-only until step 6.
 
 1. **Clean source.** Build from a `git archive` copy of the reviewed merge
@@ -1380,26 +1408,41 @@ is read-only until step 6.
    `SEASON_PUBLICATION_AUTHORITY` `sequencer`, `SEASON_BATCH_INGEST` `2026`.
    Confirm exactly these bindings: `GRIDVIEW_DATA`, `PROVIDER_RATE_LIMITER`,
    `SEASON_PUBLICATION_SEQUENCER`. Confirm no `RECONCILIATION_LEDGER` and no
-   exports or migration change. Record the bundle's SHA-256 and size.
+   exports or migration change. Record the bundle's SHA-256 and size. The
+   dry-run lists no schedules, so confirm in `wrangler.toml` itself that
+   `[env.staging.triggers]` is exactly `crons = []`. **An absent `crons` key
+   would leave the live schedule in place** (section 3).
 3. **Compare with live.** `npm exec -- wrangler deployments status --env
    staging` must show `cc8d9a54-…` at 100%. Then `npm exec -- wrangler versions
-   view cc8d9a54-e2ed-4475-8696-d2e5ec66b275 --env staging`. The five-thing
-   gate must differ in `PROVIDER_MODE` only. The cutover control, the
-   authority, the cron and the Durable Object bindings must be identical; the
-   added `SEASON_BATCH_INGEST` is the only other variable change.
-4. **Rollback target.** `npm exec -- wrangler versions list --env staging`
-   must list `cc8d9a54-…`. Staging keeps at most 10 versions, so the upload
-   drops the oldest; `cc8d9a54-…` is the newest and stays. The deployment
-   changes no Durable Object class and no `exports`, so
+   view cc8d9a54-e2ed-4475-8696-d2e5ec66b275 --env staging`. In the
+   five-thing gate, `PROVIDER_MODE` and the cron must differ, and nothing else.
+   The cutover control, the authority and the Durable Object bindings must be
+   identical. The added `SEASON_BATCH_INGEST` is the only other variable
+   change. A version view does not show schedules: read the live one in the
+   dashboard (Worker → Settings → Triggers), which must show `17 3 * * *` only,
+   and record it.
+4. **Rollback target, and what it does not restore.**
+   `npm exec -- wrangler versions list --env staging` must list `cc8d9a54-…`.
+   Staging keeps at most 10 versions, so the upload drops the oldest, but
+   `cc8d9a54-…` is the newest and stays. The deployment changes no Durable
+   Object class and no `exports`, so
    `wrangler rollback cc8d9a54-e2ed-4475-8696-d2e5ec66b275 --env staging`
-   remains available. Until a batch commits, that rollback restores the
-   previous state completely.
+   remains available. **That rollback restores `cc8d9a54`'s code and
+   variables (`mock`, no ingest), not its schedule** (section 3). Until a
+   batch commits, fully restoring the previous state is two steps: the
+   rollback, then a separately authorized
+   `npm exec -- wrangler triggers deploy --env staging` from a configuration
+   carrying `crons = ["17 3 * * *"]` (a `git archive` copy of `3228725`).
+   Confirm both in the dashboard. Without the second step the old Worker runs
+   with no nightly publication.
 5. **Secret and window.** `npm exec -- wrangler secret list --env staging`
    lists `ADMIN_TOKEN` (names only). Deploy outside 03:00-03:45Z, so the
-   upload cannot overlap the nightly run.
+   upload cannot overlap the last nightly run.
 6. **Deploy** (authorized only): `npm exec -- wrangler deploy --env staging`.
    Record the version id, then confirm `deployments status` shows it at 100%
-   and `cc8d9a54-…` is still listed.
+   and `cc8d9a54-…` is still listed. Confirm in the dashboard that the Worker
+   now has **no** Cron Trigger. If `17 3 * * *` is still listed, the deploy
+   did not carry `crons = []`: stop and investigate before the next 03:17Z.
 7. **Immediately after (read-only, public).** `/v1/status` answers `200`.
    The content ETags are unchanged; `/v1/status`'s may change once.
    `GET /v1/content/manifest` still reports `attributionVersion` `1`, the mock
@@ -1408,22 +1451,26 @@ is read-only until step 6.
    `submission-malformed`. That proves admission passed (no
    `ingest-disabled`, `attribution-not-active` or `authority-not-sequenced`)
    and it writes nothing. Any `409` `admission` reason stops the procedure.
-8. **The next nightly run (03:17Z), read-only.** Expect one `sync.failed`
-   line with `failureCategory` `provider-unavailable` and
-   `providerCallCount` `0`. Expect no `sync.started`, no `publication.*` line
-   and no `exceededCpu`. Expect unchanged content ETags and active version. A
-   `publication.*` line or a mock refresh means the deployed Worker is not this
-   configuration: roll back (step 4) and investigate.
+8. **The first 03:17Z after the deploy, read-only.** Expect **no**
+   invocation at all: no `scheduled` event and no `sync.*` line in the
+   dashboard or `wrangler tail`. Expect unchanged content ETags and active
+   version. Any scheduled invocation means the schedule survived (step 6).
+   A `sync.failed` `provider-unavailable` with zero provider calls means the
+   schedule survived but the new Worker is running. A `publication.*` line or a
+   mock refresh means the deployed Worker is not this configuration. In
+   either case, investigate before anything else is sent.
 
-**What `none` changes in staging.** Nothing rebuilds the season any more, so
-staging serves the last mock release (`pm1-…`) unchanged until a batch commits.
-Its Home chronology (next and latest event) stays as of that last mock run.
-`/v1/status` `lastSuccessfulSyncAt` stops advancing, and `snapshotAgeSeconds`
-keeps growing. After a batch, Home and freshness stay as of that batch's
-publication, because the ingest writes no sync state and nothing regenerates
-the release between batches. The nightly cron costs about two KV writes (the
-sync-state key) and no generation, against about 73-131 ms CPU per mock run
-before. `/internal/admin/rollback` and `cache/purge` are unchanged.
+**What `none` and no schedule change in staging.** Nothing rebuilds the
+season any more, so staging serves the last mock release (`pm1-…`) unchanged
+until a batch commits. Its Home chronology (next and latest event) stays as of
+that last mock run. `/v1/status` `lastSuccessfulSyncAt` stops advancing, and
+`snapshotAgeSeconds` keeps growing. After a batch, Home and freshness stay as
+of that batch's publication, because the ingest writes no sync state and
+nothing regenerates the release between batches. With no schedule there is no
+nightly invocation, so no nightly `sync.failed` and no nightly sync-state
+write. A mock run used about 73-131 ms CPU. Only an operator's manual
+`sync/*` call still records `provider-unavailable` in the sync state.
+`/internal/admin/rollback` and `cache/purge` are unchanged.
 
 **No way back to the mock release.** The first real publication is
 one-way for season 2026 in staging (DP-5):
@@ -1434,11 +1481,14 @@ one-way for season 2026 in staging (DP-5):
   mock release lacks. There is no rollback exemption and no
   break-glass (C1/C4 are not built).
 - No mock candidate can follow it. Under `none` none is built. A Worker
-  rolled back to `cc8d9a54-…` (`mock`) builds one every night, and the guard
-  refuses it every night (`sync.failed`, `publication.guard.rejected`).
-- `wrangler rollback` to `cc8d9a54-…` stays possible after a batch, but it is
-  a code and configuration rollback only. The real release keeps serving, the
-  ingest route disappears and the nightly guard refusals above begin.
+  rolled back to `cc8d9a54-…` (`mock`) builds one on each manual sync, and
+  on each scheduled run once its trigger is restored separately (section 3).
+  The guard refuses every one (`sync.failed`, `publication.guard.rejected`).
+- `wrangler rollback` to `cc8d9a54-…` stays possible after a batch, but it
+  restores only code and variables, never data and never the schedule. The
+  real release keeps serving and the ingest route disappears. The nightly
+  guard refusals above begin only if `17 3 * * *` is also restored with
+  `wrangler triggers deploy`.
 - A wrong real release is corrected only by a later reviewed batch that is a
   superset of it, or by a guarded rollback to an earlier *real* release.
   Never by returning to mock.
@@ -1472,8 +1522,7 @@ outside the repository.
    It prints the summary, `submissionSha256` and `attributionStatus` (the
    local record's; the Worker needs `active`). The real R16 batch makes a
    body of about 0.4 MB; the Worker reads at most 2 MiB.
-4. Send it **once**, outside 03:00-03:45Z (the nightly cron holds the
-   sequencer then), with the token decrypted into process memory only (section
+4. Send it **once**, with the token decrypted into process memory only (section
    4), for example:
 
    ```powershell
@@ -1535,15 +1584,16 @@ UTC day. The post-commit cache purge exceeds Free's Cache API budget and
 reports `purge-failed`, as the nightly cron does (section 15).
 
 **What the committed configuration changes for CPU (2026-10-13).** Nothing
-for public reads. The nightly cron stops generating and publishing, so the
-73-131 ms mock run becomes a few KV operations. That removes the only
-invocation that has shown, in production use, that Free tolerates an overrun
-(131 ms, 2026-10-08 soak, not terminated), and it leaves the ingest as the
-only heavy invocation. That tolerance is evidence, not a guarantee, and it
-says nothing about a 150-233 ms run. If the ingest proves impossible on Free
-before any batch has committed, `wrangler rollback` to `cc8d9a54-…` (deploy
-check 4) restores the nightly mock publication. Without that rollback,
-staging keeps serving the last mock release unchanged.
+for public reads. The nightly 73-131 ms mock run disappears with the
+schedule. That removes the only invocation that has shown, in production use,
+that Free tolerates an overrun (131 ms, 2026-10-08 soak, not terminated), and
+it leaves the ingest as the only heavy invocation. That tolerance is
+evidence, not a guarantee, and it says nothing about a 150-233 ms run. If
+the ingest proves impossible on Free before any batch has committed,
+restoring the nightly mock publication takes both halves of deploy check 4:
+`wrangler rollback` to `cc8d9a54-…` **and** a separate
+`wrangler triggers deploy` of `17 3 * * *`. Without both, staging keeps
+serving the last mock release unchanged.
 
 ## 7. Initial synchronization and publication
 
@@ -1767,13 +1817,15 @@ caller's would be. **Since the 2026-09-16 activation, season 2026 is `active`
 and authoritative, so a scheduled season-2026 publication is admitted and runs
 through the sequencer, never through the legacy pointers** (section 6).
 
-**Under the committed `PROVIDER_MODE = none` (2026-10-13, not deployed)** the
-scheduled handler builds no provider. Every run records `sync.failed`
-`provider-unavailable` with zero provider calls, writes only the season's
-sync-state key and never reaches a publisher, so it can neither publish nor be
-refused by the guard. Jobs fall due by their last *success*, which never
-advances under `none`, so this repeats every night. See "Guarded season-batch
-ingest" in section 6, deploy check 8.
+**Under the committed configuration (2026-10-13, not deployed) nothing is
+scheduled:** `[env.staging.triggers] crons = []` (section 3). The handler
+still exists. Under `PROVIDER_MODE = none` it builds no provider: an
+invocation records `sync.failed` `provider-unavailable` with zero provider
+calls, writes only the season's sync-state key and never reaches a
+publisher, so it can neither publish nor be refused by the guard. Jobs fall
+due by their last *success*, which never advances under `none`. A schedule
+would therefore repeat that failure every night, and that is why it is
+removed. See "Guarded season-batch ingest" in section 6, deploy check 8.
 
 Verify with the local test suite (the safe mechanism — no remote trigger, no
 cron change):

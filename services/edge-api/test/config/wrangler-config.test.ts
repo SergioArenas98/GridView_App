@@ -24,7 +24,7 @@ describe('wrangler staging configuration', () => {
     expect(Object.keys(jsoncConfig)).toHaveLength(0);
   });
 
-  it('declares the staging Worker, workers.dev endpoint, KV binding and cron explicitly', () => {
+  it('declares the staging Worker, workers.dev endpoint, KV binding and an explicitly empty cron', () => {
     expect(config).toMatch(
       /\[env\.staging\][\s\S]*name = "gridview-api-staging"/,
     );
@@ -35,9 +35,7 @@ describe('wrangler staging configuration', () => {
     expect(config).toMatch(
       /\[\[env\.staging\.kv_namespaces\]\][\s\S]*binding = "GRIDVIEW_DATA"[\s\S]*id = "1d0fb55486a745a1ad12e03d9f04942b"/,
     );
-    expect(config).toMatch(
-      /\[env\.staging\.triggers\][\s\S]*crons = \["17 3 \* \* \*"\]/,
-    );
+    expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
   });
 
   it('declares ADMIN_TOKEN as a required staging secret without committing its value', () => {
@@ -182,7 +180,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     }
   });
 
-  it('leaves every staging binding, the secret, cron and observability untouched', () => {
+  it('leaves every staging binding, the secret and observability untouched, with an empty cron', () => {
     expect(config).toMatch(
       /\[\[env\.staging\.durable_objects\.bindings\]\]\nname = "PROVIDER_RATE_LIMITER"\nclass_name = "ProviderRateLimiter"/,
     );
@@ -195,9 +193,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     expect(config).toMatch(
       /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN"\]/,
     );
-    expect(config).toMatch(
-      /\[env\.staging\.triggers\]\ncrons = \["17 3 \* \* \*"\]/,
-    );
+    expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
     expect(config).toMatch(
       /\[env\.staging\.observability\]\nenabled = true\nhead_sampling_rate = 1\n\n\[env\.staging\.observability\.logs\]\nenabled = true\npersist = true\ninvocation_logs = false/,
     );

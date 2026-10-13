@@ -3,13 +3,18 @@
  * PR-4, DP-6(b)), as Wrangler itself resolves `wrangler.toml`, driven through
  * the real Worker entry points.
  *
- * `env.staging` sets `SEASON_BATCH_INGEST = "2026"` and moves
- * `PROVIDER_MODE` from `mock` to `none`. Development, production, the cron and
- * the absent reconciliation-ledger binding do not change. This file proves
- * three things about that resolved configuration:
+ * `env.staging` sets `SEASON_BATCH_INGEST = "2026"`, moves `PROVIDER_MODE`
+ * from `mock` to `none` and replaces the nightly `17 3 * * *` with an explicit
+ * empty cron list. Development, production and the absent
+ * reconciliation-ledger binding do not change. This file proves four things
+ * about that resolved configuration:
  *
- * - no scheduled run, and no manual whole-season sync, can build or publish a
- *   mock candidate in staging any more;
+ * - staging schedules nothing, and says so explicitly: Wrangler replaces a
+ *   Worker's schedules only when `crons` is set, so an empty list removes the
+ *   live one where an absent key would leave it;
+ * - no scheduled run - should one ever be invoked, for example by a trigger
+ *   restored separately - and no manual whole-season sync can build or
+ *   publish a mock candidate in staging any more;
  * - production cannot ingest, whatever it is sent;
  * - the staging ingest still needs `ADMIN_TOKEN` and still publishes only
  *   through the guarded sequencer, bound to the reviewed active release.
@@ -126,10 +131,22 @@ describe('the resolved configuration', () => {
     });
   });
 
-  it('leaves the cron, the bindings and the absent ledger unchanged', () => {
-    expect(resolved('staging').triggers.crons).toEqual(['17 3 * * *']);
+  it('gives staging an explicitly empty cron list and leaves development and production unscheduled', () => {
+    // Empty, not absent: `wrangler deploy` PUTs the schedules only when
+    // `crons` is set, so `[]` removes the live `17 3 * * *` and an absent key
+    // would silently keep it.
+    expect(resolved('staging').triggers).toEqual({ crons: [] });
+    expect(rawConfig).toMatch(/^\[env\.staging\.triggers\]\ncrons = \[\]\n/m);
+    expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
+    // Development and production declared no trigger before and still do not.
     expect(resolved('').triggers.crons).toBeUndefined();
     expect(resolved('production').triggers.crons).toBeUndefined();
+    expect(rawConfig.match(/^\[[^\]]*triggers\]$/gm)).toEqual([
+      '[env.staging.triggers]',
+    ]);
+  });
+
+  it('leaves the bindings and the absent ledger unchanged', () => {
     expect(bindingNames('staging')).toEqual([
       'PROVIDER_RATE_LIMITER',
       'SEASON_PUBLICATION_SEQUENCER',
@@ -218,7 +235,9 @@ function adminPost(path: string, body?: unknown, token = ADMIN_TOKEN) {
 }
 
 describe('the committed staging variables cannot publish mock data', () => {
-  it('a scheduled run builds no provider, publishes nothing and writes only its sync state', async () => {
+  // Committed staging schedules nothing (above). The handler is still
+  // exercised: a trigger restored separately would invoke it.
+  it('a scheduled run, if one is invoked, builds no provider, publishes nothing and writes only its sync state', async () => {
     const context = await ingestContext();
     const before = await context.coordinator.readAuthority(SEASON);
     context.storage.writeLog.length = 0;
