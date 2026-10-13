@@ -44,6 +44,21 @@ const record = JSON.parse(
   ),
 ) as { version: string; sources: readonly AttributionSource[] };
 
+const wrangler = readFileSync(
+  join(repoRoot, 'services', 'edge-api', 'wrangler.toml'),
+  'utf8',
+);
+
+/** The mock provider's content manifest, as the API serves it. */
+const mockAttributionVersion = (
+  JSON.parse(
+    readFileSync(
+      join(here, '..', 'fixtures', 'api', 'v1', 'content', 'manifest.json'),
+      'utf8',
+    ),
+  ) as { data: { attributionVersion: string } }
+).data.attributionVersion;
+
 /**
  * Every data source GridView has evaluated (Provider Evaluation §6-§7). The
  * notice may name one only while the record credits it.
@@ -115,13 +130,70 @@ describe('the API documentation licence notice', () => {
     );
   });
 
-  it('does not claim a dormant source is served', () => {
+  it("states each source's status as the record does", () => {
     for (const source of record.sources) {
-      if (source.status !== 'dormant') continue;
+      if (source.status === 'dormant') {
+        expect(description).toContain(
+          `No GridView runtime retrieves data from ${source.name} yet`,
+        );
+        continue;
+      }
+      // `active` (O-9, DP-7): published through operator-run batches only,
+      // never retrieved by a Worker.
+      expect(source.status).toBe('active');
       expect(description).toContain(
-        `No GridView runtime retrieves data from ${source.name} yet`,
+        `No GridView Worker retrieves data from ${source.name} automatically`,
       );
+      expect(description).toContain(
+        `${source.name}-derived data reaches this service only as an operator-run batch`,
+      );
+      expect(description).toContain(
+        'Production accepts no batch and serves no provider data',
+      );
+      expect(description).toContain('can lag behind');
     }
+  });
+
+  it('credits Jolpica F1 as active, so the batch wording above is exercised', () => {
+    expect(
+      record.sources.find((source) => source.name === 'Jolpica F1')?.status,
+    ).toBe('active');
+  });
+
+  it('tells a reader which releases carry provider-derived data', () => {
+    // Before the first batch staging serves the mock dataset under an active
+    // record; the per-release attribution version is what makes the notice
+    // true in that window as well as after it.
+    expect(description).toContain(
+      '`GET /v1/content/manifest`, `attributionVersion`',
+    );
+    expect(description).toContain(`\`${record.version}\` or later`);
+    expect(description).toContain(
+      'A release with any other value contains no Jolpica F1-derived data',
+    );
+    expect(description).toContain(
+      "GridView's mock dataset carries `1`, and staging serves it until a first batch is published",
+    );
+    expect(mockAttributionVersion).toBe('1');
+  });
+
+  it('never claims that GridView retrieves provider data itself', () => {
+    expect(description).not.toMatch(
+      /\bGridView (retrieves|fetches|polls|downloads|synchroni[sz]es)\b/i,
+    );
+    expect(description).not.toMatch(/\b(live|real-time) (provider )?data\b/i);
+  });
+
+  it('keeps "not automatically" true: no committed environment selects coordinated mode', () => {
+    // The coordinated runtime is the only Worker path that could request
+    // Jolpica F1. While any source is active the notice and the app say no
+    // Worker retrieves it, so selecting that mode needs new wording first.
+    if (!record.sources.some((source) => source.status === 'active')) return;
+    const modes = [
+      ...wrangler.matchAll(/^\s*PROVIDER_MODE\s*=\s*["']([^"']*)["']/gm),
+    ].map((match) => match[1]);
+    expect(modes.length).toBeGreaterThan(0);
+    expect(modes).not.toContain('coordinated');
   });
 
   it('never reverts to blanket ownership or a single blanket licence', () => {

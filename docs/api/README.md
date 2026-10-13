@@ -34,8 +34,11 @@ apart:
 - **Data derived from Jolpica F1** is credited to Jolpica F1, linked, and stated
   to remain available under CC BY-NC-SA 4.0 wherever ShareAlike applies, with
   GridView's transformation, normalization and combination disclosed. GridView
-  claims no exclusive ownership of it. No GridView runtime retrieves Jolpica F1
-  data yet, and the notice says so.
+  claims no exclusive ownership of it. The notice says that no GridView Worker
+  retrieves Jolpica F1 data automatically: it reaches staging only as an
+  operator-run, reviewed batch, production serves none, and a release carries
+  it only when its content manifest's `attributionVersion` is the attribution
+  record's version (`data-sources-v2` or later).
 - **GridView's own work** - the application and edge API source code and this
   contract document - is not licensed by that notice.
 - **Service controls** such as rate limiting protect GridView's infrastructure

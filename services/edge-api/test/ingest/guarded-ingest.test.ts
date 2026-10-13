@@ -10,6 +10,8 @@
 
 import { describe, expect, it } from 'vitest';
 
+import dataSources from '../../../../content/attribution/data-sources.json';
+
 import type { SeasonBatchIngestOutcome } from '../../src/ingest/service';
 import type { ProviderSeasonSource } from '../../src/providers/formula-one-provider';
 import type { SeasonPublicationSequencerPort } from '../../src/publication/sequencer';
@@ -517,3 +519,53 @@ describe.each(sequencerTransports)(
     });
   },
 );
+
+describe('the attribution admission gate (DP-7)', () => {
+  const withJolpica = (status: string) => {
+    const record = copy(dataSources) as unknown as Json;
+    record.sources = (record.sources as Json[]).map((source) =>
+      source.sourceId === 'jolpica' ? { ...source, status } : source,
+    );
+    return record;
+  };
+
+  it('refuses a record that does not credit the source as active exactly once', async () => {
+    const ctx = await ingestContext();
+    const active = withJolpica('active');
+    const jolpica = (active.sources as Json[])[0]!;
+    for (const record of [
+      withJolpica('dormant'),
+      { ...active, sources: [] },
+      { ...active, sources: [jolpica, jolpica] },
+    ]) {
+      expect(
+        ingestFor(ctx, ctx.service, { attributionRecord: record }).admit(),
+      ).toBe('attribution-not-active');
+    }
+    // Not an attribution record at all: the curated metadata cannot name an
+    // attribution version, so the season is refused one step earlier.
+    for (const record of [{ ...active, kind: 'media-rights' }, {}]) {
+      expect(
+        ingestFor(ctx, ctx.service, { attributionRecord: record }).admit(),
+      ).toBe('ingest-misconfigured');
+    }
+  });
+
+  it('admits the committed record, which credits Jolpica as active under data-sources-v2', async () => {
+    const ctx = await ingestContext();
+    const admitted = ingestFor(ctx, ctx.service, {
+      attributionRecord: undefined,
+    }).admit();
+    if (typeof admitted === 'string') throw new Error(admitted);
+    expect(admitted.credit).toEqual({
+      active: true,
+      attribution: {
+        recordVersion: 'data-sources-v2',
+        name: 'Jolpica F1',
+        sourceUrl: 'https://github.com/jolpica/jolpica-f1',
+        licenseName: 'CC BY-NC-SA 4.0',
+        licenseUrl: 'https://creativecommons.org/licenses/by-nc-sa/4.0/',
+      },
+    });
+  });
+});

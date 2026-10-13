@@ -163,7 +163,7 @@ describe('curated season metadata (O-14)', () => {
     expect(curatedSeasonMetadata(2026)).toEqual({
       contentVersion: '2026.10.07.1',
       mediaVersion: null,
-      attributionVersion: 'data-sources-v1',
+      attributionVersion: 'data-sources-v2',
       seasonLabel: '2026 FIA Formula One World Championship',
     });
   });

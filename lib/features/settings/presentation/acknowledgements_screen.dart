@@ -26,9 +26,9 @@ import 'widgets/settings_rows.dart';
 /// appear — an absent credit is never rendered as a credit for "unknown".
 ///
 /// Third-party data sources are credited from the attribution record (ADR 0019
-/// decision 5), each with its own status. A source GridView does not retrieve
-/// data from yet is credited as such, so the screen never claims that live
-/// provider data is being served.
+/// decision 5), each with its own status. No status claims that provider data
+/// is being served or retrieved live: a dormant source is credited as not
+/// connected, and an active one as published only in operator-run batches.
 class AcknowledgementsScreen extends ConsumerWidget {
   const AcknowledgementsScreen({super.key});
 

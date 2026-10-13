@@ -22,6 +22,11 @@ const String _sampleBanner = 'Sample data — not live results';
 const String _dormant =
     'Not connected yet. GridView does not currently retrieve data from this '
     'source automatically.';
+const String _batchOnly =
+    'GridView does not retrieve data from this source automatically. Any data '
+    'from it that GridView shows was captured, reviewed and published by '
+    "GridView's operator, by hand and in batches, so it changes only when a "
+    'new batch is published and can lag behind the source.';
 const String _frozenStatus =
     'This test build contains a fixed snapshot of data from this source, '
     'captured 2026-10-08. It receives no updates.';
@@ -169,27 +174,31 @@ void main() {
           'International',
         ),
       );
-      // It neither denies serving the data nor claims live retrieval.
+      // It neither denies serving the data nor describes batches it never
+      // receives: the frozen snapshot is all this build has.
       expect(all, isNot(contains(_dormant)));
-      expect(all, isNot(contains('GridView retrieves data from this source.')));
+      expect(all, isNot(contains(_batchOnly)));
       expect(
         find.byKey(const ValueKey<String>('data-source-jolpica-license')),
         findsOneWidget,
       );
     });
 
-    testWidgets('a sample-data build keeps the dormant credit', (
+    // The record's credit claims no data is shown, so it stays true beside
+    // sample data.
+    testWidgets("a sample-data build keeps the record's batch-only credit", (
       WidgetTester tester,
     ) async {
       await _pump(tester, location: '/settings/acknowledgements');
       final String all = _texts(tester).join('\n');
 
       expect(all, contains('Sample data'));
-      expect(all, contains(_dormant));
+      expect(all, contains(_batchOnly));
+      expect(all, isNot(contains(_dormant)));
       expect(all, isNot(contains(_frozenStatus)));
     });
 
-    testWidgets('the normal app keeps the dormant credit', (
+    testWidgets("the normal app shows the record's batch-only credit", (
       WidgetTester tester,
     ) async {
       await _pump(
@@ -200,7 +209,8 @@ void main() {
       final String all = _texts(tester).join('\n');
 
       expect(all, contains('GridView service'));
-      expect(all, contains(_dormant));
+      expect(all, contains(_batchOnly));
+      expect(all, isNot(contains(_dormant)));
       expect(all, isNot(contains('Frozen test data')));
     });
   });

@@ -1,9 +1,12 @@
 import '../application/external_links.dart';
 
-/// Whether GridView retrieves data from a source yet.
+/// Whether data from a source can reach GridView at all.
 ///
-/// The screen's wording depends on it: a `dormant` source is credited without
-/// claiming that data from it is being served.
+/// The screen's wording depends on it, and neither wording claims that data
+/// from the source is being shown: a `dormant` source is credited before any
+/// path for its data exists; an `active` one is published only through
+/// operator-run, reviewed batches, never retrieved automatically, and is
+/// credited the same way before the first batch as after it.
 enum DataSourceStatus { dormant, active }
 
 /// The attribution one licensor is owed (ADR 0019 decision 5;

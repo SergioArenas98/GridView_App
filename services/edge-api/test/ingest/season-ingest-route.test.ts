@@ -3,9 +3,10 @@
  * with the attribution record exactly as committed: authentication, the
  * composition root and the response headers are the real ones.
  *
- * Every committed environment leaves `SEASON_BATCH_INGEST` unset, and the
- * committed record calls Jolpica `dormant`, so the route admits nothing
- * anywhere - and refuses before it reads a byte of the body.
+ * Every committed environment leaves `SEASON_BATCH_INGEST` unset, so the
+ * route admits nothing anywhere - and refuses before it reads a byte of the
+ * body. The committed record calls Jolpica `active` (`data-sources-v2`), so
+ * once a staging Worker is fully configured the attribution gate passes.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -120,9 +121,15 @@ describe('the season ingest route: admission', () => {
     ).toEqual(admission('authority-not-sequenced'));
   });
 
-  it('admits nothing while the committed record calls the source dormant', async () => {
-    expect(await refusal(await stagingSequencer())).toEqual(
-      admission('attribution-not-active'),
-    );
+  it('admits a fully configured staging Worker with the committed record, and only then reads the body', async () => {
+    const post = unreadPost();
+    const response = await worker.fetch(post, await stagingSequencer());
+    expect(post.bodyUsed).toBe(true);
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { data: unknown }).data).toEqual({
+      outcome: 'refused',
+      stage: 'request',
+      reason: 'submission-malformed',
+    });
   });
 });

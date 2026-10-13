@@ -2108,10 +2108,10 @@ abstract class AppLocalizations {
   /// **'Not connected yet. GridView does not currently retrieve data from this source automatically.'**
   String get settingsSourceStatusDormant;
 
-  /// Status of a credited data source that GridView retrieves data from.
+  /// Status of a credited data source whose data GridView publishes only through operator-run, reviewed batches. Must stay true before the first batch is published (it must not claim that data from the source is being shown) and must not imply automatic or live retrieval.
   ///
   /// In en, this message translates to:
-  /// **'GridView retrieves data from this source.'**
+  /// **'GridView does not retrieve data from this source automatically. Any data from it that GridView shows was captured, reviewed and published by GridView\'s operator, by hand and in batches, so it changes only when a new batch is published and can lag behind the source.'**
   String get settingsSourceStatusActive;
 
   /// Status of a credited data source in a test-only build that bundles a frozen snapshot of its data. Must not claim live retrieval.

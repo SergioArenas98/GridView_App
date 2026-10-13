@@ -19,6 +19,10 @@ import { createHash } from 'node:crypto';
 export const ISSUED_ATTRIBUTION_VERSIONS = Object.freeze({
   'data-sources-v1':
     'cda4922b7de59cc86ebdb1f23994429c0c3b6cd8eac3971c3f8e140cb61c8621',
+  // Jolpica `dormant` -> `active` (O-9, decision pack DP-7): data from it is
+  // published through operator-reviewed batches only.
+  'data-sources-v2':
+    'f01bb6fb532291cccc1ba7aac9a22cbde37a459b312e5ab325bce3c9a6a07afa',
 });
 
 /** Serializes a JSON value with object keys sorted, so digests ignore key order. */

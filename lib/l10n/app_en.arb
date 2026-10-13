@@ -1538,9 +1538,9 @@
   "@settingsSourceStatusDormant": {
     "description": "Status of a credited data source that GridView does not retrieve data from yet. Must not claim that data from it is being served."
   },
-  "settingsSourceStatusActive": "GridView retrieves data from this source.",
+  "settingsSourceStatusActive": "GridView does not retrieve data from this source automatically. Any data from it that GridView shows was captured, reviewed and published by GridView's operator, by hand and in batches, so it changes only when a new batch is published and can lag behind the source.",
   "@settingsSourceStatusActive": {
-    "description": "Status of a credited data source that GridView retrieves data from."
+    "description": "Status of a credited data source whose data GridView publishes only through operator-run, reviewed batches. Must stay true before the first batch is published (it must not claim that data from the source is being shown) and must not imply automatic or live retrieval."
   },
   "settingsSourceStatusFrozen": "This test build contains a fixed snapshot of data from this source, captured {date}. It receives no updates.",
   "@settingsSourceStatusFrozen": {
