@@ -666,6 +666,40 @@ already been attempted in this run.
 - `staleAfter` non-null and `<= now` → due (the `<=` boundary is deliberate);
 - otherwise not due. No fallback TTL when `staleAfter` is absent.
 
+**Release convergence** (`isBehindManifestRelease`, planner only, since
+2026-10-14). An automatic core resource is also due when its record belongs to
+an older release than the stored content manifest's record. Concretely, all of
+these hold:
+
+- both records have a recorded success and a `generatedAt`;
+- the resource is not the manifest itself;
+- the resource is scoped to the locally resolved current season, or to no
+  season;
+- its `generatedAt` is strictly earlier than the manifest's.
+
+This relies on the server contract of ADR 0025 D4, amendment of 2026-10-14: one
+publication instant on every document of a release, strictly later per release
+of a season, with the manifest served from the current season's release. It
+catches a CDN or edge cache that answers a core route with an old `200` or
+`304` after a new batch while the manifest already shows the new release.
+
+- **When it retries:** the resource is retried at the next startup or resume,
+  even when the manifest is not refetched or answers `304`. A `304` never moves
+  provenance, so an old copy stays behind until a response from the new release
+  arrives. A `200` with identical content from the later release then takes the
+  release's fields (ADR 0005 rule-3 amendment).
+- **Bound:** the rule applies to a key **at most once per run**. A re-plan
+  inside the run (after a failed bootstrap or a season change) passes the keys
+  already refreshed as `attemptedKeys`, and the rule never applies to them
+  again. There is no timer and no in-run retry. A cache that keeps serving the
+  old release costs one request per resource per run, never a loop. The same
+  bound holds if a server broke the contract.
+- **After a bootstrap-only first launch:** the bootstrap-materialized resources
+  have no record of their own (ADR 0014), so they are already due under the
+  rules above. The convergence rule applies once a later run has recorded them.
+- **What it does not do:** it neither reads the persisted due query nor changes
+  it, and it never reads the clock.
+
 **Missing metadata rows.** `readDueResources` can only return rows that exist, so
 the planner merges the expected canonical keys (built through `ResourceKey`,
 never string concatenation) with the query's result and treats a missing row as
@@ -807,7 +841,8 @@ written.
 - A failed resource preserves its valid domain cache and its ETag.
 - Other independent resources continue; no transaction spans unrelated resources.
 - No coordinator-level retry loop; a rate-limited resource is not immediately
-  retried (transport `Retry-After` behaviour is unchanged).
+  retried (transport `Retry-After` behaviour is unchanged). A resource behind
+  the manifest's release (§11.7) is retried at most once per run.
 - The single unconditional `304` recovery stays repository-owned (ADR 0012).
 - A configuration failure surfaces as a typed `configuration` failure; production
   never falls back to fixtures.
