@@ -104,6 +104,46 @@ A Grand Prix cached only via the Home snapshot (no detail snapshot yet) has no
 detail freshness and is treated as **stale**, prompting a detail refresh while
 its cached identity/sessions stay visible.
 
+### 3.1 Presented freshness of bootstrap-materialized content (remote builds)
+
+On a first launch an accepted bootstrap ends the run (§11.6), so Home, the
+calendar and both standings tables are on screen with **no** record of their own
+(§11.3). Until 2026-10-14 such a resource presented an *unknown* freshness,
+which shows no stale notice. A Grand Prix detail and its result document are
+fetched on demand and have their own records. The remote staging APK
+(`6ce0ed6`) showed the outcome once the batch's `staleAfter` (generatedAt
++ 15 min, never renewed because staging has no cron) had passed. The Grand
+Prix screen warned twice, once for the detail and once for the result section.
+Home, Calendar and Standings showed nothing, although the content was exactly as
+old.
+
+In a remote build (`DATA_SOURCE=remote` with the real API,
+`remoteFreshnessNoticesProvider`), `presentedFreshness` now applies one rule:
+
+- a resource with its own successful record presents that record, unchanged;
+- otherwise, if an accepted bootstrap for the **same season** materialized it
+  (Home, the calendar or a standings table, never a result document), it
+  presents the bootstrap record's own server-provided freshness;
+- otherwise its freshness is unknown, as before.
+
+This is a read for display only. Nothing is written under the resource's key, the
+resource stays due for its own synchronization, its first request still carries
+no validator, and no update time is borrowed (ADR 0014). `staleAfter` is never
+extended or invented, and no notice implies that an update happened.
+
+The Grand Prix screen states staleness **once**, in a remote build. Expired
+weekend facts or expired classifications raise the single notice at the top. Its
+wording keeps the existing precedence: a failed detail refresh shows "couldn't
+refresh, showing saved data", which covers the classifications too. The result
+section keeps only its own refresh-failure notice.
+
+Frozen and sample-fixture builds (`DATA_SOURCE=fixture`, or fixture data served)
+keep the earlier presentation exactly: unknown for bootstrap-materialized
+content, and the separate detail and result notices. Their fixtures carry an
+expired `staleAfter` too, so applying the remote rule there would change what
+those builds show. Explore collections present no stale notice in any build, and
+are unchanged.
+
 ## 4. Presentation states
 
 Pure derivation from `cache + refresh status + clock`:
@@ -924,9 +964,11 @@ and its first conditional request still carries no validator (§11.3). The seaso
 match uses bootstrap's own recorded season, so an older season's bootstrap can
 never materialize a newer current season's calendar.
 
-Because a bootstrap-materialized calendar has no record of its own, its freshness
-is **unknown** rather than fresh or stale: no "updated at" line and no stale
-notice are shown until the calendar endpoint has synced once. A later failed
+Because a bootstrap-materialized calendar has no record of its own, it shows no
+"updated at" line until the calendar endpoint has synced once. In a remote build
+it presents the bootstrap record's freshness, so an expired bootstrap shows the
+stale notice. A fixture build presents it as **unknown**, with no stale notice
+(§3.1). A later failed
 calendar refresh keeps the bootstrap-derived empty/ready state and adds only a
 non-blocking error.
 
@@ -973,6 +1015,10 @@ record; ETags and freshness are never combined.
   `evaluateFreshness` — there is one freshness policy, not two.
 - Grand Prix detail freshness comes from the persisted snapshot it already
   carries.
+- In a remote build the Grand Prix screen shows **one** stale notice for the
+  detail and the result section together. A fixture build keeps one for each
+  (§3.1). A result refresh failure always keeps its own notice in the result
+  section.
 - Stale or failed states show a discreet notice **alongside** the cached
   content, never instead of it, and never claim the device is offline merely
   because one request failed. There is no connectivity polling and no
@@ -1044,8 +1090,9 @@ same-season bootstrap materializes both. It still contributes **no** individual
 metadata: no ETag, no `generatedAt`/`sourceUpdatedAt`/`staleAfter`/`contentVersion`,
 no `lastSuccessAt`. Consequently:
 
-- a bootstrap-materialized table has `freshness == null` and shows **no** update
-  time (unknown is never presented as fresh and never as stale);
+- a bootstrap-materialized table shows **no** update time. In a remote build it
+  presents the bootstrap record's freshness. In a fixture build its freshness is
+  `null`, which is never presented as fresh or stale (§3.1);
 - both resources remain due for their first individual synchronization, whose
   first request sends no fabricated validator;
 - a `200` on one endpoint creates only its own metadata, and a later `304` uses
@@ -1458,7 +1505,9 @@ shown only for the Home resource itself, and only once that resource has
 synchronised under its own key. Anything wider is expressed as safe aggregate
 uncertainty ("Some information may be outdated"). Freshness is evaluated with
 `evaluateResourceFreshness` and the injected clock; no parallel evaluator
-exists. One stale section never makes fresh sections stale.
+exists. One stale section never makes fresh sections stale. In a remote build a
+Home, calendar or standings section with no record of its own presents the
+same-season bootstrap record's freshness. A result section never does (§3.1).
 
 ### 15.7 Season transitions
 

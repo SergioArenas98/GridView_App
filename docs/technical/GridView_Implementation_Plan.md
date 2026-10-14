@@ -3343,6 +3343,24 @@ request.**
 | Runbook | §2 and §5 committed-versus-live rows; §3 cron removal and the trigger-restoration rule; §6 "Guarded season-batch ingest": the committed-configuration proof, eight deploy checks, what `none` and no schedule change, the CPU effect on Workers Free, and "No way back to the mock release"; §7, §11, §13. |
 | **Still open** | The deployment (DP-4, cutover-sensitive), an authorized capture (DP-3), the first submission and its CPU measurement, written DP-5 acceptance, DP-10. |
 
+### 14.0.54 Consistent stale notices for expired remote data - Flutter only, no data or contract change
+
+Prepared on **2026-10-14** from `master` `6ce0ed6` (PR #75). **Flutter
+presentation, tests and documentation. No contract, OpenAPI, Drift schema,
+fixture, Edge API or Android change. Nothing was deployed, no batch was
+published, no APK was rebuilt or installed, and there was no Jolpica, staging,
+adb or phone request.** Trigger: the 2026-10-14 install of the remote staging
+APK `2a11d9fc…9e0d` on the reference phone.
+
+| Item | Status |
+|---|---|
+| Observation | Once the served `staleAfter` (16:34:54Z, generatedAt + 15 min, never renewed because staging has no cron) had passed, the Grand Prix screen showed "pueden estar desactualizados" twice, and Home, Calendar and Standings showed nothing. |
+| Cause | A first launch ends with the bootstrap (§11.6). Home, the calendar and both standings tables therefore have no record of their own (ADR 0014), and their freshness was *unknown*, which never shows a notice. The Grand Prix detail (its snapshot's `staleAfter`) and its result document (its own record) are fetched on demand. Each was expired and each raised its own notice. |
+| Fix (remote builds only) | `presentedFreshness` presents a resource's own record when it has one. Otherwise, when a same-season accepted bootstrap materialized it, the bootstrap record's own freshness is presented. This is read-only, borrows no update time and never extends `staleAfter`. The Grand Prix screen shows one top notice for stale detail or stale classifications, and the result section keeps only its refresh-failure notice. Gated by `remoteFreshnessNoticesProvider` (`DATA_SOURCE=remote` and no fixture data). Synchronization §3.1. |
+| Unchanged | Frozen and sample-fixture builds (their fixtures carry an expired `staleAfter` too), notice wording, `staleAfter` handling, refresh scheduling, Explore (no stale notice in any build), entity detail. |
+| Tests | `test/screens/expired_freshness_notice_test.dart` (24) reproduces the phone with a pinned clock past `staleAfter`. Against `6ce0ed6` the ten remote cases fail: Home, Calendar and both standings tables showed no notice, and the Grand Prix screen showed two, in en and es. Also covered: classifications alone expired, a result refresh failure, a cached Home result never taking the bootstrap freshness, fixture builds and a remote-mode build serving mock data unchanged, and remote before `staleAfter`. `test/domain/presented_freshness_test.dart` (7) covers the rule's edges. |
+| **Still open** | Review and merge. The installed `6ce0ed6` APK keeps the old behaviour until a remote APK is rebuilt from the merged `master`, which needs a separate decision. |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in
