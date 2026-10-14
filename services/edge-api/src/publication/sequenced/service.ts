@@ -50,6 +50,7 @@ import {
 } from '../../cache/purge';
 import type { Logger } from '../../logging/logger';
 import { systemClock, type Clock } from '../../runtime/clock';
+import { boundedInstant } from '../canonical/instant';
 import { contentMetadataFromManifest } from '../../storage/types';
 import type {
   SnapshotDocumentName,
@@ -83,7 +84,12 @@ import type { SeasonPublicationSequencerPort } from '../sequencer/port';
 import { readStoredInventory } from '../version-inventory';
 import { writePublicationMetadataOnce } from '../publication-metadata';
 import { buildPublicationPlan, type PublicationPlan } from './manifest-plan';
-import { bakeAssignedTimestamps, refreshVolatileFields } from './documents';
+import { bakeAssignedTimestamps, stampPublicationInstant } from './documents';
+import {
+  candidateGenerationInstant,
+  derivePublicationInstant,
+  readActivePublicationInstant,
+} from './publication-instant';
 import { resolveRollbackSourceOrdering } from './rollback-provenance';
 import {
   compareParticipationGuards,
@@ -171,8 +177,17 @@ interface ActiveAuthority {
 interface TwoPhaseInput {
   readonly season: number;
   readonly operationKind: OperationKind;
-  /** Final stable data; volatile fields already fresh; timestamps not yet assigned. */
+  /**
+   * Final stable data. Neither the publication instant nor the observation
+   * timestamps are stamped yet: the two-phase core stamps the first before
+   * `prepare` and bakes the second after it.
+   */
   readonly documents: readonly StoredSnapshot[];
+  /**
+   * The clock reading the publication instant starts from, or `null` when it
+   * has no usable spelling (refused before `prepare`).
+   */
+  readonly clockReading: string | null;
   readonly sourceOrderingInput: string;
   readonly authority: ActiveAuthority;
   /** Ordinary publication moves the current-season pointer and content metadata. */
@@ -290,6 +305,9 @@ export class SequencedPublicationService
       season: set.season,
       operationKind: 'ordinary-publication',
       documents: set.documents,
+      // The candidate's own generation reading: its chronology was resolved
+      // at this instant, so it is kept whenever it already clears the floor.
+      clockReading: candidateGenerationInstant(set.documents),
       sourceOrderingInput: set.sourceUpdatedAt,
       authority,
       publishesSeasonPointer: true,
@@ -400,12 +418,11 @@ export class SequencedPublicationService
       publicationStatus: provenance.classification,
     });
 
-    // Copy the stable historical data verbatim; regenerate only volatile fields.
-    const refreshed = refreshVolatileFields(
-      [...documents.values()],
-      this.clock.now(),
-    );
-    const validation = await this.validateDocuments(season, refreshed);
+    // Copy the stable historical data verbatim. Only the volatile fields are
+    // regenerated - stamped in the two-phase core with an instant strictly
+    // later than the release being replaced.
+    const historical = [...documents.values()];
+    const validation = await this.validateDocuments(season, historical);
     if (validation !== null) {
       return rejection(
         season,
@@ -418,7 +435,8 @@ export class SequencedPublicationService
     return this.runTwoPhase({
       season,
       operationKind: 'rollback-republication',
-      documents: refreshed,
+      documents: historical,
+      clockReading: boundedInstant(this.clock.now()),
       sourceOrderingInput: provenance.sourceOrderingInput,
       authority,
       publishesSeasonPointer: false,
@@ -470,6 +488,66 @@ export class SequencedPublicationService
     };
   }
 
+  // --- the publication instant ----------------------------------------------
+
+  /**
+   * Derives the release's logical publication instant and stamps it on every
+   * document (ADR 0025 D4, amended 2026-10-14):
+   * `max(clockReading, activeInstant + 1 ms)`, where `activeInstant` is the
+   * latest `generatedAt` the active release's own documents carry.
+   *
+   * Runs after the guard and before `prepare`, so every refusal leaves no
+   * write anywhere - no operation record, no candidate document, no floor.
+   * The active version read here is the one the guard binds and `prepare`
+   * and `finalize` re-assert, so the instant is strictly later than the
+   * release the commit actually replaces.
+   */
+  private async withPublicationInstant(
+    season: number,
+    activeVersion: string,
+    clockReading: string | null,
+    documents: readonly StoredSnapshot[],
+    operationKind: OperationKind,
+  ): Promise<
+    | { readonly kind: 'stamped'; readonly documents: StoredSnapshot[] }
+    | { readonly kind: 'refused'; readonly reason: PublicationReason }
+  > {
+    const refuse = (reason: PublicationReason) => {
+      // Bounded: the season, the operation kind and a closed category. Never
+      // an instant.
+      this.logger.warn({
+        operation: 'publication.instant.rejected',
+        season,
+        failureCategory: reason,
+        publicationStatus: operationKind,
+      });
+      return { kind: 'refused', reason } as const;
+    };
+
+    if (clockReading === null) return refuse('publication-instant-invalid');
+    const active = await readActivePublicationInstant(
+      this.storage,
+      season,
+      activeVersion,
+    );
+    if (active.kind === 'unavailable') {
+      return refuse('publication-instant-unavailable');
+    }
+    if (active.kind === 'invalid') return refuse('publication-instant-invalid');
+
+    const instant = derivePublicationInstant(clockReading, active.value);
+    if (instant.kind === 'refused') {
+      return refuse(
+        instant.reason === 'exhausted'
+          ? 'publication-instant-exhausted'
+          : 'publication-instant-invalid',
+      );
+    }
+    const stamped = stampPublicationInstant(documents, instant.generatedAt);
+    if (stamped === null) return refuse('publication-instant-exhausted');
+    return { kind: 'stamped', documents: stamped };
+  }
+
   // --- the shared two-phase core -------------------------------------------
 
   private async runTwoPhase(input: TwoPhaseInput): Promise<PublicationResult> {
@@ -484,7 +562,30 @@ export class SequencedPublicationService
       );
     }
 
-    const plan = await buildPublicationPlan(input.documents);
+    // The release's one publication instant, derived from the clock reading
+    // and the exact predecessor the guard just bound, before anything is
+    // prepared or written. Only `generatedAt` and `staleAfter` move, to
+    // `boundedInstant` spellings the contract validator accepts by
+    // construction, and the revision excludes both (ADR 0020 D1.7), so the
+    // validation and the guard above still describe these documents.
+    const stamped = await this.withPublicationInstant(
+      input.season,
+      input.authority.activeVersion,
+      input.clockReading,
+      input.documents,
+      input.operationKind,
+    );
+    if (stamped.kind === 'refused') {
+      return failed(
+        input.season,
+        '',
+        input.authority.activeVersion,
+        stamped.reason,
+      );
+    }
+    const documents = stamped.documents;
+
+    const plan = await buildPublicationPlan(documents);
 
     // Read before anything commits. `meta:current-season` is global state that
     // the post-commit maintenance below overwrites, so afterwards there is no
@@ -521,7 +622,7 @@ export class SequencedPublicationService
       assignedTimestamps,
     } = prepared;
 
-    const baked = bakeAssignedTimestamps(input.documents, assignedTimestamps);
+    const baked = bakeAssignedTimestamps(documents, assignedTimestamps);
 
     const writeReason = await this.writeCandidate(
       input,

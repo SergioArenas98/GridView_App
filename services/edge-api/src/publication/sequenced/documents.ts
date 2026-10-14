@@ -1,9 +1,9 @@
 /**
  * The caller-side document phase of the two-phase protocol (ADR 0025 D4,
  * "Caller document phase"): baking the sequencer-assigned observation
- * timestamps into each immutable document, and - for rollback only -
- * regenerating the volatile publication and freshness fields that
- * `snapshotRevision` already excludes (ADR 0020 D1.7).
+ * timestamps into each immutable document, and stamping the release's one
+ * logical publication instant over the volatile publication and freshness
+ * fields that `snapshotRevision` already excludes (ADR 0020 D1.7).
  *
  * Nothing here touches the stable public `data` payload the revision is
  * computed over. Every change is confined to `meta` and, for the one document
@@ -11,7 +11,7 @@
  * projection drops by construction.
  */
 
-import { addSeconds } from '../../runtime/clock';
+import { boundedInstant } from '../canonical/instant';
 import type { PerKeyState } from '../sequencer/model';
 import type {
   SnapshotDocumentName,
@@ -47,46 +47,74 @@ export function bakeAssignedTimestamps(
 }
 
 /**
- * Regenerates the volatile publication and freshness fields for a rollback
- * republication (ADR 0025 D8 step 4): `generatedAt` moves to now, `staleAfter`
- * is re-derived preserving each document's original TTL, and the home
- * document's freshness block is regenerated the same way. `requestId` is not
- * touched because it is never stored - the public router sets it per response.
+ * Stamps one logical publication instant on every document (ADR 0025 D4,
+ * amended 2026-10-14): `meta.generatedAt` - and, for Home, the embedded
+ * `data.freshness.generatedAt` - become `generatedAt`, and `staleAfter` is
+ * re-derived from it preserving each document's own
+ * `staleAfter - generatedAt` interval (15 minutes for most documents, an hour
+ * for the content manifest). That interval rule is the one rollback
+ * republication has always applied (D8 step 4); only the instant it starts
+ * from is now the release's derived publication instant rather than a raw
+ * clock reading.
+ *
+ * A document that already carries exactly this instant is returned unchanged,
+ * so an ordinary candidate whose generation reading is already strictly later
+ * than the active release is published byte-for-byte as generated.
+ * `requestId` is not touched because it is never stored - the public router
+ * sets it per response.
+ *
+ * Returns `null` when a re-derived `staleAfter` would leave the representable
+ * four-digit year range; the caller refuses before any write.
  */
-export function refreshVolatileFields(
+export function stampPublicationInstant(
   documents: readonly StoredSnapshot[],
-  now: Date,
-): StoredSnapshot[] {
-  const generatedAt = now.toISOString();
-  return documents.map((document) => {
+  generatedAt: string,
+): StoredSnapshot[] | null {
+  const stamped: StoredSnapshot[] = [];
+  for (const document of documents) {
+    if (carriesInstant(document, generatedAt)) {
+      stamped.push(document);
+      continue;
+    }
     const staleAfter = reprojectStaleAfter(document.meta, generatedAt);
-    const meta = {
-      ...document.meta,
-      generatedAt,
-      staleAfter,
-    } as StoredMeta;
-    return {
+    if (staleAfter === null) return null;
+    stamped.push({
       ...document,
-      meta,
+      meta: { ...document.meta, generatedAt, staleAfter } as StoredMeta,
       data: withRefreshedFreshness(document, generatedAt, staleAfter),
-    };
-  });
+    });
+  }
+  return stamped;
+}
+
+function carriesInstant(
+  document: StoredSnapshot,
+  generatedAt: string,
+): boolean {
+  if (document.meta.generatedAt !== generatedAt) return false;
+  return (
+    !hasFreshness(document) ||
+    document.data.freshness.generatedAt === generatedAt
+  );
 }
 
 /**
- * Re-derives `staleAfter` from now, preserving the original
- * `staleAfter - generatedAt` interval the generator chose for this document
- * (15 minutes for most, an hour for Grand Prix detail). Falls back to 15
- * minutes if the stored pair cannot be measured.
+ * Re-derives `staleAfter` from `generatedAt`, preserving the original
+ * `staleAfter - generatedAt` interval the generator chose for this document.
+ * Falls back to 15 minutes if the stored pair cannot be measured, and returns
+ * `null` when the result has no four-digit RFC 3339 spelling.
  */
-function reprojectStaleAfter(meta: StoredMeta, generatedAt: string): string {
+function reprojectStaleAfter(
+  meta: StoredMeta,
+  generatedAt: string,
+): string | null {
   const from = Date.parse(meta.generatedAt);
   const to = Date.parse(meta.staleAfter);
   const seconds =
     Number.isNaN(from) || Number.isNaN(to) || to <= from
       ? 15 * 60
       : Math.round((to - from) / 1000);
-  return addSeconds(generatedAt, seconds);
+  return boundedInstant(new Date(Date.parse(generatedAt) + seconds * 1000));
 }
 
 interface FreshnessCarrier {
