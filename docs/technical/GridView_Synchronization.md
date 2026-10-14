@@ -957,8 +957,9 @@ Materialization has **two** sources, and neither is a row count:
    legitimately has no events is materialized even though the calendar endpoint
    has never been called.
 
-The bootstrap record is consulted for materialization only. It contributes no
-ETag, no provenance and no freshness to the calendar resource; `calendar:<season>`
+The bootstrap record decides materialization, and in a remote build its
+freshness is also presented for display (§3.1). It writes no ETag, no provenance
+and no freshness record for the calendar resource; `calendar:<season>`
 stays absent, so the resource remains due for the next foreground or manual run
 and its first conditional request still carries no validator (§11.3). The season
 match uses bootstrap's own recorded season, so an older season's bootstrap can
@@ -1396,7 +1397,8 @@ close/reopen.
 A bootstrap-only Home is materialized and ready, but has **no** individual
 `home:<season>` metadata (ADR 0014): Home therefore shows no update time at all
 for it, the first individual Home request sends no fabricated `If-None-Match`,
-and the resource stays due for a later refresh.
+and the resource stays due for a later refresh. In a remote build it presents
+the same-season bootstrap record's freshness for display only (§3.1).
 
 ### 15.3 Refresh ownership
 
@@ -1443,9 +1445,11 @@ successful record (`calendar:<season>`, `standings:drivers:<season>`,
 `standings:constructors:<season>`), or an **accepted bootstrap for that exact
 season**. It is never inferred from a row count in either direction — rows
 without a record do not make a module available, and a materialized module with
-no rows is not unavailable. Bootstrap is consulted for materialization only and
-still lends no ETag, provenance or freshness (ADR 0014), so a bootstrap-only
-module is available and shows no update time.
+no rows is not unavailable. Bootstrap lends no ETag, provenance or update time
+and writes no resource metadata (ADR 0014), so a bootstrap-only module is
+available and shows no update time. For display only, a remote build presents
+the same-season bootstrap record's freshness for that module until its own
+record exists. A fixture build presents it as unknown (§3.1).
 
 **`resolving` is neutral.** Until the persisted record has actually been read,
 every module reports `resolving`, because `availableEmpty` and `unavailable` are
