@@ -87,6 +87,13 @@ class _DetailContent extends ConsumerWidget {
       grandPrixResultsStateProvider(gpKey),
     );
     final String deviceTimeZone = ref.watch(deviceTimeZoneLabelProvider);
+    // In a remote build the screen states staleness once. Stale weekend facts or
+    // stale classifications raise this one notice, and the result section keeps
+    // only its own refresh failure. Fixture builds keep the two scoped notices.
+    final bool oneStaleNotice = ref.watch(remoteFreshnessNoticesProvider);
+    final bool stale =
+        state.isStale ||
+        (oneStaleNotice && results is GrandPrixResultsReady && results.isStale);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -100,8 +107,8 @@ class _DetailContent extends ConsumerWidget {
           const MockDataBanner(),
           const SizedBox(height: GvSpacing.md),
         ],
-        // Detail freshness only — the result section keeps its own record.
-        if (state.isStale || state.refreshError != null) ...<Widget>[
+        // Detail freshness, plus the result section's in a remote build.
+        if (stale || state.refreshError != null) ...<Widget>[
           GvOfflineNotice(
             message: state.refreshError != null
                 ? l10n.refreshFailedNotice
@@ -134,7 +141,11 @@ class _DetailContent extends ConsumerWidget {
         ),
         const SizedBox(height: GvSpacing.xl),
 
-        _ResultsArea(gpKey: gpKey, state: results),
+        _ResultsArea(
+          gpKey: gpKey,
+          state: results,
+          staleNoticeAbove: oneStaleNotice,
+        ),
       ],
     );
   }
@@ -143,10 +154,17 @@ class _DetailContent extends ConsumerWidget {
 /// The result area. Independent of the detail state above it: it can be loading,
 /// unavailable or failed without ever removing the weekend information.
 class _ResultsArea extends ConsumerWidget {
-  const _ResultsArea({required this.gpKey, required this.state});
+  const _ResultsArea({
+    required this.gpKey,
+    required this.state,
+    required this.staleNoticeAbove,
+  });
 
   final GrandPrixKey gpKey;
   final GrandPrixResultsState state;
+
+  /// Whether the screen-level notice already covers stale classifications.
+  final bool staleNoticeAbove;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -186,15 +204,19 @@ class _ResultsArea extends ConsumerWidget {
               .refresh(),
         ),
       ),
-      final GrandPrixResultsReady ready => _ResultsReady(state: ready),
+      final GrandPrixResultsReady ready => _ResultsReady(
+        state: ready,
+        staleNoticeAbove: staleNoticeAbove,
+      ),
     };
   }
 }
 
 class _ResultsReady extends StatelessWidget {
-  const _ResultsReady({required this.state});
+  const _ResultsReady({required this.state, required this.staleNoticeAbove});
 
   final GrandPrixResultsReady state;
+  final bool staleNoticeAbove;
 
   @override
   Widget build(BuildContext context) {
@@ -204,7 +226,8 @@ class _ResultsReady extends StatelessWidget {
       children: <Widget>[
         // Cached classifications stay visible while their own resource
         // refreshes or after it fails.
-        if (state.isStale || state.refreshError != null) ...<Widget>[
+        if ((state.isStale && !staleNoticeAbove) ||
+            state.refreshError != null) ...<Widget>[
           GvOfflineNotice(
             message: state.refreshError != null
                 ? l10n.refreshFailedNotice

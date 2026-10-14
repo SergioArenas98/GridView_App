@@ -20,6 +20,7 @@ import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
+import 'package:gridview/features/shared/domain/freshness_evaluator.dart';
 
 import '../../support/bootstrap_fixture.dart';
 import '../../support/repository_harness.dart';
@@ -355,8 +356,9 @@ void main() {
       isA<CalendarEmpty>(),
       reason: 'an accepted bootstrap applied the collection',
     );
-    // Bootstrap lends no validator and no freshness to the calendar.
-    expect((state as CalendarEmpty).freshness, isNull);
+    // Bootstrap lends no validator and no update time to the calendar. A remote
+    // build presents the persisted bootstrap record's freshness.
+    expect((state as CalendarEmpty).freshness, FreshnessState.fresh);
     expect(state.lastSuccessAt, isNull);
     expect(await db2.syncMetadataDao.read('calendar:2026'), isNull);
     expect(api2.calls, isEmpty, reason: 'rendering never reaches the network');

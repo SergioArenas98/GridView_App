@@ -13,6 +13,7 @@ import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/data/remote/remote_result.dart';
 import 'package:gridview/features/shared/domain/entities/standing_entry.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
+import 'package:gridview/features/shared/domain/freshness_evaluator.dart';
 import 'package:gridview/features/standings/application/standings_providers.dart';
 import 'package:gridview/features/standings/application/standings_state.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
@@ -479,15 +480,17 @@ void main() {
           state.constructors,
           isA<StandingsEmpty<ConstructorStandingEntry>>(),
         );
-        // …borrowing no freshness and claiming no update time.
+        // …presenting the bootstrap record's freshness (a remote build) and
+        // claiming no update time.
         final StandingsEmpty<DriverStandingEntry> drivers =
             state.drivers as StandingsEmpty<DriverStandingEntry>;
-        expect(drivers.freshness, isNull);
+        expect(drivers.freshness, FreshnessState.fresh);
         expect(drivers.lastSuccessAt, isNull);
       },
     );
 
-    test('bootstrap-materialized rows carry no individual freshness', () async {
+    test('bootstrap-materialized rows present bootstrap freshness and no '
+        'update time', () async {
       final ProviderContainer c = _container(db, api);
       _watch(c);
       await _primeFirstUse(c, api);
@@ -495,7 +498,7 @@ void main() {
       final StandingsReady<DriverStandingEntry> drivers =
           _state(c).drivers as StandingsReady<DriverStandingEntry>;
       expect(drivers.rows, isNotEmpty);
-      expect(drivers.freshness, isNull);
+      expect(drivers.freshness, FreshnessState.fresh);
       expect(drivers.lastSuccessAt, isNull);
       expect(drivers.isStale, isFalse);
     });

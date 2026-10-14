@@ -14,6 +14,7 @@ import 'package:gridview/features/calendar/application/calendar_state.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/data/remote/remote_result.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
+import 'package:gridview/features/shared/domain/freshness_evaluator.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
 
 import '../support/bootstrap_fixture.dart';
@@ -335,8 +336,9 @@ void main() {
       final CalendarState state = c.read(calendarStateProvider);
       expect(state, isA<CalendarEmpty>());
       expect((state as CalendarEmpty).season, 2026);
-      // …and it borrows no freshness from bootstrap.
-      expect(state.freshness, isNull);
+      // …presenting the bootstrap record's freshness (a remote build) while
+      // borrowing no update time from it.
+      expect(state.freshness, FreshnessState.fresh);
       expect(state.lastSuccessAt, isNull);
     });
 

@@ -141,9 +141,10 @@ bool hasMaterializedCalendar({
 /// never from the number of events — so a valid empty calendar and one that has
 /// never synchronised stay distinguishable.
 ///
-/// Freshness is the calendar resource's **own**, and is `null` while it has none
-/// (a representation materialized by bootstrap). Bootstrap provenance is never
-/// borrowed to fill it in.
+/// Freshness is the calendar resource's **own**. While it has none (a
+/// representation materialized by bootstrap), it is the bootstrap
+/// representation's freshness when [bootstrapFreshness] is set, and `null`
+/// otherwise ([presentedFreshness]). No update time is ever borrowed.
 CalendarState computeCalendarState({
   required int? season,
   required bool seasonReady,
@@ -157,10 +158,15 @@ CalendarState computeCalendarState({
   required bool syncSettled,
   required DateTime now,
   int? seasonCurrentRound,
+  bool bootstrapFreshness = false,
 }) {
-  final FreshnessState? freshness = metadata?.lastSuccessAt == null
-      ? null
-      : evaluateResourceFreshness(metadata, now);
+  final FreshnessState? freshness = presentedFreshness(
+    season: season,
+    metadata: metadata,
+    bootstrapMetadata: bootstrapMetadata,
+    bootstrapFallback: bootstrapFreshness,
+    now: now,
+  );
   final CalendarFailure? refreshError = (refreshing || lastFailure == null)
       ? null
       : CalendarFailure.resource(lastFailure);

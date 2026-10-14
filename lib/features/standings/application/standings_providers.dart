@@ -336,13 +336,15 @@ final standingsStateProvider =
           resourceSyncStateProvider(ResourceKey.constructorStandings(season)),
         );
       }
-      // Bootstrap's own record. It is read for one thing only — whether an
-      // accepted bootstrap materialized *this* season's collections — and
-      // contributes no ETag, provenance or freshness to either resource.
+      // Bootstrap's own record. It decides whether an accepted bootstrap
+      // materialized *this* season's collections and, in a remote build, what
+      // freshness they present until their own records exist. It contributes no
+      // ETag, provenance or update time to either resource.
       final AsyncValue<ResourceSyncState?> bootstrap = ref.watch(
         resourceSyncStateProvider(ResourceKey.bootstrap()),
       );
       final bool settled = sync is! AppSyncIdle && sync is! AppSyncRunning;
+      final bool bootstrapFreshness = ref.watch(remoteFreshnessNoticesProvider);
 
       return StandingsScreenState(
         selected: selected,
@@ -361,6 +363,7 @@ final standingsStateProvider =
           lastFailure: status.drivers.lastFailure,
           syncSettled: settled,
           now: now,
+          bootstrapFreshness: bootstrapFreshness,
         ),
         constructors: computeStandingsTableState<ConstructorStandingEntry>(
           season: season,
@@ -376,6 +379,7 @@ final standingsStateProvider =
           lastFailure: status.constructors.lastFailure,
           syncSettled: settled,
           now: now,
+          bootstrapFreshness: bootstrapFreshness,
         ),
       );
     });

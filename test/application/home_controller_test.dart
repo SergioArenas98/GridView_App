@@ -12,6 +12,7 @@ import 'package:gridview/features/home/application/home_providers.dart';
 import 'package:gridview/features/home/application/home_state.dart';
 import 'package:gridview/features/shared/application/providers.dart';
 import 'package:gridview/features/shared/data/remote/remote_result.dart';
+import 'package:gridview/features/shared/domain/freshness_evaluator.dart';
 import 'package:gridview/features/sync/application/sync_providers.dart';
 
 import '../support/bootstrap_fixture.dart';
@@ -397,19 +398,18 @@ void main() {
   });
 
   group('bootstrap provenance', () {
-    test(
-      'a bootstrap-only Home is ready with no individual freshness',
-      () async {
-        final ProviderContainer c = _container(db, api);
-        await _primeFirstUse(c, api);
-        _watch(c);
-        await _settle();
+    test('a bootstrap-only Home is ready with bootstrap freshness and no '
+        'update time', () async {
+      final ProviderContainer c = _container(db, api);
+      await _primeFirstUse(c, api);
+      _watch(c);
+      await _settle();
 
-        final HomeReady ready = c.read(homeStateProvider) as HomeReady;
-        expect(ready.homeProvenance.lastSuccessAt, isNull);
-        expect(ready.homeProvenance.freshness, isNull);
-      },
-    );
+      final HomeReady ready = c.read(homeStateProvider) as HomeReady;
+      expect(ready.homeProvenance.lastSuccessAt, isNull);
+      // A remote build presents the bootstrap record's freshness.
+      expect(ready.homeProvenance.freshness, FreshnessState.fresh);
+    });
 
     test(
       'the first individual Home request sends no fabricated ETag',
