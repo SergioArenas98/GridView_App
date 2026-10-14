@@ -64,7 +64,8 @@ Three provenance values, kept distinct (all persisted per snapshot key `home`,
   later-generated snapshot can carry older source data). Since 2026-10-14 the
   server defines it as the release's **publication instant** for a sequenced
   season: identical on every document of one release, the content manifest and
-  Home's `freshness.generatedAt` included, and strictly later for each later
+  every embedded Home `freshness.generatedAt` (Home's and the bootstrap's copy)
+  included, and strictly later for each later
   release, rollback included
   ([ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
   D4, amendment of 2026-10-14). No client rule uses that yet.

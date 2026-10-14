@@ -5,7 +5,8 @@
  * D4, amended 2026-10-14).
  *
  * A release's instant is identical across its documents - including the
- * content manifest and Home's embedded `data.freshness.generatedAt` - and
+ * content manifest and every embedded Home `freshness.generatedAt`, Home's own
+ * and the bootstrap's copy - and
  * strictly later than the instant of the release it replaces. It is derived
  * from two inputs only, both read before `prepare`:
  *

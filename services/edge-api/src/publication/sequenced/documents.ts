@@ -53,8 +53,9 @@ export function bakeAssignedTimestamps(
 
 /**
  * Stamps one logical publication instant on every document (ADR 0025 D4,
- * amended 2026-10-14): `meta.generatedAt` - and, for Home, the embedded
- * `data.freshness.generatedAt` - become `generatedAt`, and `staleAfter` is
+ * amended 2026-10-14): `meta.generatedAt` - and every embedded Home
+ * `freshness.generatedAt`, Home's own and the bootstrap's copy - become
+ * `generatedAt`, and `staleAfter` is
  * re-derived from it preserving each document's own
  * `staleAfter - generatedAt` interval (15 minutes for most documents, an hour
  * for the content manifest). That interval rule is the one rollback

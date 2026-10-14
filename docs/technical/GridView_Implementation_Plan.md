@@ -3371,7 +3371,7 @@ PR #77, which holds its manifest check for this contract.
 
 | Item | Status |
 |---|---|
-| Contract | `SnapshotMeta.generatedAt` is the release's publication instant: identical on every document of one release, the content manifest and Home's `freshness.generatedAt` included, and strictly later for each later release of a sequenced season, rollback included. `BaseMeta` (`/v1/status`) keeps the response time. |
+| Contract | `SnapshotMeta.generatedAt` is the release's publication instant: identical on every document of one release, the content manifest and every embedded Home `freshness.generatedAt` (Home's and the bootstrap's copy) included, and strictly later for each later release of a sequenced season, rollback included. `BaseMeta` (`/v1/status`) keeps the response time. |
 | Rule | `max(clock reading, active release's latest instant + 1 ms)` at millisecond precision, derived after the guard and before `prepare` (ADR 0025 D4, amendment of 2026-10-14). The clock reading is the candidate's own generation reading for ordinary publication and the caller's clock for rollback. `staleAfter` keeps each document's interval from the derived instant. |
 | Durable state | None added. The active release is the floor; a failed candidate moves nothing. |
 | Refusals | `publication-instant-unavailable`, `-invalid` and `-exhausted`, all `failed` before `prepare`. Each log line names one closed `publicationInstantCause`; the runbook gives the action for each. The coordinated outcome retries all three, which leaves the retry gap described in ADR 0025 (no automatic path runs today). |
