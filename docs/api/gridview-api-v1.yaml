@@ -856,7 +856,11 @@ components:
         generatedAt:
           type: string
           format: date-time
-          description: When the response was generated, UTC.
+          description: >
+            When the response was generated, UTC. Snapshot responses
+            (`SnapshotMeta`, `SeasonSnapshotMeta`) narrow this to the
+            publication instant of the release that served them; see
+            `SnapshotMeta.generatedAt`.
         requestId:
           type: string
           description: Correlation ID, also returned in the X-Request-Id header.
@@ -871,6 +875,44 @@ components:
         - type: object
           required: [schemaVersion, sourceUpdatedAt, staleAfter, contentVersion]
           properties:
+            generatedAt:
+              type: string
+              format: date-time
+              description: >
+                The logical **publication instant** of the release this
+                snapshot belongs to, UTC, at millisecond precision. It is not
+                the time of this response, and a cache or a repeated request
+                serves the same value.
+
+
+                Every document of one published release carries the identical
+                instant. That includes the content manifest served for the
+                current season and Home's embedded `freshness.generatedAt`. Two
+                snapshots of one season with the same `generatedAt` therefore
+                come from the same release, and a snapshot whose `generatedAt`
+                is earlier than the manifest's comes from an earlier release.
+
+
+                Each release committed for a season, a rollback republication
+                included, carries an instant strictly later than the release it
+                replaced. The guarantee holds for a season published under the
+                season publication sequencer (ADR 0025), which is the only
+                authority a cut-over season uses. A season still under the
+                legacy pointer authority (development, or any season not cut
+                over) is not covered: its rollback re-serves a historical
+                release with that release's instant. Releases committed before
+                this rule was deployed were each generated at one instant, but
+                their ordering was a property of the server clock rather than
+                an enforced rule.
+
+
+                It orders publications, never content: it is not a recency
+                signal for the data (`sourceUpdatedAt` is), and it does not
+                change the snapshot revision, `sourceUpdatedAt` or
+                `contentVersion`. `staleAfter` keeps its own per-resource
+                interval from this instant. See
+                `docs/adr/0025-season-publication-authority-and-rollback-republication.md`
+                D4, amendment of 2026-10-14.
             schemaVersion:
               type: integer
               description: Snapshot schema version.
@@ -1069,6 +1111,9 @@ components:
         generatedAt:
           type: string
           format: date-time
+          description: >
+            Equal to the enclosing snapshot's `meta.generatedAt`: the
+            publication instant of the release that served it.
         sourceUpdatedAt:
           type: [string, "null"]
           format: date-time

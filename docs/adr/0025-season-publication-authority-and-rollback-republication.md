@@ -294,6 +294,15 @@
 > The same day, OD-3 made a coordinated-mode rollback require an operator
 > hold (ADR 0020, "E1"). The prerequisite exists only as a dormant function.
 > D8, D14/D15 and `POST /internal/admin/rollback` are unchanged.
+>
+> **Logical publication instant (2026-10-14) — repository only, not
+> deployed.** Snapshot `meta.generatedAt` is now the release's publication
+> instant: one value on every document of a committed release, strictly later
+> than the release it replaces, rollback included. It is derived before
+> `prepare` from the clock and the active release's own documents, with no new
+> durable state. See D4, "Amendment (2026-10-14): the logical publication
+> instant". Deploying it changes what staging serves, so it needs its own
+> authorization.
 
 ## Context
 
@@ -1157,6 +1166,9 @@ The caller:
   (`requestId`, `generatedAt`, `staleAfter`, the server `stale` flag —
   everything already excluded from the `snapshotRevision` hash input under
   ADR 0020 D1.7);
+  *(amended 2026-10-14: `generatedAt` is the release's logical publication
+  instant, derived and stamped **before** `prepare`, and `staleAfter` follows
+  it. See "Amendment (2026-10-14)" at the end of D4);*
 - validates the final documents against the existing schema/inventory
   discipline ([`GridView_Backend_Publication.md`](../technical/GridView_Backend_Publication.md));
 - writes every version-scoped document and its inventory to KV, recording
@@ -1482,6 +1494,137 @@ The new publication reasons are internal:
   point (emitted by `publishGuarded` since 2026-09-27, and by nothing else)
 
 Their logs carry only the season, the operation kind and a closed category.
+
+#### Amendment (2026-10-14): the logical publication instant
+
+**Context.** Snapshot `meta.generatedAt` inherited `BaseMeta`'s "when the
+response was generated". Nothing on the wire told a client which responses
+belonged to one release: `sourceUpdatedAt` is per key (ADR 0020 D1.10),
+`contentVersion` survives releases, and the release version is only an input
+to the opaque ETag. The 2026-10-14 batch-freshness review needed that answer
+to retry a core resource that a cache served from an older release than the
+content manifest's.
+
+In practice every release was generated at one instant, but nothing enforced
+it or its order:
+
+- An ordinary candidate carried its generator's reading, never compared with
+  the active release. An equal or backwards clock produced an equal or earlier
+  instant.
+- Rollback republication stamped a raw clock reading (D8 step 4), with the
+  same exposure.
+
+**Decision.**
+
+1. **Definition.** For a season under this authority, every document of a
+   committed release carries one `meta.generatedAt`, its *publication
+   instant*. The content manifest served for the current season and Home's
+   embedded `data.freshness.generatedAt` carry it too. Each committed
+   release's instant is strictly later than that of the release it replaces,
+   for ordinary publication and rollback republication alike.
+2. **Derivation.** `max(clockReading, activeInstant + 1 ms)`, spelled at
+   millisecond precision (`toISOString`).
+   - For ordinary publication, `clockReading` is the candidate's own uniform
+     generation reading. The season chronology was resolved at that reading,
+     so it is kept unchanged whenever it already clears the floor. A candidate
+     whose documents disagree is refused.
+   - For rollback republication, `clockReading` is the caller's clock.
+   - `activeInstant` is the **latest** `generatedAt` among every document the
+     active version's inventory names, Home's embedded instant included. It is
+     the latest rather than the manifest's, because a release committed before
+     this rule is not promised to be uniform.
+   - A sub-millisecond active instant is floored before the step, so the step
+     is still strictly later.
+3. **Where.** In the two-phase core, after the D14-D16 guard has bound the
+   predecessor and before `prepare`. The active version read is the one
+   `prepare` binds (`stale-predecessor`) and `finalize` re-asserts
+   (`predecessor-changed`), so the instant is strictly later than the release
+   the commit actually replaces.
+4. **Stamp.** `meta.generatedAt` (and Home's freshness instant) take the
+   derived instant. `staleAfter` is re-derived from it, preserving each
+   document's own `staleAfter - generatedAt` interval: 15 minutes for most
+   documents, an hour for the content manifest. That is the interval rule
+   rollback republication already used. A document already carrying the
+   instant is left byte-for-byte as generated. Only these instants move, to
+   `boundedInstant` spellings the contract validator accepts by construction,
+   so the earlier validation and guard still describe the stamped documents.
+5. **Refusals.** Each is returned before `prepare`, with status `failed`, no
+   write anywhere, and a log line carrying only the season, the operation kind
+   and the category:
+   - `publication-instant-unavailable`: the active inventory or a document
+     could not be read, or read as absent.
+   - `publication-instant-invalid`: the candidate's documents disagree; the
+     active release carries an instant that cannot be ordered; the clock
+     reading is unusable; or a leap-second active instant must be stepped.
+   - `publication-instant-exhausted`: the step, or a derived `staleAfter`,
+     would leave the four-digit year range.
+
+   The coordinated outcome treats all three as retryable. None is a ledger
+   block reason, so the ledger schema is unchanged. A refusal the clock can
+   clear (a leap-second active instant, an exhausted step) clears on its own
+   once the clock passes the active instant.
+6. **No durable floor.** No Durable Object field, sidecar field or KV key was
+   added. The active release *is* the floor, and only a committed release can
+   become one. A candidate that fails after `prepare` (a write failure, an
+   expired lease, a rejected `finalize`) leaves the floor where it was, and
+   the next candidate is derived from the release still active.
+
+**What does not change.**
+
+- `sourceUpdatedAt` assignment (ADR 0020 D1.9/D1.10, the D4 per-key rule),
+  `contentVersion`, the snapshot revision (D1.7 excludes `generatedAt`), the
+  plan and manifest commitment, and the ETag inputs. A publication instant
+  never orders content.
+- The `staleAfter` policy and rollback's expiry policy. Both still preserve
+  each document's generated interval and only start from the derived instant.
+  No event-based deadline is introduced.
+- The legacy pointer authority (`SnapshotPublisher`). It is not covered.
+  Development, and any season that is not cut over, keep one generator reading
+  per ordinary release, and a legacy rollback flips the pointer back to a
+  historical release, re-serving that release's instant. Enforcing the rule
+  there would need a legacy compare-and-swap and rollback republication, which
+  is what this ADR's authority provides. O-16 routes production genesis
+  through this authority.
+- `/v1/status` and other `BaseMeta` responses: there `generatedAt` stays the
+  response time.
+
+**Existing releases (repository evidence only; staging was not contacted).**
+
+- The staging season-2026 active release `pm1-000000000001c-a82904e2` was
+  committed on 2026-10-14 by the guarded batch ingest, which regenerates every
+  document at one Worker reading, `2026-10-14T16:19:54.572Z`. The next staging
+  publication's floor is therefore `2026-10-14T16:19:54.573Z`, or the clock if
+  later.
+- The earlier `pm1-…16` to `pm1-…1b` releases were nightly sequenced
+  publications of one `generateSnapshotSet` reading each, and the seeded
+  `seed:2026` release came from the legacy publisher the same way. A rollback
+  to any of them republishes it at a new instant; their own historical
+  instants are never served again. ADR 0026 D14 already refuses a rollback to
+  the mock-derived releases.
+- A stored release with an unreadable or unparseable instant refuses
+  publication until it is repaired. There is no override.
+
+**Cost.** Each sequenced publication and rollback now reads every document of
+the active release once more. That is about 117 Workers KV reads for the
+current staging release, on top of the guard's results reads and the
+candidate completeness check. The added CPU was not measured on Cloudflare.
+
+**Tests.** `test/publication/sequenced/publication-instant-rule.test.ts` covers
+the pure rule, the candidate check, the stamp and the active-release reader.
+`test/publication/sequenced/publication-instant.test.ts` covers, over both
+sequencer transports:
+
+- ordinary publication with a later, an equal and a backwards clock;
+- consecutive publications at one reading;
+- rollback with a later clock and with a clock behind the replaced release;
+- one served instant across the manifest, Home and its freshness, and a
+  season document;
+- all three refusals before `prepare`;
+- a failed candidate leaving no floor;
+- a pre-rule release with non-uniform instants.
+
+`test/ingest/guarded-ingest.test.ts` now expects a batch at the seed's own
+clock reading to be published one millisecond after it.
 
 ### D5. Prepared-operation cancellation
 
@@ -1867,7 +2010,12 @@ version. It is **republication**:
 4. **Regenerate, never copy:** everything already excluded from the
    `snapshotRevision` hash under ADR 0020 D1.7 — `requestId`, `generatedAt`,
    `staleAfter`, the server `stale` flag, ETag inputs — set fresh for this
-   rollback's publication time. The exact per-version inventory is freshly
+   rollback's publication time. *(Amended 2026-10-14: "this rollback's
+   publication time" is the logical publication instant of D4's 2026-10-14
+   amendment, `max(clock, active instant + 1 ms)`, never a raw clock reading
+   that could equal or precede the release being replaced. `staleAfter` keeps
+   the target document's own interval, re-derived from that instant, exactly
+   as before.)* The exact per-version inventory is freshly
    computed against what this rollback actually intends to write; it is
    never copied from the old version's inventory. This freshly-computed
    inventory is also what the caller deterministically enumerates into a

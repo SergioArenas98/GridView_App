@@ -61,7 +61,13 @@ Three provenance values, kept distinct (all persisted per snapshot key `home`,
   field stays required and the rules below are unchanged.
 - **`generatedAt`** — when the GridView snapshot document was produced. Only an
   **equal-source tie-breaker**; it never outranks `sourceUpdatedAt` (a
-  later-generated snapshot can carry older source data).
+  later-generated snapshot can carry older source data). Since 2026-10-14 the
+  server defines it as the release's **publication instant** for a sequenced
+  season: identical on every document of one release, the content manifest and
+  Home's `freshness.generatedAt` included, and strictly later for each later
+  release, rollback included
+  ([ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md)
+  D4, amendment of 2026-10-14). No client rule uses that yet.
 - **`contentVersion`** — immutable content identity/provenance, compared by
   **equality only** (never assumed sortable).
 
