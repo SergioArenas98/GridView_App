@@ -12,6 +12,11 @@
  */
 
 import { boundedInstant } from '../canonical/instant';
+import {
+  embeddedFreshness,
+  isHomeWithFreshness,
+  isRecord,
+} from './embedded-freshness';
 import type { PerKeyState } from '../sequencer/model';
 import type {
   SnapshotDocumentName,
@@ -81,7 +86,7 @@ export function stampPublicationInstant(
     stamped.push({
       ...document,
       meta: { ...document.meta, generatedAt, staleAfter } as StoredMeta,
-      data: withRefreshedFreshness(document, generatedAt, staleAfter),
+      data: withStampedFreshness(document, generatedAt, staleAfter),
     });
   }
   return stamped;
@@ -92,9 +97,8 @@ function carriesInstant(
   generatedAt: string,
 ): boolean {
   if (document.meta.generatedAt !== generatedAt) return false;
-  return (
-    !hasFreshness(document) ||
-    document.data.freshness.generatedAt === generatedAt
+  return embeddedFreshness(document).every(
+    (freshness) => freshness.generatedAt === generatedAt,
   );
 }
 
@@ -151,14 +155,32 @@ function withFreshnessSourceUpdatedAt(
   };
 }
 
-function withRefreshedFreshness(
+/**
+ * Every `HomeData.freshness` block a document embeds takes the instant and the
+ * document's re-derived `staleAfter`: Home's own block, and the copy of Home
+ * the bootstrap carries at `data.home` (OpenAPI `DataFreshness.generatedAt`
+ * equals the enclosing snapshot's `meta.generatedAt`).
+ */
+function withStampedFreshness(
   document: StoredSnapshot,
   generatedAt: string,
   staleAfter: string,
 ): unknown {
-  if (!hasFreshness(document)) return document.data;
-  return {
-    ...document.data,
-    freshness: { ...document.data.freshness, generatedAt, staleAfter },
-  };
+  const stamp = (home: Record<string, unknown>) => ({
+    ...home,
+    freshness: {
+      ...(home.freshness as Record<string, unknown>),
+      generatedAt,
+      staleAfter,
+    },
+  });
+  const data = document.data as Record<string, unknown>;
+  if (document.documentName === 'home' && isHomeWithFreshness(data)) {
+    return stamp(data);
+  }
+  if (document.documentName === 'bootstrap' && isRecord(data)) {
+    const home = data.home;
+    if (isHomeWithFreshness(home)) return { ...data, home: stamp(home) };
+  }
+  return document.data;
 }

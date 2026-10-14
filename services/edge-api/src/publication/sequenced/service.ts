@@ -89,6 +89,7 @@ import {
   candidateGenerationInstant,
   derivePublicationInstant,
   readActivePublicationInstant,
+  type PublicationInstantCause,
 } from './publication-instant';
 import { resolveRollbackSourceOrdering } from './rollback-provenance';
 import {
@@ -188,6 +189,8 @@ interface TwoPhaseInput {
    * has no usable spelling (refused before `prepare`).
    */
   readonly clockReading: string | null;
+  /** Why `clockReading` is `null`, when it is. */
+  readonly clockRefusal: PublicationInstantCause;
   readonly sourceOrderingInput: string;
   readonly authority: ActiveAuthority;
   /** Ordinary publication moves the current-season pointer and content metadata. */
@@ -308,6 +311,7 @@ export class SequencedPublicationService
       // The candidate's own generation reading: its chronology was resolved
       // at this instant, so it is kept whenever it already clears the floor.
       clockReading: candidateGenerationInstant(set.documents),
+      clockRefusal: 'candidate-not-uniform',
       sourceOrderingInput: set.sourceUpdatedAt,
       authority,
       publishesSeasonPointer: true,
@@ -437,6 +441,7 @@ export class SequencedPublicationService
       operationKind: 'rollback-republication',
       documents: historical,
       clockReading: boundedInstant(this.clock.now()),
+      clockRefusal: 'clock-invalid',
       sourceOrderingInput: provenance.sourceOrderingInput,
       authority,
       publishesSeasonPointer: false,
@@ -506,34 +511,46 @@ export class SequencedPublicationService
     season: number,
     activeVersion: string,
     clockReading: string | null,
+    clockRefusal: PublicationInstantCause,
     documents: readonly StoredSnapshot[],
     operationKind: OperationKind,
   ): Promise<
     | { readonly kind: 'stamped'; readonly documents: StoredSnapshot[] }
     | { readonly kind: 'refused'; readonly reason: PublicationReason }
   > {
-    const refuse = (reason: PublicationReason) => {
-      // Bounded: the season, the operation kind and a closed category. Never
-      // an instant.
+    const refuse = (
+      reason: PublicationReason,
+      cause: PublicationInstantCause,
+    ) => {
+      // Bounded: the season, the operation kind, a closed category and a
+      // closed cause. Never an instant or a document name.
       this.logger.warn({
         operation: 'publication.instant.rejected',
         season,
         failureCategory: reason,
+        publicationInstantCause: cause,
         publicationStatus: operationKind,
       });
       return { kind: 'refused', reason } as const;
     };
 
-    if (clockReading === null) return refuse('publication-instant-invalid');
+    if (clockReading === null) {
+      return refuse('publication-instant-invalid', clockRefusal);
+    }
     const active = await readActivePublicationInstant(
       this.storage,
       season,
       activeVersion,
     );
     if (active.kind === 'unavailable') {
-      return refuse('publication-instant-unavailable');
+      return refuse(
+        'publication-instant-unavailable',
+        'active-release-unreadable',
+      );
     }
-    if (active.kind === 'invalid') return refuse('publication-instant-invalid');
+    if (active.kind === 'invalid') {
+      return refuse('publication-instant-invalid', 'active-instant-invalid');
+    }
 
     const instant = derivePublicationInstant(clockReading, active.value);
     if (instant.kind === 'refused') {
@@ -541,10 +558,13 @@ export class SequencedPublicationService
         instant.reason === 'exhausted'
           ? 'publication-instant-exhausted'
           : 'publication-instant-invalid',
+        instant.cause,
       );
     }
     const stamped = stampPublicationInstant(documents, instant.generatedAt);
-    if (stamped === null) return refuse('publication-instant-exhausted');
+    if (stamped === null) {
+      return refuse('publication-instant-exhausted', 'year-range');
+    }
     return { kind: 'stamped', documents: stamped };
   }
 
@@ -572,6 +592,7 @@ export class SequencedPublicationService
       input.season,
       input.authority.activeVersion,
       input.clockReading,
+      input.clockRefusal,
       input.documents,
       input.operationKind,
     );

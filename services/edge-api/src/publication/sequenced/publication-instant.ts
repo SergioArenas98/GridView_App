@@ -30,6 +30,7 @@ import {
   compareInstants,
 } from '../canonical/instant';
 import { isEnvelopeFor } from '../guard/predecessor';
+import { embeddedFreshness } from './embedded-freshness';
 import { readStoredInventory } from '../version-inventory';
 import type {
   SnapshotDocumentName,
@@ -53,9 +54,43 @@ export type ActivePublicationInstant =
 /** Why no instant could be derived. Both are refusals with no write. */
 export type PublicationInstantRefusal = 'invalid' | 'exhausted';
 
+/**
+ * The precise, closed cause behind a refusal, logged beside the publication
+ * reason so an operator can tell the cases apart without any instant or
+ * document name reaching a log line:
+ *
+ * - `active-release-unreadable` - an inventory or document read failed or was
+ *   absent (`publication-instant-unavailable`). Usually KV visibility; a
+ *   retry may clear it.
+ * - `active-instant-invalid` - the active release carries an instant that
+ *   cannot be ordered. Needs repair; a retry cannot clear it.
+ * - `candidate-not-uniform` - the candidate's documents disagree on their
+ *   generation instant. A generator defect; a retry of the same input cannot
+ *   clear it.
+ * - `clock-invalid` - the clock reading has no millisecond-precision spelling.
+ * - `leap-second-step` - the active instant is a leap second and the clock is
+ *   not yet past it. Clears on its own within a second.
+ * - `year-range` - the step or a derived `staleAfter` would pass `9999`
+ *   (`publication-instant-exhausted`). Needs repair.
+ */
+export const publicationInstantCauses = [
+  'active-release-unreadable',
+  'active-instant-invalid',
+  'candidate-not-uniform',
+  'clock-invalid',
+  'leap-second-step',
+  'year-range',
+] as const;
+
+export type PublicationInstantCause = (typeof publicationInstantCauses)[number];
+
 export type PublicationInstant =
   | { readonly kind: 'derived'; readonly generatedAt: string }
-  | { readonly kind: 'refused'; readonly reason: PublicationInstantRefusal };
+  | {
+      readonly kind: 'refused';
+      readonly reason: PublicationInstantRefusal;
+      readonly cause: PublicationInstantCause;
+    };
 
 const unavailable: ActivePublicationInstant = { kind: 'unavailable' };
 const invalid: ActivePublicationInstant = { kind: 'invalid' };
@@ -142,25 +177,31 @@ export function derivePublicationInstant(
   activeInstant: string,
 ): PublicationInstant {
   const clock = millisecondInstant(clockReading);
-  if (clock === null || canonicalInstant(activeInstant) === null) {
-    return { kind: 'refused', reason: 'invalid' };
-  }
+  if (clock === null) return refused('invalid', 'clock-invalid');
   const order = compareInstants(clock, activeInstant);
-  if (order === null) return { kind: 'refused', reason: 'invalid' };
+  if (order === null) return refused('invalid', 'active-instant-invalid');
   if (order === 1) return { kind: 'derived', generatedAt: clock };
 
+  // A canonical instant that `Date` cannot read is a leap second.
   const activeMillis = Date.parse(activeInstant);
   if (Number.isNaN(activeMillis)) {
-    return { kind: 'refused', reason: 'invalid' };
+    return refused('invalid', 'leap-second-step');
   }
   const stepped = boundedInstant(new Date(activeMillis + 1));
-  if (stepped === null) return { kind: 'refused', reason: 'exhausted' };
+  if (stepped === null) return refused('exhausted', 'year-range');
   // Defensive: `Date.parse` truncates toward the earlier millisecond, so one
   // step is always strictly later. Asserted rather than assumed.
   if (compareInstants(stepped, activeInstant) !== 1) {
-    return { kind: 'refused', reason: 'invalid' };
+    return refused('invalid', 'active-instant-invalid');
   }
   return { kind: 'derived', generatedAt: stepped };
+}
+
+function refused(
+  reason: PublicationInstantRefusal,
+  cause: PublicationInstantCause,
+): PublicationInstant {
+  return { kind: 'refused', reason, cause };
 }
 
 /**
@@ -179,19 +220,16 @@ function millisecondInstant(value: string): string | null {
 }
 
 /**
- * The publication instants one document carries: `meta.generatedAt`, and for
- * Home the embedded `data.freshness.generatedAt` as well.
+ * The publication instants one document carries: `meta.generatedAt`, and the
+ * `generatedAt` of every Home freshness block it embeds - Home's own and the
+ * bootstrap's copy of Home.
  */
 function documentInstants(document: StoredSnapshot): unknown[] {
   const meta = (document as { meta?: { generatedAt?: unknown } }).meta;
-  const values: unknown[] = [meta?.generatedAt];
-  if (document.documentName === 'home') {
-    const data = document.data as { freshness?: { generatedAt?: unknown } };
-    if (typeof data === 'object' && data !== null && data.freshness) {
-      values.push(data.freshness.generatedAt);
-    }
-  }
-  return values;
+  return [
+    meta?.generatedAt,
+    ...embeddedFreshness(document).map((freshness) => freshness.generatedAt),
+  ];
 }
 
 async function readDocument(

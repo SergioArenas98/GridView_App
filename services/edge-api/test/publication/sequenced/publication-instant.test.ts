@@ -110,6 +110,31 @@ function expectOneInstant(
   ).freshness;
   expect(freshness.generatedAt).toBe(instant);
   expect(freshness.staleAfter).toBe(named(documents, 'home').meta.staleAfter);
+  // The bootstrap embeds its own copy of Home, freshness included.
+  const bootstrap = named(documents, 'bootstrap');
+  const nested = (
+    bootstrap.data as { home: { freshness: Record<string, unknown> } }
+  ).home.freshness;
+  expect(nested.generatedAt).toBe(instant);
+  expect(nested.staleAfter).toBe(bootstrap.meta.staleAfter);
+}
+
+/** The one refusal line, with its reason and its closed cause. */
+function expectInstantCause(
+  ctx: SequencedContext,
+  reason: string,
+  cause: string,
+): void {
+  const lines = ctx.logger.events.filter(
+    (event) => event.operation === 'publication.instant.rejected',
+  );
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toMatchObject({
+    failureCategory: reason,
+    publicationInstantCause: cause,
+  });
+  // Bounded: no instant reaches the line.
+  expect(JSON.stringify(lines[0])).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
 }
 
 async function activeVersion(ctx: SequencedContext): Promise<string> {
@@ -296,6 +321,11 @@ describe.each(sequencerTransports)(
           reason: 'publication-instant-unavailable',
           previousVersion: SEED_VERSION,
         });
+        expectInstantCause(
+          ctx,
+          'publication-instant-unavailable',
+          'active-release-unreadable',
+        );
         expect(calls).toEqual(['readAuthority']);
         expect(await ctx.storage.listVersions(SEASON)).toEqual(versionsBefore);
         expect(await activeVersion(ctx)).toBe(SEED_VERSION);
@@ -326,6 +356,11 @@ describe.each(sequencerTransports)(
           status: 'failed',
           reason: 'publication-instant-invalid',
         });
+        expectInstantCause(
+          ctx,
+          'publication-instant-invalid',
+          'active-instant-invalid',
+        );
         expect(calls).toEqual(['readAuthority']);
         expect(await activeVersion(ctx)).toBe(SEED_VERSION);
       });
@@ -355,6 +390,7 @@ describe.each(sequencerTransports)(
           status: 'failed',
           reason: 'publication-instant-exhausted',
         });
+        expectInstantCause(ctx, 'publication-instant-exhausted', 'year-range');
         expect(calls).toEqual(['readAuthority']);
       });
 
@@ -388,6 +424,11 @@ describe.each(sequencerTransports)(
           status: 'failed',
           reason: 'publication-instant-invalid',
         });
+        expectInstantCause(
+          ctx,
+          'publication-instant-invalid',
+          'candidate-not-uniform',
+        );
         expect(calls).toEqual(['readAuthority']);
       });
 

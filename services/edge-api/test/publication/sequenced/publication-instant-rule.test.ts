@@ -96,7 +96,7 @@ describe('deriving the publication instant', () => {
   it('refuses a step past the representable year range as exhausted', () => {
     expect(
       derivePublicationInstant(ACTIVE, '9999-12-31T23:59:59.999Z'),
-    ).toEqual({ kind: 'refused', reason: 'exhausted' });
+    ).toEqual({ kind: 'refused', reason: 'exhausted', cause: 'year-range' });
   });
 
   it('refuses a leap-second active instant it cannot step at millisecond precision', () => {
@@ -105,7 +105,11 @@ describe('deriving the publication instant', () => {
         '2016-12-31T23:59:59.000Z',
         '2016-12-31T23:59:60.500Z',
       ),
-    ).toEqual({ kind: 'refused', reason: 'invalid' });
+    ).toEqual({
+      kind: 'refused',
+      reason: 'invalid',
+      cause: 'leap-second-step',
+    });
     // Once the clock is past it, the clock reading is simply used.
     expect(
       derivePublicationInstant(
@@ -116,13 +120,24 @@ describe('deriving the publication instant', () => {
   });
 
   it.each([
-    ['a malformed clock reading', 'not-a-date', ACTIVE],
-    ['a sub-millisecond clock reading', '2026-10-14T16:20:00.0001Z', ACTIVE],
-    ['a malformed active instant', '2026-10-14T16:20:00.000Z', 'nope'],
-  ])('refuses %s as invalid', (_label, clock, active) => {
+    ['a malformed clock reading', 'not-a-date', ACTIVE, 'clock-invalid'],
+    [
+      'a sub-millisecond clock reading',
+      '2026-10-14T16:20:00.0001Z',
+      ACTIVE,
+      'clock-invalid',
+    ],
+    [
+      'a malformed active instant',
+      '2026-10-14T16:20:00.000Z',
+      'nope',
+      'active-instant-invalid',
+    ],
+  ])('refuses %s as invalid', (_label, clock, active, cause) => {
     expect(derivePublicationInstant(clock, active)).toEqual({
       kind: 'refused',
       reason: 'invalid',
+      cause,
     });
   });
 });
@@ -161,6 +176,77 @@ describe("a candidate's generation instant", () => {
         : document,
     );
     expect(candidateGenerationInstant(drifted)).toBeNull();
+  });
+});
+
+function withNestedHomeInstant(
+  documents: readonly StoredSnapshot[],
+  instant: string,
+): StoredSnapshot[] {
+  return documents.map((document) => {
+    if (document.documentName !== 'bootstrap') return document;
+    const data = document.data as { home: { freshness: object } };
+    return {
+      ...document,
+      data: {
+        ...data,
+        home: {
+          ...data.home,
+          freshness: { ...data.home.freshness, generatedAt: instant },
+        },
+      },
+    };
+  });
+}
+
+function nestedFreshnessOf(document: StoredSnapshot): Record<string, unknown> {
+  return (document.data as { home: { freshness: Record<string, unknown> } })
+    .home.freshness;
+}
+
+describe("the bootstrap's copy of Home", () => {
+  it('makes a candidate unknown when its freshness disagrees', async () => {
+    const documents = await documentsAt(ACTIVE);
+    expect(
+      candidateGenerationInstant(
+        withNestedHomeInstant(documents, '2026-10-14T16:19:54.573Z'),
+      ),
+    ).toBeNull();
+  });
+
+  it('is stamped with the instant and the bootstrap staleAfter', async () => {
+    const documents = await documentsAt(ACTIVE);
+    const instant = '2026-10-14T16:19:54.573Z';
+    const bootstrap = named(
+      stampPublicationInstant(documents, instant) ?? [],
+      'bootstrap',
+    );
+    expect(nestedFreshnessOf(bootstrap)).toMatchObject({
+      generatedAt: instant,
+      staleAfter: bootstrap.meta.staleAfter,
+    });
+  });
+
+  it('is restamped even when the bootstrap meta already carries the instant', async () => {
+    const documents = withNestedHomeInstant(
+      await documentsAt(ACTIVE),
+      '2026-10-14T16:00:00.000Z',
+    );
+    const bootstrap = named(
+      stampPublicationInstant(documents, ACTIVE) ?? [],
+      'bootstrap',
+    );
+    expect(nestedFreshnessOf(bootstrap).generatedAt).toBe(ACTIVE);
+  });
+
+  it('counts toward the active release instant', async () => {
+    const later = '2026-10-14T16:40:00.000Z';
+    const storage = await storedRelease(
+      withNestedHomeInstant(await documentsAt(ACTIVE), later),
+    );
+    expect(
+      await readActivePublicationInstant(storage, SEASON, 'v-active'),
+    ).toEqual({ kind: 'instant', value: later });
   });
 });
 
