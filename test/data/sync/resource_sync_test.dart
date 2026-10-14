@@ -23,13 +23,14 @@ void main() {
 
   RemoteSnapshotMeta meta({
     String etag = 'W/"1"',
+    DateTime? generated,
     DateTime? source,
     DateTime? stale,
     String content = 'c1',
     bool? serverStale,
   }) => RemoteSnapshotMeta(
     etag: etag,
-    generatedAt: DateTime.utc(2026, 7, 18, 12),
+    generatedAt: generated ?? DateTime.utc(2026, 7, 18, 12),
     sourceUpdatedAt: source ?? DateTime.utc(2026, 7, 18, 11),
     staleAfter: stale,
     contentVersion: content,
@@ -192,5 +193,128 @@ void main() {
     expect(s.lastAttemptAt, DateTime.utc(2026, 7, 21));
     expect(s.lastSuccessAt, DateTime.utc(2026, 7, 20), reason: 'not a success');
     expect(s.lastFailureCategory, SyncFailureCategory.conflictOlder);
+  });
+
+  group('identical content from a later publication (ADR 0005 amendment)', () {
+    final DateTime firstAt = DateTime.utc(2026, 7, 20);
+    final DateTime secondAt = DateTime.utc(2026, 7, 21);
+
+    Future<void> seed() => sync.applySnapshot(
+      key: key,
+      scope: scope,
+      incoming: meta(
+        stale: DateTime.utc(2026, 7, 18, 12, 15),
+        serverStale: true,
+      ),
+      at: firstAt,
+      writeDomain: () async {},
+    );
+
+    Future<(SnapshotConflictOutcome, int)> revalidate(
+      RemoteSnapshotMeta incoming,
+    ) async {
+      int writes = 0;
+      final SnapshotConflictOutcome outcome = await sync.applySnapshot(
+        key: key,
+        scope: scope,
+        incoming: incoming,
+        at: secondAt,
+        writeDomain: () async => writes++,
+      );
+      return (outcome, writes);
+    }
+
+    test('takes the publication fields without a domain write', () async {
+      await seed();
+      final (SnapshotConflictOutcome outcome, int writes) = await revalidate(
+        meta(
+          etag: 'W/"2"',
+          generated: DateTime.utc(2026, 7, 21, 9),
+          stale: DateTime.utc(2026, 7, 25, 20),
+        ),
+      );
+
+      expect(outcome, SnapshotConflictOutcome.skippedUpToDate);
+      expect(writes, 0, reason: 'identical content is never rewritten');
+      final ResourceSyncState s = (await sync.read(key))!;
+      expect(s.generatedAt, DateTime.utc(2026, 7, 21, 9));
+      expect(s.staleAfter, DateTime.utc(2026, 7, 25, 20));
+      expect(
+        s.serverStale,
+        isNull,
+        reason: 'the later publication carries no stale flag; null is set',
+      );
+      expect(s.sourceUpdatedAt, DateTime.utc(2026, 7, 18, 11));
+      expect(s.contentVersion, 'c1');
+      expect(s.etag, 'W/"2"');
+      expect(s.lastSuccessAt, secondAt);
+      expect(s.lastFailureCategory, isNull);
+    });
+
+    test(
+      'an equal generatedAt (the same publication) changes nothing',
+      () async {
+        await seed();
+        final (SnapshotConflictOutcome outcome, int writes) = await revalidate(
+          meta(etag: 'W/"1"', stale: DateTime.utc(2026, 7, 25, 20)),
+        );
+
+        expect(outcome, SnapshotConflictOutcome.skippedUpToDate);
+        expect(writes, 0);
+        final ResourceSyncState s = (await sync.read(key))!;
+        expect(s.generatedAt, DateTime.utc(2026, 7, 18, 12));
+        expect(s.staleAfter, DateTime.utc(2026, 7, 18, 12, 15));
+        expect(s.serverStale, isTrue);
+        expect(s.lastSuccessAt, secondAt, reason: 'still a validation');
+      },
+    );
+
+    test(
+      'an earlier generatedAt (an older cached copy) changes nothing',
+      () async {
+        await seed();
+        final (SnapshotConflictOutcome outcome, int writes) = await revalidate(
+          meta(
+            generated: DateTime.utc(2026, 7, 18, 6),
+            stale: DateTime.utc(2026, 7, 30),
+          ),
+        );
+
+        expect(outcome, SnapshotConflictOutcome.skippedUpToDate);
+        expect(writes, 0);
+        final ResourceSyncState s = (await sync.read(key))!;
+        expect(s.generatedAt, DateTime.utc(2026, 7, 18, 12));
+        expect(s.staleAfter, DateTime.utc(2026, 7, 18, 12, 15));
+      },
+    );
+
+    test('a 304 never moves the publication fields', () async {
+      await seed();
+      await sync.recordNotModified(key, scope, secondAt, newEtag: 'W/"2"');
+
+      final ResourceSyncState s = (await sync.read(key))!;
+      expect(s.generatedAt, DateTime.utc(2026, 7, 18, 12));
+      expect(s.staleAfter, DateTime.utc(2026, 7, 18, 12, 15));
+      expect(s.serverStale, isTrue);
+      expect(s.lastSuccessAt, secondAt);
+    });
+
+    test(
+      'differing content keeps the generatedAt tie-break (rule 4)',
+      () async {
+        await seed();
+        final (SnapshotConflictOutcome outcome, int writes) = await revalidate(
+          meta(
+            generated: DateTime.utc(2026, 7, 21, 9),
+            content: 'c2',
+            stale: DateTime.utc(2026, 7, 25, 20),
+          ),
+        );
+
+        expect(outcome, SnapshotConflictOutcome.apply);
+        expect(writes, 1);
+        expect((await sync.read(key))!.contentVersion, 'c2');
+      },
+    );
   });
 }

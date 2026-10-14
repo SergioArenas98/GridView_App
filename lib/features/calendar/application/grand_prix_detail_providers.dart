@@ -184,9 +184,13 @@ final grandPrixStateProvider = Provider.autoDispose
         grandPrixCacheProvider(key),
       );
       final RefreshStatus status = ref.watch(grandPrixControllerProvider(key));
+      final AsyncValue<ResourceSyncState?> metadata = ref.watch(
+        resourceSyncStateProvider(ResourceKey.grandPrix(key.season, key.round)),
+      );
       final DateTime now = ref.watch(clockProvider)();
       return computeGrandPrixState(
         cache: cache.value,
+        metadata: metadata.value,
         streamReady: cache.hasValue,
         refreshing: status.inProgress,
         lastFailure: status.lastFailure,

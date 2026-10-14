@@ -55,7 +55,11 @@ class ResourceSync {
   /// - **apply** → runs [writeDomain] and commits full success metadata (ETag,
   ///   provenance, `lastSuccessAt`, cleared failure) in the same transaction;
   /// - **skippedUpToDate** → no domain write; records a successful validation
-  ///   (refreshes ETag, `lastSuccessAt`, clears failure) so no stream re-emits;
+  ///   (refreshes ETag, `lastSuccessAt`, clears failure) so no domain stream
+  ///   re-emits. When the server re-issued the same content in a later
+  ///   publication (strictly later `generatedAt`), the publication fields
+  ///   (`generatedAt`, `staleAfter`, `serverStale`) are taken from it too
+  ///   (ADR 0005, 2026-10-14 amendment);
   /// - **rejectedOlder** / **rejectedInvalid** → no domain write; records a safe
   ///   conflict category and preserves the cached ETag and provenance.
   ///
@@ -114,8 +118,17 @@ class ResourceSync {
           await writeDomain();
           await _meta.upsert(_applied(stored, key, scope, incoming, at));
         case SnapshotConflictOutcome.skippedUpToDate:
+          final ResourceSyncState validated = _validated(
+            stored,
+            key,
+            scope,
+            at,
+            newEtag: incoming.etag,
+          );
           await _meta.upsert(
-            _validated(stored, key, scope, at, newEtag: incoming.etag),
+            _isRepublication(stored, incoming)
+                ? _republished(validated, incoming)
+                : validated,
           );
         case SnapshotConflictOutcome.rejectedOlder:
           await _meta.upsert(
@@ -230,6 +243,41 @@ class ResourceSync {
     lastAttemptAt: at,
     lastSuccessAt: at,
     lastFailureCategory: null,
+  );
+
+  /// Whether an identical-content snapshot comes from a later publication than
+  /// the stored one. Only a strictly later `generatedAt` counts: a re-fetch of
+  /// the same publication carries an equal value, and an older cached copy an
+  /// earlier one, and neither may move the stored publication fields.
+  bool _isRepublication(ResourceSyncState? stored, RemoteSnapshotMeta m) {
+    final DateTime? storedGeneratedAt = stored?.generatedAt;
+    return storedGeneratedAt != null &&
+        m.generatedAt.isAfter(storedGeneratedAt);
+  }
+
+  /// Takes the publication fields of a later publication of identical content:
+  /// `generatedAt`, `staleAfter` and `serverStale` are replaced verbatim (a null
+  /// is set, not preserved, as in [_applied]). `sourceUpdatedAt` and
+  /// `contentVersion` are equal by the conflict rule and stay as stored. These
+  /// are the fields the snapshot revision excludes (ADR 0020 D1.7): they
+  /// describe the publication, not the content, so no domain row is touched.
+  ResourceSyncState _republished(
+    ResourceSyncState validated,
+    RemoteSnapshotMeta m,
+  ) => ResourceSyncState(
+    resourceKey: validated.resourceKey,
+    season: validated.season,
+    entityId: validated.entityId,
+    round: validated.round,
+    etag: validated.etag,
+    generatedAt: m.generatedAt,
+    sourceUpdatedAt: validated.sourceUpdatedAt,
+    staleAfter: m.staleAfter,
+    contentVersion: validated.contentVersion,
+    serverStale: m.serverStale,
+    lastAttemptAt: validated.lastAttemptAt,
+    lastSuccessAt: validated.lastSuccessAt,
+    lastFailureCategory: validated.lastFailureCategory,
   );
 
   ResourceSyncState _rejected(

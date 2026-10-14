@@ -12,6 +12,7 @@ import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix.dart';
 import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
+import 'package:gridview/features/shared/domain/entities/resource_key.dart';
 import 'package:gridview/features/shared/domain/entities/session.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
 import 'package:gridview/features/shared/presentation/not_found_screen.dart';
@@ -621,7 +622,12 @@ void main() {
         repository: _repo(),
         surfaceSize: _tall,
         disableAnimations: true,
-        // Past the fixture's staleAfter.
+        // The detail presents its own sync record, so that record is the one
+        // that expires.
+        syncMetadata: (String key) => key == ResourceKey.grandPrix(2026, 13)
+            ? syncedMetadata(key, staleAfter: DateTime.utc(2026, 7, 18, 12, 15))
+            : syncedMetadata(key),
+        // Past that staleAfter.
         clock: DateTime.utc(2026, 7, 18, 12, 30),
       );
 
