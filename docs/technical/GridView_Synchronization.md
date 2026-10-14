@@ -87,8 +87,12 @@ Rule (`_decideOutcome`), `generatedAt` never outranks or substitutes for
 4. equal `sourceUpdatedAt` **+** differing `contentVersion` → `generatedAt`
    tie-breaker: strictly **later** applies; **equal/earlier** is rejected.
 
-A rejected, invalid or skipped snapshot performs **no write** (no false stream
-update). The Drift `snapshots.sourceUpdatedAt` column stays nullable (schema
+A rejected, invalid or skipped snapshot performs **no domain write** (no false
+stream update). A skipped snapshot from a **strictly later** publication (later
+`generatedAt`) still updates its `resource_sync_metadata` record's `generatedAt`,
+`staleAfter` and `serverStale`, and nothing else (ADR 0005, 2026-10-14
+amendment). An equal or earlier `generatedAt`, and every `304`, leave them
+unchanged. The Drift `snapshots.sourceUpdatedAt` column stays nullable (schema
 unchanged) so legacy null-source rows remain readable and are repaired by rule
 0b. See ADR 0005.
 
@@ -363,7 +367,10 @@ equal-source tie-breaker; `contentVersion` is compared by equality. A rejected
 and HTTP validator state. On every attempt `lastAttemptAt` updates. On an
 accepted 200: ETag, `generatedAt`, `sourceUpdatedAt`, `staleAfter`,
 `contentVersion`, `serverStale`, `lastSuccessAt` set and `lastFailureCategory`
-clears. On failure: ETag and all prior domain data are preserved, a safe
+clears. On a 200 carrying identical content (rule 3), the ETag, `lastSuccessAt`
+and the cleared failure are recorded as for a 304. If its `generatedAt` is
+strictly later than the stored one, `generatedAt`, `staleAfter` and
+`serverStale` are taken from it as well (§2). On failure: ETag and all prior domain data are preserved, a safe
 `lastFailureCategory` is recorded, and `lastSuccessAt` is **not** updated.
 
 ### 10.5 Concurrency & cancellation
@@ -1014,8 +1021,11 @@ record; ETags and freshness are never combined.
 - Calendar and result freshness come from `resource_sync_metadata` via
   `evaluateResourceFreshness`, which applies exactly the same rule as
   `evaluateFreshness` — there is one freshness policy, not two.
-- Grand Prix detail freshness comes from the persisted snapshot it already
-  carries.
+- Grand Prix detail freshness also comes from its own record
+  (`grand-prix:<season>:<round>`), since 2026-10-14. Until then it was read
+  from the cached `snapshots` row, which a skipped republication never
+  rewrites (§2). A detail with no record of its own (cached only through Home)
+  is stale, as before.
 - In a remote build the Grand Prix screen shows **one** stale notice for the
   detail and the result section together. A fixture build keeps one for each
   (§3.1). A result refresh failure always keeps its own notice in the result

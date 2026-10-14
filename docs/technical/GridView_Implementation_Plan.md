@@ -3361,6 +3361,21 @@ APK `2a11d9fc…9e0d` on the reference phone.
 | Tests | `test/screens/expired_freshness_notice_test.dart` (24) reproduces the phone with a pinned clock past `staleAfter`. Against `6ce0ed6` the ten remote cases fail: Home, Calendar and both standings tables showed no notice, and the Grand Prix screen showed two, in en and es. Also covered: classifications alone expired, a result refresh failure, a cached Home result never taking the bootstrap freshness, fixture builds and a remote-mode build serving mock data unchanged, and remote before `staleAfter`. `test/domain/presented_freshness_test.dart` (7) covers the rule's edges. |
 | **Still open** | Review and merge. The installed `6ce0ed6` APK keeps the old behaviour until a remote APK is rebuilt from the merged `master`, which needs a separate decision. |
 
+### 14.0.55 Republished identical content keeps its new freshness - Flutter only, no data or contract change
+
+Prepared on **2026-10-14** from `master` `900e1c5` (PR #76). This is the first
+Flutter step of the batch-freshness proposal. **It changes Flutter sync and
+presentation, tests and documentation only. No contract, OpenAPI, Drift schema,
+fixture, Edge API or Android change. Nothing was deployed, and no APK was built
+or installed. There was no Jolpica, staging, adb or phone request.**
+
+| Item | Status |
+|---|---|
+| Defect | Every release republishes every resource, and the ETag includes the publication version, so identical content comes back as a `200`. Rule 3 skipped it whole and kept the previous release's `generatedAt` / `staleAfter`. A resource whose content did not change therefore kept an expired expiry after a new release. The Grand Prix detail read its freshness from its `snapshots` row, which a skip never rewrites. |
+| Fix | ADR 0005 2026-10-14 amendment: on rule 3, a strictly later `generatedAt` replaces `generatedAt`, `staleAfter` and `serverStale` in `resource_sync_metadata` only (`ResourceSync`). No domain row or stream changes, `sourceUpdatedAt` / `contentVersion` stay, and an equal or earlier `generatedAt` or a `304` changes nothing. The Grand Prix detail now presents its own record (`computeGrandPrixState(metadata:)`), as results and Calendar do. Synchronization §2, §10.4, §12.8; ADR 0014 wording. |
+| Tests | `test/data/sync/resource_sync_test.dart` adds 5 cases: a later publication, the same publication, an older cached copy, a 304, and rule 4 unchanged. `test/application/grand_prix_controller_test.dart` adds a real-database case: identical detail from a later publication leaves every domain row and table stream untouched, moves the record, and flips the screen from stale to fresh. `test/application/grand_prix_detail_state_test.dart` now reads from the record. In `test/screens/grand_prix_widget_test.dart`, the stale-detail case now expires the detail's record (the harness defaults every record to fresh), not the cached view. Against `900e1c5`, the later-publication case and the real-database case fail. Full suite: 2,230 passed; `flutter analyze` clean. |
+| **Not in this step** | The manifest release check (proposal BF-3) and the retry of a core resource left on an older publication. The contract does not say which documents belong to one publication: snapshot `meta.generatedAt` is "When the response was generated". The required contract clarification is recorded with the PR. Until it is decided, the server's 15-minute `staleAfter` keeps every core resource due on every launch, so no check is lost. |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in
