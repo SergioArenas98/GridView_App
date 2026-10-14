@@ -87,8 +87,12 @@ Rule (`_decideOutcome`), `generatedAt` never outranks or substitutes for
 4. equal `sourceUpdatedAt` **+** differing `contentVersion` → `generatedAt`
    tie-breaker: strictly **later** applies; **equal/earlier** is rejected.
 
-A rejected, invalid or skipped snapshot performs **no write** (no false stream
-update). The Drift `snapshots.sourceUpdatedAt` column stays nullable (schema
+A rejected, invalid or skipped snapshot performs **no domain write** (no false
+stream update). A skipped snapshot from a **strictly later** publication (later
+`generatedAt`) still updates its `resource_sync_metadata` record's `generatedAt`,
+`staleAfter` and `serverStale`, and nothing else (ADR 0005, 2026-10-14
+amendment). An equal or earlier `generatedAt`, and every `304`, leave them
+unchanged. The Drift `snapshots.sourceUpdatedAt` column stays nullable (schema
 unchanged) so legacy null-source rows remain readable and are repaired by rule
 0b. See ADR 0005.
 
@@ -363,7 +367,10 @@ equal-source tie-breaker; `contentVersion` is compared by equality. A rejected
 and HTTP validator state. On every attempt `lastAttemptAt` updates. On an
 accepted 200: ETag, `generatedAt`, `sourceUpdatedAt`, `staleAfter`,
 `contentVersion`, `serverStale`, `lastSuccessAt` set and `lastFailureCategory`
-clears. On failure: ETag and all prior domain data are preserved, a safe
+clears. On a 200 carrying identical content (rule 3), the ETag, `lastSuccessAt`
+and the cleared failure are recorded as for a 304. If its `generatedAt` is
+strictly later than the stored one, `generatedAt`, `staleAfter` and
+`serverStale` are taken from it as well (§2). On failure: ETag and all prior domain data are preserved, a safe
 `lastFailureCategory` is recorded, and `lastSuccessAt` is **not** updated.
 
 ### 10.5 Concurrency & cancellation
@@ -659,6 +666,40 @@ already been attempted in this run.
 - `staleAfter` non-null and `<= now` → due (the `<=` boundary is deliberate);
 - otherwise not due. No fallback TTL when `staleAfter` is absent.
 
+**Release convergence** (`isBehindManifestRelease`, planner only, since
+2026-10-14). An automatic core resource is also due when its record belongs to
+an older release than the stored content manifest's record. Concretely, all of
+these hold:
+
+- both records have a recorded success and a `generatedAt`;
+- the resource is not the manifest itself;
+- the resource is scoped to the locally resolved current season, or to no
+  season;
+- its `generatedAt` is strictly earlier than the manifest's.
+
+This relies on the server contract of ADR 0025 D4, amendment of 2026-10-14: one
+publication instant on every document of a release, strictly later per release
+of a season, with the manifest served from the current season's release. It
+catches a CDN or edge cache that answers a core route with an old `200` or
+`304` after a new batch while the manifest already shows the new release.
+
+- **When it retries:** the resource is retried at the next startup or resume,
+  even when the manifest is not refetched or answers `304`. A `304` never moves
+  provenance, so an old copy stays behind until a response from the new release
+  arrives. A `200` with identical content from the later release then takes the
+  release's fields (ADR 0005 rule-3 amendment).
+- **Bound:** the rule applies to a key **at most once per run**. A re-plan
+  inside the run (after a failed bootstrap or a season change) passes the keys
+  already refreshed as `attemptedKeys`, and the rule never applies to them
+  again. There is no timer and no in-run retry. A cache that keeps serving the
+  old release costs one request per resource per run, never a loop. The same
+  bound holds if a server broke the contract.
+- **After a bootstrap-only first launch:** the bootstrap-materialized resources
+  have no record of their own (ADR 0014), so they are already due under the
+  rules above. The convergence rule applies once a later run has recorded them.
+- **What it does not do:** it neither reads the persisted due query nor changes
+  it, and it never reads the clock.
+
 **Missing metadata rows.** `readDueResources` can only return rows that exist, so
 the planner merges the expected canonical keys (built through `ResourceKey`,
 never string concatenation) with the query's result and treats a missing row as
@@ -800,7 +841,8 @@ written.
 - A failed resource preserves its valid domain cache and its ETag.
 - Other independent resources continue; no transaction spans unrelated resources.
 - No coordinator-level retry loop; a rate-limited resource is not immediately
-  retried (transport `Retry-After` behaviour is unchanged).
+  retried (transport `Retry-After` behaviour is unchanged). A resource behind
+  the manifest's release (§11.7) is retried at most once per run.
 - The single unconditional `304` recovery stays repository-owned (ADR 0012).
 - A configuration failure surfaces as a typed `configuration` failure; production
   never falls back to fixtures.
@@ -1014,8 +1056,11 @@ record; ETags and freshness are never combined.
 - Calendar and result freshness come from `resource_sync_metadata` via
   `evaluateResourceFreshness`, which applies exactly the same rule as
   `evaluateFreshness` — there is one freshness policy, not two.
-- Grand Prix detail freshness comes from the persisted snapshot it already
-  carries.
+- Grand Prix detail freshness also comes from its own record
+  (`grand-prix:<season>:<round>`), since 2026-10-14. Until then it was read
+  from the cached `snapshots` row, which a skipped republication never
+  rewrites (§2). A detail with no record of its own (cached only through Home)
+  is stale, as before.
 - In a remote build the Grand Prix screen shows **one** stale notice for the
   detail and the result section together. A fixture build keeps one for each
   (§3.1). A result refresh failure always keeps its own notice in the result

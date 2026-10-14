@@ -1,5 +1,6 @@
 import '../../../core/api/errors/api_failure.dart';
 import '../../shared/domain/entities/grand_prix_view.dart';
+import '../../shared/domain/entities/sync_state.dart';
 import '../../shared/domain/freshness_evaluator.dart';
 
 /// A stable (season, round) key for the Grand Prix detail provider family.
@@ -46,11 +47,15 @@ class GrandPrixReady extends GrandPrixDetailState {
 
 /// Derives the Grand Prix detail state. Pure and side-effect free.
 ///
-/// A detail cached only indirectly (e.g. from the Home snapshot) has no detail
-/// freshness yet; it is treated as stale so the UI shows content immediately
-/// while a detail refresh completes.
+/// Freshness is read from the detail resource's own `resource_sync_metadata`
+/// record ([metadata]), exactly like the result section and the Calendar, so a
+/// later publication of identical content can move it without rewriting the
+/// cached detail rows (ADR 0005, 2026-10-14 amendment). A detail cached only
+/// indirectly (e.g. from the Home snapshot) has no record yet; it is treated as
+/// stale so the UI shows content immediately while a detail refresh completes.
 GrandPrixDetailState computeGrandPrixState({
   required GrandPrixDetailView? cache,
+  required ResourceSyncState? metadata,
   required bool streamReady,
   required bool refreshing,
   required ApiFailure? lastFailure,
@@ -65,12 +70,9 @@ GrandPrixDetailState computeGrandPrixState({
     }
     return GrandPrixFirstLoadError(lastFailure);
   }
-  final FreshnessState freshness = cache.freshness == null
-      ? FreshnessState.stale
-      : evaluateFreshness(cache.freshness!, now);
   return GrandPrixReady(
     view: cache,
-    freshness: freshness,
+    freshness: evaluateResourceFreshness(metadata, now),
     refreshing: refreshing,
     refreshError: refreshing ? null : lastFailure,
   );

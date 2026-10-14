@@ -214,7 +214,11 @@ class AppSyncCoordinator {
 
     bool bootstrapAttempted = false;
     bool seasonRePlanned = false;
-    SyncPlan plan = await _plan(trigger, bootstrapAttempted: false);
+    SyncPlan plan = await _plan(
+      trigger,
+      bootstrapAttempted: false,
+      attempted: outcomes,
+    );
 
     while (true) {
       if (_cancelled) break;
@@ -232,7 +236,11 @@ class AppSyncCoordinator {
         // Bootstrap failed. The shell stays usable and every partial cache is
         // preserved; recover with the minimal first-screen plan, never a
         // compensating fan-out of all collections.
-        plan = await _plan(trigger, bootstrapAttempted: true);
+        plan = await _plan(
+          trigger,
+          bootstrapAttempted: true,
+          attempted: outcomes,
+        );
         continue;
       }
 
@@ -254,7 +262,11 @@ class AppSyncCoordinator {
         // data stays exactly where it is, and a new season with no usable Home
         // cache legitimately prefers bootstrap.
         seasonRePlanned = true;
-        plan = await _plan(trigger, bootstrapAttempted: bootstrapAttempted);
+        plan = await _plan(
+          trigger,
+          bootstrapAttempted: bootstrapAttempted,
+          attempted: outcomes,
+        );
         continue;
       }
 
@@ -305,6 +317,7 @@ class AppSyncCoordinator {
   Future<SyncPlan> _plan(
     SyncTrigger trigger, {
     required bool bootstrapAttempted,
+    required List<ResourceSyncOutcome> attempted,
   }) async {
     final DateTime now = _now().toUtc();
     final int? season = await _localSeason();
@@ -332,6 +345,10 @@ class AppSyncCoordinator {
         metadata: metadata,
         dueKeys: due.map((ResourceSyncState s) => s.resourceKey).toSet(),
         bootstrapAttempted: bootstrapAttempted,
+        attemptedKeys: <String>{
+          for (final ResourceSyncOutcome outcome in attempted)
+            outcome.resourceKey,
+        },
       ),
     );
   }

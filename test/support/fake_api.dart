@@ -209,10 +209,19 @@ RemoteResult<HomeDataDto> homeResponseFixture({
   );
 }
 
+/// The Grand Prix detail fixture. [generatedAt], [staleAfter] and [etag]
+/// override the publication fields only, so the same content can be served as
+/// a later publication.
 RemoteResult<GrandPrixDto> grandPrixResponseFixture({
   String fixture = 'grand-prix/sprint-weekend.json',
+  String? generatedAt,
+  String? staleAfter,
+  String? etag,
 }) {
   final Map<String, dynamic> json = loadFixture(fixture);
+  final Map<String, dynamic> meta = json['meta'] as Map<String, dynamic>;
+  if (generatedAt != null) meta['generatedAt'] = generatedAt;
+  if (staleAfter != null) meta['staleAfter'] = staleAfter;
   final ApiResponse<GrandPrixDto> parsed = ApiResponse.parse<GrandPrixDto>(
     json,
     (Object? d) => GrandPrixDto.fromJson(d! as Map<String, dynamic>),
@@ -220,7 +229,7 @@ RemoteResult<GrandPrixDto> grandPrixResponseFixture({
   return RemoteModified<GrandPrixDto>(
     data: parsed.data,
     meta: parsed.meta,
-    etag: 'W/"gp-${parsed.data.id}"',
+    etag: etag ?? 'W/"gp-${parsed.data.id}"',
     requestId: parsed.meta.requestId,
   );
 }
