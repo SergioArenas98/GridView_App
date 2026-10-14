@@ -887,7 +887,8 @@ components:
 
                 Every document of one published release carries the identical
                 instant. That includes the content manifest served for the
-                current season and Home's embedded `freshness.generatedAt`. Two
+                current season and every embedded `freshness.generatedAt`:
+                Home's, and the bootstrap's copy of Home. Two
                 snapshots of one season with the same `generatedAt` therefore
                 come from the same release, and a snapshot whose `generatedAt`
                 is earlier than the manifest's comes from an earlier release.
