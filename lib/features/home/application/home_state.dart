@@ -19,9 +19,10 @@ import '../domain/home_temporal_state.dart';
 /// Home combines several independent resources, so it never publishes a single
 /// screen-wide "updated" time. A module derived from the calendar carries the
 /// calendar's record; a module derived from the drivers' standings carries that
-/// table's record. A record with no `lastSuccessAt` yields a **null** freshness
-/// — a representation materialized by an accepted bootstrap has no individual
-/// provenance of its own, and unknown is presented as neither fresh nor stale.
+/// table's record. A section whose resource has no `lastSuccessAt` presents the
+/// freshness of the accepted bootstrap that materialized it in a remote build
+/// ([presentedFreshness]). Otherwise its freshness is **null**: unknown, and
+/// presented as neither fresh nor stale.
 class HomeSectionFreshness {
   const HomeSectionFreshness({this.freshness, this.lastSuccessAt});
 
@@ -323,6 +324,7 @@ class HomeStateInputs {
     required this.constructorStandingsFailed,
     required this.syncSettled,
     required this.now,
+    this.bootstrapFreshness = false,
   });
 
   /// The locally resolved current season, or `null` while none is stored.
@@ -342,10 +344,16 @@ class HomeStateInputs {
   /// one is cached.
   final ResourceSyncState? resultMetadata;
 
-  /// Bootstrap's **own** record, consulted for one thing only: whether an
-  /// accepted bootstrap materialized this exact season's collections. It
-  /// contributes no ETag, provenance or freshness to any resource (ADR 0014).
+  /// Bootstrap's **own** record. It decides whether an accepted bootstrap
+  /// materialized this exact season's collections. When [bootstrapFreshness] is
+  /// set, it also gives the freshness they present until their own records
+  /// exist. It contributes no ETag, provenance or update time to any resource
+  /// (ADR 0014).
   final ResourceSyncState? bootstrapMetadata;
+
+  /// Whether bootstrap-materialized modules present the bootstrap's freshness
+  /// (remote builds only; see `remoteFreshnessNoticesProvider`).
+  final bool bootstrapFreshness;
 
   /// Whether the persisted metadata above has actually been read. While it is
   /// false every module reports [HomeModuleAvailability.resolving], because
@@ -380,10 +388,29 @@ class HomeStateInputs {
   /// would assert something about stored state that has not been consulted, and
   /// a value that arrives with the record is not yet known to be the current
   /// one.
-  HomeSectionFreshness provenanceOf(ResourceSyncState? metadata) =>
-      metadataReady
-      ? HomeSectionFreshness.of(metadata, now)
-      : const HomeSectionFreshness();
+  ///
+  /// [bootstrapApplicable] names a resource that an accepted bootstrap can
+  /// materialize (Home, the calendar and both standings tables, but never a
+  /// result document). While such a resource has no record of its own, it
+  /// presents that bootstrap's freshness when [bootstrapFreshness] is set.
+  HomeSectionFreshness provenanceOf(
+    ResourceSyncState? metadata, {
+    bool bootstrapApplicable = false,
+  }) {
+    if (!metadataReady) return const HomeSectionFreshness();
+    if (metadata?.lastSuccessAt != null) {
+      return HomeSectionFreshness.of(metadata, now);
+    }
+    return HomeSectionFreshness(
+      freshness: presentedFreshness(
+        season: season,
+        metadata: metadata,
+        bootstrapMetadata: bootstrapMetadata,
+        bootstrapFallback: bootstrapFreshness && bootstrapApplicable,
+        now: now,
+      ),
+    );
+  }
 
   /// Classifies one season collection Home derives a module from.
   ///
@@ -418,9 +445,11 @@ HomeState computeHomeState(HomeStateInputs input) {
 
   final HomeSectionFreshness homeProvenance = input.provenanceOf(
     input.homeMetadata,
+    bootstrapApplicable: true,
   );
   final HomeSectionFreshness calendarProvenance = input.provenanceOf(
     input.calendarMetadata,
+    bootstrapApplicable: true,
   );
   final ApiFailure? refreshError = input.refreshing ? null : input.lastFailure;
 
@@ -489,7 +518,10 @@ HomeState computeHomeState(HomeStateInputs input) {
         input.driverStandingsMetadata,
         isEmpty: driverLeader is HomeLeaderUnavailable,
       ),
-      provenance: input.provenanceOf(input.driverStandingsMetadata),
+      provenance: input.provenanceOf(
+        input.driverStandingsMetadata,
+        bootstrapApplicable: true,
+      ),
       failed: input.driverStandingsFailed,
     ),
     teamLeader: HomeLeaderModule(
@@ -498,7 +530,10 @@ HomeState computeHomeState(HomeStateInputs input) {
         input.constructorStandingsMetadata,
         isEmpty: teamLeader is HomeLeaderUnavailable,
       ),
-      provenance: input.provenanceOf(input.constructorStandingsMetadata),
+      provenance: input.provenanceOf(
+        input.constructorStandingsMetadata,
+        bootstrapApplicable: true,
+      ),
       failed: input.constructorStandingsFailed,
     ),
     latestResult: latest == null

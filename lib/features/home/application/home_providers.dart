@@ -140,9 +140,10 @@ final Provider<HomeState> homeStateProvider = Provider<HomeState>((Ref ref) {
   final DateTime now = ref.watch(clockProvider)();
 
   // Each module's provenance is read from its own canonical key. Bootstrap's
-  // record is deliberately not consulted here: it materializes content but
-  // contributes no ETag, provenance or freshness to any individual resource
-  // (ADR 0014), so a bootstrap-only Home correctly shows no update time.
+  // record contributes no ETag, provenance or update time to any individual
+  // resource (ADR 0014), so a bootstrap-only Home correctly shows no update
+  // time. In a remote build its freshness stands in only until a module's own
+  // record exists (see `presentedFreshness`).
   bool metadataReady = true;
   ResourceSyncState? metadata(String? key) {
     if (key == null) return null;
@@ -177,9 +178,10 @@ final Provider<HomeState> homeStateProvider = Provider<HomeState>((Ref ref) {
         ? null
         : ResourceKey.grandPrixResults(season, resultRound),
   );
-  // Bootstrap's own record, read for one thing only: whether an accepted
-  // bootstrap materialized *this* season's collections. It contributes no ETag,
-  // provenance or freshness to any of them (ADR 0014).
+  // Bootstrap's own record. It decides whether an accepted bootstrap
+  // materialized *this* season's collections and, in a remote build, what
+  // freshness they present until their own records exist. It contributes no
+  // ETag, provenance or update time to any of them (ADR 0014).
   final ResourceSyncState? bootstrapMetadata = metadata(
     ResourceKey.bootstrap(),
   );
@@ -206,6 +208,7 @@ final Provider<HomeState> homeStateProvider = Provider<HomeState>((Ref ref) {
           status.constructorStandings.lastFailure != null,
       syncSettled: sync is! AppSyncIdle && sync is! AppSyncRunning,
       now: now,
+      bootstrapFreshness: ref.watch(remoteFreshnessNoticesProvider),
     ),
   );
 });

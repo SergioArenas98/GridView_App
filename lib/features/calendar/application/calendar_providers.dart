@@ -117,9 +117,10 @@ final Provider<CalendarState> calendarStateProvider = Provider<CalendarState>((
     seasonRow = ref.watch(calendarSeasonProvider(year));
     metadata = ref.watch(resourceSyncStateProvider(ResourceKey.calendar(year)));
   }
-  // Bootstrap's own record. It is read for one thing only — whether an accepted
-  // bootstrap materialized *this* season's collections — and contributes no
-  // ETag, provenance or freshness to the calendar resource.
+  // Bootstrap's own record. It decides whether an accepted bootstrap
+  // materialized *this* season's collections and, in a remote build, what
+  // freshness the calendar presents until its own record exists. It contributes
+  // no ETag, provenance or update time to the calendar resource.
   final AsyncValue<ResourceSyncState?> bootstrap = ref.watch(
     resourceSyncStateProvider(ResourceKey.bootstrap()),
   );
@@ -137,5 +138,6 @@ final Provider<CalendarState> calendarStateProvider = Provider<CalendarState>((
     syncSettled: sync is! AppSyncIdle && sync is! AppSyncRunning,
     now: now,
     seasonCurrentRound: seasonRow?.value?.currentRound,
+    bootstrapFreshness: ref.watch(remoteFreshnessNoticesProvider),
   );
 });

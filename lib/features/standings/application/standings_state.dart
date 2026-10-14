@@ -170,10 +170,11 @@ class StandingsReady<R> extends StandingsTableState<R> {
 /// never from the number of rows — so a valid empty table and one that has never
 /// synchronised stay distinguishable.
 ///
-/// Freshness is this resource's **own**, and is `null` while it has none (a
-/// representation materialized by bootstrap). Bootstrap provenance is never
-/// borrowed to fill it in, and the other championship's record is never
-/// consulted.
+/// Freshness is this resource's **own**. While it has none (a representation
+/// materialized by bootstrap), it is the bootstrap representation's freshness
+/// when [bootstrapFreshness] is set, and `null` otherwise
+/// ([presentedFreshness]). No update time is ever borrowed, and the other
+/// championship's record is never consulted.
 StandingsTableState<R> computeStandingsTableState<R>({
   required int? season,
   required bool seasonReady,
@@ -187,10 +188,15 @@ StandingsTableState<R> computeStandingsTableState<R>({
   required ApiFailure? lastFailure,
   required bool syncSettled,
   required DateTime now,
+  bool bootstrapFreshness = false,
 }) {
-  final FreshnessState? freshness = metadata?.lastSuccessAt == null
-      ? null
-      : evaluateResourceFreshness(metadata, now);
+  final FreshnessState? freshness = presentedFreshness(
+    season: season,
+    metadata: metadata,
+    bootstrapMetadata: bootstrapMetadata,
+    bootstrapFallback: bootstrapFreshness,
+    now: now,
+  );
   final StandingsFailure? refreshError = (refreshing || lastFailure == null)
       ? null
       : StandingsFailure.resource(lastFailure);

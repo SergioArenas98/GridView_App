@@ -175,6 +175,20 @@ final Provider<bool> usesMockDataProvider = Provider<bool>(
   (Ref ref) => ref.watch(remoteApiProvider).usesMockData,
 );
 
+/// Whether the remote stale-notice rules apply. They hold only when the build
+/// reads the real GridView API.
+///
+/// Under these rules, content materialized by an accepted bootstrap presents
+/// that bootstrap's own freshness until its own resource has synchronised (see
+/// `presentedFreshness`). The Grand Prix screen also shows one stale notice for
+/// both the weekend detail and its classifications. Frozen and sample-fixture
+/// builds keep the notices they have always shown.
+final Provider<bool> remoteFreshnessNoticesProvider = Provider<bool>(
+  (Ref ref) =>
+      ref.watch(dataSourceModeProvider) == DataSourceMode.remote &&
+      !ref.watch(usesMockDataProvider),
+);
+
 /// Resolves the locally stored current-season year, or null when none is
 /// stored.
 ///
