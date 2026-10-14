@@ -34,6 +34,7 @@ class SyncPlanInput {
     required this.metadata,
     this.dueKeys = const <String>{},
     this.bootstrapAttempted = false,
+    this.attemptedKeys = const <String>{},
   });
 
   final SyncTrigger trigger;
@@ -63,6 +64,13 @@ class SyncPlanInput {
   /// True once this run has already tried bootstrap, so it is never planned
   /// twice.
   final bool bootstrapAttempted;
+
+  /// Keys this run has already refreshed. A re-plan within the run (after a
+  /// failed bootstrap or a season change) never makes one of them due again
+  /// through [isBehindManifestRelease]: a resource that a cache keeps serving
+  /// from an older release is retried once per run, on the next launch or
+  /// resume, never in a loop.
+  final Set<String> attemptedKeys;
 }
 
 /// Builds the deterministic staged plan for one synchronization run.
@@ -187,9 +195,19 @@ abstract final class SyncPlanner {
   /// A manual run forces eligibility; an automatic run refreshes only what
   /// server-provided freshness says is due, merging the persisted due query with
   /// a direct evaluation that also covers resources with no metadata row at all.
+  ///
+  /// A resource whose stored copy belongs to an older release than the stored
+  /// content manifest is due as well, once per run
+  /// ([isBehindManifestRelease]).
   static bool _isDue(SyncResource resource, SyncPlanInput input, bool forces) {
     if (forces) return true;
     if (input.dueKeys.contains(resource.key)) return true;
-    return isResourceDue(input.metadata[resource.key], input.now);
+    if (isResourceDue(input.metadata[resource.key], input.now)) return true;
+    if (input.attemptedKeys.contains(resource.key)) return false;
+    return isBehindManifestRelease(
+      input.metadata[resource.key],
+      input.metadata[const ContentManifestSyncResource().key],
+      currentSeason: input.currentSeason,
+    );
   }
 }
