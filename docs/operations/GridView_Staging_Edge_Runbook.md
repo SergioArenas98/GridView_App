@@ -1568,7 +1568,7 @@ operation kind, the reason in `failureCategory`, and one closed
 |---|---|---|---|
 | `publication-instant-unavailable` | `active-release-unreadable` | Usually (KV visibility) | Resend once later. If it repeats, the active release is missing a document or its inventory. That also blocks rollback. Investigate; no repair tool exists. |
 | `publication-instant-invalid` | `active-instant-invalid` | **No** | A stored document of the active release carries a `generatedAt` that cannot be ordered. Publication **and** rollback of the season are blocked until it is repaired, and no repair or break-glass tool exists. Escalate. |
-| `publication-instant-invalid` | `candidate-not-uniform` | **No** for the same input | The candidate's documents disagree on their generation instant: a generator defect. Do not resend; fix the code. |
+| `publication-instant-invalid` | `candidate-instant-invalid` | **No** for the same input | The candidate's documents disagree on their generation instant, or a `home` or `bootstrap` document lacks its Home freshness block. For an ingest this is a generator defect: fix the code. For a rollback, the stored target is malformed: pick another target or escalate. Do not resend. |
 | `publication-instant-invalid` | `clock-invalid` | Unlikely | The Worker clock gave no usable reading. Resend once; if it repeats, escalate. |
 | `publication-instant-invalid` | `leap-second-step` | Yes, within a second | Resend after a second. Unreachable with instants this Worker writes. |
 | `publication-instant-exhausted` | `year-range` | **No** | The active release carries an instant near 9999, so it is corrupt. Same as `active-instant-invalid`. |

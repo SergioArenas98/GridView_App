@@ -65,9 +65,11 @@ export type PublicationInstantRefusal = 'invalid' | 'exhausted';
  *   retry may clear it.
  * - `active-instant-invalid` - the active release carries an instant that
  *   cannot be ordered. Needs repair; a retry cannot clear it.
- * - `candidate-not-uniform` - the candidate's documents disagree on their
- *   generation instant. A generator defect; a retry of the same input cannot
- *   clear it.
+ * - `candidate-instant-invalid` - the candidate's documents disagree on their
+ *   generation instant, or a `home` or `bootstrap` document lacks its required
+ *   Home freshness block (an ordinary candidate or a rollback target). A
+ *   defect in the generator or in the stored target; a retry of the same input
+ *   cannot clear it.
  * - `clock-invalid` - the clock reading has no millisecond-precision spelling.
  * - `leap-second-step` - the active instant is a leap second and the clock is
  *   not yet past it. Clears on its own within a second.
@@ -77,7 +79,7 @@ export type PublicationInstantRefusal = 'invalid' | 'exhausted';
 export const publicationInstantCauses = [
   'active-release-unreadable',
   'active-instant-invalid',
-  'candidate-not-uniform',
+  'candidate-instant-invalid',
   'clock-invalid',
   'leap-second-step',
   'year-range',
@@ -122,7 +124,9 @@ export async function readActivePublicationInstant(
     const document = await readDocument(storage, season, version, name);
     if (document === 'unavailable') return unavailable;
     if (!isEnvelopeFor(document, name)) return invalid;
-    for (const value of documentInstants(document)) {
+    const values = documentInstants(document);
+    if (values === null) return invalid;
+    for (const value of values) {
       if (typeof value !== 'string' || canonicalInstant(value) === null) {
         return invalid;
       }
@@ -145,7 +149,9 @@ export function candidateGenerationInstant(
 ): string | null {
   let instant: string | null = null;
   for (const document of documents) {
-    for (const value of documentInstants(document)) {
+    const values = documentInstants(document);
+    if (values === null) return null;
+    for (const value of values) {
       if (typeof value !== 'string' || canonicalInstant(value) === null) {
         return null;
       }
@@ -225,12 +231,27 @@ function millisecondInstant(value: string): string | null {
  * `generatedAt` of every Home freshness block it embeds - Home's own and the
  * bootstrap's copy of Home.
  */
-function documentInstants(document: StoredSnapshot): unknown[] {
+function documentInstants(document: StoredSnapshot): unknown[] | null {
   const meta = (document as { meta?: { generatedAt?: unknown } }).meta;
+  const embedded = embeddedFreshness(document);
+  if (embedded.kind === 'malformed') return null;
   return [
     meta?.generatedAt,
-    ...embeddedFreshness(document).map((freshness) => freshness.generatedAt),
+    ...embedded.blocks.map((freshness) => freshness.generatedAt),
   ];
+}
+
+/**
+ * Whether every `home` and `bootstrap` document carries its required Home
+ * freshness block, so the stamp has somewhere to put the instant. A missing or
+ * non-object block is refused, never skipped.
+ */
+export function carriesEmbeddedFreshness(
+  documents: readonly StoredSnapshot[],
+): boolean {
+  return documents.every(
+    (document) => embeddedFreshness(document).kind === 'blocks',
+  );
 }
 
 async function readDocument(

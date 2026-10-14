@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { stampPublicationInstant } from '../../../src/publication/sequenced/documents';
 import {
   candidateGenerationInstant,
+  carriesEmbeddedFreshness,
   derivePublicationInstant,
   readActivePublicationInstant,
 } from '../../../src/publication/sequenced/publication-instant';
@@ -365,5 +366,59 @@ describe("reading the active release's instant", () => {
     expect(
       await readActivePublicationInstant(storage, SEASON, 'v-active'),
     ).toEqual({ kind: 'invalid' });
+  });
+});
+
+/** `documents` with one document's embedded Home freshness block broken. */
+function withBrokenFreshness(
+  documents: readonly StoredSnapshot[],
+  name: 'home' | 'bootstrap',
+  shape: 'missing' | 'not-an-object',
+): StoredSnapshot[] {
+  const broken = shape === 'missing' ? undefined : 'not-an-object';
+  return documents.map((document) => {
+    if (document.documentName !== name) return document;
+    if (name === 'home') {
+      return {
+        ...document,
+        data: { ...(document.data as object), freshness: broken },
+      };
+    }
+    const data = document.data as { home: object };
+    return {
+      ...document,
+      data: { ...data, home: { ...data.home, freshness: broken } },
+    };
+  });
+}
+
+describe('a missing or malformed embedded Home freshness block', () => {
+  it.each([
+    ['home', 'missing'],
+    ['home', 'not-an-object'],
+    ['bootstrap', 'missing'],
+    ['bootstrap', 'not-an-object'],
+  ] as const)('on %s (%s) is refused, never skipped', async (name, shape) => {
+    const documents = withBrokenFreshness(
+      await documentsAt(ACTIVE),
+      name,
+      shape,
+    );
+    expect(carriesEmbeddedFreshness(documents)).toBe(false);
+    expect(candidateGenerationInstant(documents)).toBeNull();
+    expect(
+      stampPublicationInstant(documents, '2026-10-14T16:19:54.573Z'),
+    ).toBeNull();
+    // Even at the instant it already carries, nothing is passed through.
+    expect(stampPublicationInstant(documents, ACTIVE)).toBeNull();
+
+    const storage = await storedRelease(documents);
+    expect(
+      await readActivePublicationInstant(storage, SEASON, 'v-active'),
+    ).toEqual({ kind: 'invalid' });
+  });
+
+  it('is not required of any other document', async () => {
+    expect(carriesEmbeddedFreshness(await documentsAt(ACTIVE))).toBe(true);
   });
 });

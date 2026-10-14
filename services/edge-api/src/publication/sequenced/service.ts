@@ -87,6 +87,7 @@ import { buildPublicationPlan, type PublicationPlan } from './manifest-plan';
 import { bakeAssignedTimestamps, stampPublicationInstant } from './documents';
 import {
   candidateGenerationInstant,
+  carriesEmbeddedFreshness,
   derivePublicationInstant,
   readActivePublicationInstant,
   type PublicationInstantCause,
@@ -311,7 +312,7 @@ export class SequencedPublicationService
       // The candidate's own generation reading: its chronology was resolved
       // at this instant, so it is kept whenever it already clears the floor.
       clockReading: candidateGenerationInstant(set.documents),
-      clockRefusal: 'candidate-not-uniform',
+      clockRefusal: 'candidate-instant-invalid',
       sourceOrderingInput: set.sourceUpdatedAt,
       authority,
       publishesSeasonPointer: true,
@@ -534,6 +535,11 @@ export class SequencedPublicationService
       return { kind: 'refused', reason } as const;
     };
 
+    // A candidate - or a rollback target - that cannot carry the instant
+    // where the contract promises it is refused, never published without it.
+    if (!carriesEmbeddedFreshness(documents)) {
+      return refuse('publication-instant-invalid', 'candidate-instant-invalid');
+    }
     if (clockReading === null) {
       return refuse('publication-instant-invalid', clockRefusal);
     }

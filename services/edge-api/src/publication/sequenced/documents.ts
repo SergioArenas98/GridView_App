@@ -70,7 +70,9 @@ export function bakeAssignedTimestamps(
  * sets it per response.
  *
  * Returns `null` when a re-derived `staleAfter` would leave the representable
- * four-digit year range; the caller refuses before any write.
+ * four-digit year range, or when a `home` or `bootstrap` document lacks its
+ * required Home freshness block; the caller refuses before any write (and
+ * checks the second case first, so it can say which).
  */
 export function stampPublicationInstant(
   documents: readonly StoredSnapshot[],
@@ -78,6 +80,7 @@ export function stampPublicationInstant(
 ): StoredSnapshot[] | null {
   const stamped: StoredSnapshot[] = [];
   for (const document of documents) {
+    if (embeddedFreshness(document).kind === 'malformed') return null;
     if (carriesInstant(document, generatedAt)) {
       stamped.push(document);
       continue;
@@ -98,8 +101,10 @@ function carriesInstant(
   generatedAt: string,
 ): boolean {
   if (document.meta.generatedAt !== generatedAt) return false;
-  return embeddedFreshness(document).every(
-    (freshness) => freshness.generatedAt === generatedAt,
+  const embedded = embeddedFreshness(document);
+  return (
+    embedded.kind === 'blocks' &&
+    embedded.blocks.every((freshness) => freshness.generatedAt === generatedAt)
   );
 }
 

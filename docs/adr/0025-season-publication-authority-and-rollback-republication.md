@@ -1560,7 +1560,10 @@ it or its order:
    - `publication-instant-invalid`, with one of four causes:
      - `active-instant-invalid`: the active release carries an instant that
        cannot be ordered.
-     - `candidate-not-uniform`: the candidate's documents disagree.
+     - `candidate-instant-invalid`: the candidate's documents disagree, or a
+       `home` or `bootstrap` document (of an ordinary candidate or a rollback
+       target) lacks its required Home freshness block. A missing block is
+       refused, never skipped.
      - `clock-invalid`: the clock reading has no millisecond-precision
        spelling.
      - `leap-second-step`: a leap-second active instant must be stepped.
@@ -1572,8 +1575,8 @@ it or its order:
    `active-instant-invalid` and `year-range` mean the active release is
    corrupt, and they block publication **and** rollback of the season. No
    repair or break-glass tool exists, as for `guard-predecessor-invalid`.
-   `candidate-not-uniform` is a generator defect that a retry of the same
-   input cannot clear. The staging runbook ("Publication-instant refusals")
+   `candidate-instant-invalid` is a defect in the generator or in the stored
+   rollback target, which a retry of the same input cannot clear. The staging runbook ("Publication-instant refusals")
    gives the operator action for each cause.
 
    **Retry gap (reported, not changed here).** The coordinated outcome treats

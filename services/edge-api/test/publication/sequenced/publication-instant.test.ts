@@ -427,9 +427,107 @@ describe.each(sequencerTransports)(
         expectInstantCause(
           ctx,
           'publication-instant-invalid',
-          'candidate-not-uniform',
+          'candidate-instant-invalid',
         );
         expect(calls).toEqual(['readAuthority']);
+      });
+
+      it('refuses a candidate whose Home freshness block is missing', async () => {
+        const ctx = await context();
+        const set = await laterSet(at('2026-07-20T12:05:00.000Z'));
+        const broken = {
+          ...set,
+          documents: set.documents.map((document) =>
+            document.documentName === 'home'
+              ? {
+                  ...document,
+                  data: { ...(document.data as object), freshness: undefined },
+                }
+              : document,
+          ),
+        };
+        const { port, calls } = recording(ctx.port);
+
+        const result = await serviceAt(
+          ctx,
+          ctx.clock,
+          ctx.storage,
+          port,
+        ).publish(broken);
+
+        expect(result).toMatchObject({
+          status: 'failed',
+          reason: 'publication-instant-invalid',
+        });
+        expectInstantCause(
+          ctx,
+          'publication-instant-invalid',
+          'candidate-instant-invalid',
+        );
+        expect(calls).toEqual(['readAuthority']);
+      });
+
+      it("refuses a rollback whose target lacks the bootstrap's Home freshness", async () => {
+        const ctx = await context();
+        const published = await ctx.service.publish(
+          await laterSet(at('2026-07-20T12:05:00.000Z')),
+        );
+        expect(published.status).toBe('applied');
+        const bootstrap = await ctx.storage.readVersionedDocument(
+          SEASON,
+          SEED_VERSION,
+          'bootstrap',
+        );
+        if (!bootstrap) throw new Error('no bootstrap');
+        const data = bootstrap.data as { home: object };
+        await ctx.storage.writeVersionedDocument(SEASON, SEED_VERSION, {
+          ...bootstrap,
+          data: { ...data, home: { ...data.home, freshness: null } },
+        });
+        ctx.logger.events.length = 0;
+
+        const rollback = await serviceAt(
+          ctx,
+          at('2026-07-20T12:10:00.000Z'),
+        ).rollback(SEASON, SEED_VERSION);
+
+        expect(rollback).toMatchObject({
+          status: 'failed',
+          reason: 'publication-instant-invalid',
+        });
+        expectInstantCause(
+          ctx,
+          'publication-instant-invalid',
+          'candidate-instant-invalid',
+        );
+        expect(await activeVersion(ctx)).toBe(published.version);
+      });
+
+      it('refuses when the active release lacks its Home freshness block', async () => {
+        const ctx = await context();
+        const home = await ctx.storage.readVersionedDocument(
+          SEASON,
+          SEED_VERSION,
+          'home',
+        );
+        if (!home) throw new Error('no home');
+        await ctx.storage.writeVersionedDocument(SEASON, SEED_VERSION, {
+          ...home,
+          data: { ...(home.data as object), freshness: 'broken' },
+        });
+
+        const result = await ctx.service.publish(await laterSet(ctx.clock));
+
+        expect(result).toMatchObject({
+          status: 'failed',
+          reason: 'publication-instant-invalid',
+        });
+        expectInstantCause(
+          ctx,
+          'publication-instant-invalid',
+          'active-instant-invalid',
+        );
+        expect(await activeVersion(ctx)).toBe(SEED_VERSION);
       });
 
       it('a failed candidate advances no floor: the next one starts from the release still active', async () => {
