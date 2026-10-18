@@ -126,5 +126,6 @@ class RepositoryHarness {
     sync: sync,
     coordinator: coordinator,
     now: now,
+    currentSeason: () async => (await db.seasonDao.readCurrentSeason())?.year,
   );
 }

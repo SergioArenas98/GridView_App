@@ -48,8 +48,12 @@ bool isResourceDue(ResourceSyncState? state, DateTime now) {
 ///   no record is already due under [isResourceDue]);
 /// - [state] is the manifest itself;
 /// - [state] is scoped to a season other than [currentSeason]: publication
-///   instants are ordered per season, and the manifest describes the current
-///   one.
+///   instants are ordered per season;
+/// - [manifest] was not accepted under [currentSeason] (its recorded season
+///   differs, or none is recorded). The manifest's payload names no season, so
+///   its record carries the season that was current when it was accepted.
+///   After a season transition the stored manifest can still hold the
+///   outgoing season's instant, which orders nothing in the new season.
 ///
 /// It compares only stored values and reads no clock. A server that broke the
 /// contract could only make a resource due once per run (the planner applies
@@ -67,6 +71,7 @@ bool isBehindManifestRelease(
   final DateTime? stateInstant = state.generatedAt;
   final DateTime? releaseInstant = manifest.generatedAt;
   if (stateInstant == null || releaseInstant == null) return false;
+  if (currentSeason == null || manifest.season != currentSeason) return false;
   final int? season = state.season;
   if (season != null && season != currentSeason) return false;
   return stateInstant.isBefore(releaseInstant);

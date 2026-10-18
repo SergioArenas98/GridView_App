@@ -317,4 +317,98 @@ void main() {
       },
     );
   });
+
+  group('a record scoped to the season it was accepted under', () {
+    // The content manifest: its payload names no season, so its repository
+    // supplies the locally current season as the accepted scope.
+    const ResourceScope outgoing = ResourceScope(season: 2025);
+    const ResourceScope incomingSeason = ResourceScope(season: 2026);
+
+    Future<void> seedOutgoing() => sync.applySnapshot(
+      key: key,
+      scope: outgoing,
+      incoming: meta(
+        generated: DateTime.utc(2026, 7, 21, 9),
+        stale: DateTime.utc(2026, 7, 21, 9, 15),
+      ),
+      at: DateTime.utc(2026, 7, 21, 9, 1),
+      writeDomain: () async {},
+    );
+
+    test('identical content accepted under a new season takes its '
+        'publication fields with the season, even from an earlier '
+        'instant', () async {
+      await seedOutgoing();
+      int writes = 0;
+      final SnapshotConflictOutcome outcome = await sync.applySnapshot(
+        key: key,
+        scope: incomingSeason,
+        incoming: meta(
+          etag: 'W/"2"',
+          generated: DateTime.utc(2026, 7, 20, 8),
+          stale: DateTime.utc(2026, 7, 27),
+        ),
+        at: DateTime.utc(2026, 7, 22),
+        writeDomain: () async => writes++,
+      );
+
+      expect(outcome, SnapshotConflictOutcome.skippedUpToDate);
+      expect(writes, 0);
+      final ResourceSyncState s = (await sync.read(key))!;
+      expect(s.season, 2026);
+      expect(
+        s.generatedAt,
+        DateTime.utc(2026, 7, 20, 8),
+        reason: 'the outgoing instant orders nothing in the new season',
+      );
+      expect(s.staleAfter, DateTime.utc(2026, 7, 27));
+      expect(s.etag, 'W/"2"');
+    });
+
+    test('a later publication accepted with no current season clears the '
+        'season with the instant', () async {
+      await seedOutgoing();
+      await sync.applySnapshot(
+        key: key,
+        scope: ResourceScope.none,
+        incoming: meta(generated: DateTime.utc(2026, 7, 22, 9)),
+        at: DateTime.utc(2026, 7, 22, 9, 1),
+        writeDomain: () async {},
+      );
+
+      final ResourceSyncState s = (await sync.read(key))!;
+      expect(s.generatedAt, DateTime.utc(2026, 7, 22, 9));
+      expect(s.season, isNull);
+    });
+
+    test('a 304 keeps the recorded season', () async {
+      await seedOutgoing();
+      await sync.recordNotModified(key, scope, DateTime.utc(2026, 7, 22));
+
+      final ResourceSyncState s = (await sync.read(key))!;
+      expect(s.season, 2025);
+      expect(s.generatedAt, DateTime.utc(2026, 7, 21, 9));
+    });
+
+    test('a rejected payload never re-scopes the record', () async {
+      await seedOutgoing();
+      final SnapshotConflictOutcome outcome = await sync.applySnapshot(
+        key: key,
+        scope: incomingSeason,
+        incoming: meta(
+          etag: 'W/"old"',
+          source: DateTime.utc(2026, 7, 18, 6),
+          content: 'c2',
+        ),
+        at: DateTime.utc(2026, 7, 22),
+        writeDomain: () async {},
+      );
+
+      expect(outcome, SnapshotConflictOutcome.rejectedOlder);
+      final ResourceSyncState s = (await sync.read(key))!;
+      expect(s.season, 2025, reason: 'the season still describes the instant');
+      expect(s.generatedAt, DateTime.utc(2026, 7, 21, 9));
+      expect(s.lastFailureCategory, SyncFailureCategory.conflictOlder);
+    });
+  });
 }

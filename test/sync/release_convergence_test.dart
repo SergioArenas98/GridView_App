@@ -226,6 +226,11 @@ void main() {
       await generatedAtOf(ResourceKey.contentManifest()),
       DateTime.parse(p1.generatedAt),
     );
+    expect(
+      (await db.syncMetadataDao.read(ResourceKey.contentManifest()))?.season,
+      2026,
+      reason: 'the manifest records the season it was accepted under',
+    );
   }
 
   group('a new manifest with an old cached core response', () {
@@ -374,6 +379,52 @@ void main() {
         DateTime.parse(p2.generatedAt),
       );
     });
+  });
+
+  test('after a season transition, a manifest still holding the outgoing '
+      "season's later instant is never compared", () async {
+    await settleOnP1();
+
+    // The stored manifest was accepted while 2025 was current, and its
+    // instant is later than every 2026 release this client has seen: the
+    // outgoing season was republished after the new one was first published.
+    final ResourceSyncState manifest = (await db.syncMetadataDao.read(
+      ResourceKey.contentManifest(),
+    ))!;
+    await db.syncMetadataDao.upsert(
+      ResourceSyncState(
+        resourceKey: manifest.resourceKey,
+        season: 2025,
+        etag: 'W/"2025-contentManifest"',
+        generatedAt: DateTime.parse(p2.generatedAt),
+        sourceUpdatedAt: manifest.sourceUpdatedAt,
+        staleAfter: DateTime.utc(2026, 7, 18, 12, 45),
+        contentVersion: manifest.contentVersion,
+        serverStale: false,
+        lastAttemptAt: manifest.lastAttemptAt,
+        lastSuccessAt: manifest.lastSuccessAt,
+      ),
+    );
+
+    // No 2026 core resource is behind the outgoing season's instant.
+    final ScriptedGridViewApi api = ScriptedGridViewApi();
+    serve(api, p1);
+    final SyncHarness h = launch(api, DateTime.utc(2026, 7, 18, 12, 30));
+    await h.coordinator.start();
+    expect(callsOf(api), isEmpty);
+
+    // Once the manifest is due, the 2026 manifest is accepted with its own,
+    // earlier instant and the season it belongs to; still no core retry.
+    final ScriptedGridViewApi later = ScriptedGridViewApi();
+    serve(later, p1);
+    await launch(later, DateTime.utc(2026, 7, 18, 12, 50)).coordinator.start();
+    expect(callsOf(later), <String, int>{'contentManifest': 1});
+    final ResourceSyncState? converged = await db.syncMetadataDao.read(
+      ResourceKey.contentManifest(),
+    );
+    expect(converged?.season, 2026);
+    expect(converged?.generatedAt, DateTime.parse(p1.generatedAt));
+    expect(converged?.staleAfter, DateTime.parse(p1.manifestExpiry));
   });
 
   test(

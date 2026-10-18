@@ -363,12 +363,13 @@ void main() {
       DateTime? calendar,
       DateTime? manifest,
       int? calendarSeason = 2026,
+      int? manifestSeason = 2026,
     }) => <String, ResourceSyncState?>{
       ...allFresh(2026),
       for (final String key in SyncPlanner.expectedCoreKeys(2026))
-        key: at(key, p2, season: key == manifestKey ? null : 2026),
+        key: at(key, p2, season: 2026),
       calendarKey: at(calendarKey, calendar, season: calendarSeason),
-      manifestKey: at(manifestKey, manifest),
+      manifestKey: at(manifestKey, manifest, season: manifestSeason),
     };
 
     List<String> plannedKeys(SyncPlan plan) => <String>[
@@ -431,6 +432,34 @@ void main() {
       expect(plannedKeys(plan), isEmpty);
     });
 
+    test('a manifest accepted under another season is never compared', () {
+      // After a season transition the stored manifest can still hold the
+      // outgoing season's instant, later than any of the new season's.
+      for (final int? manifestSeason in <int?>[2025, null]) {
+        final SyncPlan plan = SyncPlanner.plan(
+          input(
+            metadata: releaseMetadata(
+              calendar: p1,
+              manifest: p2,
+              manifestSeason: manifestSeason,
+            ),
+          ),
+        );
+        expect(plannedKeys(plan), isEmpty, reason: 'manifest $manifestSeason');
+      }
+    });
+
+    test('nothing is compared without a resolved current season', () {
+      expect(
+        isBehindManifestRelease(
+          at(calendarKey, p1),
+          at(manifestKey, p2),
+          currentSeason: null,
+        ),
+        isFalse,
+      );
+    });
+
     test('a key already refreshed in this run is not made due again', () {
       final SyncPlan plan = SyncPlanner.plan(
         SyncPlanInput(
@@ -470,8 +499,8 @@ void main() {
     test('the manifest is never due through its own instant', () {
       expect(
         isBehindManifestRelease(
-          at(manifestKey, p1),
-          at(manifestKey, p2),
+          at(manifestKey, p1, season: 2026),
+          at(manifestKey, p2, season: 2026),
           currentSeason: 2026,
         ),
         isFalse,
@@ -482,7 +511,7 @@ void main() {
       expect(
         isBehindManifestRelease(
           ResourceSyncState(resourceKey: calendarKey, generatedAt: p1),
-          at(manifestKey, p2),
+          at(manifestKey, p2, season: 2026),
           currentSeason: 2026,
         ),
         isFalse,

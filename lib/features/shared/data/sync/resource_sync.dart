@@ -59,9 +59,14 @@ class ResourceSync {
   ///   re-emits. When the server re-issued the same content in a later
   ///   publication (strictly later `generatedAt`), the publication fields
   ///   (`generatedAt`, `staleAfter`, `serverStale`) are taken from it too
-  ///   (ADR 0005, 2026-10-14 amendment);
+  ///   (ADR 0005, 2026-10-14 amendment). So are they when the accepted [scope]
+  ///   names a different season than the stored record: publication instants
+  ///   are ordered only within a season, so the stored instant says nothing
+  ///   about the incoming one, and the record's season and instant must move
+  ///   together;
   /// - **rejectedOlder** / **rejectedInvalid** → no domain write; records a safe
-  ///   conflict category and preserves the cached ETag and provenance.
+  ///   conflict category and preserves the cached ETag, provenance and the
+  ///   stored scope (a rejected payload never re-scopes a record).
   ///
   /// Returns the conflict outcome. If [writeDomain] throws, the whole
   /// transaction rolls back and no success metadata is left behind.
@@ -126,8 +131,8 @@ class ResourceSync {
             newEtag: incoming.etag,
           );
           await _meta.upsert(
-            _isRepublication(stored, incoming)
-                ? _republished(validated, incoming)
+            _isRepublication(stored, incoming, scope)
+                ? _republished(validated, incoming, scope)
                 : validated,
           );
         case SnapshotConflictOutcome.rejectedOlder:
@@ -249,10 +254,22 @@ class ResourceSync {
   /// the stored one. Only a strictly later `generatedAt` counts: a re-fetch of
   /// the same publication carries an equal value, and an older cached copy an
   /// earlier one, and neither may move the stored publication fields.
-  bool _isRepublication(ResourceSyncState? stored, RemoteSnapshotMeta m) {
+  ///
+  /// The exception is a record whose accepted [scope] names another season
+  /// than the stored one, or none. Only a record scoped from the response can
+  /// change season under one key: the content manifest, scoped to the season
+  /// it was accepted under. Its stored instant belongs to another season's
+  /// publications and cannot order the incoming one, so the incoming
+  /// publication fields are taken with the accepted season.
+  bool _isRepublication(
+    ResourceSyncState? stored,
+    RemoteSnapshotMeta m,
+    ResourceScope scope,
+  ) {
     final DateTime? storedGeneratedAt = stored?.generatedAt;
-    return storedGeneratedAt != null &&
-        m.generatedAt.isAfter(storedGeneratedAt);
+    if (storedGeneratedAt == null) return false;
+    if (scope.season != stored!.season) return true;
+    return m.generatedAt.isAfter(storedGeneratedAt);
   }
 
   /// Takes the publication fields of a later publication of identical content:
@@ -261,12 +278,15 @@ class ResourceSync {
   /// `contentVersion` are equal by the conflict rule and stay as stored. These
   /// are the fields the snapshot revision excludes (ADR 0020 D1.7): they
   /// describe the publication, not the content, so no domain row is touched.
+  /// The season is the accepted [scope]'s, a null included, so a record's
+  /// season always describes its stored instant.
   ResourceSyncState _republished(
     ResourceSyncState validated,
     RemoteSnapshotMeta m,
+    ResourceScope scope,
   ) => ResourceSyncState(
     resourceKey: validated.resourceKey,
-    season: validated.season,
+    season: scope.season,
     entityId: validated.entityId,
     round: validated.round,
     etag: validated.etag,
@@ -280,6 +300,9 @@ class ResourceSync {
     lastFailureCategory: validated.lastFailureCategory,
   );
 
+  /// A rejection keeps a stored record's scope: the scope a response would
+  /// have given it describes content that was not accepted. Only a first
+  /// record, with nothing stored, takes [scope].
   ResourceSyncState _rejected(
     ResourceSyncState? stored,
     String key,
@@ -289,7 +312,7 @@ class ResourceSync {
   ) => _base(
     stored,
     key,
-    scope,
+    stored == null ? scope : ResourceScope.none,
   ).copyWith(lastAttemptAt: at, lastFailureCategory: category);
 
   ResourceSyncState _failed(

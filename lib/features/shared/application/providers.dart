@@ -394,5 +394,6 @@ final Provider<ContentRepository> contentRepositoryProvider =
         sync: ref.watch(resourceSyncProvider),
         coordinator: ref.watch(refreshCoordinatorProvider),
         now: ref.watch(clockProvider),
+        currentSeason: ref.watch(currentSeasonResolverProvider),
       ),
     );

@@ -13,6 +13,12 @@ import 'synced_repository.dart';
 /// domain rows are written. The manifest's own `contentVersion` is persisted in
 /// the resource sync metadata so the app can decide whether long-lived profile
 /// content needs refreshing.
+///
+/// The server serves the manifest from the current season's release, but its
+/// payload and meta name no season. An accepted `200` therefore records the
+/// locally resolved current season in the manifest's own scope column, so a
+/// reader can tell which season's publication instant the record holds
+/// (Synchronization §11.7). A `304` or a failure keeps the recorded season.
 class ContentRepositoryImpl extends SyncedRepository
     implements ContentRepository {
   ContentRepositoryImpl({
@@ -20,7 +26,10 @@ class ContentRepositoryImpl extends SyncedRepository
     required super.sync,
     required super.coordinator,
     required super.now,
-  });
+    required Future<int?> Function() currentSeason,
+  }) : _readCurrentSeason = currentSeason;
+
+  final Future<int?> Function() _readCurrentSeason;
 
   @override
   Future<String?> readContentVersion() async =>
@@ -30,10 +39,13 @@ class ContentRepositoryImpl extends SyncedRepository
   Future<RefreshResult> refreshContentManifest({
     bool bypassValidator = false,
     RemoteCancellation? cancellation,
-  }) {
+  }) async {
+    // Read before the request: the run resolves the season in an earlier stage.
+    final int? acceptedSeason = await _readCurrentSeason();
     return refreshResource<ContentManifestDto>(
       key: ResourceKey.contentManifest(),
       scope: ResourceScope.none,
+      scopeOf: (_) => ResourceScope(season: acceptedSeason),
       fetch: ({String? etag, RemoteCancellation? cancellation}) =>
           remote.fetchContentManifest(etag: etag, cancellation: cancellation),
       metaOf: (RemoteModified<ContentManifestDto> m) => RemoteSnapshotMeta(

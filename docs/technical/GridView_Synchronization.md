@@ -379,7 +379,13 @@ accepted 200: ETag, `generatedAt`, `sourceUpdatedAt`, `staleAfter`,
 clears. On a 200 carrying identical content (rule 3), the ETag, `lastSuccessAt`
 and the cleared failure are recorded as for a 304. If its `generatedAt` is
 strictly later than the stored one, `generatedAt`, `staleAfter` and
-`serverStale` are taken from it as well (§2). On failure: ETag and all prior domain data are preserved, a safe
+`serverStale` are taken from it as well (§2). They are also taken when the
+accepted scope names a different season than the stored record, because
+publication instants are ordered only within a season. Only the content
+manifest's record can change season under one key: its payload names no
+season, so an accepted 200 records the locally resolved current season in its
+scope column (§11.7). A 304, a failure or a rejected 200 keeps a stored
+record's scope. On failure: ETag and all prior domain data are preserved, a safe
 `lastFailureCategory` is recorded, and `lastSuccessAt` is **not** updated.
 
 ### 10.5 Concurrency & cancellation
@@ -684,6 +690,8 @@ these hold:
 - the resource is not the manifest itself;
 - the resource is scoped to the locally resolved current season, or to no
   season;
+- the manifest record was accepted under that same season (its recorded
+  season, §10.4);
 - its `generatedAt` is strictly earlier than the manifest's.
 
 This relies on the server contract of ADR 0025 D4, amendment of 2026-10-14: one
@@ -706,6 +714,16 @@ catches a CDN or edge cache that answers a core route with an old `200` or
 - **After a bootstrap-only first launch:** the bootstrap-materialized resources
   have no record of their own (ADR 0014), so they are already due under the
   rules above. The convergence rule applies once a later run has recorded them.
+- **Across a season transition:** the stored manifest can still hold the
+  outgoing season's instant. That instant can be later than every release of
+  the new season, for example when the outgoing season was republished after
+  the new one was first published. The manifest's recorded season keeps it out
+  of the comparison until a manifest is accepted under the new season, which
+  then takes that season's instant even when it is earlier (§10.4).
+  - **Residual:** a client whose season lookup still lags the server can record
+    the new season's manifest under the old season. The old season's resources
+    are then retried once per run, as above, until the lookup resolves the new
+    season.
 - **What it does not do:** it neither reads the persisted due query nor changes
   it, and it never reads the clock.
 

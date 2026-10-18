@@ -73,6 +73,15 @@
 > own metadata record, as the result section and the Calendar already did.
 > Covered by `test/data/sync/resource_sync_test.dart` and
 > `test/application/grand_prix_controller_test.dart`.
+>
+> **Same amendment, season boundary (2026-10-18).** Publication instants are
+> ordered only within a season. The content manifest's record is the only one
+> whose season can change under one key, because it is scoped to the season it
+> was accepted under (Synchronization §10.4). When rule 3 accepts identical
+> content under a different season than the stored record's, the incoming
+> `generatedAt`, `staleAfter` and `stale` flag are taken with the new season,
+> even when that `generatedAt` is earlier. A rejected snapshot never changes a
+> stored record's scope.
 
 ## Context
 
