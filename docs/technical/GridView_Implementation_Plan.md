@@ -3361,13 +3361,31 @@ APK `2a11d9fc…9e0d` on the reference phone.
 | Tests | `test/screens/expired_freshness_notice_test.dart` (24) reproduces the phone with a pinned clock past `staleAfter`. Against `6ce0ed6` the ten remote cases fail: Home, Calendar and both standings tables showed no notice, and the Grand Prix screen showed two, in en and es. Also covered: classifications alone expired, a result refresh failure, a cached Home result never taking the bootstrap freshness, fixture builds and a remote-mode build serving mock data unchanged, and remote before `staleAfter`. `test/domain/presented_freshness_test.dart` (7) covers the rule's edges. |
 | **Still open** | Review and merge. The installed `6ce0ed6` APK keeps the old behaviour until a remote APK is rebuilt from the merged `master`, which needs a separate decision. |
 
+### 14.0.55 Republished identical content keeps its new freshness - Flutter only, no data or contract change
+
+Prepared on **2026-10-14** from `master` `900e1c5` (PR #76). This is the first
+Flutter step of the batch-freshness proposal. **It changes Flutter sync and
+presentation, tests and documentation only. No contract, OpenAPI, Drift schema,
+fixture, Edge API or Android change. Nothing was deployed, and no APK was built
+or installed. There was no Jolpica, staging, adb or phone request.**
+
+| Item | Status |
+|---|---|
+| Defect | Every release republishes every resource, and the ETag includes the publication version, so identical content comes back as a `200`. Rule 3 skipped it whole and kept the previous release's `generatedAt` / `staleAfter`. A resource whose content did not change therefore kept an expired expiry after a new release. The Grand Prix detail read its freshness from its `snapshots` row, which a skip never rewrites. |
+| Fix | ADR 0005 2026-10-14 amendment: on rule 3, a strictly later `generatedAt` replaces `generatedAt`, `staleAfter` and `serverStale` in `resource_sync_metadata` only (`ResourceSync`). No domain row or stream changes, `sourceUpdatedAt` / `contentVersion` stay, and an equal or earlier `generatedAt` or a `304` changes nothing. The Grand Prix detail now presents its own record (`computeGrandPrixState(metadata:)`), as results and Calendar do. Synchronization §2, §10.4, §12.8; ADR 0014 wording. |
+| Tests | `test/data/sync/resource_sync_test.dart` adds 5 cases: a later publication, the same publication, an older cached copy, a 304, and rule 4 unchanged. `test/application/grand_prix_controller_test.dart` adds a real-database case: identical detail from a later publication leaves every domain row and table stream untouched, moves the record, and flips the screen from stale to fresh. `test/application/grand_prix_detail_state_test.dart` now reads from the record. In `test/screens/grand_prix_widget_test.dart`, the stale-detail case now expires the detail's record (the harness defaults every record to fresh), not the cached view. Against `900e1c5`, the later-publication case and the real-database case fail. Full suite: 2,230 passed; `flutter analyze` clean. |
+| Release convergence (added 2026-10-14) | The edge contract is defined in PR #78 (§14.0.56; ADR 0025 D4, amendment of 2026-10-14), merged on 2026-10-18 as `74be1c8`. It is **not deployed**. A core record whose `generatedAt` is earlier than the stored manifest record's is due at the next startup or resume (`isBehindManifestRelease`, Synchronization §11.7). The check is limited to the current season, and to at most once per key per run through `SyncPlanInput.attemptedKeys`, with no timer. |
+| Convergence tests | `test/sync/release_convergence_test.dart` (4, real database, scripted releases with a long core `staleAfter` so only the new rule can make a resource due) reproduces three cases. In each, the manifest returns a new release while a core route returns an old `304` or `200`. The resource is then retried on the next launch while the manifest answers `304`, on resume once per run while the cache stays old, and after a bootstrap-only first launch. `test/sync/sync_planner_test.dart` adds 8 edge cases: same or later release, missing instants, another season, the per-run guard, an expired resource under the guard, the manifest itself, and no recorded success. With the rule disabled, the three reproductions and the planner case fail. |
+| Season boundary (Codex P2, 2026-10-18) | The manifest's record was unscoped, so after a season transition it could still hold the outgoing season's instant. That instant can be later than every new-season release, which made every new-season core resource due once per run until the manifest refreshed. Fix: an accepted manifest `200` records the locally resolved current season in its scope column (`ContentRepositoryImpl`, `currentSeason`), and the rule compares only against a manifest accepted under the current season. A second Codex P2 on `0e4fbfd` showed that a 2026 manifest with an older `sourceUpdatedAt` would be rejected as older first. `ResourceSync` therefore decides a record marked `orderedWithinSeason` (only the manifest) as a first record when the accepted season differs from the stored one. It then applies with its own instants, and a rejection never re-scopes a stored record (ADR 0005 season boundary; Synchronization §10.4, §11.7). No Drift schema, contract or edge change. Tests: `release_convergence_test.dart` plants a 2025 manifest whose instant and source time are later and whose content differs. It shows no core retry, then the 2026 manifest accepted with its own earlier values. Also `sync_planner_test.dart` +2 and `resource_sync_test.dart` +6. With the rule or the season ordering reverted, the new reproduction and its unit cases fail. A client whose season lookup lags the server remains bounded to one retry per resource per run. |
+| **Not in this step** | A manifest probe cadence other than the manifest's own `staleAfter` (proposal BF-3), the wording change, and the edge batch-horizon expiry. **Do not install a build with this rule until PR #78 is live on staging.** Against today's staging, each release is already stamped with one instant, and the per-run bound keeps a contract break to one request per resource per run. |
+
 ### 14.0.56 Snapshot `generatedAt` is the logical publication instant - Edge API and contract, not deployed
 
 Prepared on **2026-10-14** from `master` `900e1c5`. **Edge API, OpenAPI
 description, ADRs and tests. No Flutter, Drift, fixture, wrangler or Android
 change. Nothing was deployed, no batch was submitted, no APK was built, and
 there was no Jolpica, staging, adb or phone request.** §14.0.55 is the Flutter
-PR #77, which holds its manifest check for this contract.
+PR #77, whose manifest check (release convergence) relies on this contract.
 
 | Item | Status |
 |---|---|
@@ -3379,7 +3397,8 @@ PR #77, which holds its manifest check for this contract.
 | Cost | Measured offline against the 117-document batch release: +118 KV reads per publication, no writes. Ordinary publication goes from 260 to 378 operations and rollback from 376 to 494, of 1,000 per invocation. The step costs about 3.6 ms elapsed and 4.0 ms CPU, about 2% of the path. KV latency was not measured. |
 | Unchanged | `sourceUpdatedAt`, `contentVersion`, the revision, ETag inputs, the `staleAfter` and rollback expiry policies, and the legacy pointer authority, which is not covered. |
 | Tests | `publication-instant-rule.test.ts` (unit) and `publication-instant.test.ts` (both transports). With the step disabled, 24 of the integration cases and both guarded-ingest cases fail. |
-| **Still open** | Review and merge, a separate staging deployment decision, and then the Flutter manifest check and retry held in PR #77. |
+| Merged | PR #78, 2026-10-18, merge commit `74be1c8` (head `af16e5f`). Merging is not a deployment. The last recorded staging deployment (2026-10-13, version `3b3b8273-…`) was built from `6ce0ed6`, which does not stamp the instant. |
+| **Still open** | A separate staging deployment decision, then merging PR #77, whose manifest check and retry are implemented against this contract. |
 
 ## 14.1 Objective
 

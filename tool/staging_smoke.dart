@@ -298,6 +298,8 @@ void main() {
               sync: sync,
               coordinator: perResource,
               now: DateTime.now,
+              currentSeason: () async =>
+                  (await db.seasonDao.readCurrentSeason())?.year,
             ),
             grandPrix: GrandPrixRepositoryImpl(
               remote: remote,

@@ -55,9 +55,21 @@ class ResourceSync {
   /// - **apply** → runs [writeDomain] and commits full success metadata (ETag,
   ///   provenance, `lastSuccessAt`, cleared failure) in the same transaction;
   /// - **skippedUpToDate** → no domain write; records a successful validation
-  ///   (refreshes ETag, `lastSuccessAt`, clears failure) so no stream re-emits;
+  ///   (refreshes ETag, `lastSuccessAt`, clears failure) so no domain stream
+  ///   re-emits. When the server re-issued the same content in a later
+  ///   publication (strictly later `generatedAt`), the publication fields
+  ///   (`generatedAt`, `staleAfter`, `serverStale`) are taken from it too
+  ///   (ADR 0005, 2026-10-14 amendment);
   /// - **rejectedOlder** / **rejectedInvalid** → no domain write; records a safe
-  ///   conflict category and preserves the cached ETag and provenance.
+  ///   conflict category and preserves the cached ETag, provenance and the
+  ///   stored scope (a rejected payload never re-scopes a record).
+  ///
+  /// [orderedWithinSeason] marks a record scoped to the season it was
+  /// accepted under (the content manifest), whose revisions are ordered only
+  /// within that season. When the accepted [scope] names another season than
+  /// the stored record, a null included, the stored revision orders nothing:
+  /// the snapshot is decided as a first record, so its instants and the new
+  /// season are applied together.
   ///
   /// Returns the conflict outcome. If [writeDomain] throws, the whole
   /// transaction rolls back and no success metadata is left behind.
@@ -67,6 +79,7 @@ class ResourceSync {
     required RemoteSnapshotMeta incoming,
     required DateTime at,
     required Future<void> Function() writeDomain,
+    bool orderedWithinSeason = false,
   }) async {
     try {
       return await _applySnapshot(
@@ -75,6 +88,7 @@ class ResourceSync {
         incoming: incoming,
         at: at,
         writeDomain: writeDomain,
+        orderedWithinSeason: orderedWithinSeason,
       );
     } catch (error) {
       // Observe, then rethrow untouched: the caller's rollback handling and the
@@ -101,12 +115,17 @@ class ResourceSync {
     required RemoteSnapshotMeta incoming,
     required DateTime at,
     required Future<void> Function() writeDomain,
+    required bool orderedWithinSeason,
   }) {
     return _db.transaction(() async {
       final ResourceSyncState? stored = await _meta.read(key);
+      final bool otherSeason =
+          orderedWithinSeason &&
+          stored != null &&
+          stored.season != scope.season;
       final SnapshotConflictOutcome outcome = SnapshotConflict.decide(
         incoming.revision,
-        _storedRevision(stored),
+        otherSeason ? null : _storedRevision(stored),
       );
 
       switch (outcome) {
@@ -114,8 +133,17 @@ class ResourceSync {
           await writeDomain();
           await _meta.upsert(_applied(stored, key, scope, incoming, at));
         case SnapshotConflictOutcome.skippedUpToDate:
+          final ResourceSyncState validated = _validated(
+            stored,
+            key,
+            scope,
+            at,
+            newEtag: incoming.etag,
+          );
           await _meta.upsert(
-            _validated(stored, key, scope, at, newEtag: incoming.etag),
+            _isRepublication(stored, incoming)
+                ? _republished(validated, incoming)
+                : validated,
           );
         case SnapshotConflictOutcome.rejectedOlder:
           await _meta.upsert(
@@ -232,6 +260,44 @@ class ResourceSync {
     lastFailureCategory: null,
   );
 
+  /// Whether an identical-content snapshot comes from a later publication than
+  /// the stored one. Only a strictly later `generatedAt` counts: a re-fetch of
+  /// the same publication carries an equal value, and an older cached copy an
+  /// earlier one, and neither may move the stored publication fields.
+  bool _isRepublication(ResourceSyncState? stored, RemoteSnapshotMeta m) {
+    final DateTime? storedGeneratedAt = stored?.generatedAt;
+    return storedGeneratedAt != null &&
+        m.generatedAt.isAfter(storedGeneratedAt);
+  }
+
+  /// Takes the publication fields of a later publication of identical content:
+  /// `generatedAt`, `staleAfter` and `serverStale` are replaced verbatim (a null
+  /// is set, not preserved, as in [_applied]). `sourceUpdatedAt` and
+  /// `contentVersion` are equal by the conflict rule and stay as stored. These
+  /// are the fields the snapshot revision excludes (ADR 0020 D1.7): they
+  /// describe the publication, not the content, so no domain row is touched.
+  ResourceSyncState _republished(
+    ResourceSyncState validated,
+    RemoteSnapshotMeta m,
+  ) => ResourceSyncState(
+    resourceKey: validated.resourceKey,
+    season: validated.season,
+    entityId: validated.entityId,
+    round: validated.round,
+    etag: validated.etag,
+    generatedAt: m.generatedAt,
+    sourceUpdatedAt: validated.sourceUpdatedAt,
+    staleAfter: m.staleAfter,
+    contentVersion: validated.contentVersion,
+    serverStale: m.serverStale,
+    lastAttemptAt: validated.lastAttemptAt,
+    lastSuccessAt: validated.lastSuccessAt,
+    lastFailureCategory: validated.lastFailureCategory,
+  );
+
+  /// A rejection keeps a stored record's scope: the scope a response would
+  /// have given it describes content that was not accepted. Only a first
+  /// record, with nothing stored, takes [scope].
   ResourceSyncState _rejected(
     ResourceSyncState? stored,
     String key,
@@ -241,7 +307,7 @@ class ResourceSync {
   ) => _base(
     stored,
     key,
-    scope,
+    stored == null ? scope : ResourceScope.none,
   ).copyWith(lastAttemptAt: at, lastFailureCategory: category);
 
   ResourceSyncState _failed(

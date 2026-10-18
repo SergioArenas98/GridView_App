@@ -36,6 +36,52 @@
 > client therefore accepts a rollback's republished snapshots through the
 > **existing** rules below with no new client behavior. No activation-epoch or
 > other new field is added to the wire contract for this.
+>
+> **Amended (2026-10-14): rule 3 keeps a later publication's freshness.** The
+> server publishes every resource again in each release, so identical content
+> arrives as a `200` whose `generatedAt` and `staleAfter` belong to the new
+> publication. Rule 3 used to discard those values with the rest of the
+> snapshot, so a resource whose content did not change kept the previous
+> release's expiry indefinitely. Rule 3 now reads: equal `sourceUpdatedAt` and
+> equal `contentVersion` → **skip the domain write**. If, in addition, the
+> incoming `generatedAt` is **strictly later** than the stored one, the
+> resource's `resource_sync_metadata` record takes the incoming `generatedAt`,
+> `staleAfter` and server `stale` flag (a null is set, not preserved), in the
+> same transaction as the validation bookkeeping.
+>
+> - What still holds: no domain row is written, including the `snapshots` row
+>   and media, and no domain-table stream emits. `sourceUpdatedAt` and
+>   `contentVersion` are equal by construction and stay as stored. Rules 0-2 and
+>   4 are unchanged, and the outcome is still `skippedUpToDate` /
+>   `RefreshSuccess(application: idempotent)`.
+> - Why it is legitimate: these three fields are excluded from the snapshot
+>   revision (ADR 0020 D1.7). They describe a publication, not the content, and
+>   the server re-issued them for this resource. The client invents nothing and
+>   reads no clock.
+> - What it cannot do: an equal `generatedAt` (the same publication fetched
+>   again) or an earlier one (an older cached copy) changes nothing. A `304`
+>   still never moves provenance (Synchronization §10.2), so a fetch never
+>   extends `staleAfter` on its own.
+> - `generatedAt` still never orders content. Storing a later value only raises
+>   the bar for rule 4, which only a later publication can clear anyway.
+>
+> The "no write at all" wording below described the domain write. Since Phase
+> 6B, a skip has also recorded validation bookkeeping (ETag, `lastSuccessAt`,
+> cleared failure) in `resource_sync_metadata`. This amendment adds the three
+> publication fields to that bookkeeping. Because a skip never rewrites the
+> `snapshots` row, the Grand Prix detail screen now reads its freshness from its
+> own metadata record, as the result section and the Calendar already did.
+> Covered by `test/data/sync/resource_sync_test.dart` and
+> `test/application/grand_prix_controller_test.dart`.
+>
+> **Season boundary (2026-10-18).** Publication instants are ordered only
+> within a season. The content manifest's record is the only one ordered within
+> the season it was accepted under (Synchronization §10.4), because its payload
+> names no season. A snapshot accepted under a different season than the stored
+> record's is decided as a first record, so rules 1-4 never compare it with the
+> outgoing season's. It applies with its own `generatedAt`, `sourceUpdatedAt`
+> and `staleAfter`, even when they are earlier. Every other record is
+> unchanged. A rejected snapshot never changes a stored record's scope.
 
 ## Context
 
@@ -73,7 +119,9 @@ carries `meta.generatedAt`, and season-scoped snapshots additionally carry
   release and strictly later than the instant of the release it replaced,
   rollback republication included. This makes it a publication-membership and
   publication-order signal. It is still not a content-recency signal, and every
-  rule below that keeps it subordinate to `sourceUpdatedAt` stands unchanged.)*
+  rule below that keeps it subordinate to `sourceUpdatedAt` stands unchanged.
+  The client's two uses of it, the rule-3 amendment above and release
+  convergence (Synchronization §11.7), keep it subordinate too.)*
 - **`contentVersion`** — an *immutable identity/provenance token* for the content
   representation. It is compared by **equality only**; it is **not** assumed to
   be numerically or lexicographically sortable.
@@ -119,6 +167,9 @@ write (`_decideOutcome`):
 3. **equal `sourceUpdatedAt` + equal `contentVersion` → skip (idempotent no-op).**
    No rows are rewritten and the stream does not re-emit. DAO returns
    `skippedUpToDate`; repository reports `RefreshSuccess(applied: false)`.
+   *(Amended 2026-10-14: a strictly later `generatedAt` updates the
+   publication fields in `resource_sync_metadata` only. See the amendment
+   above.)*
 4. **equal `sourceUpdatedAt` + differing `contentVersion` → `generatedAt` is a
    deterministic tie-breaker only.** A strictly **later** `generatedAt` applies;
    an **equal or earlier** one is rejected.

@@ -44,8 +44,10 @@ Consequently:
 
 - a newer accepted `200` applies every family **and** the success metadata
   together;
-- an equal revision is an idempotent no-op; an older or contract-invalid one
-  writes no domain rows;
+- an equal revision writes no domain rows (from a strictly later publication
+  it updates only the publication fields of its metadata record, per the ADR
+  0005 2026-10-14 amendment); an older or contract-invalid one writes no
+  domain rows;
 - a `304` updates synchronization metadata only;
 - a failure in any single family — or in the metadata write — rolls back every
   other bootstrap change, leaving the previous cache intact;

@@ -341,4 +341,181 @@ void main() {
       },
     );
   });
+
+  group('release convergence (ADR 0025 D4, amendment of 2026-10-14)', () {
+    final DateTime p1 = DateTime.utc(2026, 7, 18, 11);
+    final DateTime p2 = DateTime.utc(2026, 7, 18, 11, 30);
+    final String manifestKey = ResourceKey.contentManifest();
+    final String calendarKey = ResourceKey.calendar(2026);
+
+    /// Fresh by its own expiry, recorded from the release at [generatedAt].
+    ResourceSyncState at(String key, DateTime? generatedAt, {int? season}) =>
+        ResourceSyncState(
+          resourceKey: key,
+          season: season,
+          generatedAt: generatedAt,
+          lastSuccessAt: now.subtract(const Duration(minutes: 1)),
+          staleAfter: now.add(const Duration(days: 7)),
+          serverStale: false,
+        );
+
+    Map<String, ResourceSyncState?> releaseMetadata({
+      DateTime? calendar,
+      DateTime? manifest,
+      int? calendarSeason = 2026,
+      int? manifestSeason = 2026,
+    }) => <String, ResourceSyncState?>{
+      ...allFresh(2026),
+      for (final String key in SyncPlanner.expectedCoreKeys(2026))
+        key: at(key, p2, season: 2026),
+      calendarKey: at(calendarKey, calendar, season: calendarSeason),
+      manifestKey: at(manifestKey, manifest, season: manifestSeason),
+    };
+
+    List<String> plannedKeys(SyncPlan plan) => <String>[
+      for (final SyncPlanStage stage in plan.stages)
+        for (final SyncResource resource in stage.resources) resource.key,
+    ];
+
+    test('a record from an earlier release than the manifest is due', () {
+      final SyncPlan plan = SyncPlanner.plan(
+        input(
+          metadata: releaseMetadata(calendar: p1, manifest: p2),
+        ),
+      );
+      expect(plannedKeys(plan), <String>[calendarKey]);
+    });
+
+    test('a record from the same or a later release is not due', () {
+      for (final DateTime calendar in <DateTime>[
+        p2,
+        p2.add(const Duration(minutes: 1)),
+      ]) {
+        final SyncPlan plan = SyncPlanner.plan(
+          input(
+            metadata: releaseMetadata(calendar: calendar, manifest: p2),
+          ),
+        );
+        expect(plannedKeys(plan), isEmpty);
+      }
+    });
+
+    test('nothing is compared without both publication instants', () {
+      expect(
+        plannedKeys(
+          SyncPlanner.plan(
+            input(metadata: releaseMetadata(calendar: p1, manifest: null)),
+          ),
+        ),
+        isEmpty,
+      );
+      expect(
+        plannedKeys(
+          SyncPlanner.plan(
+            input(metadata: releaseMetadata(calendar: null, manifest: p2)),
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a record of another season is never compared with the manifest', () {
+      final SyncPlan plan = SyncPlanner.plan(
+        input(
+          metadata: releaseMetadata(
+            calendar: p1,
+            manifest: p2,
+            calendarSeason: 2025,
+          ),
+        ),
+      );
+      expect(plannedKeys(plan), isEmpty);
+    });
+
+    test('a manifest accepted under another season is never compared', () {
+      // After a season transition the stored manifest can still hold the
+      // outgoing season's instant, later than any of the new season's.
+      for (final int? manifestSeason in <int?>[2025, null]) {
+        final SyncPlan plan = SyncPlanner.plan(
+          input(
+            metadata: releaseMetadata(
+              calendar: p1,
+              manifest: p2,
+              manifestSeason: manifestSeason,
+            ),
+          ),
+        );
+        expect(plannedKeys(plan), isEmpty, reason: 'manifest $manifestSeason');
+      }
+    });
+
+    test('nothing is compared without a resolved current season', () {
+      expect(
+        isBehindManifestRelease(
+          at(calendarKey, p1),
+          at(manifestKey, p2),
+          currentSeason: null,
+        ),
+        isFalse,
+      );
+    });
+
+    test('a key already refreshed in this run is not made due again', () {
+      final SyncPlan plan = SyncPlanner.plan(
+        SyncPlanInput(
+          trigger: SyncTrigger.foreground,
+          now: now,
+          currentSeason: 2026,
+          hasUsableFirstScreenCache: true,
+          bootstrapMaterialized: true,
+          metadata: releaseMetadata(calendar: p1, manifest: p2),
+          attemptedKeys: <String>{calendarKey},
+        ),
+      );
+      expect(plannedKeys(plan), isEmpty);
+    });
+
+    test('the per-run guard never hides an expired resource', () {
+      final Map<String, ResourceSyncState?> metadata =
+          releaseMetadata(calendar: p1, manifest: p2)
+            ..[calendarKey] = fresh(calendarKey).copyWith(
+              generatedAt: p1,
+              staleAfter: now.subtract(const Duration(minutes: 1)),
+            );
+      final SyncPlan plan = SyncPlanner.plan(
+        SyncPlanInput(
+          trigger: SyncTrigger.foreground,
+          now: now,
+          currentSeason: 2026,
+          hasUsableFirstScreenCache: true,
+          bootstrapMaterialized: true,
+          metadata: metadata,
+          attemptedKeys: <String>{calendarKey},
+        ),
+      );
+      expect(plannedKeys(plan), <String>[calendarKey]);
+    });
+
+    test('the manifest is never due through its own instant', () {
+      expect(
+        isBehindManifestRelease(
+          at(manifestKey, p1, season: 2026),
+          at(manifestKey, p2, season: 2026),
+          currentSeason: 2026,
+        ),
+        isFalse,
+      );
+    });
+
+    test('a record without a recorded success is left to the due rule', () {
+      expect(
+        isBehindManifestRelease(
+          ResourceSyncState(resourceKey: calendarKey, generatedAt: p1),
+          at(manifestKey, p2, season: 2026),
+          currentSeason: 2026,
+        ),
+        isFalse,
+      );
+    });
+  });
 }
