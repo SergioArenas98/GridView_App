@@ -1549,9 +1549,36 @@ outside the repository.
 | `409` | `older-source-updated-at` | The batch's capture is older than the release. Benign no-op. | None. |
 | `409` | `sequencer-prepare-rejected` | Usually another operation in progress. Nothing committed. | Resend the same body later. |
 | `409` | `sequencer-authority-unavailable` (status `failed`) | Whether it committed is unknown. | Wait 15 min, read the status, resend the same body once: it publishes, or is refused as stale if it had committed. |
+| `409` | `publication-instant-unavailable` (status `failed`) | Only with PR #78 deployed. The active release's inventory or one of its documents could not be read, so its publication instant is unknown. Nothing was written. Log cause `active-release-unreadable`. | Resend the same body once after a few minutes. If it repeats, see "Publication-instant refusals" below. |
+| `409` | `publication-instant-invalid` (status `failed`) | Only with PR #78 deployed. Nothing was written. The log line's `publicationInstantCause` says which case it is. | See "Publication-instant refusals" below. Do not resend until the cause is known. |
+| `409` | `publication-instant-exhausted` (status `failed`) | Only with PR #78 deployed. The required instant would pass the year 9999. Nothing was written. Log cause `year-range`. | Stop. See "Publication-instant refusals" below. |
 | `409` | `admission` reasons | See the table above. | Fix the configuration (separately authorized). |
 | `422` | `stage: verification`, a closed reason | The batch failed verification. Nothing was written. | Fix the batch; step 3 shows the same reason offline. |
 | `400` / `413` | `submission-malformed`, `season-not-enabled` / `submission-oversized` | Not read past the bound or not a submission. | Rebuild with step 3. |
+
+**Publication-instant refusals (PR #78, not deployed).** A sequenced
+publication or rollback first derives the release's publication instant from
+the clock and the active release's own documents (ADR 0025 D4, amendment of
+2026-10-14). Each refusal is `failed`, happens before `prepare` and writes
+nothing. Its `publication.instant.rejected` warn line carries the season, the
+operation kind, the reason in `failureCategory`, and one closed
+`publicationInstantCause`. It never carries an instant or a document name.
+
+| Reason | `publicationInstantCause` | Clears on retry? | Operator action |
+|---|---|---|---|
+| `publication-instant-unavailable` | `active-release-unreadable` | Usually (KV visibility) | Resend once later. If it repeats, the active release is missing a document or its inventory. That also blocks rollback. Investigate; no repair tool exists. |
+| `publication-instant-invalid` | `active-instant-invalid` | **No** | A stored document of the active release carries a `generatedAt` that cannot be ordered. Publication **and** rollback of the season are blocked until it is repaired, and no repair or break-glass tool exists. Escalate. |
+| `publication-instant-invalid` | `candidate-instant-invalid` | **No** for the same input | The candidate's documents disagree on their generation instant, or a `home` or `bootstrap` document lacks its Home freshness block. For an ingest this is a generator defect: fix the code. For a rollback, the stored target is malformed: pick another target or escalate. Do not resend. |
+| `publication-instant-invalid` | `clock-invalid` | Unlikely | The Worker clock gave no usable reading. Resend once; if it repeats, escalate. |
+| `publication-instant-invalid` | `leap-second-step` | Yes, within a second | Resend after a second. Unreachable with instants this Worker writes. |
+| `publication-instant-exhausted` | `year-range` | **No** | The active release carries an instant near 9999, so it is corrupt. Same as `active-instant-invalid`. |
+
+**No automatic path retries these today.** Staging has no cron and runs no
+coordinated mode, and the ingest route runs once per operator request. If a
+scheduled path is restored, note this: the coordinated outcome retries all
+three reasons on its cadence, because none is a ledger block reason. The
+non-clearing causes above would then repeat every run with only a warn line.
+They will not stop until an operator reads the logs.
 
 **Retries are safe by construction.** The body names the release it was
 reviewed against, the guard and `prepare` bind to it, and any other active

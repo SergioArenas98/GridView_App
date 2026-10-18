@@ -147,6 +147,9 @@ export function consequenceForRejectedPublication(
     case 'guard-predecessor-invalid':
     case 'guard-candidate-invalid':
     case 'guard-authority-not-sequenced':
+    case 'publication-instant-unavailable':
+    case 'publication-instant-invalid':
+    case 'publication-instant-exhausted':
       return 'failed';
   }
 }

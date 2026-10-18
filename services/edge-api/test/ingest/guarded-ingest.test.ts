@@ -15,6 +15,7 @@ import dataSources from '../../../../content/attribution/data-sources.json';
 import type { SeasonBatchIngestOutcome } from '../../src/ingest/service';
 import type { ProviderSeasonSource } from '../../src/providers/formula-one-provider';
 import type { SeasonPublicationSequencerPort } from '../../src/publication/sequencer';
+import { stampPublicationInstant } from '../../src/publication/sequenced/documents';
 import { SequencedPublicationService } from '../../src/publication/sequenced/service';
 import { generateSnapshotSet } from '../../src/snapshots/generator';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
@@ -177,20 +178,28 @@ describe.each(sequencerTransports)(
 
       // The served data is the source's, generated at the Worker's clock -
       // not the submitted documents, which were generated at the capture.
+      // The seed release was generated at this same fixed reading, so the
+      // batch is published one millisecond after it: never at or before the
+      // release it replaces (ADR 0025 D4, amended 2026-10-14).
       const now = ctx.clock.now().toISOString();
-      const expected = generateSnapshotSet(
-        batch.artifact.source as unknown as ProviderSeasonSource,
-        now,
-        'expected',
+      const published = new Date(ctx.clock.now().getTime() + 1).toISOString();
+      const expected = stampPublicationInstant(
+        generateSnapshotSet(
+          batch.artifact.source as unknown as ProviderSeasonSource,
+          now,
+          'expected',
+        ).documents,
+        published,
       );
-      for (const document of expected.documents) {
+      expect(expected).not.toBeNull();
+      for (const document of expected ?? []) {
         const stored = await ctx.storage.readVersionedDocument(
           SEASON,
           outcome.publication.version,
           document.documentName,
         );
         const name = String(document.documentName);
-        expect(stored?.meta.generatedAt, name).toBe(now);
+        expect(stored?.meta.generatedAt, name).toBe(published);
         // `prepare` assigns each key's observation timestamp, which Home
         // mirrors into its freshness block; everything else is generated.
         expect(withoutObservedAt(stored?.data), name).toEqual(

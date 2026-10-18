@@ -3361,6 +3361,26 @@ APK `2a11d9fc…9e0d` on the reference phone.
 | Tests | `test/screens/expired_freshness_notice_test.dart` (24) reproduces the phone with a pinned clock past `staleAfter`. Against `6ce0ed6` the ten remote cases fail: Home, Calendar and both standings tables showed no notice, and the Grand Prix screen showed two, in en and es. Also covered: classifications alone expired, a result refresh failure, a cached Home result never taking the bootstrap freshness, fixture builds and a remote-mode build serving mock data unchanged, and remote before `staleAfter`. `test/domain/presented_freshness_test.dart` (7) covers the rule's edges. |
 | **Still open** | Review and merge. The installed `6ce0ed6` APK keeps the old behaviour until a remote APK is rebuilt from the merged `master`, which needs a separate decision. |
 
+### 14.0.56 Snapshot `generatedAt` is the logical publication instant - Edge API and contract, not deployed
+
+Prepared on **2026-10-14** from `master` `900e1c5`. **Edge API, OpenAPI
+description, ADRs and tests. No Flutter, Drift, fixture, wrangler or Android
+change. Nothing was deployed, no batch was submitted, no APK was built, and
+there was no Jolpica, staging, adb or phone request.** §14.0.55 is the Flutter
+PR #77, which holds its manifest check for this contract.
+
+| Item | Status |
+|---|---|
+| Contract | `SnapshotMeta.generatedAt` is the release's publication instant: identical on every document of one release, the content manifest and every embedded Home `freshness.generatedAt` (Home's and the bootstrap's copy) included, and strictly later for each later release of a sequenced season, rollback included. `BaseMeta` (`/v1/status`) keeps the response time. |
+| Rule | `max(clock reading, active release's latest instant + 1 ms)` at millisecond precision, derived after the guard and before `prepare` (ADR 0025 D4, amendment of 2026-10-14). The clock reading is the candidate's own generation reading for ordinary publication and the caller's clock for rollback. `staleAfter` keeps each document's interval from the derived instant. |
+| Durable state | None added. The active release is the floor; a failed candidate moves nothing. |
+| Refusals | `publication-instant-unavailable`, `-invalid` and `-exhausted`, all `failed` before `prepare`. Each log line names one closed `publicationInstantCause`; the runbook gives the action for each. The coordinated outcome retries all three, which leaves the retry gap described in ADR 0025 (no automatic path runs today). |
+| Review | A Codex P2 is fixed: the bootstrap's copy of Home freshness is now stamped, checked and read too. |
+| Cost | Measured offline against the 117-document batch release: +118 KV reads per publication, no writes. Ordinary publication goes from 260 to 378 operations and rollback from 376 to 494, of 1,000 per invocation. The step costs about 3.6 ms elapsed and 4.0 ms CPU, about 2% of the path. KV latency was not measured. |
+| Unchanged | `sourceUpdatedAt`, `contentVersion`, the revision, ETag inputs, the `staleAfter` and rollback expiry policies, and the legacy pointer authority, which is not covered. |
+| Tests | `publication-instant-rule.test.ts` (unit) and `publication-instant.test.ts` (both transports). With the step disabled, 24 of the integration cases and both guarded-ingest cases fail. |
+| **Still open** | Review and merge, a separate staging deployment decision, and then the Flutter manifest check and retry held in PR #77. |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in
