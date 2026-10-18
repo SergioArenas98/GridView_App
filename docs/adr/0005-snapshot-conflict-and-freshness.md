@@ -74,14 +74,14 @@
 > Covered by `test/data/sync/resource_sync_test.dart` and
 > `test/application/grand_prix_controller_test.dart`.
 >
-> **Same amendment, season boundary (2026-10-18).** Publication instants are
-> ordered only within a season. The content manifest's record is the only one
-> whose season can change under one key, because it is scoped to the season it
-> was accepted under (Synchronization §10.4). When rule 3 accepts identical
-> content under a different season than the stored record's, the incoming
-> `generatedAt`, `staleAfter` and `stale` flag are taken with the new season,
-> even when that `generatedAt` is earlier. A rejected snapshot never changes a
-> stored record's scope.
+> **Season boundary (2026-10-18).** Publication instants are ordered only
+> within a season. The content manifest's record is the only one ordered within
+> the season it was accepted under (Synchronization §10.4), because its payload
+> names no season. A snapshot accepted under a different season than the stored
+> record's is decided as a first record, so rules 1-4 never compare it with the
+> outgoing season's. It applies with its own `generatedAt`, `sourceUpdatedAt`
+> and `staleAfter`, even when they are earlier. Every other record is
+> unchanged. A rejected snapshot never changes a stored record's scope.
 
 ## Context
 

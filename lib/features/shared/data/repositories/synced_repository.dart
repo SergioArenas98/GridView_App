@@ -98,6 +98,9 @@ abstract class SyncedRepository {
   /// scopes or validates any other resource — and a failure keeps the declared
   /// [scope], so a previously recorded scope survives (the metadata merge
   /// preserves a stored value when the scope supplies none).
+  ///
+  /// [orderedWithinSeason] marks a resource whose revisions are ordered only
+  /// within the season of its accepted scope (see [ResourceSync.applySnapshot]).
   Future<RefreshResult> refreshResource<T>({
     required String key,
     required ResourceScope scope,
@@ -108,6 +111,7 @@ abstract class SyncedRepository {
     ResourceScope Function(RemoteModified<T> modified)? scopeOf,
     RemoteCancellation? cancellation,
     bool bypassValidator = false,
+    bool orderedWithinSeason = false,
   }) {
     return coordinator.run(
       key,
@@ -121,6 +125,7 @@ abstract class SyncedRepository {
         scopeOf: scopeOf,
         cancellation: cancellation,
         bypassValidator: bypassValidator,
+        orderedWithinSeason: orderedWithinSeason,
       ),
     );
   }
@@ -135,6 +140,7 @@ abstract class SyncedRepository {
     required ResourceScope Function(RemoteModified<T>)? scopeOf,
     required RemoteCancellation? cancellation,
     required bool bypassValidator,
+    required bool orderedWithinSeason,
   }) async {
     // Read the stored metadata once: its ETag drives the conditional request and
     // its success state feeds the resource-specific representation check.
@@ -149,7 +155,15 @@ abstract class SyncedRepository {
     // code-generation toolchain's parser mis-reads a generic type-argument
     // pattern (`RemoteModified<T>`) in a switch as a comparison expression.
     if (result is RemoteModified<T>) {
-      return _apply<T>(key, scope, result, metaOf, writeDomain, scopeOf);
+      return _apply<T>(
+        key,
+        scope,
+        result,
+        metaOf,
+        writeDomain,
+        scopeOf,
+        orderedWithinSeason: orderedWithinSeason,
+      );
     }
     if (result is RemoteNotModified<T>) {
       if (await hasLocalRepresentation(storedMeta)) {
@@ -164,7 +178,15 @@ abstract class SyncedRepository {
       // Retry exactly once, unconditionally (no If-None-Match).
       final RemoteResult<T> retry = await fetch(cancellation: cancellation);
       if (retry is RemoteModified<T>) {
-        return _apply<T>(key, scope, retry, metaOf, writeDomain, scopeOf);
+        return _apply<T>(
+          key,
+          scope,
+          retry,
+          metaOf,
+          writeDomain,
+          scopeOf,
+          orderedWithinSeason: orderedWithinSeason,
+        );
       }
       if (retry is RemoteFailure<T>) {
         await sync.recordFailure(key, scope, retry.failure.kind.name, now());
@@ -192,8 +214,9 @@ abstract class SyncedRepository {
     RemoteModified<T> modified,
     RemoteSnapshotMeta Function(RemoteModified<T>) metaOf,
     Future<void> Function(RemoteModified<T>) writeDomain,
-    ResourceScope Function(RemoteModified<T>)? scopeOf,
-  ) async {
+    ResourceScope Function(RemoteModified<T>)? scopeOf, {
+    required bool orderedWithinSeason,
+  }) async {
     final SnapshotConflictOutcome outcome;
     try {
       outcome = await sync.applySnapshot(
@@ -202,6 +225,7 @@ abstract class SyncedRepository {
         incoming: metaOf(modified),
         at: now(),
         writeDomain: () => writeDomain(modified),
+        orderedWithinSeason: orderedWithinSeason,
       );
     } on InvalidSeasonEntriesException {
       return _rejectInvalidPayload(key, scope);

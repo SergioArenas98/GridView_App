@@ -19,6 +19,8 @@ import 'synced_repository.dart';
 /// locally resolved current season in the manifest's own scope column, so a
 /// reader can tell which season's publication instant the record holds
 /// (Synchronization §11.7). A `304` or a failure keeps the recorded season.
+/// The record's revisions are ordered only within that season: a `200`
+/// accepted under another season replaces it, whatever its instants say.
 class ContentRepositoryImpl extends SyncedRepository
     implements ContentRepository {
   ContentRepositoryImpl({
@@ -46,6 +48,7 @@ class ContentRepositoryImpl extends SyncedRepository
       key: ResourceKey.contentManifest(),
       scope: ResourceScope.none,
       scopeOf: (_) => ResourceScope(season: acceptedSeason),
+      orderedWithinSeason: true,
       fetch: ({String? etag, RemoteCancellation? cancellation}) =>
           remote.fetchContentManifest(etag: etag, cancellation: cancellation),
       metaOf: (RemoteModified<ContentManifestDto> m) => RemoteSnapshotMeta(

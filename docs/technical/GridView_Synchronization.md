@@ -379,13 +379,15 @@ accepted 200: ETag, `generatedAt`, `sourceUpdatedAt`, `staleAfter`,
 clears. On a 200 carrying identical content (rule 3), the ETag, `lastSuccessAt`
 and the cleared failure are recorded as for a 304. If its `generatedAt` is
 strictly later than the stored one, `generatedAt`, `staleAfter` and
-`serverStale` are taken from it as well (§2). They are also taken when the
-accepted scope names a different season than the stored record, because
-publication instants are ordered only within a season. Only the content
-manifest's record can change season under one key: its payload names no
-season, so an accepted 200 records the locally resolved current season in its
-scope column (§11.7). A 304, a failure or a rejected 200 keeps a stored
-record's scope. On failure: ETag and all prior domain data are preserved, a safe
+`serverStale` are taken from it as well (§2). The content manifest's record
+is scoped to the season it was accepted under: its payload names no season, so
+an accepted 200 records the locally resolved current season in its scope
+column (§11.7). Its revisions are ordered only within that season. A 200
+accepted under a different season than the stored record's, or under none, is
+therefore decided as a first record, before the conflict rule: it applies with
+its own instants and `sourceUpdatedAt` even when they are earlier, and never as
+`rejectedOlder`. A 304, a failure or a rejected 200 keeps a stored record's
+scope. On failure: ETag and all prior domain data are preserved, a safe
 `lastFailureCategory` is recorded, and `lastSuccessAt` is **not** updated.
 
 ### 10.5 Concurrency & cancellation

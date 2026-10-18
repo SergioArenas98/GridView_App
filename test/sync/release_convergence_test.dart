@@ -385,9 +385,10 @@ void main() {
       "season's later instant is never compared", () async {
     await settleOnP1();
 
-    // The stored manifest was accepted while 2025 was current, and its
-    // instant is later than every 2026 release this client has seen: the
-    // outgoing season was republished after the new one was first published.
+    // The stored manifest was accepted while 2025 was current. Its instant
+    // and its source time are later than every 2026 release this client has
+    // seen (the outgoing season was republished after the new one was first
+    // published), and its content differs.
     final ResourceSyncState manifest = (await db.syncMetadataDao.read(
       ResourceKey.contentManifest(),
     ))!;
@@ -397,9 +398,9 @@ void main() {
         season: 2025,
         etag: 'W/"2025-contentManifest"',
         generatedAt: DateTime.parse(p2.generatedAt),
-        sourceUpdatedAt: manifest.sourceUpdatedAt,
+        sourceUpdatedAt: manifest.sourceUpdatedAt!.add(const Duration(days: 1)),
         staleAfter: DateTime.utc(2026, 7, 18, 12, 45),
-        contentVersion: manifest.contentVersion,
+        contentVersion: 'outgoing-2025',
         serverStale: false,
         lastAttemptAt: manifest.lastAttemptAt,
         lastSuccessAt: manifest.lastSuccessAt,
@@ -413,8 +414,9 @@ void main() {
     await h.coordinator.start();
     expect(callsOf(api), isEmpty);
 
-    // Once the manifest is due, the 2026 manifest is accepted with its own,
-    // earlier instant and the season it belongs to; still no core retry.
+    // Once the manifest is due, the 2026 manifest is accepted with its own
+    // earlier instants and the season it belongs to, never rejected as older
+    // than the outgoing season's. Still no core retry.
     final ScriptedGridViewApi later = ScriptedGridViewApi();
     serve(later, p1);
     await launch(later, DateTime.utc(2026, 7, 18, 12, 50)).coordinator.start();
@@ -425,6 +427,8 @@ void main() {
     expect(converged?.season, 2026);
     expect(converged?.generatedAt, DateTime.parse(p1.generatedAt));
     expect(converged?.staleAfter, DateTime.parse(p1.manifestExpiry));
+    expect(converged?.sourceUpdatedAt, manifest.sourceUpdatedAt);
+    expect(converged?.lastFailureCategory, isNull);
   });
 
   test(
