@@ -103,6 +103,16 @@ carries `meta.generatedAt`, and season-scoped snapshots additionally carry
 - **`generatedAt`** — the time the *GridView snapshot document was produced*. A
   snapshot generated later can still carry **older** source data (a delayed or
   re-run generation), so `generatedAt` is not a safe recency signal on its own.
+  *(Narrowed on 2026-10-14 by
+  [ADR 0025](0025-season-publication-authority-and-rollback-republication.md)
+  D4, "Amendment (2026-10-14)": for a season under the publication sequencer it
+  is the **logical publication instant**, identical on every document of one
+  release and strictly later than the instant of the release it replaced,
+  rollback republication included. This makes it a publication-membership and
+  publication-order signal. It is still not a content-recency signal, and every
+  rule below that keeps it subordinate to `sourceUpdatedAt` stands unchanged.
+  The client's two uses of it, the rule-3 amendment above and release
+  convergence (Synchronization §11.7), keep it subordinate too.)*
 - **`contentVersion`** — an *immutable identity/provenance token* for the content
   representation. It is compared by **equality only**; it is **not** assumed to
   be numerically or lexicographically sortable.

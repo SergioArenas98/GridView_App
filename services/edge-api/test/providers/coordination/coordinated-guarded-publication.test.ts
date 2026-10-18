@@ -33,6 +33,7 @@ import { handlePublicRequest } from '../../../src/public/router';
 import { deriveParticipationGuard } from '../../../src/publication/guard/participation-guard';
 import { readPredecessorGuard } from '../../../src/publication/guard/predecessor';
 import type { PublicationResult } from '../../../src/publication/publisher';
+import { stampPublicationInstant } from '../../../src/publication/sequenced/documents';
 import { SequencedPublicationService } from '../../../src/publication/sequenced/service';
 import { generateSnapshotSet } from '../../../src/snapshots/generator';
 import { runtimeSnapshotValidator } from '../../../src/validation/snapshot-validator';
@@ -257,11 +258,21 @@ describe.each(sequencerTransports)(
         expect([...(inventory ?? [])].sort()).toEqual(
           set.documents.map((document) => document.documentName).sort(),
         );
-        for (const document of set.documents) {
+        // The release's one publication instant is stamped before `prepare`
+        // (ADR 0025 D4, amended 2026-10-14), including on the bootstrap's copy
+        // of Home; apart from it, only `prepare`-assigned timestamps differ.
+        const manifest = await harness.activeDocument('content:manifest');
+        const expected =
+          stampPublicationInstant(set.documents, manifest!.meta.generatedAt) ??
+          [];
+        expect(expected).toHaveLength(set.documents.length);
+        for (const document of expected) {
           const stored = await harness.activeDocument(document.documentName);
           expect(stored, document.documentName).not.toBeNull();
+          expect(stored!.meta.generatedAt, document.documentName).toBe(
+            manifest!.meta.generatedAt,
+          );
           if (document.documentName === 'home') continue;
-          // Only `prepare`-assigned timestamps differ; the data is verbatim.
           expect(stored!.data, document.documentName).toEqual(document.data);
         }
         // Guard evaluation read the candidate without altering it.

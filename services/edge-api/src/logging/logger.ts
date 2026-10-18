@@ -71,6 +71,11 @@ export interface LogEvent {
   publicationNextDue?: string;
   /** A closed withholding cause or publication reason; never a value. */
   publicationReason?: string;
+  /**
+   * The closed cause behind a `publication-instant-*` refusal
+   * (`publicationInstantCauses`). Never an instant or a document name.
+   */
+  publicationInstantCause?: string;
   /** A count per fixed reconciliation policy event category. */
   reconciliationEvents?: Record<string, number>;
   /** Bounded coordinated run trigger: `scheduled` or `manual`. */

@@ -152,6 +152,26 @@ export const publicationReasons = [
    * legacy authority cannot bind a predecessor (ADR 0026 D16).
    */
   'guard-authority-not-sequenced',
+  /**
+   * Sequenced publication and rollback only (ADR 0025 D4, amended
+   * 2026-10-14). The active release's inventory or one of its documents could
+   * not be read, or read as absent, so its publication instant - the floor the
+   * candidate's `generatedAt` must clear - is unknown. Refused before
+   * `prepare`; the active release keeps serving.
+   */
+  'publication-instant-unavailable',
+  /**
+   * The candidate's documents disagree on their generation instant, the
+   * active release carries an instant that cannot be ordered, the clock
+   * reading is unusable, or the required step cannot be spelled at
+   * millisecond precision. Refused before `prepare`.
+   */
+  'publication-instant-invalid',
+  /**
+   * The required publication instant, or a `staleAfter` derived from it,
+   * would leave the four-digit RFC 3339 year range. Refused before `prepare`.
+   */
+  'publication-instant-exhausted',
 ] as const;
 
 export type PublicationReason = (typeof publicationReasons)[number];
