@@ -66,8 +66,8 @@ class SyncPlanInput {
   final bool bootstrapAttempted;
 
   /// Keys this run has already refreshed. A re-plan within the run (after a
-  /// failed bootstrap or a season change) never makes one of them due again
-  /// through [isBehindManifestRelease]: a resource that a cache keeps serving
+  /// failed bootstrap, a season change or the release follow-up) never makes
+  /// one of them due again through [isBehindManifestRelease]: a resource that a cache keeps serving
   /// from an older release is retried once per run, on the next launch or
   /// resume, never in a loop.
   final Set<String> attemptedKeys;

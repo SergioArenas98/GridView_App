@@ -6,10 +6,12 @@ import 'package:gridview/core/api/dto/season_dto.dart';
 import 'package:gridview/core/api/dto/standing_dto.dart';
 import 'package:gridview/core/api/dto/summary_dto.dart';
 import 'package:gridview/core/api/dto/view_dto.dart';
+import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/database/gridview_database.dart';
 import 'package:gridview/features/shared/data/remote/remote_result.dart';
 import 'package:gridview/features/shared/domain/entities/resource_key.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
+import 'package:gridview/features/shared/domain/freshness_evaluator.dart';
 
 import '../support/bootstrap_fixture.dart';
 import '../support/scripted_api.dart';
@@ -18,17 +20,24 @@ import '../support/sync_harness.dart';
 /// A published release as the scripted server serves it: one publication
 /// instant on every document (ADR 0025 D4, amendment of 2026-10-14).
 ///
-/// Core documents carry a long `staleAfter` on purpose. With the current
-/// 15-minute expiry an old copy is usually due again by its own expiry, which
-/// would hide the rule under test; a batch-horizon expiry would not.
+/// Core documents carry a long `staleAfter` on purpose: the calendar horizon
+/// a manually published batch gets (ADR 0005, amendment of 2026-10-19). With
+/// a 15-minute expiry an old copy would usually be due again by its own
+/// expiry, which would hide the rule under test.
 class Release {
-  const Release(this.label, this.generatedAt, {required this.manifestExpiry});
+  const Release(
+    this.label,
+    this.generatedAt, {
+    required this.manifestExpiry,
+    this.coreExpiry = defaultCoreExpiry,
+  });
 
   final String label;
   final String generatedAt;
   final String manifestExpiry;
+  final String coreExpiry;
 
-  static const String coreExpiry = '2026-07-25T00:00:00Z';
+  static const String defaultCoreExpiry = '2026-07-25T00:00:00Z';
 
   String etag(String endpoint) => 'W/"$label-$endpoint"';
 }
@@ -42,6 +51,15 @@ const Release p2 = Release(
   'p2',
   '2026-07-18T13:00:00Z',
   manifestExpiry: '2026-07-18T14:00:00Z',
+);
+
+/// The next batch, published after P1 and P2's horizon: it classifies that
+/// round, so its own horizon is the following one.
+const Release p3 = Release(
+  'p3',
+  '2026-07-25T06:00:00Z',
+  manifestExpiry: '2026-07-25T07:00:00Z',
+  coreExpiry: '2026-08-08T13:00:00Z',
 );
 
 /// How an edge cache answers for one endpoint.
@@ -72,7 +90,7 @@ RemoteResult<T> _answer<T>(
     parse,
     etag: r.etag(endpoint),
     generatedAt: r.generatedAt,
-    staleAfter: manifest ? r.manifestExpiry : Release.coreExpiry,
+    staleAfter: manifest ? r.manifestExpiry : r.coreExpiry,
   );
 }
 
@@ -295,50 +313,51 @@ void main() {
       expect(callsOf(fourth), <String, int>{'contentManifest': 1});
     });
 
-    test(
-      'is retried on resume, once per run, while the cache stays old',
-      () async {
-        await settleOnP1();
+    test('is adopted by the run that finds it, then retried once per run '
+        'while the cache stays old', () async {
+      await settleOnP1();
 
-        // Launch after the manifest's expiry: only the manifest is due, and it
-        // reveals P2. No core resource is due by its own expiry.
-        final ScriptedGridViewApi api = ScriptedGridViewApi();
-        serve(api, p2);
-        final SyncHarness h = launch(api, DateTime.utc(2026, 7, 18, 13, 1));
-        await h.coordinator.start();
-        expect(callsOf(api), <String, int>{'contentManifest': 1});
+      // Launch after the manifest's expiry: only the manifest is due, and it
+      // reveals P2. The same run then refreshes every core resource behind
+      // it. The calendar's cache still serves P1.
+      final ScriptedGridViewApi api = ScriptedGridViewApi();
+      serve(
+        api,
+        p2,
+        overrides: <String, Served>{
+          'calendar': (release: p1, cache: Cache.stale200),
+        },
+      );
+      final SyncHarness h = launch(api, DateTime.utc(2026, 7, 18, 13, 1));
+      await h.coordinator.start();
+      expect(callsOf(api), <String, int>{
+        for (final String e in coreEndpoints) e: 1,
+        'contentManifest': 1,
+      });
+      expect(
+        await generatedAtOf(ResourceKey.home(2026)),
+        DateTime.parse(p2.generatedAt),
+      );
+      expect(
+        await generatedAtOf(ResourceKey.calendar(2026)),
+        DateTime.parse(p1.generatedAt),
+      );
 
-        // Resume: every core resource is behind the manifest. The calendar's
-        // cache still serves P1.
-        api.calls.clear();
-        serve(
-          api,
-          p2,
-          overrides: <String, Served>{
-            'calendar': (release: p1, cache: Cache.stale200),
-          },
-        );
-        await h.coordinator.onForeground();
-        expect(callsOf(api), <String, int>{
-          for (final String e in coreEndpoints) e: 1,
-        });
+      // Resume with the cache still stale: one more attempt, never a loop
+      // within the run, and the manifest is not due again yet.
+      api.calls.clear();
+      await h.coordinator.onForeground();
+      expect(callsOf(api), <String, int>{'calendar': 1});
 
-        // Resume again with the cache still stale: one more attempt, never a
-        // loop within the run.
-        api.calls.clear();
-        await h.coordinator.onForeground();
-        expect(callsOf(api), <String, int>{'calendar': 1});
-
-        // The cache catches up; one more resume converges, then nothing.
-        api.calls.clear();
-        serve(api, p2);
-        await h.coordinator.onForeground();
-        expect(callsOf(api), <String, int>{'calendar': 1});
-        api.calls.clear();
-        await h.coordinator.onForeground();
-        expect(callsOf(api), isEmpty);
-      },
-    );
+      // The cache catches up; one more resume converges, then nothing.
+      api.calls.clear();
+      serve(api, p2);
+      await h.coordinator.onForeground();
+      expect(callsOf(api), <String, int>{'calendar': 1});
+      api.calls.clear();
+      await h.coordinator.onForeground();
+      expect(callsOf(api), isEmpty);
+    });
 
     test('is retried after a bootstrap-only first launch', () async {
       // First launch: bootstrap only, at P1. No core resource has a record of
@@ -377,6 +396,147 @@ void main() {
       expect(
         await generatedAtOf(ResourceKey.calendar(2026)),
         DateTime.parse(p2.generatedAt),
+      );
+    });
+  });
+
+  group('a manually published batch (calendar horizon)', () {
+    // `Release.defaultCoreExpiry` stands in for the batch horizon: the first sprint
+    // or race the release does not classify. The manifest keeps an hour.
+    final DateTime horizon = DateTime.parse(Release.defaultCoreExpiry);
+
+    Future<FreshnessState> freshnessOf(String key, DateTime now) async =>
+        evaluateResourceFreshness(await db.syncMetadataDao.read(key), now);
+
+    test('a first launch days after the publication presents the bootstrap '
+        'as fresh until the horizon', () async {
+      final ScriptedGridViewApi api = ScriptedGridViewApi()
+        ..bootstrap = (_) => bootstrapModified(
+          bootstrapEnvelope(staleAfter: Release.defaultCoreExpiry),
+        );
+      final DateTime launchedAt = DateTime.utc(2026, 7, 21, 9);
+      await launch(api, launchedAt).coordinator.start();
+
+      final String bootstrap = ResourceKey.bootstrap();
+      expect(await freshnessOf(bootstrap, launchedAt), FreshnessState.fresh);
+      expect(
+        await freshnessOf(
+          bootstrap,
+          horizon.subtract(const Duration(seconds: 1)),
+        ),
+        FreshnessState.fresh,
+      );
+      expect(
+        await freshnessOf(bootstrap, horizon.add(const Duration(seconds: 1))),
+        FreshnessState.stale,
+      );
+    });
+
+    test(
+      'a resume before the horizon checks only the manifest; its 304 '
+      'leaves unchanged data fresh and the check due on the next run',
+      () async {
+        await settleOnP1();
+
+        final ScriptedGridViewApi api = ScriptedGridViewApi();
+        serve(api, p1);
+        final DateTime twoDaysLater = DateTime.utc(2026, 7, 20, 12);
+        final SyncHarness h = launch(api, twoDaysLater);
+        await h.coordinator.start();
+        expect(callsOf(api), <String, int>{'contentManifest': 1});
+        expect(api.lastEtag['contentManifest'], p1.etag('contentManifest'));
+        expect(
+          await freshnessOf(ResourceKey.home(2026), twoDaysLater),
+          FreshnessState.fresh,
+        );
+
+        // A 304 never extends the manifest's expiry, so every later startup or
+        // resume checks for a newer publication again - and only that.
+        api.calls.clear();
+        await h.coordinator.onForeground();
+        expect(callsOf(api), <String, int>{'contentManifest': 1});
+      },
+    );
+
+    test('offline, the last snapshot is kept and its freshness is still the '
+        "server's horizon", () async {
+      await settleOnP1();
+      final ResourceSyncState? homeBefore = await db.syncMetadataDao.read(
+        ResourceKey.home(2026),
+      );
+
+      final ScriptedGridViewApi api = ScriptedGridViewApi()
+        ..contentManifest = (_) => const RemoteFailure<ContentManifestDto>(
+          ApiFailure(kind: ApiFailureKind.networkUnavailable),
+        );
+      final DateTime offlineAt = DateTime.utc(2026, 7, 20, 12);
+      final SyncHarness h = launch(api, offlineAt);
+      await h.coordinator.start();
+
+      // The failed check refreshes nothing and erases nothing.
+      expect(callsOf(api), <String, int>{'contentManifest': 1});
+      expect(
+        (await db.syncMetadataDao.read(
+          ResourceKey.contentManifest(),
+        ))?.lastFailureCategory,
+        isNotNull,
+      );
+      expect(await h.repositories.home.readHome(), isNotNull);
+      final ResourceSyncState? homeAfter = await db.syncMetadataDao.read(
+        ResourceKey.home(2026),
+      );
+      expect(homeAfter?.lastSuccessAt, homeBefore?.lastSuccessAt);
+      expect(homeAfter?.staleAfter, horizon);
+      expect(
+        await freshnessOf(ResourceKey.home(2026), offlineAt),
+        FreshnessState.fresh,
+      );
+      // Past the horizon the same offline copy is reported stale.
+      expect(
+        await freshnessOf(
+          ResourceKey.home(2026),
+          horizon.add(const Duration(minutes: 1)),
+        ),
+        FreshnessState.stale,
+      );
+    });
+
+    test('past the horizon with no newer batch, unchanged data is stale and '
+        'every core resource is checked each run', () async {
+      await settleOnP1();
+
+      final ScriptedGridViewApi api = ScriptedGridViewApi();
+      serve(api, p1);
+      final DateTime afterHorizon = horizon.add(const Duration(minutes: 1));
+      final SyncHarness h = launch(api, afterHorizon);
+      await h.coordinator.start();
+
+      expect(callsOf(api), <String, int>{
+        for (final String e in coreEndpoints) e: 1,
+        'contentManifest': 1,
+      });
+      // Every answer was a 304: the copy is current, but the release no longer
+      // covers the season, so it stays stale until a newer batch arrives.
+      expect(
+        await generatedAtOf(ResourceKey.home(2026)),
+        DateTime.parse(p1.generatedAt),
+      );
+      expect(
+        await freshnessOf(ResourceKey.home(2026), afterHorizon),
+        FreshnessState.stale,
+      );
+
+      // The next batch moves the horizon; the run that finds it adopts it.
+      api.calls.clear();
+      serve(api, p3);
+      await h.coordinator.onForeground();
+      expect(
+        await generatedAtOf(ResourceKey.home(2026)),
+        DateTime.parse(p3.generatedAt),
+      );
+      expect(
+        await freshnessOf(ResourceKey.home(2026), afterHorizon),
+        FreshnessState.fresh,
       );
     });
   });

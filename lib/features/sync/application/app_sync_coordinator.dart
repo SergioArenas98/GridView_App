@@ -275,6 +275,12 @@ class AppSyncCoordinator {
         if (_cancelled) break;
         await _executeStage(stage, outcomes, cancellation);
       }
+      await _followRelease(
+        trigger,
+        bootstrapAttempted: bootstrapAttempted,
+        outcomes: outcomes,
+        cancellation: cancellation,
+      );
       break;
     }
 
@@ -282,6 +288,53 @@ class AppSyncCoordinator {
     // successful bootstrap establishes the season even though the plan was
     // built before one existed.
     _finish(trigger, outcomes, seasonResolved: await _localSeason() != null);
+  }
+
+  /// The release check's follow-up (Synchronization §11.7).
+  ///
+  /// The content manifest is the client's check for a newer publication. Once
+  /// it has answered in this run, the run re-plans once and refreshes every
+  /// core resource that is now due and that this run has not yet attempted:
+  /// in practice the resources whose stored copy is behind the release the
+  /// manifest just reported. A new batch is therefore adopted by the run that
+  /// discovers it, not by the next launch or resume.
+  ///
+  /// Bounded: it runs at most once per run, only after a successful manifest
+  /// answer, and never repeats a key the run already attempted, so a cache
+  /// that keeps serving an older release costs one attempt per key per run.
+  Future<void> _followRelease(
+    SyncTrigger trigger, {
+    required bool bootstrapAttempted,
+    required List<ResourceSyncOutcome> outcomes,
+    required RemoteCancellation cancellation,
+  }) async {
+    if (_cancelled || !_checkedRelease(outcomes)) return;
+    final SyncPlan followUp = await _plan(
+      trigger,
+      bootstrapAttempted: bootstrapAttempted,
+      attempted: outcomes,
+    );
+    if (_isBootstrapPlan(followUp)) return;
+    final Set<String> attempted = <String>{
+      for (final ResourceSyncOutcome outcome in outcomes) outcome.resourceKey,
+    };
+    for (final SyncPlanStage stage in followUp.stages) {
+      if (_cancelled) return;
+      final SyncPlanStage remaining = SyncPlanStage(stage.stage, <SyncResource>[
+        for (final SyncResource resource in stage.resources)
+          if (!attempted.contains(resource.key)) resource,
+      ]);
+      if (remaining.isEmpty) continue;
+      await _executeStage(remaining, outcomes, cancellation);
+    }
+  }
+
+  bool _checkedRelease(List<ResourceSyncOutcome> outcomes) {
+    final String manifest = const ContentManifestSyncResource().key;
+    return outcomes.any(
+      (ResourceSyncOutcome outcome) =>
+          outcome.resourceKey == manifest && outcome.isSuccess,
+    );
   }
 
   void _finish(
