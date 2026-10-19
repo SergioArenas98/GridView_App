@@ -17,7 +17,9 @@ current observability status see `GridView_Observability.md` §9.
 
 Related: `GridView_Design_System.md` (tokens), `GridView_Navigation.md`
 (routing), `GridView_Environments.md` (flavors, Firebase, advertising),
-`GridView_Synchronization.md` (data and freshness).
+`GridView_Synchronization.md` (data and freshness),
+`GridView_Legacy_Migration.md` (how the legacy app's language and theme are
+carried into these keys on upgrade).
 
 ---
 

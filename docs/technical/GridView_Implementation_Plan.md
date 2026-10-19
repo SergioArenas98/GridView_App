@@ -3817,6 +3817,14 @@ Discard:
 - Remove obsolete cache after successful startup.
 - Test corrupted and unknown legacy data.
 
+**Status (2026-10-19):** implemented per
+[ADR 0027](../adr/0027-legacy-preference-migration-and-storage-removal.md) and
+[`GridView_Legacy_Migration.md`](GridView_Legacy_Migration.md). Language
+(`en`/`es`) and theme are migrated; the legacy app stored **no consent state**,
+so none is migrated; the Hive cache is deleted unread after migration and first
+frame. Covered by unit/widget tests only — the §15.3 matrix through Google Play
+is still open.
+
 ## 15.3 Upgrade test matrix
 
 Test installation over the legacy version with:
