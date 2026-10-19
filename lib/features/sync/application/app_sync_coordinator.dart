@@ -281,6 +281,11 @@ class AppSyncCoordinator {
         outcomes: outcomes,
         cancellation: cancellation,
       );
+      // Not after a failed bootstrap: its recovery plan is the minimum first
+      // screen and nothing else.
+      if (!bootstrapAttempted) {
+        await _followHomeLatestResult(outcomes, cancellation);
+      }
       break;
     }
 
@@ -297,7 +302,8 @@ class AppSyncCoordinator {
   /// core resource that is now due and that this run has not yet attempted:
   /// in practice the resources whose stored copy is behind the release the
   /// manifest just reported. A new batch is therefore adopted by the run that
-  /// discovers it, not by the next launch or resume.
+  /// discovers it, not by the next launch or resume. Home's cached latest race
+  /// result follows afterwards ([_followHomeLatestResult]).
   ///
   /// Bounded: it runs at most once per run, only after a successful manifest
   /// answer, and never repeats a key the run already attempted, so a cache
@@ -327,6 +333,47 @@ class AppSyncCoordinator {
       if (remaining.isEmpty) continue;
       await _executeStage(remaining, outcomes, cancellation);
     }
+  }
+
+  /// Refreshes the race result Home shows from cache when it is behind the
+  /// stored release (`SyncPlanner.isLatestResultBehindRelease`), so Home's
+  /// freshness does not wait for its Grand Prix to be opened.
+  ///
+  /// It runs once, as the run's last step: the dashboard is read only after
+  /// every stage and the release follow-up, so a Calendar or Home refresh in
+  /// this run that moves Home to another round is already reflected, whether
+  /// or not the manifest answered in this run. A result Home does not show from
+  /// cache is never requested, and a key the run already attempted is skipped,
+  /// so each resource is attempted at most once per run.
+  Future<void> _followHomeLatestResult(
+    List<ResourceSyncOutcome> outcomes,
+    RemoteCancellation cancellation,
+  ) async {
+    if (_cancelled) return;
+    final int? season = await _localSeason();
+    if (season == null) return;
+    final ({int season, int round})? cached = await _home
+        .cachedLatestRaceResult();
+    if (cached == null) return;
+    final GrandPrixResultsSyncResource shown = GrandPrixResultsSyncResource(
+      cached.season,
+      cached.round,
+    );
+    final bool behind = SyncPlanner.isLatestResultBehindRelease(
+      shown: shown,
+      currentSeason: season,
+      result: await _metadata.read(shown.key),
+      manifest: await _metadata.read(const ContentManifestSyncResource().key),
+      attemptedKeys: <String>{
+        for (final ResourceSyncOutcome outcome in outcomes) outcome.resourceKey,
+      },
+    );
+    if (!behind || _cancelled) return;
+    await _executeStage(
+      SyncPlanStage(SyncStage.firstScreen, <SyncResource>[shown]),
+      outcomes,
+      cancellation,
+    );
   }
 
   bool _checkedRelease(List<ResourceSyncOutcome> outcomes) {

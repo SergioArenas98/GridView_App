@@ -129,7 +129,10 @@ abstract final class SyncPlanner {
   /// season leaves the run with season resolution to do and nothing else.
   ///
   /// Detail and historical resources are absent by design — they are refreshed
-  /// on demand by whichever feature opens them.
+  /// on demand by whichever feature opens them. The one exception is not part of
+  /// this inventory: Home's cached latest race result, refreshed after the
+  /// run's stages only when it is behind the stored release
+  /// ([isLatestResultBehindRelease]).
   static List<SyncPlanStage> coreStages(int? season) => <SyncPlanStage>[
     SyncPlanStage(SyncStage.seasonContext, <SyncResource>[
       const CurrentSeasonSyncResource(),
@@ -176,6 +179,44 @@ abstract final class SyncPlanner {
     for (final SyncPlanStage stage in coreStages(season))
       for (final SyncResource resource in stage.resources) resource.key,
   ];
+
+  /// Whether Home's cached latest race result [shown] must be refreshed: its
+  /// stored record [result] belongs to an older release than the stored content
+  /// [manifest].
+  ///
+  /// Home's stale notice includes that result's own freshness, and only opening
+  /// its Grand Prix would otherwise refresh it, so a newly adopted publication
+  /// would leave Home stale while every core resource is current. The caller
+  /// asks once per run, after the run's stages, so [shown] is the result Home
+  /// shows once its calendar and Home records are as current as the run makes
+  /// them. The result is still never fetched merely because Home displays it:
+  ///
+  /// - a result that was never cached has no successful record, so it is never
+  ///   behind and stays on demand;
+  /// - it is not due through its own expiry or the persisted due query. Without
+  ///   a newer release it is no less current than Home itself, and a request
+  ///   would only repeat what the result already says;
+  /// - a key in [attemptedKeys] is never refreshed again in the same run, so a
+  ///   failure or a cache that keeps serving the older release costs at most
+  ///   one attempt per run. A failure keeps the cached result and its stale
+  ///   freshness.
+  ///
+  /// A manual refresh does not force it either: only the release rule applies.
+  static bool isLatestResultBehindRelease({
+    required GrandPrixResultsSyncResource shown,
+    required int? currentSeason,
+    required ResourceSyncState? result,
+    required ResourceSyncState? manifest,
+    required Set<String> attemptedKeys,
+  }) {
+    if (shown.year != currentSeason) return false;
+    if (attemptedKeys.contains(shown.key)) return false;
+    return isBehindManifestRelease(
+      result,
+      manifest,
+      currentSeason: currentSeason,
+    );
+  }
 
   static SyncPlanScope _scopeFor(SyncPlanInput input) {
     if (input.hasUsableFirstScreenCache) return SyncPlanScope.coreSet;

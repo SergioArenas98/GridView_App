@@ -50,6 +50,17 @@ class HomeRepositoryImpl extends SyncedRepository implements HomeRepository {
   Stream<HomeDashboardView?> watchHomeDashboard() =>
       _dashboard.watchDashboard(now);
 
+  /// The same composition Home renders: a latest completed event whose race
+  /// classification is cached.
+  @override
+  Future<({int season, int round})?> cachedLatestRaceResult() async {
+    final HomeDashboardView? view = await watchHomeDashboard().first;
+    final int? round = view?.latestRaceResult == null
+        ? null
+        : view!.latestCompleted?.round;
+    return round == null ? null : (season: view!.seasonYear, round: round);
+  }
+
   @override
   Future<HomeView?> readHome() => _local.watchHome().first;
 
