@@ -383,8 +383,13 @@ or live:
 release the Worker stamps (committed 2026-10-19, not deployed; ADR 0005,
 amendment of that date). `none` stamps the `calendar-horizon` policy: season
 documents expire at the first sprint or race the release does not classify,
-the content manifest after an hour. `mock` and `coordinated` keep the
-generator's fixed 15 minutes. No `wrangler.toml` value changes for it.
+the content manifest after an hour, and a completed season's data documents
+carry `9999-12-31T23:59:59.999Z`. `mock` and `coordinated` keep the
+generator's fixed 15 minutes. No `wrangler.toml` value changes for it. The
+policy applies only when a release is stamped: deploying it leaves the active
+release, and its 15-minute expiry, untouched. **Constraint:** do not move
+`PROVIDER_MODE` away from `none` for a season published under this policy
+until rollback re-stamping is resolved (ADR 0005, amendment of 2026-10-19).
 
 Admitting the value activates nothing. Even where it is selected, the
 coordinated runtime needs a bound reconciliation ledger (G9), and no deployed

@@ -166,7 +166,7 @@ answers one question:
 |---|---|---|---|
 | `meta.generatedAt` | The **publication instant** of the release the response came from: identical on every document of one release, strictly later for each later release of a sequenced season (ADR 0025 D4). Never a content-recency signal. | Server | A `200` that applies, or a skipped `200` from a strictly later release (§2). Never a `304`. |
 | `meta.sourceUpdatedAt` | When GridView first observed this content revision. The conflict key (§2). | Server | A `200` that applies. |
-| `meta.staleAfter` | When the payload **stops being current**. Under an automatic provider, `generatedAt` + 15 min: the next publication is due by then. Under `PROVIDER_MODE=none` (staging's manual batches), the **calendar horizon**: the first sprint or race start the release does not classify, else `generatedAt` + 15 min. The content manifest always has `generatedAt` + 1 h. (ADR 0005, amendment of 2026-10-19.) | Server | Same as `generatedAt`. A `304` never extends it. |
+| `meta.staleAfter` | When the payload **stops being current**. Under an automatic provider, `generatedAt` + 15 min: the next publication is due by then. Under `PROVIDER_MODE=none` (staging's manual batches), the **calendar horizon**: the first sprint or race start the release does not classify; `9999-12-31T23:59:59.999Z` (the last instant the contract can spell) when every event is settled or cancelled; else `generatedAt` + 15 min. The content manifest always has `generatedAt` + 1 h, so a later correction is still found. (ADR 0005, amendment of 2026-10-19.) | Server | Same as `generatedAt`. A `304` never extends it. |
 | `data.freshness` (Home) | A copy of Home's `generatedAt`, `sourceUpdatedAt` and `staleAfter`. Not read for decisions. | Server | — |
 | `lastSuccessAt` | When this device last got a successful answer for the resource (`200` or `304`): the last **check**, not the last change. | Client | Every success. |
 | `lastAttemptAt` / `lastFailureCategory` | The last request and, if it failed, a safe category. | Client | Every attempt. |
@@ -180,15 +180,16 @@ resources only when a newer release is reported or the horizon passes.
 **Stale (shown as a notice)** when `now > staleAfter`, or the server flag is
 set, or the resource has never synchronised. For a manual batch, unchanged data
 is therefore described as stale only once the season has moved past what the
-batch covers, never because 15 minutes have passed. After the horizon a `304`
+batch covers, never because 15 minutes have passed. A completed season is never
+described as stale by time. After the horizon a `304`
 confirms the copy is the latest publication but does not make it fresh: it is
 still missing what happened since.
 
 | Notice | Shown when |
 |---|---|
-| "Couldn't refresh — showing saved data" (Calendar, Grand Prix, Standings); "Update failed" (Home, Explore, profiles) | The refresh of that screen's resource failed in this run. It takes precedence over a stale notice. A failed manifest check alone shows none: it refreshes no displayed resource, and within the horizon the copy is still current by the server's statement. |
+| "Couldn't refresh — showing saved data" (Calendar, Grand Prix, Standings); "Update failed" (Home, Explore, profiles) | The refresh of that screen's resource failed in this run. It takes precedence over a stale notice. A manual refresh requests every displayed core resource, so a failed request there is always reported. A failed background manifest check alone shows none: it refreshes no displayed resource, and within the horizon the copy is still current by the server's statement. |
 | "This data may be out of date — showing the last saved version" (Calendar, Grand Prix, Standings); "Showing cached data" (Home's own resource); "Some information may be outdated" (one Home section); "Details may be outdated" (profiles) | The resource's own record (or, in a remote build, the same-season bootstrap record, §3.1) is stale as defined above. |
-| "Updated {time}" | Home, Calendar, Standings: the resource's `lastSuccessAt`, i.e. the last successful check. Not the publication time. |
+| "Last successful check: {time}" / "Comprobado: {time}" (until 2026-10-19 "Updated {time}" / "Actualizado {time}") | Home, Calendar, Standings: the resource's `lastSuccessAt`, the last time this device checked it with the server successfully (a `200` or a `304`). Not when it was published or last changed. |
 
 Offline, the last valid snapshot stays on screen: a failed request never
 deletes rows or metadata, and its freshness is still read against the stored

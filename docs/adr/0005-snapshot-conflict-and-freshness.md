@@ -102,12 +102,19 @@
 >   read from the release's own `grand-prix:<round>` documents when the
 >   publication instant is stamped, so an ordinary publication and a rollback
 >   republication of the same content get the same absolute value.
+> - **Season complete.** When every event is settled or cancelled, no
+>   scheduled event is left that could outdate the release, so its data
+>   documents get `staleAfter` = `9999-12-31T23:59:59.999Z`. The contract
+>   requires a `staleAfter` on every snapshot (`SnapshotMeta`) and has no
+>   "never" value. This is the last instant its four-digit RFC 3339
+>   `date-time` can spell, which the validators already accept. No contract
+>   change is needed. A later correction is still found, because the
+>   manifest keeps its hour (below).
 > - **Fallback.** The fixed 15 minutes from the publication instant apply
->   when the horizon is not strictly later than that instant, when every event
->   is settled or cancelled, and when any unsettled event has no timed race
->   session or any event document is malformed. The interval is never measured
->   from the stored pair under this policy, so a horizon-length interval is
->   never carried into a rollback.
+>   when the horizon is not strictly later than that instant, and when any
+>   unsettled event has no timed race session or any event document is
+>   malformed. The interval is never measured from the stored pair under this
+>   policy, so a horizon-length interval is never carried into a rollback.
 > - **The manifest keeps its hour** under both policies. It is the client's
 >   check for a newer publication. Once its `staleAfter` has passed, a `304`
 >   does not extend it, so it is checked on every startup and resume. When it
@@ -117,8 +124,33 @@
 >   freshness rule below, the conflict rules, ETags, `generatedAt`,
 >   `sourceUpdatedAt` and `contentVersion`. The client reads `staleAfter`
 >   exactly as before; only the value the server chooses changes.
+> - **When it takes effect.** Only when a release is stamped. Deploying a
+>   Worker that selects the policy rewrites no document and moves no pointer,
+>   so the active release keeps serving its 15-minute `staleAfter`, with the
+>   same ETags. The first release stamped afterwards is the first to carry the
+>   horizon, whether it is an ordinary publication or a rollback republication.
+>   A client with release convergence (Synchronization §11.7) must be
+>   installed before that publication, not necessarily before the deploy.
+>   Without it, a client would not check core resources again until the
+>   horizon.
+> - **Accepted for the current staging setup (owner, 2026-10-19):**
+>   - selection by `PROVIDER_MODE=none`;
+>   - sprint and race sessions only;
+>   - an untimed or malformed unsettled event disables the horizon for the
+>     whole release;
+>   - a failed background manifest check shows no notice within the horizon,
+>     while a failed request for a displayed resource is still reported;
+>   - no foreground timer.
+> - **Constraint before any provider-mode switch.** The `interval` policy
+>   re-stamps a release by measuring its stored `staleAfter - generatedAt`
+>   pair. Rolling back a release stamped under this policy after switching to
+>   `mock` or `coordinated` would carry a horizon-length interval forward. For
+>   a season-complete release it would be refused as `year-range`. This must
+>   be resolved before `PROVIDER_MODE` leaves `none` for any season published
+>   under this policy.
 >
 > Covered by `services/edge-api/test/publication/sequenced/freshness-horizon.test.ts`,
+> `services/edge-api/test/publication/sequenced/freshness-policy-deployment.test.ts`,
 > `services/edge-api/test/ingest/guarded-ingest.test.ts` and
 > `test/sync/release_convergence_test.dart`. Synchronization §3.2 defines what
 > each freshness timestamp and notice means.

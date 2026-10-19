@@ -957,8 +957,10 @@ components:
                 which a newer publication is due. Where releases are published
                 by hand (`PROVIDER_MODE=none`) it is the earliest start of a
                 sprint or race session the release does not classify, and
-                `generatedAt` plus 15 minutes when no such later instant
-                exists. The content manifest always carries `generatedAt` plus
+                `9999-12-31T23:59:59.999Z`, the last instant this format can
+                spell, when every event is settled or cancelled, and
+                `generatedAt` plus 15 minutes when no such later instant can be
+                derived. The content manifest always carries `generatedAt` plus
                 one hour and is the client's check for a newer publication. A
                 `304` does not extend it. See
                 `docs/adr/0005-snapshot-conflict-and-freshness.md`, amendment
