@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/legacy/legacy_startup.dart';
 import '../core/observability/error_reporter.dart';
 import '../core/observability/observability_bootstrap.dart';
 import '../core/observability/observability_providers.dart';
@@ -22,7 +25,8 @@ import 'environment/app_environment.dart';
 /// * the IANA timezone database, so session times can render in event-local time
 ///   before the first Home refresh completes;
 /// * the user's persisted preferences, so the first frame already has the right
-///   theme and language instead of flashing the defaults and correcting itself.
+///   theme and language instead of flashing the defaults and correcting itself
+///   (the legacy app's language and theme are migrated just before they load).
 ///
 /// A preference store that cannot be opened is **not** a launch failure: the
 /// repository falls back to safe defaults and the shell still renders.
@@ -48,14 +52,16 @@ Future<void> bootstrap({AppEnvironment? environment}) async {
       installObservability: () => installObservability(environment: env),
       ensureTimeZones: ensureTimeZonesInitialized,
       // The diagnostic sink is supplied by `runBootstrap`, which is the only
-      // place that holds the reporter it was installed against.
-      openPreferences: AppPreferencesRepository.open,
+      // place that holds the reporter it was installed against. The legacy
+      // app's language and theme are migrated before the repository opens.
+      openPreferences: openPreferencesAfterLegacyMigration,
       runApplication: runApp,
+      cleanUpLegacyStorage: cleanUpLegacyStorage,
     ),
   );
 }
 
-/// The four startup operations [bootstrap] performs, as injectable functions.
+/// The startup operations [bootstrap] performs, as injectable functions.
 ///
 /// This exists so the **ordering itself** can be tested. Startup order is the
 /// whole contract here — handlers before anything that can fail, timezones and
@@ -71,6 +77,7 @@ class BootstrapOperations {
     required this.ensureTimeZones,
     required this.openPreferences,
     required this.runApplication,
+    this.cleanUpLegacyStorage,
   });
 
   /// The environment this build reports as. Needed here because a preference
@@ -99,6 +106,11 @@ class BootstrapOperations {
 
   /// Hands the composed application to the framework.
   final void Function(Widget app) runApplication;
+
+  /// Removes what the legacy app left on the device. Run after the first frame
+  /// of this launch, never awaited, and only effective once the legacy
+  /// preference migration has completed. Must not throw. Null skips it.
+  final Future<void> Function()? cleanUpLegacyStorage;
 }
 
 /// The real startup orchestration, shared by production and its tests.
@@ -151,6 +163,13 @@ Future<ObservabilityBootstrap> runBootstrap(
       child: const AppSyncLifecycleScope(child: GridViewApp()),
     ),
   );
+
+  // Legacy files are removed only once this launch has rendered: a build that
+  // migrated but cannot draw its first frame never destroys anything.
+  final Future<void> Function()? cleanUp = operations.cleanUpLegacyStorage;
+  if (cleanUp != null) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(cleanUp()));
+  }
 
   return observability;
 }

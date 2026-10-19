@@ -45,4 +45,7 @@ legacy cache cannot interfere with each other.
 - Cached content survives app/database restarts (verified by
   `test/database/persistence_test.dart`).
 - The database is independently inspectable and its migrations are testable.
-- A future ADR will decide if/when the legacy Hive files are removed.
+- A future ADR will decide if/when the legacy Hive files are removed. **Decided
+  by [ADR 0027](0027-legacy-preference-migration-and-storage-removal.md):**
+  removed after a completed preference migration and a rendered first frame,
+  without ever being opened.

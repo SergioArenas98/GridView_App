@@ -207,8 +207,11 @@ reject invalid batches transactionally.
 ## 6. Legacy database isolation
 
 The reconstructed database (`gridview_v2.sqlite`, SQLite) cannot open,
-reinterpret or destroy the legacy Hive cache (`*.hive` files). Legacy cleanup is
-deferred to a separate, reviewed migration (see ADR 0004).
+reinterpret or destroy the legacy Hive cache (`*.hive` files). Since Phase 10
+the legacy box files (`cache.hive`, `cache.hivec`, `cache.lock`) are deleted —
+never read — after the legacy preference migration completes and the first
+frame renders; nothing from them reaches Drift. See ADR 0027 and
+`GridView_Legacy_Migration.md`.
 
 ## 7. Phase 6B1 — how the remote layer writes local data
 
