@@ -13,6 +13,7 @@ import { stampPublicationInstant } from '../../../src/publication/sequenced/docu
 import {
   calendarHorizon,
   freshnessPolicyFor,
+  SEASON_COMPLETE_STALE_AFTER,
 } from '../../../src/publication/sequenced/freshness-horizon';
 import { SequencedPublicationService } from '../../../src/publication/sequenced/service';
 import { readStoredInventory } from '../../../src/publication/version-inventory';
@@ -39,6 +40,11 @@ const ROUND_13_RACE = '2026-07-26T13:00:00.000Z';
 const ROUND_14_RACE = '2026-08-09T14:00:00.000Z';
 
 const at = (instant: string) => new FixedClock(new Date(instant));
+const session = (instant: string) => ({
+  kind: 'session',
+  at: Date.parse(instant),
+});
+const UNDETERMINED = { kind: 'undetermined' };
 
 type Event = Record<string, unknown> & { sessions: Record<string, unknown>[] };
 
@@ -71,6 +77,18 @@ function boundable(documents: readonly StoredSnapshot[]): StoredSnapshot[] {
     ),
   }));
   return withEvent(raced, 15, (event) => ({ ...event, status: 'cancelled' }));
+}
+
+/** Every event of the boundable season settled: rounds 13 and 14 completed. */
+function completed(documents: readonly StoredSnapshot[]): StoredSnapshot[] {
+  let settled = boundable(documents);
+  for (const round of [13, 14]) {
+    settled = withEvent(settled, round, (event) => ({
+      ...event,
+      status: 'completed',
+    }));
+  }
+  return settled;
 }
 
 async function documentsAt(instant: string): Promise<StoredSnapshot[]> {
@@ -125,7 +143,7 @@ function expectStaleAfter(
 describe('the calendar horizon of a release', () => {
   it('is the earliest sprint or race start of an event the release leaves open', async () => {
     const documents = boundable(await documentsAt(SEED_INSTANT));
-    expect(calendarHorizon(documents)).toBe(Date.parse(ROUND_13_SPRINT));
+    expect(calendarHorizon(documents)).toEqual(session(ROUND_13_SPRINT));
   });
 
   it('skips a cancelled sprint, keeping the race', async () => {
@@ -141,7 +159,7 @@ describe('the calendar horizon of a release', () => {
         ),
       }),
     );
-    expect(calendarHorizon(documents)).toBe(Date.parse(ROUND_13_RACE));
+    expect(calendarHorizon(documents)).toEqual(session(ROUND_13_RACE));
   });
 
   it('ignores an event settled by a classified result, whatever its status', async () => {
@@ -152,12 +170,14 @@ describe('the calendar horizon of a release', () => {
       13,
       (event) => ({ ...event, hasResults: true }),
     );
-    expect(calendarHorizon(documents)).toBe(Date.parse(ROUND_14_RACE));
+    expect(calendarHorizon(documents)).toEqual(session(ROUND_14_RACE));
   });
 
   it('is undetermined when an open event has no timed race session', async () => {
     // The mock season as generated: round 15 is postponed with no sessions.
-    expect(calendarHorizon(await documentsAt(SEED_INSTANT))).toBeNull();
+    expect(calendarHorizon(await documentsAt(SEED_INSTANT))).toEqual(
+      UNDETERMINED,
+    );
   });
 
   it('is undetermined when an open event only times its sprint', async () => {
@@ -171,7 +191,7 @@ describe('the calendar horizon of a release', () => {
         ),
       }),
     );
-    expect(calendarHorizon(documents)).toBeNull();
+    expect(calendarHorizon(documents)).toEqual(UNDETERMINED);
   });
 
   it('is undetermined when an event document is not shaped as one', async () => {
@@ -180,18 +200,12 @@ describe('the calendar horizon of a release', () => {
       14,
       () => 'not an event',
     );
-    expect(calendarHorizon(documents)).toBeNull();
+    expect(calendarHorizon(documents)).toEqual(UNDETERMINED);
   });
 
-  it('is undetermined when every event is settled or cancelled', async () => {
-    let documents = boundable(await documentsAt(SEED_INSTANT));
-    for (const round of [13, 14]) {
-      documents = withEvent(documents, round, (event) => ({
-        ...event,
-        status: 'completed',
-      }));
-    }
-    expect(calendarHorizon(documents)).toBeNull();
+  it('is season-complete when every event is settled or cancelled', async () => {
+    const documents = completed(await documentsAt(SEED_INSTANT));
+    expect(calendarHorizon(documents)).toEqual({ kind: 'season-complete' });
   });
 
   it('reads Grand Prix documents only, never their results', async () => {
@@ -205,7 +219,7 @@ describe('the calendar horizon of a release', () => {
           (document) => !/^grand-prix:\d+$/.test(document.documentName),
         ),
       ),
-    ).toBeNull();
+    ).toEqual(UNDETERMINED);
   });
 });
 
@@ -306,6 +320,37 @@ describe('stamping under the calendar horizon', () => {
     expectStaleAfter(restamped, ROUND_13_SPRINT, '2026-07-20T13:00:00.001Z');
   });
 
+  it('gives a season-complete release the no-scheduled-event expiry', async () => {
+    const stamped = stampPublicationInstant(
+      completed(await documentsAt(SEED_INSTANT)),
+      INSTANT,
+      'calendar-horizon',
+    );
+    expectStaleAfter(
+      stamped ?? [],
+      SEASON_COMPLETE_STALE_AFTER,
+      '2026-07-20T13:00:00.001Z',
+    );
+  });
+
+  it('is refused by the interval policy after a mode switch (constraint)', async () => {
+    // A season-complete release must not be re-stamped under `interval`: the
+    // measured interval would leave the year range. ADR 0005 records this as
+    // a constraint on any future provider-mode switch.
+    const stamped = stampPublicationInstant(
+      completed(await documentsAt(SEED_INSTANT)),
+      INSTANT,
+      'calendar-horizon',
+    );
+    expect(
+      stampPublicationInstant(
+        stamped ?? [],
+        '2026-12-20T00:00:00.000Z',
+        'interval',
+      ),
+    ).toBeNull();
+  });
+
   it('refuses when the manifest interval would leave the year range', async () => {
     expect(
       stampPublicationInstant(
@@ -361,6 +406,14 @@ async function boundableSet(
   return { ...set, documents: boundable(set.documents) };
 }
 
+async function completedSet(
+  instant: string,
+  contentVersion: string,
+): Promise<GeneratedSnapshotSet> {
+  const set = await boundableSet(instant, contentVersion);
+  return { ...set, documents: completed(set.documents) };
+}
+
 async function served(
   ctx: SequencedContext,
   path: string,
@@ -403,6 +456,49 @@ describe('a manually published season under the calendar horizon', () => {
       generatedAt: instant,
       staleAfter: '2026-07-20T13:05:00.000Z',
     });
+  });
+
+  it('keeps a completed season current while the manifest still checks hourly', async () => {
+    const ctx = await sequencedContext({ freshnessPolicy: 'calendar-horizon' });
+    const first = await serviceAt(ctx, '2026-12-07T10:00:00.000Z').publish(
+      await completedSet('2026-12-07T10:00:00.000Z', '2026.12.07.1'),
+    );
+    expect(first.status).toBe('applied');
+    expect(await served(ctx, '/v1/home')).toMatchObject({
+      staleAfter: SEASON_COMPLETE_STALE_AFTER,
+    });
+    expect(await served(ctx, '/v1/content/manifest')).toMatchObject({
+      generatedAt: '2026-12-07T10:00:00.000Z',
+      staleAfter: '2026-12-07T11:00:00.000Z',
+    });
+
+    // A later correction is a new release: the manifest the client checks
+    // carries its later instant, and the data keeps the same expiry.
+    const correction = await serviceAt(ctx, '2026-12-09T09:00:00.000Z').publish(
+      await completedSet('2026-12-09T09:00:00.000Z', '2026.12.09.1'),
+    );
+    expect(correction.status).toBe('applied');
+    expect(await served(ctx, '/v1/content/manifest')).toMatchObject({
+      generatedAt: '2026-12-09T09:00:00.000Z',
+      staleAfter: '2026-12-09T10:00:00.000Z',
+    });
+    expectStaleAfter(
+      await releaseDocuments(ctx.storage, correction.version),
+      SEASON_COMPLETE_STALE_AFTER,
+      '2026-12-09T10:00:00.000Z',
+    );
+
+    // Rolling the correction back under the same policy is not refused.
+    const rollback = await serviceAt(ctx, '2026-12-10T09:00:00.000Z').rollback(
+      SEASON,
+      first.version,
+    );
+    expect(rollback.status).toBe('applied');
+    expectStaleAfter(
+      await releaseDocuments(ctx.storage, rollback.version),
+      SEASON_COMPLETE_STALE_AFTER,
+      '2026-12-10T10:00:00.000Z',
+    );
   });
 
   it('republishes a rollback target with its own absolute horizon', async () => {

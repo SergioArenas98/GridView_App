@@ -241,8 +241,8 @@ describe.each(sequencerTransports)(
       const horizon = calendarHorizon([
         await read('grand-prix:4' as SnapshotDocumentName),
       ]);
-      expect(horizon).not.toBeNull();
-      expect(horizon!).toBeLessThan(published);
+      expect(horizon.kind).toBe('session');
+      expect(horizon.kind === 'session' && horizon.at).toBeLessThan(published);
       expect((await read('home')).meta.staleAfter).toBe(
         new Date(published + 15 * 60_000).toISOString(),
       );

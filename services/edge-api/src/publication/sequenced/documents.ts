@@ -21,7 +21,12 @@ import {
   isHomeWithFreshness,
   isRecord,
 } from './embedded-freshness';
-import { calendarHorizon, type FreshnessPolicy } from './freshness-horizon';
+import {
+  calendarHorizon,
+  SEASON_COMPLETE_STALE_AFTER,
+  type CalendarHorizon,
+  type FreshnessPolicy,
+} from './freshness-horizon';
 import type { PerKeyState } from '../sequencer/model';
 import type {
   SnapshotDocumentName,
@@ -77,7 +82,8 @@ export function bakeAssignedTimestamps(
  * Under the `calendar-horizon` policy (ADR 0005, amendment of 2026-10-19)
  * `staleAfter` is chosen differently: every document but the content manifest
  * takes the release's calendar horizon when that is strictly later than
- * `generatedAt`, and the generator's fixed 15 minutes from `generatedAt`
+ * `generatedAt`, `SEASON_COMPLETE_STALE_AFTER` when every event is settled or
+ * cancelled, and the generator's fixed 15 minutes from `generatedAt`
  * otherwise; the manifest takes its fixed hour. Nothing is measured from the
  * stored pair, so a rollback target published under the horizon never carries
  * its old horizon-length interval forward. Such a document is returned
@@ -116,11 +122,10 @@ function stampWithHorizon(
   generatedAt: string,
 ): StoredSnapshot[] | null {
   const instant = Date.parse(generatedAt);
-  const horizon = calendarHorizon(documents);
-  const horizonStaleAfter =
-    horizon !== null && horizon > instant
-      ? boundedInstant(new Date(horizon))
-      : intervalAfter(instant, SNAPSHOT_STALE_SECONDS);
+  const horizonStaleAfter = horizonStaleAfterFor(
+    calendarHorizon(documents),
+    instant,
+  );
   const manifestStaleAfter = intervalAfter(instant, MANIFEST_STALE_SECONDS);
   if (horizonStaleAfter === null || manifestStaleAfter === null) return null;
 
@@ -138,6 +143,22 @@ function stampWithHorizon(
     stamped.push(restamped(document, generatedAt, staleAfter));
   }
   return stamped;
+}
+
+/**
+ * The data documents' `staleAfter` under the horizon: the next uncovered
+ * sprint or race when it is later than the instant, the season-complete
+ * value when no scheduled event is left, and the fixed 15 minutes otherwise.
+ */
+function horizonStaleAfterFor(
+  horizon: CalendarHorizon,
+  instant: number,
+): string | null {
+  if (horizon.kind === 'season-complete') return SEASON_COMPLETE_STALE_AFTER;
+  if (horizon.kind === 'session' && horizon.at > instant) {
+    return boundedInstant(new Date(horizon.at));
+  }
+  return intervalAfter(instant, SNAPSHOT_STALE_SECONDS);
 }
 
 function intervalAfter(instant: number, seconds: number): string | null {
