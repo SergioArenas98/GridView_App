@@ -1,18 +1,27 @@
 # Google Play baseline
 
+Confirmed in Play Console on 2026-10-20 (read-only, developer account
+"Sejuma"). Fingerprints are public certificate digests, not credentials.
+
 - Production package: com.sejuma.gridview
-- Highest published versionCode: PENDING - must be confirmed in Play Console
-  before preparing any release. The local project is `1.2.1+7` (versionCode 7),
-  but 7 must NOT be assumed to be the highest value registered in Play Console.
-- Current versionName: 1.2.1 (local project; Play Console value pending
-  confirmation)
+- Highest registered versionCode: **7** (1.2.1). Bundles registered: 1, 2, 3,
+  5, 6, 7. Production track: 1.2.1 (7), full rollout, 178 countries. Closed
+  testing (Alpha): versionCode 2. Internal testing: inactive, no release.
+- Next release: **2.0.0, versionCode 8** (`pubspec.yaml`).
 - Play App Signing enabled: Yes
-- Upload key available: Yes - a new upload key has been created; its
-  registration is pending Google Play approval
-- Upload key alias: PENDING (record after the new upload key is approved)
-- App-signing certificate SHA-256: PENDING (record from Play Console)
-- Upload certificate SHA-256: PENDING (new upload key awaiting approval)
-- Date checked: 2026-07-18
+- App-signing certificate SHA-256:
+  `98:BD:6C:76:08:20:FE:84:7E:25:D5:73:8A:73:5D:74:20:4E:76:09:5F:0F:73:E9:A7:40:7D:C5:F9:47:C3:B5`
+- Upload certificate SHA-256 (registered; no reset pending):
+  `98:D7:CC:74:16:2E:50:A3:DB:C5:8E:A0:41:8A:E8:09:C4:1A:D1:0C:6F:09:50:79:93:4E:D6:E7:09:D4:6D:5E`
+  - equal to the keystore named by the local, ignored `android/key.properties`.
+  The upload key created in July 2026 is therefore approved and in force.
+- Legacy 1.2.1 bundle (versionCode 7): target SDK 35, min API 21, **not**
+  16 KB page-size compatible, automatic protection "installer check".
+- Policy status: updates are rejected unless they target API 36 and support
+  16 KB memory pages. 2.0.0 targets 36 and passes the 16 KB checks (below).
+- Store listing: "Contains ads", Data safety "No data collected / No data
+  shared", privacy policy https://gridview.netlify.app (dated 2025-02-19). All
+  three must change for 2.0.0 (`data-safety.md`).
 
 ## Rules
 
@@ -30,10 +39,11 @@
   28.2.13676358**, while `android/app/build.gradle` pins `ndkVersion
   27.0.12077973`. The Flutter/Android toolchain reports the mismatch as a
   **backward-compatible warning** and all debug flavors (dev/staging/production)
-  build successfully. This must be **revisited before the first production
-  release AAB** — decide whether to bump `ndkVersion` to 28.2 (or higher common
-  version) and re-verify the signed AAB. It is intentionally **not** changed
-  outside a dedicated, reviewed Android-config change.
+  build successfully. **Reviewed 2026-10-20 for 2.0.0: kept at 27.** A
+  production-flavor build with NDK 27 passes every 16 KB page-size check (see
+  `production-release-plan.md` §6), which was the release-relevant reason to
+  revisit it; the 28.2 request remains a backward-compatible warning. Revisit
+  only if a dependency stops building with 27.
 
 - **Firebase SDKs (added Phase 8C-1).** `firebase_core`,
   `firebase_crashlytics` and `firebase_performance` ship in the app. The native
@@ -69,9 +79,11 @@
   constants. This item records technical behaviour; the
   declaration needs a legal/privacy review, not an engineering assertion.
 
-- **Privacy policy URL (blocking for release).** `PRIVACY_POLICY_URL` is still
-  unset, so a production build shows no policy affordance at all. A published
-  policy describing the collection above, plus the URL, is a release blocker.
+- **Privacy policy URL (blocking for release).** Release builds now set
+  `PRIVACY_POLICY_URL=https://gridview.netlify.app` through
+  `config/dart_defines/production.json`. The URL already exists, but it still
+  serves the 2025 policy, so publishing the 2.0.0 policy there remains a
+  release blocker.
 
 - **Symbol handling.** Dart obfuscation is **not** enabled: no `--obfuscate` or
   `--split-debug-info` is used in any build or CI workflow, so there is no
@@ -199,15 +211,17 @@
 
 ## Remaining release blockers
 
-Unchanged by Phase 8C-2, and both still open:
+Tracked, with their approval gates, in `production-release-plan.md`:
 
-1. **Privacy-policy URL not configured** — `PRIVACY_POLICY_URL` is unset, so a
-   production build shows no policy affordance.
-2. **Play Data Safety declaration outstanding** — must cover the Firebase
-   processing categories listed above; needs legal/privacy review.
+1. **No production API.** Production genesis (ADR 0025 O-16), production
+   ingest admission and the production Worker must exist before a release
+   candidate is built.
+2. **Privacy policy not published.** The 2.0.0 policy is in this repository;
+   it must be published at https://gridview.netlify.app.
+3. **Play Data safety declaration** must be resubmitted from `data-safety.md`
+   after privacy review, and the Ads declaration set to No.
 
-Plus the pre-existing items above: every `PENDING` Play Console value, and the
-Android NDK version decision before the first release AAB.
+The `PENDING` Play Console values and the NDK decision are resolved above.
 
 **External prerequisites, still open and owned outside engineering.** None is
 marked complete: Formula 1 **media rights and attribution approval**, **R2

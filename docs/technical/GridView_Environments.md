@@ -124,9 +124,11 @@ flutter run --flavor staging --dart-define=APP_ENV=staging \
   --dart-define=API_BASE_URL=https://gridview-api-staging.example.workers.dev
 
 # Production always talks to the real API; a missing API_BASE_URL is a
-# controlled configuration failure, never fixtures.
-flutter build appbundle --flavor production --dart-define=APP_ENV=production \
-  --dart-define=API_BASE_URL=https://api.gridview.example
+# controlled configuration failure, never fixtures. Release builds take every
+# define from the committed file, which test/release/ guards
+# (docs/release/production-release-plan.md, A2).
+flutter build appbundle --release --flavor production \
+  --dart-define-from-file=config/dart_defines/production.json
 
 # Manual (non-CI) staging orchestration smoke: first-use bootstrap, close/reopen
 # and a returning conditional-revalidation pass over public routes only.
