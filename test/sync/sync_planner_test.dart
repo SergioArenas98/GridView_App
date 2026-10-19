@@ -525,145 +525,84 @@ void main() {
       );
       final String resultKey = shown.key;
 
-      SyncPlan planWith({
+      bool behind({
         ResourceSyncState? result,
-        DateTime? calendar,
-        SyncTrigger trigger = SyncTrigger.foreground,
-        GrandPrixResultsSyncResource? latest = shown,
+        GrandPrixResultsSyncResource latest = shown,
+        int? currentSeason = 2026,
+        DateTime? manifest,
         Set<String> attemptedKeys = const <String>{},
-        bool hasUsableFirstScreenCache = true,
-        bool bootstrapAttempted = false,
-      }) => SyncPlanner.plan(
-        SyncPlanInput(
-          trigger: trigger,
-          now: now,
-          currentSeason: 2026,
-          hasUsableFirstScreenCache: hasUsableFirstScreenCache,
-          bootstrapMaterialized: true,
-          bootstrapAttempted: bootstrapAttempted,
-          metadata: <String, ResourceSyncState?>{
-            ...releaseMetadata(calendar: calendar ?? p2, manifest: p2),
-            resultKey: result,
-          },
-          attemptedKeys: attemptedKeys,
-          homeLatestResult: latest,
-        ),
+      }) => SyncPlanner.isLatestResultBehindRelease(
+        shown: latest,
+        currentSeason: currentSeason,
+        result: result,
+        manifest: at(manifestKey, manifest ?? p2, season: 2026),
+        attemptedKeys: attemptedKeys,
       );
 
-      test('is planned in the first-screen stage when it is behind the '
-          'release', () {
-        final SyncPlan plan = planWith(result: at(resultKey, p1, season: 2026));
-        expect(plannedKeys(plan), <String>[resultKey]);
-        expect(plan.stages.single.stage, SyncStage.firstScreen);
-      });
-
-      test('follows the due first-screen core resources, before later '
-          'stages', () {
-        final Map<String, ResourceSyncState?> metadata =
-            <String, ResourceSyncState?>{
-              ...releaseMetadata(calendar: p1, manifest: p2),
-              ResourceKey.driverStandings(2026): at(
-                ResourceKey.driverStandings(2026),
-                p1,
-                season: 2026,
-              ),
-              resultKey: at(resultKey, p1, season: 2026),
-            };
-        final SyncPlan plan = SyncPlanner.plan(
-          SyncPlanInput(
-            trigger: SyncTrigger.foreground,
-            now: now,
-            currentSeason: 2026,
-            hasUsableFirstScreenCache: true,
-            bootstrapMaterialized: true,
-            metadata: metadata,
-            homeLatestResult: shown,
-          ),
-        );
-        expect(
-          <SyncStage>[for (final SyncPlanStage s in plan.stages) s.stage],
-          <SyncStage>[SyncStage.firstScreen, SyncStage.championship],
-        );
-        expect(plannedKeys(plan), <String>[
-          calendarKey,
-          resultKey,
-          ResourceKey.driverStandings(2026),
-        ]);
+      test('is refreshed when its record is behind the release', () {
+        expect(behind(result: at(resultKey, p1, season: 2026)), isTrue);
       });
 
       test('a result never loaded stays on demand', () {
-        expect(plannedKeys(planWith(result: null)), isEmpty);
+        expect(behind(result: null), isFalse);
         expect(
-          plannedKeys(
-            planWith(
-              result: ResourceSyncState(
-                resourceKey: resultKey,
-                season: 2026,
-                generatedAt: p1,
-              ),
+          behind(
+            result: ResourceSyncState(
+              resourceKey: resultKey,
+              season: 2026,
+              generatedAt: p1,
             ),
           ),
-          isEmpty,
+          isFalse,
           reason: 'no recorded success',
         );
       });
 
-      test('Home showing no result plans none', () {
-        expect(
-          plannedKeys(
-            planWith(result: at(resultKey, p1, season: 2026), latest: null),
-          ),
-          isEmpty,
-        );
-      });
-
-      test('a result on the current release is not planned, even when its '
-          'own expiry has passed or a manual run forces the core set', () {
+      test('a result on the current release is not refreshed, even when its '
+          'own expiry has passed', () {
         final ResourceSyncState expired = at(
           resultKey,
           p2,
           season: 2026,
         ).copyWith(staleAfter: now.subtract(const Duration(minutes: 1)));
-        expect(plannedKeys(planWith(result: expired)), isEmpty);
-        expect(
-          plannedKeys(planWith(result: expired, trigger: SyncTrigger.manual)),
-          isNot(contains(resultKey)),
-        );
+        expect(behind(result: expired), isFalse);
       });
 
       test('is attempted at most once per run', () {
         expect(
-          plannedKeys(
-            planWith(
-              result: at(resultKey, p1, season: 2026),
-              attemptedKeys: <String>{resultKey},
-            ),
-          ),
-          isEmpty,
-        );
-      });
-
-      test('a result of another season is never planned', () {
-        expect(
-          plannedKeys(
-            planWith(
-              result: at(resultKey, p1, season: 2025),
-              latest: const GrandPrixResultsSyncResource(2025, 17),
-            ),
-          ),
-          isEmpty,
-        );
-      });
-
-      test('a bootstrap or recovery plan never includes it', () {
-        for (final bool attempted in <bool>[false, true]) {
-          final SyncPlan plan = planWith(
+          behind(
             result: at(resultKey, p1, season: 2026),
-            hasUsableFirstScreenCache: false,
-            bootstrapAttempted: attempted,
-          );
-          expect(plannedKeys(plan), isNot(contains(resultKey)));
-        }
+            attemptedKeys: <String>{resultKey},
+          ),
+          isFalse,
+        );
+      });
+
+      test('a result of another season is never refreshed', () {
+        expect(
+          behind(
+            result: at(resultKey, p1, season: 2025),
+            latest: const GrandPrixResultsSyncResource(2025, 17),
+          ),
+          isFalse,
+        );
+        expect(
+          behind(result: at(resultKey, p1, season: 2026), currentSeason: null),
+          isFalse,
+        );
+      });
+
+      test('a plan never contains it: it is no automatic core resource', () {
+        final SyncPlan plan = SyncPlanner.plan(
+          input(
+            trigger: SyncTrigger.manual,
+            metadata: <String, ResourceSyncState?>{
+              ...releaseMetadata(calendar: p1, manifest: p2),
+              resultKey: at(resultKey, p1, season: 2026),
+            },
+          ),
+        );
+        expect(plannedKeys(plan), isNot(contains(resultKey)));
       });
     });
   });

@@ -47,21 +47,32 @@ final String resultKey = ResourceKey.grandPrixResults(2026, round);
 /// Serves the fixture calendar as a Jolpica batch delivers it: every status
 /// `unknown` and no weekend dates (ADR 0022 A6, A8). Only a classified result
 /// settles a round, so the latest completed round is [round] whatever the
-/// date, as R17 was on the phone. Conditional like every scripted endpoint.
-void serveJolpicaCalendar(ScriptedGridViewApi api, Release release) {
+/// date, as R17 was on the phone. [classified] are the rounds that carry a
+/// classified result. A calendar whose content changed takes a new
+/// [sourceUpdatedAt], as the sequencer stamps a changed document. Conditional
+/// like every scripted endpoint.
+void serveJolpicaCalendar(
+  ScriptedGridViewApi api,
+  Release release, {
+  Set<int> classified = const <int>{round},
+  String? sourceUpdatedAt,
+}) {
   api.calendar = (String? etag) {
     if (etag == release.etag('calendar')) {
       return RemoteNotModified<List<GrandPrixSummaryDto>>();
     }
     final Map<String, dynamic> json = loadFixture('calendar/2026.json');
-    (json['meta'] as Map<String, dynamic>)
+    final Map<String, dynamic> meta = json['meta'] as Map<String, dynamic>
       ..['generatedAt'] = release.generatedAt
       ..['staleAfter'] = release.coreExpiry;
+    if (sourceUpdatedAt != null) meta['sourceUpdatedAt'] = sourceUpdatedAt;
     for (final Object? event in json['data'] as List<dynamic>) {
-      (event! as Map<String, dynamic>)
+      final Map<String, dynamic> e = event! as Map<String, dynamic>;
+      e
         ..['status'] = 'unknown'
         ..['startDate'] = null
-        ..['endDate'] = null;
+        ..['endDate'] = null
+        ..['hasResults'] = classified.contains(e['round']);
     }
     return modifiedFromJson<List<GrandPrixSummaryDto>>(
       json,
@@ -84,6 +95,36 @@ void serveBatch(
 }) {
   serve(api, release, overrides: overrides);
   serveJolpicaCalendar(api, release);
+}
+
+/// Serves the fixture race classification for each round in [served], as
+/// that round's document of the given release (conditional, like
+/// [serveJolpicaCalendar]). Any other round answers 404.
+void serveResultsByRound(ScriptedGridViewApi api, Map<int, Release> served) {
+  final Map<int, String> grandPrixIds = <int, String>{
+    for (final Object? e in loadFixture('calendar/2026.json')['data'] as List)
+      (e! as Map<String, dynamic>)['round'] as int:
+          (e as Map<String, dynamic>)['id'] as String,
+  };
+  api.resultsByRound = (int r, String? etag) {
+    final Release? release = served[r];
+    if (release == null) return api.notFound<RaceResultDto>();
+    final String tag = release.etag('results-$r');
+    if (etag == tag) return RemoteNotModified<RaceResultDto>();
+    final Map<String, dynamic> json = loadFixture('results/race-timing.json');
+    (json['meta'] as Map<String, dynamic>)
+      ..['generatedAt'] = release.generatedAt
+      ..['staleAfter'] = release.coreExpiry;
+    (json['data'] as Map<String, dynamic>)
+      ..['id'] = '${grandPrixIds[r]}-race-results'
+      ..['round'] = r
+      ..['grandPrixId'] = grandPrixIds[r];
+    return modifiedFromJson<RaceResultDto>(
+      json,
+      (Object? d) => RaceResultDto.fromJson(d! as Map<String, dynamic>),
+      etag: tag,
+    );
+  };
 }
 
 void main() {
@@ -342,5 +383,96 @@ void main() {
       for (final String e in coreEndpoints) e: 1,
       'contentManifest': 1,
     });
+  });
+
+  final String r13 = ResourceKey.grandPrixResults(2026, 13);
+
+  /// The P2 sequence (PR #80 review) up to the run that must converge. On
+  /// `…1c` the calendar classifies R12, and the user opened both R12 and R13
+  /// (whose classification the calendar did not list yet). `…1d` classifies
+  /// R13, but an edge cache still holds the `…1c` calendar: the first resume
+  /// adopts the manifest, keeps the calendar behind, and refreshes R12, which
+  /// Home still shows. Returns that harness with the `…1d` calendar now served,
+  /// so the next resume's calendar refresh moves Home to R13.
+  Future<({SyncHarness h, ScriptedGridViewApi api})>
+  settleWithCalendarBehind() async {
+    final ScriptedGridViewApi first = ScriptedGridViewApi()
+      ..bootstrap = (_) => bootstrapModified(bootstrapEnvelope());
+    await launch(first, DateTime.utc(2026, 10, 14, 16, 20)).coordinator.start();
+    final ScriptedGridViewApi old = ScriptedGridViewApi();
+    serveBatch(old, c1);
+    serveResultsByRound(old, <int, Release>{12: c1, 13: c1});
+    final SyncHarness h1 = launch(old, DateTime.utc(2026, 10, 14, 16, 21));
+    await h1.coordinator.start();
+    await h1.repositories.results.refreshResults(season: 2026, round: 12);
+    await h1.repositories.results.refreshResults(season: 2026, round: 13);
+
+    final ScriptedGridViewApi api = ScriptedGridViewApi();
+    serveBatch(api, d1);
+    serveJolpicaCalendar(api, c1);
+    serveResultsByRound(api, <int, Release>{12: d1, 13: d1});
+    final SyncHarness h = launch(api, resumedAt);
+    await h.coordinator.start();
+    expect(
+      (await record(ResourceKey.calendar(2026)))?.generatedAt,
+      DateTime.parse(c1.generatedAt),
+    );
+    expect(
+      (await record(ResourceKey.contentManifest()))?.generatedAt,
+      DateTime.parse(d1.generatedAt),
+    );
+    expect(api.resultRounds, <int>[12]);
+    expect((await record(r13))?.generatedAt, DateTime.parse(c1.generatedAt));
+    expect((await homeAt(h, resumedAt)).latestResult?.event.round, round);
+
+    api.calls.clear();
+    api.resultRounds.clear();
+    serveJolpicaCalendar(
+      api,
+      d1,
+      classified: <int>{12, 13},
+      sourceUpdatedAt: d1.generatedAt,
+    );
+    return (h: h, api: api);
+  }
+
+  test('a Calendar refresh that moves Home to another cached result behind '
+      'the stored release refreshes that result in the same run', () async {
+    final (:SyncHarness h, :ScriptedGridViewApi api) =
+        await settleWithCalendarBehind();
+
+    // The manifest is current and not due; the calendar is behind. Its
+    // refresh moves Home to R13, cached and behind the release, and the same
+    // run refreshes it - no further launch and no Grand Prix visit.
+    await h.coordinator.onForeground();
+    expect(callsOf(api), <String, int>{'calendar': 1, 'results': 1});
+    expect(api.resultRounds, <int>[13]);
+    expect((await record(r13))?.generatedAt, DateTime.parse(d1.generatedAt));
+    final HomeReady home = await homeAt(h, resumedAt);
+    expect(home.latestResult?.event.round, 13);
+    expect(home.hasStaleSection, isFalse);
+
+    // Converged: nothing more on the next resume.
+    api.calls.clear();
+    await h.coordinator.onForeground();
+    expect(callsOf(api), isEmpty);
+  });
+
+  test('when that refresh fails, the cached R13 and the notice remain, and '
+      'R12 is not requested again', () async {
+    final (:SyncHarness h, :ScriptedGridViewApi api) =
+        await settleWithCalendarBehind();
+    api.resultsByRound = (int r, String? _) => offline;
+
+    await h.coordinator.onForeground();
+    expect(callsOf(api), <String, int>{'calendar': 1, 'results': 1});
+    expect(api.resultRounds, <int>[13]);
+    final ResourceSyncState stored = (await record(r13))!;
+    expect(stored.generatedAt, DateTime.parse(c1.generatedAt));
+    expect(stored.lastFailureCategory, isNotNull);
+    final HomeReady home = await homeAt(h, resumedAt);
+    expect(home.latestResult?.event.round, 13);
+    expect(home.latestResult?.winner, isNotNull, reason: 'cache preserved');
+    expect(home.hasStaleSection, isTrue);
   });
 }

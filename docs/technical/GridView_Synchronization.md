@@ -774,13 +774,19 @@ catches a CDN or edge cache that answers a core route with an old `200` or
   it, and it never reads the clock.
 
 **Home's cached latest race result** (since 2026-10-19,
-`SyncPlanner.latestResultBehindRelease`). Home's stale notice includes the
+`AppSyncCoordinator._followHomeLatestResult`,
+`SyncPlanner.isLatestResultBehindRelease`). Home's stale notice includes the
 freshness of the race result its latest-result module shows from cache
 (`grand-prix-results:<year>:<round>`). Opening that Grand Prix was the only
 thing that refreshed it, so after a new release Home kept its notice while
-every core resource was current. The coordinator now passes that result
-(`HomeRepository.cachedLatestRaceResult`, read from the stored dashboard) to
-the planner. It is planned in the first-screen stage when all of these hold:
+every core resource was current.
+
+The coordinator now checks that result once, as the run's last step: after
+every stage and the release follow-up. It reads the stored dashboard only then
+(`HomeRepository.cachedLatestRaceResult`), so a Calendar or Home refresh in the
+same run that moves Home to another round is already reflected, whether or not
+the manifest answered in this run. The result is refreshed when all of these
+hold:
 
 - Home shows it from cache, and its record has a recorded success. A result
   that was never loaded stays on demand;
@@ -789,11 +795,11 @@ the planner. It is planned in the first-screen stage when all of these hold:
 
 It is never due through its own expiry or the persisted due query, and a manual
 refresh does not force it. Without a newer release it is no less current than
-Home itself. In practice it is refreshed by the release follow-up of the run
-that adopts a new release, and otherwise once per run while it stays behind. A
-failure keeps the cached result and its stale freshness: Home's own expiry is
-never borrowed for it. Identical content takes the release's fields through the
-existing metadata-only rule (§10.4). See also §11.8.
+Home itself. It is never part of a plan, and the step does not run after a
+failed bootstrap, whose recovery is the minimum first screen. A failure keeps
+the cached result and its stale freshness: Home's own expiry is never borrowed
+for it. Identical content takes the release's fields through the existing
+metadata-only rule (§10.4). See also §11.8.
 
 **Missing metadata rows.** `readDueResources` can only return rows that exist, so
 the planner merges the expected canonical keys (built through `ResourceKey`,

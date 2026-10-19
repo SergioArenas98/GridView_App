@@ -42,6 +42,14 @@ class ScriptedGridViewApi extends BaseFakeGridViewApi {
   calendar;
   FutureOr<RemoteResult<GrandPrixDto>> Function(String? etag)? grandPrix;
   FutureOr<RemoteResult<RaceResultDto>> Function(String? etag)? results;
+
+  /// A round-aware results responder. When set it answers instead of
+  /// [results]; the request still counts under `results`.
+  FutureOr<RemoteResult<RaceResultDto>> Function(int round, String? etag)?
+  resultsByRound;
+
+  /// The round of every results request, in order.
+  final List<int> resultRounds = <int>[];
   FutureOr<RemoteResult<List<DriverStandingDto>>> Function(String? etag)?
   driverStandings;
   FutureOr<RemoteResult<List<ConstructorStandingDto>>> Function(String? etag)?
@@ -122,7 +130,16 @@ class ScriptedGridViewApi extends BaseFakeGridViewApi {
     required int round,
     String? etag,
     RemoteCancellation? cancellation,
-  }) async => _dispatch('results', etag, results);
+  }) async {
+    resultRounds.add(round);
+    final FutureOr<RemoteResult<RaceResultDto>> Function(int, String?)?
+    byRound = resultsByRound;
+    return _dispatch(
+      'results',
+      etag,
+      byRound == null ? results : (String? e) => byRound(round, e),
+    );
+  }
 
   @override
   Future<RemoteResult<List<DriverStandingDto>>> fetchDriverStandings({
