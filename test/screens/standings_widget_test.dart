@@ -58,7 +58,7 @@ FakeStandingsRepository _longTables() => FakeStandingsRepository(
 /// The freshness caption the screen renders for [instant], formatted through the
 /// same local-time conversion so the expectation is host-zone independent.
 String _updatedLabel(DateTime instant) =>
-    'Updated ${DateFormat.Hm('en').format(instant.toLocal())}';
+    'Last successful check: ${DateFormat.Hm('en').format(instant.toLocal())}';
 
 double _tableOffset(WidgetTester tester) {
   final Finder scrollable = find
@@ -167,7 +167,7 @@ void main() {
             key == 'bootstrap' ? syncedMetadata(key) : null,
       );
       expect(find.text('Max Verstappen'), findsOneWidget);
-      expect(find.textContaining('Updated'), findsNothing);
+      expect(find.textContaining('Last successful check'), findsNothing);
       expect(find.byType(GvOfflineNotice), findsNothing);
     });
 

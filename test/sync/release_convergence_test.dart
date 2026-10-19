@@ -8,10 +8,13 @@ import 'package:gridview/core/api/dto/summary_dto.dart';
 import 'package:gridview/core/api/dto/view_dto.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/database/gridview_database.dart';
+import 'package:gridview/features/shared/application/refresh_status.dart';
 import 'package:gridview/features/shared/data/remote/remote_result.dart';
 import 'package:gridview/features/shared/domain/entities/resource_key.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/shared/domain/freshness_evaluator.dart';
+import 'package:gridview/features/sync/application/resource_refresh_status.dart';
+import 'package:gridview/features/sync/domain/sync_resource.dart';
 
 import '../support/bootstrap_fixture.dart';
 import '../support/scripted_api.dart';
@@ -52,6 +55,10 @@ const Release p2 = Release(
   '2026-07-18T13:00:00Z',
   manifestExpiry: '2026-07-18T14:00:00Z',
 );
+
+/// The `staleAfter` the server gives a season-complete release's data documents:
+/// the last instant the contract can spell (ADR 0005, amendment of 2026-10-19).
+const String seasonCompleteExpiry = '9999-12-31T23:59:59.999Z';
 
 /// The next batch, published after P1 and P2's horizon: it classifies that
 /// round, so its own horizon is the following one.
@@ -539,6 +546,111 @@ void main() {
         FreshnessState.fresh,
       );
     });
+
+    test('a failed background manifest check is silent, but a manual refresh '
+        'reports the failed displayed resource', () async {
+      await settleOnP1();
+      RefreshStatus? statusOf(
+        SyncHarness h,
+        bool Function(SyncResource) matches,
+      ) => resourceRefreshStatus(h.coordinator.state, matches);
+
+      // Background run within the horizon: only the manifest is due, and it
+      // fails. No displayed resource was requested, so none reports a failure.
+      final ScriptedGridViewApi api = ScriptedGridViewApi();
+      serve(api, p1);
+      api.contentManifest = (_) => const RemoteFailure<ContentManifestDto>(
+        ApiFailure(kind: ApiFailureKind.networkUnavailable),
+      );
+      final SyncHarness h = launch(api, DateTime.utc(2026, 7, 20, 12));
+      await h.coordinator.start();
+      expect(callsOf(api), <String, int>{'contentManifest': 1});
+      for (final bool Function(SyncResource) matches
+          in <bool Function(SyncResource)>[
+            (SyncResource r) => r is HomeSyncResource,
+            (SyncResource r) => r is CalendarSyncResource,
+            (SyncResource r) => r is DriverStandingsSyncResource,
+          ]) {
+        expect(statusOf(h, matches)?.lastFailure, isNull);
+      }
+
+      // The user's manual refresh requests every displayed resource. Home's
+      // request fails and is reported; the others answer 304 and are not.
+      api.calls.clear();
+      api.home = (_) => const RemoteFailure<HomeDataDto>(
+        ApiFailure(kind: ApiFailureKind.networkUnavailable),
+      );
+      await h.coordinator.refreshNow();
+      expect(api.callsFor('home'), 1);
+      expect(
+        statusOf(
+          h,
+          (SyncResource r) => r is HomeSyncResource,
+        )?.lastFailure?.kind,
+        ApiFailureKind.networkUnavailable,
+      );
+      expect(
+        statusOf(h, (SyncResource r) => r is CalendarSyncResource)?.lastFailure,
+        isNull,
+      );
+      // The failed request erased nothing.
+      expect(await h.repositories.home.readHome(), isNotNull);
+    });
+
+    test(
+      'a completed season stays current with no scheduled event left, and '
+      'a later correction is still found by the hourly manifest check',
+      () async {
+        const Release complete = Release(
+          'complete',
+          '2026-12-07T10:00:00Z',
+          manifestExpiry: '2026-12-07T11:00:00Z',
+          coreExpiry: seasonCompleteExpiry,
+        );
+        const Release correction = Release(
+          'correction',
+          '2027-01-15T09:00:00Z',
+          manifestExpiry: '2027-01-15T10:00:00Z',
+          coreExpiry: seasonCompleteExpiry,
+        );
+
+        final ScriptedGridViewApi first = ScriptedGridViewApi()
+          ..bootstrap = (_) => bootstrapModified(bootstrapEnvelope());
+        await launch(first, DateTime.utc(2026, 7, 18, 12)).coordinator.start();
+        final ScriptedGridViewApi api = ScriptedGridViewApi();
+        serve(api, complete);
+        await launch(api, DateTime.utc(2026, 12, 7, 10, 1)).coordinator.start();
+        expect(
+          (await db.syncMetadataDao.read(ResourceKey.home(2026)))?.staleAfter,
+          DateTime.parse(seasonCompleteExpiry),
+        );
+
+        // Months later only the manifest is checked, and the data is current.
+        api.calls.clear();
+        final DateTime months = DateTime.utc(2027, 1, 10);
+        final SyncHarness h = launch(api, months);
+        await h.coordinator.start();
+        expect(callsOf(api), <String, int>{'contentManifest': 1});
+        expect(
+          await freshnessOf(ResourceKey.home(2026), months),
+          FreshnessState.fresh,
+        );
+
+        // A correction is published: the run that finds it adopts it.
+        api.calls.clear();
+        serve(api, correction);
+        final SyncHarness later = launch(api, DateTime.utc(2027, 1, 15, 9, 30));
+        await later.coordinator.start();
+        expect(callsOf(api), <String, int>{
+          for (final String e in coreEndpoints) e: 1,
+          'contentManifest': 1,
+        });
+        expect(
+          await generatedAtOf(ResourceKey.home(2026)),
+          DateTime.parse(correction.generatedAt),
+        );
+      },
+    );
   });
 
   test('after a season transition, a manifest still holding the outgoing '

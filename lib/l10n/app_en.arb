@@ -402,9 +402,9 @@
   "@notFoundGoHome": {
     "description": "Recovery action returning to Home."
   },
-  "homeUpdated": "Updated {time}",
+  "homeUpdated": "Last successful check: {time}",
   "@homeUpdated": {
-    "description": "Freshness caption showing when content was last synced.",
+    "description": "Freshness caption: when this device last checked the content with the server successfully (a 200 or a 304). Not when the content was published or last changed.",
     "placeholders": {
       "time": {
         "type": "String",
@@ -514,9 +514,9 @@
   "@unverifiedDataBanner": {
     "description": "Banner shown in a fixture build whose bundled data could not be identified as sample or captured data."
   },
-  "lastUpdatedLabel": "Updated {time}",
+  "lastUpdatedLabel": "Last successful check: {time}",
   "@lastUpdatedLabel": {
-    "description": "Caption showing when a resource was last synchronised successfully.",
+    "description": "Caption: when this device last checked the resource with the server successfully (a 200 or a 304). Not when the content was published or last changed.",
     "placeholders": {
       "time": {
         "type": "String",

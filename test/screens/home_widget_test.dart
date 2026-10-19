@@ -742,7 +742,7 @@ void main() {
     ) async {
       await pumpHome(tester, syncMetadata: (String key) => null);
       expect(
-        find.textContaining('Updated'),
+        find.textContaining('Last successful check'),
         findsNothing,
         reason: 'no fabricated timestamp is published',
       );
@@ -752,7 +752,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await pumpHome(tester);
-      expect(find.textContaining('Updated'), findsOneWidget);
+      expect(find.textContaining('Last successful check'), findsOneWidget);
     });
 
     testWidgets('a stale section produces one safe aggregate notice', (
@@ -886,7 +886,7 @@ void main() {
         );
         expect(find.text('Italian Grand Prix'), findsWidgets);
         expect(
-          find.textContaining('Updated'),
+          find.textContaining('Last successful check'),
           findsNothing,
           reason: 'no update time is claimed from an unread record',
         );

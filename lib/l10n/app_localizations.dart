@@ -656,10 +656,10 @@ abstract class AppLocalizations {
   /// **'Go to Home'**
   String get notFoundGoHome;
 
-  /// Freshness caption showing when content was last synced.
+  /// Freshness caption: when this device last checked the content with the server successfully (a 200 or a 304). Not when the content was published or last changed.
   ///
   /// In en, this message translates to:
-  /// **'Updated {time}'**
+  /// **'Last successful check: {time}'**
   String homeUpdated(String time);
 
   /// Accessibility-only announcement placed once around a screen's loading placeholder. Never rendered visually; a screen reader speaks it instead of the decorative skeleton shapes.
@@ -806,10 +806,10 @@ abstract class AppLocalizations {
   /// **'Test data of unverified origin — not live results'**
   String get unverifiedDataBanner;
 
-  /// Caption showing when a resource was last synchronised successfully.
+  /// Caption: when this device last checked the resource with the server successfully (a 200 or a 304). Not when the content was published or last changed.
   ///
   /// In en, this message translates to:
-  /// **'Updated {time}'**
+  /// **'Last successful check: {time}'**
   String lastUpdatedLabel(String time);
 
   /// Fallback label for an event status this app version does not recognise.
