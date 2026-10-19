@@ -1548,7 +1548,9 @@ it or its order:
    document's own `staleAfter - generatedAt` interval: 15 minutes for most
    documents, an hour for the content manifest. That is the interval rule
    rollback republication already used. A document already carrying the
-   instant is left byte-for-byte as generated. Only these instants move, to
+   instant is left byte-for-byte as generated. *(Under `PROVIDER_MODE=none`
+   the `calendar-horizon` policy chooses `staleAfter` instead; see "What does
+   not change" below and ADR 0005, amendment of 2026-10-19.)* Only these instants move, to
    `boundedInstant` spellings the contract validator accepts by construction,
    so the earlier validation and guard still describe the stamped documents.
 5. **Refusals.** Each is returned before `prepare`, with status `failed` and
@@ -1601,7 +1603,11 @@ it or its order:
   never orders content.
 - The `staleAfter` policy and rollback's expiry policy. Both still preserve
   each document's generated interval and only start from the derived instant.
-  No event-based deadline is introduced.
+  No event-based deadline is introduced. *(Qualified on 2026-10-19 by
+  [ADR 0005](0005-snapshot-conflict-and-freshness.md), amendment of that
+  date: a Worker with `PROVIDER_MODE=none` stamps the `calendar-horizon`
+  policy instead, at this same step, for ordinary publication and rollback
+  alike. Every other mode keeps the interval rule above.)*
 - The legacy pointer authority (`SnapshotPublisher`). It is not covered.
   Development, and any season that is not cut over, keep one generator reading
   per ordinary release, and a legacy rollback flips the pointer back to a

@@ -3400,6 +3400,25 @@ PR #77, whose manifest check (release convergence) relies on this contract.
 | Merged | PR #78, 2026-10-18, merge commit `74be1c8` (head `af16e5f`). Merging is not a deployment. The last recorded staging deployment (2026-10-13, version `3b3b8273-…`) was built from `6ce0ed6`, which does not stamp the instant. |
 | **Still open** | A separate staging deployment decision, then merging PR #77, whose manifest check and retry are implemented against this contract. |
 
+### 14.0.57 Freshness of manually published batches - Edge API, Flutter and contract description, not deployed
+
+Prepared on **2026-10-19** from `master` `0cfa312`. **Edge API, Flutter sync,
+OpenAPI descriptions, ADRs, docs and tests. No Drift schema, wire shape,
+fixture, `wrangler.toml`, l10n or Android change. Nothing was deployed, no
+batch was captured or published, no APK was built or installed, and there was
+no Jolpica, staging, adb or phone request.**
+
+| Item | Status |
+|---|---|
+| Defect | Staging publishes season batches by hand (`PROVIDER_MODE=none`, no cron), yet every document expired 15 minutes after its publication. Unchanged data was then called stale for the life of the batch, and every core resource was refetched on every startup and resume. |
+| Edge rule | ADR 0005, amendment of 2026-10-19. A Worker with `PROVIDER_MODE=none` stamps the `calendar-horizon` policy at the publication-instant step (ADR 0025 D4): every document but the manifest gets the earliest sprint or race start of an event the release does not settle, read from its own `grand-prix:<round>` documents. The fixed 15 minutes apply when that is not later than the instant or cannot be derived. The manifest keeps one hour. Ordinary publication and rollback get the same absolute horizon. `mock` and `coordinated` are unchanged. |
+| Client rule | A successful content-manifest answer is followed, in the same run, by one re-plan that refreshes every core resource now due and not yet attempted (`AppSyncCoordinator._followRelease`, Synchronization §11.7). A new batch is adopted by the run that discovers it. The due rule, the freshness rule and every notice are unchanged; §3.2 documents what each timestamp and notice means. |
+| Check cadence | Within the horizon only the manifest is checked: never in the first hour after a publication, then on every startup and resume, because a `304` does not extend it. There is no timer. |
+| Edge tests | `freshness-horizon.test.ts` (18): the horizon (sprint before race, cancelled sprint, settled by result, untimed race, malformed event, all settled, results documents ignored), the mode mapping, the stamp (horizon, past horizon, no horizon, no measured interval carried forward, untouched documents, year range), and through the service and the public router an ordinary publication and two rollbacks. `guarded-ingest.test.ts` +1 per transport: a batch published after a race it does not classify keeps 15 minutes. Full suite 5,377 passed before the OpenAPI edit. |
+| App tests | `release_convergence_test.dart`: the "retried on resume" case now asserts adoption in the same run; four new cases cover a first launch days after the publication, a resume with a manifest `304`, an offline launch, and the horizon passing with no new batch followed by a new batch. |
+| **Deployment order** | An installed client without the release convergence of PR #77 (the `900e1c5` staging APK on DNP-NX9) would not refresh any core resource until the horizon once this Worker is deployed. A build containing PR #77 and this change must be installed first. |
+| **Not decided here** | See the PR description: the season-complete fallback, sprint versus qualifying as horizon sessions, the wording of "Updated {time}", and a foreground timer. |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in

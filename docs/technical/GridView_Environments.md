@@ -379,6 +379,13 @@ or live:
 | staging | `none` since 2026-10-13 (decision pack DP-6(b), with `SEASON_BATCH_INGEST` below); `mock` before | `mock` (version `cc8d9a54-…`, Stage A, 2026-10-07; it admits the `coordinated` value and does not select it) |
 | production | `none` | not provisioned |
 
+`PROVIDER_MODE` also selects the `staleAfter` policy of every sequenced
+release the Worker stamps (committed 2026-10-19, not deployed; ADR 0005,
+amendment of that date). `none` stamps the `calendar-horizon` policy: season
+documents expire at the first sprint or race the release does not classify,
+the content manifest after an hour. `mock` and `coordinated` keep the
+generator's fixed 15 minutes. No `wrangler.toml` value changes for it.
+
 Admitting the value activates nothing. Even where it is selected, the
 coordinated runtime needs a bound reconciliation ledger (G9), and no deployed
 Worker has one. Wherever it is unbound, every coordinated run stops as

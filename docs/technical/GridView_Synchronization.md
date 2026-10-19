@@ -157,6 +157,43 @@ expired `staleAfter` too, so applying the remote rule there would change what
 those builds show. Explore collections present no stale notice in any build, and
 are unchanged.
 
+### 3.2 What each freshness timestamp and notice means (2026-10-19)
+
+The client stores the server's values verbatim and invents none. Each value
+answers one question:
+
+| Value | Meaning | Who sets it | What moves it on the client |
+|---|---|---|---|
+| `meta.generatedAt` | The **publication instant** of the release the response came from: identical on every document of one release, strictly later for each later release of a sequenced season (ADR 0025 D4). Never a content-recency signal. | Server | A `200` that applies, or a skipped `200` from a strictly later release (§2). Never a `304`. |
+| `meta.sourceUpdatedAt` | When GridView first observed this content revision. The conflict key (§2). | Server | A `200` that applies. |
+| `meta.staleAfter` | When the payload **stops being current**. Under an automatic provider, `generatedAt` + 15 min: the next publication is due by then. Under `PROVIDER_MODE=none` (staging's manual batches), the **calendar horizon**: the first sprint or race start the release does not classify, else `generatedAt` + 15 min. The content manifest always has `generatedAt` + 1 h. (ADR 0005, amendment of 2026-10-19.) | Server | Same as `generatedAt`. A `304` never extends it. |
+| `data.freshness` (Home) | A copy of Home's `generatedAt`, `sourceUpdatedAt` and `staleAfter`. Not read for decisions. | Server | — |
+| `lastSuccessAt` | When this device last got a successful answer for the resource (`200` or `304`): the last **check**, not the last change. | Client | Every success. |
+| `lastAttemptAt` / `lastFailureCategory` | The last request and, if it failed, a safe category. | Client | Every attempt. |
+
+**Due (checked by the next run)** when the resource has no success, the server
+flagged it stale, its `staleAfter` has passed, or it is behind the stored
+manifest's release (§11.7). For a manual batch that means: the manifest every
+startup and resume once an hour has passed since the publication, and the core
+resources only when a newer release is reported or the horizon passes.
+
+**Stale (shown as a notice)** when `now > staleAfter`, or the server flag is
+set, or the resource has never synchronised. For a manual batch, unchanged data
+is therefore described as stale only once the season has moved past what the
+batch covers, never because 15 minutes have passed. After the horizon a `304`
+confirms the copy is the latest publication but does not make it fresh: it is
+still missing what happened since.
+
+| Notice | Shown when |
+|---|---|
+| "Couldn't refresh — showing saved data" (Calendar, Grand Prix, Standings); "Update failed" (Home, Explore, profiles) | The refresh of that screen's resource failed in this run. It takes precedence over a stale notice. A failed manifest check alone shows none: it refreshes no displayed resource, and within the horizon the copy is still current by the server's statement. |
+| "This data may be out of date — showing the last saved version" (Calendar, Grand Prix, Standings); "Showing cached data" (Home's own resource); "Some information may be outdated" (one Home section); "Details may be outdated" (profiles) | The resource's own record (or, in a remote build, the same-season bootstrap record, §3.1) is stale as defined above. |
+| "Updated {time}" | Home, Calendar, Standings: the resource's `lastSuccessAt`, i.e. the last successful check. Not the publication time. |
+
+Offline, the last valid snapshot stays on screen: a failed request never
+deletes rows or metadata, and its freshness is still read against the stored
+`staleAfter`.
+
 ## 4. Presentation states
 
 Pure derivation from `cache + refresh status + clock`:
@@ -702,15 +739,21 @@ of a season, with the manifest served from the current season's release. It
 catches a CDN or edge cache that answers a core route with an old `200` or
 `304` after a new batch while the manifest already shows the new release.
 
-- **When it retries:** the resource is retried at the next startup or resume,
-  even when the manifest is not refetched or answers `304`. A `304` never moves
-  provenance, so an old copy stays behind until a response from the new release
-  arrives. A `200` with identical content from the later release then takes the
-  release's fields (ADR 0005 rule-3 amendment).
+- **When it retries:** in the run that received the manifest, and otherwise at
+  the next startup or resume, even when the manifest is not refetched or
+  answers `304`. Since 2026-10-19 a successful manifest answer is followed, in
+  the same run, by one re-plan: every core resource that is now due and that
+  the run has not yet attempted is refreshed (`AppSyncCoordinator`'s release
+  follow-up). A newly published batch is therefore adopted by the run that
+  discovers it. A `304` never moves provenance, so an old copy stays behind
+  until a response from the new release arrives. A `200` with identical
+  content from the later release then takes the release's fields (ADR 0005
+  rule-3 amendment).
 - **Bound:** the rule applies to a key **at most once per run**. A re-plan
-  inside the run (after a failed bootstrap or a season change) passes the keys
-  already refreshed as `attemptedKeys`, and the rule never applies to them
-  again. There is no timer and no in-run retry. A cache that keeps serving the
+  inside the run (after a failed bootstrap, a season change or the release
+  follow-up) passes the keys already refreshed as `attemptedKeys`, and the
+  rule never applies to them again; the follow-up also skips every attempted
+  key, and runs at most once. There is no timer and no in-run retry. A cache that keeps serving the
   old release costs one request per resource per run, never a loop. The same
   bound holds if a server broke the contract.
 - **After a bootstrap-only first launch:** the bootstrap-materialized resources

@@ -82,6 +82,46 @@
 > outgoing season's. It applies with its own `generatedAt`, `sourceUpdatedAt`
 > and `staleAfter`, even when they are earlier. Every other record is
 > unchanged. A rejected snapshot never changes a stored record's scope.
+>
+> **Amended (2026-10-19): `staleAfter` of a manually published release.** The
+> generator sets `staleAfter` to `generatedAt` + 15 minutes (an hour for the
+> content manifest). That interval means "expect a newer publication by then"
+> only while an automatic provider republishes on a schedule. Staging publishes
+> season batches by hand (`PROVIDER_MODE=none`, no cron), so every screen
+> called a batch stale 15 minutes after it was published and for the rest of
+> its life, although nothing newer existed.
+>
+> - **The server's rule.** A sequenced release stamped by a Worker whose
+>   `PROVIDER_MODE` is `none` uses the `calendar-horizon` policy
+>   (`services/edge-api/src/publication/sequenced/freshness-horizon.ts`).
+>   Every document except the content manifest gets `staleAfter` = the
+>   earliest start of a sprint or race session of an event the release does
+>   not settle (status `completed` or `hasResults`; a `cancelled` event or
+>   session is skipped). From that instant a result, a standings change and
+>   Home's featured event can all be missing from the release. The horizon is
+>   read from the release's own `grand-prix:<round>` documents when the
+>   publication instant is stamped, so an ordinary publication and a rollback
+>   republication of the same content get the same absolute value.
+> - **Fallback.** The fixed 15 minutes from the publication instant apply
+>   when the horizon is not strictly later than that instant, when every event
+>   is settled or cancelled, and when any unsettled event has no timed race
+>   session or any event document is malformed. The interval is never measured
+>   from the stored pair under this policy, so a horizon-length interval is
+>   never carried into a rollback.
+> - **The manifest keeps its hour** under both policies. It is the client's
+>   check for a newer publication. Once its `staleAfter` has passed, a `304`
+>   does not extend it, so it is checked on every startup and resume. When it
+>   reports a later release, the run that received it refreshes every core
+>   resource behind that release (Synchronization §11.7).
+> - **Unchanged:** the `interval` policy of every other provider mode, the
+>   freshness rule below, the conflict rules, ETags, `generatedAt`,
+>   `sourceUpdatedAt` and `contentVersion`. The client reads `staleAfter`
+>   exactly as before; only the value the server chooses changes.
+>
+> Covered by `services/edge-api/test/publication/sequenced/freshness-horizon.test.ts`,
+> `services/edge-api/test/ingest/guarded-ingest.test.ts` and
+> `test/sync/release_convergence_test.dart`. Synchronization §3.2 defines what
+> each freshness timestamp and notice means.
 
 ## Context
 
