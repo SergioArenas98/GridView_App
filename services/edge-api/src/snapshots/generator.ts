@@ -34,6 +34,16 @@ import type {
   StoredSnapshot,
 } from '../storage/types';
 
+/**
+ * The generator's fixed `staleAfter` interval: every document but the content
+ * manifest. A sequenced release under the `calendar-horizon` policy replaces it
+ * with a horizon when one applies (`publication/sequenced/freshness-horizon.ts`).
+ */
+export const SNAPSHOT_STALE_SECONDS = 15 * 60;
+
+/** The content manifest's fixed `staleAfter` interval, under every policy. */
+export const MANIFEST_STALE_SECONDS = 60 * 60;
+
 export interface GeneratedSnapshotSet {
   season: number;
   version: string;
@@ -47,7 +57,7 @@ export function generateSnapshotSet(
   generatedAt: string,
   version: string,
 ): GeneratedSnapshotSet {
-  const staleAfter = addSeconds(generatedAt, 15 * 60);
+  const staleAfter = addSeconds(generatedAt, SNAPSHOT_STALE_SECONDS);
   // One reading of the season's chronology at the generation instant, shared
   // by the season document and Home so the two can never disagree.
   const chronology = resolveSeasonChronology(source.calendar, generatedAt);
@@ -153,7 +163,7 @@ export function generateSnapshotSet(
       manifest,
       source,
       generatedAt,
-      addSeconds(generatedAt, 3600),
+      addSeconds(generatedAt, MANIFEST_STALE_SECONDS),
     ),
   ];
 

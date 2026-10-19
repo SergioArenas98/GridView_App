@@ -93,6 +93,7 @@ import {
   type PublicationInstantCause,
 } from './publication-instant';
 import { resolveRollbackSourceOrdering } from './rollback-provenance';
+import type { FreshnessPolicy } from './freshness-horizon';
 import {
   compareParticipationGuards,
   deriveParticipationGuard,
@@ -169,6 +170,13 @@ export interface SequencedPublicationDeps {
   readonly logger: Logger;
   readonly clock?: Clock;
   readonly purgeOrigin?: string;
+  /**
+   * How each release's `staleAfter` is chosen when the instant is stamped
+   * (`freshness-horizon.ts`). Defaults to `interval`, the generator's fixed
+   * intervals; the Worker selects `calendar-horizon` when no automatic provider
+   * republishes (`PROVIDER_MODE=none`).
+   */
+  readonly freshnessPolicy?: FreshnessPolicy;
 }
 
 interface ActiveAuthority {
@@ -209,6 +217,7 @@ export class SequencedPublicationService
   private readonly logger: Logger;
   private readonly clock: Clock;
   private readonly purgeOrigin: string;
+  private readonly freshnessPolicy: FreshnessPolicy;
 
   constructor(deps: SequencedPublicationDeps) {
     this.port = deps.port;
@@ -219,6 +228,7 @@ export class SequencedPublicationService
     this.logger = deps.logger;
     this.clock = deps.clock ?? systemClock;
     this.purgeOrigin = deps.purgeOrigin ?? 'https://api.gridview.local';
+    this.freshnessPolicy = deps.freshnessPolicy ?? 'interval';
   }
 
   async publish(set: GeneratedSnapshotSet): Promise<PublicationResult> {
@@ -567,7 +577,11 @@ export class SequencedPublicationService
         instant.cause,
       );
     }
-    const stamped = stampPublicationInstant(documents, instant.generatedAt);
+    const stamped = stampPublicationInstant(
+      documents,
+      instant.generatedAt,
+      this.freshnessPolicy,
+    );
     if (stamped === null) {
       return refuse('publication-instant-exhausted', 'year-range');
     }

@@ -20,6 +20,7 @@ import {
 } from '../../src/ingest/service';
 import type { ProviderSeasonSource } from '../../src/providers/formula-one-provider';
 import type { GuardedPublicationCommands } from '../../src/publication/commands';
+import type { FreshnessPolicy } from '../../src/publication/sequenced/freshness-horizon';
 import { generateSnapshotSet } from '../../src/snapshots/generator';
 import { generateSeasonBatch } from '../../scripts/season-batch/generate';
 import {
@@ -186,6 +187,8 @@ export async function ingestContext(
     readonly cutover?: 'active' | 'seeded' | 'none';
     /** The sequencer's committed ordering input; defaults to the predecessor's. */
     readonly seedOrderingInput?: string;
+    /** The publication service's `staleAfter` policy; `interval` when omitted. */
+    readonly freshnessPolicy?: FreshnessPolicy;
   } = {},
 ): Promise<SequencedContext> {
   const predecessor = await syntheticBatch(
@@ -197,6 +200,7 @@ export async function ingestContext(
     transport: options.transport,
     cutover: options.cutover,
     seedOrderingInput: options.seedOrderingInput ?? PREDECESSOR_OBSERVED_AT,
+    freshnessPolicy: options.freshnessPolicy,
     seedTransform: () =>
       generateSnapshotSet(source, SEED_GENERATED_AT, SEED_VERSION),
   });

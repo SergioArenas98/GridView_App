@@ -16,8 +16,10 @@ import type { SeasonBatchIngestOutcome } from '../../src/ingest/service';
 import type { ProviderSeasonSource } from '../../src/providers/formula-one-provider';
 import type { SeasonPublicationSequencerPort } from '../../src/publication/sequencer';
 import { stampPublicationInstant } from '../../src/publication/sequenced/documents';
+import { calendarHorizon } from '../../src/publication/sequenced/freshness-horizon';
 import { SequencedPublicationService } from '../../src/publication/sequenced/service';
 import { generateSnapshotSet } from '../../src/snapshots/generator';
+import type { SnapshotDocumentName } from '../../src/storage/types';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
 import {
   portWith,
@@ -206,6 +208,47 @@ describe.each(sequencerTransports)(
           withoutObservedAt(document.data),
         );
       }
+    });
+
+    it('stamps the calendar horizon policy on a batch publication', async () => {
+      batch ??= await syntheticBatch();
+      const ctx = await ingestContext({
+        transport,
+        freshnessPolicy: 'calendar-horizon',
+      });
+
+      const outcome = publication(
+        await ingestOnce(
+          ingestFor(ctx, ctx.service),
+          submissionFor(batch, SEED_VERSION),
+        ),
+      );
+
+      expect(outcome.publication.status).toBe('applied');
+      const read = async (name: SnapshotDocumentName) => {
+        const document = await ctx.storage.readVersionedDocument(
+          SEASON,
+          outcome.publication.version,
+          name,
+        );
+        if (!document) throw new Error(`missing ${name}`);
+        return document;
+      };
+      // The synthetic season's open rounds raced long before the Worker's
+      // clock: the release is already behind its calendar, so it keeps the
+      // fixed 15 minutes rather than a horizon in the past.
+      const published = Date.parse((await read('home')).meta.generatedAt);
+      const horizon = calendarHorizon([
+        await read('grand-prix:4' as SnapshotDocumentName),
+      ]);
+      expect(horizon).not.toBeNull();
+      expect(horizon!).toBeLessThan(published);
+      expect((await read('home')).meta.staleAfter).toBe(
+        new Date(published + 15 * 60_000).toISOString(),
+      );
+      expect((await read('content:manifest')).meta.staleAfter).toBe(
+        new Date(published + 60 * 60_000).toISOString(),
+      );
     });
 
     it('returns and logs no provider data', async () => {
