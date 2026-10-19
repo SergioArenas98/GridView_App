@@ -178,6 +178,125 @@ void main() {
     );
   });
 
+  group('corrupt reconstruction value', () {
+    test('languageCode=es replaces a corrupt new language key', () async {
+      seedPrefs(<String, Object>{
+        'languageCode': 'es',
+        PreferenceKeys.language: 'klingon',
+      });
+
+      final AppPreferences first = await launch();
+
+      // Without the repair the corrupt token would render as `system` and the
+      // cleanup would then delete the only record of the Spanish choice.
+      expect(first.language, AppLanguagePreference.spanish);
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(PreferenceKeys.language), 'spanish');
+      expect(
+        prefs.getString(LegacyMigrationMarker.key),
+        LegacyMigrationMarker.completed,
+      );
+      // Repaired before the repository read it: no corrupted-value report.
+      expect(diagnostics, isEmpty);
+    });
+
+    test('isDarkMode=false replaces a corrupt new theme key', () async {
+      seedPrefs(<String, Object>{
+        'isDarkMode': false,
+        PreferenceKeys.theme: 'purple',
+      });
+
+      final AppPreferences first = await launch();
+
+      expect(first.theme, AppThemePreference.light);
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(PreferenceKeys.theme), 'light');
+      expect(diagnostics, isEmpty);
+    });
+
+    test('a wrongly-typed new key is corrupt too', () async {
+      final MemoryMigrationStore store = MemoryMigrationStore(<String, Object>{
+        'languageCode': 'es',
+        'isDarkMode': true,
+        PreferenceKeys.language: 3,
+        PreferenceKeys.theme: false,
+      });
+
+      final LegacyMigrationResult result = await migrate(store);
+
+      expect(result.status, LegacyMigrationStatus.completed);
+      expect(result.language, LegacyValueOutcome.replacedCorrupt);
+      expect(result.theme, LegacyValueOutcome.replacedCorrupt);
+      expect(store.values[PreferenceKeys.language], 'spanish');
+      expect(store.values[PreferenceKeys.theme], 'dark');
+    });
+
+    test(
+      'a corrupt new key with no usable legacy choice is left alone',
+      () async {
+        final MemoryMigrationStore store =
+            MemoryMigrationStore(<String, Object>{
+              'languageCode': 'it',
+              PreferenceKeys.language: 'klingon',
+              PreferenceKeys.theme: 'purple',
+            });
+
+        final LegacyMigrationResult result = await migrate(store);
+
+        // The repository's own corrupted-value handling still owns these.
+        expect(result.language, LegacyValueOutcome.unsupported);
+        expect(result.theme, LegacyValueOutcome.absent);
+        expect(store.writes, <String>[LegacyMigrationMarker.key]);
+      },
+    );
+  });
+
+  group('read failures', () {
+    for (final (String name, String failing) in <(String, String)>[
+      ('legacy language key', 'languageCode'),
+      ('legacy theme key', 'isDarkMode'),
+      ('new language key', PreferenceKeys.language),
+      ('marker', LegacyMigrationMarker.key),
+    ]) {
+      test(
+        'an unreadable $name is not absent: incomplete, then retried',
+        () async {
+          final MemoryMigrationStore store = MemoryMigrationStore(
+            <String, Object>{'languageCode': 'es', 'isDarkMode': true},
+            failingReads: <String>{failing},
+          );
+
+          final LegacyMigrationResult first = await migrate(store);
+
+          expect(first.status, LegacyMigrationStatus.incomplete);
+          expect(store.values.containsKey(LegacyMigrationMarker.key), isFalse);
+          expect(store.values['languageCode'], 'es');
+          expect(store.values['isDarkMode'], true);
+
+          store.failingReads.clear();
+          final LegacyMigrationResult retry = await migrate(store);
+
+          expect(retry.status, LegacyMigrationStatus.completed);
+          expect(store.values[PreferenceKeys.language], 'spanish');
+          expect(store.values[PreferenceKeys.theme], 'dark');
+        },
+      );
+    }
+
+    test('one unreadable key still lets the other migrate', () async {
+      final MemoryMigrationStore store = MemoryMigrationStore(
+        <String, Object>{'languageCode': 'es', 'isDarkMode': true},
+        failingReads: <String>{'languageCode'},
+      );
+
+      final LegacyMigrationResult result = await migrate(store);
+
+      expect(result.language, LegacyValueOutcome.readFailed);
+      expect(result.theme, LegacyValueOutcome.migrated);
+      expect(store.values.containsKey(PreferenceKeys.language), isFalse);
+    });
+  });
+
   group('repeated upgrades', () {
     test('a second launch is a no-op', () async {
       final MemoryMigrationStore store = MemoryMigrationStore(<String, Object>{

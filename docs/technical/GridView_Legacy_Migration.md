@@ -32,7 +32,12 @@ scope.
 | key absent | not written (defaults `system` / `dark`) | the legacy defaults were not user choices |
 | anything else | not written | invalid; never blocks startup, no diagnostic |
 
-A reconstruction key that already has a value is never overwritten.
+A reconstruction key that already holds a **valid** value is never overwritten;
+one holding a corrupt value (unknown token, wrong type) is replaced by a valid
+legacy choice, since it would otherwise render as the default and the legacy
+choice would then be cleaned up. A key that cannot be **read** is never treated
+as absent: the migration stays incomplete, so nothing is cleaned up, and the
+next launch retries.
 
 ## 3. Lifecycle
 
@@ -61,10 +66,11 @@ sequenceDiagram
 | Cleanup | `lib/core/legacy/legacy_storage_cleanup.dart` |
 | Production startup steps | `lib/core/legacy/legacy_startup.dart`, wired in `lib/app/bootstrap.dart` |
 
-Both steps are total (they never throw) and idempotent. A failed value or marker
-write leaves the migration incomplete, raises the existing `writeFailure`
-preference diagnostic and is retried next launch; cleanup does nothing until the
-marker exists, and a failed removal is retried next launch.
+Both steps are total (they never throw) and idempotent. A failed read, or a
+failed value or marker write, leaves the migration incomplete and is retried
+next launch; a failed write also raises the existing `writeFailure` preference
+diagnostic. Cleanup does nothing until the marker exists, and a failed removal
+is retried next launch.
 
 ## 4. Tests
 
@@ -74,7 +80,9 @@ marker exists, and a failed removal is retried next launch.
 | Empty | same, and `legacy_storage_cleanup_test.dart` |
 | Corrupt values (wrong type, unknown code, region tag, case) and a throwing store | both |
 | Corrupt / genuine Hive box, directory with a legacy name, unavailable directory | `legacy_storage_cleanup_test.dart` |
-| Repeated upgrade, marker missing with new keys set, failed writes/removals then retry | both |
+| Corrupt reconstruction key (`es` + corrupt language, `false` + corrupt theme, wrong type) | `legacy_preference_migration_test.dart` |
+| Transient read failure (each legacy key, new key, marker) then retry; files and keys intact meanwhile | both |
+| Repeated upgrade, marker missing with valid new keys set, failed writes/removals then retry | both |
 | Cleanup only after the first frame | `test/app/legacy_cleanup_scheduling_test.dart` |
 | No Hive dependency or import | `test/legacy/legacy_isolation_test.dart` |
 

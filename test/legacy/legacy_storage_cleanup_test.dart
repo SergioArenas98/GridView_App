@@ -160,6 +160,58 @@ void main() {
     });
   });
 
+  group('incomplete migration', () {
+    test('a transient read failure keeps everything until the retry', () async {
+      populateLegacyDevice();
+      final MemoryMigrationStore store = MemoryMigrationStore(
+        const <String, Object>{'languageCode': 'es', 'isDarkMode': true},
+        failingReads: <String>{'languageCode'},
+      );
+
+      // Launch 1: the read fails, so the migration is incomplete...
+      final LegacyMigrationResult first = await LegacyPreferenceMigration(
+        store: store,
+      ).run();
+      expect(first.status, LegacyMigrationStatus.incomplete);
+
+      // ...and the post-frame cleanup removes nothing.
+      expect(
+        await cleanup(store).run(),
+        LegacyCleanupStatus.skippedMigrationIncomplete,
+      );
+      expect(doc('cache.hive').readAsBytesSync(), _legacyHiveBox);
+      expect(doc('cache.hivec').readAsBytesSync(), _legacyHiveBox);
+      expect(doc('cache.lock').existsSync(), isTrue);
+      expect(store.values['languageCode'], 'es');
+      expect(store.values['isDarkMode'], true);
+
+      // Launch 2: the read succeeds, the choice is migrated, then cleaned.
+      store.failingReads.clear();
+      final LegacyMigrationResult retry = await LegacyPreferenceMigration(
+        store: store,
+      ).run();
+      expect(retry.status, LegacyMigrationStatus.completed);
+      expect(store.values[PreferenceKeys.language], 'spanish');
+      expect(await cleanup(store).run(), LegacyCleanupStatus.cleaned);
+      for (final String name in LegacyHiveFiles.all) {
+        expect(doc(name).existsSync(), isFalse, reason: name);
+      }
+      expect(store.values.containsKey('languageCode'), isFalse);
+    });
+
+    test('an unreadable marker removes nothing', () async {
+      populateLegacyDevice();
+      final MemoryMigrationStore store = MemoryMigrationStore(
+        migrated(),
+        failingReads: <String>{LegacyMigrationMarker.key},
+      );
+
+      expect(await cleanup(store).run(), LegacyCleanupStatus.failed);
+      expect(doc('cache.hive').readAsBytesSync(), _legacyHiveBox);
+      expect(store.values['languageCode'], 'es');
+    });
+  });
+
   group('empty legacy storage', () {
     test('a device with no legacy files or keys is already clean', () async {
       final MemoryMigrationStore store = MemoryMigrationStore(

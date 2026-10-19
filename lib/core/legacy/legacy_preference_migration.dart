@@ -11,9 +11,14 @@ enum LegacyValueOutcome {
   /// The legacy choice was written under the reconstruction key.
   migrated,
 
-  /// The reconstruction key already holds a value. A choice made in this app
-  /// always wins over a legacy one, so the legacy value is ignored.
+  /// The reconstruction key already holds a **valid** value. A choice made in
+  /// this app always wins over a legacy one, so the legacy value is ignored.
   alreadySet,
+
+  /// The reconstruction key held a corrupt value (unknown token or wrong
+  /// type), so it was not a usable choice; the valid legacy choice replaced
+  /// it rather than being lost to the default.
+  replacedCorrupt,
 
   /// A valid legacy choice this app cannot honour (a language it does not
   /// offer). The new default applies.
@@ -26,6 +31,11 @@ enum LegacyValueOutcome {
   /// Writing the migrated value failed. The migration stays incomplete and is
   /// retried on the next launch.
   writeFailed,
+
+  /// The legacy or reconstruction key could not be read. This is **not**
+  /// [absent]: the migration stays incomplete, so the cleanup cannot delete a
+  /// choice that was never seen, and the next launch retries.
+  readFailed,
 }
 
 /// The overall result of one [LegacyPreferenceMigration.run].
@@ -36,8 +46,8 @@ enum LegacyMigrationStatus {
   /// Every preference was handled and the marker is stored.
   completed,
 
-  /// Something could not be persisted. No marker was stored, legacy storage is
-  /// left in place, and the next launch runs the migration again.
+  /// Something could not be read or persisted. No marker was stored, legacy
+  /// storage is left in place, and the next launch runs the migration again.
   incomplete,
 }
 
@@ -114,10 +124,11 @@ class LegacyMigrationResult {
 ///
 /// * **Idempotent.** A stored [LegacyMigrationMarker] short-circuits the run.
 ///   Without it, a rerun yields the same result: a reconstruction key that
-///   already holds a value is never overwritten.
+///   already holds a valid value is never overwritten. A corrupt one is
+///   replaced by a valid legacy choice.
 /// * **Total.** [run] never throws. Unknown, corrupt or wrongly-typed legacy
-///   values resolve to the new defaults; a failed write leaves the migration
-///   incomplete for the next launch rather than blocking this one.
+///   values resolve to the new defaults; a failed read or write leaves the
+///   migration incomplete for the next launch rather than blocking this one.
 /// * **Non-destructive.** Legacy storage is not touched here; see
 ///   `LegacyStorageCleanup`, which removes it only after a completed migration
 ///   and a rendered first frame.
@@ -147,27 +158,33 @@ class LegacyPreferenceMigration {
         );
       }
 
-      final language = mapLegacyLanguage(
-        _store.readRaw(LegacyPreferenceKeys.languageCode),
-      );
-      final LegacyValueOutcome languageOutcome = await _apply(
-        PreferenceKeys.language,
-        language.outcome,
-        language.value?.wire,
+      final LegacyValueOutcome languageOutcome = await _migrate(
+        legacyKey: LegacyPreferenceKeys.languageCode,
+        key: PreferenceKeys.language,
+        map: (Object? raw) {
+          final mapped = mapLegacyLanguage(raw);
+          return (outcome: mapped.outcome, token: mapped.value?.wire);
+        },
+        validTokens: AppLanguagePreference.values.map(
+          (AppLanguagePreference v) => v.wire,
+        ),
       );
 
-      final theme = mapLegacyTheme(
-        _store.readRaw(LegacyPreferenceKeys.isDarkMode),
-      );
-      final LegacyValueOutcome themeOutcome = await _apply(
-        PreferenceKeys.theme,
-        theme.outcome,
-        theme.value?.wire,
+      final LegacyValueOutcome themeOutcome = await _migrate(
+        legacyKey: LegacyPreferenceKeys.isDarkMode,
+        key: PreferenceKeys.theme,
+        map: (Object? raw) {
+          final mapped = mapLegacyTheme(raw);
+          return (outcome: mapped.outcome, token: mapped.value?.wire);
+        },
+        validTokens: AppThemePreference.values.map(
+          (AppThemePreference v) => v.wire,
+        ),
       );
 
       final bool persisted =
-          languageOutcome != LegacyValueOutcome.writeFailed &&
-          themeOutcome != LegacyValueOutcome.writeFailed &&
+          !_blocksCompletion(languageOutcome) &&
+          !_blocksCompletion(themeOutcome) &&
           await _write(
             LegacyMigrationMarker.key,
             LegacyMigrationMarker.completed,
@@ -187,16 +204,47 @@ class LegacyPreferenceMigration {
     }
   }
 
-  Future<LegacyValueOutcome> _apply(
-    String key,
-    LegacyValueOutcome mapped,
-    String? token,
-  ) async {
-    if (mapped != LegacyValueOutcome.migrated || token == null) return mapped;
-    if (_store.readRaw(key) != null) return LegacyValueOutcome.alreadySet;
-    return await _write(key, token)
+  static bool _blocksCompletion(LegacyValueOutcome outcome) =>
+      outcome == LegacyValueOutcome.writeFailed ||
+      outcome == LegacyValueOutcome.readFailed;
+
+  /// Migrates one preference: reads the legacy value, maps it, and writes it
+  /// unless the reconstruction key already holds a valid choice.
+  Future<LegacyValueOutcome> _migrate({
+    required String legacyKey,
+    required String key,
+    required ({LegacyValueOutcome outcome, String? token}) Function(Object? raw)
+    map,
+    required Iterable<String> validTokens,
+  }) async {
+    final Object? raw;
+    try {
+      raw = _store.readRaw(legacyKey);
+    } on Object {
+      return LegacyValueOutcome.readFailed;
+    }
+    final mapped = map(raw);
+    final String? token = mapped.token;
+    if (mapped.outcome != LegacyValueOutcome.migrated || token == null) {
+      return mapped.outcome;
+    }
+
+    final Object? current;
+    try {
+      current = _store.readRaw(key);
+    } on Object {
+      return LegacyValueOutcome.readFailed;
+    }
+    // Only a valid token is a choice worth keeping. A corrupt one would render
+    // as the default anyway, so it must not cost the user their legacy choice.
+    final bool currentIsValid =
+        current is String && validTokens.contains(current);
+    if (currentIsValid) return LegacyValueOutcome.alreadySet;
+
+    if (!await _write(key, token)) return LegacyValueOutcome.writeFailed;
+    return current == null
         ? LegacyValueOutcome.migrated
-        : LegacyValueOutcome.writeFailed;
+        : LegacyValueOutcome.replacedCorrupt;
   }
 
   Future<bool> _write(String key, String value) async {

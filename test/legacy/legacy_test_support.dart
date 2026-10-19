@@ -15,19 +15,28 @@ class MemoryMigrationStore implements LegacyMigrationStore {
     Map<String, Object> initial, {
     Set<String> failingWrites = const <String>{},
     Set<String> failingRemovals = const <String>{},
+    Set<String> failingReads = const <String>{},
   }) : _values = <String, Object>{...initial},
        failingWrites = <String>{...failingWrites},
-       failingRemovals = <String>{...failingRemovals};
+       failingRemovals = <String>{...failingRemovals},
+       failingReads = <String>{...failingReads};
 
   final Map<String, Object> _values;
   final Set<String> failingWrites;
   final Set<String> failingRemovals;
+
+  /// Keys whose read throws, as an unreadable platform value would. Clear the
+  /// set to model the failure being transient.
+  final Set<String> failingReads;
   final List<String> writes = <String>[];
 
   Map<String, Object> get values => Map<String, Object>.unmodifiable(_values);
 
   @override
-  Object? readRaw(String key) => _values[key];
+  Object? readRaw(String key) {
+    if (failingReads.contains(key)) throw StateError('read $key');
+    return _values[key];
+  }
 
   @override
   Future<void> writeString(String key, String value) async {
@@ -43,8 +52,7 @@ class MemoryMigrationStore implements LegacyMigrationStore {
   }
 }
 
-/// A store that breaks every contract it can, including the "never throws"
-/// read, to prove callers stay total regardless.
+/// A store whose every operation throws, to prove callers stay total.
 class ThrowingMigrationStore implements LegacyMigrationStore {
   @override
   Object? readRaw(String key) => throw StateError('read $key');

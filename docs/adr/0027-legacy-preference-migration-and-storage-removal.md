@@ -44,13 +44,20 @@ reconstruction already uses.
      (`system`, `dark`) apply.
    - Any other type or content is invalid and ignored. It never blocks
      startup and never raises a diagnostic: it is not a fault of this build.
-2. **A reconstruction key that already holds a value is never overwritten.** A
-   choice made in this app always wins over a legacy one.
+2. **A reconstruction key that already holds a valid value is never
+   overwritten.** A choice made in this app always wins over a legacy one. A
+   reconstruction key holding a **corrupt** value (unknown token or wrong type)
+   is not a choice — it would render as the default — so a valid legacy choice
+   replaces it instead of being lost when the legacy key is cleaned up.
 3. **Completion is recorded** by `gv.migration.legacy_preferences = v1`, written
    last. Its presence short-circuits later runs; without it, a rerun yields the
    same result (rule 2), so the migration is idempotent. A failed write leaves
    the migration incomplete and raises the existing `writeFailure` preference
    diagnostic; the next launch retries.
+   **A failed read is not an absent key.** If the marker, a legacy key or a
+   reconstruction key cannot be read, the migration stays incomplete, no marker
+   is written, and therefore the cleanup removes nothing; the next launch
+   retries.
 4. **Consent is not migrated.** The legacy app never persisted any consent state
    (it initialized Mobile Ads without UMP), so there is no stored value whose
    legal meaning could be shown to be equivalent. The reconstruction ships no

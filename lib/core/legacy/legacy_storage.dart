@@ -64,8 +64,11 @@ abstract final class LegacyMigrationMarker {
 /// serves the typed preference domain, while the legacy theme is a bool and the
 /// legacy keys must be removable.
 abstract interface class LegacyMigrationStore {
-  /// The stored value for [key] whatever its type, or `null` when absent or
-  /// unreadable. Never throws.
+  /// The stored value for [key] whatever its type, or `null` when absent.
+  ///
+  /// **Throws when the value cannot be read.** An unreadable key is not an
+  /// absent one: treating it as absent would let the migration complete
+  /// without the legacy choice and the cleanup then delete it.
   Object? readRaw(String key);
 
   /// Persists [value] under [key]. Throws when the write fails.
@@ -83,13 +86,7 @@ class SharedPreferencesMigrationStore implements LegacyMigrationStore {
   final SharedPreferences _prefs;
 
   @override
-  Object? readRaw(String key) {
-    try {
-      return _prefs.get(key);
-    } on Object {
-      return null;
-    }
-  }
+  Object? readRaw(String key) => _prefs.get(key);
 
   @override
   Future<void> writeString(String key, String value) async {
