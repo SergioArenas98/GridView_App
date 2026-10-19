@@ -297,7 +297,10 @@ class AppSyncCoordinator {
   /// core resource that is now due and that this run has not yet attempted:
   /// in practice the resources whose stored copy is behind the release the
   /// manifest just reported. A new batch is therefore adopted by the run that
-  /// discovers it, not by the next launch or resume.
+  /// discovers it, not by the next launch or resume. Home's cached latest race
+  /// result is refreshed here too when it is behind that release
+  /// (`SyncPlanner.latestResultBehindRelease`), so Home's freshness does not wait
+  /// for its Grand Prix to be opened.
   ///
   /// Bounded: it runs at most once per run, only after a successful manifest
   /// answer, and never repeats a key the run already attempted, so a cache
@@ -384,6 +387,12 @@ class AppSyncCoordinator {
     for (final String key in SyncPlanner.expectedCoreKeys(season)) {
       metadata[key] = await _metadata.read(key);
     }
+    final GrandPrixResultsSyncResource? latestResult = await _homeLatestResult(
+      season,
+    );
+    if (latestResult != null) {
+      metadata[latestResult.key] = await _metadata.read(latestResult.key);
+    }
 
     return SyncPlanner.plan(
       SyncPlanInput(
@@ -402,8 +411,20 @@ class AppSyncCoordinator {
           for (final ResourceSyncOutcome outcome in attempted)
             outcome.resourceKey,
         },
+        homeLatestResult: latestResult,
       ),
     );
+  }
+
+  /// The race result Home's latest-result module shows from cache for
+  /// [season], read from the stored dashboard. The planner decides whether it
+  /// is refreshed; nothing here requests it.
+  Future<GrandPrixResultsSyncResource?> _homeLatestResult(int? season) async {
+    if (season == null) return null;
+    final ({int season, int round})? cached = await _home
+        .cachedLatestRaceResult();
+    if (cached == null || cached.season != season) return null;
+    return GrandPrixResultsSyncResource(cached.season, cached.round);
   }
 
   Future<int?> _localSeason() async {

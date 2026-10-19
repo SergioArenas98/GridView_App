@@ -102,6 +102,15 @@ class FakeRaceWeekendRepository
       dashboardStream ?? Stream<HomeDashboardView?>.value(dashboard);
 
   @override
+  Future<({int season, int round})?> cachedLatestRaceResult() async {
+    final HomeDashboardView? view = await watchHomeDashboard().first;
+    final int? round = view?.latestRaceResult == null
+        ? null
+        : view!.latestCompleted?.round;
+    return round == null ? null : (season: view!.seasonYear, round: round);
+  }
+
+  @override
   Stream<List<CalendarEntry>> watchCalendar(int season) {
     if (calendarStream != null) return calendarStream!(season);
     return Stream<List<CalendarEntry>>.value(

@@ -3420,6 +3420,19 @@ no Jolpica, staging, adb or phone request.**
 | **Deployment order** | Corrected in review round 1. Deploying the Worker changes nothing served: the active release keeps its 15-minute `staleAfter` and its ETags until the next stamping (`freshness-policy-deployment.test.ts`, through the Worker entry point). The first release stamped afterwards, an ordinary publication or a rollback, carries the horizon. A build with PR #77's release convergence and this change must be installed before that publication. The `900e1c5` APK on DNP-NX9 lacks the convergence and would not check core resources until the horizon. |
 | Owner decisions (2026-10-19) | Accepted for the current staging setup: selection by `PROVIDER_MODE=none`; sprint and race only; an untimed or malformed unsettled event disables the horizon; a failed background manifest check is silent within the horizon; no foreground timer. **Constraint:** a release stamped under this policy must not be rolled back after `PROVIDER_MODE` leaves `none`. The interval policy would carry a horizon-length interval forward, or refuse a season-complete release as `year-range`. Resolve this before any provider-mode switch. |
 
+### 14.0.58 Home's cached latest result follows a new release - Flutter only, no data or contract change
+
+Prepared on **2026-10-19** from `master` `d351118`. **Flutter sync, tests and
+documentation only. No contract, Drift schema, fixture, Edge API or Android
+change. Nothing was deployed, no batch was captured or published, and there was
+no phone request.**
+
+| Item | Status |
+|---|---|
+| Defect | Found on the reference phone after staging adopted `pm1-…1d` (2026-10-19). The resume adopted the release for every core resource, but Home kept its stale notice. The notice includes the cached latest race result (`grand-prix-results:2026:17`), which only opening its Grand Prix refreshed, and which still carried `…1c`'s 15-minute expiry. |
+| Fix | `SyncPlanner.latestResultBehindRelease` plans Home's cached latest result in the first-screen stage when its record is behind the stored manifest's release. It is planned only when cached and successfully recorded, for the current season, and at most once per run. It is not planned through its own expiry, and a manual refresh does not force it. The coordinator reads it through `HomeRepository.cachedLatestRaceResult` (request-free). Synchronization §11.7, §11.8. |
+| Tests | `test/sync/home_latest_result_convergence_test.dart` (5, real database). It uses the phone's instants (`…1c` at 2026-10-14T16:19:54.572Z with a 15-minute expiry, `…1d` at 2026-10-19T18:43:32.476Z until 2026-10-25T20:00:00.000Z) and a Jolpica-shaped calendar. Cases: the adopting run refreshes the result through the metadata-only rule and Home clears its notice, with no Grand Prix request; a failed request keeps the cached result and the notice, then is retried once per run; a cache serving the old result costs one request per run; a never-loaded result stays on demand; a current result is not requested again by a later run, a manual refresh or its own expiry. `sync_planner_test.dart` +8. Against `d351118`, four of the five reproductions fail; the never-loaded case passes on both. Full suite: 2,273 passed; `flutter analyze` clean. The release-scripting helpers moved to `test/support/release_server.dart`, which now also scripts results, and `callsOf` counts results and Grand Prix requests. |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in

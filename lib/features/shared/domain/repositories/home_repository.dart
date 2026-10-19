@@ -21,6 +21,14 @@ abstract interface class HomeRepository {
   /// `null` until a Home representation has been materialized for a season.
   Stream<HomeDashboardView?> watchHomeDashboard();
 
+  /// The season and round of the race classification Home's latest-result
+  /// module currently shows from cache, or `null` when it shows none.
+  ///
+  /// Read-only and request-free, like [watchHomeDashboard]: it names the result
+  /// the dashboard already composed. A result that was never cached is never
+  /// named, so it stays on demand.
+  Future<({int season, int round})?> cachedLatestRaceResult();
+
   /// The season of the locally materialized Home representation, or `null` when
   /// none has been materialized.
   ///

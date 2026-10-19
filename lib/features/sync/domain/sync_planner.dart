@@ -35,6 +35,7 @@ class SyncPlanInput {
     this.dueKeys = const <String>{},
     this.bootstrapAttempted = false,
     this.attemptedKeys = const <String>{},
+    this.homeLatestResult,
   });
 
   final SyncTrigger trigger;
@@ -71,6 +72,10 @@ class SyncPlanInput {
   /// from an older release is retried once per run, on the next launch or
   /// resume, never in a loop.
   final Set<String> attemptedKeys;
+
+  /// The race result Home's latest-result module shows from cache, or null
+  /// when it shows none. Its stored record, when one exists, is in [metadata].
+  final GrandPrixResultsSyncResource? homeLatestResult;
 }
 
 /// Builds the deterministic staged plan for one synchronization run.
@@ -110,7 +115,9 @@ abstract final class SyncPlanner {
 
     return SyncPlan(
       trigger: input.trigger,
-      stages: eligible,
+      stages: scope == SyncPlanScope.coreSet
+          ? _withFirstScreen(eligible, latestResultBehindRelease(input))
+          : eligible,
       season: season,
       forcesEligibility: forces,
       seasonContextResolved: season != null,
@@ -129,7 +136,9 @@ abstract final class SyncPlanner {
   /// season leaves the run with season resolution to do and nothing else.
   ///
   /// Detail and historical resources are absent by design — they are refreshed
-  /// on demand by whichever feature opens them.
+  /// on demand by whichever feature opens them. The one exception is not part of
+  /// this inventory: Home's cached latest race result, planned only when it is
+  /// behind the stored release ([latestResultBehindRelease]).
   static List<SyncPlanStage> coreStages(int? season) => <SyncPlanStage>[
     SyncPlanStage(SyncStage.seasonContext, <SyncResource>[
       const CurrentSeasonSyncResource(),
@@ -176,6 +185,73 @@ abstract final class SyncPlanner {
     for (final SyncPlanStage stage in coreStages(season))
       for (final SyncResource resource in stage.resources) resource.key,
   ];
+
+  /// Home's cached latest race result when its stored copy belongs to an older
+  /// release than the stored content manifest, else null.
+  ///
+  /// Home's stale notice includes that result's own freshness, and only opening
+  /// its Grand Prix would otherwise refresh it, so a newly adopted publication
+  /// would leave Home stale while every core resource is current. The result
+  /// is still never fetched merely because Home displays it:
+  ///
+  /// - a result that was never cached has no successful record, so it is never
+  ///   behind and stays on demand;
+  /// - it is not due through its own expiry or the persisted due query. Without
+  ///   a newer release it is no less current than Home itself, and a request
+  ///   would only repeat what the result already says;
+  /// - like the core keys, it is planned at most once per run, so a failure or
+  ///   a cache that keeps serving the older release costs one attempt per run.
+  ///   A failure keeps the cached result and its stale freshness.
+  ///
+  /// A manual refresh does not force it either: only the release rule plans it.
+  static GrandPrixResultsSyncResource? latestResultBehindRelease(
+    SyncPlanInput input,
+  ) {
+    final GrandPrixResultsSyncResource? result = input.homeLatestResult;
+    if (result == null || result.year != input.currentSeason) return null;
+    if (input.attemptedKeys.contains(result.key)) return null;
+    return isBehindManifestRelease(
+          input.metadata[result.key],
+          input.metadata[const ContentManifestSyncResource().key],
+          currentSeason: input.currentSeason,
+        )
+        ? result
+        : null;
+  }
+
+  /// [stages] with [resource] added to the first-screen stage, which is
+  /// created in stage order when no core resource of it is due.
+  static List<SyncPlanStage> _withFirstScreen(
+    List<SyncPlanStage> stages,
+    SyncResource? resource,
+  ) {
+    if (resource == null) return stages;
+    final SyncPlanStage added = SyncPlanStage(
+      SyncStage.firstScreen,
+      <SyncResource>[resource],
+    );
+    final List<SyncPlanStage> result = <SyncPlanStage>[];
+    bool placed = false;
+    for (final SyncPlanStage stage in stages) {
+      if (stage.stage == SyncStage.firstScreen) {
+        result.add(
+          SyncPlanStage(stage.stage, <SyncResource>[
+            ...stage.resources,
+            resource,
+          ]),
+        );
+        placed = true;
+        continue;
+      }
+      if (!placed && stage.stage.index > SyncStage.firstScreen.index) {
+        result.add(added);
+        placed = true;
+      }
+      result.add(stage);
+    }
+    if (!placed) result.add(added);
+    return result;
+  }
 
   static SyncPlanScope _scopeFor(SyncPlanInput input) {
     if (input.hasUsableFirstScreenCache) return SyncPlanScope.coreSet;
