@@ -950,7 +950,21 @@ components:
             staleAfter:
               type: string
               format: date-time
-              description: When the payload should be treated as stale, UTC.
+              description: >
+                When the payload should be treated as stale, UTC: the instant
+                it stops being current. The server chooses it per release. With
+                an automatic provider it is `generatedAt` plus 15 minutes, by
+                which a newer publication is due. Where releases are published
+                by hand (`PROVIDER_MODE=none`) it is the earliest start of a
+                sprint or race session the release does not classify, and
+                `9999-12-31T23:59:59.999Z`, the last instant this format can
+                spell, when every event is settled or cancelled, and
+                `generatedAt` plus 15 minutes when no such later instant can be
+                derived. The content manifest always carries `generatedAt` plus
+                one hour and is the client's check for a newer publication. A
+                `304` does not extend it. See
+                `docs/adr/0005-snapshot-conflict-and-freshness.md`, amendment
+                of 2026-10-19.
             contentVersion:
               type: string
               description: Curated-content version identifier.
@@ -1125,6 +1139,8 @@ components:
         staleAfter:
           type: [string, "null"]
           format: date-time
+          description: >
+            Equal to the enclosing snapshot's `meta.staleAfter`.
         contentVersion:
           type: [string, "null"]
         stale:

@@ -224,7 +224,7 @@ void main() {
       // Real content, from an accepted same-season bootstrap.
       expect(find.text('Max Verstappen'), findsOneWidget);
       // ...but nothing that claims when this collection was last updated.
-      expect(find.textContaining('Updated'), findsNothing);
+      expect(find.textContaining('Last successful check'), findsNothing);
       expect(find.text('Showing saved data'), findsNothing);
     });
 

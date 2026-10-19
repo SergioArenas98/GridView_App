@@ -320,7 +320,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String homeUpdated(String time) {
-    return 'Actualizado $time';
+    return 'Comprobado: $time';
   }
 
   @override
@@ -403,7 +403,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String lastUpdatedLabel(String time) {
-    return 'Actualizado $time';
+    return 'Comprobado: $time';
   }
 
   @override

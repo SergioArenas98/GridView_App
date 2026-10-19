@@ -27,6 +27,7 @@ import { CutoverPausedPublicationCommands } from './publication/cutover/admissio
 import type { CutoverControl } from './publication/cutover/control';
 import { CutoverPreparationService } from './publication/cutover/service';
 import { SnapshotPublisher } from './publication/publisher';
+import { freshnessPolicyFor } from './publication/sequenced/freshness-horizon';
 import { SequencedPublicationService } from './publication/sequenced/service';
 import { handlePublicRequest } from './public/router';
 import { resolveProvider } from './providers/factory';
@@ -550,6 +551,7 @@ function buildPublicationCommands(
       logger,
       clock,
       purgeOrigin,
+      freshnessPolicy: freshnessPolicyFor(config.providerMode),
     });
   if (control.kind === 'activate') {
     const service = sequenced(

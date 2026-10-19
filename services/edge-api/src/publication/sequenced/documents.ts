@@ -13,10 +13,20 @@
 
 import { boundedInstant } from '../canonical/instant';
 import {
+  MANIFEST_STALE_SECONDS,
+  SNAPSHOT_STALE_SECONDS,
+} from '../../snapshots/generator';
+import {
   embeddedFreshness,
   isHomeWithFreshness,
   isRecord,
 } from './embedded-freshness';
+import {
+  calendarHorizon,
+  SEASON_COMPLETE_STALE_AFTER,
+  type CalendarHorizon,
+  type FreshnessPolicy,
+} from './freshness-horizon';
 import type { PerKeyState } from '../sequencer/model';
 import type {
   SnapshotDocumentName,
@@ -69,6 +79,17 @@ export function bakeAssignedTimestamps(
  * `requestId` is not touched because it is never stored - the public router
  * sets it per response.
  *
+ * Under the `calendar-horizon` policy (ADR 0005, amendment of 2026-10-19)
+ * `staleAfter` is chosen differently: every document but the content manifest
+ * takes the release's calendar horizon when that is strictly later than
+ * `generatedAt`, `SEASON_COMPLETE_STALE_AFTER` when every event is settled or
+ * cancelled, and the generator's fixed 15 minutes from `generatedAt`
+ * otherwise; the manifest takes its fixed hour. Nothing is measured from the
+ * stored pair, so a rollback target published under the horizon never carries
+ * its old horizon-length interval forward. Such a document is returned
+ * unchanged only when it already carries both the instant and that
+ * `staleAfter`.
+ *
  * Returns `null` when a re-derived `staleAfter` would leave the representable
  * four-digit year range, or when a `home` or `bootstrap` document lacks its
  * required Home freshness block; the caller refuses before any write (and
@@ -77,7 +98,11 @@ export function bakeAssignedTimestamps(
 export function stampPublicationInstant(
   documents: readonly StoredSnapshot[],
   generatedAt: string,
+  policy: FreshnessPolicy = 'interval',
 ): StoredSnapshot[] | null {
+  if (policy === 'calendar-horizon') {
+    return stampWithHorizon(documents, generatedAt);
+  }
   const stamped: StoredSnapshot[] = [];
   for (const document of documents) {
     if (embeddedFreshness(document).kind === 'malformed') return null;
@@ -87,13 +112,83 @@ export function stampPublicationInstant(
     }
     const staleAfter = reprojectStaleAfter(document.meta, generatedAt);
     if (staleAfter === null) return null;
-    stamped.push({
-      ...document,
-      meta: { ...document.meta, generatedAt, staleAfter } as StoredMeta,
-      data: withStampedFreshness(document, generatedAt, staleAfter),
-    });
+    stamped.push(restamped(document, generatedAt, staleAfter));
   }
   return stamped;
+}
+
+function stampWithHorizon(
+  documents: readonly StoredSnapshot[],
+  generatedAt: string,
+): StoredSnapshot[] | null {
+  const instant = Date.parse(generatedAt);
+  const horizonStaleAfter = horizonStaleAfterFor(
+    calendarHorizon(documents),
+    instant,
+  );
+  const manifestStaleAfter = intervalAfter(instant, MANIFEST_STALE_SECONDS);
+  if (horizonStaleAfter === null || manifestStaleAfter === null) return null;
+
+  const stamped: StoredSnapshot[] = [];
+  for (const document of documents) {
+    if (embeddedFreshness(document).kind === 'malformed') return null;
+    const staleAfter =
+      document.documentName === 'content:manifest'
+        ? manifestStaleAfter
+        : horizonStaleAfter;
+    if (carriesStamp(document, generatedAt, staleAfter)) {
+      stamped.push(document);
+      continue;
+    }
+    stamped.push(restamped(document, generatedAt, staleAfter));
+  }
+  return stamped;
+}
+
+/**
+ * The data documents' `staleAfter` under the horizon: the next uncovered
+ * sprint or race when it is later than the instant, the season-complete
+ * value when no scheduled event is left, and the fixed 15 minutes otherwise.
+ */
+function horizonStaleAfterFor(
+  horizon: CalendarHorizon,
+  instant: number,
+): string | null {
+  if (horizon.kind === 'season-complete') return SEASON_COMPLETE_STALE_AFTER;
+  if (horizon.kind === 'session' && horizon.at > instant) {
+    return boundedInstant(new Date(horizon.at));
+  }
+  return intervalAfter(instant, SNAPSHOT_STALE_SECONDS);
+}
+
+function intervalAfter(instant: number, seconds: number): string | null {
+  return boundedInstant(new Date(instant + seconds * 1000));
+}
+
+function restamped(
+  document: StoredSnapshot,
+  generatedAt: string,
+  staleAfter: string,
+): StoredSnapshot {
+  return {
+    ...document,
+    meta: { ...document.meta, generatedAt, staleAfter } as StoredMeta,
+    data: withStampedFreshness(document, generatedAt, staleAfter),
+  };
+}
+
+function carriesStamp(
+  document: StoredSnapshot,
+  generatedAt: string,
+  staleAfter: string,
+): boolean {
+  if (!carriesInstant(document, generatedAt)) return false;
+  if (document.meta.staleAfter !== staleAfter) return false;
+  const embedded = embeddedFreshness(document);
+  return (
+    embedded.kind === 'blocks' &&
+    embedded.blocks.every((freshness) => freshness.staleAfter === staleAfter)
+  );
 }
 
 function carriesInstant(
@@ -122,7 +217,7 @@ function reprojectStaleAfter(
   const to = Date.parse(meta.staleAfter);
   const seconds =
     Number.isNaN(from) || Number.isNaN(to) || to <= from
-      ? 15 * 60
+      ? SNAPSHOT_STALE_SECONDS
       : Math.round((to - from) / 1000);
   return boundedInstant(new Date(Date.parse(generatedAt) + seconds * 1000));
 }

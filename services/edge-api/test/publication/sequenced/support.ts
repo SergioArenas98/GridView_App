@@ -30,6 +30,7 @@ import {
   type SequencerNamespace,
   type SequencerOptions,
 } from '../../../src/publication/sequencer';
+import type { FreshnessPolicy } from '../../../src/publication/sequenced/freshness-horizon';
 import { SequencedPublicationService } from '../../../src/publication/sequenced/service';
 import { MockFormulaOneProvider } from '../../../src/providers/mock/mock-provider';
 import { FixedClock, type Clock } from '../../../src/runtime/clock';
@@ -307,6 +308,8 @@ export async function sequencedContext(
      * the year seeds behind them instead.
      */
     seedOrderingInput?: string;
+    /** The service's `staleAfter` policy; `interval` when omitted. */
+    freshnessPolicy?: FreshnessPolicy;
   } = {},
 ): Promise<SequencedContext> {
   const seedOrderingInput = options.seedOrderingInput ?? SEED_ORDERING_INPUT;
@@ -419,6 +422,7 @@ export async function sequencedContext(
     logger,
     clock,
     purgeOrigin: 'https://api.gridview.local',
+    freshnessPolicy: options.freshnessPolicy,
   });
 
   return {
