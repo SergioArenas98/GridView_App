@@ -181,7 +181,9 @@ We may also disclose information if the law requires it.
 
 ## 6. Your choices and rights
 
-- **Stop all processing**: uninstall the app. Without the app, nothing is sent.
+- **Stop future collection**: uninstall the app. Without the app, nothing
+  more is sent. Reports already sent stay with Firebase until their retention
+  period ends (section 3.3), or until they are deleted at your request (below).
 - **Reset the identifiers**: clear the app's data in Android settings. This
   gives the installation new random identifiers.
 - **Your rights**: depending on where you live, you can ask for access to,

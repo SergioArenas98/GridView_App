@@ -134,7 +134,7 @@ ephemerally** = no, **required** (the user cannot turn it off in the app).
 | App info and performance → **Crash logs** | Crashlytics stack traces and app state at crash | Analytics |
 | App info and performance → **Diagnostics** | Performance Monitoring (start time, trace durations, CPU and memory); Sessions metrics | Analytics |
 | Device or other IDs → **Device or other IDs** | Firebase installation ID; Crashlytics installation UUID | Analytics |
-| Location → **Approximate location** | Performance Monitoring maps IP addresses to countries | Analytics — **review item R1** |
+| Location → **Approximate location** | Performance Monitoring maps IP addresses to countries. The GridView API also receives the IP address with each request, to serve it; that part is ephemeral (§3.4), but Firebase's part is not, so the type as a whole is not | Analytics; **App functionality** (the API) — **review items R1, R2** |
 | App activity → **App interactions** | Firebase Sessions records when the app is foregrounded to start a session ("application metrics", Firebase disclosure) | Analytics — **review item R8** |
 
 "Analytics" is Play's purpose for monitoring app performance and diagnosing
@@ -216,7 +216,7 @@ State T adds these rows to §3.2:
 | # | Question | Engineering recommendation |
 |---|---|---|
 | R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | Declare it. Country-level location is coarser than Play's 3 km² threshold, so declaring is the conservative reading. Over-declaring is not a policy violation; under-declaring is. |
-| R2 | Is Cloudflare's handling of the IP address ephemeral? | Yes, but only once the production logging condition in §3.4 is committed (PR #83, W1) and verified on the deployed Worker (W3). Until then, do not submit the form. |
+| R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | Yes, but only once the production logging condition in §3.4 is committed (PR #83, W1) and verified on the deployed Worker (W3). Until then, do not submit the form. |
 | R3 | Deletion-request answer | **"Yes", but only after the owner confirms the requests can be fulfilled.** The policy offers deletion requests at gridviewapp1@gmail.com, and Play's guidance prescribes no mechanism and accepts a dedicated email address. "No" would contradict the policy. GridView has no accounts, so Play's separate account-deletion requirement does not apply. To fulfil a request, the owner needs a way to locate the data (for example from the date and time of a crash, as the policy asks) and remove it in Firebase; otherwise it expires after 90, 60 or 30 days. If fulfilment cannot be committed to, remove the deletion promise from the policy instead of answering "No" while the policy says otherwise. |
 | R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
 | R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to the SDK version 1.2.1 resolved. |
