@@ -28,9 +28,10 @@ Contact: **gridviewapp1@gmail.com**
   advertising or marketing SDK. Versions 1.x showed advertising banners from
   Google AdMob (section 3.4).
 - From version 2.0.0, GridView does **not** track which screens you open or
-  what you tap. It records only when a session starts (section 3.3). In
-  versions 1.x, the advertising SDK collects app launches, taps and ad views
-  (section 3.4).
+  what you tap. Firebase records when a session starts (section 3.3). The
+  GridView API may keep short-lived logs of which kind of data each request
+  fetched, with no IP address or identifier (section 3.2). In versions 1.x,
+  the advertising SDK collects app launches, taps and ad views (section 3.4).
 - Your language and theme choices and the Formula 1 data the app downloads are
   stored **on your device**.
 - To fix crashes and keep the app fast, GridView sends **crash reports and
@@ -62,12 +63,14 @@ When the app downloads Formula 1 data, your device connects to the GridView API
 over an encrypted connection (HTTPS). The API is hosted by **Cloudflare**, which
 necessarily receives your device's **IP address** and standard request details
 (time, requested resource and a random request number generated for each
-request). Requests contain no account, device identifier or personal
-information.
+request). Apart from the IP address and those request details, requests
+contain no account, device identifier or other personal information.
 
 We use this only to deliver the data and to keep the service working and
-secure. We do not use it to identify you or to build a profile, and any
-operational logs are short-lived.
+secure. We do not use it to identify you or to build a profile. The API may
+keep short-lived operational logs, one line per request: which kind of data
+was requested, the random request number, the result and how long it took.
+They do not include your IP address or any identifier.
 
 ### 3.3 Crash reports and performance measurements (Firebase)
 
