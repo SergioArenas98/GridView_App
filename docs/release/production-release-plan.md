@@ -35,7 +35,7 @@ Steps marked **[PR]** are reviewable repository changes.
 | D3 | **[approval]** Submit the reviewed batch to production | D1, D2 |
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
 | P2 | **[approval]** Publish the policy at https://gridview.netlify.app | P1 |
-| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2 |
+| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2, W3 (production logging verified off) |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
 | A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A1, D3, P2 |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
@@ -275,11 +275,27 @@ Record the deployed version id.
      reports `state: genesis` with no active version.
    - Confirm that `/v1/seasons/2026` answers `503 SNAPSHOT_NOT_READY`.
    - A lost answer is safe to retry with the same identity.
-3. **D3 [approval]: submit** (through the path W-P chose).
-   - Run `npm run season-batch:submission -- … --first-release` and send one
-     `POST /internal/admin/season/ingest`, whose body carries
-     `"expectedActiveVersion": null`.
-   - A retry after a commit is refused as `guard-predecessor-stale`.
+3. **D3 [approval]: submit.** The procedure depends on the path W-P chose.
+   Every path publishes the first release against the empty predecessor, so
+   a retry after a commit is refused as `guard-predecessor-stale`.
+   - **Path 1, operator-driven two-phase publication (recommended).**
+     - Follow the procedure that path's PR delivers: an authenticated `prepare`
+       naming no active release, then `wrangler kv bulk put` of the documents
+       baked offline, then `finalize`, then the post-commit metadata.
+     - Do **not** use `/internal/admin/season/ingest`. That single request is
+       what W-P measured at 25–36 times the Free CPU limit.
+     - This path does not exist yet: D3 waits for its PR.
+   - **Path 2, verification inside a Durable Object.**
+     - Only after the staging probe passed and that PR merged.
+     - Run `npm run season-batch:submission -- … --first-release` (from
+       `services/edge-api`) and send the body to the route that PR
+       designates.
+   - **Single request, explicitly accepted by the owner.**
+     - Run `npm run season-batch:submission -- … --first-release` and send one
+       `POST /internal/admin/season/ingest`, whose body carries
+       `"expectedActiveVersion": null`.
+     - Accept that error 1102 may end it. If it ends after the commit, the
+       current-season pointer may be missing until the next release (W-P).
    - Expect `applied`.
    - Verify:
      - the public documents equal the batch, apart from the publish-time
@@ -321,6 +337,10 @@ The details are in PR #82, `data-safety.md` §1.
   - It must be live before P3 and A2.
   - Publish only the version that covers 1.x. A 2.0.0-only text must never
     replace the live page while 1.x is distributed.
+- **P3 precondition.** The Data safety answer that API traffic is processed
+  ephemerally (`data-safety.md` §3.4, R2) holds only once production logging is
+  off. W1 must commit `invocation_logs = false` for `[env.production]`, and W3
+  must verify it on the deployed Worker, before P3 is submitted.
 - **P3 [approval]:** in Play Console, submit Data safety in **state T**: the
   2.0.0 Firebase rows plus the 1.x AdMob rows. Keep Ads **Yes**.
   - The live "No data collected" is already inaccurate for 1.2.1, so P3 need
