@@ -134,7 +134,9 @@ async function release(
   return storage;
 }
 
-const activeAuthority = (version = VERSION): SeasonAuthority => ({
+const activeAuthority = (
+  version = VERSION,
+): Extract<SeasonAuthority, { activeVersion: string }> => ({
   cutoverState: 'active',
   authoritative: true,
   activeVersion: version,

@@ -3434,6 +3434,24 @@ no phone request.**
 | Tests | `test/sync/home_latest_result_convergence_test.dart` (7, real database; the two P2 cases are described below). It uses the phone's instants (`…1c` at 2026-10-14T16:19:54.572Z with a 15-minute expiry, `…1d` at 2026-10-19T18:43:32.476Z until 2026-10-25T20:00:00.000Z) and a Jolpica-shaped calendar. Cases: the adopting run refreshes the result through the metadata-only rule and Home clears its notice, with no Grand Prix request; a failed request keeps the cached result and the notice, then is retried once per run; a cache serving the old result costs one request per run; a never-loaded result stays on demand; a current result is not requested again by a later run, a manual refresh or its own expiry. `sync_planner_test.dart` +6. Against `d351118`, four of the five phone reproductions fail; the never-loaded case passes on both. Full suite: 2,273 passed; `flutter analyze` clean. The release-scripting helpers moved to `test/support/release_server.dart`, which now also scripts results, and `callsOf` counts results and Grand Prix requests. |
 | Review (Codex P2, 2026-10-19) | The first version identified the result while planning, before the run refreshed Calendar. With a current manifest and a Calendar behind it, that Calendar refresh could move Home to another cached result behind the release. Nothing re-planned, because the manifest was not fetched in that run, so Home ended the run stale. The check moved to the run's last step, as above. Two database cases reproduce it: R12 and R13 are both cached, and the Calendar refresh moves Home from R12 to R13. In the same run R13 is refreshed and the notice clears; if that request fails, the cached R13 and the notice stay and R12 is not requested again. Against `b49117c` both cases fail and the five phone cases pass. The planner tests now cover the pure check (6 cases). |
 
+### 14.0.59 Production genesis (O-16) - Edge API only, not deployed
+
+Prepared on **2026-10-20** from `master` `6aefcbf`. **Edge API, tests and
+documentation only. No contract, OpenAPI, Flutter or configuration change.
+Nothing was provisioned or deployed, no batch was captured or published, and
+there was no Cloudflare, Jolpica or phone request.**
+
+| Item | Status |
+|---|---|
+| Decision | O-16 (2026-09-30) approved a separate genesis design for a season with no earlier release. It is now [ADR 0025](../adr/0025-season-publication-authority-and-rollback-republication.md) D12, "Amendment (2026-10-20): production genesis (O-16)". |
+| Mechanism | **Sequencer.** A fourth `cutoverState`, `genesis`: authoritative, with no version, baseline or floor. `commitGenesis` writes it only where the object holds no state, and the `genesis1:` fingerprint prefix is reserved for it. **Operator act.** `POST /internal/admin/publication/cutover/genesis` runs under a `genesis:<season>` control in production or staging. It requires the literal `confirmGenesis: true` and no legacy pointer, and reconciles a lost answer with one read. **First publication.** `prepare` admits the empty predecessor `{ activeVersion: null, guardDocuments: [] }`, and the first commit makes the season `active` with no previous version. |
+| Read and rollback rules | Public reads of a `genesis` season answer `503 SNAPSHOT_NOT_READY`, with no legacy read. Rollback is refused in `genesis`, and after the first release until a second one exists. |
+| Ingest | The guarded ingest admits production only under `genesis:<season>`. `expectedActiveVersion` may be an explicit `null` (builder flag `--first-release`). |
+| Staging | Unchanged: `activate:2026`, seeded season. |
+| Tests | `test/publication/sequencer/genesis.test.ts` (30), `test/publication/cutover/genesis.test.ts` (26) and `test/publication/sequenced/genesis-publication.test.ts` (13), plus control, builder, ingest and transport cases. The full edge suite has 242 files and 5,453 tests. |
+| Free plan | Genesis costs about 0.1-0.4 ms CPU locally. A submission costs 93-251 ms locally and 362 ms on staging (2026-10-19), against the Free plan's 10 ms. The measurements and the reliable paths are recorded in `docs/release/production-release-plan.md` (PR #83). |
+| Still open | Production configuration (binding, `[exports]` entry, authority, `genesis:<season>` control, ingest flag), provisioning, deployment, the genesis request, the first batch, and the Free-plan path for submissions. Each needs the owner's decision or authorization. |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in

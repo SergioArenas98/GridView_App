@@ -109,6 +109,17 @@ describe('the cutover control is absent by default', () => {
   });
 });
 
+describe('the genesis phase', () => {
+  it('parses exactly genesis:YYYY and pauses only that season', () => {
+    expect(parseCutoverControl('genesis:2027')).toEqual({
+      kind: 'genesis',
+      season: 2027,
+    });
+    expect(pausesSeason({ kind: 'genesis', season: 2027 }, 2027)).toBe(true);
+    expect(pausesSeason({ kind: 'genesis', season: 2027 }, 2026)).toBe(false);
+  });
+});
+
 describe('a malformed control fails closed', () => {
   it('never resolves a malformed non-empty value to disabled', () => {
     for (const value of [
@@ -124,6 +135,10 @@ describe('a malformed control fails closed', () => {
       'activate',
       'activate:abcd',
       'seed:2026:extra',
+      'genesis',
+      'genesis:26',
+      'GENESIS:2026',
+      'genesis :2026',
       'true',
     ]) {
       expect(parseCutoverControl(value)).toBeNull();

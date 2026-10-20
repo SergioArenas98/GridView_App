@@ -23,7 +23,7 @@ import type {
   PrepareRejectionReason,
   PrepareRequest,
 } from './model';
-import { isOperationKind } from './model';
+import { isGenesisFingerprint, isOperationKind } from './model';
 import { isManifestCommitment } from './manifest-commitment';
 import {
   isDocumentName,
@@ -256,6 +256,11 @@ export function validatePrepareRequest(
  * identifier, and a bounded list of results-document revisions strictly
  * ascending by `compareUtf8` - which also makes it unique. Checked before any
  * durable read, so a malformed binding never reaches the transaction.
+ *
+ * The empty predecessor of a `genesis` season's first release is exactly
+ * `{ activeVersion: null, guardDocuments: [] }`: a release that does not exist
+ * has no results documents, so a `null` version naming any is malformed. An
+ * absent or `undefined` version is never read as `null`.
  */
 function isExpectedPredecessor(value: unknown): value is ExpectedPredecessor {
   if (typeof value !== 'object' || value === null) return false;
@@ -263,6 +268,9 @@ function isExpectedPredecessor(value: unknown): value is ExpectedPredecessor {
     activeVersion?: unknown;
     guardDocuments?: unknown;
   };
+  if (activeVersion === null) {
+    return Array.isArray(guardDocuments) && guardDocuments.length === 0;
+  }
   if (!isVersionIdentifier(activeVersion)) return false;
   if (!Array.isArray(guardDocuments)) return false;
   if (guardDocuments.length > maximumManifestSize) return false;
@@ -313,7 +321,11 @@ export function validateCutoverSeed(
   seed: CutoverSeed,
 ): CutoverRejectionReason | null {
   if (!isSeason(seed.season)) return 'invalid-season';
-  if (!isOpaqueIdentifier(seed.cutoverFingerprint)) {
+  if (
+    !isOpaqueIdentifier(seed.cutoverFingerprint) ||
+    // Reserved for genesis-born seasons (`genesisFingerprintPrefix`).
+    isGenesisFingerprint(seed.cutoverFingerprint)
+  ) {
     return 'invalid-cutover-fingerprint';
   }
   if (!isVersionIdentifier(seed.activeVersion)) return 'invalid-seed';

@@ -180,6 +180,7 @@ export default {
           ingest: new SeasonBatchIngest({
             environment: config.environment,
             providerMode: config.providerMode,
+            cutoverControl: config.publicationCutoverControl,
             enabledSeason: env.SEASON_BATCH_INGEST,
             guarded,
             clock,
@@ -487,11 +488,12 @@ function runSignal(env: Env): { readonly signal?: AbortSignal } {
  * - `seed:` - and `activate:` under any authority other than a reachable
  *   sequencer - wraps the whole surface, so the season is refused
  *   unconditionally.
- * - `activate:` under a reachable sequencer puts the boundary in the sequenced
- *   service's **legacy fallback slot** instead. The service reads the season's
- *   durable authority once per command: only a positive `active`,
- *   authoritative answer runs the two-phase protocol; `uninitialized` and
- *   `seeded` fall through to the boundary and are refused; an unreadable or
+ * - `activate:` and `genesis:` under a reachable sequencer put the boundary in
+ *   the sequenced service's **legacy fallback slot** instead. The service reads
+ *   the season's durable authority once per command: only a positive `active`,
+ *   authoritative answer - or `genesis`, authoritative with no release - runs
+ *   the two-phase protocol; `uninitialized` and `seeded` fall through to the
+ *   boundary and are refused; an unreadable or
  *   `unavailable` authority fails closed inside the service. Either way the
  *   controlled season never reaches `SnapshotPublisher`, so the activation
  *   request itself - not a further configuration change - is what resumes its
@@ -553,7 +555,7 @@ function buildPublicationCommands(
       purgeOrigin,
       freshnessPolicy: freshnessPolicyFor(config.providerMode),
     });
-  if (control.kind === 'activate') {
+  if (control.kind === 'activate' || control.kind === 'genesis') {
     const service = sequenced(
       new CutoverPausedPublicationCommands(legacy, control.season),
     );

@@ -528,6 +528,14 @@ export function countingPort(
             reason: 'state-corrupt' as const,
           }),
     ),
+    commitGenesis: record('commitGenesis', (r) =>
+      inner
+        ? inner.commitGenesis(r)
+        : Promise.resolve({
+            outcome: 'rejected' as const,
+            reason: 'state-corrupt' as const,
+          }),
+    ),
   };
 }
 
@@ -546,6 +554,7 @@ export function portWith(
     seedCutover: (r) => base.seedCutover(r),
     recoverCutoverSeed: (r) => base.recoverCutoverSeed(r),
     activateCutover: (r) => base.activateCutover(r),
+    commitGenesis: (r) => base.commitGenesis(r),
     ...overrides,
   };
 }

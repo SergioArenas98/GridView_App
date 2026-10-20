@@ -66,6 +66,14 @@ export type OperationPhase = (typeof operationPhases)[number];
  * Legacy Workers KV pointers are the sole authority and the sequencer holds no
  * seed at all.
  *
+ * `genesis` - the season was born in the sequencer (ADR 0025 D12, "Amendment
+ * (2026-10-20): production genesis"). It had no earlier release and no
+ * sequencer state, so nothing was seeded: the sequencer is authoritative and
+ * its mutators are admitted, but **no release has committed yet**. There is no
+ * active version, no previous version, no ordering baseline and no floor, and
+ * public reads of the season stay unavailable. The first committed operation
+ * moves it to `active`; nothing moves it back.
+ *
  * `seeded` - a complete seed is committed for a specific migration fingerprint.
  * The sequencer can already answer lookups, but it is **not yet** the
  * authoritative switch: legacy pointer state remains the declared authority and
@@ -76,7 +84,12 @@ export type OperationPhase = (typeof operationPhases)[number];
  * `active` - authority has switched. The sequencer is authoritative and this
  * season's publication and rollback mutators are admitted.
  */
-export const cutoverStates = ['uninitialized', 'seeded', 'active'] as const;
+export const cutoverStates = [
+  'uninitialized',
+  'seeded',
+  'genesis',
+  'active',
+] as const;
 
 export type CutoverState = (typeof cutoverStates)[number];
 
@@ -239,6 +252,12 @@ export const prepareRejectionReasons = [
   'predecessor-guard-mismatch',
   /** `expectedPredecessor` is missing, malformed, unsorted or oversized. */
   'invalid-expected-predecessor',
+  /**
+   * A rollback-republication was asked of a `genesis` season. No release has
+   * committed, so there is nothing to roll back from or to. Nothing is
+   * written.
+   */
+  'no-committed-release',
   'state-corrupt',
 ] as const;
 
@@ -331,7 +350,12 @@ export type CutoverRejectionReason = (typeof cutoverRejectionReasons)[number];
  * predecessor committed no results document at all.
  */
 export interface ExpectedPredecessor {
-  readonly activeVersion: string;
+  /**
+   * `null` only for a `genesis` season's first release: the authority itself
+   * reports that no release has committed, so the predecessor is empty by
+   * construction. A predecessor that could not be read is never `null`.
+   */
+  readonly activeVersion: string | null;
   readonly guardDocuments: readonly PerKeyRevision[];
 }
 
@@ -371,7 +395,7 @@ export type PrepareOutcome =
        * `expectedPredecessor.activeVersion`, so a version-skewed object fails
        * closed rather than silently skipping the compare-and-swap.
        */
-      readonly priorVersion?: string;
+      readonly priorVersion?: string | null;
       /**
        * Present only when this `prepare` displaced an expired or cancelled
        * operation whose candidate must still be cleaned up: its identity was
@@ -614,6 +638,66 @@ export type CutoverSeedRecovery =
     };
 
 /**
+ * The prefix every genesis fingerprint carries, and no seed fingerprint may.
+ *
+ * Reserving it is what lets the object - which keeps no history - tell a
+ * genesis-born season from a migrated one for as long as the season exists:
+ * `commitGenesis` accepts only a fingerprint with this prefix, and a seed whose
+ * fingerprint has it is refused.
+ */
+export const genesisFingerprintPrefix = 'genesis1:';
+
+export function isGenesisFingerprint(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.startsWith(genesisFingerprintPrefix) &&
+    value.length > genesisFingerprintPrefix.length
+  );
+}
+
+/**
+ * Asks the sequencer to bring one season into existence with no release (ADR
+ * 0025 D12, "Amendment (2026-10-20): production genesis").
+ *
+ * The fingerprint is computed by the caller from the operator's genesis
+ * identity; the object only stores it and compares it on a retry.
+ */
+export interface SeasonGenesisRequest {
+  readonly season: number;
+  readonly genesisFingerprint: string;
+}
+
+/** Why the sequencer refused a genesis. Closed. */
+export const genesisRejectionReasons = [
+  'invalid-season',
+  'invalid-genesis-fingerprint',
+  'season-mismatch',
+  /**
+   * The object already holds state for this season that this genesis did not
+   * create: a seed, a release, an operation, a pending cleanup, per-key rows,
+   * or a genesis under another fingerprint. Genesis applies only to a season
+   * with no sequencer state at all, and never overwrites any.
+   */
+  'sequencer-state-present',
+  'state-corrupt',
+] as const;
+
+export type GenesisRejectionReason = (typeof genesisRejectionReasons)[number];
+
+export type SeasonGenesisOutcome =
+  /** This call wrote the `genesis` record. */
+  | { readonly outcome: 'created' }
+  /** The same fingerprint is already in `genesis`: nothing was written. */
+  | { readonly outcome: 'already-genesis' }
+  /**
+   * The same fingerprint's season has since committed its first release and is
+   * `active`. Nothing was written.
+   */
+  | { readonly outcome: 'already-active' }
+  | { readonly outcome: 'rejected'; readonly reason: GenesisRejectionReason }
+  | TransportUncertainOutcome;
+
+/**
  * What the sequencer reports about a season's authority.
  *
  * The three cutover states produce three genuinely different answers, and the
@@ -636,6 +720,19 @@ export type SeasonAuthority =
       readonly authoritative: boolean;
       readonly activeVersion: string;
       readonly previousVersion: string | null;
+      readonly cutoverFingerprint: string;
+    }
+  | {
+      /**
+       * Born in the sequencer and authoritative, with **no committed
+       * release**. Public reads of the season are unavailable; the first
+       * guarded publication commits against the empty predecessor this
+       * answer describes.
+       */
+      readonly cutoverState: 'genesis';
+      readonly authoritative: true;
+      readonly activeVersion: null;
+      readonly previousVersion: null;
       readonly cutoverFingerprint: string;
     }
   | {

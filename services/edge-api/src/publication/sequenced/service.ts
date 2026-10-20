@@ -40,6 +40,18 @@
  * being handed to the legacy authority, which cannot bind a predecessor. The
  * decision is made from the authority read alone, before any write. `publish`,
  * `rollback` and `purgeActiveVersion` keep their fallback unchanged.
+ *
+ * ## A genesis season (ADR 0025 D12, "Amendment (2026-10-20)")
+ *
+ * A season the sequencer reports `genesis` is authoritative with no release,
+ * so it is never handed to the fallback either. Its predecessor is **empty
+ * because the authority says so** - no version, no results documents, no
+ * publication instant - and the first publication is guarded, bound and
+ * stamped against exactly that: every candidate contains the empty guard,
+ * `prepare` binds `{ activeVersion: null, guardDocuments: [] }`, and the
+ * instant is the clock reading. A predecessor that merely could not be read is
+ * still never empty. Rollback is refused while the season has no previous
+ * release: in `genesis`, and after its first commit until a second one.
  */
 
 import {
@@ -99,6 +111,7 @@ import {
   deriveParticipationGuard,
 } from '../guard/participation-guard';
 import { readPredecessorGuard } from '../guard/predecessor';
+import { isGenesisFingerprint } from '../sequencer/model';
 
 /** Season-level documents every generated set carries; also the manual-purge base. */
 const baseDocumentNames: readonly SnapshotDocumentName[] = [
@@ -180,8 +193,15 @@ export interface SequencedPublicationDeps {
 }
 
 interface ActiveAuthority {
-  readonly activeVersion: string;
+  /** `null` only for a `genesis` season: no release has committed. */
+  readonly activeVersion: string | null;
   readonly previousVersion: string | null;
+  /**
+   * Whether the season was born by genesis. Every release such a season ever
+   * had was committed by this sequencer, so with no previous version there is
+   * no earlier release a rollback could restore.
+   */
+  readonly bornByGenesis: boolean;
 }
 
 interface TwoPhaseInput {
@@ -340,6 +360,20 @@ export class SequencedPublicationService
       return failed(season, '', null, 'sequencer-authority-unavailable');
     }
 
+    if (
+      authority.activeVersion === null ||
+      (authority.bornByGenesis && authority.previousVersion === null)
+    ) {
+      // A genesis season with no release, or with only its first: there is no
+      // earlier release to restore, whatever target was named. Refused before
+      // any read.
+      return rejection(
+        season,
+        targetVersion ?? '',
+        authority.activeVersion,
+        'missing-previous-version',
+      );
+    }
     const target = targetVersion ?? authority.previousVersion;
     if (target === null) {
       return rejection(
@@ -471,6 +505,16 @@ export class SequencedPublicationService
         urls: [],
       };
     }
+    if (authority.activeVersion === null) {
+      // A genesis season serves nothing yet, so there is nothing to purge.
+      return {
+        season,
+        activeVersion: null,
+        ok: false,
+        reason: 'no-active-version',
+        urls: [],
+      };
+    }
     const inventory = await readStoredInventory(
       this.storage,
       season,
@@ -520,7 +564,7 @@ export class SequencedPublicationService
    */
   private async withPublicationInstant(
     season: number,
-    activeVersion: string,
+    activeVersion: string | null,
     clockReading: string | null,
     clockRefusal: PublicationInstantCause,
     documents: readonly StoredSnapshot[],
@@ -553,11 +597,16 @@ export class SequencedPublicationService
     if (clockReading === null) {
       return refuse('publication-instant-invalid', clockRefusal);
     }
-    const active = await readActivePublicationInstant(
-      this.storage,
-      season,
-      activeVersion,
-    );
+    // A genesis season has no release, so there is no instant to clear: the
+    // first release's instant is the clock reading itself.
+    const active =
+      activeVersion === null
+        ? ({ kind: 'none' } as const)
+        : await readActivePublicationInstant(
+            this.storage,
+            season,
+            activeVersion,
+          );
     if (active.kind === 'unavailable') {
       return refuse(
         'publication-instant-unavailable',
@@ -568,7 +617,10 @@ export class SequencedPublicationService
       return refuse('publication-instant-invalid', 'active-instant-invalid');
     }
 
-    const instant = derivePublicationInstant(clockReading, active.value);
+    const instant = derivePublicationInstant(
+      clockReading,
+      active.kind === 'none' ? null : active.value,
+    );
     if (instant.kind === 'refused') {
       return refuse(
         instant.reason === 'exhausted'
@@ -945,10 +997,20 @@ export class SequencedPublicationService
     if (candidate.kind === 'invalid') {
       return refuse('rejected', 'guard-candidate-invalid');
     }
+    const activeVersion = input.authority.activeVersion;
+    if (activeVersion === null) {
+      // The authority reports a genesis season: no release, so the predecessor
+      // is empty and every valid candidate contains it. `prepare` re-checks
+      // this binding inside its own transaction.
+      return {
+        kind: 'guarded',
+        expectedPredecessor: { activeVersion: null, guardDocuments: [] },
+      };
+    }
     const predecessor = await readPredecessorGuard(
       this.storage,
       input.season,
-      input.authority.activeVersion,
+      activeVersion,
     );
     if (predecessor.kind === 'unavailable') {
       return refuse('failed', 'guard-predecessor-unavailable');
@@ -966,7 +1028,7 @@ export class SequencedPublicationService
     return {
       kind: 'guarded',
       expectedPredecessor: {
-        activeVersion: input.authority.activeVersion,
+        activeVersion,
         guardDocuments: predecessor.guardDocuments,
       },
     };
@@ -1324,11 +1386,21 @@ export class SequencedPublicationService
     if (!read.ok) return 'unavailable';
     const authority = read.value;
     if (authority.cutoverState === 'unavailable') return 'unavailable';
+    if (authority.cutoverState === 'genesis') {
+      // Authoritative with no release. Never the fallback: the legacy
+      // authority must not publish a season the sequencer owns.
+      return {
+        activeVersion: null,
+        previousVersion: null,
+        bornByGenesis: true,
+      };
+    }
     if (authority.cutoverState !== 'active') return null;
     if (!authority.authoritative) return 'unavailable';
     return {
       activeVersion: authority.activeVersion,
       previousVersion: authority.previousVersion,
+      bornByGenesis: isGenesisFingerprint(authority.cutoverFingerprint),
     };
   }
 

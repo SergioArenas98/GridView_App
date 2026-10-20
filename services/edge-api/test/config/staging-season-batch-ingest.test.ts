@@ -371,7 +371,7 @@ describe('the committed production variables cannot ingest', () => {
     expect(context.storage.writeLog).toEqual([]);
   });
 
-  it('refuses even with the flag and a reachable sequencer added by hand', async () => {
+  it('refuses even with the flag and a reachable sequencer added by hand, without a genesis control', async () => {
     const context = await ingestContext();
     context.storage.writeLog.length = 0;
     const spies = publicationSpies();
@@ -394,7 +394,7 @@ describe('the committed production variables cannot ingest', () => {
       data: {
         outcome: 'refused',
         stage: 'admission',
-        reason: 'environment-not-permitted',
+        reason: 'genesis-control-required',
       },
       bodyUsed: false,
     });

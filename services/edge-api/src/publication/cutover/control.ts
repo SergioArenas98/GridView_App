@@ -17,7 +17,16 @@
  * ```
  * SEASON_PUBLICATION_CUTOVER_CONTROL=seed:2026
  * SEASON_PUBLICATION_CUTOVER_CONTROL=activate:2026
+ * SEASON_PUBLICATION_CUTOVER_CONTROL=genesis:2027
  * ```
+ *
+ * `genesis:` is the third, separate phase (ADR 0025 D12, "Amendment
+ * (2026-10-20): production genesis"). It is for a season with **no earlier
+ * release and no sequencer state**, which has nothing to seed: it permits only
+ * the genesis operation, which records the season in the sequencer with no
+ * release, and its first guarded publication then commits through the
+ * sequencer. It closes the season's legacy admission exactly as `activate:`
+ * does, so the season can never gain a legacy release.
  *
  * The two phases are deliberately separate values rather than one "cutover"
  * flag. D12 forbids combining seed and activation, so a mode that permits both
@@ -60,19 +69,20 @@ import { isSeason } from '../sequencer/store';
 export type CutoverControl =
   | { readonly kind: 'disabled' }
   | { readonly kind: 'seed'; readonly season: number }
-  | { readonly kind: 'activate'; readonly season: number };
+  | { readonly kind: 'activate'; readonly season: number }
+  | { readonly kind: 'genesis'; readonly season: number };
 
 export const disabledCutoverControl: CutoverControl = { kind: 'disabled' };
 
-/** The two phases, as the operator surface names them. */
-export type CutoverPhase = 'seed' | 'activate';
+/** The three phases, as the operator surface names them. */
+export type CutoverPhase = 'seed' | 'activate' | 'genesis';
 
 /**
- * `seed:YYYY` or `activate:YYYY`, anchored, with no surrounding whitespace
- * tolerated - a value that needs trimming to be understood is a value the
- * operator did not write on purpose.
+ * `seed:YYYY`, `activate:YYYY` or `genesis:YYYY`, anchored, with no
+ * surrounding whitespace tolerated - a value that needs trimming to be
+ * understood is a value the operator did not write on purpose.
  */
-const controlPattern = /^(seed|activate):(\d{4})$/;
+const controlPattern = /^(seed|activate|genesis):(\d{4})$/;
 
 /**
  * Parses the cutover control: the resolved value, or **`null` for a malformed
@@ -96,9 +106,8 @@ export function parseCutoverControl(
   if (parts === null) return null;
   const season = Number(parts[2]);
   if (!isSeason(season)) return null;
-  return parts[1] === 'seed'
-    ? { kind: 'seed', season }
-    : { kind: 'activate', season };
+  const kind = parts[1] as CutoverPhase;
+  return { kind, season };
 }
 
 /** Whether this control closes legacy mutation admission for `season`. */

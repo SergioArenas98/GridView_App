@@ -93,18 +93,21 @@ describe('the season ingest route: admission', () => {
     }
   });
 
-  it('admits nothing outside staging', async () => {
+  it('admits nothing in development, and production only under a genesis control', async () => {
     const development = createHarness();
     expect(
       await refusal({ ...development.env, SEASON_BATCH_INGEST: '2026' }),
     ).toEqual(admission('environment-not-permitted'));
+    // Production passes the environment check (ADR 0025 D12, "Amendment
+    // (2026-10-20)") and is still refused: no `genesis:2026` control names the
+    // season, and there is no legacy ingest path.
     const production = createHarness({
       environment: 'production',
       providerMode: 'none',
     });
     expect(
       await refusal({ ...production.env, SEASON_BATCH_INGEST: '2026' }),
-    ).toEqual(admission('environment-not-permitted'));
+    ).toEqual(admission('genesis-control-required'));
   });
 
   it('admits nothing beside a coordinated provider budget', async () => {
