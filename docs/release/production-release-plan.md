@@ -257,7 +257,32 @@ Record the deployed version id.
      - It replays the capture and sends no request.
      - Both directories must be outside the repository.
    - Review `manifest.json` and record its SHA-256, as in the staging captures.
-2. **D2 [approval]: genesis.**
+   **Admin authentication for D2 and D3.** Every `/internal/admin/...`
+   request, GET or POST, is refused with 401 unless it sends
+   `Authorization: Bearer <production ADMIN_TOKEN>`. Use the staging
+   runbook's secret-safe pattern (§6, standings-predecessor gate), with the
+   production host and a separate variable:
+
+   ```powershell
+   $env:GRIDVIEW_PRODUCTION_ADMIN_TOKEN = Read-Host "Production admin token"  # not echoed or logged
+   $base = "https://gridview-api-production.sejuma18.workers.dev"
+   $headers = @{ Authorization = "Bearer $env:GRIDVIEW_PRODUCTION_ADMIN_TOKEN" }
+   try {
+     # one request per approved step, for example:
+     $r = Invoke-WebRequest -Uri "$base/internal/admin/publication/cutover/status?season=2026" -Method Get -Headers $headers -UseBasicParsing
+     "$($r.StatusCode) $($r.Content)"
+   } finally {
+     Remove-Item Env:\GRIDVIEW_PRODUCTION_ADMIN_TOKEN
+   }
+   ```
+
+   - For a POST, add `-Method Post -ContentType "application/json" -Body
+     $json`. For D3 on Path A, use `-InFile <submission file>`, which keeps the
+     batch body off the command line.
+   - The token is never placed in a URL or a file inside the repository, and
+     never printed.
+
+2. **D2 [approval]: genesis.** Authenticate each request as above.
    - Send one `POST /internal/admin/publication/cutover/genesis` with
      `{season: 2026, genesisIdentity, confirmGenesis: true}` and the production
      `ADMIN_TOKEN`.
