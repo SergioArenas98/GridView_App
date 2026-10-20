@@ -35,10 +35,10 @@ Steps marked **[PR]** are reviewable repository changes.
 | D3 | **[approval]** Submit the reviewed batch to production | D1, D2 |
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
 | P2 | **[approval]** Publish the policy at https://gridview.netlify.app | P1 |
-| P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2 |
+| P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2, P-R, §5.1 step 2 or step 3 (Alpha inspected or paused) |
 | P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, W3 (production logging verified off in persisted Workers Logs); before R2 |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
-| A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1 and every W/D PR merged |
+| A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1, P1, D3, every W/D PR merged |
 | A0b | **[record]** Release-candidate gate, post-build part: the AAB, the internal installation and performance | A2, R2, R3 |
 | A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A0, A1, D3, P2 |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
@@ -318,7 +318,9 @@ The details are in PR #82, `data-safety.md` §1.
     and 2.0.0 everywhere else;
   - `docs/release/data-safety.md`.
 
-  Its review items R1–R7 need the owner's privacy review. R7 is the controller
+  Its review items (data-safety R1–R8) need the owner's privacy review, P-R,
+  before **any** Data safety submission (P0, P3, R7). Data-safety item R7 is
+  the controller
   naming: the policy now names the individual the Play listing shows,
   publishing as Sejuma, in Spain.
 - **P2 [approval]:** publish `privacy_policies.html` at https://gridview.netlify.app,
@@ -327,7 +329,7 @@ The details are in PR #82, `data-safety.md` §1.
   - Publish only the version that covers 1.x. A 2.0.0-only text must never
     replace the live page while 1.x is distributed.
 - **P3 precondition.** The Data safety answer that API traffic is processed
-  ephemerally (`data-safety.md` §3.4, R2) holds only once production logging is
+  ephemerally (`data-safety.md` §3.4, data-safety review item R2) holds only once production logging is
   off. W1 must commit `invocation_logs = false` for `[env.production]`, and W3
   must verify it on the deployed Worker, before P3 is submitted.
 - **P0 [approval]:** in Play Console, correct the live form now to **state
@@ -522,8 +524,9 @@ One device, one pass, about 30 minutes, on the exact candidate R5 promotes,
 delivered by Play from internal testing.
 
 **Preconditions:**
-- A Play Store device with 4 KB memory pages, signed in with the upgrade-check
-  tester account.
+- A Play Store device on **API 36** (the current Android version, a matrix
+  row), with 4 KB memory pages, signed in with the upgrade-check tester
+  account.
 - GridView **1.2.1 installed from Play production**, with Spanish and dark
   mode chosen in 1.2.1. 1.2.1's own backend no longer answers, so its cache
   stays empty, which 2.0.0 never reads anyway.
@@ -573,8 +576,8 @@ approves, or not, as D-U. R3 is a release gate only with both.
 | Empty legacy cache; dark theme; alternate language | The pass (steps 4–6) |
 | No network | The pass (step 4: first launch offline) |
 | Current Android version | The pass, on an API 36 device |
-| Slow network | **Replacement (D-U):** the same candidate, extracted from the AAB with `bundletool`, on an emulator with throttled network ("EDGE" profile), first launch. Not Play-delivered; it tests the app's timeouts, not the upgrade path, which the pass covers. |
-| Older supported Android version | **Replacement (D-U):** the same extracted candidate, installed over a Play-signed 1.2.1 on an **API 24** emulator (the new minSdk), with the pass's steps 4–6. Not Play-delivered. A pass on a physical API 24–26 Play device can be added if one is available. |
+| Slow network | **Replacement (D-U):** the same candidate as a **Play-signed universal APK** (Play Console → App bundle explorer → versionCode 8 → "Download signed universal APK", a read-only download). Install it on an emulator with throttled network ("EDGE" profile) and do the first launch. Not Play-delivered; it tests the app's timeouts, not the upgrade path, which the pass covers. |
+| Older supported Android version | **Replacement (D-U):** the same Play-signed universal APK, installed over the Play-signed 1.2.1 universal APK (versionCode 7, same download) on an **API 24** emulator (the new minSdk), with the pass's steps 4–6. Both carry the app-signing key, so the update installs. An APK extracted with `bundletool` would carry the upload or debug key and fail with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. A pass on a physical API 24–26 Play device can be added if one is available. |
 | **Populated legacy cache** | **Not reproducible through Play.** 1.2.1's backend is dead, so a Play-installed 1.2.1 cannot fill its Hive cache; only a device or backup from before the shutdown could. Proposed replacement: the unit tests over the genuine Hive fixture (`test/fixtures/legacy/`, `GridView_Legacy_Migration.md` §4), plus a populated pass if a pre-shutdown device exists. **Needs D-U.** |
 | **Corrupted legacy cache** | **Not reproducible on a Play build**, which is not debuggable, so its files cannot be altered. Proposed replacement: the corrupt-key and failed-read unit tests from PR #81. **Needs D-U.** |
 
@@ -594,6 +597,6 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | D-C | Commit a reviewed Jolpica capture tool to the repository, or keep the private operator script | D1 |
 | D-U | Approve the replacements for the upgrade-matrix rows the single pass does not cover: slow network, older Android, and populated and corrupted legacy cache (§8). Or supply devices for them | R3 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
-| P-R | Privacy review of `data-safety.md` R1–R4 | R4 |
+| P-R | Privacy review of PR #82 `data-safety.md` review items R1–R8 (not the R-track gates) | P0 |
 | M | Ship 2.0.0 with placeholder media (no R2, no approved media) | R5 |
 | O | Who runs D1/D3 each race weekend, and the 2027 dataset work | R5 |

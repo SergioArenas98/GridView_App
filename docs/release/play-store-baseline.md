@@ -214,13 +214,17 @@ Confirmed in Play Console on 2026-10-20 (read-only, developer account
 Tracked, with their approval gates, in `production-release-plan.md`:
 
 1. **No production API.** Production genesis (ADR 0025 O-16) and production
-   ingest admission are in PR #84. The production Worker configuration, and a
-   reliable Workers Free path for submissions (decision W-P), must exist
-   before a release candidate is built.
+   ingest admission are merged (PR #84, `527444b`). Two things must exist
+   before a release candidate is built:
+   - the production Worker configuration;
+   - a submission path chosen under W-P (`submission-path-decision.md`):
+     Workers Paid with the existing ingest, or a Free-plan redesign that has
+     passed that document's §4.7.
 2. **Privacy policy not published.** The policy covering both 1.x and 2.0.0
-   is in this repository. It must be published at https://gridview.netlify.app.
-3. **Play Data safety declaration.** It must be resubmitted from
-   `data-safety.md` after privacy review, in two states:
+   is in PR #82, which is not merged. It must be published at
+   https://gridview.netlify.app.
+3. **Play Data safety declaration.** It must be resubmitted from PR #82's
+   `data-safety.md` after privacy review, starting with state 0 for 1.x, then:
    - **Transition state T**, with Ads still **Yes**, while any 1.x build is
      distributed.
    - **Final state F**, with Ads **No**, once only 2.0.0 is distributed.

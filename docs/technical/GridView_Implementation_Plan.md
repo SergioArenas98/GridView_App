@@ -3974,8 +3974,10 @@ Given the very small active-user population, the rollout may be accelerated afte
 > **2.0.0 (owner decision, 2026-10-20).** Steps 4–5, the closed track and its
 > monitoring, are replaced for 2.0.0 by **one controlled, Play-delivered
 > upgrade of the final candidate** from internal testing. The staged
-> production rollout that follows is gated on the §16.3 signals. Play does
-> not require closed testing for this account, and no risk that only a closed
+> production rollout that follows is gated on the §16.3 signals and starts at
+> **20 %**, not 5 %. Play is not expected to require closed testing for this
+> account, which has had production access since 2025; the owner confirms
+> this when creating the production release (R5). No risk that only a closed
 > track would test was identified. Retiring the old Alpha artefact is a
 > separate step. See `docs/release/production-release-plan.md` §7, §8 and
 > §5.1.

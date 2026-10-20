@@ -71,8 +71,8 @@ make it about USD 6.05, if Cloudflare charges VAT on this account.
 
 The first threshold the assumptions approach is the **1 M included Durable
 Object requests**. That is about 1,100 active devices at 30 requests a day.
-Each further million costs USD 0.15. Every other line stays more than ten times
-below its included amount.
+Each further million costs USD 0.15. Every other line stays more than five
+times below its included amount; the closest is KV reads, 1.8 M of 10 M.
 
 **Side effects to accept:**
 
@@ -123,21 +123,26 @@ in the offline tool is no longer caught by a second, independent run.
 
 ### 4.2 Release visibility
 
-- Public reads resolve the active version **only from the sequencer**
-  (`src/public/router.ts`, PR #84). The router never lists or guesses
-  versions.
+- For a sequenced season (`genesis` or `active`), public reads resolve the
+  active version **only from the sequencer** (`src/public/router.ts`, PR #84).
+  Only `uninitialized` and `seeded` seasons still read the legacy pointer. The
+  router never lists or guesses versions.
 - Candidate keys live under a version that `prepare` allocated to one epoch,
   so a partial or complete bulk write is **invisible until `finalize`
   commits**. This is the same property today's candidate write relies on.
 - **Order.** The documents go first, the inventory after them, and the sidecar
   last, as `SequencedPublicationService.writeCandidate` does.
 - **Read-back gate.** The CLI calls `finalize` only after reading back every
-  key it wrote: 117 reads, about 0.1% of the Free daily read budget.
+  key it wrote: 119 reads (117 documents, `__inventory` and
+  `__publication_metadata`), about 0.1% of the Free daily read budget.
 - **Unproven:** KV's eventual visibility between the bulk API and the
   Worker's reads after `finalize`. D6's bounded fallback to the previous
   version covers a lagging document today, and the same applies here. The
   first release of a genesis season has **no previous version**, so a
-  lagging document there answers 503 until it propagates.
+  lagging document there gets no fallback until it propagates. A lagging
+  listing document answers a retryable `503 SNAPSHOT_NOT_READY`. A lagging
+  detail document answers `404 RESOURCE_NOT_FOUND`, which clients do not
+  retry (`missingResponse`). That is a reason for the read-back gate.
 
 ### 4.3 Concurrency control
 
