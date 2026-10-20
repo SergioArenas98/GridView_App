@@ -25,8 +25,8 @@ Steps marked **[PR]** are reviewable repository changes.
 
 | Gate | Action | Depends on |
 |---|---|---|
-| W0 | **[PR #84]** Production genesis design and implementation (ADR 0025 O-16 amendment) | — |
-| W-P | **[decision]** The Free-plan path for submissions (§3, W-P) | W0 |
+| W0 | **[done]** Production genesis design and implementation (ADR 0025 O-16 amendment), PR #84, merged 2026-10-20 as `527444b` | — |
+| W-P | **[decision]** The submission path: Workers Paid or the Free-plan redesign (`submission-path-decision.md`) | W0 |
 | W1 | **[PR]** The production Worker configuration, plus whatever W-P requires | W0, W-P |
 | W2 | **[approval]** Create the production KV namespace and `ADMIN_TOKEN` secret; **[PR]** commit the KV id | W1 |
 | W3 | **[approval]** Deploy `gridview-api-production` | W2 |
@@ -36,26 +36,25 @@ Steps marked **[PR]** are reviewable repository changes.
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
 | P2 | **[approval]** Publish the policy at https://gridview.netlify.app | P1 |
 | P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2 |
-| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, W3 (production logging verified off in persisted Workers Logs); before R4b |
+| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, W3 (production logging verified off in persisted Workers Logs); before R2 |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
 | A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1 and every W/D PR merged |
-| A0b | **[record]** Release-candidate gate, post-build part: the AAB, the internal installation and performance | A2, R2, R3, R4b |
+| A0b | **[record]** Release-candidate gate, post-build part: the AAB, the internal installation and performance | A2, R2, R3 |
 | A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A0, A1, D3, P2 |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
-| R2 | **[approval]** Upload the AAB to internal testing and release it | A2, R1 |
-| R3 | **[approval]** The upgrade check (§8): the feasible rows of the §15.3 upgrade matrix, plus the owner's approval (D-U) of the replacement for the infeasible rows | R2 |
-| R4 | **[approval]** Release notes; decide D-T1 (retain versionCode 7 or not) and D-T2 (closed Alpha versionCode 2) | P3 |
-| R4b | **[approval]** Promote the same release to **closed testing** (the existing "Alpha" track, which also retires versionCode 2, D-T2), then monitor Crashlytics, ANRs and backend health (Implementation Plan §16.2) | R3, R4, P3 |
-| R5 | **[approval]** Promote the same release to production at 20 % | R4b, A0, A0b (every §15.8 item recorded as passed) |
+| R2 | **[approval]** Upload the AAB to internal testing and release it | A2, R1, P3 |
+| R3 | **[approval]** The controlled upgrade (§8): one Play-delivered upgrade of the final candidate, plus the owner's approval (D-U) of the replacements for the matrix rows one pass cannot cover | R2 |
+| R4 | **[approval]** Release notes; decide D-T1 (retain versionCode 7 or not) | P3 |
+| R5 | **[approval]** Promote the same release to production at 20 % | R3, R4, A0, A0b (every §15.8 item recorded as passed) |
 | R6 | **[approval]** Increase to 100 % after the monitoring window | R5 |
-| R7 | **[approval]** Data safety final state F, Ads = **No**, once no 1.x artifact is distributed on any non-internal track | R6, D-T1, D-T2 |
+| R7 | **[approval]** Data safety final state F, Ads = **No**, once no 1.x artifact is distributed on any non-internal track | R6, D-T1, Alpha retired (§5.1) |
 
 ## 3. Track W — production Worker
 
 ### W0. Production genesis design — PR #84
 
 > **Status 2026-10-20.** The design is written as ADR 0025 D12, "Amendment
-> (2026-10-20): production genesis (O-16)", and implemented in **PR #84**, with
+> (2026-10-20): production genesis (O-16)", and implemented in **PR #84** (merged 2026-10-20 as `527444b`), with
 > no configuration change. The text below the list records the problem as it
 > stood. What PR #84 decided differs from the expectations listed there in
 > four places:
@@ -133,7 +132,7 @@ The amendment must decide:
   - Observability on, with `invocation_logs = false` and no log line that
     records an IP address or a header. This is the condition behind the Data
     safety answer (`data-safety.md` §3.4).
-### W-P. Free-plan cost of genesis and submissions (decision)
+### W-P. Cost of genesis and submissions, and the submission path (decision)
 
 **Correction.** An earlier version of this section cited 269 ms, the staging
 ingest of 2026-10-14. **The latest staging ingest, on 2026-10-19, used 362 ms
@@ -185,43 +184,21 @@ If the CPU limit terminates a submission:
   `503 SNAPSHOT_NOT_READY` until the next release. The retry is refused as
   stale, because the release committed.
 
-**Reliable paths that stay on Free** (each needs its own design and PR):
+**Decision W-P: see `submission-path-decision.md`.** It compares the two
+reliable candidates:
 
-1. **Recommended: operator-driven two-phase publication.**
-   - The operator's machine runs what the Worker runs today, with the same
-     code: verification, generation, the D14/D15 guard against the predecessor
-     it reads, revisions, the publication instant, and timestamp baking. The
-     submission builder already runs the first two.
-   - The Worker exposes only small authenticated steps:
-     - `prepare`, with about 117 revisions, under 15 KB;
-     - `finalize`;
-     - the post-commit metadata write.
-   - The candidate documents are written with `wrangler kv bulk put` under the
-     version `prepare` allocated. No Worker CPU is spent on them.
-   - Every Worker request stays well under 10 ms. The sequencer still binds the
-     predecessor, single-flight, the timestamps and the commit.
-   - **Trade-off.** The Worker no longer re-verifies the documents it commits.
-     Trust rests on the operator's Cloudflare credentials, which can already
-     deploy any code, so no privilege is added.
-   - Needs an ADR 0025 decision, admin routes and an offline publisher CLI.
-2. **Conditional: verification inside a Durable Object.**
-   - The Worker forwards the body (parsing it costs about 1 ms) to a Durable
-     Object that verifies, generates and writes.
-   - Cloudflare documents a 30 s default CPU budget per Durable Object request,
-     but the Free-plan pages do not say whether Free gets it. On staging,
-     sequencer calls have used up to 18 ms on Free without termination, which
-     is weak evidence.
-   - Usable only after an owner-authorized staging probe shows Free Durable
-     Objects running a full verification without `exceededCpu`.
-3. **Not recommended: chunking the ingest into about 30–60 requests.**
-   Verification is whole-batch, and per-chunk re-verification would need new
-   staged state. It is complex and still close to 10 ms per request.
+- **A. Workers Paid, with the existing guarded ingest.** No code change. It
+  costs USD 5.00 a month before tax at the assumed usage, and the measured
+  362 ms is about 80× below the Paid CPU limit.
+- **B. A Free-plan redesign.** The operator verifies and prepares offline,
+  writes with `wrangler kv bulk put`, and the Worker only runs the small
+  `prepare` and `finalize` steps. That document shows how B would keep
+  validation, release visibility, concurrency control, retries and recovery
+  after partial writes. **B is not described as reliable**: its CPU budget,
+  including the Durable Object side, and its failure handling are untested.
 
-**Owner decision W-P.** Pick one of these paths, or explicitly accept the
-unreliable single-request ingest. That means accepting that a race-weekend
-update may fail with error 1102 and must be retried, with the post-commit gap
-above. The plan does not assume the Paid plan. Paid would remove the limit
-(5 min CPU), but that is the owner's choice.
+Keeping the single request on Free is listed there only as an explicitly
+accepted risk. The plan does not assume Paid; buying it is an owner step.
 
 Public traffic on Free is a separate budget. Each uncached public read is one
 Worker request, one Durable Object request and two KV reads, against 100,000
@@ -291,24 +268,23 @@ Record the deployed version id.
 3. **D3 [approval]: submit.** The procedure depends on the path W-P chose.
    Every path publishes the first release against the empty predecessor, so
    a retry after a commit is refused as `guard-predecessor-stale`.
-   - **Path 1, operator-driven two-phase publication (recommended).**
-     - Follow the procedure that path's PR delivers: an authenticated `prepare`
-       naming no active release, then `wrangler kv bulk put` of the documents
-       baked offline, then `finalize`, then the post-commit metadata.
-     - Do **not** use `/internal/admin/season/ingest`. That single request is
-       what W-P measured at 25–36 times the Free CPU limit.
-     - This path does not exist yet: D3 waits for its PR.
-   - **Path 2, verification inside a Durable Object.**
-     - Only after the staging probe passed and that PR merged.
-     - Run `npm run season-batch:submission -- … --first-release` (from
-       `services/edge-api`) and send the body to the route that PR
-       designates.
-   - **Single request, explicitly accepted by the owner.**
-     - Run `npm run season-batch:submission -- … --first-release` and send one
-       `POST /internal/admin/season/ingest`, whose body carries
+   - **Path A, Workers Paid** (`submission-path-decision.md` §3).
+     - From `services/edge-api`, run
+       `npm run season-batch:submission -- … --first-release`.
+     - Send one `POST /internal/admin/season/ingest` whose body carries
        `"expectedActiveVersion": null`.
-     - Accept that error 1102 may end it. If it ends after the commit, the
-       current-season pointer may be missing until the next release (W-P).
+   - **Path B, the Free-plan redesign** (§4 there).
+     - Only once its PR has merged and its §4.7 tests and measurements have
+       passed.
+     - Follow that PR's procedure: `prepare` naming no active release, then
+       `wrangler kv bulk put` of the documents baked offline, with read-back,
+       then `finalize`, then the metadata request.
+     - Never use `/internal/admin/season/ingest` on Free.
+   - **The single request on Free**, only if the owner explicitly accepts the
+     risk.
+     - Use the same command and request as Path A.
+     - It may end with error 1102. If that happens after the commit, the
+       current-season pointer may be missing until the next release.
    - Expect `applied`.
    - Verify:
      - the public documents equal the batch, apart from the publish-time
@@ -359,13 +335,53 @@ The details are in PR #82, `data-safety.md` §1.
   is already inaccurate for 1.2.1. State 0 does not depend on 2.0.0 or on the
   production Worker.
 - **P3 [approval]:** submit Data safety in **state T**: the 2.0.0 Firebase
-  rows plus the 1.x AdMob rows, with Ads **Yes**. Submit it before 2.0.0
-  reaches any closed, open or production track (R4b).
+  rows plus the 1.x AdMob rows, with Ads **Yes**.
+  - Play counts closed, open and production tracks, and exempts only apps that
+    are active exclusively on internal testing. GridView is not internal-only,
+    so this plan takes the conservative reading and submits state T before
+    the internal upload (R2), not just before production (R5).
 - **R4 [approval]:**
   - English and Spanish release notes.
   - **D-T1:** do not retain versionCode 7 for API 21–23 (recommended). The
     legacy backend is dead, so 1.2.1 shows ads but no data.
-  - **D-T2:** deactivate the closed "Alpha" track, or replace its build.
+
+### 5.1 Retiring the old Alpha artefact (versionCode 2)
+
+This is a separate plan, not a test stage: 2.0.0 is **not** promoted to the
+Alpha track.
+
+Facts (Play Console Help, *Set up an open, closed, or internal test*, read
+2026-10-20):
+
+- **Ending a test.** "Manage track", then the **Pause track** button. After
+  that, "testers do not receive updates, but the app will remain installed on
+  their device."
+- **Superseded tracks.** When every bundle on a track is outranked by a higher
+  versionCode on the fallback track, the track is **Superseded**: "None of the
+  app bundles on the track serve users, as all users receive an app bundle
+  from the fallback track." versionCode 2 is below production's versionCode 7,
+  so the Alpha track is probably Superseded already. That has not been read in
+  the Console.
+
+Steps (each owner-run; only step 3 changes Play Console):
+
+1. **Read the Alpha track's status** in Play Console, read-only: Superseded,
+   Active or Paused. Record it.
+2. **Settle what versionCode 2 contains** before any declaration relies on it.
+   Either inspect it in the App bundle explorer against PR #82
+   `data-safety.md` §3.5, or skip the inspection because step 3 runs first.
+   This is PR #82 §1.4 step 0.
+3. **Pause the Alpha track** (Manage track → Pause track). This ends the
+   test whatever step 1 found. It must happen before P0 if versionCode 2 was
+   not inspected, and in any case before R7.
+4. **Verify:** the track shows Paused, and no release on any closed or open
+   track names versionCode 1–7.
+5. Existing Alpha installs keep whatever they have (Play says so). They are
+   covered by the policy's 1.x section, which stays published (PR #82 policy
+   §9).
+
+Not used: promoting 2.0.0 to Alpha to replace versionCode 2. That would make a
+closed test of 2.0.0, which §7 does not need.
 - **R7 [approval]:** after R6 (100%), and once no 1.x artifact is distributed
   on any non-internal track, submit Data safety in **state F** and set App
   content → Ads → **No**. This removes "Contains ads".
@@ -394,7 +410,7 @@ lists what the candidate must pass. Record each item against the **exact
 merged commit** A2 builds, never a branch head or an older run.
 
 - **A0 (before A2):** every item that does not need the AAB.
-- **A0b (after R4b, before R5):** the three items that do: the production AAB
+- **A0b (after R3, before R5):** the three items that do: the production AAB
   build, the internal installation and the performance targets.
 
 | §15.8 item | Part | Evidence for that commit |
@@ -403,7 +419,7 @@ merged commit** A2 builds, never a branch head or an older run.
 | Backend and contract tests | A0 | The green `Edge API quality gates` and `Canonical golden freshness` runs (typecheck, lint, format, the full vitest suite, `npm run validate`) |
 | Integration tests | A0 | The same edge suite's Worker-level tests. Any Flutter integration test is run locally on that commit and recorded. |
 | Production AAB build; internal Play installation | A0b | A2 and R2 |
-| Performance targets | A0b | The Performance traces from R3 and R4b against the targets in Implementation Plan §15.4 |
+| Performance targets | A0b | The Performance traces from R3's controlled upgrade against the targets in Implementation Plan §15.4 |
 | Security review | A0 | CodeQL and the secret scan green on that commit, plus a recorded review of the release diff |
 | Privacy review | A0 | PR #82's R1–R8 answered by the owner |
 | Provider legal gate | A0 | ADR 0019 and Implementation Plan §14.2, re-confirmed for the batch D3 published |
@@ -445,20 +461,9 @@ Artifact checks before upload:
 3. **R3 [approval].** The upgrade check in §8.
 4. **R4 [approval].** The store declarations in §5. They are reviewed with
    the production submission.
-5. **R4b [approval].** Implementation Plan §16.2 requires a closed-testing
-   stage between the internal check and production.
-   - Promote the **same** release to the closed "Alpha" track. Replacing its
-     versionCode 2 is decision D-T2.
-   - Invite the existing "Testers" list, and monitor for at least 48 hours or
-     a race weekend.
-   - **Pass criteria:** no new fatal in Crashlytics for 2.0.0 (8), no ANR
-     cluster, the production `/v1/status` healthy, and data current.
-   - **On failure:** stop and fix forward with a new versionCode.
-   - State T (P3) must already be submitted, because closed testing is a
-     non-internal track.
-6. **R5 [approval].** Promote the **same** release to production, a
+5. **R5 [approval].** Promote the **same** release to production, a
    staged rollout at **20 %**. This goes through Google review.
-7. **R6 [approval].** Increase to 100 % once the monitoring window passes.
+6. **R6 [approval].** Increase to 100 % once the monitoring window passes.
    - **Window:** at least 48 hours, or a race weekend.
    - **Pass criteria** (the Implementation Plan §16.3 signals that apply to
      2.0.0):
@@ -466,10 +471,11 @@ Artifact checks before upload:
        Android vitals, and no new fatal in Crashlytics;
      - no ANR cluster in Android vitals;
      - **startup traces** (Performance `_app_start`) within the §15.4 target
-       and not regressed against R4b;
+       and not regressed against R3's controlled upgrade;
      - **API errors:** non-fatal network or sync failures in Crashlytics, and
-       5xx responses in the production Workers metrics, at no more than the
-       R4b level. A healthy `/v1/status` is necessary but not sufficient;
+       5xx responses in the production Workers metrics, with no sustained
+       rise over the first 24 hours of the rollout. A healthy `/v1/status` is
+       necessary but not sufficient;
      - **snapshot age:** `/v1/status` `snapshotAgeSeconds` consistent with
        the last reviewed batch;
      - **image failures:** no new image-loading non-fatal cluster;
@@ -484,10 +490,36 @@ Artifact checks before upload:
      Console. Play cannot lower a versionCode, so the fix ships forward as
      2.0.1 (9).
 
-## 8. The upgrade check (R3)
+**No closed-testing stage (owner decision, 2026-10-20).** Between internal
+testing and production there is **one controlled, Play-delivered upgrade of
+the final candidate** (R3). Implementation Plan §16.2's closed-testing and
+monitoring stage is not used. A closed stage was considered against the two
+reasons that could justify one:
 
-One device, one pass, about 20 minutes. It uses the exact candidate that R5
-promotes.
+- **Play Console requirement: none applies.** Play's closed-testing rule (12
+  testers for 14 days, *App testing requirements for new personal developer
+  accounts*) applies to personal accounts created after 13 November 2023,
+  before production access. GridView has had production access since 2025.
+  The owner should still confirm that the Console shows no such requirement
+  when R5 is created.
+- **Risks the controlled upgrade cannot test:**
+  - device and OS diversity;
+  - crash, ANR and API-error rates across many users;
+  - real-network variety.
+
+  A closed track of about 19 testers samples these weakly. The **staged
+  production rollout** samples them better, with a halt: R5 starts at 20 %,
+  R6 gates 100 % on the §16.3 signals, and Play can halt a rollout. One risk
+  neither covers is a failure that appears only after days of use; the R6
+  window (48 hours or a race weekend) is the mitigation.
+
+  No remaining risk needs closed testing, so no closed gate is kept.
+  Retiring the old Alpha artefact is planned separately (§5.1).
+
+## 8. The upgrade check (R3): one controlled, Play-delivered upgrade
+
+One device, one pass, about 30 minutes, on the exact candidate R5 promotes,
+delivered by Play from internal testing.
 
 **Preconditions:**
 - A Play Store device with 4 KB memory pages, signed in with the upgrade-check
@@ -505,36 +537,44 @@ promotes.
    - `apksigner verify --print-certs` on the pulled base APK shows the
      app-signing certificate.
 2. Opt in through the internal-testing link and update from the Play Store.
-3. **After the update:**
+   **Do not open the app.**
+3. **After the update** (still unopened):
    - versionCode 8 and installer `com.android.vending`;
    - the **same** signer certificate.
-4. **Cold launch:**
+4. **First launch offline.** Turn on airplane mode and do the first 2.0.0
+   launch:
+   - no crash;
+   - the UI is in Spanish and dark, because the migration needs no network;
+   - Home shows its bounded unavailable or empty state.
+
+   Force-stop and turn airplane mode off.
+5. **Cold launch online:**
    - the UI is in Spanish and dark (the 1.x choices migrated);
    - Home shows production season-2026 data, with no "Sample data" banner;
    - Settings shows 2.0.0, and the privacy-policy link opens the published
      policy.
-5. **Relaunch** (force-stop, then launch):
+6. **Relaunch** (force-stop, then launch):
    - the state is unchanged;
    - switch the theme to light and relaunch: light persists.
-6. Relaunch in airplane mode: cached content renders.
-7. After 30 minutes, Crashlytics shows no fatal or non-fatal for 2.0.0 (8),
+7. Relaunch in airplane mode: cached content renders.
+8. After 30 minutes, Crashlytics shows no fatal or non-fatal for 2.0.0 (8),
    and `gv_sync_run` appears in Performance.
 
 **Pass:** every step holds. **Fail:** stop before R5, record the failure, and
 fix forward with a new versionCode.
 
 **Coverage of the §15.3 upgrade matrix** (Implementation Plan §15.3;
-`GridView_Legacy_Migration.md` §5). The pass above is one row. R3 is a release
-gate only when the rows below are done, or replaced with the owner's explicit
-approval (D-U).
+`GridView_Legacy_Migration.md` §5). The single pass covers five rows. The
+rest are not Play-delivered passes. They are named replacements that the owner
+approves, or not, as D-U. R3 is a release gate only with both.
 
-| Matrix row | How R3 covers it |
+| Matrix row | Coverage |
 |---|---|
-| Empty legacy cache; dark theme; alternate language | The pass above |
-| No network | On a second 1.2.1 device or install: do step 2 **online**, letting Play install 2.0.0 without opening it. Then turn the network off and do the **first** 2.0.0 launch offline. Expect the empty or unavailable state, no crash, and the migrated preferences. Then go online and relaunch: data loads. |
-| Slow network | Repeat the first launch with the network throttled (developer options, or a slow hotspot). Expect no crash and data within the app's timeouts, or the bounded unavailable state. |
-| Older supported Android version | Repeat the pass on an **API 24 to 26** device. API 24 is the new minSdk. |
-| Current Android version | The pass above on an API 36 device |
+| Empty legacy cache; dark theme; alternate language | The pass (steps 4–6) |
+| No network | The pass (step 4: first launch offline) |
+| Current Android version | The pass, on an API 36 device |
+| Slow network | **Replacement (D-U):** the same candidate, extracted from the AAB with `bundletool`, on an emulator with throttled network ("EDGE" profile), first launch. Not Play-delivered; it tests the app's timeouts, not the upgrade path, which the pass covers. |
+| Older supported Android version | **Replacement (D-U):** the same extracted candidate, installed over a Play-signed 1.2.1 on an **API 24** emulator (the new minSdk), with the pass's steps 4–6. Not Play-delivered. A pass on a physical API 24–26 Play device can be added if one is available. |
 | **Populated legacy cache** | **Not reproducible through Play.** 1.2.1's backend is dead, so a Play-installed 1.2.1 cannot fill its Hive cache; only a device or backup from before the shutdown could. Proposed replacement: the unit tests over the genuine Hive fixture (`test/fixtures/legacy/`, `GridView_Legacy_Migration.md` §4), plus a populated pass if a pre-shutdown device exists. **Needs D-U.** |
 | **Corrupted legacy cache** | **Not reproducible on a Play build**, which is not debuggable, so its files cannot be altered. Proposed replacement: the corrupt-key and failed-read unit tests from PR #81. **Needs D-U.** |
 
@@ -546,12 +586,13 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 
 | # | Decision | Needed before |
 |---|---|---|
-| W0 | Production genesis design (ADR 0025 O-16 amendment): review and merge PR #84 | W1 |
-| W-P | Free-plan submission path (§3 W-P): two-phase operator publication, a Durable Object probe, or accept the unreliable single request. Paid is not assumed | W1, D3 |
+| W0 | Production genesis design (ADR 0025 O-16 amendment): **done**, PR #84 merged as `527444b` | — |
+| W-P | Submission path (`submission-path-decision.md`): A, Workers Paid (USD 5/month, existing ingest); B, Free-plan redesign (untested, needs a PR and the §4.7 tests); or explicitly accept the single request on Free. Nothing is bought by this plan | W1, D3 |
 | D-T1 | Retain versionCode 7 for API 21–23 or not (recommended: not) | R4, R7 |
-| D-T2 | Closed "Alpha" track (versionCode 2): deactivate or replace | R7 |
+| D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | P0 or R7 |
+| D-R | Confirm no closed-testing stage: one controlled Play-delivered upgrade (R3), then the staged rollout (§7) | R5 |
 | D-C | Commit a reviewed Jolpica capture tool to the repository, or keep the private operator script | D1 |
-| D-U | Approve the replacement for the upgrade-matrix rows Play cannot reproduce (populated and corrupted legacy cache, §8), or supply a pre-shutdown device | R3 |
+| D-U | Approve the replacements for the upgrade-matrix rows the single pass does not cover: slow network, older Android, and populated and corrupted legacy cache (§8). Or supply devices for them | R3 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
 | P-R | Privacy review of `data-safety.md` R1–R4 | R4 |
 | M | Ship 2.0.0 with placeholder media (no R2, no approved media) | R5 |
