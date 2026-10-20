@@ -212,8 +212,8 @@ State T adds these rows to §3.2:
 | R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
 | R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to the SDK version 1.2.1 resolved. |
 | R6 | 1.x requested ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 3) limits it. |
-| R8 | Does Firebase Sessions' session-start time count as **App interactions**? | Declare it. It is usage data about the app coming to the foreground, and over-declaring is not a violation. |
 | R7 | Controller identity (§6) | The policy now names the natural person shown on the Play listing. Confirm, or replace with a registered business name and address if one exists. |
+| R8 | Does Firebase Sessions' session-start time count as **App interactions**? | Declare it. It is usage data about the app coming to the foreground, and over-declaring is not a violation. |
 
 ## 5. Related store items
 
