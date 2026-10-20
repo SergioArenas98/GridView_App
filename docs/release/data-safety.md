@@ -62,7 +62,7 @@ Play Console Help, *Provide information for Google Play's Data safety section*
 | State | When | Data safety | Ads declaration |
 |---|---|---|---|
 | **0 - now** | Only 1.x is distributed (today) | §3.5 only (1.x, AdMob) | **Yes** |
-| **T - transition** | From now until no 1.x artifact is distributed on any non-internal track | The **union**: §3.2 (2.0.0, Firebase) **plus** §3.5 (1.x, AdMob) | **Yes** |
+| **T - transition** | From its submission, just before 2.0.0 first reaches a non-internal track (closed, open or production), until no 1.x artifact is distributed on any non-internal track | The **union**: §3.2 (2.0.0, Firebase) **plus** §3.5 (1.x, AdMob) | **Yes** |
 | **F - final** | 2.0.0 is the only distributed build: rollout at 100%, versionCode 7 not retained, Alpha closed or replaced | §3.2 only | **No** |
 
 ### 1.4 Order of the store steps
@@ -112,7 +112,7 @@ or publishing step.
 |---|---|---|
 | Does your app collect or share any of the required user data types? | **Yes** | Firebase collects the types in §3.2 |
 | Is all of the user data collected by your app encrypted in transit? | **Yes** | Firebase sends over HTTPS; the GridView API is HTTPS-only and cleartext is blocked by the platform |
-| Do you provide a way for users to request that their data is deleted? | **Review item R3** | No account exists; see §4 |
+| Do you provide a way for users to request that their data is deleted? | **Yes, by email**, once R3 is confirmed | The policy offers deletion requests at gridviewapp1@gmail.com; see R3 |
 
 ### 3.2 Data types
 
@@ -208,7 +208,7 @@ State T adds these rows to §3.2:
 |---|---|---|
 | R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | Declare it. Country-level location is coarser than Play's 3 km² threshold, so declaring is the conservative reading. Over-declaring is not a policy violation; under-declaring is. |
 | R2 | Is Cloudflare's handling of the IP address ephemeral? | Yes, but only once the production logging condition in §3.4 is committed (PR #83, W1) and verified on the deployed Worker (W3). Until then, do not submit the form. |
-| R3 | Deletion-request answer | GridView has no accounts, so Play's account-deletion requirement does not apply. The policy offers requests by email and states automatic retention (90 / 60 / 30 days). Answer "No" unless the review decides a manual request path counts. |
+| R3 | Deletion-request answer | **"Yes", but only after the owner confirms the requests can be fulfilled.** The policy offers deletion requests at gridviewapp1@gmail.com, and Play's guidance prescribes no mechanism and accepts a dedicated email address. "No" would contradict the policy. GridView has no accounts, so Play's separate account-deletion requirement does not apply. To fulfil a request, the owner needs a way to locate the data (for example from the date and time of a crash, as the policy asks) and remove it in Firebase; otherwise it expires after 90, 60 or 30 days. If fulfilment cannot be committed to, remove the deletion promise from the policy instead of answering "No" while the policy says otherwise. |
 | R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
 | R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to the SDK version 1.2.1 resolved. |
 | R6 | 1.x requested ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 3) limits it. |
