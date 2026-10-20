@@ -57,10 +57,11 @@ Play Console Help, *Provide information for Google Play's Data safety section*
   to 6.0 (API 21 to 23) devices that cannot install 2.0.0;
 - the closed "Alpha" track still serving versionCode 2.
 
-### 1.3 Two declaration states
+### 1.3 Three declaration states
 
 | State | When | Data safety | Ads declaration |
 |---|---|---|---|
+| **0 - now** | Only 1.x is distributed (today) | §3.5 only (1.x, AdMob) | **Yes** |
 | **T - transition** | From now until no 1.x artifact is distributed on any non-internal track | The **union**: §3.2 (2.0.0, Firebase) **plus** §3.5 (1.x, AdMob) | **Yes** |
 | **F - final** | 2.0.0 is the only distributed build: rollout at 100%, versionCode 7 not retained, Alpha closed or replaced | §3.2 only | **No** |
 
@@ -75,15 +76,19 @@ or publishing step.
    submitted. The 2.0.0-only draft must never replace the live page while 1.2.1
    is distributed, because 1.2.1 would then point at a policy that does not
    describe its ads.
-2. **Submit Data safety in state T**, with Ads **Yes**. The live "No data
-   collected" is already inaccurate for 1.2.1, so this need not wait for 2.0.0.
-3. **Release 2.0.0.** Recommendation (owner decision D-T1): do **not** retain
+2. **Correct the live form now (state 0).** The live "No data collected" is
+   already inaccurate for 1.2.1, so declare §3.5 with Ads **Yes**. This does
+   not depend on 2.0.0 or on the production Worker.
+3. **Submit state T** before 2.0.0 reaches any non-internal track (closed,
+   open or production). State T includes the 2.0.0 API answer (§3.4), so it
+   also waits for production logging to be verified off.
+4. **Release 2.0.0.** Recommendation (owner decision D-T1): do **not** retain
    versionCode 7. The legacy backend is dead, so on API 21 to 23 1.2.1 can show
    ads but no Formula 1 data. Also deactivate the closed "Alpha" track or
    replace its build (D-T2).
-4. **Once the rollout reaches 100%** and no 1.x artifact remains on any
+5. **Once the rollout reaches 100%** and no 1.x artifact remains on any
    non-internal track, submit Data safety in state F and set Ads to **No**.
-5. **Keep section 3.4 in the policy.** Devices that never update still run 1.x
+6. **Keep section 3.4 in the policy.** Devices that never update still run 1.x
    (policy §9).
 
 ## 2. Evidence sources
@@ -148,7 +153,8 @@ application log line records an IP or a header.
 - PR #83's `docs/release/production-release-plan.md` gate W1 must commit it
   for `[env.production]`, and W3 checks it on the deployed Worker.
 - **Do not submit this answer** (state T or F) until that production setting
-  is committed and verified on the deployed Worker.
+  is committed and verified on the deployed Worker. State 0 (1.x only) does
+  not include it.
 - If the production configuration ever persists IP addresses, revisit this
   section (**review item R2**).
 
