@@ -41,7 +41,7 @@ Steps marked **[PR]** are reviewable repository changes.
 | A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A1, D3, P2 |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
 | R2 | **[approval]** Upload the AAB to internal testing and release it | A2, R1 |
-| R3 | **[approval]** The upgrade check (§8), on one device | R2 |
+| R3 | **[approval]** The upgrade check (§8): the feasible rows of the §15.3 upgrade matrix, plus the owner's approval (D-U) of the replacement for the infeasible rows | R2 |
 | R4 | **[approval]** Release notes; decide D-T1 (retain versionCode 7 or not) and D-T2 (closed Alpha versionCode 2) | P3 |
 | R5 | **[approval]** Promote the same release to production at 20 % | R3, R4 |
 | R6 | **[approval]** Increase to 100 % after the monitoring window | R5 |
@@ -464,6 +464,21 @@ promotes.
 **Pass:** every step holds. **Fail:** stop before R5, record the failure, and
 fix forward with a new versionCode.
 
+**Coverage of the §15.3 upgrade matrix** (Implementation Plan §15.3;
+`GridView_Legacy_Migration.md` §5). The pass above is one row. R3 is a release
+gate only when the rows below are done, or replaced with the owner's explicit
+approval (D-U).
+
+| Matrix row | How R3 covers it |
+|---|---|
+| Empty legacy cache; dark theme; alternate language | The pass above |
+| No network | Repeat steps 2 to 4 with the device offline **during the first 2.0.0 launch**. Expect the empty or unavailable state, no crash, and the migrated preferences. Then go online and relaunch: data loads. |
+| Slow network | Repeat the first launch with the network throttled (developer options, or a slow hotspot). Expect no crash and data within the app's timeouts, or the bounded unavailable state. |
+| Older supported Android version | Repeat the pass on an **API 24 to 26** device. API 24 is the new minSdk. |
+| Current Android version | The pass above on an API 36 device |
+| **Populated legacy cache** | **Not reproducible through Play.** 1.2.1's backend is dead, so a Play-installed 1.2.1 cannot fill its Hive cache; only a device or backup from before the shutdown could. Proposed replacement: the unit tests over the genuine Hive fixture (`test/fixtures/legacy/`, `GridView_Legacy_Migration.md` §4), plus a populated pass if a pre-shutdown device exists. **Needs D-U.** |
+| **Corrupted legacy cache** | **Not reproducible on a Play build**, which is not debuggable, so its files cannot be altered. Proposed replacement: the corrupt-key and failed-read unit tests from PR #81. **Needs D-U.** |
+
 This check does not prove that the 1.x Hive files were deleted. A Play build is
 not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 (`GridView_Legacy_Migration.md` §4).
@@ -477,6 +492,7 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | D-T1 | Retain versionCode 7 for API 21–23 or not (recommended: not) | R4, R7 |
 | D-T2 | Closed "Alpha" track (versionCode 2): deactivate or replace | R7 |
 | D-C | Commit a reviewed Jolpica capture tool to the repository, or keep the private operator script | D1 |
+| D-U | Approve the replacement for the upgrade-matrix rows Play cannot reproduce (populated and corrupted legacy cache, §8), or supply a pre-shutdown device | R3 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
 | P-R | Privacy review of `data-safety.md` R1–R4 | R4 |
 | M | Ship 2.0.0 with placeholder media (no R2, no approved media) | R5 |
