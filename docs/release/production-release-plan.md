@@ -35,7 +35,8 @@ Steps marked **[PR]** are reviewable repository changes.
 | D3 | **[approval]** Submit the reviewed batch to production | D1, D2 |
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
 | P2 | **[approval]** Publish the policy at https://gridview.netlify.app | P1 |
-| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2, W3 (production logging verified off) |
+| P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2 |
+| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, W3 (production logging verified off); before R5 |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
 | A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A1, D3, P2 |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
@@ -341,10 +342,13 @@ The details are in PR #82, `data-safety.md` §1.
   ephemerally (`data-safety.md` §3.4, R2) holds only once production logging is
   off. W1 must commit `invocation_logs = false` for `[env.production]`, and W3
   must verify it on the deployed Worker, before P3 is submitted.
-- **P3 [approval]:** in Play Console, submit Data safety in **state T**: the
-  2.0.0 Firebase rows plus the 1.x AdMob rows. Keep Ads **Yes**.
-  - The live "No data collected" is already inaccurate for 1.2.1, so P3 need
-    not wait for 2.0.0.
+- **P0 [approval]:** in Play Console, correct the live form now to **state
+  0**: the 1.x AdMob rows only, with Ads **Yes**. The live "No data collected"
+  is already inaccurate for 1.2.1. State 0 does not depend on 2.0.0 or on the
+  production Worker.
+- **P3 [approval]:** submit Data safety in **state T**: the 2.0.0 Firebase
+  rows plus the 1.x AdMob rows, with Ads **Yes**. Submit it before 2.0.0
+  reaches any closed, open or production track (R5).
 - **R4 [approval]:**
   - English and Spanish release notes.
   - **D-T1:** do not retain versionCode 7 for API 21–23 (recommended). The
