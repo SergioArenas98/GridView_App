@@ -4,14 +4,19 @@ Last updated: 20 October 2026
 
 This policy explains what information the GridView Android application
 ("GridView", "the app") processes, why, for how long, and what choices you
-have. It applies to GridView version 2.0.0 and later. Earlier versions (1.x)
-were covered by the previous policy.
+have. It covers **every version** of GridView:
+
+- **version 2.0.0 and later** (sections 2 to 3.3); and
+- **versions 1.x, up to and including 1.2.1** (section 3.4). They may stay
+  installed on devices, and they may remain available on Google Play while
+  version 2.0.0 is rolled out and for devices that cannot install it.
 
 ## 1. Who is responsible
 
-GridView is an unofficial Formula 1 companion app, published on Google Play by
-the developer account **Sejuma**, based in Spain. Sejuma is the data controller
-for the processing described here.
+GridView is an unofficial Formula 1 companion app. It is published on Google
+Play under the developer name **Sejuma** by **Sergio Arenas del Amo**, an
+individual developer based in **Spain**, who is the data controller for the
+processing described here.
 
 Contact: **gridviewapp1@gmail.com**
 
@@ -19,8 +24,9 @@ Contact: **gridviewapp1@gmail.com**
 
 - GridView has **no user accounts** and never asks for your name, email address,
   phone number, contacts, photos, files or precise location.
-- GridView shows **no advertising** and contains no advertising or marketing
-  SDK.
+- From version 2.0.0, GridView shows **no advertising** and contains no
+  advertising or marketing SDK. Versions 1.x showed advertising banners from
+  Google AdMob (section 3.4).
 - GridView does **not** track which screens you open or what you tap.
 - Your language and theme choices and the Formula 1 data the app downloads are
   stored **on your device**.
@@ -89,6 +95,45 @@ Performance Monitoring keeps installation-linked performance data for 60 days
 and IP-linked events for 30 days. Firebase installation identifiers are kept
 until they are deleted.
 
+### 3.4 GridView 1.x (version 1.2.1 and earlier)
+
+Versions 1.x work differently from version 2.0.0. They contain no Firebase
+Crashlytics or Performance Monitoring, and section 3.3 does not apply to them.
+Instead:
+
+- **Advertising (Google AdMob).** Versions 1.x show advertising banners through
+  the **Google Mobile Ads SDK**, which starts when the app opens. Google
+  collects and receives, through that SDK:
+  - your device's **IP address**, from which an approximate location can be
+    derived;
+  - **app interactions** such as app launches, taps and ad views;
+  - **diagnostic information** such as app launch time and performance;
+  - **device identifiers**, including the Android **advertising ID** and app
+    set ID.
+
+  Google uses this information for advertising (including, where your
+  settings allow, personalised ads), analytics and fraud prevention, under its
+  own policies: https://policies.google.com/technologies/partner-sites.
+  Versions 1.x **do not show a consent message** before ads are requested.
+- **Unity Ads SDK.** Versions 1.x also include the Unity Ads SDK. The app's own
+  code never starts it.
+- **The 1.x data server.** Versions 1.x downloaded Formula 1 data from a
+  separate GridView server hosted on Railway, which received your device's IP
+  address with each request. That server has been shut down and no longer
+  receives requests.
+- **On the device.** Versions 1.x keep your settings and a cache of Formula 1
+  data on your device. Updating to version 2.0.0 keeps your language and theme
+  choices and deletes the rest (section 3.1).
+
+**Your choices for versions 1.x:**
+
+- Update to version 2.0.0 or later, which contains no advertising. It needs
+  Android 7.0 or later.
+- Reset or delete your advertising ID, or opt out of ad personalisation, in
+  Android settings. Look for **Privacy → Ads** or **Google → Ads**, depending on
+  your device.
+- Uninstall the app.
+
 ## 4. Legal basis
 
 For users in the European Economic Area, the United Kingdom and Switzerland, we
@@ -100,9 +145,16 @@ rely on our **legitimate interests** (Article 6(1)(f) GDPR):
 We have limited this processing to what those purposes need, as described
 above.
 
+The advertising in versions 1.x (section 3.4) is processed by Google for its
+own purposes, as described in Google's policies. Versions 1.x did not ask for
+consent to it. Version 2.0.0 removes it.
+
 ## 5. Who receives the information
 
-We do not sell, rent or share your information for advertising or marketing.
+We do not sell or rent your information. From version 2.0.0 we do not share it
+for advertising or marketing. In versions 1.x, the advertising SDK sends the
+information listed in section 3.4 to **Google**, which uses it for its own
+advertising purposes: https://policies.google.com/technologies/partner-sites.
 
 Information is processed on our behalf by these service providers, under their
 data-processing terms:
@@ -147,6 +199,9 @@ If this policy changes, we will publish the new version at the same address and
 update the date at the top. If a change materially affects how your information
 is processed, we will also tell you in the app or on the GridView Google Play
 page.
+
+Section 3.4 stays in this policy for as long as versions 1.x are available on
+Google Play or may still be in use.
 
 ## 10. Contact
 

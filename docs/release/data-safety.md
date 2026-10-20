@@ -6,18 +6,85 @@ versionName 2.0.0) does. Each one cites the evidence it rests on. They are the
 Console by the owner after a privacy review. The review is needed because
 classifying data for Play is a legal judgement, not an engineering one.
 
-Prepared 2026-10-20 at `6aefcbf`.
+Prepared 2026-10-20 at `6aefcbf`. The transition sections (§1, §1.1-§1.4 and
+§3.5) and the controller check (§6) were added the same day, before merge.
 
 ## 1. Why the current declaration must change
 
-The live 1.2.1 listing declares **"No data collected"** and **"No data shared"**
-(public listing, read 2026-10-20). That is not true of 2.0.0, which packages
-Firebase Crashlytics and Performance Monitoring and activates them in production
-builds (`../technical/GridView_Observability.md` §4, §7). The 1.x app also
-packaged Google Mobile Ads and Unity Ads, so its declaration was itself
-questionable. Version 2.0.0 contains no advertising SDK (ADR 0018).
+The live listing declares **"No data collected"** and **"No data shared"**
+(public listing, read 2026-10-20).
 
-The listing's **"Contains ads"** label must also be removed.
+- **Wrong for 1.2.1 today.** Version 1.2.1 shows Google AdMob banners on every
+  page. It initializes the Google Mobile Ads SDK at startup, and that SDK
+  collects and shares data (§3.5).
+- **Wrong for 2.0.0.** It packages Firebase Crashlytics and Performance
+  Monitoring and activates them in production builds
+  (`../technical/GridView_Observability.md` §4, §7). Version 2.0.0 contains no
+  advertising SDK (ADR 0018).
+
+The **"Contains ads"** label is correct for 1.2.1. It may be removed only once
+no 1.x build is distributed (§1.2).
+
+### 1.1 Play's rule: the form covers every distributed version
+
+Play Console Help, *Provide information for Google Play's Data safety section*
+(support.google.com/googleplay/android-developer/answer/10787469, read
+2026-10-20), says:
+
+> "Your Data safety section describes the sum of your app's data collection and
+> sharing across all its versions currently distributed on Google Play",
+> "including apps on closed, open, or production testing tracks".
+
+- Only apps active exclusively on the internal track are exempt.
+- The only artifacts that may be excluded are those whose effective target SDK
+  is below 21. Neither 1.x build qualifies.
+- Data collected through third-party SDKs counts, and so does data sent to a
+  third party through an SDK that builds advertising profiles.
+
+### 1.2 What is distributed during the move to 2.0.0
+
+| Artifact | Track (Play Console, read 2026-10-20) | minSdk | Data practices |
+|---|---|---|---|
+| versionCode 7, 1.2.1 | Production, full rollout | 21 | Google Mobile Ads SDK (§3.5) |
+| versionCode 2, 1.x | Closed testing "Alpha" | not read | Google Mobile Ads SDK, assumed as in 1.2.1 |
+| versionCode 8, 2.0.0 | not yet uploaded | **24** (Flutter 3.44 default, `flutter.minSdkVersion`) | Firebase (§3.2) |
+
+1.x builds stay distributed in any of these cases:
+
+- a **staged rollout** of 2.0.0 below 100%, which keeps serving versionCode 7
+  to the rest;
+- versionCode 7 **retained** in the 2.0.0 production release, for Android 5.0
+  to 6.0 (API 21 to 23) devices that cannot install 2.0.0;
+- the closed "Alpha" track still serving versionCode 2.
+
+### 1.3 Two declaration states
+
+| State | When | Data safety | Ads declaration |
+|---|---|---|---|
+| **T - transition** | From now until no 1.x artifact is distributed on any non-internal track | The **union**: §3.2 (2.0.0, Firebase) **plus** §3.5 (1.x, AdMob) | **Yes** |
+| **F - final** | 2.0.0 is the only distributed build: rollout at 100%, versionCode 7 not retained, Alpha closed or replaced | §3.2 only | **No** |
+
+### 1.4 Order of the store steps
+
+None of these steps is done; each is a separate, owner-authorized Play Console
+or publishing step.
+
+1. **Publish the transition policy** (`privacy_policies.md` and `.html` in this
+   PR) at https://gridview.netlify.app. It covers 1.x (section 3.4) and 2.0.0.
+   Publish it **before** the 2.0.0 Data safety change and before the release is
+   submitted. The 2.0.0-only draft must never replace the live page while 1.2.1
+   is distributed, because 1.2.1 would then point at a policy that does not
+   describe its ads.
+2. **Submit Data safety in state T**, with Ads **Yes**. The live "No data
+   collected" is already inaccurate for 1.2.1, so this need not wait for 2.0.0.
+3. **Release 2.0.0.** Recommendation (owner decision D-T1): do **not** retain
+   versionCode 7. The legacy backend is dead, so on API 21 to 23 1.2.1 can show
+   ads but no Formula 1 data. Also deactivate the closed "Alpha" track or
+   replace its build (D-T2).
+4. **Once the rollout reaches 100%** and no 1.x artifact remains on any
+   non-internal track, submit Data safety in state F and set Ads to **No**.
+5. **Keep section 3.4 in the policy.** Devices that never update still run 1.x
+   (policy §9).
 
 ## 2. Evidence sources
 
@@ -58,7 +125,7 @@ ephemerally** = no, **required** (the user cannot turn it off in the app).
 "Analytics" is Play's purpose for monitoring app performance and diagnosing
 problems. GridView uses this data for nothing else.
 
-### 3.3 Not collected
+### 3.3 Not collected (2.0.0)
 
 Personal info (name, email, user IDs, address, phone), financial info, health
 and fitness, messages, photos and videos, audio, files and documents, calendar,
@@ -76,6 +143,47 @@ production Worker configuration (`production-release-plan.md`, W2). If the
 production configuration ever persists IPs, this section must be revisited
 (**review item R2**).
 
+### 3.5 Versions 1.x (state T only)
+
+Evidence: the pre-reconstruction tree (`git show 7524998^:pubspec.yaml`, `lib/`
+and `android/`), which declares `version: 1.2.1+7`.
+
+- `google_mobile_ads: ^7.0.0` is initialized in `lib/main.dart`
+  (`MobileAds.instance.initialize()`). Banner ads appear on the calendar,
+  driver, Grand Prix, list and standings pages.
+- The manifest carries `com.google.android.gms.ads.APPLICATION_ID`.
+- There is no User Messaging Platform or other consent code.
+- `unity_ads_plugin: ^0.3.24` is a dependency, but no Dart code references
+  Unity Ads.
+- There is no Firebase SDK dependency.
+
+The Google Mobile Ads SDK disclosure
+(developers.google.com/admob/android/privacy/play-data-disclosure, updated
+2026-10-16) lists four data types as **collected and shared automatically**
+for advertising, analytics and fraud prevention, all encrypted in transit.
+State T adds these rows to §3.2:
+
+| Play category → type | Collected | Shared | Purposes |
+|---|---|---|---|
+| Location → **Approximate location** (IP address) | yes | **yes** | Advertising or marketing; Analytics; Fraud prevention, security and compliance |
+| App activity → **App interactions** | yes | **yes** | the same |
+| App info and performance → **Diagnostics** | yes | **yes** | the same |
+| Device or other IDs → **Device or other IDs** (advertising ID, app set ID) | yes | **yes** | the same |
+
+- These rows are **required**: 1.x has no switch, and it starts the SDK before
+  showing anything. They are **not processed ephemerally**: Play says data
+  used to build advertising profiles cannot be.
+- Where a type is already declared in §3.2 (Approximate location, Diagnostics,
+  Device or other IDs), state T marks it **shared**, adds the advertising and
+  fraud purposes, and keeps Analytics.
+- **App activity → App interactions** is new in state T. Version 2.0.0 does not
+  collect it (§3.3).
+- In state T, "Is all user data encrypted in transit?" stays **Yes** (TLS for
+  both SDKs, HTTPS to the API).
+- The SDK version in 1.2.1 resolves from `^7.0.0`. Google publishes the
+  disclosure for its current SDK only, so the review should confirm that it
+  applies (R5).
+
 ## 4. Review items for the privacy review
 
 | # | Question | Engineering recommendation |
@@ -84,6 +192,9 @@ production configuration ever persists IPs, this section must be revisited
 | R2 | Is Cloudflare's handling of the IP address ephemeral? | Yes, if the production logging condition in §3.4 holds |
 | R3 | Deletion-request answer | GridView has no accounts, so Play's account-deletion requirement does not apply. The policy offers requests by email and states automatic retention (90 / 60 / 30 days). Answer "No" unless the review decides a manual request path counts. |
 | R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
+| R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to the SDK version 1.2.1 resolved. |
+| R6 | 1.x requested ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 3) limits it. |
+| R7 | Controller identity (§6) | The policy now names the natural person shown on the Play listing. Confirm, or replace with a registered business name and address if one exists. |
 
 ## 5. Related store items
 
@@ -91,5 +202,25 @@ production configuration ever persists IPs, this section must be revisited
   in this repository. It must be **published** at the listing's existing URL,
   https://gridview.netlify.app, before the release is submitted. Publishing is a
   separate, authorized step.
-- **Ads declaration** (App content → Ads): change to **No**.
+- **Ads declaration** (App content → Ads): keep **Yes** in state T, and change
+  to **No** only in state F (§1.3).
 - **App access, content rating, target audience**: unchanged by this release.
+
+## 6. Controller identity and country (verified 2026-10-20)
+
+| Source | Name | Country | Contact |
+|---|---|---|---|
+| Public Play listing, "About the developer" (`play.google.com/store/apps/details?id=com.sejuma.gridview`, read 2026-10-20) | **Sergio Arenas del Amo**; developer name **Sejuma** | **Spain** | gridviewapp1@gmail.com |
+| Play Console (read 2026-10-20, earlier session) | developer account "Sejuma" | - | - |
+| Live policy, last updated 2025-02-19 | "GridView" (the "Company"), no legal name | Spain | gridviewapp1@gmail.com |
+| This PR's first draft | "the developer account Sejuma ... Sejuma is the data controller" | Spain | gridviewapp1@gmail.com |
+
+- **Country and contact:** Spain and gridviewapp1@gmail.com agree in every
+  source.
+- **Identity:** "Sejuma" is the account's display name, not a legal person, so
+  naming it as controller was imprecise. Play already shows the individual's
+  legal name publicly, so the policy now names him as controller, publishing
+  as Sejuma (R7).
+- The same listing still shows **"Contains ads"**, Data safety **"No data
+  collected / No data shared"**, "Updated on Apr 19, 2025", and the policy link
+  https://gridview.netlify.app.
