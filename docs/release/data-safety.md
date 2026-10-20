@@ -132,7 +132,7 @@ ephemerally** = no, **required** (the user cannot turn it off in the app).
 | Play category → type | Source | Purpose |
 |---|---|---|
 | App info and performance → **Crash logs** | Crashlytics stack traces and app state at crash | Analytics |
-| App info and performance → **Diagnostics** | Performance Monitoring (start time, trace durations, CPU and memory); Sessions metrics | Analytics |
+| App info and performance → **Diagnostics** | Performance Monitoring (start time, trace durations, CPU and memory); Sessions metrics. If production keeps Workers Logs (§3.4, option (a)), also each API request's duration and status in the persisted `request.completed` line | Analytics; **App functionality** if the API logs are kept |
 | Device or other IDs → **Device or other IDs** | Firebase installation ID; Crashlytics installation UUID | Analytics |
 | Location → **Approximate location** | Performance Monitoring maps IP addresses to countries. The GridView API also receives the IP address with each request, to serve it; that part is ephemeral (§3.4), but Firebase's part is not, so the type as a whole is not | Analytics; **App functionality** (the API) — **review items R1, R2** |
 | App activity → **App interactions** | Firebase Sessions records when the app is foregrounded to start a session ("application metrics", Firebase disclosure). If production keeps Workers Logs (§3.4), the API also persists one `request.completed` line per request, with the route template (which resource was fetched), a random request ID and the outcome, but no IP, header or device identifier | Analytics; **App functionality** if the API logs are kept — **review item R8** |

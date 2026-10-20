@@ -30,7 +30,8 @@ Contact: **gridviewapp1@gmail.com**
 - From version 2.0.0, GridView does **not** track which screens you open or
   what you tap. Firebase records when a session starts (section 3.3). The
   GridView API may keep short-lived logs of which kind of data each request
-  fetched, with no IP address or identifier (section 3.2). In versions 1.x,
+  fetched, with no IP address and no account or device identifier (section
+  3.2). In versions 1.x,
   the advertising SDK collects app launches, taps and ad views (section 3.4).
 - Your language and theme choices and the Formula 1 data the app downloads are
   stored **on your device**.
@@ -73,7 +74,8 @@ We use this only to deliver the data and to keep the service working and
 secure. We do not use it to identify you or to build a profile. The API may
 keep short-lived operational logs, one line per request: which kind of data
 was requested, the random request number, the result and how long it took.
-They do not include your IP address or any identifier.
+They do not include your IP address or any account or device identifier. The
+request number is random and generated for each request.
 
 ### 3.3 Crash reports and performance measurements (Firebase)
 
