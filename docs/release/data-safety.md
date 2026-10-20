@@ -138,10 +138,19 @@ Requests to the GridView API (Cloudflare Workers) expose the device IP address
 to Cloudflare, as any network request does. GridView does not store or use it
 beyond serving the request. This is ephemeral processing, provided the
 production Worker keeps request logging off: `invocation_logs = false`, and no
-application log line records an IP or a header. That condition is part of the
-production Worker configuration (`production-release-plan.md`, W2). If the
-production configuration ever persists IPs, this section must be revisited
-(**review item R2**).
+application log line records an IP or a header.
+
+**That condition is not enforced in this repository yet.**
+
+- Today `services/edge-api/wrangler.toml` sets `invocation_logs = false` only
+  for staging. Production has no such setting, and production is not
+  deployed.
+- PR #83's `docs/release/production-release-plan.md` gate W1 must commit it
+  for `[env.production]`, and W3 checks it on the deployed Worker.
+- **Do not submit this answer** (state T or F) until that production setting
+  is committed and verified on the deployed Worker.
+- If the production configuration ever persists IP addresses, revisit this
+  section (**review item R2**).
 
 ### 3.5 Versions 1.x (state T only)
 
@@ -189,7 +198,7 @@ State T adds these rows to §3.2:
 | # | Question | Engineering recommendation |
 |---|---|---|
 | R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | Declare it. Country-level location is coarser than Play's 3 km² threshold, so declaring is the conservative reading. Over-declaring is not a policy violation; under-declaring is. |
-| R2 | Is Cloudflare's handling of the IP address ephemeral? | Yes, if the production logging condition in §3.4 holds |
+| R2 | Is Cloudflare's handling of the IP address ephemeral? | Yes, but only once the production logging condition in §3.4 is committed (PR #83, W1) and verified on the deployed Worker (W3). Until then, do not submit the form. |
 | R3 | Deletion-request answer | GridView has no accounts, so Play's account-deletion requirement does not apply. The policy offers requests by email and states automatic retention (90 / 60 / 30 days). Answer "No" unless the review decides a manual request path counts. |
 | R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
 | R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to the SDK version 1.2.1 resolved. |
