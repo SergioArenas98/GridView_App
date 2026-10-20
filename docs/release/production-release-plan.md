@@ -19,7 +19,7 @@ Steps marked **[PR]** are reviewable repository changes.
 | Signing files | `android/key.properties` (ignored) → the upload keystore it names. Play App Signing re-signs with the app-signing key. |
 | Upload certificate SHA-256 | `98:D7:CC:74:16:2E:50:A3:DB:C5:8E:A0:41:8A:E8:09:C4:1A:D1:0C:6F:09:50:79:93:4E:D6:E7:09:D4:6D:5E`, registered in Play Console and equal to the local keystore |
 | App-signing certificate SHA-256 | `98:BD:6C:76:08:20:FE:84:7E:25:D5:73:8A:73:5D:74:20:4E:76:09:5F:0F:73:E9:A7:40:7D:C5:F9:47:C3:B5` |
-| Changes that affect update compatibility | **None.** Same applicationId, same app-signing key. minSdk rises from 21 to 24 (Android 7.0), so devices on Android 6.0 and older (API 21–23) cannot install 2.0.0 and stay on 1.2.1. Whether Play keeps serving them 1.2.1 is decision D-T1 (§5). |
+| Changes that affect update compatibility | **One: the minSdk rises from 21 to 24.** The applicationId and app-signing key are the same, so every device on API 24 or later receives the update. **Devices on API 21–23 (Android 5.0 to 6.0.1) cannot receive 2.0.0.** Existing installs there stay on 1.2.1, which has no working backend. New installs there get 1.2.1 only if versionCode 7 is retained (D-T1, §5); otherwise the app is unavailable to them. Android 7.0 (API 24) remains eligible. |
 
 ## 2. Approval gates at a glance
 
@@ -226,7 +226,12 @@ that, but growth would need monitoring.
 
 ### W2. Provisioning **[approval]**, then **[PR]**
 
+Every Worker command in tracks W and D runs from `services/edge-api`, which
+holds the `package.json` and `wrangler.toml` they need. The staging runbook
+does the same.
+
 ```text
+cd services/edge-api
 npx wrangler kv namespace create GRIDVIEW_DATA --env production
 npx wrangler secret put ADMIN_TOKEN --env production   # new value, stored like staging's (DPAPI), never printed
 ```
@@ -237,6 +242,7 @@ Commit the returned KV id to `[env.production]` and validate with
 ### W3. Deploy **[approval]**
 
 ```text
+cd services/edge-api
 npx wrangler deploy --env production
 ```
 
@@ -249,9 +255,17 @@ Record the deployed version id.
 
 ## 4. Track D — reviewed data publication
 
-1. **D1 [approval]: capture and review.**
-   - Run `npm run season-batch:generate` (owner-run; about 23 Jolpica `GET`s,
-     as on 2026-10-13 and 2026-10-19).
+1. **D1 [approval]: capture and review.** Two separate steps.
+   - **Capture (network).** Record one Jolpica capture: about 23 `GET`s, in
+     the format of `services/edge-api/scripts/season-batch/README.md`,
+     "Capture format", as on 2026-10-13 and 2026-10-19.
+     - No capture tool is in this repository; the generator README says so.
+     - The operator used the private script `~/.gridview/frozen/<date>/scripts/capture.sh`.
+     - Committing a capture tool is open decision D-C (§9).
+   - **Generate (offline).** From `services/edge-api`, run
+     `npm run season-batch:generate -- --capture <capture-dir> --out <new-output-dir>`.
+     - It replays the capture and sends no request.
+     - Both directories must be outside the repository.
    - Review `manifest.json` and record its SHA-256, as in the staging captures.
 2. **D2 [approval]: genesis.**
    - Send one `POST /internal/admin/publication/cutover/genesis` with
@@ -438,6 +452,7 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | W-P | Free-plan submission path (§3 W-P): two-phase operator publication, a Durable Object probe, or accept the unreliable single request. Paid is not assumed | W1, D3 |
 | D-T1 | Retain versionCode 7 for API 21–23 or not (recommended: not) | R4, R7 |
 | D-T2 | Closed "Alpha" track (versionCode 2): deactivate or replace | R7 |
+| D-C | Commit a reviewed Jolpica capture tool to the repository, or keep the private operator script | D1 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
 | P-R | Privacy review of `data-safety.md` R1–R4 | R4 |
 | M | Ship 2.0.0 with placeholder media (no R2, no approved media) | R5 |
