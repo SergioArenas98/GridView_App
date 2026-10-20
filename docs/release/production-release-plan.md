@@ -36,14 +36,15 @@ Steps marked **[PR]** are reviewable repository changes.
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
 | P2 | **[approval]** Publish the policy at https://gridview.netlify.app | P1 |
 | P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2 |
-| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, W3 (production logging verified off); before R5 |
+| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, W3 (production logging verified off in persisted Workers Logs); before R4b |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
 | A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A1, D3, P2 |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
 | R2 | **[approval]** Upload the AAB to internal testing and release it | A2, R1 |
 | R3 | **[approval]** The upgrade check (§8): the feasible rows of the §15.3 upgrade matrix, plus the owner's approval (D-U) of the replacement for the infeasible rows | R2 |
 | R4 | **[approval]** Release notes; decide D-T1 (retain versionCode 7 or not) and D-T2 (closed Alpha versionCode 2) | P3 |
-| R5 | **[approval]** Promote the same release to production at 20 % | R3, R4 |
+| R4b | **[approval]** Promote the same release to **closed testing** (the existing "Alpha" track, which also retires versionCode 2, D-T2), then monitor Crashlytics, ANRs and backend health (Implementation Plan §16.2) | R3, R4, P3 |
+| R5 | **[approval]** Promote the same release to production at 20 % | R4b |
 | R6 | **[approval]** Increase to 100 % after the monitoring window | R5 |
 | R7 | **[approval]** Data safety final state F, Ads = **No**, once no 1.x artifact is distributed on any non-internal track | R6, D-T1, D-T2 |
 
@@ -250,7 +251,16 @@ npx wrangler deploy --env production
 Verify:
 - `GET /v1/status` returns `200` with `environment=production` and `maintenance=false`.
 - The season resources are unavailable, as W0 item 4 expects.
-- `wrangler tail --env production` shows no IP address or header in logs.
+- **Production logging is off in persisted Workers Logs.** This is the
+  premise of P3. `wrangler tail` cannot prove it: it is a real-time stream,
+  carries request metadata itself, and stores nothing.
+  - The deployed version's configuration shows observability with
+    `invocation_logs = false`. Check `npx wrangler versions view <version-id>
+    --env production` or the dashboard's Observability settings.
+  - Send a few public requests, then query the Workers Logs dataset in the
+    dashboard (Observability → Logs) for that window. It holds no invocation
+    record with request metadata, and no application line with an IP address
+    or a header.
 
 Record the deployed version id.
 
@@ -348,7 +358,7 @@ The details are in PR #82, `data-safety.md` §1.
   production Worker.
 - **P3 [approval]:** submit Data safety in **state T**: the 2.0.0 Firebase
   rows plus the 1.x AdMob rows, with Ads **Yes**. Submit it before 2.0.0
-  reaches any closed, open or production track (R5).
+  reaches any closed, open or production track (R4b).
 - **R4 [approval]:**
   - English and Spanish release notes.
   - **D-T1:** do not retain versionCode 7 for API 21–23 (recommended). The
@@ -412,9 +422,20 @@ Artifact checks before upload:
 3. **R3 [approval].** The upgrade check in §8.
 4. **R4 [approval].** The store declarations in §5. They are reviewed with
    the production submission.
-5. **R5 [approval].** Promote the **same** internal release to production, a
+5. **R4b [approval].** Implementation Plan §16.2 requires a closed-testing
+   stage between the internal check and production.
+   - Promote the **same** release to the closed "Alpha" track. Replacing its
+     versionCode 2 is decision D-T2.
+   - Invite the existing "Testers" list, and monitor for at least 48 hours or
+     a race weekend.
+   - **Pass criteria:** no new fatal in Crashlytics for 2.0.0 (8), no ANR
+     cluster, the production `/v1/status` healthy, and data current.
+   - **On failure:** stop and fix forward with a new versionCode.
+   - State T (P3) must already be submitted, because closed testing is a
+     non-internal track.
+6. **R5 [approval].** Promote the **same** release to production, a
    staged rollout at **20 %**. This goes through Google review.
-6. **R6 [approval].** Increase to 100 % once the monitoring window passes.
+7. **R6 [approval].** Increase to 100 % once the monitoring window passes.
    - **Window:** at least 48 hours, or a race weekend.
    - **Pass criteria:**
      - no new fatal in Crashlytics for 2.0.0 (8);
