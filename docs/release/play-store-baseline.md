@@ -213,13 +213,19 @@ Confirmed in Play Console on 2026-10-20 (read-only, developer account
 
 Tracked, with their approval gates, in `production-release-plan.md`:
 
-1. **No production API.** Production genesis (ADR 0025 O-16), production
-   ingest admission and the production Worker must exist before a release
-   candidate is built.
-2. **Privacy policy not published.** The 2.0.0 policy is in this repository;
-   it must be published at https://gridview.netlify.app.
-3. **Play Data safety declaration** must be resubmitted from `data-safety.md`
-   after privacy review, and the Ads declaration set to No.
+1. **No production API.** Production genesis (ADR 0025 O-16) and production
+   ingest admission are in PR #84. The production Worker configuration, and a
+   reliable Workers Free path for submissions (decision W-P), must exist
+   before a release candidate is built.
+2. **Privacy policy not published.** The policy covering both 1.x and 2.0.0
+   is in this repository. It must be published at https://gridview.netlify.app.
+3. **Play Data safety declaration.** It must be resubmitted from
+   `data-safety.md` after privacy review, in two states:
+   - **Transition state T**, with Ads still **Yes**, while any 1.x build is
+     distributed.
+   - **Final state F**, with Ads **No**, once only 2.0.0 is distributed.
+   The live "No data collected" is already inaccurate for 1.2.1, which shows
+   AdMob ads.
 
 The `PENDING` Play Console values and the NDK decision are resolved above.
 
