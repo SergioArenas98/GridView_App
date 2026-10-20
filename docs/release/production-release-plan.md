@@ -38,14 +38,15 @@ Steps marked **[PR]** are reviewable repository changes.
 | P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2 |
 | P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, W3 (production logging verified off in persisted Workers Logs); before R4b |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
-| A0 | **[record]** Release-candidate gate (Implementation Plan §15.8) on the exact merged commit A2 builds | A1 and every W/D PR merged |
+| A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1 and every W/D PR merged |
+| A0b | **[record]** Release-candidate gate, post-build part: the AAB, the internal installation and performance | A2, R2, R3, R4b |
 | A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A0, A1, D3, P2 |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
 | R2 | **[approval]** Upload the AAB to internal testing and release it | A2, R1 |
 | R3 | **[approval]** The upgrade check (§8): the feasible rows of the §15.3 upgrade matrix, plus the owner's approval (D-U) of the replacement for the infeasible rows | R2 |
 | R4 | **[approval]** Release notes; decide D-T1 (retain versionCode 7 or not) and D-T2 (closed Alpha versionCode 2) | P3 |
 | R4b | **[approval]** Promote the same release to **closed testing** (the existing "Alpha" track, which also retires versionCode 2, D-T2), then monitor Crashlytics, ANRs and backend health (Implementation Plan §16.2) | R3, R4, P3 |
-| R5 | **[approval]** Promote the same release to production at 20 % | R4b, A0 (every §15.8 item recorded as passed) |
+| R5 | **[approval]** Promote the same release to production at 20 % | R4b, A0, A0b (every §15.8 item recorded as passed) |
 | R6 | **[approval]** Increase to 100 % after the monitoring window | R5 |
 | R7 | **[approval]** Data safety final state F, Ads = **No**, once no 1.x artifact is distributed on any non-internal track | R6, D-T1, D-T2 |
 
@@ -388,22 +389,26 @@ at `6aefcbf` with NDK 27.0.12077973:
 No NDK change is needed for 16 KB. A2 re-checks the release AAB, and Play's
 bundle explorer shows the result after upload.
 
-**A0 [record]: release-candidate gate.** Implementation Plan §15.8 lists what
-the candidate must pass. Record each item against the **exact merged commit**
-A2 will build, never a branch head or an older run.
+**A0 and A0b [record]: release-candidate gate.** Implementation Plan §15.8
+lists what the candidate must pass. Record each item against the **exact
+merged commit** A2 builds, never a branch head or an older run.
 
-| §15.8 item | Evidence for that commit |
-|---|---|
-| Formatting and static analysis; unit, widget, database and migration tests; golden tests | The green `Flutter quality gates` CI run on that commit (`flutter analyze`, format, the full `flutter test`) |
-| Backend and contract tests | The green `Edge API quality gates` and `Canonical golden freshness` runs (typecheck, lint, format, the full vitest suite, `npm run validate`) |
-| Integration tests | The same edge suite's Worker-level tests. Any Flutter integration test is run locally on that commit and recorded. |
-| Production AAB build; internal Play installation | A2 and R2 |
-| Performance targets | The Performance traces from R3 and R4b against the targets in Implementation Plan §15.4 |
-| Security review | CodeQL and the secret scan green on that commit, plus a recorded review of the release diff |
-| Privacy review | PR #82's R1–R8 answered by the owner |
-| Provider legal gate | ADR 0019 and Implementation Plan §14.2, re-confirmed for the batch D3 published |
+- **A0 (before A2):** every item that does not need the AAB.
+- **A0b (after R4b, before R5):** the three items that do: the production AAB
+  build, the internal installation and the performance targets.
 
-A failing, missing or stale item blocks A2 and R5.
+| §15.8 item | Part | Evidence for that commit |
+|---|---|---|
+| Formatting and static analysis; unit, widget, database and migration tests; golden tests | A0 | The green `Flutter quality gates` CI run on that commit (`flutter analyze`, format, the full `flutter test`) |
+| Backend and contract tests | A0 | The green `Edge API quality gates` and `Canonical golden freshness` runs (typecheck, lint, format, the full vitest suite, `npm run validate`) |
+| Integration tests | A0 | The same edge suite's Worker-level tests. Any Flutter integration test is run locally on that commit and recorded. |
+| Production AAB build; internal Play installation | A0b | A2 and R2 |
+| Performance targets | A0b | The Performance traces from R3 and R4b against the targets in Implementation Plan §15.4 |
+| Security review | A0 | CodeQL and the secret scan green on that commit, plus a recorded review of the release diff |
+| Privacy review | A0 | PR #82's R1–R8 answered by the owner |
+| Provider legal gate | A0 | ADR 0019 and Implementation Plan §14.2, re-confirmed for the batch D3 published |
+
+A failing, missing or stale A0 item blocks A2. A failing A0b item blocks R5.
 
 **A2 [approval]: build and sign.** Run from a clean checkout of the merged
 commit, in PowerShell, with the API live and holding data (W3, D3) and the
