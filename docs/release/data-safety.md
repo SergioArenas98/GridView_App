@@ -182,10 +182,14 @@ application log line records an IP or a header.
   before state T or F (owner decision with W1, review item R8):
   - **(a) Keep the logs** for operations, and declare them under App
     interactions with the App functionality purpose (§3.2).
-  - **(b) Turn persisted logs off** for production
-    (`[env.production.observability] enabled = false`, or no `logs` block).
-    The declaration then stays Firebase-only, and production operations rely
-    on metrics and `wrangler tail`.
+  - **(b) Turn persisted logs off** for production with an **explicit**
+    `[env.production.observability] enabled = false`.
+    - Omitting the block is not enough: Cloudflare enables observability by
+      default for new Workers.
+    - Verify the setting on the deployed version, and that the Workers Logs
+      dataset stays empty after test requests (PR #83, W3), before submitting.
+    - The declaration then stays Firebase-only, and production operations
+      rely on metrics and `wrangler tail`.
 
 ### 3.5 Versions 1.x (states 0 and T)
 
