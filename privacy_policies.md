@@ -72,10 +72,14 @@ GridView uses **Firebase Crashlytics** and **Firebase Performance Monitoring**,
 provided by Google, together with the Firebase components they need
 (Installations, Sessions and Remote Config). They process:
 
-- **Crash and error reports**: the stack trace, the state of the app when the
-  problem happened, and a small set of fixed labels GridView adds (such as which
-  feature was affected). GridView never adds your preferences' values, the
-  content you viewed, web addresses or error messages to these reports.
+- **Crash and error reports**: the stack trace and the state of the app when
+  the problem happened.
+  - For a crash, the report also carries the error's own type and description,
+    which the app or Android generated. That description can contain technical
+    values from the moment of the crash.
+  - GridView adds only a small set of fixed labels, such as which feature was
+    affected. It never adds your preferences' values, the content you viewed or
+    web addresses to these labels.
 - **Performance measurements**: for example app start time, the time taken by
   the app's own operations, and memory and processor use.
 - **Device and app information**: device model and manufacturer, Android
