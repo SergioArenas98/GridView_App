@@ -487,6 +487,9 @@ describe('genesis enables no other transition', () => {
       { committedSourceOrderingInput: '2026-09-01T00:00:00.000Z' },
       { seasonSnapshotObservedAtHighWaterMark: '2026-09-01T00:00:00.000Z' },
       { cutoverFingerprint: null },
+      // Only the reserved prefix can name a genesis.
+      { cutoverFingerprint: FINGERPRINT },
+      { cutoverFingerprint: 'cutover1:aaaa' },
     ]) {
       const { host, sequencer } = genesisSequencer();
       host.poke(authorityStorageKey, {
@@ -519,6 +522,7 @@ describe('the wire never accepts an impossible genesis answer', () => {
       { ...valid, activeVersion: 'v-1' },
       { ...valid, previousVersion: 'v-0' },
       { ...valid, cutoverFingerprint: '' },
+      { ...valid, cutoverFingerprint: 'cutover1:aaaa' },
     ]) {
       expect(decodeSeasonAuthority(tampered)).toBeNull();
     }

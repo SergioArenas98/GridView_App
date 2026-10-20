@@ -39,7 +39,12 @@ import type {
   PendingCleanupRecord,
   PerKeyState,
 } from './model';
-import { cutoverStates, operationPhases, isOperationKind } from './model';
+import {
+  cutoverStates,
+  isGenesisFingerprint,
+  isOperationKind,
+  operationPhases,
+} from './model';
 import { canonicalInstant } from '../canonical/instant';
 import type { SnapshotDocumentName } from '../../storage/types';
 
@@ -193,7 +198,15 @@ export function readAuthorityRecord(
   // A genesis record holding a version, an ordering baseline or a floor
   // describes no defined transition, and fails closed the same way.
   if (raw.cutoverState === 'genesis') {
-    if (!isOpaqueIdentifier(raw.cutoverFingerprint)) return { kind: 'corrupt' };
+    // Only `commitGenesis` writes this state, and only with the reserved
+    // prefix. A genesis record under any other fingerprint would later read as
+    // a migrated season and escape the genesis-born rollback rule.
+    if (
+      !isOpaqueIdentifier(raw.cutoverFingerprint) ||
+      !isGenesisFingerprint(raw.cutoverFingerprint)
+    ) {
+      return { kind: 'corrupt' };
+    }
     if (
       raw.activeVersion !== null ||
       raw.previousVersion !== null ||

@@ -4501,8 +4501,10 @@ beside `uninitialized`, `seeded` and `active`:
 - Its authority record carries the genesis fingerprint and nothing else. Active
   version, previous version, committed ordering input and high-water mark are
   all `null`, and the operation epoch is `0`. The durable codec reads a
-  `genesis` record carrying any of them as corrupt, and a `seeded` or `active`
-  record still needs its active version.
+  `genesis` record carrying any of them as corrupt. It also reads one whose
+  fingerprint lacks the reserved `genesis1:` prefix (below) as corrupt, and so
+  does the wire decoder. A `seeded` or `active` record still needs its active
+  version.
 - `readAuthority` answers
   `{ cutoverState: 'genesis', authoritative: true, activeVersion: null,
   previousVersion: null, cutoverFingerprint }`. The wire decoder refuses any

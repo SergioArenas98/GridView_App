@@ -42,6 +42,7 @@ import {
   cutoverRejectionReasons,
   finalizeRejectionReasons,
   genesisRejectionReasons,
+  isGenesisFingerprint,
   isOperationKind,
   prepareRejectionReasons,
   type CancelOutcome,
@@ -199,7 +200,12 @@ export function decodeSeasonAuthority(value: unknown): SeasonAuthority | null {
       if (value.activeVersion !== null || value.previousVersion !== null) {
         return null;
       }
-      if (!isOpaqueIdentifier(value.cutoverFingerprint)) return null;
+      if (
+        !isOpaqueIdentifier(value.cutoverFingerprint) ||
+        !isGenesisFingerprint(value.cutoverFingerprint)
+      ) {
+        return null;
+      }
       return {
         cutoverState: 'genesis',
         authoritative: true,
