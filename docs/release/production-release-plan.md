@@ -132,6 +132,15 @@ The amendment must decide:
   - Observability on, with `invocation_logs = false` and no log line that
     records an IP address or a header. This is the condition behind the Data
     safety answer (`data-safety.md` §3.4).
+  - **Owner decision D-L: persisted application logs.**
+    `invocation_logs = false` does not stop the Worker's own
+    `request.completed` lines (route template, request ID, status, duration,
+    cache outcome) from persisting in Workers Logs. Either:
+    - **keep them**, and declare App interactions with the App functionality
+      purpose (PR #82 `data-safety.md` §3.4, R8); or
+    - **disable persisted logs** for production
+      (`[env.production.observability] enabled = false`).
+
 ### W-P. Cost of genesis and submissions, and the submission path (decision)
 
 **Correction.** An earlier version of this section cited 269 ms, the staging
@@ -620,6 +629,7 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | P0 or R7 |
 | D-R | Confirm no closed-testing stage: one controlled Play-delivered upgrade (R3), then the staged rollout (§7) | R5 |
 | D-C | Commit a reviewed Jolpica capture tool to the repository, or keep the private operator script | D1 |
+| D-L | Production persisted application logs: keep them (and declare App interactions) or disable them (W1; PR #82 §3.4, R8) | W1, P3 |
 | D-U | Approve the replacements for the upgrade-matrix rows the single pass does not cover: slow network, older Android, and populated and corrupted legacy cache (§8). Or supply devices for them | R3 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
 | P-R | Privacy review of PR #82 `data-safety.md` review items R1–R8 (not the R-track gates) | P0 |
