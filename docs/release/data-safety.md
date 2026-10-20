@@ -46,7 +46,7 @@ Play Console Help, *Provide information for Google Play's Data safety section*
 | Artifact | Track (Play Console, read 2026-10-20) | minSdk | Data practices |
 |---|---|---|---|
 | versionCode 7, 1.2.1 | Production, full rollout | 21 | Google Mobile Ads SDK (§3.5) |
-| versionCode 2, 1.x | Closed testing "Alpha" | not read | Google Mobile Ads SDK, assumed as in 1.2.1 |
+| versionCode 2, 1.x | Closed testing "Alpha" | not read | **Not verified.** Assumed to match 1.2.1 (Google Mobile Ads SDK) until inspected (§1.4 step 2). |
 | versionCode 8, 2.0.0 | not yet uploaded | **24** (Flutter 3.44 default, `flutter.minSdkVersion`) | Firebase (§3.2) |
 
 1.x builds stay distributed in any of these cases:
@@ -79,6 +79,13 @@ or publishing step.
 2. **Correct the live form now (state 0).** The live "No data collected" is
    already inaccurate for 1.2.1, so declare §3.5 with Ads **Yes**. This does
    not depend on 2.0.0 or on the production Worker.
+   - **First settle the Alpha build.** §3.5 is evidenced from the 1.2.1
+     source only, and the form must cover versionCode 2 too.
+   - **Either** inspect it: download it from Play Console (App bundle
+     explorer) and check its SDKs and manifest against §3.5, adding any
+     difference.
+   - **Or** stop distributing it before submitting: deactivate the Alpha
+     track, or replace its build (D-T2).
 3. **Submit state T** before 2.0.0 reaches any non-internal track (closed,
    open or production). State T includes the 2.0.0 API answer (§3.4), so it
    also waits for production logging to be verified off.

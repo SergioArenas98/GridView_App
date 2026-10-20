@@ -136,8 +136,8 @@ Instead:
 
 **Your choices for versions 1.x:**
 
-- Update to version 2.0.0 or later, which contains no advertising. It needs
-  Android 7.0 or later.
+- Once version 2.0.0 is available on Google Play, update to it. It contains no
+  advertising and needs Android 7.0 or later.
 - Reset or delete your advertising ID, or opt out of ad personalisation, in
   Android settings. Look for **Privacy → Ads** or **Google → Ads**, depending on
   your device.
