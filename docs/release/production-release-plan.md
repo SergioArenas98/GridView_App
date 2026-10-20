@@ -36,7 +36,7 @@ Steps marked **[PR]** are reviewable repository changes.
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
 | P2 | **[approval]** Publish the policy at https://gridview.netlify.app | P1 |
 | P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2, P-R, §5.1 step 2 or step 3 (Alpha inspected or paused) |
-| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, W3 (production logging verified off in persisted Workers Logs); before R2 |
+| P3 | **[approval]** Data safety in transition state T, Ads = **Yes**, including the App interactions row D-L requires | P2, P-R, D-L, W3 (the deployed observability setting matches D-L); before R2 |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
 | A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1, P1, D3, every W/D PR merged |
 | A0b | **[record]** Release-candidate gate, post-build part: the AAB, the internal installation and performance | A2, R2, R3 |
@@ -239,16 +239,19 @@ npx wrangler deploy --env production
 Verify:
 - `GET /v1/status` returns `200` with `environment=production` and `maintenance=false`.
 - The season resources are unavailable, as W0 item 4 expects.
-- **Production logging is off in persisted Workers Logs.** This is the
-  premise of P3. `wrangler tail` cannot prove it: it is a real-time stream,
-  carries request metadata itself, and stores nothing.
-  - The deployed version's configuration shows observability with
-    `invocation_logs = false`. Check `npx wrangler versions view <version-id>
-    --env production` or the dashboard's Observability settings.
+- **Persisted Workers Logs match D-L.** This is the premise of P3.
+  `wrangler tail` cannot prove it: it is a real-time stream, carries request
+  metadata itself, and stores nothing.
+  - The deployed version's configuration matches D-L. Check
+    `npx wrangler versions view <version-id> --env production` or the
+    dashboard's Observability settings.
+    - **D-L keep:** `invocation_logs = false`.
+    - **D-L disable:** observability logs disabled.
   - Send a few public requests, then query the Workers Logs dataset in the
-    dashboard (Observability → Logs) for that window. It holds no invocation
-    record with request metadata, and no application line with an IP address
-    or a header.
+    dashboard (Observability → Logs) for that window.
+    - **D-L keep:** no invocation record with request metadata. Only
+      `request.completed` lines appear, with no IP address or header.
+    - **D-L disable:** no records at all.
 
 Record the deployed version id.
 
@@ -372,6 +375,12 @@ The details are in PR #82, `data-safety.md` §1.
   production Worker.
 - **P3 [approval]:** submit Data safety in **state T**: the 2.0.0 Firebase
   rows plus the 1.x AdMob rows, with Ads **Yes**.
+  - **Prerequisites:** P-R is done, and D-L is decided.
+  - If D-L keeps the persisted `request.completed` logs, the App interactions
+    row also carries the API source and the App functionality purpose
+    (PR #82 `data-safety.md` §3.2, §3.4).
+  - If D-L disables them, W3 has verified that the deployed production
+    version has persisted logs off.
   - Play counts closed, open and production tracks, and exempts only apps that
     are active exclusively on internal testing. GridView is not internal-only,
     so this plan takes the conservative reading and submits state T before
@@ -629,7 +638,7 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | P0 or R7 |
 | D-R | Confirm no closed-testing stage: one controlled Play-delivered upgrade (R3), then the staged rollout (§7) | R5 |
 | D-C | Commit a reviewed Jolpica capture tool to the repository, or keep the private operator script | D1 |
-| D-L | Production persisted application logs: keep them (and declare App interactions) or disable them (W1; PR #82 §3.4, R8) | W1, P3 |
+| D-L | Production persisted application logs: keep them (and declare App interactions) or disable them (W1; PR #82 §3.4, R8) | W1, W3, P3 |
 | D-U | Approve the replacements for the upgrade-matrix rows the single pass does not cover: slow network, older Android, and populated and corrupted legacy cache (§8). Or supply devices for them | R3 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
 | P-R | Privacy review of PR #82 `data-safety.md` review items R1–R8 (not the R-track gates) | P0 |
