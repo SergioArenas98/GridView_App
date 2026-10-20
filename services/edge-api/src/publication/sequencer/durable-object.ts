@@ -65,6 +65,8 @@ import type {
   PrepareOutcome,
   PrepareRequest,
   SeasonAuthority,
+  SeasonGenesisOutcome,
+  SeasonGenesisRequest,
 } from './model';
 import type { SeasonPublicationSequencerPort } from './port';
 import {
@@ -78,6 +80,7 @@ import {
   decodeFinalizeOutcome,
   decodePrepareOutcome,
   decodeSeasonAuthority,
+  decodeSeasonGenesisOutcome,
   prepareAssignmentsMatchRequest,
 } from './wire-decoders';
 
@@ -95,6 +98,7 @@ export const sequencerCommands = [
   'seed-cutover',
   'recover-cutover-seed',
   'activate-cutover',
+  'commit-genesis',
 ] as const;
 
 export type SequencerCommand = (typeof sequencerCommands)[number];
@@ -172,6 +176,10 @@ export class SeasonPublicationSequencer {
       case 'activate-cutover':
         return this.coordinator.activateCutover(
           request as unknown as CutoverActivationRequest,
+        );
+      case 'commit-genesis':
+        return this.coordinator.commitGenesis(
+          request as unknown as SeasonGenesisRequest,
         );
     }
   }
@@ -379,6 +387,15 @@ export class DurableObjectSeasonPublicationSequencer implements SeasonPublicatio
         reason: 'state-corrupt',
       }
     );
+  }
+
+  async commitGenesis(
+    request: SeasonGenesisRequest,
+  ): Promise<SeasonGenesisOutcome> {
+    const value = await this.call(request.season, 'commit-genesis', request);
+    // A lost or undecodable answer may follow a committed write, so it is
+    // `uncertain`: the caller reads the authority once to find out.
+    return decodeSeasonGenesisOutcome(value) ?? { outcome: 'uncertain' };
   }
 
   private async call(

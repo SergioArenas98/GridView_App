@@ -7,9 +7,10 @@
  * GET  /internal/admin/publication/cutover/status?season=YYYY
  * POST /internal/admin/publication/cutover/seed
  * POST /internal/admin/publication/cutover/activate
+ * POST /internal/admin/publication/cutover/genesis
  * ```
  *
- * All three sit under `/internal/admin/`, so `handleAdminRequest` has already
+ * All four sit under `/internal/admin/`, so `handleAdminRequest` has already
  * enforced `ADMIN_TOKEN` before any of them is reached, and every response
  * carries `Cache-Control: no-store` through the same `jsonResponse` helper the
  * rest of the admin router uses.
@@ -37,17 +38,20 @@
 import { jsonResponse } from '../http/envelope';
 import type { CutoverPreparationService } from '../publication/cutover/service';
 import { decodeCutoverCheckpoint } from '../publication/cutover/checkpoint';
+import { isSeason } from '../publication/sequencer/store';
 
 export const cutoverStatusPath = '/internal/admin/publication/cutover/status';
 export const cutoverSeedPath = '/internal/admin/publication/cutover/seed';
 export const cutoverActivatePath =
   '/internal/admin/publication/cutover/activate';
+export const cutoverGenesisPath = '/internal/admin/publication/cutover/genesis';
 
 export function isCutoverPath(pathname: string): boolean {
   return (
     pathname === cutoverStatusPath ||
     pathname === cutoverSeedPath ||
-    pathname === cutoverActivatePath
+    pathname === cutoverActivatePath ||
+    pathname === cutoverGenesisPath
   );
 }
 
@@ -80,6 +84,22 @@ export async function handleCutoverRequest(
 
   const body = await readJsonObject(request);
   if (body === null) return invalid(requestId, 'malformed-body');
+
+  if (url.pathname === cutoverGenesisPath) {
+    // `{season, genesisIdentity, confirmGenesis: true}`. The confirmation must
+    // be the literal `true`; the identity is validated by the service.
+    const season = body.season;
+    if (!isSeason(season)) return invalid(requestId, 'invalid-season');
+    if (typeof body.genesisIdentity !== 'string') {
+      return invalid(requestId, 'invalid-genesis-identity');
+    }
+    const result = await service.genesis({
+      season,
+      genesisIdentity: body.genesisIdentity,
+      confirmGenesis: body.confirmGenesis === true,
+    });
+    return ok(result, requestId, result.kind === 'genesis' ? 200 : 409);
+  }
 
   if (url.pathname === cutoverSeedPath) {
     const checkpoint = decodeCutoverCheckpoint(body.checkpoint);

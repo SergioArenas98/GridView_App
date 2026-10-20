@@ -55,6 +55,12 @@ import type { CutoverSeed, CutoverSeedOutcome } from '../sequencer/model';
 import type { SeasonPublicationSequencerPort } from '../sequencer/port';
 import { highestInstant } from '../sequencer/rules';
 import type { CutoverControl, CutoverPhase } from './control';
+import { cutoverGate, type CutoverGate, type CutoverGateRefusal } from './gate';
+import {
+  SeasonGenesisService,
+  type SeasonGenesisCommand,
+  type SeasonGenesisResult,
+} from './genesis';
 import {
   auditedUpperBoundOf,
   cutoverFingerprint,
@@ -71,27 +77,7 @@ import {
   type ReleaseImportRefusal,
 } from './migration';
 
-/**
- * Why an operation could not even be attempted.
- *
- * Every value here is a refusal taken **before** any storage read.
- */
-export const cutoverGateRefusals = [
-  /** No cutover control is set at all. */
-  'disabled',
-  /** The control names a different season. */
-  'season-not-paused',
-  /** `seed:` cannot activate, and `activate:` cannot seed. */
-  'phase-not-permitted',
-  /** Only staging is an authorized cutover target; production never is. */
-  'environment-not-staging',
-  /** `SEASON_PUBLICATION_AUTHORITY` is not the exact string `sequencer`. */
-  'authority-mode-not-sequencer',
-  /** Sequencer mode is selected and no port is reachable. */
-  'sequencer-unavailable',
-] as const;
-
-export type CutoverGateRefusal = (typeof cutoverGateRefusals)[number];
+export { cutoverGateRefusals, type CutoverGateRefusal } from './gate';
 
 /** Why a seed attempt failed after the gate allowed it. Bounded. */
 export const cutoverSeedFailures = [
@@ -214,14 +200,29 @@ export type CutoverStatus =
       readonly phase: CutoverPhase;
       /**
        * Whether this Worker refuses the season's publication and rollback.
-       * `false` only for an `active`, authoritative season in the `activate`
-       * phase, whose mutators run through the sequencer; legacy admission stays
-       * closed either way.
+       * `false` only for an `active`, authoritative season outside the `seed`
+       * phase, whose mutators run through the sequencer; legacy admission
+       * stays closed either way.
        */
       readonly admissionClosed: boolean;
       readonly authoritative: boolean;
       readonly activeVersion: string;
       readonly previousVersion: string | null;
+      readonly cutoverFingerprint: string;
+    }
+  | {
+      /**
+       * Born in the sequencer with no committed release (ADR 0025 D12,
+       * "Amendment (2026-10-20)"). Its public reads are unavailable until the
+       * first guarded publication commits.
+       */
+      readonly state: 'genesis';
+      readonly season: number;
+      readonly phase: CutoverPhase;
+      readonly admissionClosed: boolean;
+      readonly authoritative: true;
+      readonly activeVersion: null;
+      readonly previousVersion: null;
       readonly cutoverFingerprint: string;
     };
 
@@ -244,6 +245,7 @@ export class CutoverPreparationService {
   private readonly logger: Logger;
   private readonly clock: Clock;
   private readonly retry: CutoverRetryPolicy;
+  private readonly genesisService: SeasonGenesisService;
 
   constructor(deps: CutoverPreparationDeps) {
     this.control = deps.config.publicationCutoverControl;
@@ -254,6 +256,16 @@ export class CutoverPreparationService {
     this.logger = deps.logger;
     this.clock = deps.clock;
     this.retry = deps.retry ?? defaultCutoverRetryPolicy;
+    this.genesisService = new SeasonGenesisService(deps);
+  }
+
+  /**
+   * Records a season with no earlier release in the sequencer, with no release
+   * (`genesis.ts`; ADR 0025 D12, "Amendment (2026-10-20)"). Only reachable in
+   * `genesis:<same season>` mode; never seeds and never activates.
+   */
+  async genesis(command: SeasonGenesisCommand): Promise<SeasonGenesisResult> {
+    return this.genesisService.genesis(command);
   }
 
   /**
@@ -287,6 +299,18 @@ export class CutoverPreparationService {
         season,
         phase,
         admissionClosed: true,
+      };
+    }
+    if (authority.cutoverState === 'genesis') {
+      return {
+        state: 'genesis',
+        season,
+        phase,
+        admissionClosed: phase === 'seed',
+        authoritative: true,
+        activeVersion: null,
+        previousVersion: null,
+        cutoverFingerprint: authority.cutoverFingerprint,
       };
     }
     return {
@@ -465,7 +489,11 @@ export class CutoverPreparationService {
     if (authority.cutoverState === 'unavailable') {
       return this.failedActivation(season, 'authority-unreadable');
     }
-    if (authority.cutoverState === 'uninitialized') {
+    if (
+      authority.cutoverState === 'uninitialized' ||
+      authority.cutoverState === 'genesis'
+    ) {
+      // A genesis season was never seeded, so it has nothing to activate.
       return this.failedActivation(season, 'cutover-not-seeded');
     }
 
@@ -518,38 +546,18 @@ export class CutoverPreparationService {
   // --- guards ---------------------------------------------------------------
 
   /**
-   * The one gate every operation passes, in the order that reveals the least.
-   *
-   * All five conditions are required together, and production fails at the
-   * environment check before an authority mode or a port is even considered.
+   * The one gate every operation passes (`gate.ts`). A seed or an activation
+   * requires staging, so production fails at the environment check before an
+   * authority mode or a port is even considered.
    */
-  private reachablePort(
-    season: number,
-    phase: CutoverPhase,
-  ):
-    | { kind: 'ok'; port: SeasonPublicationSequencerPort }
-    | { kind: 'refused'; refusal: CutoverGateRefusal } {
-    if (this.control.kind === 'disabled') {
-      return { kind: 'refused', refusal: 'disabled' };
-    }
-    if (this.control.season !== season) {
-      return { kind: 'refused', refusal: 'season-not-paused' };
-    }
-    if (this.control.kind !== phase) {
-      // `seed:` cannot activate and `activate:` cannot seed. D12 forbids one
-      // operator act that does both, and this is where that is enforced.
-      return { kind: 'refused', refusal: 'phase-not-permitted' };
-    }
-    if (this.environment !== 'staging') {
-      return { kind: 'refused', refusal: 'environment-not-staging' };
-    }
-    if (this.authority.mode === 'legacy') {
-      return { kind: 'refused', refusal: 'authority-mode-not-sequencer' };
-    }
-    if (this.authority.mode === 'sequencer-unavailable') {
-      return { kind: 'refused', refusal: 'sequencer-unavailable' };
-    }
-    return { kind: 'ok', port: this.authority.port };
+  private reachablePort(season: number, phase: CutoverPhase): CutoverGate {
+    return cutoverGate(
+      this.control,
+      this.environment,
+      this.authority,
+      season,
+      phase,
+    );
   }
 
   /**

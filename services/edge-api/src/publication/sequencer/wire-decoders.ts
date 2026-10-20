@@ -41,6 +41,8 @@ import {
   cleanupRefusalReasons,
   cutoverRejectionReasons,
   finalizeRejectionReasons,
+  genesisRejectionReasons,
+  isGenesisFingerprint,
   isOperationKind,
   prepareRejectionReasons,
   type CancelOutcome,
@@ -57,6 +59,7 @@ import {
   type PrepareRequest,
   type RetiredCleanupHandle,
   type SeasonAuthority,
+  type SeasonGenesisOutcome,
 } from './model';
 import {
   isDocumentName,
@@ -190,6 +193,26 @@ export function decodeSeasonAuthority(value: unknown): SeasonAuthority | null {
       return value.authoritative === false
         ? { cutoverState: 'unavailable', authoritative: false }
         : null;
+    case 'genesis':
+      // Authoritative with no release: exactly a fingerprint and two `null`
+      // versions. A genesis answer naming any version is impossible.
+      if (value.authoritative !== true) return null;
+      if (value.activeVersion !== null || value.previousVersion !== null) {
+        return null;
+      }
+      if (
+        !isOpaqueIdentifier(value.cutoverFingerprint) ||
+        !isGenesisFingerprint(value.cutoverFingerprint)
+      ) {
+        return null;
+      }
+      return {
+        cutoverState: 'genesis',
+        authoritative: true,
+        activeVersion: null,
+        previousVersion: null,
+        cutoverFingerprint: value.cutoverFingerprint,
+      };
     case 'seeded':
     case 'active': {
       const authoritative = value.cutoverState === 'active';
@@ -233,10 +256,11 @@ export function decodePrepareOutcome(value: unknown): PrepareOutcome | null {
     if (assignedTimestamps === null) return null;
     if (!isInstant(value.deadline)) return null;
     // Absent only from an older sequencer build, which the client refuses by
-    // binding it to the request; present, it must be a version identifier.
+    // binding it to the request; present, it must be a version identifier, or
+    // `null` for the empty predecessor of a `genesis` season's first release.
     if (
       value.priorVersion !== undefined &&
-      !isVersionIdentifier(value.priorVersion)
+      !isNullableVersion(value.priorVersion)
     ) {
       return null;
     }
@@ -480,6 +504,26 @@ export function decodeCutoverSeedRecovery(
     default:
       return null;
   }
+}
+
+export function decodeSeasonGenesisOutcome(
+  value: unknown,
+): SeasonGenesisOutcome | null {
+  if (!isRecord(value)) return null;
+  if (
+    value.outcome === 'created' ||
+    value.outcome === 'already-genesis' ||
+    value.outcome === 'already-active'
+  ) {
+    return { outcome: value.outcome };
+  }
+  if (value.outcome === 'rejected') {
+    return inClosedSet(value.reason, genesisRejectionReasons)
+      ? { outcome: 'rejected', reason: value.reason }
+      : null;
+  }
+  // `uncertain` is the client's own answer and is never accepted from the wire.
+  return null;
 }
 
 export function decodeCutoverActivationOutcome(

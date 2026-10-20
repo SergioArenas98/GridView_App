@@ -201,6 +201,7 @@ describe('SeasonPublicationSequencer durable object', () => {
       'seed-cutover',
       'recover-cutover-seed',
       'activate-cutover',
+      'commit-genesis',
     ]);
   });
 });

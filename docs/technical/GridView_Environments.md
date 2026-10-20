@@ -568,8 +568,9 @@ pointers, and production has never been deployed.**
 `SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is live in staging only —
 `activate:2026` since 2026-09-16, and `seed:2026` from 2026-09-12 before that —
 and remains unset in development and production. `env.staging` commits the same
-`activate:2026` (below). It accepts exactly `seed:<supported season>` or
-`activate:<supported season>`; an absent or empty value is disabled and
+`activate:2026` (below). It accepts exactly `seed:<supported season>`,
+`activate:<supported season>` or (since 2026-10-20, ADR 0025 D12 "Amendment
+(2026-10-20)") `genesis:<supported season>`, which no environment sets; an absent or empty value is disabled and
 preserves today's behaviour exactly. A **malformed non-empty value is a bounded
 `ConfigurationError`** — the same failure an unknown `PROVIDER_MODE` produces,
 surfacing as a 500 that carries no raw value in either the response or the log

@@ -121,6 +121,9 @@ async function resolveActiveVersion(
     if (read.cutoverState === 'active') {
       return { kind: 'version', version: read.activeVersion };
     }
+    // `genesis`: the sequencer's own positive answer that no release has
+    // committed yet. Never the legacy pointer.
+    if (read.cutoverState === 'genesis') return noActiveVersion;
     // `uninitialized` / `seeded`: the legacy pointer remains authoritative.
   }
   return { kind: 'version', version: await storage.getActiveVersion(season) };

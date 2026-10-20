@@ -6,7 +6,7 @@
  *   "kind": "gridview-season-batch-submission",
  *   "schemaVersion": 1,
  *   "season": 2026,
- *   "expectedActiveVersion": "<the active release the batch was reviewed against>",
+ *   "expectedActiveVersion": "<the active release the batch was reviewed against>" | null,
  *   "reviewedManifestSha256": "<64 lower-case hex>",
  *   "manifest": { ...manifest.json... },
  *   "artifact": { ...artifact.json... }
@@ -34,7 +34,13 @@ export const maximumSubmissionBytes = 2 * 1024 * 1024;
 
 export interface SeasonBatchSubmission {
   readonly season: number;
-  readonly expectedActiveVersion: string;
+  /**
+   * The active release the batch was reviewed against, or `null` for the
+   * first release of a `genesis` season, which has none (ADR 0025 D12,
+   * "Amendment (2026-10-20)"). `null` must be explicit: an absent member is
+   * malformed, never "no release".
+   */
+  readonly expectedActiveVersion: string | null;
   readonly reviewedManifestSha256: string;
   /** Untrusted until `verifySeasonBatch` accepts it. */
   readonly manifest: unknown;
@@ -76,8 +82,11 @@ export function decodeSubmission(value: unknown): SeasonBatchSubmission | null {
     value.kind !== submissionKind ||
     value.schemaVersion !== seasonBatchSchemaVersion ||
     !Number.isSafeInteger(value.season) ||
-    typeof value.expectedActiveVersion !== 'string' ||
-    !versionPattern.test(value.expectedActiveVersion) ||
+    !(
+      value.expectedActiveVersion === null ||
+      (typeof value.expectedActiveVersion === 'string' &&
+        versionPattern.test(value.expectedActiveVersion))
+    ) ||
     typeof value.reviewedManifestSha256 !== 'string' ||
     !sha256Pattern.test(value.reviewedManifestSha256) ||
     !isRecord(value.manifest) ||
@@ -87,7 +96,7 @@ export function decodeSubmission(value: unknown): SeasonBatchSubmission | null {
   }
   return {
     season: value.season as number,
-    expectedActiveVersion: value.expectedActiveVersion,
+    expectedActiveVersion: value.expectedActiveVersion as string | null,
     reviewedManifestSha256: value.reviewedManifestSha256,
     manifest: value.manifest,
     artifact: value.artifact,

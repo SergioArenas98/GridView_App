@@ -128,6 +128,22 @@ describe('season-batch submission builder', () => {
     ).toEqual({ ok: false, failure: 'expected-version-invalid' });
   });
 
+  it('builds a first-release body naming no release explicitly', async () => {
+    const result = await buildSubmission(
+      input({ expectedActiveVersion: null }),
+    );
+    if (!result.ok) throw new Error(result.failure);
+    expect(result.summary.expectedActiveVersion).toBeNull();
+    const body = JSON.parse(result.text) as Record<string, unknown>;
+    // Present and `null`: an absent member is malformed, never "no release".
+    expect(Object.hasOwn(body, 'expectedActiveVersion')).toBe(true);
+    expect(body.expectedActiveVersion).toBeNull();
+    expect(decodeSubmission(body)?.expectedActiveVersion).toBeNull();
+    const without = { ...body };
+    delete without.expectedActiveVersion;
+    expect(decodeSubmission(without)).toBeNull();
+  });
+
   it('writes a body the Worker decodes exactly', async () => {
     const result = await buildSubmission(input());
     if (!result.ok) throw new Error(result.failure);

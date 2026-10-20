@@ -57,7 +57,7 @@ export interface GuardedPublicationOptions {
    * Absent, the predecessor is whatever is authoritative when the
    * publication starts, as for coordinated publication.
    */
-  readonly expectedActiveVersion?: string;
+  readonly expectedActiveVersion?: string | null;
 }
 
 /**

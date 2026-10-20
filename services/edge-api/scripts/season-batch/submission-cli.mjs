@@ -1,7 +1,11 @@
 // GridView season-batch submission builder: offline.
 //
 //   npm run season-batch:submission -- --batch <dir> --manifest-sha256 <hex> \
-//     --expected-active-version <version> --out <file>
+//     (--expected-active-version <version> | --first-release) --out <file>
+//
+// `--first-release` is for a season in `genesis`, which has no release to name
+// (ADR 0025 D12, "Amendment (2026-10-20)"); the body then carries
+// `"expectedActiveVersion": null`.
 //
 // Reads one reviewed season batch directory (exactly `artifact.json` and
 // `manifest.json`, as the season-batch generator wrote them), runs the

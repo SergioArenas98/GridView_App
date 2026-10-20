@@ -18,7 +18,12 @@
  *
  * - `SEASON_BATCH_INGEST` names the one season accepted. No committed
  *   environment sets it.
- * - The environment is `staging`. Production never ingests, whatever is set.
+ * - The environment is `staging` or `production`. Development never ingests,
+ *   whatever is set. Production additionally requires the cutover control
+ *   `genesis:<the same season>`: it has no legacy release to seed from, so its
+ *   only sequenced seasons are born by genesis (ADR 0025 D12, "Amendment
+ *   (2026-10-20)"), and the same control closes the season's legacy
+ *   admission.
  * - `PROVIDER_MODE` is not `coordinated`, so there is never a second provider
  *   budget beside the Worker's own.
  * - The publication authority is a reachable sequencer, so the guarded entry
@@ -44,6 +49,10 @@
  * than publishing a duplicate release, and of two conflicting submissions at
  * most one commits.
  *
+ * A `genesis` season's first submission names `null`: the sequencer reports no
+ * release, and the empty predecessor is bound the same way. Once that first
+ * release commits, a retry naming `null` is refused as stale.
+ *
  * ## What leaves this module
  *
  * Closed reasons, the publication status, versions, digests the operator
@@ -55,6 +64,7 @@ import dataSources from '../../../../content/attribution/data-sources.json';
 import type { EnvironmentName, ProviderMode } from '../config/environment';
 import type { Logger } from '../logging/logger';
 import type { GuardedPublicationCommands } from '../publication/commands';
+import type { CutoverControl } from '../publication/cutover/control';
 import type {
   PublicationReason,
   PublicationResult,
@@ -80,6 +90,8 @@ export const ingestAdmissionRefusals = [
   'ingest-disabled',
   'ingest-misconfigured',
   'environment-not-permitted',
+  /** Production, without `genesis:<season>` naming the ingested season. */
+  'genesis-control-required',
   'provider-mode-coordinated',
   'authority-not-sequenced',
   'attribution-not-active',
@@ -137,7 +149,7 @@ export interface IngestBatchSummary {
   readonly manifestSha256: string;
   readonly artifactSha256: string;
   readonly observedAt: string;
-  readonly expectedActiveVersion: string;
+  readonly expectedActiveVersion: string | null;
   readonly documentCount: number;
   readonly classifiedRounds: readonly number[];
 }
@@ -145,6 +157,8 @@ export interface IngestBatchSummary {
 export interface SeasonBatchIngestDeps {
   readonly environment: EnvironmentName;
   readonly providerMode: ProviderMode;
+  /** The resolved cutover control; production ingests only under `genesis:`. */
+  readonly cutoverControl: CutoverControl;
   /** The raw `SEASON_BATCH_INGEST` value. */
   readonly enabledSeason: string | undefined;
   /** The guarded sequenced publication, or `null` when there is none. */
@@ -227,8 +241,18 @@ export class SeasonBatchIngest {
     if (!seasonPattern.test(raw) || this.metadataFor(Number(raw)) === null) {
       return 'ingest-misconfigured';
     }
-    if (this.deps.environment !== 'staging') {
+    if (
+      this.deps.environment !== 'staging' &&
+      this.deps.environment !== 'production'
+    ) {
       return 'environment-not-permitted';
+    }
+    const control = this.deps.cutoverControl;
+    if (
+      this.deps.environment === 'production' &&
+      !(control.kind === 'genesis' && control.season === Number(raw))
+    ) {
+      return 'genesis-control-required';
     }
     if (this.deps.providerMode === 'coordinated') {
       return 'provider-mode-coordinated';

@@ -39,7 +39,12 @@ import type {
   PendingCleanupRecord,
   PerKeyState,
 } from './model';
-import { cutoverStates, operationPhases, isOperationKind } from './model';
+import {
+  cutoverStates,
+  isGenesisFingerprint,
+  isOperationKind,
+  operationPhases,
+} from './model';
 import { canonicalInstant } from '../canonical/instant';
 import type { SnapshotDocumentName } from '../../storage/types';
 
@@ -187,7 +192,30 @@ export function readAuthorityRecord(
   // and the fingerprint that produced it (D12). A durable record in one of
   // those states missing either cannot be reconciled with any defined
   // transition, so it fails closed rather than becoming a partial authority.
-  if (raw.cutoverState !== 'uninitialized') {
+  //
+  // A `genesis` season is the one exception, and the exact opposite: it was
+  // born with no release, so it carries its fingerprint and **nothing else**.
+  // A genesis record holding a version, an ordering baseline or a floor
+  // describes no defined transition, and fails closed the same way.
+  if (raw.cutoverState === 'genesis') {
+    // Only `commitGenesis` writes this state, and only with the reserved
+    // prefix. A genesis record under any other fingerprint would later read as
+    // a migrated season and escape the genesis-born rollback rule.
+    if (
+      !isOpaqueIdentifier(raw.cutoverFingerprint) ||
+      !isGenesisFingerprint(raw.cutoverFingerprint)
+    ) {
+      return { kind: 'corrupt' };
+    }
+    if (
+      raw.activeVersion !== null ||
+      raw.previousVersion !== null ||
+      raw.committedSourceOrderingInput !== null ||
+      raw.seasonSnapshotObservedAtHighWaterMark !== null
+    ) {
+      return { kind: 'corrupt' };
+    }
+  } else if (raw.cutoverState !== 'uninitialized') {
     if (!isVersionIdentifier(raw.activeVersion)) return { kind: 'corrupt' };
     if (!isOpaqueIdentifier(raw.cutoverFingerprint)) return { kind: 'corrupt' };
   }

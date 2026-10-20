@@ -153,7 +153,7 @@ export interface SubmissionOverrides {
 
 export function submissionFor(
   batch: Batch,
-  expectedActiveVersion: string,
+  expectedActiveVersion: string | null,
   overrides: Omit<SubmissionOverrides, 'expectedActiveVersion'> = {},
 ): Json {
   return {
@@ -214,6 +214,7 @@ export function ingestFor(
   return new SeasonBatchIngest({
     environment: 'staging',
     providerMode: 'mock',
+    cutoverControl: { kind: 'disabled' },
     enabledSeason: String(SEASON),
     guarded,
     clock: context.clock,

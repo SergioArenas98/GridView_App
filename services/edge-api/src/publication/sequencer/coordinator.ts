@@ -43,6 +43,7 @@ import {
 } from './candidate-version';
 import { isManifestCommitment } from './manifest-commitment';
 import {
+  isGenesisFingerprint,
   type AuthorityRecord,
   type CancelOutcome,
   type CleanupAcknowledgement,
@@ -50,6 +51,7 @@ import {
   type CleanupRequest,
   type CommittedResult,
   type CutoverActivationOutcome,
+  type CutoverState,
   type CutoverActivationRequest,
   type CutoverSeed,
   type CutoverSeedOutcome,
@@ -63,6 +65,8 @@ import {
   type PrepareOutcome,
   type PrepareRequest,
   type SeasonAuthority,
+  type SeasonGenesisOutcome,
+  type SeasonGenesisRequest,
 } from './model';
 import {
   clearOperationRecord,
@@ -71,6 +75,8 @@ import {
   committedKeyPrefix,
   isOpaqueIdentifier,
   isSeason,
+  operationStorageKey,
+  pendingCleanupStorageKey,
   preparedKeyPrefix,
   putPerKeyState,
   readAuthorityRecord,
@@ -167,6 +173,17 @@ export class SeasonPublicationCoordinator {
         // One object owns one season. It never answers for another.
         return { cutoverState: 'unavailable', authoritative: false } as const;
       }
+      if (record.cutoverState === 'genesis') {
+        // The durable codec admits a genesis record only with its fingerprint
+        // and no version, baseline or floor, so this answer is complete.
+        return {
+          cutoverState: 'genesis',
+          authoritative: true,
+          activeVersion: null,
+          previousVersion: null,
+          cutoverFingerprint: record.cutoverFingerprint as string,
+        } as const;
+      }
       const { activeVersion, cutoverFingerprint } = record;
       if (activeVersion === null || cutoverFingerprint === null) {
         // A seeded/active record must carry both. The durable codec already
@@ -212,7 +229,7 @@ export class SeasonPublicationCoordinator {
       }
       if (
         authority.kind === 'missing' ||
-        authority.value.cutoverState !== 'active'
+        !isMutableState(authority.value.cutoverState)
       ) {
         // Mutators stay paused until this season's authority has switched.
         // `seeded` is a pre-activation state in which legacy pointers remain
@@ -223,12 +240,29 @@ export class SeasonPublicationCoordinator {
       if (current.season !== request.season) {
         return { outcome: 'rejected', reason: 'season-mismatch' };
       }
+      if (
+        request.operationKind === 'rollback-republication' &&
+        isGenesisFingerprint(current.cutoverFingerprint) &&
+        current.previousVersion === null
+      ) {
+        // A genesis-born season with no previous version has committed at most
+        // one release - every release it ever had was committed here - so
+        // there is no earlier release to roll back to, in `genesis` or after
+        // its first commit.
+        return { outcome: 'rejected', reason: 'no-committed-release' };
+      }
 
       // D16: the candidate was compared against one exact predecessor. Bind it
       // here, in the same transaction that admits the operation, before any
       // epoch is allocated or anything is written. From this point until this
       // operation's own `finalize`, single-flight and epoch fencing keep that
       // predecessor authoritative, and `finalize` re-asserts it.
+      //
+      // A `genesis` season's predecessor is empty: its `activeVersion` is
+      // `null`, so only `expected.activeVersion === null` matches, and it has
+      // no committed rows, so only an empty `guardDocuments` matches. An
+      // `active` season's version is never `null`, so an empty predecessor
+      // presented to it is `stale-predecessor`.
       const expected = request.expectedPredecessor;
       if (current.activeVersion !== expected.activeVersion) {
         return { outcome: 'rejected', reason: 'stale-predecessor' };
@@ -424,8 +458,8 @@ export class SeasonPublicationCoordinator {
       return { outcome: 'rejected', reason: 'malformed-identity' };
     }
     return this.host.transactionSync((store): FinalizeOutcome => {
-      const context = this.resolveActive(store, request.season);
-      if (context.kind !== 'active') {
+      const context = this.resolveMutable(store, request.season);
+      if (context.kind !== 'mutable') {
         return { outcome: 'rejected', reason: context.reason };
       }
       const authority = context.authority;
@@ -511,6 +545,10 @@ export class SeasonPublicationCoordinator {
         committedAt: nowInstant,
       };
 
+      // A `genesis` season's first commit is what makes it `active`: from here
+      // on it is an ordinary sequenced season, with this release active and no
+      // previous one. Every other commit leaves the state as it was.
+      //
       // Per-key state for a key no longer named in the incoming manifest is
       // retired here. The season-wide high-water mark is not: it is never
       // lowered or removed merely because a key left the active inventory,
@@ -522,6 +560,7 @@ export class SeasonPublicationCoordinator {
       clearPerKeyState(store, preparedKeyPrefix);
       writeAuthorityRecord(store, {
         ...authority,
+        cutoverState: 'active',
         activeVersion: result.activeVersion,
         previousVersion: result.previousVersion,
         committedSourceOrderingInput: record.sourceOrderingInput,
@@ -552,8 +591,8 @@ export class SeasonPublicationCoordinator {
       return { outcome: 'rejected', reason: 'malformed-identity' };
     }
     return this.host.transactionSync((store): CancelOutcome => {
-      const context = this.resolveActive(store, request.season);
-      if (context.kind !== 'active') {
+      const context = this.resolveMutable(store, request.season);
+      if (context.kind !== 'mutable') {
         return { outcome: 'rejected', reason: context.reason };
       }
       const operation = readOperationRecord(store);
@@ -896,7 +935,11 @@ export class SeasonPublicationCoordinator {
       if (record.season !== request.season) {
         return { outcome: 'rejected', reason: 'season-mismatch' };
       }
-      if (record.cutoverFingerprint !== request.cutoverFingerprint) {
+      if (
+        record.cutoverState === 'genesis' ||
+        record.cutoverFingerprint !== request.cutoverFingerprint
+      ) {
+        // A genesis is not a seed under any fingerprint.
         return { outcome: 'rejected', reason: 'conflicting-cutover-seed' };
       }
       const committed = readPerKeyState(store, committedKeyPrefix);
@@ -960,6 +1003,12 @@ export class SeasonPublicationCoordinator {
       if (record.season !== request.season) {
         return { outcome: 'rejected', reason: 'season-mismatch' };
       }
+      if (record.cutoverState === 'genesis') {
+        // Only a seed is activated. A genesis season becomes `active` through
+        // its first committed release, never through this transition, which
+        // would otherwise leave an `active` record with no active version.
+        return { outcome: 'rejected', reason: 'cutover-not-seeded' };
+      }
       if (record.cutoverFingerprint !== request.cutoverFingerprint) {
         return { outcome: 'rejected', reason: 'cutover-fingerprint-mismatch' };
       }
@@ -971,12 +1020,86 @@ export class SeasonPublicationCoordinator {
     });
   }
 
-  /** The shared "is this season active, and is it this season" precondition. */
-  private resolveActive(
+  /**
+   * Brings one season into existence in the sequencer with **no release**
+   * (ADR 0025 D12, "Amendment (2026-10-20): production genesis").
+   *
+   * It applies only to a season this object holds no state for at all: no
+   * authority record in any state, no operation, no pending cleanup and no
+   * per-key row. One atomic write then records `genesis` with the fingerprint
+   * and nothing else - no version, no baseline, no floor, epoch `0`.
+   *
+   * A retry with the same fingerprint writes nothing and reports where the
+   * season is now: still `genesis`, or `active` once its first release
+   * committed. Any other state, including a genesis under another fingerprint,
+   * is refused and left exactly as it was. Whether the season has a legacy
+   * release is the caller's check: this component never reads Workers KV.
+   */
+  commitGenesis(request: SeasonGenesisRequest): SeasonGenesisOutcome {
+    if (!isSeason(request.season)) {
+      return { outcome: 'rejected', reason: 'invalid-season' };
+    }
+    if (
+      !isOpaqueIdentifier(request.genesisFingerprint) ||
+      !isGenesisFingerprint(request.genesisFingerprint)
+    ) {
+      return { outcome: 'rejected', reason: 'invalid-genesis-fingerprint' };
+    }
+    return this.host.transactionSync((store): SeasonGenesisOutcome => {
+      const authority = readAuthorityRecord(store);
+      if (authority.kind === 'corrupt') {
+        return { outcome: 'rejected', reason: 'state-corrupt' };
+      }
+      if (authority.kind === 'value') {
+        const record = authority.value;
+        if (record.season !== request.season) {
+          return { outcome: 'rejected', reason: 'season-mismatch' };
+        }
+        if (record.cutoverFingerprint === request.genesisFingerprint) {
+          if (record.cutoverState === 'genesis') {
+            return { outcome: 'already-genesis' };
+          }
+          if (record.cutoverState === 'active') {
+            return { outcome: 'already-active' };
+          }
+        }
+        return { outcome: 'rejected', reason: 'sequencer-state-present' };
+      }
+      // No authority record. Any other durable row is still state this
+      // genesis did not create - including a corrupt one, which is never
+      // overwritten.
+      if (
+        store.get(operationStorageKey) !== undefined ||
+        store.get(pendingCleanupStorageKey) !== undefined ||
+        hasAnyRow(store, committedKeyPrefix) ||
+        hasAnyRow(store, preparedKeyPrefix)
+      ) {
+        return { outcome: 'rejected', reason: 'sequencer-state-present' };
+      }
+      writeAuthorityRecord(store, {
+        season: request.season,
+        cutoverState: 'genesis',
+        activeVersion: null,
+        previousVersion: null,
+        committedSourceOrderingInput: null,
+        seasonSnapshotObservedAtHighWaterMark: null,
+        lastOperationEpoch: 0,
+        cutoverFingerprint: request.genesisFingerprint,
+      });
+      return { outcome: 'created' };
+    });
+  }
+
+  /**
+   * The shared "may this season's operations run, and is it this season"
+   * precondition: `active`, or a `genesis` season whose first release has not
+   * committed yet.
+   */
+  private resolveMutable(
     store: SequencerRecordStore,
     season: number,
   ):
-    | { kind: 'active'; authority: AuthorityRecord }
+    | { kind: 'mutable'; authority: AuthorityRecord }
     | {
         kind: 'rejected';
         reason: 'state-corrupt' | 'authority-not-active' | 'season-mismatch';
@@ -987,13 +1110,26 @@ export class SeasonPublicationCoordinator {
     }
     if (
       authority.kind === 'missing' ||
-      authority.value.cutoverState !== 'active'
+      !isMutableState(authority.value.cutoverState)
     ) {
       return { kind: 'rejected', reason: 'authority-not-active' };
     }
     if (authority.value.season !== season) {
       return { kind: 'rejected', reason: 'season-mismatch' };
     }
-    return { kind: 'active', authority: authority.value };
+    return { kind: 'mutable', authority: authority.value };
   }
+}
+
+/**
+ * The states whose publication and rollback operations the sequencer runs:
+ * `active`, and `genesis` (born authoritative, no release yet).
+ */
+function isMutableState(state: CutoverState): boolean {
+  return state === 'active' || state === 'genesis';
+}
+
+function hasAnyRow(store: SequencerRecordStore, prefix: string): boolean {
+  for (const _entry of store.list(prefix)) return true;
+  return false;
 }

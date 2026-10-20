@@ -181,10 +181,12 @@ export function candidateGenerationInstant(
  */
 export function derivePublicationInstant(
   clockReading: string,
-  activeInstant: string,
+  activeInstant: string | null,
 ): PublicationInstant {
   const clock = millisecondInstant(clockReading);
   if (clock === null) return refused('invalid', 'clock-invalid');
+  // A genesis season's first release replaces nothing: the clock is the answer.
+  if (activeInstant === null) return { kind: 'derived', generatedAt: clock };
   const order = compareInstants(clock, activeInstant);
   if (order === null) return refused('invalid', 'active-instant-invalid');
   if (order === 1) return { kind: 'derived', generatedAt: clock };
