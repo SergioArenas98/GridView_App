@@ -27,7 +27,10 @@ Contact: **gridviewapp1@gmail.com**
 - From version 2.0.0, GridView shows **no advertising** and contains no
   advertising or marketing SDK. Versions 1.x showed advertising banners from
   Google AdMob (section 3.4).
-- GridView does **not** track which screens you open or what you tap.
+- From version 2.0.0, GridView does **not** track which screens you open or
+  what you tap. It records only when a session starts (section 3.3). In
+  versions 1.x, the advertising SDK collects app launches, taps and ad views
+  (section 3.4).
 - Your language and theme choices and the Formula 1 data the app downloads are
   stored **on your device**.
 - To fix crashes and keep the app fast, GridView sends **crash reports and
@@ -82,6 +85,8 @@ provided by Google, together with the Firebase components they need
     web addresses to these labels.
 - **Performance measurements**: for example app start time, the time taken by
   the app's own operations, and memory and processor use.
+- **Session information**: when the app comes to the foreground to start a
+  session. Firebase Sessions uses it to group crash and performance data.
 - **Device and app information**: device model and manufacturer, Android
   version, app version, language, country, time zone, available memory and
   storage, and network type.

@@ -126,6 +126,7 @@ ephemerally** = no, **required** (the user cannot turn it off in the app).
 | App info and performance → **Diagnostics** | Performance Monitoring (start time, trace durations, CPU and memory); Sessions metrics | Analytics |
 | Device or other IDs → **Device or other IDs** | Firebase installation ID; Crashlytics installation UUID | Analytics |
 | Location → **Approximate location** | Performance Monitoring maps IP addresses to countries | Analytics — **review item R1** |
+| App activity → **App interactions** | Firebase Sessions records when the app is foregrounded to start a session ("application metrics", Firebase disclosure) | Analytics — **review item R8** |
 
 "Analytics" is Play's purpose for monitoring app performance and diagnosing
 problems. GridView uses this data for nothing else.
@@ -134,8 +135,9 @@ problems. GridView uses this data for nothing else.
 
 Personal info (name, email, user IDs, address, phone), financial info, health
 and fitness, messages, photos and videos, audio, files and documents, calendar,
-contacts, **app activity** (no screen-view, interaction or search analytics; the
-Analytics SDK is forbidden by the build), web browsing, and precise location.
+contacts, web browsing, and precise location. Of **app activity**, only the
+session start in §3.2 is collected: there is no screen-view, tap or search
+analytics, and the build forbids the Analytics SDK.
 
 ### 3.4 GridView API traffic
 
@@ -158,7 +160,7 @@ application log line records an IP or a header.
 - If the production configuration ever persists IP addresses, revisit this
   section (**review item R2**).
 
-### 3.5 Versions 1.x (state T only)
+### 3.5 Versions 1.x (states 0 and T)
 
 Evidence: the pre-reconstruction tree (`git show 7524998^:pubspec.yaml`, `lib/`
 and `android/`), which declares `version: 1.2.1+7`.
@@ -191,8 +193,9 @@ State T adds these rows to §3.2:
 - Where a type is already declared in §3.2 (Approximate location, Diagnostics,
   Device or other IDs), state T marks it **shared**, adds the advertising and
   fraud purposes, and keeps Analytics.
-- **App activity → App interactions** is new in state T. Version 2.0.0 does not
-  collect it (§3.3).
+- **App activity → App interactions** is also declared for 2.0.0 (Firebase
+  Sessions, §3.2). State T marks it **shared** and adds the advertising and
+  fraud purposes.
 - In state T, "Is all user data encrypted in transit?" stays **Yes** (TLS for
   both SDKs, HTTPS to the API).
 - The SDK version in 1.2.1 resolves from `^7.0.0`. Google publishes the
@@ -209,6 +212,7 @@ State T adds these rows to §3.2:
 | R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
 | R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to the SDK version 1.2.1 resolved. |
 | R6 | 1.x requested ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 3) limits it. |
+| R8 | Does Firebase Sessions' session-start time count as **App interactions**? | Declare it. It is usage data about the app coming to the foreground, and over-declaring is not a violation. |
 | R7 | Controller identity (§6) | The policy now names the natural person shown on the Play listing. Confirm, or replace with a registered business name and address if one exists. |
 
 ## 5. Related store items
