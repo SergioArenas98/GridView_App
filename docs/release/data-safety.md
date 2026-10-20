@@ -135,7 +135,7 @@ ephemerally** = no, **required** (the user cannot turn it off in the app).
 | App info and performance → **Diagnostics** | Performance Monitoring (start time, trace durations, CPU and memory); Sessions metrics | Analytics |
 | Device or other IDs → **Device or other IDs** | Firebase installation ID; Crashlytics installation UUID | Analytics |
 | Location → **Approximate location** | Performance Monitoring maps IP addresses to countries. The GridView API also receives the IP address with each request, to serve it; that part is ephemeral (§3.4), but Firebase's part is not, so the type as a whole is not | Analytics; **App functionality** (the API) — **review items R1, R2** |
-| App activity → **App interactions** | Firebase Sessions records when the app is foregrounded to start a session ("application metrics", Firebase disclosure) | Analytics — **review item R8** |
+| App activity → **App interactions** | Firebase Sessions records when the app is foregrounded to start a session ("application metrics", Firebase disclosure). If production keeps Workers Logs (§3.4), the API also persists one `request.completed` line per request, with the route template (which resource was fetched), a random request ID and the outcome, but no IP, header or device identifier | Analytics; **App functionality** if the API logs are kept — **review item R8** |
 
 "Analytics" is Play's purpose for monitoring app performance and diagnosing
 problems. GridView uses this data for nothing else.
@@ -168,6 +168,24 @@ application log line records an IP or a header.
   not include it.
 - If the production configuration ever persists IP addresses, revisit this
   section (**review item R2**).
+
+**Persisted application logs are a separate question.**
+
+- `invocation_logs = false` turns off only Cloudflare's automatic invocation
+  records.
+- With Workers Logs enabled, as staging has it, each public request still
+  persists the Worker's own `request.completed` line (`src/index.ts`): the
+  route template, a random request ID, the cache outcome and the status. It
+  has no IP, header or device identifier.
+- Google Play may count the route template, which says which resource the app
+  fetched, as **App interactions**. Production must take one of two routes
+  before state T or F (owner decision with W1, review item R8):
+  - **(a) Keep the logs** for operations, and declare them under App
+    interactions with the App functionality purpose (§3.2).
+  - **(b) Turn persisted logs off** for production
+    (`[env.production.observability] enabled = false`, or no `logs` block).
+    The declaration then stays Firebase-only, and production operations rely
+    on metrics and `wrangler tail`.
 
 ### 3.5 Versions 1.x (states 0 and T)
 
@@ -222,7 +240,7 @@ State T adds these rows to §3.2:
 | R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to the SDK version 1.2.1 resolved. |
 | R6 | 1.x requested ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits it. |
 | R7 | Controller identity (§6) | The policy now names the natural person shown on the Play listing. Confirm, or replace with a registered business name and address if one exists. |
-| R8 | Does Firebase Sessions' session-start time count as **App interactions**? | Declare it. It is usage data about the app coming to the foreground, and over-declaring is not a violation. |
+| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted `request.completed` route logs (§3.4), if kept? | Declare the Sessions data: it is usage data about the app coming to the foreground, and over-declaring is not a violation. For the API logs, choose (a) keep and declare them with the App functionality purpose, or (b) turn them off in production (§3.4). |
 
 ## 5. Related store items
 
