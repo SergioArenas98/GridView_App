@@ -4593,11 +4593,11 @@ not be read is still never empty.
 
 **Rollback needs a previous release.**
 
-- `prepare` refuses `rollback-republication` in genesis as
-  `no-committed-release`.
-- The sequenced service refuses any rollback, whatever its target, while a
-  genesis-born season has no previous version: in `genesis`, and after its
-  first commit until a second one.
+- While a genesis-born season (a `genesis1:` fingerprint) has no previous
+  version - in `genesis`, and after its first commit until a second one - two
+  layers refuse every rollback:
+  - `prepare` refuses `rollback-republication` as `no-committed-release`;
+  - the sequenced service refuses it first, whatever its target.
 - The reason is that in a genesis-born season every release was committed by
   this sequencer. With no previous version there is no earlier release, so any
   other named version is an uncommitted candidate.
@@ -4609,6 +4609,9 @@ not be read is still never empty.
   retryable `503 SNAPSHOT_NOT_READY`, never a legacy pointer read and never
   "not found".
 - `/v1/status` reports no active version.
+- The read-only A3.5 standings predecessor gate answers
+  `authority-without-release`, distinct from a season that is not `active`.
+  There is no predecessor to check before the first release.
 - The current-season pointer and content metadata are written only by the
   first commit's post-commit maintenance, so `/v1/seasons/current` also stays
   `503` until then.

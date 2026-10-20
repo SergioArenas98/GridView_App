@@ -17,8 +17,8 @@ const validProviderModes = ['mock', 'none', 'coordinated'] as const;
  * `sequencer` - the two-phase `SeasonPublicationSequencer` protocol
  * (ADR 0025). Selecting it only makes the integrated path *constructible*; the
  * sequencer itself still refuses every mutator until a season's cutover has
- * reached `cutoverState: 'active'`, which no environment has performed. It
- * exists so the Integration path can be exercised end to end in tests.
+ * reached `cutoverState: 'active'` (or a season was born `genesis`). Which
+ * environment has done so is recorded in `docs/technical/GridView_Environments.md`.
  */
 export type EnvironmentName = (typeof validEnvironments)[number];
 export type ProviderMode = (typeof validProviderModes)[number];
@@ -266,7 +266,7 @@ export function resolvePublicationCutoverControl(
   const control = parseCutoverControl(value);
   if (control === null) {
     throw new ConfigurationError(
-      'SEASON_PUBLICATION_CUTOVER_CONTROL must be "seed:<supported season>" or "activate:<supported season>".',
+      'SEASON_PUBLICATION_CUTOVER_CONTROL must be "seed:<supported season>", "activate:<supported season>" or "genesis:<supported season>".',
     );
   }
   return control;

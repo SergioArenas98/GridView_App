@@ -646,6 +646,17 @@ describe('only a sequencer-active, authoritative release is examined', () => {
     ],
     ['a seeded, unactivated season', seededAuthority, 'authority-not-active'],
     [
+      'a genesis season with no release yet',
+      {
+        cutoverState: 'genesis',
+        authoritative: true,
+        activeVersion: null,
+        previousVersion: null,
+        cutoverFingerprint: 'genesis1:test',
+      },
+      'authority-without-release',
+    ],
+    [
       'an active answer that is not authoritative',
       { ...activeAuthority(), authoritative: false },
       'authority-not-active',

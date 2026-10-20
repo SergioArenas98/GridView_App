@@ -343,6 +343,46 @@ describe('a genesis season publishes against the empty predecessor', () => {
     ).toMatchObject({ outcome: 'prepared', priorVersion: version });
   });
 
+  it('refuses a rollback after the first release, and admits one after the second', () => {
+    const harness = genesisSequencer();
+    const first = commitFirstRelease(harness);
+    const rollback = (expectedPredecessor: ExpectedPredecessor) =>
+      harness.sequencer.prepare(
+        prepareRequest({
+          operationKind: 'rollback-republication',
+          expectedPredecessor,
+        }),
+      );
+    const before = snapshot(harness.host);
+    expect(rollback({ activeVersion: first, guardDocuments: [] })).toEqual({
+      outcome: 'rejected',
+      reason: 'no-committed-release',
+    });
+    expect(snapshot(harness.host)).toEqual(before);
+
+    const second = harness.sequencer.prepare(
+      prepareRequest({
+        expectedPredecessor: { activeVersion: first, guardDocuments: [] },
+        expectedManifestCommitment: commitment('manifest-2'),
+      }),
+    );
+    if (second.outcome !== 'prepared') throw new Error('not prepared');
+    expect(
+      harness.sequencer.finalize({
+        season: SEASON,
+        operationEpoch: second.operationEpoch,
+        operationToken: second.operationToken,
+        completionAttestation: { manifestCommitment: commitment('manifest-2') },
+      }).outcome,
+    ).toBe('committed');
+    expect(
+      rollback({ activeVersion: second.candidateVersion, guardDocuments: [] }),
+    ).toMatchObject({
+      outcome: 'prepared',
+      priorVersion: second.candidateVersion,
+    });
+  });
+
   it('admits one of two concurrent first releases', () => {
     const { sequencer } = genesisSequencer();
     const first = sequencer.prepare(

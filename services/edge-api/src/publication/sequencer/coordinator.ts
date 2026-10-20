@@ -241,10 +241,14 @@ export class SeasonPublicationCoordinator {
         return { outcome: 'rejected', reason: 'season-mismatch' };
       }
       if (
-        current.cutoverState === 'genesis' &&
-        request.operationKind === 'rollback-republication'
+        request.operationKind === 'rollback-republication' &&
+        isGenesisFingerprint(current.cutoverFingerprint) &&
+        current.previousVersion === null
       ) {
-        // A season born with no release has nothing to roll back from or to.
+        // A genesis-born season with no previous version has committed at most
+        // one release - every release it ever had was committed here - so
+        // there is no earlier release to roll back to, in `genesis` or after
+        // its first commit.
         return { outcome: 'rejected', reason: 'no-committed-release' };
       }
 

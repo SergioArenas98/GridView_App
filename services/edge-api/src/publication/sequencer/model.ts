@@ -253,9 +253,10 @@ export const prepareRejectionReasons = [
   /** `expectedPredecessor` is missing, malformed, unsorted or oversized. */
   'invalid-expected-predecessor',
   /**
-   * A rollback-republication was asked of a `genesis` season. No release has
-   * committed, so there is nothing to roll back from or to. Nothing is
-   * written.
+   * A rollback-republication was asked of a genesis-born season with no
+   * previous version: in `genesis`, or after its first release. No earlier
+   * release was ever committed, so there is nothing to roll back to. Nothing
+   * is written.
    */
   'no-committed-release',
   'state-corrupt',
