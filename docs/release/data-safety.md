@@ -144,9 +144,15 @@ problems. GridView uses this data for nothing else.
 
 Personal info (name, email, user IDs, address, phone), financial info, health
 and fitness, messages, photos and videos, audio, files and documents, calendar,
-contacts, web browsing, and precise location. Of **app activity**, only the
-session start in §3.2 is collected: there is no screen-view, tap or search
-analytics, and the build forbids the Analytics SDK.
+contacts, web browsing, and precise location. Of **app activity**, only these
+are collected (both in the §3.2 row):
+
+- the session start;
+- if production keeps Workers Logs (§3.4, option (a)), the API's per-request
+  route logs.
+
+There is no screen-view, tap or search analytics, and the build forbids the
+Analytics SDK.
 
 ### 3.4 GridView API traffic
 

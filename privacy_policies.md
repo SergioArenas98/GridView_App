@@ -50,8 +50,11 @@ Contact: **gridviewapp1@gmail.com**
 | Formula 1 data downloaded from the GridView API (calendar, results, standings, drivers, teams, circuits) | To show it quickly and when you are offline |
 
 This information is not sent to us. When you update from GridView 1.x, the app
-reads the language and theme choices you made in the old version, keeps them,
-and then deletes the old version's settings and cache.
+reads the language and theme choices you made in the old version, then deletes
+the old version's settings and cache. Your theme choice is kept. Your language
+choice is kept if it was English or Spanish. The other 1.x languages (Italian,
+Portuguese, French, German and Catalan) are not available in 2.0.0, so the app
+uses its default language setting instead.
 
 If Android backup is turned on for your device, Android may include this app
 data in your device backup with Google. That backup is controlled by your
@@ -134,8 +137,9 @@ Instead:
   address with each request. That server has been shut down and no longer
   receives requests.
 - **On the device.** Versions 1.x keep your settings and a cache of Formula 1
-  data on your device. Updating to version 2.0.0 keeps your language and theme
-  choices and deletes the rest (section 3.1).
+  data on your device. Updating to version 2.0.0 keeps your theme choice, and your
+  language choice if it was English or Spanish, and deletes the rest (section
+  3.1).
 
 **Your choices for versions 1.x:**
 
