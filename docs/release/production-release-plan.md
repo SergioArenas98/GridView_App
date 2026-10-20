@@ -460,11 +460,26 @@ Artifact checks before upload:
    staged rollout at **20 %**. This goes through Google review.
 7. **R6 [approval].** Increase to 100 % once the monitoring window passes.
    - **Window:** at least 48 hours, or a race weekend.
-   - **Pass criteria:**
-     - no new fatal in Crashlytics for 2.0.0 (8);
+   - **Pass criteria** (the Implementation Plan §16.3 signals that apply to
+     2.0.0):
+     - **crash-free users** for 2.0.0 (8) at least as high as 1.2.1's in
+       Android vitals, and no new fatal in Crashlytics;
      - no ANR cluster in Android vitals;
-     - production `/v1/status` healthy;
+     - **startup traces** (Performance `_app_start`) within the §15.4 target
+       and not regressed against R4b;
+     - **API errors:** non-fatal network or sync failures in Crashlytics, and
+       5xx responses in the production Workers metrics, at no more than the
+       R4b level. A healthy `/v1/status` is necessary but not sufficient;
+     - **snapshot age:** `/v1/status` `snapshotAgeSeconds` consistent with
+       the last reviewed batch;
+     - **image failures:** no new image-loading non-fatal cluster;
+     - **migration failures:** no preference-migration non-fatal
+       (`feature=settings`) cluster;
+     - **store reviews:** no new review reporting lost settings, missing data
+       or crashes;
      - no ingest needed outside the reviewed path.
+     - Provider quota and ad initialization do not apply: production has no
+       provider mode, and 2.0.0 has no ads.
    - **Halt criteria:** any of the above failing. Halt the rollout in Play
      Console. Play cannot lower a versionCode, so the fix ships forward as
      2.0.1 (9).
@@ -516,7 +531,7 @@ approval (D-U).
 | Matrix row | How R3 covers it |
 |---|---|
 | Empty legacy cache; dark theme; alternate language | The pass above |
-| No network | Repeat steps 2 to 4 with the device offline **during the first 2.0.0 launch**. Expect the empty or unavailable state, no crash, and the migrated preferences. Then go online and relaunch: data loads. |
+| No network | On a second 1.2.1 device or install: do step 2 **online**, letting Play install 2.0.0 without opening it. Then turn the network off and do the **first** 2.0.0 launch offline. Expect the empty or unavailable state, no crash, and the migrated preferences. Then go online and relaunch: data loads. |
 | Slow network | Repeat the first launch with the network throttled (developer options, or a slow hotspot). Expect no crash and data within the app's timeouts, or the bounded unavailable state. |
 | Older supported Android version | Repeat the pass on an **API 24 to 26** device. API 24 is the new minSdk. |
 | Current Android version | The pass above on an API 36 device |
