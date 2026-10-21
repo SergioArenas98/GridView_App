@@ -286,6 +286,12 @@ staging state").
    --secrets-file <temporary file outside the repository>`. Delete the file
    immediately. Expect three Durable Object namespaces for `gridview-api-e2e`.
    Staging's two are untouched, and staging's rollback history is unaffected.
+   **Done 2026-10-21:** deployed once at 23:12Z from a clean checkout of
+   master `38d84ed`, after Workers Paid was re-read as the current plan.
+   Version `91ff2541-e771-488c-b167-038ae1ca7d86`, with three SQLite Durable
+   Object namespaces and no schedule. The token is kept outside the
+   repository. Staging was unchanged: Worker `453af4fb`, its two namespaces,
+   no schedule, active `pm1-000000000001d-aed72435`, and the same public ETags.
 4. Genesis: one authenticated `POST
    /internal/admin/publication/cutover/genesis` with `{"season": 2026,
    "genesisIdentity": "gridview-e2e-2026-genesis-01", "confirmGenesis":
