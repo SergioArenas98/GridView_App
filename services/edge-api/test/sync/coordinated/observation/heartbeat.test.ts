@@ -85,6 +85,47 @@ describe.each(sequencerTransports)(
       expect(await lastCompleted(harness)).toBe(PRE_SEASON);
     });
 
+    it('lets no idle tick beat after a failed observation, until one succeeds again', async () => {
+      const harness = await harnessFor();
+      await harness.run(PRE_SEASON);
+      await harness.run(FIRST_PUBLICATION);
+      const healthy = await lastCompleted(harness);
+
+      // Between races only the calendar falls due, every six hours; Jolpica
+      // is down when it does.
+      harness.server.answers.set('/races/', () => ({
+        kind: 'status',
+        status: 503,
+      }));
+      const due = (await harness.season()).refresh.calendar.nextDueAt!;
+      const failed = await harness.run(due);
+      expect(failed.requests).toEqual(['/races/']);
+      expect(await lastCompleted(harness)).toBe(healthy);
+      expect(
+        (await harness.storage.getSyncState(SEASON))?.lastFailureCategory,
+      ).toBe('coordinated-observation-failed');
+
+      // The failed refresh is rescheduled six hours ahead; the ticks between
+      // are idle and must not make the outage look healthy.
+      for (const hours of [1, 2, 3, 4]) {
+        const idle = await harness.run(later(due, hours * HOUR));
+        expect(idle.outcome.status).toBe('nothing-due');
+      }
+      expect(await lastCompleted(harness)).toBe(healthy);
+
+      // Jolpica is back: the next calendar observation beats, and idle
+      // ticks beat again after it.
+      harness.server.answers.delete('/races/');
+      const next = (await harness.season()).refresh.calendar.nextDueAt!;
+      await harness.run(next);
+      expect(await lastCompleted(harness)).toBe(
+        harness.clock.now().toISOString(),
+      );
+      const idle = later(next, HOUR);
+      await harness.run(idle);
+      expect(await lastCompleted(harness)).toBe(idle);
+    });
+
     it('never beats for a manual run', async () => {
       const harness = await harnessFor();
       await harness.run(PRE_SEASON, { trigger: 'manual' });

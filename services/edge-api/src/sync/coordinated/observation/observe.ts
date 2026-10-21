@@ -48,7 +48,9 @@
  *    read. A manual run writes none: its operator is already looking.
  * 10. When that scheduled run's line was quiet and the read found the season
  *    not stopped, record the heartbeat `GET /v1/status` serves as
- *    `lastSuccessfulSyncAt` (`../heartbeat.ts`; ADR 0028 D7).
+ *    `lastSuccessfulSyncAt` (`../heartbeat.ts`; ADR 0028 D7). A run that sent
+ *    requests and observed nothing instead marks a failed observation, and
+ *    idle runs do not beat until an observation succeeds again.
  *
  * Before planning, a `publishing` slot a previous run left behind is resolved
  * against the authority (`../outcome/recovery.ts`), so a release whose
@@ -79,7 +81,7 @@ import {
   type CoordinatedRuntimeDependencies,
   type CoordinatedUnavailableReason,
 } from '../composition';
-import { recordHeartbeat } from '../heartbeat';
+import { recordFailedObservation, recordHeartbeat } from '../heartbeat';
 import { signalAttention } from '../operator/attention';
 import {
   startRunBudget,
@@ -255,15 +257,24 @@ export async function observeCoordinatedSeason(
       request.season,
       dependencies.logger,
     );
-    // Step 10: only a healthy scheduled run beats.
-    if (reading !== null && !reading.stopped && healthyRun(outcome)) {
-      await recordHeartbeat({
+    // Step 10: only a healthy scheduled run beats; a run that observed
+    // nothing marks it, so the idle runs after it cannot beat either.
+    if (reading !== null && !reading.stopped) {
+      const target = {
         storage: dependencies.storage,
         season: request.season,
         at: dependencies.clock.now(),
-        publishedVersion: publishedVersion(outcome),
         logger: dependencies.logger,
-      });
+      };
+      if (healthyRun(outcome)) {
+        await recordHeartbeat({
+          ...target,
+          publishedVersion: publishedVersion(outcome),
+          evidence: outcome.providerRequests === 0 ? 'idle' : 'observed',
+        });
+      } else if (observedNothing(outcome)) {
+        await recordFailedObservation(target);
+      }
     }
   }
   return outcome;
@@ -711,6 +722,22 @@ function healthyRun(outcome: CoordinatedObservationOutcome): boolean {
   if (outcome.coordination !== 'completed') return false;
   if (outcome.providerRequests === 0) return true;
   return Object.entries(outcome.events).some(
+    ([category, count]) =>
+      (count ?? 0) > 0 && !unsuccessfulEvents.has(category),
+  );
+}
+
+/**
+ * Whether a run sent provider requests and none of them was a successful
+ * observation: every check failed, or the run failed after sending them.
+ */
+function observedNothing(outcome: CoordinatedObservationOutcome): boolean {
+  if (outcome.status !== 'observed' && outcome.status !== 'failed') {
+    return false;
+  }
+  if (outcome.providerRequests === 0) return false;
+  if (outcome.status === 'failed') return true;
+  return !Object.entries(outcome.events).some(
     ([category, count]) =>
       (count ?? 0) > 0 && !unsuccessfulEvents.has(category),
   );
