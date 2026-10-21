@@ -28,7 +28,6 @@ import type {
   ReservationOutcome,
 } from '../../src/providers/http/provider-rate-limiter';
 import { SequencedPublicationService } from '../../src/publication/sequenced/service';
-import { MemorySnapshotStorage } from '../../src/storage/local';
 import type { LedgerNamespace } from '../../src/sync/coordinated/ledger';
 import { resolveReconciliationLedger } from '../../src/sync/coordinated/ledger-port';
 import { SynchronizationService } from '../../src/sync/sync-service';
@@ -85,29 +84,33 @@ describe('the committed configuration declares no reconciliation ledger, as Wran
     expect(resolved('').exports).toEqual(topLevelExports);
   });
 
-  it('leaves development and production without the class or the binding', () => {
-    for (const environment of ['', 'production'] as const) {
-      const config = resolved(environment);
-      expect(config.exports, environment).toEqual(topLevelExports);
-      expect(bindingNames(config), environment).toEqual([
-        'PROVIDER_RATE_LIMITER',
-      ]);
-      expect(config.migrations, environment).toEqual([]);
-    }
+  it('leaves development without the season binding, and gives production the same two as staging', () => {
+    const development = resolved('');
+    expect(development.exports).toEqual(topLevelExports);
+    expect(bindingNames(development)).toEqual(['PROVIDER_RATE_LIMITER']);
+    expect(development.migrations).toEqual([]);
+    // Production genesis (release plan W1) binds the sequencer too, and
+    // inherits the top-level exports like staging.
+    const production = resolved('production');
+    expect(production.exports).toEqual(topLevelExports);
+    expect(bindingNames(production)).toEqual([
+      'PROVIDER_RATE_LIMITER',
+      'SEASON_PUBLICATION_SEQUENCER',
+    ]);
+    expect(production.migrations).toEqual([]);
   });
 
   it('keeps staging and production on none, with no scheduled trigger anywhere', () => {
     const staging = resolved('staging');
     const production = resolved('production');
     expect(staging.vars.PROVIDER_MODE).toBe('none');
-    expect(production.vars).toEqual({
-      ENVIRONMENT: 'production',
-      PROVIDER_MODE: 'none',
-    });
+    expect(production.vars.PROVIDER_MODE).toBe('none');
+    expect(JSON.stringify(production.vars)).not.toMatch(/RECONCILIATION/);
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
-    // Explicitly empty since the season-batch ingest configuration.
+    // Explicitly empty: staging since the season-batch ingest configuration,
+    // production since its own configuration (W1).
     expect(staging.triggers.crons).toEqual([]);
-    expect(production.triggers.crons).toBeUndefined();
+    expect(production.triggers.crons).toEqual([]);
     expect(resolved('').triggers.crons).toBeUndefined();
   });
 
@@ -256,13 +259,10 @@ describe('the committed provider modes with a bound RECONCILIATION_LEDGER namesp
   it.each(['staging', 'production'] as const)(
     'the committed %s variables never look the ledger up, request a provider or publish through the coordinated path',
     async (environment) => {
-      // Staging selects the sequencer authority, so its Worker reads season
-      // 2026 from an active in-process sequencer, as live staging does.
-      // Production selects none and reads legacy storage.
-      const ctx =
-        environment === 'staging'
-          ? await sequencedContext({ cutover: 'active' })
-          : null;
+      // Both select the sequencer authority, so each Worker reads season 2026
+      // from an active in-process sequencer: as live staging does, and as
+      // production will once genesis and its first batch have committed.
+      const ctx = await sequencedContext({ cutover: 'active' });
       const namespace = countingNamespace();
       const limiter = new CountingLimiter();
       let transportCalls = 0;
@@ -271,8 +271,8 @@ describe('the committed provider modes with a bound RECONCILIATION_LEDGER namesp
         ...committedVars(environment),
         ADMIN_TOKEN,
         RECONCILIATION_LEDGER: namespace as unknown as DurableObjectNamespace,
-        __LOCAL_STORAGE: ctx?.storage ?? new MemorySnapshotStorage(),
-        ...(ctx ? { __SEASON_PUBLICATION_SEQUENCER: ctx.port } : {}),
+        __LOCAL_STORAGE: ctx.storage,
+        __SEASON_PUBLICATION_SEQUENCER: ctx.port,
         __CACHE_PURGER: new MemoryCachePurgeAdapter(),
         __SNAPSHOT_VALIDATOR: runtimeSnapshotValidator,
         __LOGGER: logger,
@@ -303,19 +303,9 @@ describe('the committed provider modes with a bound RECONCILIATION_LEDGER namesp
         });
       }
 
-      // The sync entry points took the whole-season path. Production commits
-      // no `PUBLIC_BASE_URL`, so its scheduled run stops at configuration,
-      // before any synchronization, as it always has...
-      if (environment === 'staging') {
-        expect(wholeSeason).toHaveBeenCalledTimes(2);
-      } else {
-        expect(wholeSeason).toHaveBeenCalledTimes(1);
-        expect(
-          logger.events.filter(
-            (event) => event.operation === 'scheduled.failed',
-          ),
-        ).toHaveLength(1);
-      }
+      // The sync entry points took the whole-season path, the scheduled run
+      // and the manual one alike...
+      expect(wholeSeason).toHaveBeenCalledTimes(2);
       // ...and nothing touched the ledger, a provider or the coordinated path.
       expect(namespace.touched()).toBe(0);
       expect(limiter.calls).toBe(0);

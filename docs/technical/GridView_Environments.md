@@ -305,8 +305,8 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 | Environment | Worker name | State |
 |---|---|---|
 | development | `gridview-api-dev` | Local `wrangler dev` only |
-| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`). Redeployed twice more on 2026-09-13, for the season-2026 recovery window: reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, then reclosure version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, carrying `seed:2026`. Redeployed on 2026-09-15 as version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`, which adds `SEASON_PUBLICATION_AUTHORITY = "sequencer"` and keeps `seed:2026`. Redeployed on 2026-09-16 as version `c297d260-c81b-4110-bdf2-7572e1206af3`, which keeps `sequencer` and moves the control to `activate:2026`; season 2026 was activated that day. Redeployed on 2026-10-07 as version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275` (Stage A; operator-recorded source `3228725`), which keeps every var, the cron and both Durable Object bindings, and is current. See the Durable Object state below. |
-| production | `gridview-api-production` | Not provisioned |
+| staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`). Redeployed twice more on 2026-09-13, for the season-2026 recovery window: reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, then reclosure version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, carrying `seed:2026`. Redeployed on 2026-09-15 as version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`, which adds `SEASON_PUBLICATION_AUTHORITY = "sequencer"` and keeps `seed:2026`. Redeployed on 2026-09-16 as version `c297d260-c81b-4110-bdf2-7572e1206af3`, which keeps `sequencer` and moves the control to `activate:2026`; season 2026 was activated that day. Redeployed on 2026-10-07 as version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275` (Stage A; operator-recorded source `3228725`), which keeps every var, the cron and both Durable Object bindings. Redeployed on 2026-10-13 as version `3b3b8273-41d4-4781-867c-8e517f132823` (from `6ce0ed6`: `PROVIDER_MODE = none`, `SEASON_BATCH_INGEST = 2026`, no schedule), on 2026-10-18 as `ddf551e9-c295-4f87-8ea7-fd6af8da11ed` (from `0cfa312`) and on 2026-10-19 as `453af4fb-e478-42a2-abd6-acdaa1d6473f` (from `d351118`), which is **current, verified read-only 2026-10-21** (staging runbook §2, "Live staging state"). See the Durable Object state below. |
+| production | `gridview-api-production` | Not provisioned. Configuration committed 2026-10-21 (release plan W1), deliberately incomplete: no KV binding until the namespace exists (below) |
 
 > **Staging: public availability observed; administrative state not verified.**
 >
@@ -338,6 +338,43 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 Production Cloudflare account resources (KV namespaces, R2 buckets, routes,
 domains, secrets) do not exist; provisioning happens with approval in the owning
 phase.
+
+**Production Worker configuration (release plan W1), committed 2026-10-21,
+never deployed.** The owner chose submission path A, Workers Paid, on
+2026-10-20; nothing was bought. `[env.production]` now commits:
+
+- `workers_dev = true`, `preview_urls = false`: the host
+  `gridview-api-production.sejuma18.workers.dev` that
+  `config/dart_defines/production.json` names;
+- `PROVIDER_MODE = "none"`, `PUBLIC_BASE_URL`,
+  `SEASON_PUBLICATION_AUTHORITY = "sequencer"`,
+  `SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"` and
+  `SEASON_BATCH_INGEST = "2026"`;
+- both Durable Object bindings, `PROVIDER_RATE_LIMITER` and
+  `SEASON_PUBLICATION_SEQUENCER`, on the shared SQLite `exports`;
+- `[env.production.secrets] required = ["ADMIN_TOKEN"]`;
+- `[env.production.triggers] crons = []`;
+- `[env.production.observability] enabled = false`: persisted Workers Logs
+  off, the fail-safe choice while decision D-L is open.
+
+It deliberately commits **no `GRIDVIEW_DATA` KV binding**. No production
+namespace exists, and Wrangler 4.112 provisions a new namespace on deploy for a
+KV binding that has no `id`, so a binding without one would create
+infrastructure. Release plan W2 creates the namespace and the secret, each
+separately authorized, and commits the real id. Until then the Worker fails
+closed with `500 INTERNAL_ERROR` (`GRIDVIEW_DATA KV binding is required in
+production`; the message is not returned): the test shows it for `/v1/status`, a
+season read and the ingest. A first
+`wrangler deploy` refuses for the missing required secret unless one is
+supplied with `--secrets-file`. **Do not deploy this configuration.**
+
+Once deployed, production serves no season until genesis and the first batch:
+before genesis the season resources answer `404 SEASON_NOT_FOUND` and
+`/v1/seasons/current` `503 SNAPSHOT_NOT_READY`; in `genesis` they all answer
+`503 SNAPSHOT_NOT_READY`; only the first reviewed batch, submitted with
+`expectedActiveVersion: null`, makes the season `active` and served.
+`services/edge-api/test/config/production-worker-config.test.ts` drives this
+through the real Worker with the committed variables.
 
 ## Media delivery
 
@@ -373,17 +410,20 @@ changed 2026-10-13).** The code admits `mock`,
 `none` and `coordinated` (Implementation Plan §14.0.29). `coordinated` is
 admitted only when `ENVIRONMENT` is `staging` or `production`, and is a
 configuration error in development. **No environment selects it**, committed
-or live:
+or live (live re-read 2026-10-21). Automatic updates select it for staging
+and production in a separately authorized activation (an owner release
+requirement since 2026-10-21):
 
 | Environment | Committed (`wrangler.toml`) | Live |
 |---|---|---|
 | development | unset (`mock`) | local only |
-| staging | `none` since 2026-10-13 (decision pack DP-6(b), with `SEASON_BATCH_INGEST` below); `mock` before | `mock` (version `cc8d9a54-…`, Stage A, 2026-10-07; it admits the `coordinated` value and does not select it) |
+| staging | `none` since 2026-10-13 (decision pack DP-6(b), with `SEASON_BATCH_INGEST` below); `mock` before | `none` since 2026-10-13 (version `3b3b8273-…`); current `453af4fb-…` (from `d351118`). `mock` in Stage A `cc8d9a54-…`, 2026-10-07 to 2026-10-13 |
 | production | `none` | not provisioned |
 
 `PROVIDER_MODE` also selects the `staleAfter` policy of every sequenced
-release the Worker stamps (committed 2026-10-19, not deployed; ADR 0005,
-amendment of that date). `none` stamps the `calendar-horizon` policy: season
+release the Worker stamps (committed 2026-10-19 and live since that day's
+deployment of `d351118`; ADR 0005, amendment of that date). The 2026-10-19
+release `pm1-…1d` is the first stamped under it. `none` stamps the `calendar-horizon` policy: season
 documents expire at the first sprint or race the release does not classify,
 the content manifest after an hour, and a completed season's data documents
 carry `9999-12-31T23:59:59.999Z`. `mock` and `coordinated` keep the
@@ -401,19 +441,20 @@ zero provider requests. No committed environment declares the binding either;
 see "Reconciliation ledger binding: removed, Stage B parked" below.
 
 **`SEASON_BATCH_INGEST`, code committed (2026-10-12); staging value
-committed (2026-10-13); never deployed.** It names the one season the guarded
+committed (2026-10-13); live in staging since 2026-10-13.** It names the one season the guarded
 staging ingest of a reviewed season batch accepts
 (`POST /internal/admin/season/ingest`, Implementation Plan §14.0.51). The only
 accepted value is a four-digit season with curated season metadata, so
-`2026`; anything else is refused as `ingest-misconfigured`. **Only committed
-staging sets it, and no deployed Worker carries it.** Wherever it is unset the
-route refuses every request as `ingest-disabled` before reading its body:
+`2026`; anything else is refused as `ingest-misconfigured`. **Committed
+staging and production set it; live staging carries it.** Wherever
+it is unset the route refuses every request as `ingest-disabled` before
+reading its body:
 
 | Environment | Committed (`wrangler.toml`) | Live |
 |---|---|---|
 | development | unset | local only |
-| staging | `2026` since 2026-10-13 (decision pack PR-4); unset before | unset (Stage A `cc8d9a54-…` predates the route) |
-| production | unset | not provisioned |
+| staging | `2026` since 2026-10-13 (decision pack PR-4); unset before | `2026` since 2026-10-13 (`3b3b8273-…`); current `453af4fb-…` |
+| production | `2026` since 2026-10-21 (release plan W1), admitted only under `genesis:2026`; unset before | not provisioned |
 
 The same staging change commits `PROVIDER_MODE = none` (table above) and an
 explicitly empty cron list, so a Worker deployed from it builds no provider
@@ -421,32 +462,37 @@ and has no schedule. Its manual whole-season sync fails fast as
 `provider-unavailable` and never builds or publishes a mock candidate. Its
 only source of season data is the ingest.
 
-**Staging cron, committed and live (2026-10-13).** Committed: none
-(`[env.staging.triggers] crons = []`). Live: `17 3 * * *` (Stage A). The
-empty list is deliberate: `wrangler deploy` replaces a Worker's schedules
-only when `crons` is set, so an absent key would keep the live schedule.
+**Staging cron, committed and live (2026-10-13; re-read 2026-10-21).**
+Committed: none (`[env.staging.triggers] crons = []`). Live: none; the
+2026-10-13 deployment removed Stage A's `17 3 * * *`, and the schedules API
+answers `[]`. The empty list is deliberate: `wrangler deploy` replaces a
+Worker's schedules only when `crons` is set, so an absent key would have kept
+the old schedule.
 Schedules are script settings, not part of a version, so a `wrangler
 rollback` to `cc8d9a54-…` would not bring `17 3 * * *` back. That takes a
 separate `wrangler triggers deploy` (staging runbook, section 3). Development
-and production declare no trigger, unchanged.
+declares no trigger. Production commits an explicitly empty list since
+2026-10-21 (W1), so its first deploy sets no schedule.
 
 Setting it enables nothing by itself. The ingest also refuses outside
-`ENVIRONMENT = staging`, under `PROVIDER_MODE = coordinated`, without a
+staging and production, in production without a `genesis:` control naming
+the same season (`genesis-control-required`, ADR 0025 D12 "Amendment
+(2026-10-20)"), under `PROVIDER_MODE = coordinated`, without a
 reachable sequencer, and while the record bundled in the Worker
 (`content/attribution/data-sources.json`) calls Jolpica anything but
-`active`: committed `active`, deployed `dormant` (see "Jolpica attribution"
+`active`: committed and deployed `active` (see "Jolpica attribution"
 below). Enabling it on staging
 is a configuration change and a deployment, each separately authorized; see
 the staging runbook, section 6, "Guarded season-batch ingest".
 
 **Jolpica attribution: committed record, deployed Worker and served release
-(2026-10-13).** These are three separate facts, and only the last one says
+(2026-10-13; staging row re-read 2026-10-21).** These are three separate facts, and only the last one says
 whether Jolpica data is being served:
 
 | Environment | Committed record (`content/attribution/data-sources.json`) | Record bundled in the deployed Worker | Served release (`GET /v1/content/manifest`, `attributionVersion`) |
 |---|---|---|---|
 | development | `data-sources-v2`, Jolpica `active` | local only | mock dataset, `1` |
-| staging | `data-sources-v2`, Jolpica `active` | `data-sources-v1`, Jolpica `dormant` (Stage A `cc8d9a54-…`, built from `3228725`) | mock dataset, `1` (from the code; not read live) |
+| staging | `data-sources-v2`, Jolpica `active` | `data-sources-v2`, Jolpica `active` (since `3b3b8273-…`, built from `6ce0ed6`; current `453af4fb-…`) | `data-sources-v2` since release `pm1-…1c` (2026-10-14); active `pm1-…1d` (2026-10-19) |
 | production | `data-sources-v2`, Jolpica `active` | not provisioned | none |
 
 `active` (O-9, DP-7; the owner accepted this meaning on 2026-10-13) means only
@@ -455,12 +501,9 @@ operator-captured, reviewed batches. It does not mean that a Worker retrieves
 Jolpica data, and it does not mean that the release being served contains
 any. The served release's `attributionVersion` identifies what was actually
 published: a release contains Jolpica F1-derived data only when it is
-`data-sources-v2` or later. **No environment serves such a release.** The
-deployed staging Worker would refuse a batch twice over: it predates the
-ingest route, and it bundles the `dormant` record. Changing that takes a
-staging deployment of a commit that bundles `data-sources-v2` (DP-4), with
-`SEASON_BATCH_INGEST` set (DP-6), and then an accepted batch, each separately
-authorized.
+`data-sources-v2` or later. **Staging serves such a release** since
+2026-10-14, from two separately authorized batches; production serves
+nothing.
 
 **Wired is not active (2026-10-06).** Since Implementation Plan §14.0.41,
 the scheduled handler and `POST /internal/admin/sync/full` in `coordinated`
@@ -476,8 +519,8 @@ orchestration is **wired but unbound** in every deployed Worker, and
 | Environment | Orchestration | Ledger | Coordinated run outcome |
 |---|---|---|---|
 | development | `coordinated` is refused as a configuration error | none | never reached |
-| staging | wired in code and in the live version (`cc8d9a54-…`, Stage A) | none: not declared, not deployed, not provisioned (below) | not selected (live `mock`, committed `none`); if selected, refused as `ledger-unbound` |
-| production | wired in code; never deployed | none | not selected (`none`); if selected, refused as `authority-not-sequencer` and `ledger-unbound` |
+| staging | wired in code and in the live version (`453af4fb-…`) | none: not declared, not deployed, not provisioned (below) | not selected (`none`, committed and live); if selected, refused as `ledger-unbound` |
+| production | wired in code; never deployed | none | not selected (`none`); if selected, refused as `ledger-unbound` |
 
 The rate-limiter note above is otherwise unchanged. Once a coordinated run
 can pass that gate, the hardened client reserves through this namespace.
@@ -505,7 +548,10 @@ fail-closed resolver stay in the code.
 | Deployed (a live Worker version carries the binding) | **no**: no staging version ever has | local only | never deployed |
 | Provisioned (Cloudflare holds a `ReconciliationLedger` namespace) | **no** | not applicable | no |
 
-- **Staging matches Stage A.** Stage A deployed version `cc8d9a54-…` on
+- **Staging has the same two bindings as Stage A.** *(Dated 2026-10-07;
+  staging is now `453af4fb-…`, which keeps them, and the account still
+  holds exactly two Durable Object namespaces, re-read 2026-10-21.)* Stage A
+  deployed version `cc8d9a54-…` on
   2026-10-07 from operator-recorded source `3228725`, with the
   `PROVIDER_RATE_LIMITER` and `SEASON_PUBLICATION_SEQUENCER` bindings and
   no ledger binding. Wrangler's resolved staging configuration on `master`
@@ -532,7 +578,7 @@ fail-closed resolver stay in the code.
 
 `SEASON_PUBLICATION_AUTHORITY` (ADR 0025, Phase 9B-6b) is **`sequencer` in
 live staging** since 2026-09-15 (version `cccdcf11-…`, kept unchanged by
-version `c297d260-…` on 2026-09-16), and in `env.staging` as committed. It is unset in development and production. An absent, empty or unrecognised value resolves to `legacy` and
+version `c297d260-…` on 2026-09-16), and in `env.staging` as committed. `env.production` commits it too, for production genesis (W1, 2026-10-21, never deployed). It is unset in development. An absent, empty or unrecognised value resolves to `legacy` and
 never throws, so the composition builds the existing `SnapshotPublisher` and the
 public router performs no Durable Object lookup. The exact string `sequencer`
 selects the two-phase path when a sequencer port is reachable, and **fails
@@ -545,10 +591,11 @@ pointers.
 only, and since 2026-09-16 it is authoritative there for season 2026 alone.**
 `wrangler.toml` declares
 `[exports.SeasonPublicationSequencer]` with SQLite storage and binds
-`SEASON_PUBLICATION_SEQUENCER` for **`env.staging` only** (staging cutover
-preparation slice, 2026-09-10); the class is a named export of the Worker entry
-point, which is how Wrangler resolves it. There is still **no `[[migrations]]`
-block and no production binding**. The 2026-09-12 staging deployment (version
+`SEASON_PUBLICATION_SEQUENCER` for `env.staging` (staging cutover
+preparation slice, 2026-09-10) and, since 2026-10-21, for `env.production`
+(W1, for production genesis; never deployed); the class is a named export of
+the Worker entry point, which is how Wrangler resolves it. There is still
+**no `[[migrations]]` block**. The 2026-09-12 staging deployment (version
 `985115b7-abb3-4346-8845-d8ff41c80cf6`) created the staging namespace. Since
 2026-09-15, live staging selects `sequencer`, so publications and public reads
 look the sequencer up. Season 2026 was seeded that day and **activated on
@@ -560,19 +607,20 @@ pointers, and production has never been deployed.**
 |---|---|---|---|
 | `[exports]` entries (both classes) | shared, once | shared, once (a staging-only table adding `ReconciliationLedger` was committed and removed on 2026-10-07, never deployed) | shared, once |
 | `PROVIDER_RATE_LIMITER` binding declared | yes (local `wrangler dev` only) | yes | yes |
-| `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | **none** |
+| `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | committed 2026-10-21 (W1); never deployed |
 | `RECONCILIATION_LEDGER` binding declared | none | **none** (committed and removed on 2026-10-07, never deployed; Stage B parked) | **none** |
 | Namespaces provisioned on Cloudflare | none | **rate limiter and sequencer, 2026-09-12** (version `985115b7-…`); since 2026-09-15 the sequencer is looked up, and the rate limiter still is not. **No ledger namespace** | none - never deployed |
-| Authority mode set | no | **live: yes** (`sequencer`, since 2026-09-15, version `cccdcf11-…`, kept by `c297d260-…`); **committed: yes** (`sequencer`) | no |
-| Cutover control set | no | **live: yes** (`activate:2026`, since 2026-09-16, version `c297d260-…`; before it `seed:2026`, first deployed 2026-09-12 as version `00012c06-…`, absent only during the 2026-09-13 recovery window, restored as version `c35f99c0-…`, and kept by `cccdcf11-…`); **committed: yes** (`activate:2026`) | no |
+| Authority mode set | no | **live: yes** (`sequencer`, since 2026-09-15, version `cccdcf11-…`, kept by `c297d260-…`); **committed: yes** (`sequencer`) | committed `sequencer` (W1); never deployed |
+| Cutover control set | no | **live: yes** (`activate:2026`, since 2026-09-16, version `c297d260-…`; before it `seed:2026`, first deployed 2026-09-12 as version `00012c06-…`, absent only during the 2026-09-13 recovery window, restored as version `c35f99c0-…`, and kept by `cccdcf11-…`); **committed: yes** (`activate:2026`) | committed `genesis:2026` (W1); never deployed |
 | Season 2026 cutover state | n/a | **`active` and authoritative** since 2026-09-16 (`admissionClosed: false`) | n/a |
 
 `SEASON_PUBLICATION_CUTOVER_CONTROL` (ADR 0025 D12) is live in staging only —
 `activate:2026` since 2026-09-16, and `seed:2026` from 2026-09-12 before that —
-and remains unset in development and production. `env.staging` commits the same
+and remains unset in development. `env.staging` commits the same
 `activate:2026` (below). It accepts exactly `seed:<supported season>`,
 `activate:<supported season>` or (since 2026-10-20, ADR 0025 D12 "Amendment
-(2026-10-20)") `genesis:<supported season>`, which no environment sets; an absent or empty value is disabled and
+(2026-10-20)") `genesis:<supported season>`, which only `env.production`
+commits (`genesis:2026`, W1, 2026-10-21, never deployed); an absent or empty value is disabled and
 preserves today's behaviour exactly. A **malformed non-empty value is a bounded
 `ConfigurationError`** — the same failure an unknown `PROVIDER_MODE` produces,
 surfacing as a 500 that carries no raw value in either the response or the log

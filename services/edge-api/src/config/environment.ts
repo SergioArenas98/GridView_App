@@ -102,7 +102,7 @@ export interface Env extends TestOnlyBindings {
    * Durable Object namespace backing the per-season publication sequencer
    * (ADR 0025 D1). Optional in the type because availability is
    * environment-specific: `wrangler.toml` declares the binding for
-   * `env.staging` only and production declares none. Which environment has it
+   * `env.staging` and `env.production`, not for development. Which environment has it
    * provisioned is recorded in `docs/technical/GridView_Environments.md` and
    * the staging runbook, not here. A bound namespace enables nothing by itself:
    * the resolver only looks it up when `SEASON_PUBLICATION_AUTHORITY` is

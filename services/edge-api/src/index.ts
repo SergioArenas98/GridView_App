@@ -65,17 +65,18 @@ export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';
 
 /**
  * Durable Object class registered as the `SEASON_PUBLICATION_SEQUENCER` binding
- * for `env.staging` only (ADR 0025 D1, D12). Wrangler resolves a Durable Object
+ * for `env.staging` and `env.production` (ADR 0025 D1, D12). Wrangler resolves a Durable Object
  * class through a named export of the Worker's main module, so any deployment
  * that binds the namespace needs this export to exist.
  *
  * **Exported is not enabled.** Exporting it creates no namespace, deploys
  * nothing, seeds no season and activates none, and a provisioned namespace is
- * not an invoked object. Production declares no such binding at all, and
- * development and production leave `SEASON_PUBLICATION_AUTHORITY` unset - so
- * there `resolvePublicationAuthority` returns `legacy`, no code path performs
- * the lookup, and every cutover operation is refused at the authority-mode
- * gate. Only `env.staging` selects `sequencer`. Which environment has the
+ * not an invoked object. Development declares no such binding and leaves
+ * `SEASON_PUBLICATION_AUTHORITY` unset - so there `resolvePublicationAuthority`
+ * returns `legacy`, no code path performs the lookup, and every cutover
+ * operation is refused at the authority-mode gate. `env.staging` and
+ * `env.production` select `sequencer`; production's `genesis:` control
+ * permits only production genesis. Which environment has the
  * namespace provisioned, and which authority and cutover control are committed
  * and deployed where, is recorded in `docs/technical/GridView_Environments.md`.
  */

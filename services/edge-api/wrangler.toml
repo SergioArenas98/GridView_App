@@ -8,7 +8,8 @@
 #   declared for it below; no code path in that configuration looks either up.
 # - `env.production` is declared only and has never been deployed: no
 #   production Worker, KV or Durable Object namespace, R2 bucket, route,
-#   domain or secret exists.
+#   domain or secret exists. Its declaration is deliberately incomplete (no
+#   KV binding) until the namespace is created; see the section itself.
 
 name = "gridview-api-dev"
 main = "src/index.ts"
@@ -53,8 +54,9 @@ storage = "sqlite"
 # 2026-09-16 under `activate:2026` (version `c297d260-…`). The sequencer is
 # therefore the authority for season 2026's publication, rollback and public
 # reads in staging; every other season stays on the legacy KV pointers.
-# Development and production select no authority; production declares no
-# binding and has never been deployed.
+# Development selects no authority. Production declares the binding and the
+# `sequencer` authority for production genesis (below), but has never been
+# deployed, so no production namespace exists.
 #
 # Deploying a Worker built with the D14-D16 publication guard (ADR 0026)
 # changes how staging publishes and rolls back season 2026: every sequenced
@@ -78,8 +80,13 @@ preview_urls = false
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-# No provider (decision pack 2026-10-07 DP-6(b)). COMMITTED, NOT DEPLOYED:
-# live staging still runs `mock` (Stage A version `cc8d9a54-…`). With `none`
+# No provider (decision pack 2026-10-07 DP-6(b)). Committed 2026-10-13 and
+# LIVE since that day's deployment (version `3b3b8273-…`); the current live
+# version `453af4fb-…` (2026-10-19, from `d351118`) keeps it, verified
+# read-only on 2026-10-21. This is an interim state, not the operating model:
+# automatic updates (an owner release requirement since 2026-10-21) replace
+# it with
+# the automatic provider mode, a separately authorized change. With `none`
 # the whole-season sync routes (`POST /internal/admin/sync/full` and the
 # others) and the scheduled handler build no provider and fail fast as
 # `provider-unavailable`, so they never construct, guard or publish a mock
@@ -122,7 +129,9 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 
 # The one season the guarded season-batch ingest accepts
 # (`POST /internal/admin/season/ingest`, decision pack 2026-10-07 PR-4).
-# STAGING ONLY; COMMITTED, NOT DEPLOYED. The value must be exactly the
+# STAGING ONLY; LIVE since 2026-10-13 (version `3b3b8273-…`), kept by
+# `453af4fb-…`; two batches have committed through it (2026-10-14 and
+# 2026-10-19). The value must be exactly the
 # four-digit season `2026`, which has curated season metadata; anything else
 # (`2026 `, `2099`, `abcd`) is refused as `ingest-misconfigured`. Setting it
 # admits nothing by itself: the route still needs `ADMIN_TOKEN`, refuses
@@ -140,10 +149,10 @@ SEASON_BATCH_INGEST = "2026"
 name = "PROVIDER_RATE_LIMITER"
 class_name = "ProviderRateLimiter"
 
-# Staging only, and staging is the only environment ADR 0025 D12's cutover
-# sequence is authorized to target. Production deliberately declares no
-# season-publication binding at all, so a production deployment cannot reach the
-# class even by accident. Declaring the binding does not by itself provision
+# Staging is the only environment ADR 0025 D12's seed-and-activation cutover
+# is authorized to target. Production declares its own binding (below) for
+# production genesis only, whose `genesis:` phase refuses the seed and the
+# activation. Declaring the binding does not by itself provision
 # the namespace - the 2026-09-12 staging deployment did. Only
 # `SEASON_PUBLICATION_AUTHORITY = "sequencer"` makes the Worker look it up;
 # while a deployment lacks that value, the composition builds the exact legacy
@@ -159,11 +168,13 @@ required = ["ADMIN_TOKEN"]
 binding = "GRIDVIEW_DATA"
 id = "1d0fb55486a745a1ad12e03d9f04942b"
 
-# No scheduled trigger. COMMITTED, NOT DEPLOYED: live staging still runs the
-# nightly `17 3 * * *` (Stage A version `cc8d9a54-…`). Under
-# `PROVIDER_MODE = "none"` that run could only record `sync.failed` and
+# No scheduled trigger. LIVE since 2026-10-13: that deployment removed the
+# nightly `17 3 * * *` the Stage A version had, and the schedules API has
+# answered `[]` since (re-read 2026-10-21). Under
+# `PROVIDER_MODE = "none"` a nightly run could only record `sync.failed` and
 # rewrite the season's failure state every night, so the season-batch ingest
-# configuration removes it.
+# configuration removes it. The hourly schedule of automatic updates is a
+# separate, separately authorized change.
 #
 # The empty list is deliberate and must stay explicit. Wrangler replaces the
 # Worker's schedules on deploy only when `crons` is set: an empty list removes
@@ -184,15 +195,83 @@ enabled = true
 persist = true
 invocation_logs = false
 
-# Declared only; never deployed. No `gridview-api-production` Worker exists on
-# the Cloudflare account, so none of the configuration below is live.
+# Production (release plan W1; submission path A, Workers Paid). DECLARED
+# ONLY; NEVER DEPLOYED: no `gridview-api-production` Worker, KV or Durable
+# Object namespace or secret exists on the Cloudflare account.
+#
+# INCOMPLETE BY DESIGN - DO NOT DEPLOY. There is deliberately no production
+# KV namespace binding: no production namespace exists,
+# and Wrangler 4 creates a new namespace on deploy for a KV binding that has
+# no `id`. Release plan W2 creates the namespace and the `ADMIN_TOKEN` secret,
+# each separately authorized, and commits the real id here. Until then the
+# Worker fails closed (`GRIDVIEW_DATA KV binding is required in production`),
+# and a first `wrangler deploy` refuses for the missing required secret unless
+# one is supplied with `--secrets-file`. Each production deployment (W3) is
+# separately authorized.
+#
+# Season 2026 is born through production genesis (ADR 0025 D12, "Amendment
+# (2026-10-20)"), never through the staging seed and activation:
+# - before the authenticated genesis request, the season is `uninitialized`
+#   and unknown: its resources answer `404 SEASON_NOT_FOUND` and
+#   `/v1/seasons/current` answers `503 SNAPSHOT_NOT_READY` (the new namespace
+#   holds nothing);
+# - after genesis and before the first reviewed batch commits, the season is
+#   `genesis`, still `503 SNAPSHOT_NOT_READY`;
+# - only the first batch, submitted with `expectedActiveVersion: null`
+#   through the guarded ingest below, makes it `active` and served.
 [env.production]
 name = "gridview-api-production"
+# The API host committed in `config/dart_defines/production.json`.
+workers_dev = true
+preview_urls = false
 
 [env.production.vars]
 ENVIRONMENT = "production"
+# No provider, as in staging: the whole-season sync routes and the scheduled
+# handler build no provider and fail fast as `provider-unavailable`. Season
+# data reaches production only through the guarded season-batch ingest.
 PROVIDER_MODE = "none"
+PUBLIC_BASE_URL = "https://gridview-api-production.sejuma18.workers.dev"
+# The genesis phase for season 2026. It permits the one authenticated,
+# confirmed `POST /internal/admin/publication/cutover/genesis`, refuses the
+# staging seed and activation (`phase-not-permitted`), and is the control the
+# production ingest requires (`genesis-control-required` otherwise).
+SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"
+# Every season reads and publishes through the sequencer once the sequencer
+# reports it `genesis` or `active`. Genesis and the ingest refuse otherwise.
+SEASON_PUBLICATION_AUTHORITY = "sequencer"
+# The one season the guarded ingest accepts. Every admitted batch still needs
+# `ADMIN_TOKEN`, the genesis control above, a sequenced season and a Jolpica
+# attribution record marked `active`, and publishes only through the D14-D16
+# guard and the `prepare` CAS bound to its `expectedActiveVersion`.
+SEASON_BATCH_INGEST = "2026"
 
+# Bindings are not inherited by named environments, so each one redeclares it.
 [[env.production.durable_objects.bindings]]
 name = "PROVIDER_RATE_LIMITER"
 class_name = "ProviderRateLimiter"
+
+# The production season-publication authority. Declaring it provisions
+# nothing until W3's authorized deploy creates the namespace.
+[[env.production.durable_objects.bindings]]
+name = "SEASON_PUBLICATION_SEQUENCER"
+class_name = "SeasonPublicationSequencer"
+
+[env.production.secrets]
+required = ["ADMIN_TOKEN"]
+
+# No scheduled trigger, explicitly: an empty list makes `wrangler deploy` set
+# no schedule, where an absent key would leave any existing one in place.
+[env.production.triggers]
+crons = []
+
+# Persisted Workers Logs off (release plan decision D-L, pending; this is the
+# fail-safe choice). Explicit, because Cloudflare enables observability by
+# default for new Workers. With it off, the Worker's own `request.completed`
+# lines are not stored, so the Data safety form needs no API row for them
+# (PR #82 `data-safety.md` §3.4 option (b)). `wrangler tail` still works and
+# stores nothing. Keeping the logs instead is D-L option (a): it needs
+# `enabled = true` with `invocation_logs = false`, as staging has, and the
+# App interactions declaration.
+[env.production.observability]
+enabled = false
