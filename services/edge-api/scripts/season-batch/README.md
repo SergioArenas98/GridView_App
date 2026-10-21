@@ -71,8 +71,10 @@ nothing else:
 - **`observedAt`** is the instant the capture was complete. Every
   clock-dependent rule runs at that instant.
 - **`classificationRounds`** must be exactly the rounds whose race anchor is
-  at least five hours old at `observedAt`. That is the runtime's
-  `isEligible` rule.
+  at least five hours old at `observedAt`. That is the batch capture rule,
+  `isBatchCaptureEligible`: the coordinated runtime's former first check,
+  which ADR 0028 D5 deliberately left unchanged for batches (the runtime now
+  asks from race start + 1 h 30 min).
 - **`responses`** holds:
   - the six season-level requests: races, circuits, drivers, constructors,
     driver standings and constructor standings;

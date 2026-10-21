@@ -316,7 +316,7 @@ export interface RunRecord {
 }
 
 export interface HarnessOptions {
-  readonly cutover?: 'active' | 'seeded' | 'none';
+  readonly cutover?: 'active' | 'seeded' | 'none' | 'genesis';
   /** How the sequencer and the ledger are reached. */
   readonly transport?: SequencerTransport;
   /**
@@ -325,6 +325,8 @@ export interface HarnessOptions {
    * classified round, which any complete candidate contains.
    */
   readonly seed?: 'mock' | 'unclassified';
+  /** When the seed release is published; see `sequencedContext`. */
+  readonly seedAt?: string;
 }
 
 /** Seeded behind every fixture instant, so a coordinated candidate is admitted. */
@@ -400,6 +402,7 @@ export class ObservationHarness {
       transport,
       sequencerClock: clock,
       seedOrderingInput: SEED_ORDERING,
+      ...(settings.seedAt === undefined ? {} : { seedAt: settings.seedAt }),
       ...(settings.seed === 'unclassified'
         ? { seedTransform: unclassified }
         : {}),

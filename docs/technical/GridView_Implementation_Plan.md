@@ -2620,6 +2620,8 @@ activate it.
 
 ### 14.0.30 Phase 9B reconciliation ledger storage foundation (C1) - dormant
 
+> **Superseded in part 2026-10-21 (§14.0.61, ADR 0028 D5):** the check-index and consecutive-confirmation bounds are 0-25, not 0-17; schema version 1 is refined in place (no ledger exists in any environment).
+
 Implemented on **2026-09-27** as PR-C1 of the runtime activation slicing, under
 owner decision **O-6**. O-6 approves one global SQLite-backed
 `ReconciliationLedger` Durable Object, intended to be addressed by the stable
@@ -2650,6 +2652,8 @@ more. **G9 and G5 are not complete.**
 | **Still open** | **G9 reconciliation**: the §10.4.1 observation transitions and D2.1-D2.9, corroboration, settling, the typed events and monitoring, the operator disposition path, and the observation and outcome orchestration of decision-pack §6.6. **G5 planning**: the due-work planner. **Owner decisions O-3, O-4, O-5, O-7, O-9 and O-12 to O-16**, including the no-change publication gate (O-12) and ordering input (O-13). **Round coherence** and **empty-standings replacement** (ADR 0023 A3.5), and **attribution**. Also open: any binding, migration, provisioning or deployment of the ledger, and the staging mode and cron changes. Those belong to PR-C2 and later, separately authorized steps. *(Superseded in part on 2026-09-27 by §14.0.31: the §10.4.1 transitions, corroboration, settling, the typed events and the due-work planner now exist as dormant pure policy, under O-3, O-4, O-5(a) and O-7. The rest of this row stays open.)* |
 
 ### 14.0.31 Phase 9B reconciliation policy and due-work planner (C2) - implemented, not connected
+
+> **Superseded in part 2026-10-21 (§14.0.61, ADR 0028 D5):** the race cadence below (+5/+9/+15/+24 h, 17 slots, `anchor + 5 h` eligibility, settling from slot 4, ceiling slot 17) is replaced. The first check is the first tick at or after race start + 1 h 30 min; hourly through + 10 h 30 min while no result is accepted or a change is pending; then + 15 h, + 24 h and days 2-14 (25 slots, settling from slot 12, ceiling slot 25). An accepted result takes slots 5, 9 and 11-25. The rest of this record stands.
 
 Implemented on **2026-09-27** as PR-C2 of the runtime activation slicing. It
 builds on the C1 ledger (§14.0.30) and runs under owner decisions **O-3, O-4,
@@ -2857,6 +2861,8 @@ in the same ADR, "E2". **No activation step is complete or authorized.**
 | **Still open** | Connecting the orchestration to the scheduled handler, the ledger `[exports]` entry, binding and resolver, and every other activation step. Verified production alert delivery (OD-1). PR-E3 (OD-7). PR-G (O-16). O-9. Running the A3.5 gate. *(Superseded in part on 2026-10-05 by §14.0.39: PR-E3 is implemented, dormant.)* |
 
 ### 14.0.39 Phase 9B operator verification (E3) - implemented, not deployed, never run
+
+> **Superseded in part 2026-10-21 (ADR 0028 D5):** the eligibility check below is the planner's current rule, `anchor` + 1 h 30 min, not `anchor + 5h`.
 
 Implemented on **2026-10-05**. This is PR-E3 of the operator disposition
 decision pack: T11-T11c, with the OD-7 content. The owner answered the E3
@@ -3139,6 +3145,8 @@ complete.**
 
 ### 14.0.46 Phase 9B offline season-batch generator - dormant, offline
 
+> **Renamed 2026-10-21 (ADR 0028 D5):** the capture eligibility rule below is now `isBatchCaptureEligible`, still five hours; the runtime's `isEligible` moved to + 1 h 30 min and no longer governs batches.
+
 Implemented on **2026-10-07** as PR-1 of the private decision pack "Real
 Jolpica data in a test APK at zero cost" (2026-10-07). The pack is at
 `1d31872`. It recommends a curated batch over Workers Free invocations or a
@@ -3263,6 +3271,8 @@ reference phone (runbook §7).
 | **Still open** | Review and merge. A frozen APK built from the merged `master` would show the fixes. The installed `f2be701` APK keeps the old behaviour. Curated team colours and driver codes need an owner decision. |
 
 ### 14.0.51 Phase 9B guarded staging season-batch ingest - disabled, never run
+
+> **Renamed 2026-10-21 (ADR 0028 D5):** batch verification's completeness rule is `isBatchCaptureEligible` (five hours, unchanged), no longer the runtime's `isEligible`.
 
 > **Dated note (2026-10-13).** "Disabled" records this change. Committed
 > staging enables the route since §14.0.53. No deployed Worker contains it,
@@ -3480,6 +3490,29 @@ was purchased, provisioned or deployed, and there was no Cloudflare request.**
 | Deliberately absent | The `GRIDVIEW_DATA` KV binding. Wrangler 4.112 provisions a namespace on deploy for a binding without an `id`, and no production namespace exists. W2 commits the real id. Until then the Worker answers `500` and a first deploy refuses for the missing secret. |
 | Tests | New `test/config/production-worker-config.test.ts` (15) reads the configuration through `unstable_readConfig` and drives the real Worker: no cron, fail-closed without KV, no season served before genesis or before the first batch, seed and activation refused, no provider built. The tests that pinned production as inert are reframed, not deleted: `inertness.test.ts`, `wrangler-config.test.ts`, `staging-season-batch-ingest.test.ts`, `ledger-binding-absent.test.ts`. Staging's resolved configuration is asserted unchanged. |
 | Still open | W2 (KV namespace, `ADMIN_TOKEN`, the KV id PR), the Workers Paid purchase (before D3), D-L, W3 deployment, D1-D3. Each needs the owner's authorization. |
+
+### 14.0.61 Automatic end-to-end updates (ADR 0028) - code, tests and documentation, not activated
+
+Prepared on **2026-10-21**, stacked on PR #85. The owner made automatic
+updates a release requirement. **Nothing is activated:** no environment
+selects `coordinated`, binds the ledger or has a schedule; nothing was
+purchased, provisioned or deployed; no provider was contacted. Live staging
+was re-read read-only (staging runbook §2).
+
+| Item | Status |
+|---|---|
+| Genesis | Coordinated runs accept a `genesis` season: no reconciliation, the lease snapshot, a `publishing` slot resolved as not published, the empty predecessor from the authority. Production needs no capture or submission. |
+| Freshness | `coordinated` stamps `calendar-horizon`; only `mock` keeps the interval. The none↔coordinated rollback constraint is gone. |
+| Heartbeat | A healthy scheduled run writes `SyncState.lastCompletedAt` (`/v1/status.lastSuccessfulSyncAt`). Manual, failed, cancelled, all-checks-failed, held and blocked runs do not. A run that sent requests and observed nothing marks `lastFailedAt`; idle (nothing-due) runs do not beat until an observation succeeds again (Codex P2 on PR #86; negative control: 2 failing). |
+| Production logs (D-L) | Persisted, invocation logs off; no public `request.completed`; `request.failed` without request ID; `X-Request-ID` only as an opaque token; refused internal paths as `/internal/*`. The whole-season baseline is compared as amended by D8 (`asAmendedByAdr0028`), the recording untouched. |
+| Alerts | `scripts/monitor/automation-monitor.mjs` (public GETs; heartbeat > 3 h, result > 12 h after race start) and `.github/workflows/automation-monitor.yml`, manual-only. |
+| Controlled source | `src/providers/controlled/source.ts`: KV-backed, time-aware Jolpica transport, admitted only in a coordinated staging Worker (`CONTROLLED_PROVIDER_SOURCE = "kv"`), for the isolated demonstration Worker. |
+| Race-result polling (ADR 0028 D5, owner instruction of the same day) | `policy/cadence.ts`: the first check at the first tick at or after race start + 90 min; ten hourly checks through + 10 h 30 min while no result is accepted or a change is pending; then + 15 h, + 24 h and days 2-14 (25 slots, was 17). An accepted result takes only slots 5, 9 and 11-25 (`slotSetFor`, `isConfirmationSlot`); the planner and the state machine's `nextDueAt` follow the record's slot set. Ledger bounds 17 → 25, schema v1 refined in place (no ledger exists anywhere). The batch capture rule keeps five hours under its own name (`isBatchCaptureEligible`), so committed batches reconvert unchanged. I1-I5 restated on the new slots. |
+| Product scope (ADR 0028 D12) | The first Google Play release shows the full weekend schedule and publishes and displays race results only; free practice, qualifying, sprint qualifying and sprint results are a future product update (PRD §9.3, §25). |
+| Gate AU-3 | `test/e2e/automatic-updates/`: `gate.test.ts` (16, in CI: the + 90 min start, on-time, long, delayed and last-window results, late publication and back-off, a never-published result, an incomplete page, a short self-consistent result, pre- and post-settlement corrections, outage, lost commit, genesis, budget with a missing result), `controlled-source.test.ts` (8), `app-gate.test.ts` with the Flutter data layer over HTTP (`test/e2e/automatic_update_app_gate_test.dart`, opt-in), `controlled-source-export.test.ts` (opt-in). |
+| Negative controls | Interval policy back: 2 failing; genesis refused: 9; no heartbeat: 8; production success line kept: 3; free-text request ID adopted: 6; all-failed run beats: 2; app gate without the correction: fails. Polling: planner ignoring the slot set (hourly for accepted results): 8; a pending change not re-entering hourly checks: 11; first check back at + 5 h: 35 (policy, observation and gate suites). Each restored byte for byte (SHA-256 checked). |
+| Review | Code-reviewer pass: no CRITICAL/HIGH. Two MEDIUM (beat on an all-failed run; unauthenticated internal path text in production logs) and three LOW fixed in the follow-up commit "fix: address review findings on the automatic path". |
+| Still open | AU-1 to AU-8 (`docs/release/automatic-updates.md` §7), each separately authorized; AU-D2 to AU-D4. AU-D1 and AU-D5 were accepted by the owner for 2.0.0 on 2026-10-21, with their limitations (ADR 0028 D13). |
 
 ## 14.1 Objective
 

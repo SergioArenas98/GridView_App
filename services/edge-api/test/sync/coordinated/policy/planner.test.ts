@@ -72,13 +72,16 @@ const accepted = (
   ...overrides,
 });
 
+/** Settled at the +24h check, slot 12. */
 const settledFields = {
   ...accepted(),
-  checkIndex: 4,
+  checkIndex: 12,
   reviewState: 'settled',
   terminalReason: 'settled',
-  settledAt: checkTime(ANCHOR, 4).toISOString(),
+  settledAt: checkTime(ANCHOR, 12).toISOString(),
 };
+
+const MINUTE = HOUR / 60;
 
 describe('bootstrap', () => {
   it.each(['scheduled', 'manual'] as const)(
@@ -261,37 +264,82 @@ describe('publication runs', () => {
 describe('race classification checks', () => {
   const season = quietSeason(calendar, FAR);
 
-  it('are never planned before anchor + 5 hours, even for a race in progress', () => {
+  it('are never planned before anchor + 1 h 30 min, even for a race in progress', () => {
     for (const trigger of ['scheduled', 'manual'] as const) {
-      const result = plan(plus(ANCHOR, 5 * HOUR - 1), { season }, trigger);
+      const result = plan(plus(ANCHOR, 90 * MINUTE - 1), { season }, trigger);
       expect(checksOf(result)).toEqual([]);
     }
-    expect(checksOf(plan(plus(ANCHOR, 5 * HOUR), { season }))).toEqual([
+    expect(checksOf(plan(plus(ANCHOR, 90 * MINUTE), { season }))).toEqual([
       '1:cadence:1',
     ]);
   });
 
-  it('fall due at +5, +9, +15 and +24 hours and not between', () => {
+  /**
+   * Plans the minute-17 ticks from `fromHour` to `toHour` after the race
+   * start, each run consuming the slot it served, and answers when a check
+   * fell due. `fields` is what the record holds besides its slot.
+   */
+  function dueTicks(
+    fields: Partial<Record<keyof ClassificationRecord, unknown>> | null,
+    fromHour: number,
+    toHour: number,
+    checkIndex = 0,
+  ): string[] {
     const due: string[] = [];
-    for (let hour = 0; hour <= 30; hour += 1) {
-      const checkIndex = [5, 9, 15, 24].filter(
-        (offset) => offset < hour,
-      ).length;
+    let served = checkIndex;
+    for (let hour = fromHour; hour <= toHour; hour += 1) {
       const records =
-        checkIndex === 0 ? [] : [record(1, { ...accepted(), checkIndex })];
-      const result = plan(plus(ANCHOR, hour * HOUR), {
-        season,
-        classifications: records,
-      });
-      if (checksOf(result).some((check) => check.includes('cadence'))) {
-        due.push(`+${hour}h:${checksOf(result).join(',')}`);
-      }
+        fields === null && served === 0
+          ? []
+          : [record(1, { ...(fields ?? {}), checkIndex: served })];
+      const checks = checksOf(
+        plan(plus(ANCHOR, hour * HOUR + 17 * MINUTE), {
+          season,
+          classifications: records,
+        }),
+      );
+      const cadence = checks.find((check) => check.includes('cadence'));
+      if (cadence === undefined) continue;
+      due.push(`+${hour}h17:${cadence}`);
+      served = Number(cadence.split(':')[2]);
     }
-    expect(due).toEqual([
-      '+5h:1:cadence:1',
-      '+9h:1:cadence:2',
-      '+15h:1:cadence:3',
-      '+24h:1:cadence:4',
+    return due;
+  }
+
+  it('ask for a missing result on every hourly tick of the window, then back off', () => {
+    // No result yet: the record holds no accepted revision.
+    expect(dueTicks(null, 0, 30)).toEqual([
+      '+2h17:1:cadence:1',
+      '+3h17:1:cadence:2',
+      '+4h17:1:cadence:3',
+      '+5h17:1:cadence:4',
+      '+6h17:1:cadence:5',
+      '+7h17:1:cadence:6',
+      '+8h17:1:cadence:7',
+      '+9h17:1:cadence:8',
+      '+10h17:1:cadence:9',
+      '+11h17:1:cadence:10',
+      '+15h17:1:cadence:11',
+      '+24h17:1:cadence:12',
+    ]);
+  });
+
+  it('confirm an accepted result only at +5 h 30 min, +9 h 30 min, +15 h and +24 h', () => {
+    // Accepted at slot 1, on the +2h17 tick.
+    expect(dueTicks(accepted(), 3, 30, 1)).toEqual([
+      '+6h17:1:cadence:5',
+      '+10h17:1:cadence:9',
+      '+15h17:1:cadence:11',
+      '+24h17:1:cadence:12',
+    ]);
+  });
+
+  it('ask hourly again while a differing revision is pending', () => {
+    const pending = accepted({ candidateRevision: rev('B') });
+    expect(dueTicks(pending, 7, 9, 5)).toEqual([
+      '+7h17:1:cadence:6',
+      '+8h17:1:cadence:7',
+      '+9h17:1:cadence:8',
     ]);
   });
 
@@ -300,16 +348,16 @@ describe('race classification checks', () => {
       season,
       classifications: [record(1, { ...accepted(), checkIndex: 1 })],
     });
-    // Slots 2-8 were missed; one check serves slot 9 (day 6).
-    expect(checksOf(result)).toEqual(['1:cadence:9']);
+    // Slots 5-16 were missed; one check serves slot 17 (day 6).
+    expect(checksOf(result)).toEqual(['1:cadence:17']);
   });
 
   it('continue daily only while unsettled, and stop at the ceiling', () => {
     const unsettledDay3 = plan(plus(ANCHOR, 3 * DAY), {
       season,
-      classifications: [record(1, { ...accepted(), checkIndex: 5 })],
+      classifications: [record(1, { ...accepted(), checkIndex: 13 })],
     });
-    expect(checksOf(unsettledDay3)).toEqual(['1:cadence:6']);
+    expect(checksOf(unsettledDay3)).toEqual(['1:cadence:14']);
 
     const settledDay3 = plan(plus(ANCHOR, 3 * DAY), {
       season,
@@ -322,7 +370,7 @@ describe('race classification checks', () => {
       classifications: [
         record(1, {
           ...accepted(),
-          checkIndex: 17,
+          checkIndex: 25,
           terminalReason: 'settled-on-deadline',
           reviewState: 'settled',
         }),
@@ -338,7 +386,7 @@ describe('race classification checks', () => {
       }),
       classifications: [
         record(1, {
-          checkIndex: 17,
+          checkIndex: 25,
           terminalReason: 'never-reconciled-abandoned',
         }),
       ],
@@ -356,7 +404,7 @@ describe('race classification checks', () => {
       season: moved,
       classifications: [record(1, { ...accepted(), checkIndex: 1 })],
     });
-    expect(checksOf(result)).toEqual(['1:cadence:2']);
+    expect(checksOf(result)).toEqual(['1:cadence:5']);
   });
 });
 
@@ -367,7 +415,7 @@ describe('full backfill', () => {
   it('selects every eligible round of an unrecorded season and nothing in the future', () => {
     const result = plan(now, { season: quietSeason(season23, FAR) });
     const eligible = season23.filter(
-      (entry) => Date.parse(entry.anchor) + 5 * HOUR <= now.getTime(),
+      (entry) => Date.parse(entry.anchor) + 90 * MINUTE <= now.getTime(),
     );
 
     expect(eligible).toHaveLength(16);
@@ -376,15 +424,16 @@ describe('full backfill', () => {
     expect(result.checks.map((check) => check.round)).toEqual(
       eligible.map((entry) => entry.round),
     );
-    // Rounds past their ceiling are served at slot 17; the newest is mid-cadence.
+    // Rounds past their ceiling are served at slot 25; the newest is in its
+    // hourly window (+8 h 17 min: slot 7).
     expect(checksOf(result).slice(0, 2)).toEqual([
-      '1:cadence:17',
-      '2:cadence:17',
+      '1:cadence:25',
+      '2:cadence:25',
     ]);
     expect(checksOf(result).slice(13)).toEqual([
-      '14:cadence:17',
-      '15:cadence:10',
-      '16:cadence:1',
+      '14:cadence:25',
+      '15:cadence:18',
+      '16:cadence:7',
     ]);
     expect(result.providerRequests).toBe(6 + 16);
     expect(
@@ -398,7 +447,7 @@ describe('full backfill', () => {
     const recorded = season23
       .slice(0, 15)
       .map((entry) =>
-        record(entry.round, { ...settledFields, checkIndex: 17 }, entry.anchor),
+        record(entry.round, { ...settledFields, checkIndex: 25 }, entry.anchor),
       );
     const newest = season23[15]!;
     const result = plan(plus(newest.anchor, 9 * HOUR), {
@@ -411,7 +460,7 @@ describe('full backfill', () => {
 
     expect(checksOf(result)).toEqual([
       ...recorded.map((entry) => `${entry.round}:reread`),
-      '16:cadence:2',
+      '16:cadence:5',
     ]);
     expect(result.providerRequests).toBe(22);
   });
@@ -436,7 +485,7 @@ describe('the limiter deferral', () => {
     });
     expect(
       checksOf(plan(new Date(until), { season, classifications: deferred })),
-    ).toEqual(['1:cadence:2']);
+    ).toEqual(['1:cadence:9']);
   });
 
   it('does not stop a manual run, which the limiter itself still paces', () => {
@@ -462,7 +511,7 @@ describe('manual force (O-8)', () => {
           record(1, settledFields, season23[0]!.anchor),
           record(
             2,
-            { checkIndex: 17, terminalReason: 'never-reconciled-abandoned' },
+            { checkIndex: 25, terminalReason: 'never-reconciled-abandoned' },
             season23[1]!.anchor,
           ),
         ],

@@ -36,6 +36,7 @@ import {
 } from '../../../../src/sync/coordinated/ledger';
 import { SynchronizationService } from '../../../../src/sync/sync-service';
 import {
+  asAmendedByAdr0028,
   wholeSeasonTrace,
   withoutInspectionReasons,
   type StepTrace,
@@ -134,6 +135,7 @@ function expectNoTraffic(record: CallRecord): void {
     prepares: 0,
     finalizes: 0,
     storageWrites: 0,
+    heartbeats: 0,
     mockProviderCalls: 0,
   });
 }
@@ -422,7 +424,7 @@ describe('mock and none with a RECONCILIATION_LEDGER binding', () => {
     // `ledger-unbound`; that reason is the one expected difference. Every
     // sync, admin and public step is the baseline, byte for byte.
     expect(withoutInspectionReasons(trace)).toEqual(
-      withoutInspectionReasons(recorded),
+      withoutInspectionReasons(asAmendedByAdr0028(recorded)),
     );
     expect(touched).toBe(0);
   });

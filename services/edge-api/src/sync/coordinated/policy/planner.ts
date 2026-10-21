@@ -17,10 +17,13 @@
  * from a calendar read in the same run. With no observed calendar the only
  * possible plan is a bootstrap calendar observation.
  *
- * A round is never planned before `anchor + 5h`, whatever the trigger. The
- * selected rounds are every round with a recorded (accepted) classification,
- * plus every round with a cadence check due now (O-3). Missed checks collapse
- * into one current check; there is no catch-up burst.
+ * A round is never planned before `anchor` + 1 h 30 min, whatever the
+ * trigger. The selected rounds are every round with a recorded (accepted)
+ * classification, plus every round with a cadence check due now (O-3). A
+ * round still waiting for a result takes every hourly slot of the initial
+ * window; one whose accepted result has nothing pending takes only the
+ * confirmation slots (ADR 0028 D5). Missed checks collapse into one current
+ * check; there is no catch-up burst.
  *
  * A publication is also due when the authority serves a release other than
  * the one this runtime last published or confirmed (`releaseDrifted`).
@@ -47,7 +50,7 @@ import type {
   RefreshResource,
   SeasonRecord,
 } from '../ledger/model';
-import { currentSlot, isEligible } from './cadence';
+import { currentSlot, isEligible, slotSetFor } from './cadence';
 
 export type RunTrigger = 'scheduled' | 'manual';
 
@@ -187,7 +190,7 @@ export function dueSlot(
   now: Date,
 ): number | null {
   if (record !== null && record.terminalReason !== null) return null;
-  const slot = currentSlot(anchor.anchor, now);
+  const slot = currentSlot(anchor.anchor, now, slotSetFor(record));
   return slot > (record?.checkIndex ?? 0) ? slot : null;
 }
 

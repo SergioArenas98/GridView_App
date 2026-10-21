@@ -45,8 +45,11 @@ function dueBy(current: LedgerInstant | null, since: LedgerInstant): string {
 
 export async function recoverUnfinishedPublication(input: {
   readonly record: SeasonRecord | null;
-  /** The authoritative release, as this run reconciled it. */
-  readonly activeVersion: string;
+  /**
+   * The authoritative release, as this run reconciled it, or `null` for a
+   * `genesis` season, which has none.
+   */
+  readonly activeVersion: string | null;
   readonly storage: SnapshotStorage;
   readonly now: Date;
 }): Promise<Recovery> {
@@ -62,6 +65,14 @@ export async function recoverUnfinishedPublication(input: {
   };
   if (disposition.digest === null || disposition.orderingInput === null) {
     return { kind: 'resolved', resolution: 'not-reached', record: due };
+  }
+  if (input.activeVersion === null) {
+    // A `genesis` season: had the reserved candidate committed, the season
+    // would be `active`. Nothing was published, so the publication is due.
+    // The run's one authority read suffices: in `coordinated` mode every
+    // publisher of the season runs under the lease this run holds (the
+    // ingest refuses that mode), so no commit can land after the read.
+    return { kind: 'resolved', resolution: 'not-published', record: due };
   }
 
   const sidecar = await readStoredPublicationMetadata(

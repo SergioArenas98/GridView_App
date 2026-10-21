@@ -116,8 +116,10 @@ get constructor-standings.json "$B/constructorstandings/?limit=100" || exit 1
 ```
 
 Then fetch the race results of **exactly** the rounds whose race started at
-least five hours before the capture is complete (the runtime's `isEligible`
-rule). This lists them from the calendar just fetched:
+least five hours before the capture is complete (the batch capture rule,
+`isBatchCaptureEligible`; the coordinated runtime itself asks from race start
++ 1 h 30 min since ADR 0028 D5). This lists them from the calendar just
+fetched:
 
 ```bash
 ROUNDS=$(node -e '

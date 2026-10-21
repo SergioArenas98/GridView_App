@@ -1,15 +1,16 @@
 /**
  * How a sequenced release's `staleAfter` is chosen (ADR 0005, amendment of
- * 2026-10-19).
+ * 2026-10-19; extended to the coordinated runtime by ADR 0028).
  *
- * `staleAfter` tells a client when to treat a payload as stale. Under an
- * automatic provider the Worker republishes on its own schedule, so the
- * generator's fixed interval (15 minutes, an hour for the content manifest)
- * says "expect a newer publication by then". With no automatic provider
- * (`PROVIDER_MODE=none`, staging's manually published season batches) nothing
- * republishes on a schedule, and the same interval only says that 15 minutes
- * have passed: unchanged data would be called stale for the whole life of a
- * batch.
+ * `staleAfter` tells a client when to treat a payload as stale. Only the
+ * mock provider republishes on every run, so only there does the generator's
+ * fixed interval (15 minutes, an hour for the content manifest) say "expect a
+ * newer publication by then". With no automatic provider
+ * (`PROVIDER_MODE=none`, staging's manually published season batches)
+ * nothing republishes on a schedule, and the coordinated runtime republishes
+ * only content that changed (its no-change gate, O-12). In both, the same
+ * interval only says that 15 minutes have passed: unchanged data would be
+ * called stale for the whole life of a release.
  *
  * The `calendar-horizon` policy instead derives `staleAfter` from what the
  * release itself covers. A release stops describing the season at the
@@ -25,10 +26,11 @@
  *
  * Constraint: the `interval` policy measures each stored
  * `staleAfter - generatedAt` pair when it re-stamps. A release stamped under
- * this policy must not be rolled back after the Worker switches to another
- * provider mode: a horizon-length interval would be carried forward, and a
- * season-complete one would leave the year range and refuse the rollback.
- * Resolve this before any provider-mode switch.
+ * this policy must not be rolled back by a Worker on the `interval` policy:
+ * a horizon-length interval would be carried forward, and a season-complete
+ * one would leave the year range and refuse the rollback. `none` and
+ * `coordinated` share this policy, so switching between them re-stamps
+ * consistently; only a switch to `mock` would cross the constraint.
  *
  * The content manifest is the client's check for a newer publication and keeps
  * its one-hour interval under either policy.
@@ -135,12 +137,13 @@ function earliestResultSessionStart(sessions: unknown): number | null {
 }
 
 /**
- * The policy of every sequenced release a Worker stamps. Only an automatic
- * provider republishes on a schedule, so only then does the generator's fixed
- * interval say when to expect newer data. With `none` every release is
- * published by hand - a season batch or a rollback - and its own calendar says
- * when it stops covering the season.
+ * The policy of every sequenced release a Worker stamps. Only the mock
+ * provider republishes on every run, so only there does the generator's
+ * fixed interval say when to expect newer data. With `none` every release is
+ * published by hand - a season batch or a rollback - and the coordinated
+ * runtime publishes only a changed candidate, so in both the release's own
+ * calendar says when it stops covering the season.
  */
 export function freshnessPolicyFor(mode: ProviderMode): FreshnessPolicy {
-  return mode === 'none' ? 'calendar-horizon' : 'interval';
+  return mode === 'mock' ? 'interval' : 'calendar-horizon';
 }

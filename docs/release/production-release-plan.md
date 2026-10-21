@@ -5,6 +5,30 @@ current state (staging only, production never deployed) to a staged Google Play
 production rollout of **2.0.0 (versionCode 8)** as an update to the existing
 `com.sejuma.gridview` listing.
 
+> **Amended 2026-10-21: automatic updates are a release requirement**
+> ([ADR 0028](../adr/0028-automatic-end-to-end-season-updates.md),
+> [`automatic-updates.md`](automatic-updates.md)). A newly available result
+> must reach the app with no manual capture or submission. PR #85's
+> `PROVIDER_MODE = "none"` and empty cron are an interim bootstrap state.
+> Track D's capture (D1) and submission (D3) leave the production path;
+> genesis (D2) stays. Gates AU-0 to AU-8 are added, and A0 and R5 depend on
+> them.
+
+> **Product scope of 2.0.0 (owner, 2026-10-21; ADR 0028 D12).** The first
+> Google Play release keeps the current public scope: the **full weekend
+> schedule**, but **race results only**, published and displayed. Free
+> practice, qualifying, sprint qualifying and sprint results are a future
+> product update. Nothing in this plan, PR #86, the release notes or the store
+> listing may present 2.0.0 as delivering results for every session.
+>
+> **Race-result polling (ADR 0028 D5).** The first check is the first hourly
+> tick at or after the scheduled race start + 90 minutes - the start of
+> polling, not evidence that the race has finished. While no valid, complete
+> result exists it repeats hourly through + 10 h 30 min, then backs off to
+> + 15 h, + 24 h and daily to day 14. Gate AU-3 covers delayed starts,
+> unusually long races, missing and partial results, a late Jolpica
+> publication and the request budget.
+
 Nothing in this document is authorized by the change that adds it. Every step
 marked **[approval]** is a separate owner authorization, given in that order.
 Steps marked **[PR]** are reviewable repository changes.
@@ -30,22 +54,23 @@ Steps marked **[PR]** are reviewable repository changes.
 | W1 | **[PR]** The production Worker configuration, plus whatever W-P requires: **PR #85**, without the KV binding | W0, W-P |
 | W2 | **[approval]** Create the production KV namespace and a new `ADMIN_TOKEN` value (not uploaded yet); **[PR]** commit the KV id | W1 |
 | W3 | **[approval]** First deploy of `gridview-api-production`, supplying `ADMIN_TOKEN` with `--secrets-file` | W2 |
-| D1 | **[approval]** Capture and review the season-2026 batch | W3 |
+| D1 | **Superseded 2026-10-21** (ADR 0028 D3): no capture. Kept only as the manual fallback in `none` mode | — |
 | D2 | **[approval]** Run production genesis for season 2026 | W3 |
-| D3 | **[approval]** Submit the reviewed batch to production | D1, D2 |
+| D3 | **Superseded 2026-10-21** (ADR 0028 D3): the first release is published automatically after genesis (AU-7). Kept only as the manual fallback | — |
+| AU-0…AU-8 | Automatic updates: code (AU-0), Workers Paid (AU-1), the isolated demonstration Worker (AU-2), **the end-to-end demonstration with controlled data (AU-3)**, live staging automatic (AU-4), monitor schedule (AU-5), alert drill (AU-6), production automatic (AU-7), release-candidate check (AU-8) — `automatic-updates.md` §7 | W1, W-P; AU-7 also D2 and D-A |
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
 | P2 | **[approval]** Publish the policy at https://gridview.netlify.app | P1 |
 | P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2, P-R, §5.1 step 2 or step 3 (Alpha inspected or paused) |
 | P3 | **[approval]** Data safety in transition state T, Ads = **Yes**, including the App interactions row D-L requires | P2, P-R, D-L, W3 (the deployed observability setting matches D-L); before R2 |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
-| A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1, P1, D3, every W/D PR merged |
+| A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1, P1, AU-3, every W/D/AU PR merged |
 | A0b | **[record]** Release-candidate gate, post-build part: the AAB, the internal installation and performance | A2, R2, R3 |
-| A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A0, A1, D3, P2 |
+| A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A0, A1, P2, AU-7 (production live and holding its first automatic release; D3 is superseded) |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
 | R2 | **[approval]** Upload the AAB to internal testing and release it | A2, R1, P3 |
 | R3 | **[approval]** The controlled upgrade (§8): one Play-delivered upgrade of the final candidate, plus the owner's approval (D-U) of the replacements for the matrix rows one pass cannot cover | R2 |
-| R4 | **[approval]** Release notes; decide D-T1 (retain versionCode 7 or not) | P3 |
-| R5 | **[approval]** Promote the same release to production at 20 % | R3, R4, A0, A0b (every §15.8 item recorded as passed) |
+| R4 | **[approval]** Release notes, which describe race results only (ADR 0028 D12); decide D-T1 (retain versionCode 7 or not) | P3 |
+| R5 | **[approval]** Promote the same release to production at 20 % | R3, R4, A0, A0b (every §15.8 item recorded as passed), AU-7, AU-8 |
 | R6 | **[approval]** Increase to 100 % after the monitoring window | R5 |
 | R7 | **[approval]** Data safety final state F, Ads = **No**, once no 1.x artifact is distributed on any non-internal track | R6, D-T1, Alpha retired (§5.1) |
 
@@ -149,6 +174,13 @@ The amendment must decide:
     - **disable persisted logs** for production
       (`[env.production.observability] enabled = false`).
 
+    **Resolved on the engineering side 2026-10-21 by ADR 0028 D8**, a third
+    option: logs persist for automatic operation, but in production the
+    Worker writes no `request.completed` line for a public request, keeps
+    `request.failed` without the request ID, and logs refused internal paths
+    as `/internal/*`. App traffic is not stored, so no App interactions row
+    is needed for Worker logs. The privacy wording stays with PR #82 (AU-D3).
+
 ### W-P. Cost of genesis and submissions, and the submission path (decision)
 
 **Correction.** An earlier version of this section cited 269 ms, the staging
@@ -220,6 +252,10 @@ accepted risk.
 **Decided 2026-10-20: A, Workers Paid.** D3 follows Path A. Buying the plan
 is still a separate owner step, and it must be done before D3.
 
+> **2026-10-21:** D3 is superseded by automatic publication (ADR 0028), which
+> needs Workers Paid for the same reason (O-10). Buying the plan is gate AU-1,
+> before AU-2 and before W3.
+
 Public traffic on Free is a separate budget. Each uncached public read is one
 Worker request, one Durable Object request and two KV reads, against 100,000
 of each per day. The current install base ("100+ downloads") is far below
@@ -286,6 +322,13 @@ Verify:
 Record the deployed version id.
 
 ## 4. Track D — reviewed data publication
+
+> **Superseded for production on 2026-10-21 by automatic updates** (ADR 0028;
+> `automatic-updates.md` §8.4). Production runs genesis (D2) and then publishes
+> its first and every later release automatically. D1, D3 and the recurring
+> submissions below remain only as the **manual fallback** with
+> `PROVIDER_MODE = "none"`, and are not a release step. The text is kept as
+> written.
 
 1. **D1 [approval]: capture and review.** Two separate steps.
    - **Capture (network).** Record one Jolpica capture: about 23 `GET`s, in
@@ -433,7 +476,8 @@ The details are in PR #82, `data-safety.md` §1.
     so this plan takes the conservative reading and submits state T before
     the internal upload (R2), not just before production (R5).
 - **R4 [approval]:**
-  - English and Spanish release notes.
+  - English and Spanish release notes. They name race results only, never
+    practice, qualifying or sprint results (ADR 0028 D12).
   - **D-T1:** do not retain versionCode 7 for API 21–23 (recommended). The
     legacy backend is dead, so 1.2.1 shows ads but no data.
 
@@ -520,12 +564,13 @@ merged commit** A2 builds, never a branch head or an older run.
 | Performance targets | A0b | The Performance traces from R3's controlled upgrade against the targets in Implementation Plan §15.4 |
 | Security review | A0 | CodeQL and the secret scan green on that commit, plus a recorded review of the release diff |
 | Privacy review | A0 | PR #82's R1–R8 answered by the owner |
-| Provider legal gate | A0 | ADR 0019 and Implementation Plan §14.2, re-confirmed for the batch D3 published |
+| Provider legal gate | A0 | ADR 0019 and Implementation Plan §14.2, re-confirmed for automatic publication of race results (ADR 0028 D11, D12); Jolpica's terms and rate limits re-read from its public repository, without contacting the API |
 
 A failing, missing or stale A0 item blocks A2. A failing A0b item blocks R5.
 
 **A2 [approval]: build and sign.** Run from a clean checkout of the merged
-commit, in PowerShell, with the API live and holding data (W3, D3) and the
+commit, in PowerShell, with the API live and holding data (W3, D2, then the
+first automatic release of AU-7; D3 is superseded) and the
 policy published (P2):
 
 ```text
@@ -686,15 +731,17 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | # | Decision | Needed before |
 |---|---|---|
 | W0 | Production genesis design (ADR 0025 O-16 amendment): **done**, PR #84 merged as `527444b` | — |
-| W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). Buying the plan is a separate owner step, before D3 | — |
+| W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). Buying the plan is a separate owner step: AU-1, before AU-2 and W3 (D3 is superseded) | — |
 | D-T1 | Retain versionCode 7 for API 21–23 or not (recommended: not) | R4, R7 |
 | D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | P0 or R7 |
 | D-A | Archive the 1.x ad units in AdMob, or not. It stops ads being served to installed 1.x copies, which pausing a track does not, but not the SDK's requests (PR #82 `data-safety.md` §3.6). Irreversible; ends 1.x ad revenue | — (owner's choice of timing) |
 | D-R | Confirm no closed-testing stage: one controlled Play-delivered upgrade (R3), then the staged rollout (§7) | R5 |
 | D-C | Commit a reviewed Jolpica capture tool to the repository, or keep the private operator script | D1 |
-| D-L | Production persisted application logs: keep them (and declare App interactions) or disable them (W1; PR #82 §3.4, R8) | W1, W3, P3 |
+| D-L | Production persisted application logs. **Engineering resolved 2026-10-21 by ADR 0028 D8:** persisted, invocation logs off, no public-request line and no client data or credential stored. The privacy wording stays an owner decision in PR #82 (AU-D3) | P3 |
 | D-U | Approve the replacements for the upgrade-matrix rows the single pass does not cover: slow network, older Android, and populated and corrupted legacy cache (§8). Or supply devices for them | R3 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
 | P-R | Privacy review of PR #82 `data-safety.md` review items R1–R8 (not the R-track gates) | P0 |
 | M | Ship 2.0.0 with placeholder media (no R2, no approved media) | R5 |
-| O | Who runs D1/D3 each race weekend, and the 2027 dataset work | R5 |
+| O | **Changed 2026-10-21:** nobody runs D1/D3 each race weekend (automatic). Who answers alerts and staged corrections (ADR 0028 D6, D9), and the 2027 dataset work | R5 |
+| AU-D1, AU-D5 | **Accepted by the owner for 2.0.0 on 2026-10-21, including their documented limitations** (ADR 0028 D13; `automatic-updates.md` §9): AU-D1, O-5(a), a staged correction freezes the season until an operator acts; AU-D5, a first race result inside the window is seen twice before it is published, which reduces but does not remove the risk of a short classification shown as "Final". The acceptance authorises no merge, purchase, provisioning, deployment or activation | — |
+| AU-D2…AU-D4 | D-A before AU-7; privacy wording for Worker logs; alert channel (`automatic-updates.md` §9) | AU-7 |

@@ -6,7 +6,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { checkTime } from '../../../../src/sync/coordinated/policy';
+import {
+  FINAL_CHECK_SLOT,
+  SETTLING_CONFIRMATIONS,
+  SETTLING_FIRST_SLOT,
+  checkTime,
+  isConfirmationSlot,
+} from '../../../../src/sync/coordinated/policy';
 import {
   ANCHOR,
   DAY,
@@ -50,7 +56,7 @@ async function started(script: RoundScript): Promise<Simulation> {
 /** Ticks only at each cadence slot, the minimum a scheduled cron must serve. */
 async function atSlots(
   simulation: Simulation,
-  last = 17,
+  last = FINAL_CHECK_SLOT,
 ): Promise<TickResult[]> {
   const ticks: TickResult[] = [];
   for (let slot = 1; slot <= last; slot += 1) {
@@ -64,10 +70,17 @@ function publishedTicks(ticks: readonly TickResult[]) {
 }
 
 describe('I1: corroboration is reachable', () => {
-  /** No result before `slot - 1`, the first result there, a change from `slot`. */
+  /**
+   * No result before `slot - 1`, the first result there, a change from
+   * `slot`. The first result is read on the hourly slot it appears at; the
+   * change is seen at `slot`, a confirmation slot, and then - pending - on
+   * every slot again.
+   */
   const changingAt = (slot: number): RoundScript =>
+    // A is first seen two slots before, so it is accepted (AU-D5) before
+    // B appears.
     switching(
-      checkTime(ANCHOR, slot - 1),
+      checkTime(ANCHOR, slot - 2),
       always(failed),
       switching(
         checkTime(ANCHOR, slot),
@@ -76,7 +89,7 @@ describe('I1: corroboration is reachable', () => {
       ),
     );
 
-  it.each([2, 9, 16])(
+  it.each([5, 9, 13, 24])(
     'a revision first seen at unsettled slot %i has a next check, where it is confirmed',
     async (slot) => {
       const simulation = await started(changingAt(slot));
@@ -93,7 +106,7 @@ describe('I1: corroboration is reachable', () => {
   );
 
   it('a revision first seen at the ceiling is staged for an operator, not lost', async () => {
-    const simulation = await started(changingAt(17));
+    const simulation = await started(changingAt(FINAL_CHECK_SLOT));
     await atSlots(simulation);
     const record = simulation.record(1)!;
 
@@ -131,7 +144,40 @@ describe('I1: corroboration is reachable', () => {
 });
 
 describe('I2: settlement is reachable from every starting point', () => {
-  it.each(Array.from({ length: 17 }, (_, index) => index + 1))(
+  /**
+   * Where a result first accepted at `first` settles: at the first check that
+   * is its third confirmation and is not before `+24h` (slot 12), counting
+   * only the confirmation slots after `first`; at the ceiling otherwise.
+   */
+  function settlement(first: number): {
+    slot: number;
+    reason: 'settled' | 'settled-on-deadline';
+  } {
+    const checks = [first];
+    for (let slot = first + 1; slot <= FINAL_CHECK_SLOT; slot += 1) {
+      if (isConfirmationSlot(slot)) checks.push(slot);
+    }
+    const slot = checks.find(
+      (check, index) =>
+        index + 1 >= SETTLING_CONFIRMATIONS && check >= SETTLING_FIRST_SLOT,
+    );
+    return slot === undefined
+      ? { slot: FINAL_CHECK_SLOT, reason: 'settled-on-deadline' }
+      : { slot, reason: 'settled' };
+  }
+
+  it('settles an ordinary result at +24h and a day-13 one on deadline', () => {
+    expect(settlement(1)).toEqual({ slot: 12, reason: 'settled' });
+    expect(settlement(10)).toEqual({ slot: 12, reason: 'settled' });
+    expect(settlement(11)).toEqual({ slot: 13, reason: 'settled' });
+    expect(settlement(23)).toEqual({ slot: 25, reason: 'settled' });
+    expect(settlement(24)).toEqual({
+      slot: 25,
+      reason: 'settled-on-deadline',
+    });
+  });
+
+  it.each(Array.from({ length: FINAL_CHECK_SLOT }, (_, index) => index + 1))(
     'a first result at slot %i settles by the ceiling',
     async (first) => {
       const simulation = await started(
@@ -143,27 +189,27 @@ describe('I2: settlement is reachable from every starting point', () => {
       );
       await atSlots(simulation);
       const record = simulation.record(1)!;
-      const settlesAt = first <= 15 ? Math.max(4, first + 2) : 17;
+      const expected = settlement(first);
 
       expect(record.reviewState).toBe('settled');
-      expect(record.terminalReason).toBe(
-        first <= 15 ? 'settled' : 'settled-on-deadline',
-      );
-      expect(record.settledAt).toBe(slotTick(settlesAt).toISOString());
+      expect(record.terminalReason).toBe(expected.reason);
+      expect(record.settledAt).toBe(slotTick(expected.slot).toISOString());
       expect(record.contentRevision).toBe(A);
     },
   );
 
-  it('a corroborated change settles after one further identical check from +24h', async () => {
+  it('a corroborated change settles at the +24h check', async () => {
+    // A at slot 1; B seen at the slot-5 confirmation, corroborated at slot 6,
+    // then confirmed at slots 9, 11 and 12 (+24h).
     const simulation = await started(
       switching(checkTime(ANCHOR, 2), always(observed(A)), always(observed(B))),
     );
-    await atSlots(simulation, 4);
+    await atSlots(simulation, SETTLING_FIRST_SLOT);
     const record = simulation.record(1)!;
 
     expect(record.contentRevision).toBe(B);
     expect(record.terminalReason).toBe('settled');
-    expect(record.settledAt).toBe(slotTick(4).toISOString());
+    expect(record.settledAt).toBe(slotTick(SETTLING_FIRST_SLOT).toISOString());
   });
 
   it('a record held pending by alternating revisions still settles at the ceiling', async () => {
@@ -175,7 +221,7 @@ describe('I2: settlement is reachable from every starting point', () => {
     const record = simulation.record(1)!;
 
     expect(record.terminalReason).toBe('settled-on-deadline');
-    expect(record.settledAt).toBe(slotTick(17).toISOString());
+    expect(record.settledAt).toBe(slotTick(FINAL_CHECK_SLOT).toISOString());
   });
 });
 
@@ -185,31 +231,48 @@ describe('a failed check between observations (T6)', () => {
     (answers: Record<number, ReturnType<RoundScript>>): RoundScript =>
     (now) => {
       let slot = 0;
-      for (let next = 1; next <= 17; next += 1) {
+      for (let next = 1; next <= FINAL_CHECK_SLOT; next += 1) {
         if (checkTime(ANCHOR, next).getTime() <= now.getTime()) slot = next;
       }
       return answers[slot] ?? failed;
     };
 
   it('keeps the confirmations it interrupts, so settlement is not delayed', async () => {
+    // Sighted at slot 1; confirmations at slots 2, 5 and 12; the checks at 9
+    // and 11 fail.
     const simulation = await started(
-      bySlot({ 1: observed(A), 2: observed(A), 3: failed, 4: observed(A) }),
+      bySlot({
+        1: observed(A),
+        2: observed(A),
+        5: observed(A),
+        9: failed,
+        11: failed,
+        12: observed(A),
+      }),
     );
-    await atSlots(simulation, 4);
+    await atSlots(simulation, SETTLING_FIRST_SLOT);
     const record = simulation.record(1)!;
 
     expect(record.consecutiveConfirmations).toBe(3);
     expect(record.terminalReason).toBe('settled');
-    expect(record.settledAt).toBe(slotTick(4).toISOString());
+    expect(record.settledAt).toBe(slotTick(SETTLING_FIRST_SLOT).toISOString());
   });
 
   it('neither corroborates nor discards a pending revision', async () => {
+    // A is accepted at slot 2; B is seen at the slot-5 confirmation; pending,
+    // it is asked for again at slot 6, which fails, and at slot 7.
     const simulation = await started(
-      bySlot({ 1: observed(A), 2: observed(B), 3: failed, 4: observed(B) }),
+      bySlot({
+        1: observed(A),
+        2: observed(A),
+        5: observed(B),
+        6: failed,
+        7: observed(B),
+      }),
     );
-    const ticks = await atSlots(simulation, 4);
+    const ticks = await atSlots(simulation, 7);
 
-    expect(simulation.record(1, ticks[2]!.snapshot)).toMatchObject({
+    expect(simulation.record(1, ticks[5]!.snapshot)).toMatchObject({
       contentRevision: A,
       candidateRevision: B,
     });
@@ -222,11 +285,11 @@ describe('a failed check between observations (T6)', () => {
 
 describe('I3: dense and daily polling terminate', () => {
   it.each([
-    ['an ordinary result', always(observed(A)), [1, 2, 3, 4]],
+    ['an ordinary result', always(observed(A)), [1, 2, 5, 9, 11, 12]],
     [
       'a source that never answers',
       always(failed),
-      Array.from({ length: 17 }, (_, i) => i + 1),
+      Array.from({ length: FINAL_CHECK_SLOT }, (_, i) => i + 1),
     ],
   ] as const)(
     '%s is checked on a bounded cadence and then never again',
@@ -242,7 +305,7 @@ describe('I3: dense and daily polling terminate', () => {
     },
   );
 
-  it('never makes more than 17 cadence checks, whatever the source does', async () => {
+  it('never makes more than 25 cadence checks, whatever the source does', async () => {
     let call = 0;
     const simulation = await started(() =>
       call++ % 3 === 0 ? failed : observed(rev(`noise-${call}`)),
@@ -252,7 +315,7 @@ describe('I3: dense and daily polling terminate', () => {
       plus(ANCHOR, 30 * DAY),
     );
 
-    expect(cadenceSlots(ticks, 1).length).toBeLessThanOrEqual(17);
+    expect(cadenceSlots(ticks, 1).length).toBeLessThanOrEqual(FINAL_CHECK_SLOT);
     expect(simulation.record(1)!.terminalReason).not.toBeNull();
   });
 });
@@ -306,7 +369,7 @@ describe('I4: a late correction stays observable through the slow reread path', 
 });
 
 describe('I5: the ordinary case targets reconciled data within 24 hours', () => {
-  it('publishes at the first check after +5h and settles at +24h', async () => {
+  it('publishes at the second check, the tick after +1 h 30 min, and settles at +24h', async () => {
     const simulation = await started(always(observed(A)));
     const ticks = await simulation.run(
       plus(ANCHOR, -DAY),
@@ -318,7 +381,9 @@ describe('I5: the ordinary case targets reconciled data within 24 hours', () => 
         tick.result!.decision.rounds.some((entry) => entry.round === 1),
     )!;
 
-    expect(first.now.toISOString()).toBe('2026-10-04T18:17:00.000Z');
+    // The race starts at 13:00; slot 1 is 14:30, so the 15:17 tick sights
+    // the result and the 16:17 tick, which sees it again, publishes it.
+    expect(first.now.toISOString()).toBe('2026-10-04T16:17:00.000Z');
     expect(first.now.getTime() - Date.parse(ANCHOR)).toBeLessThan(DAY);
     expect(simulation.record(1)!.publishedRevision).toBe(A);
     expect(simulation.record(1)!.settledAt).toBe('2026-10-05T13:17:00.000Z');
@@ -339,7 +404,7 @@ describe('I5: the ordinary case targets reconciled data within 24 hours', () => 
     )!;
 
     // The next due check after the source answers is the day-2 check.
-    expect(first.now.toISOString()).toBe(slotTick(5).toISOString());
+    expect(first.now.toISOString()).toBe(slotTick(13).toISOString());
     expect(first.now.getTime() - Date.parse(ANCHOR)).toBeGreaterThan(DAY);
   });
 });

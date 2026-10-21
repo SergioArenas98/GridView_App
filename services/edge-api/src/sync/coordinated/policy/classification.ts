@@ -10,13 +10,15 @@
  *
  * - **cadence**: a scheduled check for a due slot (§10.4.1 cadence). The only
  *   check that advances `checkIndex`, counts a confirmation on an unsettled
- *   record, corroborates a pending revision there (D2.1), or settles.
+ *   record, corroborates a pending revision there (D2.1) or a pending first
+ *   sighting inside the window (T0, AU-D5), or settles.
  * - **reread**: the O-3 full-backfill reread of a recorded round with no slot
  *   due. On a settled record it is the slow path (T8-T10, I4). On an unsettled
  *   record it is not a reconciliation check and changes no review state.
  * - **manual**: an operator's forced publication run (O-8). It may make a first
- *   write, and nothing else on the review axis: it advances no slot, counts no
- *   confirmation, corroborates nothing and stages nothing.
+ *   write at once, discarding a pending first sighting, and nothing else on
+ *   the review axis: it advances no slot, counts no confirmation,
+ *   corroborates nothing and stages nothing.
  *
  * Fixed rules, whatever the kind:
  *
@@ -46,9 +48,11 @@ import {
 } from '../ledger/model';
 import {
   FINAL_CHECK_SLOT,
+  INITIAL_WINDOW_CHECKS,
   SETTLING_CONFIRMATIONS,
   SETTLING_FIRST_SLOT,
   nextCheckAt,
+  slotSetFor,
 } from './cadence';
 import {
   policyEvent,
@@ -208,23 +212,7 @@ function observe(
     return;
   }
   if (record.contentRevision === null) {
-    // T0: a first valid write needs no corroboration. A manual first write is
-    // not a check, so it counts no confirmation.
-    update(step, {
-      contentRevision: observed,
-      provenance: 'reconciled',
-      reviewState: 'unsettled',
-      consecutiveConfirmations: check.kind === 'cadence' ? 1 : 0,
-      sourceObservedAt: at,
-    });
-    raise(step, 'classification.first-write');
-    if (record.terminalReason === 'never-reconciled-abandoned') {
-      // A first result after the ceiling has no check left: it settles on
-      // deadline at once and joins the slow path, as at day 14.
-      update(step, { terminalReason: null });
-      settle(step, 'settled-on-deadline', at);
-      raise(step, 'classification.settled-on-deadline');
-    }
+    observeFirst(step, check, observed, at);
     return;
   }
   if (check.kind === 'manual') {
@@ -246,6 +234,94 @@ function observe(
     return;
   }
   observeUnsettled(step, observed, at);
+}
+
+/**
+ * T0, a round with no accepted result (AU-D5). Inside the hourly window,
+ * where the next check is an hour away, a cadence check's first sighting is
+ * held pending and written only when the next successful cadence check
+ * returns it again (a failed or deferred check leaves it pending);
+ * a different revision replaces it as T4 does. A short page that is replaced
+ * within the hour is therefore never published. Two equal sightings do not
+ * prove a classification complete: a short page served unchanged for an hour
+ * is still written, and replaced later as any correction is (ADR 0028 D6).
+ *
+ * From the window's last slot on, a cadence check writes what it observes at
+ * once (C-1), whatever is pending, because the next check is hours or days
+ * away and a pending revision would withhold the whole season until then
+ * (O-5(a)). A manual run is not a check: it writes at once, and counts no
+ * confirmation.
+ */
+function observeFirst(
+  step: Step,
+  check: ClassificationCheck,
+  observed: RevisionHash,
+  at: LedgerInstant,
+): void {
+  const record = step.record;
+  const pending = record.candidateRevision;
+  const sighted = pending !== null && observed === pending;
+  if (check.kind === 'cadence' && sighted) {
+    // The revision was first observed when it was sighted, not now. The pair
+    // counts one confirmation, as a first write always has: two reads an
+    // hour apart are not three spaced confirmations, so settling keeps its
+    // cadence (slots 5, 9, 11, 12).
+    firstWrite(step, observed, record.candidateFirstSeenAt!, 1, at);
+    return;
+  }
+  if (check.kind === 'cadence' && check.slot < INITIAL_WINDOW_CHECKS) {
+    if (pending === null) {
+      update(step, { candidateRevision: observed, candidateFirstSeenAt: at });
+      raise(step, 'classification.pending-observed');
+    } else {
+      replaceCandidate(step, observed, at);
+    }
+    return;
+  }
+  if (pending !== null && !sighted) {
+    raise(step, 'classification.pending-discarded');
+  }
+  firstWrite(
+    step,
+    observed,
+    sighted ? record.candidateFirstSeenAt! : at,
+    check.kind === 'cadence' ? 1 : 0,
+    at,
+  );
+}
+
+/**
+ * The first accepted result. It leaves the hourly window for the
+ * confirmation slots; a cadence check then recomputes the next check from its
+ * own slot.
+ */
+function firstWrite(
+  step: Step,
+  observed: RevisionHash,
+  firstSeenAt: LedgerInstant,
+  confirmations: number,
+  at: LedgerInstant,
+): void {
+  const record = step.record;
+  update(step, {
+    contentRevision: observed,
+    provenance: 'reconciled',
+    reviewState: 'unsettled',
+    consecutiveConfirmations: confirmations,
+    sourceObservedAt: firstSeenAt,
+    candidateRevision: null,
+    candidateFirstSeenAt: null,
+    unstableSightings: 0,
+    nextDueAt: nextCheckAt(record.anchor, record.checkIndex, 'confirmation'),
+  });
+  raise(step, 'classification.first-write');
+  if (record.terminalReason === 'never-reconciled-abandoned') {
+    // A first result after the ceiling has no check left: it settles on
+    // deadline at once and joins the slow path, as at day 14.
+    update(step, { terminalReason: null });
+    settle(step, 'settled-on-deadline', at);
+    raise(step, 'classification.settled-on-deadline');
+  }
 }
 
 /** Shared by both paths: T5 and the identical case (T1, or T10's first half). */
@@ -414,7 +490,9 @@ function stage(
 /**
  * Consumes the slot, then evaluates settling. The predicate needs an
  * observation; the ceiling is a time rule and fires at the final slot
- * whatever that check returned.
+ * whatever that check returned. The next check is the next slot the record
+ * now takes: every slot while it waits for a result or has one pending, the
+ * confirmation slots otherwise (ADR 0028 D5).
  */
 function advanceCadence(
   step: Step,
@@ -424,7 +502,7 @@ function advanceCadence(
 ): void {
   update(step, {
     checkIndex: slot,
-    nextDueAt: nextCheckAt(step.record.anchor, slot),
+    nextDueAt: nextCheckAt(step.record.anchor, slot, slotSetFor(step.record)),
   });
   const record = step.record;
   if (record.terminalReason !== null) return;
@@ -460,10 +538,17 @@ function settle(
 
 function settleOnDeadline(step: Step, at: LedgerInstant): void {
   if (step.record.contentRevision === null) {
-    // Never reconciled by the ceiling: polling stops and it is flagged.
+    // Never reconciled by the ceiling: polling stops and it is flagged. A
+    // first sighting still pending has no check left and is never written.
+    if (step.record.candidateRevision !== null) {
+      raise(step, 'classification.pending-discarded');
+    }
     update(step, {
       terminalReason: 'never-reconciled-abandoned',
       nextDueAt: null,
+      candidateRevision: null,
+      candidateFirstSeenAt: null,
+      unstableSightings: 0,
     });
     raise(step, 'classification.never-reconciled');
     return;

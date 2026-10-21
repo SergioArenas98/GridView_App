@@ -13,6 +13,12 @@
  * or are not a valid release's results. The ledger is never reconciled from
  * anything but the authority, and an unreadable release is never read as an
  * empty one.
+ *
+ * The one empty answer is the authority's own: a `genesis` season (ADR 0025
+ * D12, "Amendment (2026-10-20)"; ADR 0028 D3) is authoritative with no
+ * release, so it has no active version and no published revisions. That is
+ * read only from the sequencer's `genesis` state, never inferred from a
+ * missing or unreadable release.
  */
 
 import { readPredecessorGuard } from '../../../publication/guard/predecessor';
@@ -37,7 +43,8 @@ export type PublishedReadRefusal = (typeof publishedReadRefusals)[number];
 export type PublishedRevisionsRead =
   | {
       readonly kind: 'read';
-      readonly activeVersion: string;
+      /** `null` only for a `genesis` season: no release has committed. */
+      readonly activeVersion: string | null;
       /** Sorted by round. */
       readonly revisions: readonly AuthoritativeRevision[];
     }
@@ -61,6 +68,9 @@ export async function readPublishedRevisions(
   }
   if (authority.cutoverState === 'unavailable') {
     return refused('authority-unavailable');
+  }
+  if (authority.cutoverState === 'genesis') {
+    return { kind: 'read', activeVersion: null, revisions: [] };
   }
   if (authority.cutoverState !== 'active' || !authority.authoritative) {
     return refused('authority-not-authoritative');

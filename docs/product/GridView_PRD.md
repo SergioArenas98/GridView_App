@@ -300,12 +300,30 @@ Possible sessions include:
 
 The interface must adapt to different weekend formats without assuming that every Grand Prix follows the same schedule.
 
+#### First Google Play release: results scope (owner decision, 2026-10-21)
+
+The first Google Play release (2.0.0) shows the **full weekend schedule** -
+every practice, sprint qualifying, sprint, qualifying and race session, with
+its localized time - but publishes and displays **race results only**.
+
+- Free practice, qualifying, sprint qualifying and sprint results are **not**
+  part of 2.0.0. They are a future product update (section 25).
+- Championship standings come from the data source and include sprint points;
+  the sprint classification itself is not shown.
+- A race result is published automatically after the race (ADR 0028). Its
+  first check is at the first hourly update at or after the scheduled race
+  start + 90 minutes; while no complete result exists, the update checks
+  hourly for several hours, then less often. A result therefore usually
+  appears within a few hours of the race, but no time is guaranteed, because
+  the data source guarantees none.
+
 #### Grand Prix acceptance criteria
 
 - All available sessions are displayed in chronological order.
 - Session times are localized.
 - Sprint and non-sprint weekends are represented correctly.
 - Completed race results are accessible when available.
+- No result is shown for any session other than the race in the first release.
 - Missing sessions or data do not break the page layout.
 
 ### 9.4 Circuits
@@ -877,7 +895,8 @@ Once the reconstructed core is stable, GridView may expand with:
 - Android home-screen widgets.
 - Historical seasons.
 - Detailed race results.
-- Qualifying and sprint classifications.
+- Free practice, qualifying, sprint qualifying and sprint results (the first
+  release publishes race results only; section 9.3).
 - News or editorial summaries.
 - Live race-weekend information.
 - Personalized Home content.

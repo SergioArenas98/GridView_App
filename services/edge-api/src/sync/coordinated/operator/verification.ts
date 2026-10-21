@@ -20,7 +20,8 @@
  *    the ledger and sends nothing; then the record must hold exactly the staged revision
  *    the operator named, with its backlog entry, must not be locked for
  *    review (T11d), and its round must have reached the earliest time it may
- *    be asked for (`anchor + 5h`, the planner's own eligibility rule).
+ *    be asked for (`anchor` + 1 h 30 min, the planner's own eligibility
+ *    rule).
  * 3. Make **one** classification request through the composed runtime's
  *    coordinator, port, client, pacer and limiter (`requestClassification`).
  *    No retry.
@@ -140,7 +141,7 @@ export const verificationPreconditions = [
   'review-locked',
   /** The round already holds `MAXIMUM_VERIFICATIONS` verifications. */
   'verification-history-full',
-  /** The round's first check is not due yet (`anchor + 5h`). */
+  /** The round's first check is not due yet (`anchor` + 1 h 30 min). */
   'not-eligible',
   /** The lease expired before the request could be sent. */
   'lease-expired',

@@ -205,6 +205,7 @@ describe.each(sequencerTransports)(
           reservations: 0,
           prepares: 0,
           storageWrites: 0,
+          heartbeats: 0,
           ledgerCalls: [],
         });
         expect(compose).not.toHaveBeenCalled();
@@ -243,6 +244,8 @@ describe.each(sequencerTransports)(
           reservations: 1,
           prepares: 0,
           storageWrites: 0,
+          // The heartbeat: a healthy scheduled run (ADR 0028 D7).
+          heartbeats: 1,
           mockProviderCalls: 0,
         });
         expect((await harness.season()).calendarAnchors).not.toBeNull();
@@ -272,6 +275,7 @@ describe.each(sequencerTransports)(
           reservations: 0,
           prepares: 0,
           storageWrites: 0,
+          heartbeats: 1,
         });
         expect(idle.ledgerCalls).toEqual([
           'acquireLease',
@@ -425,7 +429,8 @@ describe.each(sequencerTransports)(
           await harness.published();
           harness.server.results.set(1, 'A');
         }
-        const at = tickAfter(1, 5);
+        // + 6 h 17 min: slot 5, the first slot an accepted result also takes.
+        const at = tickAfter(1, 6);
 
         const manual = await manualFirst.manual(at);
         await scheduledFirst.scheduled(at);
@@ -440,16 +445,20 @@ describe.each(sequencerTransports)(
           checkIndex: 0,
           consecutiveConfirmations: 0,
         });
+        // A scheduled first sighting consumes its slot and is held pending
+        // for the next one (AU-D5).
         expect(await scheduledFirst.round(1)).toMatchObject({
-          checkIndex: 1,
-          consecutiveConfirmations: 1,
+          checkIndex: 5,
+          contentRevision: null,
+          candidateRevision: expect.stringMatching(/^sha256:/),
+          consecutiveConfirmations: 0,
         });
 
         // The slot the manual run left is still served by the next tick.
         const tick = await manualFirst.scheduled(later(at, MINUTE));
         expect(tick.requests).toEqual([...seasonPaths, paths.results(1)]);
         expect(await manualFirst.round(1)).toMatchObject({
-          checkIndex: 1,
+          checkIndex: 5,
           consecutiveConfirmations: 1,
         });
 
@@ -460,7 +469,7 @@ describe.each(sequencerTransports)(
           events: { 'classification.observation-not-applied': 1 },
         });
         expect(await manualFirst.round(1)).toMatchObject({
-          checkIndex: 1,
+          checkIndex: 5,
           consecutiveConfirmations: 1,
           candidateRevision: null,
         });

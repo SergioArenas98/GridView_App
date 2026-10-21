@@ -261,10 +261,11 @@ describe('a coordination the orchestration cannot believe', () => {
       expect(harness.observationState()).toBe(before);
       expect(harness.publishGuarded).not.toHaveBeenCalled();
 
+      // Nothing was recorded, so the retry is the round's first sighting.
       const retry = await harness.run(RETRY);
       expect(retry.outcome).toMatchObject({
         status: 'observed',
-        events: { 'classification.first-write': 1 },
+        events: { 'classification.pending-observed': 1 },
       });
       expect(retry.requests).toEqual(firstCheckRequests);
     });
