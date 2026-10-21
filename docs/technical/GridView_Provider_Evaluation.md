@@ -2283,7 +2283,7 @@ action, deliberately requested by a human against one named backlog record:
 | If it never happens | The record simply stays in the backlog unchanged and T11-T11d never execute. That is a supported steady state, not a stall. |
 | Disposition | Still only T12. Verification informs an operator; it never decides for them. |
 
-> **Amended 2026-10-21 by [ADR 0028](../adr/0028-automatic-end-to-end-season-updates.md) D5 item 5 (AU-D5):** inside the hourly window (slots 1-9) a cadence check's first valid payload is held pending and written only when the next successful cadence check returns the same revision, still with `consecutiveConfirmations` := 1 and `sourceObservedAt` from the first sighting; a different one replaces it as T4 does. From slot 10 on, and for a manual run, T0 below is unchanged.
+> **Amendment proposed 2026-10-21 by [ADR 0028](../adr/0028-automatic-end-to-end-season-updates.md) D5 item 5 (AU-D5, not yet accepted by the owner; implemented on PR #86):** inside the hourly window (slots 1-9) a cadence check's first valid payload is held pending and written only when the next successful cadence check returns the same revision, still with `consecutiveConfirmations` := 1 and `sourceObservedAt` from the first sighting; a different one replaces it as T4 does. From slot 10 on, and for a manual run, T0 below is unchanged.
 
 | # | From | Observation | Effect |
 |---|---|---|---|

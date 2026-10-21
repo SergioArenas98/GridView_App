@@ -50,10 +50,10 @@ The race-result polling plan (ADR 0028 D5):
    result is then abandoned and flagged.
 4. **Accepted result:** confirmed only at + 5 h 30 min and + 9 h 30 min, then
    the back-off. It settles at + 24 h at the earliest (three confirmations).
-5. **First result seen twice (AU-D5):** inside the window, the check that
-   first finds a result holds it pending, and the next successful check
-   (normally the next hourly tick) publishes it only if it returns the same
-   result. From the window's last check on, a first result is published at
+5. **First result seen twice (AU-D5, proposed, not yet accepted):** inside
+   the window, the check that first finds a result holds it pending, and the
+   next successful check (normally the next hourly tick) publishes it only if
+   it returns the same result. From the window's last check on, a first result is published at
    once. Settling is unchanged: the pair counts as one confirmation.
 
 | Resource | Checked |
@@ -381,4 +381,4 @@ Then:
 | AU-D2 | D-A, archive the 1.x AdMob units, before Jolpica data is published automatically in production (ADR 0028 D11) | Yes, before AU-7 |
 | AU-D3 | Privacy wording for production Worker logs (PR #82, still open; D-L engineering resolved by ADR 0028 D8) | Say that Worker logs store no app-user data and are kept 7 days |
 | AU-D4 | The alert channel: GitHub e-mail (committed) or an additional Cloudflare custom alert (beta, webhook) | GitHub e-mail first; revisit when the beta ends |
-| AU-D5 | A short but self-consistent race classification cannot be told from a complete one (curator decision C-1), and the API serves it as `final`. Options: keep publishing a first result at once (documented limitation); publish it as `provisional` and confirm it later (a contract change: the revision hashes `status`, and `provisional` means the provisional source); or see it twice before the first publication | **Implemented on PR #86, for the owner to confirm at merge:** see a first result twice inside the window (§2 item 5, ADR 0028 D5 item 5). One hour of latency, no contract, API or app change. A short page served unchanged for an hour is still published and later replaced (§3). A field-size completeness rule stays out: it can wrongly withhold a legitimately smaller field |
+| AU-D5 | A short but self-consistent race classification cannot be told from a complete one (curator decision C-1), and the API serves it as `final`. Options: keep publishing a first result at once (documented limitation); publish it as `provisional` and confirm it later (a contract change: the revision hashes `status`, and `provisional` means the provisional source); or see it twice before the first publication | **Proposed product decision, not yet accepted by the owner** (implemented on PR #86): see a first result twice inside the window (§2 item 5, ADR 0028 D5 item 5). One hour of latency, no contract, API or app change. **Limitation:** Two matching observations reduce the risk of publishing a transient short classification; they do not prove that a classification is complete, and a short result Jolpica serves unchanged for an hour or more may still appear as "Final" until it is corrected. (§3). A field-size completeness rule stays out: it can wrongly withhold a legitimately smaller field |

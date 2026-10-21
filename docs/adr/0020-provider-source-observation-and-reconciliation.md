@@ -2600,9 +2600,11 @@ new slots in `test/sync/coordinated/policy/invariants.test.ts`, and the
 operator verification's eligibility (step 4 of E3) is the planner's new
 + 1 h 30 min.
 
-**T0 is amended by ADR 0028 D5 item 5 (AU-D5, 2026-10-21)** inside the
-hourly window: a first result found in slots 1-9 is held pending and written
-only when the next cadence check returns it again. From slot 10 on, and for a
+**A T0 amendment is proposed by ADR 0028 D5 item 5 (AU-D5, 2026-10-21, not
+yet accepted by the owner; implemented on PR #86)** inside the hourly window:
+a first result found in slots 1-9 is held pending and written only when the
+next successful cadence check returns it again. Two matching observations do
+not prove the classification complete. From slot 10 on, and for a
 manual run, a first result is still written without corroboration.
 
 The decision above is unchanged.

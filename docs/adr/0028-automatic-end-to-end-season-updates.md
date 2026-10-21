@@ -152,18 +152,22 @@ replaces ADR 0020 C2's dense checks at race start + 5 h, + 9 h, + 15 h and
    checks: + 5 h 30 min and + 9 h 30 min inside the window, then the back-off.
    It is not re-read hourly. Settlement is unchanged: three confirmations,
    never before + 24 h.
-5. **A first result is seen twice before it is published** (AU-D5,
-   recommended 2026-10-21; the owner confirms it when PR #86 merges). A
-   cadence check in slots 1-9 that finds a round's first valid result holds
-   it pending, and the next successful cadence check publishes it only if it
-   returns the same revision; a different one replaces the pending one, as
-   any change pending does (T4), and must itself be seen twice. A failed or
-   deferred check leaves it pending. Inside the window the next check is the
-   next hourly tick, so this normally costs one hour. The pair counts as
-   **one** confirmation, as any first write does: two reads an hour apart are
-   not the three spaced confirmations settling needs, so settling is
-   unchanged. From
-   slot 10 on - the window's last check, the back-off and the ceiling - a
+5. **A first result is seen twice before it is published.** **Proposed
+   product decision AU-D5 (2026-10-21), not yet accepted by the owner;** the
+   code on PR #86 implements it. Its limitation: two matching observations
+   reduce the risk of publishing a transient short classification; they do
+   not prove that a classification is complete, and a short result Jolpica
+   serves unchanged for an hour or more may still appear as "Final" until it
+   is corrected. A cadence check in slots 1-9 that finds a round's first
+   valid result holds it pending, and the next successful cadence check
+   publishes it only if it returns the same revision; a different one
+   replaces the pending one, as any change pending does (T4), and must itself
+   be seen twice. A failed or deferred check leaves it pending. Inside the
+   window the next check is the next hourly tick, so this normally costs one
+   hour. The pair counts as **one** confirmation, as any first write does:
+   two reads an hour apart are not the three spaced confirmations settling
+   needs, so settling is unchanged. From slot 10 on - the window's last
+   check, the back-off and the ceiling - a
    first result is published at once, as before, because the next check is
    hours or days away and a pending round withholds the whole season until
    then. A manual run (O-8) still writes at once. This amends ADR 0020's T0
