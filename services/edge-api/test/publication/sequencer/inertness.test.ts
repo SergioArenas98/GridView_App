@@ -10,7 +10,10 @@
  * seed preparation (2026-09-15) then selected the `sequencer` authority mode
  * for `env.staging` alone, which the seed requires, and once that seed was
  * committed the activation preparation (2026-09-15) moved `env.staging`'s
- * cutover control from `seed:2026` to `activate:2026`. What is deployed, per
+ * cutover control from `seed:2026` to `activate:2026`. The production Worker
+ * configuration (release plan W1, 2026-10-21) then declared a production
+ * binding, the `sequencer` authority and the `genesis:2026` control, for
+ * production genesis only (ADR 0025 D12, "Amendment (2026-10-20)"). What is deployed, per
  * environment, is recorded in `docs/technical/GridView_Environments.md` and is
  * deliberately not asserted here.
  *
@@ -19,26 +22,29 @@
  *
  * - the class *is* a named Worker export and *is* declared as an
  *   `[exports.SeasonPublicationSequencer]` SQLite Durable Object bound to
- *   `SEASON_PUBLICATION_SEQUENCER` in `env.staging` - and nowhere else;
- * - **production declares no season-publication binding at all**;
- * - only `env.staging` sets `SEASON_PUBLICATION_AUTHORITY`, to exactly
- *   `sequencer`. Development and production leave it unset, so their
- *   composition still builds the exact legacy `SnapshotPublisher` and the
- *   router performs no Durable Object lookup (see `default-off.test.ts` for
- *   the behavioural proof). Selecting it activates no season: an
- *   `uninitialized` or `seeded` season keeps the legacy authority;
+ *   `SEASON_PUBLICATION_SEQUENCER` in `env.staging` and `env.production` -
+ *   and not in development;
+ * - only `env.staging` and `env.production` set
+ *   `SEASON_PUBLICATION_AUTHORITY`, to exactly `sequencer`. Development
+ *   leaves it unset, so its composition still builds the exact legacy
+ *   `SnapshotPublisher` and the router performs no Durable Object lookup (see
+ *   `default-off.test.ts` for the behavioural proof). Selecting it activates
+ *   no season: an `uninitialized` or `seeded` season keeps the legacy
+ *   authority;
  * - `env.staging` declares `SEASON_PUBLICATION_CUTOVER_CONTROL =
  *   "activate:2026"`, which keeps season 2026's admission closed, permits the
  *   activation route and never another seed, and activates nothing by itself;
- * - production declares neither configuration value;
+ * - `env.production` declares `SEASON_PUBLICATION_CUTOVER_CONTROL =
+ *   "genesis:2026"`, which permits only production genesis and refuses the
+ *   seed and the activation (`production-worker-config.test.ts`);
  * - the legacy `[[migrations]]` form is still absent, and `PROVIDER_MODE`, the
  *   public API and the closed document-name union are untouched.
  *
  * Nothing here provisions a namespace, deploys a Worker, seeds a season or
  * activates one. These assertions fail the moment someone commits an authority
- * mode outside staging or other than `sequencer`, a cutover control naming a
- * different season or phase, a cutover control outside staging, or a
- * production binding.
+ * mode in development or other than `sequencer`, a cutover control naming a
+ * different season or phase, a cutover control in development, or a
+ * development binding.
  */
 
 import { readFileSync } from 'node:fs';
@@ -84,7 +90,7 @@ function environmentSection(name: string): string {
   return next === -1 ? rest : rest.slice(0, next);
 }
 
-describe('wrangler.toml declares the sequencer surface and selects it in staging only', () => {
+describe('wrangler.toml declares the sequencer surface and selects it in staging and production only', () => {
   it('declares the SQLite export in the supported exports form', () => {
     expect(declaredConfig).toContain('[exports.ProviderRateLimiter]');
     expect(declaredConfig).toMatch(
@@ -98,22 +104,27 @@ describe('wrangler.toml declares the sequencer surface and selects it in staging
     expect(declaredConfig).not.toContain('[[migrations]]');
   });
 
-  it('binds the sequencer in staging only, and leaves ProviderRateLimiter alone', () => {
-    const staging = environmentSection('staging');
-    const production = environmentSection('production');
+  it('binds the sequencer in staging and production only, and leaves ProviderRateLimiter alone', () => {
+    const development = declaredConfig.slice(
+      0,
+      declaredConfig.indexOf('[env.'),
+    );
+    for (const name of ['staging', 'production']) {
+      const section = environmentSection(name);
+      expect(section, name).toContain('name = "SEASON_PUBLICATION_SEQUENCER"');
+      expect(section, name).toContain(
+        'class_name = "SeasonPublicationSequencer"',
+      );
+      expect(section, name).toContain('name = "PROVIDER_RATE_LIMITER"');
+    }
 
-    expect(staging).toContain('name = "SEASON_PUBLICATION_SEQUENCER"');
-    expect(staging).toContain('class_name = "SeasonPublicationSequencer"');
-    expect(staging).toContain('name = "PROVIDER_RATE_LIMITER"');
-
-    // Production declares no season-publication binding at all, so a production
-    // deployment cannot reach the class even by accident.
-    expect(production).not.toContain('SEASON_PUBLICATION_SEQUENCER');
-    expect(production).not.toContain('SeasonPublicationSequencer');
-    expect(production).toContain('class_name = "ProviderRateLimiter"');
+    // Development declares the export (every environment shares it) but no
+    // season-publication binding, so it cannot reach the class.
+    expect(development).not.toContain('SEASON_PUBLICATION_SEQUENCER');
+    expect(development).toContain('class_name = "ProviderRateLimiter"');
   });
 
-  it('sets the authority mode and the cutover control in staging only', () => {
+  it('sets the authority mode and the cutover control in staging and production only', () => {
     // Staging keeps the sequencer authority and names exactly season 2026's
     // activation phase. Neither activates anything: the control only permits
     // the activation route to be attempted, and a seeded season stays on the
@@ -126,16 +137,20 @@ describe('wrangler.toml declares the sequencer surface and selects it in staging
       'SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"',
     );
     expect(declaredConfig).not.toContain('seed:');
-    expect(production).not.toContain('SEASON_PUBLICATION_AUTHORITY');
-    expect(production).not.toContain('SEASON_PUBLICATION_CUTOVER_CONTROL');
-    // Each is configured exactly once in the whole file, so the top-level
-    // development table sets neither.
+    // Production names only its genesis phase, which refuses the seed and the
+    // activation.
+    expect(production).toContain('SEASON_PUBLICATION_AUTHORITY = "sequencer"');
+    expect(production).toContain(
+      'SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"',
+    );
+    // Each is configured exactly twice in the whole file, once per
+    // environment above, so the top-level development table sets neither.
     expect(declaredConfig.match(/SEASON_PUBLICATION_AUTHORITY/g)).toHaveLength(
-      1,
+      2,
     );
     expect(
       declaredConfig.match(/SEASON_PUBLICATION_CUTOVER_CONTROL/g),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 
   it('changes no provider mode or deployment setting', () => {

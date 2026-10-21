@@ -1328,7 +1328,9 @@ batch** (the offline generator's `artifact.json` and `manifest.json`) to
 staging, through the guarded sequencer only. Implementation Plan §14.0.51.
 **Committed staging enables it** since 2026-10-13 (`SEASON_BATCH_INGEST =
 "2026"`, with `PROVIDER_MODE = "none"`; decision pack 2026-10-07 PR-4 and
-DP-6(b)). Development and production leave it unset. **No deployed Worker
+DP-6(b)). Development leaves it unset. Committed production sets `2026` too
+since 2026-10-21 (release plan W1), admitted only under its `genesis:2026`
+control; production has never been deployed. **No deployed Worker
 contains it**: live staging is still Stage A (`cc8d9a54-…`), which predates the
 route. Nothing in this section is authorized by the changes that added the
 route or committed its configuration: deploying it, capturing real data and
@@ -1338,9 +1340,9 @@ submitting a batch are each separate, explicitly authorized steps.
 
 | Reason | When |
 |---|---|
-| `ingest-disabled` | `SEASON_BATCH_INGEST` is unset or empty (committed development and production; every deployed Worker). |
+| `ingest-disabled` | `SEASON_BATCH_INGEST` is unset or empty (committed development; every deployed Worker). |
 | `ingest-misconfigured` | The value is not a four-digit season with curated metadata. |
-| `environment-not-permitted` | `ENVIRONMENT` is not `staging`. Production never ingests. |
+| `environment-not-permitted` | `ENVIRONMENT` is neither `staging` nor `production`. Production ingests only under its `genesis:` control (`genesis-control-required` otherwise). |
 | `provider-mode-coordinated` | `PROVIDER_MODE = coordinated`: never a second provider budget. |
 | `authority-not-sequenced` | The publication authority is not a reachable sequencer. |
 | `attribution-not-active` | The Worker's bundled `content/attribution/data-sources.json` does not credit Jolpica as `active` exactly once. The committed record is `data-sources-v2`, `active` (DP-7, O-9); a Worker built before it (every deployed Worker today bundles `data-sources-v1`, `dormant`) refuses every batch. |

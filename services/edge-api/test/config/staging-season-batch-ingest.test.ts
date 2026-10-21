@@ -5,9 +5,10 @@
  *
  * `env.staging` sets `SEASON_BATCH_INGEST = "2026"`, moves `PROVIDER_MODE`
  * from `mock` to `none` and replaces the nightly `17 3 * * *` with an explicit
- * empty cron list. Development, production and the absent
- * reconciliation-ledger binding do not change. This file proves four things
- * about that resolved configuration:
+ * empty cron list. Development and the absent reconciliation-ledger binding
+ * do not change. Production's own configuration (release plan W1) is pinned
+ * in `production-worker-config.test.ts`. This file proves four things about
+ * that resolved configuration:
  *
  * - staging schedules nothing, and says so explicitly: Wrangler replaces a
  *   Worker's schedules only when `crons` is set, so an empty list removes the
@@ -15,7 +16,7 @@
  * - no scheduled run - should one ever be invoked, for example by a trigger
  *   restored separately - and no manual whole-season sync can build or
  *   publish a mock candidate in staging any more;
- * - production cannot ingest, whatever it is sent;
+ * - production cannot ingest without its own genesis control;
  * - the staging ingest still needs `ADMIN_TOKEN` and still publishes only
  *   through the guarded sequencer, bound to the reviewed active release.
  *
@@ -106,8 +107,11 @@ describe('the resolved configuration', () => {
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',
       SEASON_BATCH_INGEST: '2026',
     });
-    // Assigned once in the whole file, so no other environment sets it.
-    expect(rawConfig.match(/^\s*SEASON_BATCH_INGEST\s*=/gm)).toHaveLength(1);
+    // Assigned only in staging and production (W1), never in development.
+    expect(rawConfig.match(/^\s*SEASON_BATCH_INGEST\s*=/gm)).toHaveLength(2);
+    expect(resolved('production').vars).toMatchObject({
+      SEASON_BATCH_INGEST: '2026',
+    });
     // No environment commits the mock provider any more.
     expect(rawConfig).not.toMatch(/^\s*PROVIDER_MODE\s*=\s*"mock"/m);
   });
@@ -123,26 +127,24 @@ describe('the resolved configuration', () => {
     });
   });
 
-  it('leaves development and production variables unchanged', () => {
+  it('leaves the development variables unchanged', () => {
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
-    expect(resolved('production').vars).toEqual({
-      ENVIRONMENT: 'production',
-      PROVIDER_MODE: 'none',
-    });
   });
 
-  it('gives staging an explicitly empty cron list and leaves development and production unscheduled', () => {
+  it('gives staging and production an explicitly empty cron list and leaves development unscheduled', () => {
     // Empty, not absent: `wrangler deploy` PUTs the schedules only when
     // `crons` is set, so `[]` removes the live `17 3 * * *` and an absent key
     // would silently keep it.
     expect(resolved('staging').triggers).toEqual({ crons: [] });
     expect(rawConfig).toMatch(/^\[env\.staging\.triggers\]\ncrons = \[\]\n/m);
     expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
-    // Development and production declared no trigger before and still do not.
+    // Production (W1) schedules nothing, explicitly too. Development declared
+    // no trigger before and still does not.
+    expect(resolved('production').triggers).toEqual({ crons: [] });
     expect(resolved('').triggers.crons).toBeUndefined();
-    expect(resolved('production').triggers.crons).toBeUndefined();
     expect(rawConfig.match(/^\[[^\]]*triggers\]$/gm)).toEqual([
       '[env.staging.triggers]',
+      '[env.production.triggers]',
     ]);
   });
 
@@ -152,7 +154,10 @@ describe('the resolved configuration', () => {
       'SEASON_PUBLICATION_SEQUENCER',
     ]);
     expect(bindingNames('')).toEqual(['PROVIDER_RATE_LIMITER']);
-    expect(bindingNames('production')).toEqual(['PROVIDER_RATE_LIMITER']);
+    expect(bindingNames('production')).toEqual([
+      'PROVIDER_RATE_LIMITER',
+      'SEASON_PUBLICATION_SEQUENCER',
+    ]);
     for (const environment of ['', 'staging', 'production'] as const) {
       const config = resolved(environment);
       expect(Object.keys(config.exports), environment).toEqual([
@@ -167,6 +172,7 @@ describe('the resolved configuration', () => {
     expect(resolved('staging').kv_namespaces).toEqual([
       { binding: 'GRIDVIEW_DATA', id: '1d0fb55486a745a1ad12e03d9f04942b' },
     ]);
+    // No production namespace exists yet (W2 commits its id).
     expect(resolved('production').kv_namespaces).toEqual([]);
   });
 });
@@ -345,62 +351,46 @@ async function ingestResponse(
   };
 }
 
-describe('the committed production variables cannot ingest', () => {
-  it('refuses a valid, authenticated submission before reading it', async () => {
-    const context = await ingestContext();
-    context.storage.writeLog.length = 0;
-    const spies = publicationSpies();
-    const env = workerEnv(resolvedVars('production'), context);
-    expect(env.SEASON_BATCH_INGEST).toBeUndefined();
+describe('the committed production ingest needs its genesis control', () => {
+  // Production commits the flag, the sequencer and `genesis:2026` (W1). The
+  // ingest admits production only under a `genesis:` control naming the same
+  // season, so removing or replacing that control closes it again.
+  it.each([
+    ['without a control', undefined],
+    ['under the staging activation phase', 'activate:2026'],
+  ] as const)(
+    'refuses a valid, authenticated submission %s, before reading it',
+    async (_label, control) => {
+      const context = await ingestContext();
+      context.storage.writeLog.length = 0;
+      const spies = publicationSpies();
+      const env = workerEnv(
+        {
+          ...resolvedVars('production'),
+          SEASON_PUBLICATION_CUTOVER_CONTROL: control,
+        },
+        context,
+      );
+      expect(env.SEASON_BATCH_INGEST).toBe('2026');
 
-    const answer = await ingestResponse(
-      env,
-      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
-    );
+      const answer = await ingestResponse(
+        env,
+        adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+      );
 
-    expect(answer).toEqual({
-      status: 409,
-      data: {
-        outcome: 'refused',
-        stage: 'admission',
-        reason: 'ingest-disabled',
-      },
-      bodyUsed: false,
-    });
-    expect(spies.guardedPublish).not.toHaveBeenCalled();
-    expect(context.storage.writeLog).toEqual([]);
-  });
-
-  it('refuses even with the flag and a reachable sequencer added by hand, without a genesis control', async () => {
-    const context = await ingestContext();
-    context.storage.writeLog.length = 0;
-    const spies = publicationSpies();
-    const env = workerEnv(
-      {
-        ...resolvedVars('production'),
-        SEASON_BATCH_INGEST: '2026',
-        SEASON_PUBLICATION_AUTHORITY: 'sequencer',
-      },
-      context,
-    );
-
-    const answer = await ingestResponse(
-      env,
-      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
-    );
-
-    expect(answer).toEqual({
-      status: 409,
-      data: {
-        outcome: 'refused',
-        stage: 'admission',
-        reason: 'genesis-control-required',
-      },
-      bodyUsed: false,
-    });
-    expect(spies.guardedPublish).not.toHaveBeenCalled();
-    expect(context.storage.writeLog).toEqual([]);
-  });
+      expect(answer).toEqual({
+        status: 409,
+        data: {
+          outcome: 'refused',
+          stage: 'admission',
+          reason: 'genesis-control-required',
+        },
+        bodyUsed: false,
+      });
+      expect(spies.guardedPublish).not.toHaveBeenCalled();
+      expect(context.storage.writeLog).toEqual([]);
+    },
+  );
 });
 
 describe('the committed staging ingest stays authenticated and guarded', () => {

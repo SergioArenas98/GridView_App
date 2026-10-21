@@ -31,8 +31,8 @@
  * component checks.
  *
  * Its only runtime caller is the `SeasonPublicationSequencer` Durable Object,
- * whose namespace is bound in `env.staging` only; production declares no
- * binding.
+ * whose namespace is bound in `env.staging` and, for production genesis, in
+ * `env.production`.
  */
 
 import {
