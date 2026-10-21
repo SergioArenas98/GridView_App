@@ -73,13 +73,15 @@ describe('a failed or cancelled request', () => {
       publishable: false,
       reasons: ['classification-unavailable'],
     });
+    // Round 1 is at + 8 h 17 min (slot 7), round 2 at + 5 h 17 min (slot 4):
+    // each in its hourly window, asked at its current slot.
     expect(simulation.record(1)).toMatchObject({
       contentRevision: A,
-      checkIndex: 1,
+      checkIndex: 7,
     });
     expect(simulation.record(2)).toMatchObject({
       contentRevision: null,
-      checkIndex: 1,
+      checkIndex: 4,
     });
     expect(simulation.record(1)!.publishedRevision).toBeNull();
   });
@@ -251,12 +253,14 @@ describe('a stale revision (D2.2) under full backfill', () => {
     await simulation.tick(plus(ANCHOR, -DAY));
     await simulation.tick(tickAtOrAfter(checkTime(ANCHOR, 1)));
     answer = B;
-    await simulation.tick(tickAtOrAfter(checkTime(ANCHOR, 2)));
-    const applied = await simulation.tick(tickAtOrAfter(checkTime(ANCHOR, 3)));
+    // Accepted at slot 1, the round is next read at the slot-5
+    // confirmation; B is pending there and corroborated at slot 6.
+    await simulation.tick(tickAtOrAfter(checkTime(ANCHOR, 5)));
+    const applied = await simulation.tick(tickAtOrAfter(checkTime(ANCHOR, 6)));
     expect(applied.result!.decision).toMatchObject({ publishable: true });
 
     answer = A;
-    for (const slot of [4, 5, 6]) {
+    for (const slot of [9, 11, 12]) {
       const stale = await simulation.tick(
         tickAtOrAfter(checkTime(ANCHOR, slot)),
       );
@@ -279,7 +283,7 @@ describe('a stale revision (D2.2) under full backfill', () => {
     await simulation.tick(plus(ANCHOR, -DAY));
     await simulation.tick(tickAtOrAfter(checkTime(ANCHOR, 1)));
     const firstObservedAt = simulation.record(1)!.sourceObservedAt;
-    await simulation.tick(tickAtOrAfter(checkTime(ANCHOR, 2)));
+    await simulation.tick(tickAtOrAfter(checkTime(ANCHOR, 5)));
 
     expect(simulation.record(1)).toMatchObject({
       contentRevision: A,
@@ -375,9 +379,10 @@ describe('full backfill from an empty ledger', () => {
         .slice(0, 14)
         .every((record) => record.terminalReason === 'settled-on-deadline'),
     ).toBe(true);
+    // Round 16 started at 04:00: + 8 h 17 min is its slot 7.
     expect(records[15]).toMatchObject({
       reviewState: 'unsettled',
-      checkIndex: 1,
+      checkIndex: 7,
     });
     expect(
       records.every(
@@ -402,7 +407,8 @@ describe('a manual run', () => {
       contentRevision: A,
       checkIndex: 0,
       consecutiveConfirmations: 0,
-      nextDueAt: checkTime(ANCHOR, 1).toISOString(),
+      // No slot consumed; accepted, the round now waits for a confirmation.
+      nextDueAt: checkTime(ANCHOR, 5).toISOString(),
     });
     for (const resource of ['calendar', 'circuits', 'participants'] as const) {
       expect(after.refresh[resource].nextDueAt).toBe(
@@ -410,14 +416,15 @@ describe('a manual run', () => {
       );
     }
     expect(after.publicationDueAt).toBe(before.publicationDueAt);
-    // The scheduled cadence still runs its own first check.
+    // The scheduled cadence still runs its own check: the slot-5
+    // confirmation, since the manual run already accepted a result.
     const scheduled = await simulation.tick(
       tickAtOrAfter(plus(ANCHOR, 6 * HOUR)),
     );
     expect(
       scheduled.plan.kind === 'publication' && scheduled.plan.checks,
     ).toEqual([
-      expect.objectContaining({ round: 1, check: 'cadence', slot: 1 }),
+      expect.objectContaining({ round: 1, check: 'cadence', slot: 5 }),
     ]);
   });
 });

@@ -429,7 +429,8 @@ describe.each(sequencerTransports)(
           await harness.published();
           harness.server.results.set(1, 'A');
         }
-        const at = tickAfter(1, 5);
+        // + 6 h 17 min: slot 5, the first slot an accepted result also takes.
+        const at = tickAfter(1, 6);
 
         const manual = await manualFirst.manual(at);
         await scheduledFirst.scheduled(at);
@@ -445,7 +446,7 @@ describe.each(sequencerTransports)(
           consecutiveConfirmations: 0,
         });
         expect(await scheduledFirst.round(1)).toMatchObject({
-          checkIndex: 1,
+          checkIndex: 5,
           consecutiveConfirmations: 1,
         });
 
@@ -453,7 +454,7 @@ describe.each(sequencerTransports)(
         const tick = await manualFirst.scheduled(later(at, MINUTE));
         expect(tick.requests).toEqual([...seasonPaths, paths.results(1)]);
         expect(await manualFirst.round(1)).toMatchObject({
-          checkIndex: 1,
+          checkIndex: 5,
           consecutiveConfirmations: 1,
         });
 
@@ -464,7 +465,7 @@ describe.each(sequencerTransports)(
           events: { 'classification.observation-not-applied': 1 },
         });
         expect(await manualFirst.round(1)).toMatchObject({
-          checkIndex: 1,
+          checkIndex: 5,
           consecutiveConfirmations: 1,
           candidateRevision: null,
         });

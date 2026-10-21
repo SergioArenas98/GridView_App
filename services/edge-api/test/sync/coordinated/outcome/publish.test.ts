@@ -263,7 +263,8 @@ describe.each(sequencerTransports)(
 
       // A changed classification is pending until corroborated, so the run
       // withholds and the publication waits for the next cadence check -
-      // not an hourly retry.
+      // not an hourly retry. Seen at the + 15 h back-off check, the next is
+      // + 24 h.
       harness.server.results.set(1, 'B');
       const pending = await harness.run(tickAfter(1, 15));
       expect(pending.outcome).toMatchObject({
@@ -277,7 +278,7 @@ describe.each(sequencerTransports)(
       expect(pending.publishCalls).toBe(0);
       expect(pending.ledgerCalls).toEqual(settlingRun);
       expect((await harness.season()).publicationDueAt).toBe(
-        checkTime(anchorOf(1).toISOString(), 4).toISOString(),
+        checkTime(anchorOf(1).toISOString(), 12).toISOString(),
       );
 
       const corroborated = await harness.run(tickAfter(1, 24));
@@ -445,13 +446,18 @@ describe.each(sequencerTransports)(
         publicationReason: 'classification-staged',
       });
 
-      // No hourly retry: the next ticks send nothing.
-      for (const hours of [10, 11, 12, 13, 14]) {
+      // A cadence check still observes - round 2's slot-9 confirmation - and
+      // is still held, since unchanged.
+      const confirmation = await harness.run(tickAfter(2, 10));
+      expect(confirmation.outcome).toMatchObject({
+        publication: { cause: 'classification-staged', next: 'blocked' },
+      });
+      // No hourly retry: the ticks between cadence checks send nothing.
+      for (const hours of [11, 12, 13, 14]) {
         const tick = await harness.run(tickAfter(2, hours));
         expect(tick.outcome).toMatchObject({ status: 'nothing-due' });
         expect(tick.requests).toEqual([]);
       }
-      // A cadence check still observes, and is still held, since unchanged.
       const cadence = await harness.run(tickAfter(2, 15));
       expect(cadence.outcome).toMatchObject({
         publication: { cause: 'classification-staged', next: 'blocked' },

@@ -19,8 +19,8 @@
  * - **Controlled data.** `ControlledJolpica` answers from the synthetic
  *   season the port tests use (every identity is curated content): a result
  *   is "not yet available" (an empty race list, as Jolpica answers) until the
- *   instant the scenario makes it available, can change to a corrected
- *   variant, and can be made to fail.
+ *   instant the scenario makes it available, can be served as an incomplete
+ *   page first, can change to a corrected variant, and can be made to fail.
  *
  * Nothing here can reach a provider or Cloudflare: the global `fetch` is
  * stubbed to throw by every test that uses it.
@@ -115,10 +115,26 @@ export function tickAfterRace(round: number, hours: number): string {
   ).toISOString();
 }
 
+/**
+ * What one round's classification serves: a variant, a structurally
+ * incomplete page (`total` counts a row the page does not carry, as a page
+ * read while Jolpica is still loading the result would), or nothing yet.
+ */
+export type ServedResult = ResultVariant | 'incomplete' | null;
+
 /** One availability change of one round's classification. */
 interface ResultChange {
   readonly at: number;
-  readonly variant: ResultVariant | null;
+  readonly variant: ServedResult;
+}
+
+/** Variant A with its last row missing, while `total` still counts it. */
+function incompletePage(round: number): Record<string, unknown> {
+  const body = structuredClone(resultsBody(round, 'A')) as {
+    MRData: { RaceTable: { Races: { Results: unknown[] }[] } };
+  };
+  body.MRData.RaceTable.Races[0]!.Results.pop();
+  return body;
 }
 
 /**
@@ -132,6 +148,15 @@ export class ControlledJolpica {
 
   /** Round `round`'s result becomes `variant` from `at` on. */
   available(round: number, at: string, variant: ResultVariant = 'A'): this {
+    return this.serve(round, at, variant);
+  }
+
+  /** Round `round` serves an incomplete page from `at` on. */
+  incomplete(round: number, at: string): this {
+    return this.serve(round, at, 'incomplete');
+  }
+
+  private serve(round: number, at: string, variant: ServedResult): this {
     const list = this.changes.get(round) ?? [];
     list.push({ at: Date.parse(at), variant });
     list.sort((left, right) => left.at - right.at);
@@ -145,9 +170,9 @@ export class ControlledJolpica {
     return this;
   }
 
-  /** The variant served for `round` at `now`, or `null` while unavailable. */
-  variantAt(round: number, now: number): ResultVariant | null {
-    let variant: ResultVariant | null = null;
+  /** What `round` serves at `now`, or `null` while unavailable. */
+  variantAt(round: number, now: number): ServedResult {
+    let variant: ServedResult = null;
     for (const change of this.changes.get(round) ?? []) {
       if (change.at <= now) variant = change.variant;
     }
@@ -174,12 +199,17 @@ export class ControlledJolpica {
     const down = this.outages.some(({ from, to }) => from <= now && now < to);
     for (let round = 1; round <= 24; round += 1) {
       const variant = this.variantAt(round, now);
-      if (variant !== null) server.results.set(round, variant);
+      if (variant !== null && variant !== 'incomplete') {
+        server.results.set(round, variant);
+      }
       const path = `/${round}/results/`;
       server.answers.set(path, () => {
         if (down) return { kind: 'status', status: 503 };
-        return variant === null
-          ? { kind: 'json', body: emptyResultsEnvelope() }
+        if (variant === null) {
+          return { kind: 'json', body: emptyResultsEnvelope() };
+        }
+        return variant === 'incomplete'
+          ? { kind: 'json', body: incompletePage(round) }
           : { kind: 'json', body: resultsBody(round, variant) };
       });
     }

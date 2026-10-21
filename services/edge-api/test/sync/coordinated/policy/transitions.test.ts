@@ -145,7 +145,8 @@ describe('T0: a first valid write', () => {
       consecutiveConfirmations: 1,
       sourceObservedAt: iso(1),
       checkIndex: 1,
-      nextDueAt: iso(2),
+      // Accepted: the next check is the first confirmation slot (+5 h 30 min).
+      nextDueAt: iso(5),
       publishedRevision: null,
     });
     expect(categories(step)).toEqual(['classification.first-write']);
@@ -159,9 +160,12 @@ describe('T0: a first valid write', () => {
       contentRevision: A,
       consecutiveConfirmations: 0,
       checkIndex: 0,
-      nextDueAt: record.nextDueAt,
+      // No slot is consumed, but the accepted result leaves the hourly
+      // window for the confirmation slots.
+      nextDueAt: iso(5),
       sourceObservedAt: iso(3),
     });
+    expect(record.nextDueAt).toBe(iso(1));
   });
 });
 
@@ -403,17 +407,17 @@ describe('the settling predicate', () => {
 
   it('settles at three confirmations from +24h, leaving the cadence for the slow path', () => {
     const step = cadence(
-      unsettled({ checkIndex: 3, consecutiveConfirmations: 2 }),
-      4,
+      unsettled({ checkIndex: 11, consecutiveConfirmations: 2 }),
+      12,
       observed(A),
     );
 
     expect(step.record).toMatchObject({
       reviewState: 'settled',
       terminalReason: 'settled',
-      settledAt: iso(4),
+      settledAt: iso(12),
       nextDueAt: null,
-      lastSweptAt: iso(4),
+      lastSweptAt: iso(12),
     });
     expect(categories(step)).toEqual([
       'classification.confirmed',
@@ -435,8 +439,8 @@ describe('the settling predicate', () => {
 describe('the 14-day ceiling', () => {
   it('settles on deadline whatever the confirmation count', () => {
     const step = cadence(
-      unsettled({ checkIndex: 16, consecutiveConfirmations: 1 }),
-      17,
+      unsettled({ checkIndex: 24, consecutiveConfirmations: 1 }),
+      25,
       observed(A),
     );
 
@@ -453,14 +457,14 @@ describe('the 14-day ceiling', () => {
   });
 
   it('stages a pending revision uncorroborated rather than dropping or applying it', () => {
-    const step = cadence(unsettled({ checkIndex: 16 }), 17, observed(B));
+    const step = cadence(unsettled({ checkIndex: 24 }), 25, observed(B));
 
     expect(step.record).toMatchObject({
       contentRevision: A,
       candidateRevision: null,
       stagedCorrection: {
         revision: B,
-        firstSeenAt: iso(17),
+        firstSeenAt: iso(25),
         uncorroborated: true,
       },
       markers: ['staged'],
@@ -475,8 +479,8 @@ describe('the 14-day ceiling', () => {
   });
 
   it('is a time rule: it fires at the final slot even when that check fails', () => {
-    const record = pending(unsettled({ checkIndex: 16 }), B, iso(16));
-    const step = cadence(record, 17, failed);
+    const record = pending(unsettled({ checkIndex: 24 }), B, iso(24));
+    const step = cadence(record, 25, failed);
 
     expect(step.record.contentRevision).toBe(A);
     expect(step.record.consecutiveConfirmations).toBe(
@@ -485,14 +489,14 @@ describe('the 14-day ceiling', () => {
     expect(step.record.terminalReason).toBe('settled-on-deadline');
     expect(step.record.stagedCorrection).toEqual({
       revision: B,
-      firstSeenAt: iso(16),
+      firstSeenAt: iso(24),
       uncorroborated: true,
     });
   });
 
   it('stops polling a round that was never reconciled, and flags it', () => {
     const record = newClassificationRecord(2026, anchorOf(1, ANCHOR));
-    const step = cadence(record, 17, failed);
+    const step = cadence(record, 25, failed);
 
     expect(step.record).toMatchObject({
       terminalReason: 'never-reconciled-abandoned',

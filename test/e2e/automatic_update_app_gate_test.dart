@@ -145,21 +145,24 @@ void main() {
         );
         expect(await roundOneClassified(l), isFalse);
 
-        // The race. Only the Worker's hourly runs happen until 6 h after it.
-        await stage.advance(at(6, 17).toIso8601String());
-        l = await launch(at(6, 30).toIso8601String());
+        // The race. Only the Worker's hourly runs happen; its first check is
+        // the first tick at or after the start + 90 min, + 2 h 17 min, and
+        // Jolpica has the result from + 2 h.
+        await stage.advance(at(2, 17).toIso8601String());
+        l = await launch(at(2, 30).toIso8601String());
         expect(await roundOneClassified(l), isTrue);
         // The user opens the Grand Prix.
         await l.repositories.results.refreshResults(season: 2026, round: 1);
         expect(await winnerPoints(l), 25);
 
         // Jolpica corrects the classification 8 h after the start; the
-        // Worker corroborates it at the +15 h check and publishes it.
+        // Worker sights it at the + 9 h 30 min confirmation and, pending,
+        // corroborates and publishes it on the next hourly tick, + 11 h 17.
         final Map<String, Object?> corrected = await stage.advance(
-          at(15, 17).toIso8601String(),
+          at(11, 17).toIso8601String(),
         );
         expect(corrected['releases'], greaterThanOrEqualTo(3));
-        l = await launch(at(16).toIso8601String());
+        l = await launch(at(11, 30).toIso8601String());
         // Converged without reopening the Grand Prix: the launch's release
         // follow-up refreshed the cached result.
         expect(await winnerPoints(l), 26);

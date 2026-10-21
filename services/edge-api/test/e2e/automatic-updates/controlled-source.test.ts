@@ -246,8 +246,10 @@ describe('the staging demonstration, from the documents an operator loads', () =
     // At the race start, a run that was due anyway (the daily checks of
     // rounds 20 and 21) regenerates Home, whose featured event moves on to
     // the next round: new content, so a new release. Then the result at its
-    // first check, and the correction once corroborated.
-    expect(published).toEqual([tickAt(0), tickAt(5), tickAt(15)]);
+    // first check (+ 2 h 17 min, the first tick at or after + 1 h 30 min),
+    // and the correction: sighted at the + 9 h 30 min confirmation, pending,
+    // and corroborated on the next hourly tick.
+    expect(published).toEqual([tickAt(0), tickAt(2), tickAt(11)]);
     const home = (await (await stage.fetch('/v1/home?season=2026')).json()) as {
       data: { featuredEvent: { round: number } };
     };

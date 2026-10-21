@@ -49,6 +49,7 @@ import {
   SETTLING_CONFIRMATIONS,
   SETTLING_FIRST_SLOT,
   nextCheckAt,
+  slotSetFor,
 } from './cadence';
 import {
   policyEvent,
@@ -210,12 +211,15 @@ function observe(
   if (record.contentRevision === null) {
     // T0: a first valid write needs no corroboration. A manual first write is
     // not a check, so it counts no confirmation.
+    // An accepted result leaves the hourly window for the confirmation
+    // slots; a cadence check then recomputes this from its own slot.
     update(step, {
       contentRevision: observed,
       provenance: 'reconciled',
       reviewState: 'unsettled',
       consecutiveConfirmations: check.kind === 'cadence' ? 1 : 0,
       sourceObservedAt: at,
+      nextDueAt: nextCheckAt(record.anchor, record.checkIndex, 'confirmation'),
     });
     raise(step, 'classification.first-write');
     if (record.terminalReason === 'never-reconciled-abandoned') {
@@ -414,7 +418,9 @@ function stage(
 /**
  * Consumes the slot, then evaluates settling. The predicate needs an
  * observation; the ceiling is a time rule and fires at the final slot
- * whatever that check returned.
+ * whatever that check returned. The next check is the next slot the record
+ * now takes: every slot while it waits for a result or has one pending, the
+ * confirmation slots otherwise (ADR 0028 D5).
  */
 function advanceCadence(
   step: Step,
@@ -424,7 +430,7 @@ function advanceCadence(
 ): void {
   update(step, {
     checkIndex: slot,
-    nextDueAt: nextCheckAt(step.record.anchor, slot),
+    nextDueAt: nextCheckAt(step.record.anchor, slot, slotSetFor(step.record)),
   });
   const record = step.record;
   if (record.terminalReason !== null) return;

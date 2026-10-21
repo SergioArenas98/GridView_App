@@ -68,11 +68,14 @@ async function startedSeason(): Promise<ObservationHarness> {
   return harness;
 }
 
-/** Round 1 accepted as variant A at its first slot. */
+/**
+ * Round 1 accepted as variant A at its first slot: the + 2 h 17 min tick, the
+ * first at or after the race start + 1 h 30 min.
+ */
 async function firstWrite(): Promise<ObservationHarness> {
   const harness = await startedSeason();
   harness.server.results.set(1, 'A');
-  await harness.run(tickAfter(1, 5));
+  await harness.run(tickAfter(1, 2));
   return harness;
 }
 
@@ -241,7 +244,7 @@ describe('a first classification', () => {
   it('reads the round at its first slot and accepts it with one confirmation (T0)', async () => {
     const harness = await startedSeason();
     harness.server.results.set(1, 'A');
-    const at = tickAfter(1, 5);
+    const at = tickAfter(1, 2);
 
     const run = await harness.run(at);
 
@@ -261,7 +264,8 @@ describe('a first classification', () => {
       checkIndex: 1,
       lastAttemptedAt: observed,
       lastSuccessfulObservationAt: observed,
-      nextDueAt: checkTime(anchorOf(1).toISOString(), 2).toISOString(),
+      // Accepted: next read at the first confirmation slot, + 5 h 30 min.
+      nextDueAt: checkTime(anchorOf(1).toISOString(), 5).toISOString(),
       contentRevision: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
       consecutiveConfirmations: 1,
       provenance: 'reconciled',
@@ -285,7 +289,8 @@ describe('corroboration of an unsettled change (D2.1)', () => {
     const accepted = (await harness.record(1))!.contentRevision!;
 
     harness.server.results.set(1, 'B');
-    const sightedAt = tickAfter(1, 9);
+    // Seen at the slot-5 confirmation (+ 5 h 30 min, so the + 6 h 17 tick).
+    const sightedAt = tickAfter(1, 6);
     const before = await harness.record(1);
     const sighting = await harness.run(sightedAt);
     const pending = await harness.record(1);
@@ -308,13 +313,14 @@ describe('corroboration of an unsettled change (D2.1)', () => {
       contentRevision: accepted,
       candidateFirstSeenAt: paced(sightedAt, 7),
       consecutiveConfirmations: 0,
-      checkIndex: 2,
+      checkIndex: 5,
       markers: ['pending'],
     });
     const candidate = pending!.candidateRevision!;
     expect(candidate).not.toBe(accepted);
 
-    const corroboration = await harness.run(tickAfter(1, 15));
+    // Pending, the round is asked for again on the next hourly slot.
+    const corroboration = await harness.run(tickAfter(1, 7));
     expect(corroboration.requests).toEqual([...seasonPaths, paths.results(1)]);
     expect(corroboration.outcome).toMatchObject({
       events: { 'classification.overwrite': 1 },
@@ -326,7 +332,7 @@ describe('corroboration of an unsettled change (D2.1)', () => {
       sourceObservedAt: paced(sightedAt, 7),
       consecutiveConfirmations: 2,
       candidateRevision: null,
-      checkIndex: 3,
+      checkIndex: 6,
       markers: [],
       reviewState: 'unsettled',
     });
@@ -338,7 +344,7 @@ describe('corroboration of an unsettled change (D2.1)', () => {
     expect(await harness.record(1)).toMatchObject({
       contentRevision: candidate,
       consecutiveConfirmations: 3,
-      checkIndex: 4,
+      checkIndex: 12,
       reviewState: 'settled',
       terminalReason: 'settled',
       nextDueAt: null,
@@ -354,11 +360,11 @@ describe('an unstable source (T4, T5)', () => {
     const first = (await harness.record(1))!.contentRevision!;
 
     harness.server.results.set(1, 'B');
-    await harness.run(tickAfter(1, 9));
+    await harness.run(tickAfter(1, 6));
     const pendingB = (await harness.record(1))!.candidateRevision!;
 
     harness.server.results.set(1, 'C');
-    const replaced = await harness.run(tickAfter(1, 15));
+    const replaced = await harness.run(tickAfter(1, 7));
     expect(replaced.outcome).toMatchObject({
       events: { 'classification.pending-replaced': 1 },
     });
@@ -370,7 +376,7 @@ describe('an unstable source (T4, T5)', () => {
     });
     expect(pendingC!.candidateRevision).not.toBe(pendingB);
 
-    const corroborated = await harness.run(tickAfter(1, 24));
+    const corroborated = await harness.run(tickAfter(1, 8));
     expect(corroborated.outcome).toMatchObject({
       events: { 'classification.overwrite': 1 },
     });
@@ -391,7 +397,8 @@ describe('an unstable source (T4, T5)', () => {
       candidateRevision: null,
       consecutiveConfirmations: 0,
       supersededRevisions: [first],
-      checkIndex: 5,
+      // + 48 h 17 min: the day-2 check, slot 13.
+      checkIndex: 13,
       reviewState: 'unsettled',
     });
   });
@@ -401,11 +408,11 @@ describe('a failed attempted check (T6)', () => {
   it('records the attempt and consumes the slot, but accepts nothing and resets nothing', async () => {
     const harness = await firstWrite();
     harness.server.results.set(1, 'B');
-    await harness.run(tickAfter(1, 9));
+    await harness.run(tickAfter(1, 6));
     const pending = await harness.record(1);
 
     harness.server.results.delete(1);
-    const at = tickAfter(1, 15);
+    const at = tickAfter(1, 7);
     const run = await harness.run(at);
     const after = await harness.record(1);
 
@@ -424,7 +431,7 @@ describe('a failed attempted check (T6)', () => {
     ]);
     expect(after).toMatchObject({
       lastAttemptedAt: paced(at, 7),
-      checkIndex: 3,
+      checkIndex: 6,
       contentRevision: pending!.contentRevision,
       candidateRevision: pending!.candidateRevision,
       consecutiveConfirmations: pending!.consecutiveConfirmations,
@@ -432,7 +439,7 @@ describe('a failed attempted check (T6)', () => {
 
     // The pending revision survives the failure and is corroborated next.
     harness.server.results.set(1, 'B');
-    await harness.run(tickAfter(1, 24));
+    await harness.run(tickAfter(1, 8));
     expect(await harness.record(1)).toMatchObject({
       contentRevision: pending!.candidateRevision,
       consecutiveConfirmations: 2,
@@ -546,7 +553,7 @@ describe('a scheduled cadence check and an O-3 reread stay distinct', () => {
     await harness.run(tickAfter(1, 7 * 24));
     const first = await harness.record(1);
     expect(first).toMatchObject({
-      checkIndex: 10,
+      checkIndex: 18,
       consecutiveConfirmations: 1,
     });
 
@@ -573,7 +580,7 @@ describe('a scheduled cadence check and an O-3 reread stay distinct', () => {
       events: { 'classification.pending-observed': 1 },
     });
     expect(await harness.record(1)).toMatchObject({
-      checkIndex: 11,
+      checkIndex: 19,
       markers: ['pending'],
     });
   });
@@ -611,7 +618,8 @@ describe('a limiter deferral', () => {
   it('is not a check: nothing is sent for it, and only the deferral is recorded', async () => {
     const harness = await firstWrite();
     const record = await harness.record(1);
-    const at = tickAfter(1, 9);
+    // The slot-5 confirmation check.
+    const at = tickAfter(1, 6);
     const retryAt = later(at, 90 * 60 * 1000);
     const base = harness.limiter.reservations.length;
     harness.limiter.script = (call) =>
@@ -645,7 +653,7 @@ describe('a limiter deferral', () => {
     const retried = await harness.run(later(at, 2 * HOUR));
     expect(retried.requests).toEqual([...seasonPaths, paths.results(1)]);
     expect(await harness.record(1)).toMatchObject({
-      checkIndex: 2,
+      checkIndex: 5,
       consecutiveConfirmations: 2,
       limiterDeferralUntil: null,
     });
