@@ -2577,6 +2577,19 @@ complete.**
 
 The decision above is unchanged.
 
+### Automatic operation (2026-10-21)
+
+[ADR 0028](0028-automatic-end-to-end-season-updates.md) makes this runtime the
+operating model once activated. It accepts a `genesis` season, stamps the
+calendar horizon, records a heartbeat after a healthy scheduled run (step 10
+in `observe.ts`), and closes OD-1 through an outside-in monitor with a
+verified delivery drill (AU-6). None of the activation steps above is taken:
+the ledger binding, `coordinated`, the hourly cron, the first provider-backed
+run and production delivery remain separately authorized
+(`docs/release/automatic-updates.md`).
+
+The decision above is unchanged.
+
 ## Reopening conditions
 
 | Trigger | Consequence |

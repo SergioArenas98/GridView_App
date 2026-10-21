@@ -3481,6 +3481,27 @@ was purchased, provisioned or deployed, and there was no Cloudflare request.**
 | Tests | New `test/config/production-worker-config.test.ts` (15) reads the configuration through `unstable_readConfig` and drives the real Worker: no cron, fail-closed without KV, no season served before genesis or before the first batch, seed and activation refused, no provider built. The tests that pinned production as inert are reframed, not deleted: `inertness.test.ts`, `wrangler-config.test.ts`, `staging-season-batch-ingest.test.ts`, `ledger-binding-absent.test.ts`. Staging's resolved configuration is asserted unchanged. |
 | Still open | W2 (KV namespace, `ADMIN_TOKEN`, the KV id PR), the Workers Paid purchase (before D3), D-L, W3 deployment, D1-D3. Each needs the owner's authorization. |
 
+### 14.0.61 Automatic end-to-end updates (ADR 0028) - code, tests and documentation, not activated
+
+Prepared on **2026-10-21**, stacked on PR #85. The owner made automatic
+updates a release requirement. **Nothing is activated:** no environment
+selects `coordinated`, binds the ledger or has a schedule; nothing was
+purchased, provisioned or deployed; no provider was contacted. Live staging
+was re-read read-only (staging runbook §2).
+
+| Item | Status |
+|---|---|
+| Genesis | Coordinated runs accept a `genesis` season: no reconciliation, the lease snapshot, a `publishing` slot resolved as not published, the empty predecessor from the authority. Production needs no capture or submission. |
+| Freshness | `coordinated` stamps `calendar-horizon`; only `mock` keeps the interval. The none↔coordinated rollback constraint is gone. |
+| Heartbeat | A healthy scheduled run writes `SyncState.lastCompletedAt` (`/v1/status.lastSuccessfulSyncAt`). Manual, failed, cancelled, all-checks-failed, held and blocked runs do not. |
+| Production logs (D-L) | Persisted, invocation logs off; no public `request.completed`; `request.failed` without request ID; `X-Request-ID` only as an opaque token; refused internal paths as `/internal/*`. The whole-season baseline is compared as amended by D8 (`asAmendedByAdr0028`), the recording untouched. |
+| Alerts | `scripts/monitor/automation-monitor.mjs` (public GETs; heartbeat > 3 h, result > 12 h after race start) and `.github/workflows/automation-monitor.yml`, manual-only. |
+| Controlled source | `src/providers/controlled/source.ts`: KV-backed, time-aware Jolpica transport, admitted only in a coordinated staging Worker (`CONTROLLED_PROVIDER_SOURCE = "kv"`), for the isolated demonstration Worker. |
+| Gate AU-3 | `test/e2e/automatic-updates/`: `gate.test.ts` (9, in CI), `controlled-source.test.ts` (8), `app-gate.test.ts` with the Flutter data layer over HTTP (`test/e2e/automatic_update_app_gate_test.dart`, opt-in), `controlled-source-export.test.ts` (opt-in). |
+| Negative controls | Interval policy back: 2 failing; genesis refused: 9; no heartbeat: 8; production success line kept: 3; free-text request ID adopted: 6; all-failed run beats: 2; app gate without the correction: fails. |
+| Review | Code-reviewer pass: no CRITICAL/HIGH. Two MEDIUM (beat on an all-failed run; unauthenticated internal path text in production logs) and three LOW fixed in `fad2af0`. |
+| Still open | AU-1 to AU-8 (`docs/release/automatic-updates.md` §7), each separately authorized; AU-D1 to AU-D4. |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in

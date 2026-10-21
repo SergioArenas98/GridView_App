@@ -354,8 +354,12 @@ never deployed.** The owner chose submission path A, Workers Paid, on
   `SEASON_PUBLICATION_SEQUENCER`, on the shared SQLite `exports`;
 - `[env.production.secrets] required = ["ADMIN_TOKEN"]`;
 - `[env.production.triggers] crons = []`;
-- `[env.production.observability] enabled = false`: persisted Workers Logs
-  off, the fail-safe choice while decision D-L is open.
+- `[env.production.observability]`: persisted Workers Logs **on**, with
+  invocation logs off (ADR 0028 D8, which resolves D-L's engineering side,
+  2026-10-21). The Worker writes no line for a successful public request in
+  production, a failed one without its request ID, and refused internal
+  paths as `/internal/*`, so nothing about app users or credentials is
+  stored. PR #85 had committed `enabled = false` as the fail-safe.
 
 It deliberately commits **no `GRIDVIEW_DATA` KV binding**. No production
 namespace exists, and Wrangler 4.112 provisions a new namespace on deploy for a
@@ -426,12 +430,21 @@ deployment of `d351118`; ADR 0005, amendment of that date). The 2026-10-19
 release `pm1-…1d` is the first stamped under it. `none` stamps the `calendar-horizon` policy: season
 documents expire at the first sprint or race the release does not classify,
 the content manifest after an hour, and a completed season's data documents
-carry `9999-12-31T23:59:59.999Z`. `mock` and `coordinated` keep the
-generator's fixed 15 minutes. No `wrangler.toml` value changes for it. The
-policy applies only when a release is stamped: deploying it leaves the active
-release, and its 15-minute expiry, untouched. **Constraint:** do not move
-`PROVIDER_MODE` away from `none` for a season published under this policy
-until rollback re-stamping is resolved (ADR 0005, amendment of 2026-10-19).
+carry `9999-12-31T23:59:59.999Z`. **Since ADR 0028 D4 (2026-10-21, not
+deployed), `coordinated` stamps the same policy**, because it publishes only
+changed content; only `mock` keeps the generator's fixed 15 minutes. No
+`wrangler.toml` value changes for it. The policy applies only when a release
+is stamped: deploying it leaves the active release untouched. **Constraint,
+narrowed:** a season published under this policy must not be rolled back by
+a Worker on `mock`; `none` and `coordinated` re-stamp it identically.
+
+**`CONTROLLED_PROVIDER_SOURCE` (code 2026-10-21, set nowhere).** `kv` makes a
+coordinated **staging** Worker's Jolpica transport read time-aware controlled
+documents from its own `GRIDVIEW_DATA` instead of the network: the isolated
+demonstration Worker `gridview-api-e2e` of gate AU-3 (ADR 0028 D10,
+`docs/release/automatic-updates.md` §8.1). Any other value, or `kv` in
+production, development or a non-coordinated Worker, is a configuration
+error on every request.
 
 Admitting the value activates nothing. Even where it is selected, the
 coordinated runtime needs a bound reconciliation ledger (G9), and no deployed
