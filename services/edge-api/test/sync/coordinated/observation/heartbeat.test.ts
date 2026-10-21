@@ -61,6 +61,30 @@ describe.each(sequencerTransports)(
       ).toBe(harness.releases()[0]);
     });
 
+    it('does not beat when every check of a run failed', async () => {
+      const harness = await harnessFor();
+      await harness.run(PRE_SEASON);
+      expect(await lastCompleted(harness)).toBe(PRE_SEASON);
+      for (const path of [
+        '/races/',
+        '/circuits/',
+        '/drivers/',
+        '/constructors/',
+        '/driverstandings/',
+        '/constructorstandings/',
+      ]) {
+        harness.server.answers.set(path, () => ({
+          kind: 'status',
+          status: 503,
+        }));
+      }
+      const run = await harness.run(FIRST_PUBLICATION);
+      // Quiet - a provider outage is not GridView's failure - but no beat.
+      expect(run.outcome.status).toBe('observed');
+      expect(run.requests.length).toBeGreaterThan(0);
+      expect(await lastCompleted(harness)).toBe(PRE_SEASON);
+    });
+
     it('never beats for a manual run', async () => {
       const harness = await harnessFor();
       await harness.run(PRE_SEASON, { trigger: 'manual' });

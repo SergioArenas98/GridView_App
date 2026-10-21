@@ -17,6 +17,7 @@ import { consoleLogger } from './logging/logger';
 import {
   completedLine,
   failedLine,
+  internalRouteTemplate,
   requestIdFor,
   requestLogScope,
 } from './logging/request-log';
@@ -234,7 +235,11 @@ export default {
           },
           clock,
         });
-        routeTemplate = url.pathname;
+        routeTemplate = internalRouteTemplate(
+          env.ENVIRONMENT,
+          url.pathname,
+          response.status,
+        );
       } else if (request.method !== 'GET' && !isHead) {
         response = errorResponse(
           405,

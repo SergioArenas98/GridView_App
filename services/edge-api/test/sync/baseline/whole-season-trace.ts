@@ -269,17 +269,12 @@ export async function wholeSeasonTrace(
 const inspection = 'GET /internal/admin/reconciliation?season=2026';
 
 /**
- * `trace` without the one answer a bound ledger changes: the read-only
- * inspection route (PR-E2) lists `ledger-unbound` among its `503` reasons only
- * while no ledger is resolved, so that reason and the body carrying it are
- * dropped. Every other step is kept as it is.
- */
-/**
  * The recorded baseline as amended by ADR 0028 D8 (2026-10-21), the one
  * deliberate change to these modes since it was recorded: in production, a
  * public request writes no `request.completed` line, and a failed one keeps
- * its `request.failed` line without the request ID. Every other line,
- * environment and step is the recording, unchanged.
+ * its `request.failed` line without the request ID; an internal request the
+ * router refused before routing (`401`, `404`) is logged as `/internal/*`.
+ * Every other line, environment and step is the recording, unchanged.
  */
 export function asAmendedByAdr0028(
   recorded: Record<string, StepTrace[]>,
@@ -301,13 +296,26 @@ export function asAmendedByAdr0028(
                       return operational;
                     }),
                 }
-              : step,
+              : {
+                  ...step,
+                  logs: step.logs.map((line) =>
+                    line.status === 401 || line.status === 404
+                      ? { ...line, routeTemplate: '/internal/*' }
+                      : line,
+                  ),
+                },
           )
         : steps,
     ]),
   );
 }
 
+/**
+ * `trace` without the one answer a bound ledger changes: the read-only
+ * inspection route (PR-E2) lists `ledger-unbound` among its `503` reasons only
+ * while no ledger is resolved, so that reason and the body carrying it are
+ * dropped. Every other step is kept as it is.
+ */
 export function withoutInspectionReasons(
   trace: Record<string, StepTrace[]>,
 ): Record<string, StepTrace[]> {

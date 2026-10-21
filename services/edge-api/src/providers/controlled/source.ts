@@ -128,11 +128,11 @@ export function decodeControlledDocument(
     }
     if (from <= previous) return null;
     previous = from;
+    // 200, or a failure to rehearse: every status served carries a body.
     if (
       typeof entry.status !== 'number' ||
       !Number.isInteger(entry.status) ||
-      entry.status < 200 ||
-      entry.status > 599
+      (entry.status !== 200 && (entry.status < 400 || entry.status > 599))
     ) {
       return null;
     }

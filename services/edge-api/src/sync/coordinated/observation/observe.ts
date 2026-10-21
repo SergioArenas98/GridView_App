@@ -256,7 +256,7 @@ export async function observeCoordinatedSeason(
       dependencies.logger,
     );
     // Step 10: only a healthy scheduled run beats.
-    if (reading !== null && !reading.stopped && quietRun(outcome)) {
+    if (reading !== null && !reading.stopped && healthyRun(outcome)) {
       await recordHeartbeat({
         storage: dependencies.storage,
         season: request.season,
@@ -685,6 +685,34 @@ function quietRun(outcome: CoordinatedObservationOutcome): boolean {
           settled.next !== 'durably-blocked' &&
           settled.next !== 'stopped' &&
           settled.next !== 'resolve')))
+  );
+}
+
+/** The policy events of a check that did not complete. */
+const unsuccessfulEvents: ReadonlySet<string> = new Set([
+  'classification.check-deferred',
+  'classification.check-failed',
+  'classification.check-not-attempted',
+  'refresh.deferred',
+  'refresh.failed',
+  'refresh.not-attempted',
+]);
+
+/**
+ * Whether a scheduled run may beat (ADR 0028 D7): its line is quiet, its
+ * coordination completed (no budget abort), and when it sent requests at
+ * least one of them was a successful observation. A run whose every check
+ * failed - Jolpica down or blocking GridView - is quiet by design, but does
+ * not beat, so the monitor sees the outage.
+ */
+function healthyRun(outcome: CoordinatedObservationOutcome): boolean {
+  if (!quietRun(outcome)) return false;
+  if (outcome.status !== 'observed') return true;
+  if (outcome.coordination !== 'completed') return false;
+  if (outcome.providerRequests === 0) return true;
+  return Object.entries(outcome.events).some(
+    ([category, count]) =>
+      (count ?? 0) > 0 && !unsuccessfulEvents.has(category),
   );
 }
 

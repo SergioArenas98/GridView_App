@@ -197,7 +197,12 @@ describe('the monitor CLI', () => {
       '/v1/seasons/2026/grand-prix/18',
     ]);
     for (const { headers } of api.requests) {
-      expect(Object.keys(headers).sort()).toEqual(['Accept', 'User-Agent']);
+      expect(Object.keys(headers).sort()).toEqual([
+        'Accept',
+        'Cache-Control',
+        'User-Agent',
+      ]);
+      expect(headers['Cache-Control']).toBe('no-cache');
     }
   });
 

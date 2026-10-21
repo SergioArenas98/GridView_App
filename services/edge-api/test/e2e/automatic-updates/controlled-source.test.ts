@@ -79,6 +79,9 @@ describe('the controlled source transport', () => {
         { from: '2026-11-15T16:00:00.000Z', status: 200, body: {} },
       ]),
       doc([{ from: '1970-01-01T00:00:00.000Z', status: 99, body: {} }]),
+      doc([{ from: '1970-01-01T00:00:00.000Z', status: 204, body: {} }]),
+      doc([{ from: '1970-01-01T00:00:00.000Z', status: 304, body: {} }]),
+      doc([{ from: '1970-01-01T00:00:00.000Z', status: 301, body: {} }]),
       doc([{ from: '1970-01-01T00:00:00.000Z', status: 200 }]),
       doc(
         Array.from({ length: MAX_CONTROLLED_VERSIONS + 1 }, (_, index) => ({

@@ -69,6 +69,9 @@ export async function recoverUnfinishedPublication(input: {
   if (input.activeVersion === null) {
     // A `genesis` season: had the reserved candidate committed, the season
     // would be `active`. Nothing was published, so the publication is due.
+    // The run's one authority read suffices: in `coordinated` mode every
+    // publisher of the season runs under the lease this run holds (the
+    // ingest refuses that mode), so no commit can land after the read.
     return { kind: 'resolved', resolution: 'not-published', record: due };
   }
 

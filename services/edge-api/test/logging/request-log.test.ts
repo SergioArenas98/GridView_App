@@ -131,6 +131,22 @@ describe('through the Worker', () => {
     ]);
   });
 
+  it('logs a refused internal path in production only as a fixed template', async () => {
+    const harness = productionHarness();
+    await worker.fetch(
+      request('/internal/admin/jane.doe@example.com-free-text'),
+      harness.env,
+    );
+    expect(harness.logger.events).toEqual([
+      expect.objectContaining({
+        operation: 'request.completed',
+        routeTemplate: '/internal/*',
+        status: 401,
+      }),
+    ]);
+    expect(harness.logger.serialized()).not.toContain('jane.doe');
+  });
+
   it('keeps the staging line, and replaces a free-text request ID', async () => {
     const harness = createHarness({
       environment: 'staging',

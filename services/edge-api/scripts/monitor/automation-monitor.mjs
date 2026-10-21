@@ -95,7 +95,11 @@ async function readData(url, fetchImpl) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const response = await fetchImpl(url, {
-        headers: { Accept: 'application/json', 'User-Agent': USER_AGENT },
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-cache',
+          'User-Agent': USER_AGENT,
+        },
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       if (response.status >= 500 && attempt === 0) continue;

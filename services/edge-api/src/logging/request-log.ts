@@ -54,6 +54,23 @@ export function requestLogScope(
     : 'complete';
 }
 
+/**
+ * The route template an internal request's lines carry. In production a
+ * request the admin router refused before routing - unauthenticated (`401`)
+ * or naming no route (`404`) - is logged as `/internal/*`, so no
+ * client-chosen path text is persisted; every routed admin request names one
+ * of the router's own fixed paths. Other environments keep the path.
+ */
+export function internalRouteTemplate(
+  environment: string | undefined,
+  pathname: string,
+  status: number,
+): string {
+  return environment === 'production' && (status === 401 || status === 404)
+    ? '/internal/*'
+    : pathname;
+}
+
 /** The `request.completed` line for `scope`, or `null` when none is written. */
 export function completedLine(
   scope: RequestLogScope,
