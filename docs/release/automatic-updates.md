@@ -188,7 +188,7 @@ run e-mails the owner through GitHub's own notifications. Known limits:
 |---|---|---|---|
 | AU-0 | This change merged, dormant: genesis-capable coordinated runs, calendar horizon, the + 90 min / hourly / back-off polling plan, heartbeat, production logging design, monitor, controlled source, gate tests | **[PR]** | PR #85 |
 | AU-1 | Workers Paid bought (the plan is account-wide, so staging gets it too). **Done 2026-10-21:** read-only, the dashboard shows Workers Paid active, renewing 2026-11-21, on account `786e24f1…e6bf`, the account Wrangler uses; one invoice that day, USD 5.00, paid (the invoice itself, and so any VAT line, was not opened) | **[approval]** owner | — |
-| AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis | **[approval]** each, **[PR]** | AU-0, AU-1 |
+| AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis. **Done 2026-10-21:** all four steps (§8.1) | **[approval]** each, **[PR]** | AU-0, AU-1 |
 | AU-3 | **The end-to-end demonstration with controlled data** (§8.2). Also on the release commit: the in-process gate in CI and the app half locally | **[approval]** the KV load and the schedule; **[record]** the evidence | AU-2 |
 | AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2) | **[approval]** each of the three; cutover-sensitive | AU-3 |
 | AU-5 | The monitor's hourly `schedule:` for staging | **[approval]**, **[PR]** | AU-4, AU-6 |
@@ -297,6 +297,13 @@ staging state").
    "genesisIdentity": "gridview-e2e-2026-genesis-01", "confirmGenesis":
    true}`. Then `GET /internal/admin/publication/cutover/status?season=2026`
    must show `genesis`, and `/v1/seasons/2026` must answer `503`.
+   **Done 2026-10-21:** one POST at 23:17:41Z. It returned 200 with outcome
+   `created` and fingerprint `genesis1:374357a9…6a8b`. Status then showed
+   `genesis`, authoritative, with no active or previous version.
+   `/v1/seasons/2026` went from `404 SEASON_NOT_FOUND` before genesis to
+   `503 SNAPSHOT_NOT_READY` with `retryable: true` after it. The namespace
+   still holds no key, the schedule is still empty, and staging was unchanged.
+   That status read was the last admin request sent to the Worker.
 
 ### 8.2 The demonstration (AU-3)
 
