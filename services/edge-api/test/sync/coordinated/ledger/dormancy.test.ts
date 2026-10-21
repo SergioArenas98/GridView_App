@@ -1,8 +1,9 @@
 /**
  * The ledger storage foundation is dormant: the class is exported, and the
  * resolver reads an optional `RECONCILIATION_LEDGER` binding, but no committed
- * configuration declares, registers or binds it, so the resolver answers
- * `null` in every committed environment.
+ * configuration declares, registers or binds it outside the isolated
+ * demonstration Worker (`[env.e2e]`, gate AU-3), so the resolver answers
+ * `null` in development, staging and production.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -14,6 +15,10 @@ import { describe, expect, it } from 'vitest';
 import * as entryPoint from '../../../../src/index';
 import { ReconciliationLedger } from '../../../../src/sync/coordinated/ledger';
 import { resolveReconciliationLedger } from '../../../../src/sync/coordinated/ledger-port';
+import {
+  demonstrationSection,
+  withoutDemonstration,
+} from '../../../config/demonstration-environment';
 
 const edgeApiRoot = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -42,7 +47,7 @@ function declarations(): string {
     .join('\n');
 }
 
-describe('the reconciliation ledger is exported, resolvable and not bound', () => {
+describe('the reconciliation ledger is exported, resolvable and bound only by the demonstration Worker', () => {
   it('is a named export of the Worker entry point', () => {
     expect(entryPoint.ReconciliationLedger).toBe(ReconciliationLedger);
     expect(source('src/index.ts')).toContain(
@@ -50,19 +55,27 @@ describe('the reconciliation ledger is exported, resolvable and not bound', () =
     );
   });
 
-  it('is declared by no exports entry, migration or binding in any environment', () => {
+  it('is declared by no exports entry, migration or binding outside the demonstration Worker', () => {
     const declared = declarations();
-    expect(declared).not.toMatch(/ReconciliationLedger/);
-    expect(declared).not.toMatch(/RECONCILIATION/i);
+    const elsewhere = withoutDemonstration(declared);
+    expect(elsewhere).not.toMatch(/ReconciliationLedger/);
+    expect(elsewhere).not.toMatch(/RECONCILIATION/i);
     expect(declared).not.toMatch(/\[\[migrations\]\]/);
-    // The two existing registrations are the only ones.
+    // The two existing top-level registrations are the only ones there.
     expect(declared.match(/^\[exports\.[A-Za-z]+\]$/gm)).toEqual([
       '[exports.ProviderRateLimiter]',
       '[exports.SeasonPublicationSequencer]',
     ]);
+    // The demonstration Worker registers the class and binds it once.
+    const demonstration = demonstrationSection(declared);
+    expect(demonstration.match(/ReconciliationLedger/g)).toHaveLength(2);
+    expect(demonstration).toContain('[env.e2e.exports.ReconciliationLedger]');
+    expect(demonstration).toContain(
+      'name = "RECONCILIATION_LEDGER"\nclass_name = "ReconciliationLedger"',
+    );
   });
 
-  it('keeps every committed provider mode off the coordinated path and schedules nothing', () => {
+  it('keeps every committed provider mode but the demonstration Worker off the coordinated path, and schedules nothing', () => {
     const declared = declarations();
     // `none` since the staging season-batch ingest configuration (`mock`
     // before); both stay off the coordinated path.
@@ -72,9 +85,15 @@ describe('the reconciliation ledger is exported, resolvable and not bound', () =
     expect(declared).toMatch(
       /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
     );
-    expect(declared).not.toMatch(/PROVIDER_MODE = "coordinated"/);
+    expect(withoutDemonstration(declared)).not.toMatch(
+      /PROVIDER_MODE = "coordinated"/,
+    );
+    expect(demonstrationSection(declared)).toContain(
+      'PROVIDER_MODE = "coordinated"',
+    );
     // The staging cron was removed (an explicit empty list) by the same
-    // configuration; no environment schedules a run.
+    // configuration; no environment schedules a run, the demonstration Worker
+    // included (its schedule is gate AU-3's own step).
     expect(declared).toContain('crons = []');
     expect(declared).not.toMatch(/crons = \[\s*"/);
   });
@@ -98,9 +117,10 @@ describe('the reconciliation ledger is exported, resolvable and not bound', () =
     ]);
   });
 
-  it('answers null in every committed environment, none of which binds it', () => {
-    // No committed environment declares the binding (asserted above), so a
-    // Worker built from any of them has no `RECONCILIATION_LEDGER` field.
+  it('answers null in development, staging and production, none of which binds it', () => {
+    // No committed environment but the demonstration Worker declares the
+    // binding (asserted above), so a Worker built from any other has no
+    // `RECONCILIATION_LEDGER` field.
     expect(resolveReconciliationLedger({})).toBeNull();
     expect(
       resolveReconciliationLedger({ RECONCILIATION_LEDGER: undefined }),

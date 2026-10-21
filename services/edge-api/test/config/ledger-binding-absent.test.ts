@@ -1,5 +1,6 @@
 /**
- * No committed environment declares the `RECONCILIATION_LEDGER` binding or
+ * No committed environment but the isolated demonstration Worker
+ * (`[env.e2e]`, gate AU-3) declares the `RECONCILIATION_LEDGER` binding or
  * registers the `ReconciliationLedger` class, as Wrangler itself resolves
  * `wrangler.toml`. Staging resolves to the two Durable Object registrations
  * and bindings that Stage A deployed on 2026-10-07; the staging-only ledger
@@ -43,7 +44,7 @@ const configPath = join(
 );
 
 /** The configuration Wrangler resolves for one environment (`''` = top level). */
-function resolved(environment: '' | 'staging' | 'production') {
+function resolved(environment: '' | 'staging' | 'production' | 'e2e') {
   return unstable_readConfig(
     { config: configPath, env: environment === '' ? undefined : environment },
     { hideWarnings: true },
@@ -62,7 +63,7 @@ function bindingNames(config: ReturnType<typeof resolved>): string[] {
   );
 }
 
-describe('the committed configuration declares no reconciliation ledger, as Wrangler resolves it', () => {
+describe('the committed configuration declares no reconciliation ledger outside the demonstration Worker, as Wrangler resolves it', () => {
   it('resolves staging to the two Durable Objects Stage A deployed, with no migration', () => {
     const staging = resolved('staging');
     expect(staging.exports).toEqual(topLevelExports);
@@ -79,7 +80,12 @@ describe('the committed configuration declares no reconciliation ledger, as Wran
   it('gives staging no exports table of its own, so it inherits the top-level one', () => {
     // A named environment's `exports` table would replace the top-level one;
     // without one, staging resolves to exactly the top-level registrations.
-    expect(rawConfig).not.toMatch(/^\[env\.[a-z]+\.exports/m);
+    // Only the demonstration Worker has its own (asserted below).
+    expect(
+      [...rawConfig.matchAll(/^\[env\.([a-z0-9]+)\.exports/gm)].map(
+        (match) => match[1],
+      ),
+    ).toEqual(['e2e', 'e2e', 'e2e']);
     expect(resolved('staging').exports).toEqual(resolved('').exports);
     expect(resolved('').exports).toEqual(topLevelExports);
   });
@@ -114,10 +120,24 @@ describe('the committed configuration declares no reconciliation ledger, as Wran
     expect(resolved('').triggers.crons).toBeUndefined();
   });
 
-  it('fails closed in every environment, none of which declares the binding', () => {
+  it('resolves the demonstration Worker to the three registrations and bindings, the ledger included', () => {
+    const demonstration = resolved('e2e');
+    expect(demonstration.exports).toEqual({
+      ...topLevelExports,
+      ReconciliationLedger: sqlite,
+    });
+    expect(bindingNames(demonstration)).toEqual([
+      'PROVIDER_RATE_LIMITER',
+      'SEASON_PUBLICATION_SEQUENCER',
+      'RECONCILIATION_LEDGER',
+    ]);
+    expect(demonstration.migrations).toEqual([]);
+  });
+
+  it('fails closed in every environment but the demonstration Worker, none of which declares the binding', () => {
     // A namespace for every binding each environment declares, as a
     // deployment of it would carry.
-    const boundEnv = (environment: '' | 'staging' | 'production') =>
+    const boundEnv = (environment: '' | 'staging' | 'production' | 'e2e') =>
       Object.fromEntries(
         bindingNames(resolved(environment)).map((name) => [
           name,
@@ -130,6 +150,8 @@ describe('the committed configuration declares no reconciliation ledger, as Wran
         environment,
       ).toBeNull();
     }
+    // The demonstration Worker's bindings carry it, so it resolves there.
+    expect(resolveReconciliationLedger(boundEnv('e2e'))).not.toBeNull();
     // The same namespace under the ledger's own name would be resolved, so
     // the nulls above come from the configuration, not from the namespace.
     expect(

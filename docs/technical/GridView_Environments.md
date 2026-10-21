@@ -307,6 +307,7 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 | development | `gridview-api-dev` | Local `wrangler dev` only |
 | staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`). Redeployed twice more on 2026-09-13, for the season-2026 recovery window: reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, then reclosure version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, carrying `seed:2026`. Redeployed on 2026-09-15 as version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`, which adds `SEASON_PUBLICATION_AUTHORITY = "sequencer"` and keeps `seed:2026`. Redeployed on 2026-09-16 as version `c297d260-c81b-4110-bdf2-7572e1206af3`, which keeps `sequencer` and moves the control to `activate:2026`; season 2026 was activated that day. Redeployed on 2026-10-07 as version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275` (Stage A; operator-recorded source `3228725`), which keeps every var, the cron and both Durable Object bindings. Redeployed on 2026-10-13 as version `3b3b8273-41d4-4781-867c-8e517f132823` (from `6ce0ed6`: `PROVIDER_MODE = none`, `SEASON_BATCH_INGEST = 2026`, no schedule), on 2026-10-18 as `ddf551e9-c295-4f87-8ea7-fd6af8da11ed` (from `0cfa312`) and on 2026-10-19 as `453af4fb-e478-42a2-abd6-acdaa1d6473f` (from `d351118`), which is **current, verified read-only 2026-10-21** (staging runbook §2, "Live staging state"). See the Durable Object state below. |
 | production | `gridview-api-production` | Not provisioned. Configuration committed 2026-10-21 (release plan W1), deliberately incomplete: no KV binding until the namespace exists (below) |
+| e2e | `gridview-api-e2e` | **Never deployed.** The isolated demonstration Worker of gate AU-3 (`docs/release/automatic-updates.md` §8.1). Its KV namespace `gridview-snapshots-e2e` (`f8970084eef14b6a8e24db521d015df3`) was created on 2026-10-21 (AU-2 step 1), and `[env.e2e]` binds it. No Worker, Durable Object namespace, secret or schedule exists for it |
 
 > **Staging: public availability observed; administrative state not verified.**
 >
@@ -438,7 +439,8 @@ is stamped: deploying it leaves the active release untouched. **Constraint,
 narrowed:** a season published under this policy must not be rolled back by
 a Worker on `mock`; `none` and `coordinated` re-stamp it identically.
 
-**`CONTROLLED_PROVIDER_SOURCE` (code 2026-10-21, set nowhere).** `kv` makes a
+**`CONTROLLED_PROVIDER_SOURCE` (code 2026-10-21; committed only in `[env.e2e]`,
+never deployed).** `kv` makes a
 coordinated **staging** Worker's Jolpica transport read time-aware controlled
 documents from its own `GRIDVIEW_DATA` instead of the network: the isolated
 demonstration Worker `gridview-api-e2e` of gate AU-3 (ADR 0028 D10,

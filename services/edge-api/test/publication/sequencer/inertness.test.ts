@@ -52,6 +52,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import wranglerConfig from '../../../wrangler.toml?raw';
+import {
+  demonstrationSection,
+  withoutDemonstration,
+} from '../../config/demonstration-environment';
 
 const repoRoot = join(__dirname, '..', '..', '..', '..', '..');
 const edgeApiRoot = join(repoRoot, 'services', 'edge-api');
@@ -86,11 +90,11 @@ function environmentSection(name: string): string {
   const start = declaredConfig.indexOf(`[env.${name}]`);
   expect(start).toBeGreaterThanOrEqual(0);
   const rest = declaredConfig.slice(start + 1);
-  const next = rest.search(/^\[env\.[a-z]+\]\s*$/m);
+  const next = rest.search(/^\[env\.[a-z0-9]+\]\s*$/m);
   return next === -1 ? rest : rest.slice(0, next);
 }
 
-describe('wrangler.toml declares the sequencer surface and selects it in staging and production only', () => {
+describe('wrangler.toml declares the sequencer surface and selects it in staging, production and the demonstration Worker only', () => {
   it('declares the SQLite export in the supported exports form', () => {
     expect(declaredConfig).toContain('[exports.ProviderRateLimiter]');
     expect(declaredConfig).toMatch(
@@ -104,12 +108,12 @@ describe('wrangler.toml declares the sequencer surface and selects it in staging
     expect(declaredConfig).not.toContain('[[migrations]]');
   });
 
-  it('binds the sequencer in staging and production only, and leaves ProviderRateLimiter alone', () => {
+  it('binds the sequencer in staging, production and the demonstration Worker only, and leaves ProviderRateLimiter alone', () => {
     const development = declaredConfig.slice(
       0,
       declaredConfig.indexOf('[env.'),
     );
-    for (const name of ['staging', 'production']) {
+    for (const name of ['staging', 'production', 'e2e']) {
       const section = environmentSection(name);
       expect(section, name).toContain('name = "SEASON_PUBLICATION_SEQUENCER"');
       expect(section, name).toContain(
@@ -124,7 +128,7 @@ describe('wrangler.toml declares the sequencer surface and selects it in staging
     expect(development).toContain('class_name = "ProviderRateLimiter"');
   });
 
-  it('sets the authority mode and the cutover control in staging and production only', () => {
+  it('sets the authority mode and the cutover control in staging, production and the demonstration Worker only', () => {
     // Staging keeps the sequencer authority and names exactly season 2026's
     // activation phase. Neither activates anything: the control only permits
     // the activation route to be attempted, and a seeded season stays on the
@@ -143,13 +147,25 @@ describe('wrangler.toml declares the sequencer surface and selects it in staging
     expect(production).toContain(
       'SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"',
     );
-    // Each is configured exactly twice in the whole file, once per
-    // environment above, so the top-level development table sets neither.
-    expect(declaredConfig.match(/SEASON_PUBLICATION_AUTHORITY/g)).toHaveLength(
+    // The demonstration Worker (gate AU-3) names its own genesis phase.
+    const demonstration = environmentSection('e2e');
+    expect(demonstration).toContain(
+      'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
+    );
+    expect(demonstration).toContain(
+      'SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"',
+    );
+    // Outside it, each is configured exactly twice, once per environment
+    // above, so the top-level development table sets neither.
+    const elsewhere = withoutDemonstration(declaredConfig);
+    expect(elsewhere.match(/SEASON_PUBLICATION_AUTHORITY/g)).toHaveLength(2);
+    expect(elsewhere.match(/SEASON_PUBLICATION_CUTOVER_CONTROL/g)).toHaveLength(
       2,
     );
     expect(
-      declaredConfig.match(/SEASON_PUBLICATION_CUTOVER_CONTROL/g),
+      demonstrationSection(declaredConfig).match(
+        /SEASON_PUBLICATION_(AUTHORITY|CUTOVER_CONTROL)/g,
+      ),
     ).toHaveLength(2);
   });
 
