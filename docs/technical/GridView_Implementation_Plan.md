@@ -3499,7 +3499,7 @@ was re-read read-only (staging runbook §2).
 | Controlled source | `src/providers/controlled/source.ts`: KV-backed, time-aware Jolpica transport, admitted only in a coordinated staging Worker (`CONTROLLED_PROVIDER_SOURCE = "kv"`), for the isolated demonstration Worker. |
 | Gate AU-3 | `test/e2e/automatic-updates/`: `gate.test.ts` (9, in CI), `controlled-source.test.ts` (8), `app-gate.test.ts` with the Flutter data layer over HTTP (`test/e2e/automatic_update_app_gate_test.dart`, opt-in), `controlled-source-export.test.ts` (opt-in). |
 | Negative controls | Interval policy back: 2 failing; genesis refused: 9; no heartbeat: 8; production success line kept: 3; free-text request ID adopted: 6; all-failed run beats: 2; app gate without the correction: fails. |
-| Review | Code-reviewer pass: no CRITICAL/HIGH. Two MEDIUM (beat on an all-failed run; unauthenticated internal path text in production logs) and three LOW fixed in `fad2af0`. |
+| Review | Code-reviewer pass: no CRITICAL/HIGH. Two MEDIUM (beat on an all-failed run; unauthenticated internal path text in production logs) and three LOW fixed in the follow-up commit "fix: address review findings on the automatic path". |
 | Still open | AU-1 to AU-8 (`docs/release/automatic-updates.md` §7), each separately authorized; AU-D1 to AU-D4. |
 
 ## 14.1 Objective
