@@ -80,8 +80,13 @@ preview_urls = false
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-# No provider (decision pack 2026-10-07 DP-6(b)). COMMITTED, NOT DEPLOYED:
-# live staging still runs `mock` (Stage A version `cc8d9a54-…`). With `none`
+# No provider (decision pack 2026-10-07 DP-6(b)). Committed 2026-10-13 and
+# LIVE since that day's deployment (version `3b3b8273-…`); the current live
+# version `453af4fb-…` (2026-10-19, from `d351118`) keeps it, verified
+# read-only on 2026-10-21. This is an interim state, not the operating model:
+# automatic updates (an owner release requirement since 2026-10-21) replace
+# it with
+# the automatic provider mode, a separately authorized change. With `none`
 # the whole-season sync routes (`POST /internal/admin/sync/full` and the
 # others) and the scheduled handler build no provider and fail fast as
 # `provider-unavailable`, so they never construct, guard or publish a mock
@@ -124,7 +129,9 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 
 # The one season the guarded season-batch ingest accepts
 # (`POST /internal/admin/season/ingest`, decision pack 2026-10-07 PR-4).
-# STAGING ONLY; COMMITTED, NOT DEPLOYED. The value must be exactly the
+# STAGING ONLY; LIVE since 2026-10-13 (version `3b3b8273-…`), kept by
+# `453af4fb-…`; two batches have committed through it (2026-10-14 and
+# 2026-10-19). The value must be exactly the
 # four-digit season `2026`, which has curated season metadata; anything else
 # (`2026 `, `2099`, `abcd`) is refused as `ingest-misconfigured`. Setting it
 # admits nothing by itself: the route still needs `ADMIN_TOKEN`, refuses
@@ -161,11 +168,13 @@ required = ["ADMIN_TOKEN"]
 binding = "GRIDVIEW_DATA"
 id = "1d0fb55486a745a1ad12e03d9f04942b"
 
-# No scheduled trigger. COMMITTED, NOT DEPLOYED: live staging still runs the
-# nightly `17 3 * * *` (Stage A version `cc8d9a54-…`). Under
-# `PROVIDER_MODE = "none"` that run could only record `sync.failed` and
+# No scheduled trigger. LIVE since 2026-10-13: that deployment removed the
+# nightly `17 3 * * *` the Stage A version had, and the schedules API has
+# answered `[]` since (re-read 2026-10-21). Under
+# `PROVIDER_MODE = "none"` a nightly run could only record `sync.failed` and
 # rewrite the season's failure state every night, so the season-batch ingest
-# configuration removes it.
+# configuration removes it. The hourly schedule of automatic updates is a
+# separate, separately authorized change.
 #
 # The empty list is deliberate and must stay explicit. Wrangler replaces the
 # Worker's schedules on deploy only when `crons` is set: an empty list removes
