@@ -333,8 +333,25 @@ Record the deployed version id.
      - `attributionVersion = data-sources-v2`.
 4. **Ongoing operations.** Production data then changes only through this
    reviewed path.
-   - Each later race weekend of 2026 needs a capture and a submission (D1 and
-     D3). The calendar-horizon freshness policy tells the app when its data is
+   - Each later race weekend of 2026 needs a capture and review (as D1) and a
+     **recurring submission**, which is not D3's first-release procedure.
+     `--first-release` and `"expectedActiveVersion": null` are for the first
+     release of a `genesis` season only; once a release is active, they are
+     refused as `guard-predecessor-stale`. For every later batch:
+     - before building the body, read the active release (authenticated
+       `GET /internal/admin/publication/cutover/status?season=2026`), record
+       its `activeVersion`, and stop if an operation is prepared;
+     - review the batch against that release, then build the body with
+       `npm run season-batch:submission -- --batch <batch-dir> --manifest-sha256 <reviewed-hex> --expected-active-version <activeVersion> --out <file>`;
+     - send it once to `POST /internal/admin/season/ingest` and expect
+       `applied` with `previousVersion` equal to the recorded version;
+     - on `guard-predecessor-stale`, read the status again: if the active
+       release is the one just submitted, stop; otherwise review again
+       against the new release.
+
+     This is the staging runbook's procedure (section 6, "Guarded
+     season-batch ingest"), run against production.
+   - The calendar-horizon freshness policy tells the app when its data is
      due.
    - Season 2027 needs its curated event, circuit and participant datasets
      before its first batch.
