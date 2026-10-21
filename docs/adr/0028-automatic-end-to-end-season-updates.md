@@ -152,6 +152,23 @@ replaces ADR 0020 C2's dense checks at race start + 5 h, + 9 h, + 15 h and
    checks: + 5 h 30 min and + 9 h 30 min inside the window, then the back-off.
    It is not re-read hourly. Settlement is unchanged: three confirmations,
    never before + 24 h.
+5. **A first result is seen twice before it is published** (AU-D5,
+   recommended 2026-10-21; the owner confirms it when PR #86 merges). A
+   cadence check in slots 1-9 that finds a round's first valid result holds
+   it pending, and the next successful cadence check publishes it only if it
+   returns the same revision; a different one replaces the pending one, as
+   any change pending does (T4), and must itself be seen twice. A failed or
+   deferred check leaves it pending. Inside the window the next check is the
+   next hourly tick, so this normally costs one hour. The pair counts as
+   **one** confirmation, as any first write does: two reads an hour apart are
+   not the three spaced confirmations settling needs, so settling is
+   unchanged. From
+   slot 10 on - the window's last check, the back-off and the ceiling - a
+   first result is published at once, as before, because the next check is
+   hours or days away and a pending round withholds the whole season until
+   then. A manual run (O-8) still writes at once. This amends ADR 0020's T0
+   (Provider Evaluation §10.4.1), which wrote a first result without
+   corroboration, for the window only.
 
 Why the window ends at + 10 h 30 min: a race lasts at most about three hours,
 suspensions included; weather can delay a start or a restart by hours; and
@@ -169,10 +186,13 @@ at a bounded cost (D11). A later result is still found by the back-off.
 | Every classified round | re-read in every publication run (O-3), so at least weekly |
 
 **Latency.** For a race at minute 00 the window's ticks are + 2 h 17 min,
-+ 3 h 17 min, … + 11 h 17 min. A result Jolpica serves by a tick is published
-at that tick. The gate measures + 2 h 17 min for a result available two hours
-after the start, + 4 h 17 min for an unusually long race, + 6 h 17 min for a
-start delayed by three hours, and + 11 h 17 min at the window's last check.
++ 3 h 17 min, … + 11 h 17 min. A result Jolpica serves by a tick is sighted
+at that tick and published at the next one (item 5), or at once at the
+window's last check. The gate measures + 3 h 17 min for a result available
+two hours after the start, + 5 h 17 min for an unusually long race, + 7 h
+17 min for a start delayed by three hours, and + 11 h 17 min both for a
+result first served an hour before the window's last check and for one first
+served by it. The window's latest publication is therefore unchanged.
 A result first served after + 10 h 30 min waits for the back-off: + 15 h
 17 min, + 24 h 17 min, or a daily check. The I5 objective - reconciled data
 within 24 hours - is an objective and not a guarantee, because Jolpica
@@ -187,10 +207,26 @@ maps every identity through the curated registries, passes deep validation
 no winner all make the check fail, so nothing is accepted and the next hourly
 tick asks again. A classification that is **short but self-consistent** cannot
 be told from a complete one (curator decision C-1: a decoded classification is
-final). It is published as first seen; the complete one is sighted at the next
-confirmation check and, pending, published one hourly tick later through the
-unchanged corroboration (D6). The gate shows both. A field-size completeness
-rule would need a curator decision (AU-D5).
+final, and the API serves it as `final`). Item 5 narrows that risk without
+claiming to remove it:
+
+- a short page that Jolpica completes **within the hour** is never
+  published: the gate serves it from + 2 h and the complete one from + 3 h,
+  and the only release is the complete one, at + 4 h 17 min;
+- a short page served **unchanged for an hour or more** is still published
+  as `final`, because two equal sightings do not prove a classification
+  complete. The complete one is sighted at the next confirmation check and,
+  pending, published one hourly tick later through the unchanged
+  corroboration (D6): the gate publishes the short one at + 3 h 17 min and
+  replaces it at + 7 h 17 min.
+
+Publishing a first result as `provisional` and confirming it later was
+rejected for 2.0.0: a classification's revision is the hash of the published
+document, `status` included, so a status that changes without the content
+breaks the rule that an accepted and a published revision are equal exactly
+when the content is (`classification-revision.ts`), and `provisional`
+denotes the provisional source (Provider Evaluation §10.9). A field-size completeness
+rule would need a curator decision. Either is a future contract change.
 
 **The manual batch fallback is unchanged.** Its capture rule
 (`isBatchCaptureEligible`, PR #73) keeps the former five-hour threshold, so a
@@ -370,6 +406,10 @@ publishes and displays **race results only**.
 - A missing result costs up to ten hourly publication runs per race instead
   of one at + 5 h; each is withheld before generation, so it costs requests,
   not KV writes.
+- A first result inside the window is published an hour after it is first
+  seen (D5 item 5). The sighting run is withheld whole, so for that hour no
+  other change in the season is published either; it costs one more
+  publication run's requests per race, and no KV write.
 
 ## Alternatives considered
 

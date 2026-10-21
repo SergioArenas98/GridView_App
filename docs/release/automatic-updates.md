@@ -50,6 +50,11 @@ The race-result polling plan (ADR 0028 D5):
    result is then abandoned and flagged.
 4. **Accepted result:** confirmed only at + 5 h 30 min and + 9 h 30 min, then
    the back-off. It settles at + 24 h at the earliest (three confirmations).
+5. **First result seen twice (AU-D5):** inside the window, the check that
+   first finds a result holds it pending, and the next successful check
+   (normally the next hourly tick) publishes it only if it returns the same
+   result. From the window's last check on, a first result is published at
+   once. Settling is unchanged: the pair counts as one confirmation.
 
 | Resource | Checked |
 |---|---|
@@ -64,15 +69,17 @@ The race-result polling plan (ADR 0028 D5):
 2026-10-25T20:00Z, so polling starts at 21:30Z and the first check is the
 **22:17Z** tick. If the race is delayed or Jolpica has not published yet, the
 23:17Z tick and every hourly tick to **07:17Z** on 2026-10-26 ask again (ten
-checks), then **11:17Z** and **20:17Z**, then daily. The app shows the result
-at its next launch or resume, because everything it holds expired at the race
+checks), then **11:17Z** and **20:17Z**, then daily. A result first served by
+22:17Z is published at **23:17Z**, when the next tick sees it again; one first
+served by the 07:17Z tick is published at once. The app shows the result at
+its next launch or resume, because everything it holds expired at the race
 start.
 
 Targets, not guarantees, because Jolpica guarantees neither timing nor uptime:
 
-- published at the first tick after Jolpica serves a complete result, when
-  that is within the window (by race start + 11 h 17 min for a race at minute
-  00);
+- published one hourly tick after the first tick at which Jolpica serves a
+  complete result, when that is within the window, and at once at its last
+  check (by race start + 11 h 17 min for a race at minute 00);
 - reconciled data within 24 h (ADR 0020 I5);
 - the monitor alerts at race start + 12 h if no result was published, after
   the window's last check.
@@ -81,15 +88,20 @@ Targets, not guarantees, because Jolpica guarantees neither timing nor uptime:
 `total`, missing positions, no winner, an unknown status or an unmapped
 identity is never accepted: the check fails, the last release keeps serving,
 and the next hourly tick asks again. A short classification whose page is
-self-consistent cannot be detected (curator decision C-1); it is published,
-then replaced through corroboration once the complete one appears (AU-D5).
+self-consistent cannot be detected (curator decision C-1), and the API serves
+an accepted result as `final`. Seeing a first result twice (item 5) keeps a
+short page that Jolpica completes within the hour from ever being published.
+It does not prove completeness: a short page served unchanged for an hour is
+still published, then replaced through corroboration once the complete one
+appears (§3, AU-D5).
 
 ## 3. Corrections
 
 | Case | What happens | Measured in the gate |
 |---|---|---|
 | Changed before the result settles | Pending at one sighting; published when the next cadence check returns it again. Inside the window that is the next hourly tick | Corrected 8 h after the start: sighted at + 10 h 17 min, published at + 11 h 17 min |
-| A short but self-consistent result replaced by the complete one | Published as first seen; the complete one is sighted at the next confirmation, pending, then published an hour later | Short at + 2 h, complete from + 3 h: published at + 2 h 17 min, replaced at + 7 h 17 min |
+| A short but self-consistent result, completed within the hour | Never published: the complete one replaces the pending short one, and is published when seen again | Short at + 2 h, complete from + 3 h: only the complete one is published, at + 4 h 17 min |
+| A short but self-consistent result, served unchanged for an hour | Published as `final`; the complete one is sighted at the next confirmation, pending, then published an hour later | Short at + 2 h, complete from + 4 h: short published at + 3 h 17 min, replaced at + 7 h 17 min |
 | Changed again | The pending revision is replaced; three replacements in a row raise `unstable-source` | — |
 | A revision seen before | Rejected for good (D2.2) | — |
 | Changed after settlement | Sighted, then staged; the **whole season is withheld** (O-5(a)) until an operator verifies (E3) and disposes (T12) | Staged; round 2's new result withheld; heartbeat stops |
@@ -102,7 +114,7 @@ The operator path for a staged correction is in the staging runbook, section
 | Budget | Limit | GridView's use |
 |---|---|---|
 | Jolpica burst | 4 requests/s | Pacer at least 260 ms apart (≤ 3.85/s); the global limiter enforces 4/s for all callers |
-| Jolpica sustained | 500 requests/h | At most 6 + classified rounds per run, so ≤ 29 an hour. A missing result adds up to ten hourly runs per race, still one an hour. The gate measured ≤ 9 per run and < 200 a day across two race weekends with one result that never appeared (asked 12 times in its first 30 h) |
+| Jolpica sustained | 500 requests/h | At most 6 + classified rounds per run, so ≤ 29 an hour. A missing result adds up to ten hourly runs per race, still one an hour; seeing a first result twice adds one run per race. The gate measured ≤ 9 per run and < 200 a day across two race weekends with one result that never appeared (asked 12 times in its first 30 h) |
 | Cron CPU | 15 min for an hourly trigger | A publication run does the generation, validation and guard the ingest measured at 362 ms on staging, plus ≤ 29 response parses; a nothing-due tick takes milliseconds. Measured at AU-4 before relying on it |
 | Cron wall time | 15 min | Coordination aborts at 240 s; publication starts only within 300 s and with 300 s of the 10-minute lease left |
 | Subrequests | 10,000 per invocation | A season-end publication: about 300 KV operations, 260 cache deletes and 40 Durable Object calls, plus ≤ 29 fetches |
@@ -300,7 +312,8 @@ staging state").
    | First tick | Bootstrap (one KV read for the calendar); no release |
    | Second tick | First release, previous version `null`, rounds 1–21 served |
    | `T` + 0:17, + 1:17 | A release only if a run is due; Home moves on to round 23; round 22 not asked for yet |
-   | `T` + 2:17 | First check of round 22 (the first tick at or after `T` + 1:30): its result published |
+   | `T` + 2:17 | First check of round 22 (the first tick at or after `T` + 1:30): its result sighted, pending; no release |
+   | `T` + 3:17 | Seen again: its result published |
    | App, next launch | Shows the round 22 result |
    | `T` + 6:17 | Confirmation; no release |
    | `T` + 10:17 | The correction sighted, pending; no release |
@@ -368,4 +381,4 @@ Then:
 | AU-D2 | D-A, archive the 1.x AdMob units, before Jolpica data is published automatically in production (ADR 0028 D11) | Yes, before AU-7 |
 | AU-D3 | Privacy wording for production Worker logs (PR #82, still open; D-L engineering resolved by ADR 0028 D8) | Say that Worker logs store no app-user data and are kept 7 days |
 | AU-D4 | The alert channel: GitHub e-mail (committed) or an additional Cloudflare custom alert (beta, webhook) | GitHub e-mail first; revisit when the beta ends |
-| AU-D5 | A short but self-consistent race classification cannot be told from a complete one (curator decision C-1), so it is published as first seen and replaced by corroboration (§2). A field-size completeness rule (for example, every entrant present) would withhold such a page instead, but can wrongly withhold a legitimately smaller field | Keep C-1 for 2.0.0; revisit if Jolpica is ever seen serving a partial classification |
+| AU-D5 | A short but self-consistent race classification cannot be told from a complete one (curator decision C-1), and the API serves it as `final`. Options: keep publishing a first result at once (documented limitation); publish it as `provisional` and confirm it later (a contract change: the revision hashes `status`, and `provisional` means the provisional source); or see it twice before the first publication | **Implemented on PR #86, for the owner to confirm at merge:** see a first result twice inside the window (§2 item 5, ADR 0028 D5 item 5). One hour of latency, no contract, API or app change. A short page served unchanged for an hour is still published and later replaced (§3). A field-size completeness rule stays out: it can wrongly withhold a legitimately smaller field |
