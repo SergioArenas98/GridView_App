@@ -14,6 +14,11 @@ the app without a manual capture or submission. PR #85's
 `PROVIDER_MODE = "none"` and empty cron are an interim bootstrap state. A Play
 release proceeds only through gates AU-3 and AU-7.
 
+**Scope (owner, 2026-10-21; ADR 0028 D12).** The first Google Play release
+shows the full weekend schedule but publishes and displays **race results
+only**. Free practice, qualifying, sprint qualifying and sprint results are a
+future product update; this path neither requests nor publishes them.
+
 ## 1. The path
 
 ```text
@@ -33,31 +38,58 @@ PR as its deploy authorization (ADR 0028 D2).
 
 ## 2. When it runs, and when a result appears
 
+The race-result polling plan (ADR 0028 D5):
+
+1. **Start of polling:** the first hourly tick at or after the scheduled race
+   start + 90 minutes. It is the start of polling, not evidence that the race
+   has finished.
+2. **Initial window:** while no valid, complete result has been accepted (or
+   while a differing revision is pending), every hourly tick through race
+   start + 10 h 30 min: ten checks.
+3. **Back-off:** + 15 h, + 24 h, then daily to day 14. A round still without a
+   result is then abandoned and flagged.
+4. **Accepted result:** confirmed only at + 5 h 30 min and + 9 h 30 min, then
+   the back-off. It settles at + 24 h at the earliest (three confirmations).
+
 | Resource | Checked |
 |---|---|
-| Race classification | race start + 5 h, + 9 h, + 15 h, + 24 h; daily while unsettled; settled on deadline at + 14 days |
+| Race classification, no accepted result | first tick at or after race start + 1 h 30 min; hourly through + 10 h 30 min; + 15 h, + 24 h; daily to day 14 |
+| Race classification, accepted result | + 5 h 30 min, + 9 h 30 min, + 15 h, + 24 h; daily while unsettled; settled on deadline at + 14 days |
 | Calendar | every 6 h |
 | Standings (both) | daily in season, weekly off season, and in every publication run |
 | Participants, circuits | weekly |
 | Every classified round | in every publication run, so at least weekly |
 
 **Example: the 2026 United States Grand Prix (round 18).** It starts
-2026-10-25T20:00Z. If Jolpica has the classification by then, the
-**2026-10-26T01:17Z** run publishes it. If not, the **05:17Z**, **11:17Z** or
-**20:17Z** checks will. The app shows it at its next launch or resume, because
-everything it holds expired at the race start.
+2026-10-25T20:00Z, so polling starts at 21:30Z and the first check is the
+**22:17Z** tick. If the race is delayed or Jolpica has not published yet, the
+23:17Z tick and every hourly tick to **07:17Z** on 2026-10-26 ask again (ten
+checks), then **11:17Z** and **20:17Z**, then daily. The app shows the result
+at its next launch or resume, because everything it holds expired at the race
+start.
 
 Targets, not guarantees, because Jolpica guarantees neither timing nor uptime:
 
-- published within an hour of race start + 5 h when the source has it;
+- published at the first tick after Jolpica serves a complete result, when
+  that is within the window (by race start + 11 h 17 min for a race at minute
+  00);
 - reconciled data within 24 h (ADR 0020 I5);
-- the monitor alerts at race start + 12 h if neither happened.
+- the monitor alerts at race start + 12 h if no result was published, after
+  the window's last check.
+
+**Valid and complete.** An empty answer, a page with fewer rows than its
+`total`, missing positions, no winner, an unknown status or an unmapped
+identity is never accepted: the check fails, the last release keeps serving,
+and the next hourly tick asks again. A short classification whose page is
+self-consistent cannot be detected (curator decision C-1); it is published,
+then replaced through corroboration once the complete one appears (AU-D5).
 
 ## 3. Corrections
 
 | Case | What happens | Measured in the gate |
 |---|---|---|
-| Changed before the result settles | Pending at one sighting; published when the next cadence check returns it again | Corrected 8 h after the start, published at + 15 h 17 min |
+| Changed before the result settles | Pending at one sighting; published when the next cadence check returns it again. Inside the window that is the next hourly tick | Corrected 8 h after the start: sighted at + 10 h 17 min, published at + 11 h 17 min |
+| A short but self-consistent result replaced by the complete one | Published as first seen; the complete one is sighted at the next confirmation, pending, then published an hour later | Short at + 2 h, complete from + 3 h: published at + 2 h 17 min, replaced at + 7 h 17 min |
 | Changed again | The pending revision is replaced; three replacements in a row raise `unstable-source` | — |
 | A revision seen before | Rejected for good (D2.2) | — |
 | Changed after settlement | Sighted, then staged; the **whole season is withheld** (O-5(a)) until an operator verifies (E3) and disposes (T12) | Staged; round 2's new result withheld; heartbeat stops |
@@ -70,7 +102,7 @@ The operator path for a staged correction is in the staging runbook, section
 | Budget | Limit | GridView's use |
 |---|---|---|
 | Jolpica burst | 4 requests/s | Pacer at least 260 ms apart (≤ 3.85/s); the global limiter enforces 4/s for all callers |
-| Jolpica sustained | 500 requests/h | At most 6 + classified rounds per run, so ≤ 29 an hour; a race weekend day stays under about 120. The gate measured ≤ 9 per run and < 200 a day |
+| Jolpica sustained | 500 requests/h | At most 6 + classified rounds per run, so ≤ 29 an hour. A missing result adds up to ten hourly runs per race, still one an hour. The gate measured ≤ 9 per run and < 200 a day across two race weekends with one result that never appeared (asked 12 times in its first 30 h) |
 | Cron CPU | 15 min for an hourly trigger | A publication run does the generation, validation and guard the ingest measured at 362 ms on staging, plus ≤ 29 response parses; a nothing-due tick takes milliseconds. Measured at AU-4 before relying on it |
 | Cron wall time | 15 min | Coordination aborts at 240 s; publication starts only within 300 s and with 300 s of the 10-minute lease left |
 | Subrequests | 10,000 per invocation | A season-end publication: about 300 KV operations, 260 cache deletes and 40 Durable Object calls, plus ≤ 29 fetches |
@@ -85,8 +117,8 @@ visible until the sequencer's `finalize` commits.
 
 | Failure | Effect | Retry |
 |---|---|---|
-| Result not yet published by Jolpica (empty race list) | The run is withheld | The next cadence check |
-| Jolpica 5xx, timeout, 429, block | The check is counted as failed; the run is withheld; the heartbeat stops if no check succeeded | Next hourly run; a 429's `Retry-After` is honoured |
+| Result not yet published by Jolpica (empty race list), incomplete page, delayed start, long race | The check fails; the run is withheld | The next hourly tick through + 10 h 30 min, then + 15 h, + 24 h, daily to day 14 |
+| Jolpica 5xx, timeout, 429, block | The check is counted as failed; the run is withheld; the heartbeat stops if no check succeeded, and idle ticks do not restart it until an observation succeeds | Next hourly run; a 429's `Retry-After` is honoured |
 | Limiter deferral | Not a check; withheld | At the limiter's `retryAt` |
 | Invalid payload, unmapped identity | Withheld; the mapping needs curation | Next check, after curation |
 | D14/D15 guard refusal | Blocked; the heartbeat stops | Operator |
@@ -141,7 +173,7 @@ run e-mails the owner through GitHub's own notifications. Known limits:
 
 | Gate | Action | Authorization | Depends on |
 |---|---|---|---|
-| AU-0 | This change merged, dormant: genesis-capable coordinated runs, calendar horizon, heartbeat, production logging design, monitor, controlled source, gate tests | **[PR]** | PR #85 |
+| AU-0 | This change merged, dormant: genesis-capable coordinated runs, calendar horizon, the + 90 min / hourly / back-off polling plan, heartbeat, production logging design, monitor, controlled source, gate tests | **[PR]** | PR #85 |
 | AU-1 | Workers Paid bought (the plan is account-wide, so staging gets it too) | **[approval]** owner | — |
 | AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis | **[approval]** each, **[PR]** | AU-0, AU-1 |
 | AU-3 | **The end-to-end demonstration with controlled data** (§8.2). Also on the release commit: the in-process gate in CI and the app half locally | **[approval]** the KV load and the schedule; **[record]** the evidence | AU-2 |
@@ -267,11 +299,12 @@ staging state").
    |---|---|
    | First tick | Bootstrap (one KV read for the calendar); no release |
    | Second tick | First release, previous version `null`, rounds 1–21 served |
-   | `T` + 0:17 | A release only if a run is due; Home moves on to round 23 |
-   | `T` + 5:17 | Round 22's result published |
+   | `T` + 0:17, + 1:17 | A release only if a run is due; Home moves on to round 23; round 22 not asked for yet |
+   | `T` + 2:17 | First check of round 22 (the first tick at or after `T` + 1:30): its result published |
    | App, next launch | Shows the round 22 result |
-   | `T` + 9:17 | The correction pending; no release |
-   | `T` + 15:17 | The correction published; the app converges at its next launch |
+   | `T` + 6:17 | Confirmation; no release |
+   | `T` + 10:17 | The correction sighted, pending; no release |
+   | `T` + 11:17 | The correction published; the app converges at its next launch |
    | Throughout | `lastSuccessfulSyncAt` advances hourly; the monitor passes; no admin request appears in the logs after genesis |
 
    Then remove the schedule (`crons = []`, `triggers deploy`).
@@ -335,3 +368,4 @@ Then:
 | AU-D2 | D-A, archive the 1.x AdMob units, before Jolpica data is published automatically in production (ADR 0028 D11) | Yes, before AU-7 |
 | AU-D3 | Privacy wording for production Worker logs (PR #82, still open; D-L engineering resolved by ADR 0028 D8) | Say that Worker logs store no app-user data and are kept 7 days |
 | AU-D4 | The alert channel: GitHub e-mail (committed) or an additional Cloudflare custom alert (beta, webhook) | GitHub e-mail first; revisit when the beta ends |
+| AU-D5 | A short but self-consistent race classification cannot be told from a complete one (curator decision C-1), so it is published as first seen and replaced by corroboration (§2). A field-size completeness rule (for example, every entrant present) would withhold such a page instead, but can wrongly withhold a legitimately smaller field | Keep C-1 for 2.0.0; revisit if Jolpica is ever seen serving a partial classification |

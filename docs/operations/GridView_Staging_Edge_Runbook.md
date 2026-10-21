@@ -1217,7 +1217,8 @@ The checks run in this order: authentication, method, the strict body,
 2. a resent operation ID;
 3. the staged revision and its backlog entry;
 4. the review lock;
-5. the round's earliest time (`anchor + 5h`).
+5. the round's earliest time (`anchor` + 1 h 30 min, the planner's first
+   check since ADR 0028 D5; `anchor + 5h` before it).
 
 Only then is the one request sent, and it is never retried.
 

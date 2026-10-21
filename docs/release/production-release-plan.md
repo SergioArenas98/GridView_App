@@ -14,6 +14,21 @@ production rollout of **2.0.0 (versionCode 8)** as an update to the existing
 > genesis (D2) stays. Gates AU-0 to AU-8 are added, and A0 and R5 depend on
 > them.
 
+> **Product scope of 2.0.0 (owner, 2026-10-21; ADR 0028 D12).** The first
+> Google Play release keeps the current public scope: the **full weekend
+> schedule**, but **race results only**, published and displayed. Free
+> practice, qualifying, sprint qualifying and sprint results are a future
+> product update. Nothing in this plan, PR #86, the release notes or the store
+> listing may present 2.0.0 as delivering results for every session.
+>
+> **Race-result polling (ADR 0028 D5).** The first check is the first hourly
+> tick at or after the scheduled race start + 90 minutes - the start of
+> polling, not evidence that the race has finished. While no valid, complete
+> result exists it repeats hourly through + 10 h 30 min, then backs off to
+> + 15 h, + 24 h and daily to day 14. Gate AU-3 covers delayed starts,
+> unusually long races, missing and partial results, a late Jolpica
+> publication and the request budget.
+
 Nothing in this document is authorized by the change that adds it. Every step
 marked **[approval]** is a separate owner authorization, given in that order.
 Steps marked **[PR]** are reviewable repository changes.
@@ -50,11 +65,11 @@ Steps marked **[PR]** are reviewable repository changes.
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
 | A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1, P1, AU-3, every W/D/AU PR merged |
 | A0b | **[record]** Release-candidate gate, post-build part: the AAB, the internal installation and performance | A2, R2, R3 |
-| A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A0, A1, D3, P2 |
+| A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A0, A1, P2, AU-7 (production live and holding its first automatic release; D3 is superseded) |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
 | R2 | **[approval]** Upload the AAB to internal testing and release it | A2, R1, P3 |
 | R3 | **[approval]** The controlled upgrade (§8): one Play-delivered upgrade of the final candidate, plus the owner's approval (D-U) of the replacements for the matrix rows one pass cannot cover | R2 |
-| R4 | **[approval]** Release notes; decide D-T1 (retain versionCode 7 or not) | P3 |
+| R4 | **[approval]** Release notes, which describe race results only (ADR 0028 D12); decide D-T1 (retain versionCode 7 or not) | P3 |
 | R5 | **[approval]** Promote the same release to production at 20 % | R3, R4, A0, A0b (every §15.8 item recorded as passed), AU-7, AU-8 |
 | R6 | **[approval]** Increase to 100 % after the monitoring window | R5 |
 | R7 | **[approval]** Data safety final state F, Ads = **No**, once no 1.x artifact is distributed on any non-internal track | R6, D-T1, Alpha retired (§5.1) |
@@ -236,6 +251,10 @@ accepted risk.
 
 **Decided 2026-10-20: A, Workers Paid.** D3 follows Path A. Buying the plan
 is still a separate owner step, and it must be done before D3.
+
+> **2026-10-21:** D3 is superseded by automatic publication (ADR 0028), which
+> needs Workers Paid for the same reason (O-10). Buying the plan is gate AU-1,
+> before AU-2 and before W3.
 
 Public traffic on Free is a separate budget. Each uncached public read is one
 Worker request, one Durable Object request and two KV reads, against 100,000
@@ -457,7 +476,8 @@ The details are in PR #82, `data-safety.md` §1.
     so this plan takes the conservative reading and submits state T before
     the internal upload (R2), not just before production (R5).
 - **R4 [approval]:**
-  - English and Spanish release notes.
+  - English and Spanish release notes. They name race results only, never
+    practice, qualifying or sprint results (ADR 0028 D12).
   - **D-T1:** do not retain versionCode 7 for API 21–23 (recommended). The
     legacy backend is dead, so 1.2.1 shows ads but no data.
 
@@ -544,12 +564,13 @@ merged commit** A2 builds, never a branch head or an older run.
 | Performance targets | A0b | The Performance traces from R3's controlled upgrade against the targets in Implementation Plan §15.4 |
 | Security review | A0 | CodeQL and the secret scan green on that commit, plus a recorded review of the release diff |
 | Privacy review | A0 | PR #82's R1–R8 answered by the owner |
-| Provider legal gate | A0 | ADR 0019 and Implementation Plan §14.2, re-confirmed for the batch D3 published |
+| Provider legal gate | A0 | ADR 0019 and Implementation Plan §14.2, re-confirmed for automatic publication of race results (ADR 0028 D11, D12); Jolpica's terms and rate limits re-read from its public repository, without contacting the API |
 
 A failing, missing or stale A0 item blocks A2. A failing A0b item blocks R5.
 
 **A2 [approval]: build and sign.** Run from a clean checkout of the merged
-commit, in PowerShell, with the API live and holding data (W3, D3) and the
+commit, in PowerShell, with the API live and holding data (W3, D2, then the
+first automatic release of AU-7; D3 is superseded) and the
 policy published (P2):
 
 ```text
@@ -710,7 +731,7 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | # | Decision | Needed before |
 |---|---|---|
 | W0 | Production genesis design (ADR 0025 O-16 amendment): **done**, PR #84 merged as `527444b` | — |
-| W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). Buying the plan is a separate owner step, before D3 | — |
+| W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). Buying the plan is a separate owner step: AU-1, before AU-2 and W3 (D3 is superseded) | — |
 | D-T1 | Retain versionCode 7 for API 21–23 or not (recommended: not) | R4, R7 |
 | D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | P0 or R7 |
 | D-A | Archive the 1.x ad units in AdMob, or not. It stops ads being served to installed 1.x copies, which pausing a track does not, but not the SDK's requests (PR #82 `data-safety.md` §3.6). Irreversible; ends 1.x ad revenue | — (owner's choice of timing) |
@@ -722,4 +743,4 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | P-R | Privacy review of PR #82 `data-safety.md` review items R1–R8 (not the R-track gates) | P0 |
 | M | Ship 2.0.0 with placeholder media (no R2, no approved media) | R5 |
 | O | **Changed 2026-10-21:** nobody runs D1/D3 each race weekend (automatic). Who answers alerts and staged corrections (ADR 0028 D6, D9), and the 2027 dataset work | R5 |
-| AU-D1…AU-D4 | O-5(a) season freeze on a staged correction; D-A before AU-7; privacy wording for Worker logs; alert channel (`automatic-updates.md` §9) | AU-7 |
+| AU-D1…AU-D5 | O-5(a) season freeze on a staged correction; D-A before AU-7; privacy wording for Worker logs; alert channel; a completeness rule for a short but self-consistent race classification (`automatic-updates.md` §9) | AU-7 |

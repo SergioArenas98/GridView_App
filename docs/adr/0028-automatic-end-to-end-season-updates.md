@@ -7,7 +7,12 @@
 
 On 2026-10-21 the owner made **end-to-end automatic updates a release
 requirement**: a race result must travel from the source to the app with no
-operator capture or submission. Until then the only path that reached real
+operator capture or submission. The same day the owner fixed the first Google
+Play release's product scope - the full weekend schedule, but **race results
+only** (D12) - and the race-result polling plan (D5): the first check at the
+first hourly tick at or after the scheduled race start + 90 minutes, then
+hourly while no valid, complete result exists, through a bounded window, then
+backing off. Until then the only path that reached real
 data was operator-driven: capture about 23 Jolpica `GET`s, review the batch
 offline, submit it to `POST /internal/admin/season/ingest` (ADR 0025 D12,
 PR #73; twice on staging, 2026-10-14 and 2026-10-19). PR #85's production
@@ -126,33 +131,82 @@ mode-switch constraint between them (ADR 0005 amendment of 2026-10-19).
 
 ### D5. When it runs, and how soon a result appears
 
-| Resource | Cadence (ADR 0020 C2, Provider Evaluation §11) |
+The race classification's polling plan (owner instruction of 2026-10-21). It
+replaces ADR 0020 C2's dense checks at race start + 5 h, + 9 h, + 15 h and
++ 24 h; the settling rules are unchanged.
+
+1. **Start of polling.** The first eligible check is the **first hourly tick
+   at or after the scheduled race start + 90 minutes**. That instant starts
+   polling; it is **not** evidence that the race has finished. A delayed
+   start, a red-flagged race and a source still loading the result all answer
+   "no result yet", and the next tick asks again.
+2. **Initial window.** While no valid, complete result has been accepted, the
+   round is asked for on **every hourly tick through race start + 10 h
+   30 min**: ten checks (slots 1-10). A differing revision pending
+   corroboration is asked for hourly too, because it withholds the whole
+   season (O-5(a)) until the next check resolves it.
+3. **Back-off.** Then race start + 15 h and + 24 h, then daily to day 14 (slots
+   11-25). A round never reconciled by day 14 is abandoned
+   (`never-reconciled-abandoned`) and flagged; nothing is asked again.
+4. **An accepted result** with nothing pending takes only the confirmation
+   checks: + 5 h 30 min and + 9 h 30 min inside the window, then the back-off.
+   It is not re-read hourly. Settlement is unchanged: three confirmations,
+   never before + 24 h.
+
+Why the window ends at + 10 h 30 min: a race lasts at most about three hours,
+suspensions included; weather can delay a start or a restart by hours; and
+Jolpica publishes after the race and states no delay or timing guarantee. Ten hourly checks cover a start delayed
+by about four hours, a three-hour race and several hours of publication lag,
+at a bounded cost (D11). A later result is still found by the back-off.
+
+| Resource | Cadence |
 |---|---|
-| Race classification | race start + 5 h, + 9 h, + 15 h, + 24 h; then daily while unsettled; settled on deadline at + 14 days |
+| Race classification, no accepted result | the first tick at or after race start + 1 h 30 min; hourly through + 10 h 30 min; + 15 h, + 24 h; daily to day 14 |
+| Race classification, accepted result | + 5 h 30 min, + 9 h 30 min, + 15 h, + 24 h; daily while unsettled; hourly within the window while a change is pending; settled on deadline at day 14 |
 | Calendar | every 6 h |
 | Driver and constructor standings | daily in season, weekly off season, and in every publication run |
 | Participants, circuits | weekly |
 | Every classified round | re-read in every publication run (O-3), so at least weekly |
 
-**Latency.** When Jolpica has the result by the first check, it is published
-at the first minute-17 tick at or after race start + 5 h: between 5 h and
-5 h 59 min after the start. The gate measures exactly race start + 5 h 17 min
-for a race at minute 00. If the result is not there yet, the next check at
-+ 9 h, + 15 h or + 24 h publishes it; the I5 objective is reconciled data
-within 24 hours, an objective and not a guarantee, because Jolpica guarantees
-neither timing nor uptime. **The app** shows it at its next launch or resume
-after publication: its data expired at the race start, so that refresh
-revalidates and receives the new release. There is no push.
+**Latency.** For a race at minute 00 the window's ticks are + 2 h 17 min,
++ 3 h 17 min, … + 11 h 17 min. A result Jolpica serves by a tick is published
+at that tick. The gate measures + 2 h 17 min for a result available two hours
+after the start, + 4 h 17 min for an unusually long race, + 6 h 17 min for a
+start delayed by three hours, and + 11 h 17 min at the window's last check.
+A result first served after + 10 h 30 min waits for the back-off: + 15 h
+17 min, + 24 h 17 min, or a daily check. The I5 objective - reconciled data
+within 24 hours - is an objective and not a guarantee, because Jolpica
+guarantees neither timing nor uptime. **The app** shows the result at its
+next launch or resume after publication: its data expired at the race start,
+so that refresh revalidates and receives the new release. There is no push.
+
+**Valid and complete.** A result is accepted only when it decodes strictly,
+maps every identity through the curated registries, passes deep validation
+(ADR 0022, ADR 0024) and is complete by its own page: an empty race list
+(C-9), a page carrying fewer rows than its `total`, a gap in the positions or
+no winner all make the check fail, so nothing is accepted and the next hourly
+tick asks again. A classification that is **short but self-consistent** cannot
+be told from a complete one (curator decision C-1: a decoded classification is
+final). It is published as first seen; the complete one is sighted at the next
+confirmation check and, pending, published one hourly tick later through the
+unchanged corroboration (D6). The gate shows both. A field-size completeness
+rule would need a curator decision (AU-D5).
+
+**The manual batch fallback is unchanged.** Its capture rule
+(`isBatchCaptureEligible`, PR #73) keeps the former five-hour threshold, so a
+committed batch reconverts byte for byte.
 
 ### D6. Corrections
 
 The settling state machine (ADR 0020 §4, D2.1–D2.9) decides, unchanged:
 
 - **Before settlement**, a differing classification is pending, and is
-  published when the next cadence check returns it again (D2.1). The gate
-  shows a correction made 8 h after the start published at + 15 h 17 min.
-  A third revision replaces the pending one; three replacements in a row
-  raise `unstable-source`.
+  published when the next cadence check returns it again (D2.1). Inside the
+  window the next check is the next hourly tick (D5). The gate shows a
+  correction made 8 h after the start sighted at the + 9 h 30 min
+  confirmation (+ 10 h 17 min) and published at + 11 h 17 min. A third
+  revision replaces the pending one; three replacements in a row raise
+  `unstable-source`.
 - A **superseded** revision is never applied again (D2.2).
 - **After settlement** (three confirmations from + 24 h on), a differing
   revision is sighted once and staged at its second sighting (D2.5). Under
@@ -170,7 +224,12 @@ observation - and whose season the closing ledger read finds neither held,
 durably blocked nor publication-blocked, the run writes the season's `SyncState` with its
 instant as `lastCompletedAt` (and the release it published, if any).
 `GET /v1/status` already serves it as `lastSuccessfulSyncAt`. Manual runs
-never beat. A failed write is one `warn` line and never fails the run. The
+never beat. A scheduled run that sent provider requests and observed nothing
+records `lastFailedAt` (not served publicly), and while that mark is newer
+than the last beat, a run that sent no request does not beat either: between
+races a failed calendar refresh is rescheduled six hours ahead, and the idle
+ticks in between must not hide the outage. The next successful observation
+beats and clears the mark. A failed write is one `warn` line and never fails the run. The
 value stops moving when the cron stops, when runs fail, when every check
 fails (Jolpica down or blocking GridView), and when the season needs an
 operator.
@@ -209,7 +268,8 @@ event) and fails on:
 - `heartbeat-stale`: `lastSuccessfulSyncAt` older than **3 hours** (three
   missed hourly runs), or missing;
 - `results-late`: the earliest event that is neither cancelled nor classified
-  started more than **12 hours** ago (after its + 9 h check);
+  started more than **12 hours** ago (after the window's last check, at
+  + 10 h 30 min, made at + 11 h 17 min);
 - an unreadable status, calendar or event.
 
 It needs no credential and can read nothing an app user could not. The
@@ -232,9 +292,13 @@ released:
    Durable Object classes behind their clients, the real limiter logic on the
    test clock, controlled Jolpica data, the scheduled handler at minute 17 of
    every hour, and **public GETs only** (the stage refuses an admin path). It
-   covers a new result, a late source, a pre-settlement correction, a
-   post-settlement correction, an outage, a lost commit answer, production
-   from genesis, and the request budget.
+   covers the first check at + 1 h 30 min; an on-time race, an unusually long
+   race, a delayed start and a result first served at the window's last check;
+   a late Jolpica publication found by the back-off; a result that never
+   appears (bounded checks, then none); a structurally incomplete page and a
+   short but self-consistent classification; a pre-settlement correction; a
+   post-settlement correction; an outage; a lost commit answer; production
+   from genesis; and the request budget with a missing result.
 2. **App** (`app-gate.test.ts` with `GRIDVIEW_E2E_APP=1`, locally): the
    Flutter data layer itself - `AppSyncCoordinator`, every repository, Drift
    and the production Dio client - launches against the same stage over HTTP
@@ -253,7 +317,8 @@ released:
 - **Volume.** At most 6 + the classified rounds per publication run (29 at
   season end), one run an hour, so at most 29 requests in any hour against
   500; one run's pace stays under 4/s, and the global limiter enforces both
-  windows for every caller. A tenfold cut in the limits would still leave
+  windows for every caller. The hourly window (D5) adds at most ten such runs
+  per race, still one an hour. A tenfold cut in the limits would still leave
   room.
 - **Caching.** GridView publishes snapshots; the app never calls Jolpica.
 - **Attribution and licence.** Unchanged: `data-sources-v2`, CC BY-NC-SA 4.0
@@ -268,6 +333,25 @@ released:
   publication of Jolpica data in production**. Recorded as an owner decision,
   not taken here.
 
+### D12. Product scope of the first Google Play release: race results only
+
+2.0.0 shows the **full weekend schedule** - every practice, sprint
+qualifying, sprint, qualifying and race session, with its time - and
+publishes and displays **race results only**.
+
+- The automatic path requests only the race classification
+  (`/{season}/{round}/results/`), and the batch fallback captures the same.
+  No free practice, qualifying, sprint qualifying or sprint result is
+  requested, reconciled, published or displayed.
+- Championship standings are Jolpica's standings, which count sprint points;
+  the sprint classification itself is not shown.
+- The app's results store can hold a sprint document, but nothing in 2.0.0
+  publishes one.
+- Results for free practice, qualifying, sprint qualifying and sprint are a
+  **future product update**. Each needs its own provider resource, curated
+  status vocabulary, polling plan, publication guard and gate. This ADR and
+  PR #86 deliver none of them.
+
 ## Consequences
 
 - No environment is automatic yet. Everything here is dormant until the
@@ -279,6 +363,13 @@ released:
 - Production logs exist for diagnosis, and contain nothing about app users.
 - O-5(a) means one rejected correction can freeze a season until an operator
   acts. The alert makes that visible; it does not make it automatic.
+- The race cadence has 25 slots instead of 17, and the ledger's check-index
+  and confirmation bounds follow. Schema version 1 is refined in place, as
+  ADR 0020 did before, because no ledger record exists in any environment:
+  the class has never been registered or bound.
+- A missing result costs up to ten hourly publication runs per race instead
+  of one at + 5 h; each is withheld before generation, so it costs requests,
+  not KV writes.
 
 ## Alternatives considered
 
@@ -295,8 +386,10 @@ released:
 
 ## References
 
-- ADR 0005 (amendment of 2026-10-19), 0015, 0018, 0019, 0020, 0021, 0022,
-  0023, 0024, 0025 (D12 and its 2026-10-20 amendment), 0026.
+- ADR 0005 (amendment of 2026-10-19), 0015, 0018, 0019, 0020 (C2 cadence,
+  amended by D5), 0021, 0022, 0023 (A2, curator decisions C-1 and C-9), 0024,
+  0025 (D12 and its 2026-10-20 amendment), 0026.
+- `docs/product/GridView_PRD.md` §9.3 (the first release's results scope).
 - `docs/release/automatic-updates.md` (gates AU-0 to AU-8, activation).
 - `docs/release/production-release-plan.md`, `submission-path-decision.md`.
 - Jolpica F1, *Terms of Use* (last updated 2025-08-27) and *Rate Limits*,

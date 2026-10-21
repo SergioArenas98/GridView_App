@@ -22,8 +22,12 @@ export const DEFAULT_THRESHOLDS = Object.freeze({
   /** Three missed hourly runs. */
   heartbeatMaxAgeHours: 3,
   /**
-   * The first check is at race start + 5 h and the second at + 9 h; this
-   * leaves the second check, and the hourly cron's lateness, room to land.
+   * The race is asked for hourly from race start + 1 h 30 min to + 10 h
+   * 30 min (ADR 0028 D5); this leaves the window's last check, made at
+   * + 11 h 17 min for a race at minute 00, room to land. Nothing asks again
+   * until + 15 h, so a result Jolpica serves after the window alerts here
+   * first and is published at the + 15 h 17 min check: an alert that clears
+   * itself, by design, rather than a later one that misses a stalled path.
    */
   resultsLateAfterHours: 12,
 });

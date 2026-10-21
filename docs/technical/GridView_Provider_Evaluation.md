@@ -2203,6 +2203,8 @@ Plus two scheduling keys, both persisted and both restart-safe: `lastSweptAt`
 
 ##### Cadence
 
+> **Amended 2026-10-21 by [ADR 0028](../adr/0028-automatic-end-to-end-season-updates.md) D5:** the dense +5/+9/+15/+24 h checks and the 17-check limit below are replaced by the first check at the first hourly tick at or after race start + 90 minutes, hourly checks through + 10 h 30 min while no result is accepted (or a change is pending), then + 15 h, + 24 h and daily to day 14 (25 checks). The settling predicate and the 14-day ceiling are unchanged.
+
 | Phase | Checks | Terminates at |
 |---|---|---|
 | **Dense** | +5, +9, +15, +24 hours from the Jolpica start anchor (§10.4) | Always after 4 checks |
