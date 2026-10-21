@@ -150,6 +150,15 @@ export interface Env extends TestOnlyBindings {
    * `PROVIDER_MODE=coordinated` and every other gated dependency.
    */
   RECONCILIATION_LEDGER?: DurableObjectNamespace;
+  /**
+   * `kv` makes a coordinated **staging** Worker's Jolpica transport answer
+   * from controlled documents in its own `GRIDVIEW_DATA` namespace instead of
+   * the network: the automatic-updates staging demonstration (ADR 0028 D10).
+   * **No committed environment sets it.** Any other value, and `kv` outside a
+   * coordinated staging Worker, is a configuration error, so production can
+   * never select it (`src/providers/controlled/source.ts`).
+   */
+  CONTROLLED_PROVIDER_SOURCE?: string;
 }
 
 /**

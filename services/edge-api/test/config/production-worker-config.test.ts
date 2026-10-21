@@ -156,12 +156,16 @@ describe('the resolved production configuration', () => {
     expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
   });
 
-  it('turns persisted Workers Logs off explicitly (D-L fail-safe)', () => {
-    // Cloudflare enables observability by default for new Workers, so an
-    // absent block would not turn it off.
-    expect(resolved('production').observability).toEqual({ enabled: false });
+  it('persists the Worker lines, never the invocation logs (ADR 0028 D8)', () => {
+    // Every sampled run of the automatic path is kept; invocation logs, the
+    // platform's per-request records, are never stored.
+    expect(resolved('production').observability).toEqual({
+      enabled: true,
+      head_sampling_rate: 1,
+      logs: { enabled: true, persist: true, invocation_logs: false },
+    });
     expect(rawConfig).toMatch(
-      /^\[env\.production\.observability\]\nenabled = false$/m,
+      /\[env\.production\.observability\]\nenabled = true\nhead_sampling_rate = 1\n\n\[env\.production\.observability\.logs\]\nenabled = true\npersist = true\ninvocation_logs = false/,
     );
   });
 

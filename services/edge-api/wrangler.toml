@@ -265,13 +265,25 @@ required = ["ADMIN_TOKEN"]
 [env.production.triggers]
 crons = []
 
-# Persisted Workers Logs off (release plan decision D-L, pending; this is the
-# fail-safe choice). Explicit, because Cloudflare enables observability by
-# default for new Workers. With it off, the Worker's own `request.completed`
-# lines are not stored, so the Data safety form needs no API row for them
-# (PR #82 `data-safety.md` §3.4 option (b)). `wrangler tail` still works and
-# stores nothing. Keeping the logs instead is D-L option (a): it needs
-# `enabled = true` with `invocation_logs = false`, as staging has, and the
-# App interactions declaration.
+# Persisted Workers Logs ON for the automatic path's observability (ADR 0028
+# D8, which resolves release plan decision D-L). Persisted lines carry no
+# personal data and no credential:
+# - `invocation_logs = false`: Cloudflare stores none of its own per-request
+#   records (request, response and their metadata);
+# - the Worker writes no line for a successful public request in production,
+#   and a failed one without its request ID (`src/logging/request-log.ts`);
+# - what remains is the scheduled automatic runs, the operator's admin
+#   requests and failures, in the closed `LogEvent` vocabulary, whose
+#   credential keys are redacted wherever they appear.
+# So app traffic is not stored, and the Data safety form needs no API row for
+# it (PR #82 `data-safety.md` section 3.4, option (b)'s effect). The first
+# production deploy confirms it (`docs/release/automatic-updates.md`, gate
+# AU-7). Retention is Cloudflare's: 7 days on Workers Paid.
 [env.production.observability]
-enabled = false
+enabled = true
+head_sampling_rate = 1
+
+[env.production.observability.logs]
+enabled = true
+persist = true
+invocation_logs = false

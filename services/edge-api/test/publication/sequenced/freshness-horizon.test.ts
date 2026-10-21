@@ -224,10 +224,12 @@ describe('the calendar horizon of a release', () => {
 });
 
 describe('the policy a Worker stamps with', () => {
-  it('is the calendar horizon only when no provider republishes automatically', () => {
+  it('is the calendar horizon unless a provider republishes on every run', () => {
     expect(freshnessPolicyFor('none')).toBe('calendar-horizon');
+    // The coordinated runtime publishes only changed content (O-12), so a
+    // fixed interval would call unchanged data stale between releases.
+    expect(freshnessPolicyFor('coordinated')).toBe('calendar-horizon');
     expect(freshnessPolicyFor('mock')).toBe('interval');
-    expect(freshnessPolicyFor('coordinated')).toBe('interval');
   });
 });
 

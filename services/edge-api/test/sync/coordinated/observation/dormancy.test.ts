@@ -78,6 +78,7 @@ describe('the observation orchestration is wired through one entry, unbound', ()
       'storage/types.ts',
       'sync/coordinated/classification-revision.ts',
       'sync/coordinated/composition.ts',
+      'sync/coordinated/heartbeat.ts',
       'sync/coordinated/ledger/model.ts',
       'sync/coordinated/operator/attention.ts',
       'sync/coordinated/outcome/index.ts',

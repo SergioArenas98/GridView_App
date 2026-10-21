@@ -274,6 +274,40 @@ const inspection = 'GET /internal/admin/reconciliation?season=2026';
  * while no ledger is resolved, so that reason and the body carrying it are
  * dropped. Every other step is kept as it is.
  */
+/**
+ * The recorded baseline as amended by ADR 0028 D8 (2026-10-21), the one
+ * deliberate change to these modes since it was recorded: in production, a
+ * public request writes no `request.completed` line, and a failed one keeps
+ * its `request.failed` line without the request ID. Every other line,
+ * environment and step is the recording, unchanged.
+ */
+export function asAmendedByAdr0028(
+  recorded: Record<string, StepTrace[]>,
+): Record<string, StepTrace[]> {
+  return Object.fromEntries(
+    Object.entries(recorded).map(([key, steps]) => [
+      key,
+      key.startsWith('production/')
+        ? steps.map((step) =>
+            step.step.startsWith('GET /v1/')
+              ? {
+                  ...step,
+                  logs: step.logs
+                    .filter((line) => line.operation !== 'request.completed')
+                    .map((line) => {
+                      if (line.operation !== 'request.failed') return line;
+                      const operational = { ...line };
+                      delete operational.requestId;
+                      return operational;
+                    }),
+                }
+              : step,
+          )
+        : steps,
+    ]),
+  );
+}
+
 export function withoutInspectionReasons(
   trace: Record<string, StepTrace[]>,
 ): Record<string, StepTrace[]> {

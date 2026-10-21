@@ -46,6 +46,9 @@
  *    `nothing-due` and a refused composition with a ledger still bound, so a
  *    stopped season never goes quiet. Without a ledger there is nothing to
  *    read. A manual run writes none: its operator is already looking.
+ * 10. When that scheduled run's line was quiet and the read found the season
+ *    not stopped, record the heartbeat `GET /v1/status` serves as
+ *    `lastSuccessfulSyncAt` (`../heartbeat.ts`; ADR 0028 D7).
  *
  * Before planning, a `publishing` slot a previous run left behind is resolved
  * against the authority (`../outcome/recovery.ts`), so a release whose
@@ -76,6 +79,7 @@ import {
   type CoordinatedRuntimeDependencies,
   type CoordinatedUnavailableReason,
 } from '../composition';
+import { recordHeartbeat } from '../heartbeat';
 import { signalAttention } from '../operator/attention';
 import {
   startRunBudget,
@@ -246,11 +250,21 @@ export async function observeCoordinatedSeason(
   // Step 9, against whichever ledger is bound, even when another dependency
   // is missing: a degraded runtime must not silence a stopped season.
   if (request.trigger === 'scheduled' && dependencies.ledger !== null) {
-    await signalAttention(
+    const reading = await signalAttention(
       dependencies.ledger,
       request.season,
       dependencies.logger,
     );
+    // Step 10: only a healthy scheduled run beats.
+    if (reading !== null && !reading.stopped && quietRun(outcome)) {
+      await recordHeartbeat({
+        storage: dependencies.storage,
+        season: request.season,
+        at: dependencies.clock.now(),
+        publishedVersion: publishedVersion(outcome),
+        logger: dependencies.logger,
+      });
+    }
   }
   return outcome;
 }
@@ -295,6 +309,7 @@ async function runUnderComposition(
       dependencies,
       runtime,
       acquired.lease,
+      acquired.snapshot,
       budget,
     );
   } catch (error) {
@@ -314,6 +329,7 @@ async function underLease(
   dependencies: CoordinatedObservationDependencies,
   runtime: CoordinatedRuntime,
   grant: LeaseGrant,
+  leased: LedgerSnapshot,
   budget: RunBudget,
 ): Promise<HeldOutcome> {
   const lease: LeaseToken = { season: grant.season, fence: grant.fence };
@@ -326,20 +342,27 @@ async function underLease(
   if (published.kind === 'refused') {
     return failure('authority', published.reason, null, 0);
   }
-  const reconciled = await runtime.ledger.reconcilePublishedRevisions({
-    lease,
-    activeVersion: published.activeVersion,
-    revisions: published.revisions,
-  });
-  if (reconciled.outcome !== 'reconciled') {
-    return ledgerFailure('reconciliation', reconciled, 0);
+  let reconciledSnapshot = leased;
+  if (published.activeVersion !== null) {
+    const reconciled = await runtime.ledger.reconcilePublishedRevisions({
+      lease,
+      activeVersion: published.activeVersion,
+      revisions: published.revisions,
+    });
+    if (reconciled.outcome !== 'reconciled') {
+      return ledgerFailure('reconciliation', reconciled, 0);
+    }
+    reconciledSnapshot = reconciled.snapshot;
   }
+  // Otherwise the season is `genesis`: no release has ever committed, so no
+  // record can cache a published revision and there is nothing to reconcile.
+  // The run plans from the snapshot its lease read.
 
   const recovered = await recover(
     dependencies,
     runtime,
     lease,
-    reconciled.snapshot,
+    reconciledSnapshot,
     published.activeVersion,
   );
   if (recovered.kind === 'failed') return recovered.failure;
@@ -371,7 +394,7 @@ async function recover(
   runtime: CoordinatedRuntime,
   lease: LeaseToken,
   snapshot: LedgerSnapshot,
-  activeVersion: string,
+  activeVersion: string | null,
 ): Promise<
   | { readonly kind: 'ready'; readonly snapshot: LedgerSnapshot }
   | { readonly kind: 'failed'; readonly failure: Omit<Failure, 'leaseRelease'> }
@@ -625,16 +648,34 @@ async function release(
  * quiet; a block, a durable block, a stop, a refusal, an unknown commit and
  * every failure warn - including a manual run a stop refused.
  */
-function logged(
-  logger: Logger,
+/** The release the run published, or `null` when it published none. */
+function publishedVersion(
   outcome: CoordinatedObservationOutcome,
-): CoordinatedObservationOutcome {
+): string | null {
+  const settled = settledPublication(outcome);
+  return settled?.outcome === 'published' ? settled.releaseVersion : null;
+}
+
+/** What the run settled in its publication half, if it reached one. */
+function settledPublication(
+  outcome: CoordinatedObservationOutcome,
+): PublicationRunResult | null {
   const publication =
     outcome.status === 'observed' || outcome.status === 'failed'
       ? (outcome.publication ?? null)
       : null;
-  const settled = publication === 'not-attempted' ? null : publication;
-  const quiet =
+  return publication === 'not-attempted' ? null : publication;
+}
+
+/**
+ * Whether a run's line is `info`: nothing was due (and nothing stopped it),
+ * or it observed and settled without a refusal, a block or a stop. Every
+ * other run - failed, in progress, unavailable, stopped, blocked, not
+ * applied - writes `warn`.
+ */
+function quietRun(outcome: CoordinatedObservationOutcome): boolean {
+  const settled = settledPublication(outcome);
+  return (
     (outcome.status === 'nothing-due' &&
       outcome.reason !== 'publication-stopped') ||
     (outcome.status === 'observed' &&
@@ -643,7 +684,16 @@ function logged(
           settled.next !== 'blocked' &&
           settled.next !== 'durably-blocked' &&
           settled.next !== 'stopped' &&
-          settled.next !== 'resolve')));
+          settled.next !== 'resolve')))
+  );
+}
+
+function logged(
+  logger: Logger,
+  outcome: CoordinatedObservationOutcome,
+): CoordinatedObservationOutcome {
+  const settled = settledPublication(outcome);
+  const quiet = quietRun(outcome);
   const event = {
     operation: COORDINATED_OBSERVATION_OPERATION,
     season: outcome.season,

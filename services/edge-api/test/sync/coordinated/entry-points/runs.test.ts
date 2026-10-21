@@ -205,6 +205,7 @@ describe.each(sequencerTransports)(
           reservations: 0,
           prepares: 0,
           storageWrites: 0,
+          heartbeats: 0,
           ledgerCalls: [],
         });
         expect(compose).not.toHaveBeenCalled();
@@ -243,6 +244,8 @@ describe.each(sequencerTransports)(
           reservations: 1,
           prepares: 0,
           storageWrites: 0,
+          // The heartbeat: a healthy scheduled run (ADR 0028 D7).
+          heartbeats: 1,
           mockProviderCalls: 0,
         });
         expect((await harness.season()).calendarAnchors).not.toBeNull();
@@ -272,6 +275,7 @@ describe.each(sequencerTransports)(
           reservations: 0,
           prepares: 0,
           storageWrites: 0,
+          heartbeats: 1,
         });
         expect(idle.ledgerCalls).toEqual([
           'acquireLease',

@@ -24,6 +24,7 @@ import { observeCoordinatedSeason } from '../../../../src/sync/coordinated/obser
 import { runCoordinatedSync } from '../../../../src/sync/coordinated/run';
 import { sequencerTransports } from '../../../publication/sequenced/support';
 import {
+  asAmendedByAdr0028,
   wholeSeasonTrace,
   withoutInspectionReasons,
   type StepTrace,
@@ -324,7 +325,7 @@ describe('mock and none with a ledger bound', () => {
     // carrying it are the one expected difference. Everything else - every
     // sync, admin and public step - is the baseline, byte for byte.
     expect(withoutInspectionReasons(trace)).toEqual(
-      withoutInspectionReasons(recorded),
+      withoutInspectionReasons(asAmendedByAdr0028(recorded)),
     );
     expect(ledger.calls).toEqual([]);
     // `development/coordinated` is refused as a configuration error, so no
