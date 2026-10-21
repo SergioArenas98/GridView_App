@@ -1,6 +1,6 @@
 # GridView Privacy Policy
 
-Last updated: 20 October 2026
+Last updated: 21 October 2026
 
 This policy explains what information the GridView Android application
 ("GridView", "the app") processes, why, for how long, and what choices you
@@ -15,8 +15,9 @@ have. It covers **every version** of GridView:
 
 GridView is an unofficial Formula 1 companion app. It is published on Google
 Play under the developer name **Sejuma** by **Sergio Arenas del Amo**, an
-individual developer based in **Spain**, who is the data controller for the
-processing described here.
+individual developer based in **Ireland**, who is the data controller for the
+processing described here. Sejuma is the name he publishes under, not a
+registered business.
 
 Contact: **gridviewapp1@gmail.com**
 
@@ -200,8 +201,10 @@ We may also disclose information if the law requires it.
   processing. Write to gridviewapp1@gmail.com. Because GridView does not know
   who you are, we may need your help to find the information concerned (for
   example, the approximate date and time of a crash).
-- **Complaints**: you can complain to a data protection authority. In Spain,
-  this is the Agencia Española de Protección de Datos (https://www.aepd.es).
+- **Complaints**: you can complain to a data protection authority, in
+  particular in the country where you live or work, or where you believe your
+  rights were infringed. GridView's controller is based in Ireland, where the
+  authority is the Data Protection Commission (https://www.dataprotection.ie).
 
 ## 7. Children
 

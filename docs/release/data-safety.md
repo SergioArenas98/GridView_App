@@ -8,6 +8,8 @@ classifying data for Play is a legal judgement, not an engineering one.
 
 Prepared 2026-10-20 at `6aefcbf`. The transition sections (§1, §1.1-§1.4 and
 §3.5) and the controller check (§6) were added the same day, before merge.
+On 2026-10-21 the owner's controller and contact decisions were recorded
+(§6), and §3.6 was added on ads that installed 1.x copies keep requesting.
 
 ## 1. Why the current declaration must change
 
@@ -121,7 +123,7 @@ or publishing step.
 |---|---|---|
 | Does your app collect or share any of the required user data types? | **Yes** | Firebase collects the types in §3.2 |
 | Is all of the user data collected by your app encrypted in transit? | **Yes** | Firebase sends over HTTPS; the GridView API is HTTPS-only and cleartext is blocked by the platform |
-| Do you provide a way for users to request that their data is deleted? | **Yes, by email**, once R3 is confirmed | The policy offers deletion requests at gridviewapp1@gmail.com; see R3 |
+| Do you provide a way for users to request that their data is deleted? | **Open (R3).** Do not answer until a workable way to identify and delete one installation's Firebase data is verified | The policy offers deletion requests at gridviewapp1@gmail.com, a mailbox the owner confirmed he uses (§6). No identification and deletion procedure has been verified yet; see R3 |
 
 ### 3.2 Data types
 
@@ -239,17 +241,77 @@ State T adds these rows to §3.2:
   disclosure for its current SDK only, so the review should confirm that it
   applies (R5).
 
+### 3.6 Ads that installed 1.x copies keep requesting
+
+Stopping **distribution** of 1.x on Play does not stop **installed** 1.x
+copies from requesting ads. These Play steps change only what Play serves to
+new installs and updates:
+
+- pausing the Alpha track;
+- not retaining versionCode 7 in the 2.0.0 release;
+- unpublishing the app.
+
+**What the code shows.** Evidence: the imported 1.x tree (`f8a0ad4`, read as
+`git show 7524998^:<path>`). Its `pubspec.lock` pins `google_mobile_ads`
+7.0.0.
+
+- `lib/main.dart` calls `MobileAds.instance.initialize()` on every launch,
+  before the first frame, with no condition.
+- `lib/pages/splash_page.dart` then loads the data and the ads in sequence.
+  `GrandPrixProvider.fetchGrandsPrix()` catches every error, so the dead
+  Railway server does **not** stop the next steps. Every cold start requests
+  the standings banner, then the six other banners in the background.
+  `lib/services/ad_provider.dart` holds the seven ad unit IDs, hard-coded.
+- Each request is a plain `AdRequest()`. There is no `RequestConfiguration`
+  and no consent code.
+- There is no remote switch: no Remote Config, no server flag (the only
+  server is shut down), and no in-app update prompt.
+
+**Limit of this evidence.** The import is labelled "sanitized", and it is
+not proven to be the uploaded bundle. Play reports target SDK 35 for
+versionCode 7, while the imported `android/app/build.gradle` says 36.
+Downloading versionCodes 7 and 2 from the App bundle explorer would settle
+it (§1.4 step 0). That is a read-only Play Console step, and it was not done
+here.
+
+**Consequence.** Nothing GridView controls, in the app or on a server, can
+switch the ads off in an installed 1.x copy. Ad requests from a device end
+only when it updates to 2.0.0 or the app is uninstalled. Devices on API 21
+to 23 cannot update (2.0.0 has minSdk 24), so they keep requesting until the
+app is uninstalled.
+
+**What would stop ad serving** (owner decision **D-A**, not taken; no AdMob
+change was made):
+
+- **Archive (remove) the 1.x ad units in AdMob.** Google's AdMob blog,
+  *Archiving ad units* (2017-01-12), says "all ad serving and settings
+  associated with the ad unit will be disabled". It is permanent, and Google
+  recommends it for "legacy apps" that cannot be updated. The current AdMob
+  interface may call it "remove", so check the current help before acting.
+- **Before archiving**, check in AdMob (read-only) that these units belong
+  only to GridView 1.x and that no other app uses them.
+- **Effect:** banners stop showing, and 1.x ad revenue ends. 2.0.0 contains
+  no ads code, so it is not affected.
+- **What it does not do:** the SDK still initializes and still sends
+  requests. The sources read do not say whether requests for an archived
+  unit still reach Google, or what they carry. Archiving limits ad serving.
+  It does not end data flow to Google; only the update or uninstall does.
+
+The Ads declaration still follows distribution, not serving. State F (Ads
+**No**) waits until no 1.x artifact is distributed (§1.3), whether or not
+the units are archived.
+
 ## 4. Review items for the privacy review
 
 | # | Question | Engineering recommendation |
 |---|---|---|
 | R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | Declare it. Country-level location is coarser than Play's 3 km² threshold, so declaring is the conservative reading. Over-declaring is not a policy violation; under-declaring is. |
 | R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | Yes, but only once the production logging condition in §3.4 is committed (PR #83, W1) and verified on the deployed Worker (W3). Until then, do not submit the form. |
-| R3 | Deletion-request answer | **"Yes", but only after the owner confirms the requests can be fulfilled.** The policy offers deletion requests at gridviewapp1@gmail.com, and Play's guidance prescribes no mechanism and accepts a dedicated email address. "No" would contradict the policy. GridView has no accounts, so Play's separate account-deletion requirement does not apply. To fulfil a request, the owner needs a way to locate the data (for example from the date and time of a crash, as the policy asks) and remove it in Firebase; otherwise it expires after 90, 60 or 30 days. If fulfilment cannot be committed to, remove the deletion promise from the policy instead of answering "No" while the policy says otherwise. |
+| R3 | Deletion-request answer | **Open.** The owner confirmed on 2026-10-20 that he uses gridviewapp1@gmail.com, so requests can be received. That does not show they can be fulfilled. Play's guidance prescribes no mechanism and accepts a dedicated email address. GridView has no accounts, so Play's separate account-deletion requirement does not apply. **Identification:** the app shows the user no installation ID and sets no Crashlytics user identifier (`lib/core/observability/firebase/firebase_observability.dart` only enables collection). A user can offer only a crash's approximate time and device model. **Deletion:** no Firebase console or API procedure for deleting one installation's Crashlytics and Performance data has been verified. Until one is, data expires only after 90, 60 or 30 days (§2). Answer "Yes" once a procedure is verified on the real project. If none works, change the policy's deletion wording (section 6, including "or until they are deleted at your request") before it is published (P2), instead of answering "No" while the policy says otherwise. |
 | R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
 | R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to the SDK version 1.2.1 resolved. |
-| R6 | 1.x requested ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits it. |
-| R7 | Controller identity (§6) | The policy now names the natural person shown on the Play listing. Confirm, or replace with a registered business name and address if one exists. |
+| R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). Archiving the 1.x ad units in AdMob (decision D-A, §3.6) would stop ads being served to them, but not the SDK's requests. |
+| R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. Two follow-ups remain: the Play listing still says Spain (§6.2), and the review decides whether email alone is enough (§6.1). |
 | R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted `request.completed` route logs (§3.4), if kept? | Declare the Sessions data: it is usage data about the app coming to the foreground, and over-declaring is not a violation. For the API logs, choose (a) keep and declare them with the App functionality purpose, or (b) turn them off in production (§3.4). |
 
 ## 5. Related store items
@@ -262,21 +324,51 @@ State T adds these rows to §3.2:
   to **No** only in state F (§1.3).
 - **App access, content rating, target audience**: unchanged by this release.
 
-## 6. Controller identity and country (verified 2026-10-20)
+## 6. Controller identity and country
+
+**Owner decision, 2026-10-20.** The controller is **Sergio Arenas del Amo**,
+acting as an individual from **Ireland**. No registered business stands
+behind "Sejuma", which is only the developer name on Play. The privacy
+contact is **gridviewapp1@gmail.com**, which the owner confirmed he uses and
+can access. The policy's section 1 and its complaints item (section 6) now
+say this.
+
+Sources read before the decision:
 
 | Source | Name | Country | Contact |
 |---|---|---|---|
 | Public Play listing, "About the developer" (`play.google.com/store/apps/details?id=com.sejuma.gridview`, read 2026-10-20) | **Sergio Arenas del Amo**; developer name **Sejuma** | **Spain** | gridviewapp1@gmail.com |
 | Play Console (read 2026-10-20, earlier session) | developer account "Sejuma" | - | - |
 | Live policy, last updated 2025-02-19 | "GridView" (the "Company"), no legal name | Spain | gridviewapp1@gmail.com |
-| This PR's first draft | "the developer account Sejuma ... Sejuma is the data controller" | Spain | gridviewapp1@gmail.com |
+| This PR before 2026-10-21 | Sergio Arenas del Amo, publishing as Sejuma | Spain | gridviewapp1@gmail.com |
 
-- **Country and contact:** Spain and gridviewapp1@gmail.com agree in every
-  source.
-- **Identity:** "Sejuma" is the account's display name, not a legal person, so
-  naming it as controller was imprecise. Play already shows the individual's
-  legal name publicly, so the policy now names him as controller, publishing
-  as Sejuma (R7).
-- The same listing still shows **"Contains ads"**, Data safety **"No data
-  collected / No data shared"**, "Updated on Apr 19, 2025", and the policy link
-  https://gridview.netlify.app.
+The same listing still shows **"Contains ads"**, Data safety **"No data
+collected / No data shared"**, "Updated on Apr 19, 2025", and the policy link
+https://gridview.netlify.app.
+
+### 6.1 Do the contact details meet the privacy-notice requirements?
+
+Checked against GDPR Article 13 and the Article 29 Working Party's
+*Guidelines on transparency* (WP260 rev.01, endorsed by the EDPB), Annex,
+page 35. **No home address is assumed to be publishable.**
+
+| Requirement | What the policy gives | Assessment |
+|---|---|---|
+| Art. 13(1)(a): "the identity and the contact details of the controller" | Full legal name, the developer name, the country and an email address | **Met.** Article 13 does not require a postal address, and email is a contact detail. |
+| WP260 Annex on Art. 13(1)(a): the information "should allow for easy identification of the controller and preferably allow for different forms of communications with the data controller (e.g. phone number, email, postal address, etc.)" | One channel: email | **Meets the requirement, not the recommendation.** "Preferably" is guidance. Whether one channel is enough is for the privacy review. A second channel, if wanted, should **not** be the home address; a correspondence or mail-forwarding address would do. That is an owner decision, and nothing here assumes one. |
+| Art. 13(1)(a): the representative | None | **Not applicable.** Article 27 applies only to controllers not established in the EU. |
+| Art. 13(1)(b): the data protection officer | None | Applies only where a DPO is designated. None is. |
+| Art. 12(2) and (3): facilitate the exercise of rights; answer within one month | A mailbox the owner uses | **Met for receiving requests**, given the owner's confirmation. Fulfilling a deletion request is still open (R3). |
+| Art. 13(2)(d) with Art. 77: the right to complain, "in particular in the Member State of his or her habitual residence, place of work or of an alleged infringement" (WP260 Annex) | That wording, and the Irish Data Protection Commission as the controller's authority | **Met.** The policy no longer names only the Spanish AEPD. |
+
+**Not assessed here:** information duties outside the privacy notice, such
+as the e-commerce rules on a service provider's "geographic address". They
+are for the privacy review.
+
+### 6.2 Inconsistencies left for owner steps
+
+- **The Play listing says Spain**, and the policy now says Ireland. Changing
+  the developer account's country or address is a Play Console step. It was
+  not done, and it was not authorised.
+- **The live policy** (2025-02-19) still says Spain until P2 publishes this
+  version.
