@@ -50,7 +50,8 @@ The race-result polling plan (ADR 0028 D5):
    result is then abandoned and flagged.
 4. **Accepted result:** confirmed only at + 5 h 30 min and + 9 h 30 min, then
    the back-off. It settles at + 24 h at the earliest (three confirmations).
-5. **First result seen twice (AU-D5, proposed, not yet accepted):** inside
+5. **First result seen twice (AU-D5, accepted by the owner for 2.0.0 on
+   2026-10-21, with its limitation; §9):** inside
    the window, the check that first finds a result holds it pending, and the
    next successful check (normally the next hourly tick) publishes it only if
    it returns the same result. From the window's last check on, a first result is published at
@@ -373,12 +374,18 @@ Then:
    no capture or submission.
 4. **[approval] Monitor:** schedule it for production (AU-5 for production).
 
-## 9. Open owner decisions
+## 9. Owner decisions
 
-| # | Decision | Recommendation |
+On 2026-10-21 the owner explicitly accepted **AU-D1** and **AU-D5** for
+version 2.0.0, including their documented limitations (ADR 0028 D13).
+AU-D2, AU-D3 and AU-D4 remain open. Accepting a decision authorises no merge,
+purchase, provisioning, deployment or activation; those stay the separately
+authorised steps of §7 and §8.
+
+| # | Decision | Status / recommendation |
 |---|---|---|
-| AU-D1 | O-5(a): a staged correction withholds the whole season until an operator acts | Keep for 2.0.0, with the 3 h heartbeat alert. O-5(b) (per-round carry-over) is a later design change |
+| AU-D1 | O-5(a): a staged correction withholds the whole season until an operator acts | **Accepted by the owner for 2.0.0 on 2026-10-21, with its limitation:** keep O-5(a), with the 3 h heartbeat alert; a staged correction holds every later change, a new race result included, until an operator disposes of it. O-5(b) (per-round carry-over) is a later design change |
 | AU-D2 | D-A, archive the 1.x AdMob units, before Jolpica data is published automatically in production (ADR 0028 D11) | Yes, before AU-7 |
 | AU-D3 | Privacy wording for production Worker logs (PR #82, still open; D-L engineering resolved by ADR 0028 D8) | Say that Worker logs store no app-user data and are kept 7 days |
 | AU-D4 | The alert channel: GitHub e-mail (committed) or an additional Cloudflare custom alert (beta, webhook) | GitHub e-mail first; revisit when the beta ends |
-| AU-D5 | A short but self-consistent race classification cannot be told from a complete one (curator decision C-1), and the API serves it as `final`. Options: keep publishing a first result at once (documented limitation); publish it as `provisional` and confirm it later (a contract change: the revision hashes `status`, and `provisional` means the provisional source); or see it twice before the first publication | **Proposed product decision, not yet accepted by the owner** (implemented on PR #86): see a first result twice inside the window (§2 item 5, ADR 0028 D5 item 5). One hour of latency, no contract, API or app change. **Limitation:** Two matching observations reduce the risk of publishing a transient short classification; they do not prove that a classification is complete, and a short result Jolpica serves unchanged for an hour or more may still appear as "Final" until it is corrected. (§3). A field-size completeness rule stays out: it can wrongly withhold a legitimately smaller field |
+| AU-D5 | A short but self-consistent race classification cannot be told from a complete one (curator decision C-1), and the API serves it as `final`. Options: keep publishing a first result at once (documented limitation); publish it as `provisional` and confirm it later (a contract change: the revision hashes `status`, and `provisional` means the provisional source); or see it twice before the first publication | **Accepted by the owner for 2.0.0 on 2026-10-21, with the limitation below** (implemented on PR #86): see a first result twice inside the window (§2 item 5, ADR 0028 D5 item 5). One hour of latency, no contract, API or app change. **Limitation:** Two matching observations reduce the risk of publishing a transient short classification; they do not prove that a classification is complete, and a short result Jolpica serves unchanged for an hour or more may still appear as "Final" until it is corrected (§3). A field-size completeness rule stays out: it can wrongly withhold a legitimately smaller field |

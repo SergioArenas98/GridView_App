@@ -152,9 +152,10 @@ replaces ADR 0020 C2's dense checks at race start + 5 h, + 9 h, + 15 h and
    checks: + 5 h 30 min and + 9 h 30 min inside the window, then the back-off.
    It is not re-read hourly. Settlement is unchanged: three confirmations,
    never before + 24 h.
-5. **A first result is seen twice before it is published.** **Proposed
-   product decision AU-D5 (2026-10-21), not yet accepted by the owner;** the
-   code on PR #86 implements it. Its limitation: two matching observations
+5. **A first result is seen twice before it is published.** **Product
+   decision AU-D5, accepted by the owner for 2.0.0 on 2026-10-21 together
+   with the limitation below (D13);** the code on PR #86 implements it. Its
+   limitation: two matching observations
    reduce the risk of publishing a transient short classification; they do
    not prove that a classification is complete, and a short result Jolpica
    serves unchanged for an hour or more may still appear as "Final" until it
@@ -392,6 +393,29 @@ publishes and displays **race results only**.
   status vocabulary, polling plan, publication guard and gate. This ADR and
   PR #86 deliver none of them.
 
+### D13. Owner acceptance of AU-D1 and AU-D5 (2026-10-21)
+
+On 2026-10-21 the owner explicitly accepted AU-D1 and AU-D5
+(`docs/release/automatic-updates.md` §9) for version 2.0.0, including their
+documented limitations:
+
+- **AU-D1, O-5(a).** A staged correction withholds the whole season until an
+  operator verifies and disposes of it (D6); even a new race result waits.
+  The heartbeat stops and the monitor alerts (D7, D9); nothing releases the
+  season automatically. O-5(b), per-round carry-over, stays a later design
+  change.
+- **AU-D5, a first result seen twice (D5 item 5).** Two matching
+  observations reduce the risk of publishing a transient short
+  classification; they do not prove that a classification is complete, and
+  a short result Jolpica serves unchanged for an hour or more may still
+  appear as "Final" until it is corrected. A first result inside the window
+  appears about an hour later than it would without the rule (+ 3 h 17 min
+  instead of + 2 h 17 min for a race starting on the hour).
+
+This records product decisions only. It authorises no merge, purchase,
+provisioning, deployment or activation; each stays a separately authorised
+step (`automatic-updates.md` §7, §8). AU-D2, AU-D3 and AU-D4 remain open.
+
 ## Consequences
 
 - No environment is automatic yet. Everything here is dormant until the
@@ -402,7 +426,8 @@ publishes and displays **race results only**.
   and its ETag changes hourly while healthy.
 - Production logs exist for diagnosis, and contain nothing about app users.
 - O-5(a) means one rejected correction can freeze a season until an operator
-  acts. The alert makes that visible; it does not make it automatic.
+  acts. The alert makes that visible; it does not make it automatic. The
+  owner accepted this for 2.0.0 (AU-D1, D13).
 - The race cadence has 25 slots instead of 17, and the ledger's check-index
   and confirmation bounds follow. Schema version 1 is refined in place, as
   ADR 0020 did before, because no ledger record exists in any environment:

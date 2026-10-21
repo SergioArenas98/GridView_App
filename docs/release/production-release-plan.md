@@ -743,4 +743,5 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | P-R | Privacy review of PR #82 `data-safety.md` review items R1–R8 (not the R-track gates) | P0 |
 | M | Ship 2.0.0 with placeholder media (no R2, no approved media) | R5 |
 | O | **Changed 2026-10-21:** nobody runs D1/D3 each race weekend (automatic). Who answers alerts and staged corrections (ADR 0028 D6, D9), and the 2027 dataset work | R5 |
-| AU-D1…AU-D5 | O-5(a) season freeze on a staged correction; D-A before AU-7; privacy wording for Worker logs; alert channel; accepting or rejecting the proposed see-twice rule for a first race result, implemented on PR #86, which does not prove completeness (`automatic-updates.md` §9) | AU-7 |
+| AU-D1, AU-D5 | **Accepted by the owner for 2.0.0 on 2026-10-21, including their documented limitations** (ADR 0028 D13; `automatic-updates.md` §9): AU-D1, O-5(a), a staged correction freezes the season until an operator acts; AU-D5, a first race result inside the window is seen twice before it is published, which reduces but does not remove the risk of a short classification shown as "Final". The acceptance authorises no merge, purchase, provisioning, deployment or activation | — |
+| AU-D2…AU-D4 | D-A before AU-7; privacy wording for Worker logs; alert channel (`automatic-updates.md` §9) | AU-7 |

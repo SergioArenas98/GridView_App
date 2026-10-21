@@ -3512,7 +3512,7 @@ was re-read read-only (staging runbook §2).
 | Gate AU-3 | `test/e2e/automatic-updates/`: `gate.test.ts` (16, in CI: the + 90 min start, on-time, long, delayed and last-window results, late publication and back-off, a never-published result, an incomplete page, a short self-consistent result, pre- and post-settlement corrections, outage, lost commit, genesis, budget with a missing result), `controlled-source.test.ts` (8), `app-gate.test.ts` with the Flutter data layer over HTTP (`test/e2e/automatic_update_app_gate_test.dart`, opt-in), `controlled-source-export.test.ts` (opt-in). |
 | Negative controls | Interval policy back: 2 failing; genesis refused: 9; no heartbeat: 8; production success line kept: 3; free-text request ID adopted: 6; all-failed run beats: 2; app gate without the correction: fails. Polling: planner ignoring the slot set (hourly for accepted results): 8; a pending change not re-entering hourly checks: 11; first check back at + 5 h: 35 (policy, observation and gate suites). Each restored byte for byte (SHA-256 checked). |
 | Review | Code-reviewer pass: no CRITICAL/HIGH. Two MEDIUM (beat on an all-failed run; unauthenticated internal path text in production logs) and three LOW fixed in the follow-up commit "fix: address review findings on the automatic path". |
-| Still open | AU-1 to AU-8 (`docs/release/automatic-updates.md` §7), each separately authorized; AU-D1 to AU-D5. |
+| Still open | AU-1 to AU-8 (`docs/release/automatic-updates.md` §7), each separately authorized; AU-D2 to AU-D4. AU-D1 and AU-D5 were accepted by the owner for 2.0.0 on 2026-10-21, with their limitations (ADR 0028 D13). |
 
 ## 14.1 Objective
 
