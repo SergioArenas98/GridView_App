@@ -151,9 +151,13 @@ describe.skipIf(!enabled)(
         await stage.tick(later(PRE_SEASON, HOUR));
 
         const server = createServer((request, response) => {
-          handle(stage, request, response).catch((error: unknown) => {
-            response.writeHead(500);
-            response.end(String(error));
+          handle(stage, request, response).catch(() => {
+            if (response.headersSent) {
+              response.destroy();
+              return;
+            }
+            response.writeHead(500, { 'Content-Type': 'application/json' });
+            response.end('{"error":"internal"}');
           });
         });
         await new Promise<void>((resolve) =>
