@@ -2,10 +2,11 @@ name: gridview
 description: "GridView - a Formula 1 season companion for Android."
 publish_to: "none"
 
-# Google Play identity: versionName 1.2.1, versionCode 7.
-# Do not change without confirming the highest published versionCode in
-# Play Console first (docs/release/play-store-baseline.md).
-version: 1.2.1+7
+# Google Play identity. The highest versionCode registered in Play Console is
+# 7 (legacy 1.2.1, confirmed 2026-10-20), so the reconstruction ships as
+# 2.0.0 with versionCode 8. Confirm again in Play Console before any later
+# change (docs/release/play-store-baseline.md).
+version: 2.0.0+8
 
 environment:
   sdk: ^3.12.0
