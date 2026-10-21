@@ -27,9 +27,9 @@ Steps marked **[PR]** are reviewable repository changes.
 |---|---|---|
 | W0 | **[done]** Production genesis design and implementation (ADR 0025 O-16 amendment), PR #84, merged 2026-10-20 as `527444b` | — |
 | W-P | **[decided 2026-10-20: A, Workers Paid]** The submission path (`submission-path-decision.md`). Buying the plan is a separate owner step | W0 |
-| W1 | **[PR]** The production Worker configuration, plus whatever W-P requires | W0, W-P |
-| W2 | **[approval]** Create the production KV namespace and `ADMIN_TOKEN` secret; **[PR]** commit the KV id | W1 |
-| W3 | **[approval]** Deploy `gridview-api-production` | W2 |
+| W1 | **[PR]** The production Worker configuration, plus whatever W-P requires: **PR #85**, without the KV binding | W0, W-P |
+| W2 | **[approval]** Create the production KV namespace and a new `ADMIN_TOKEN` value (not uploaded yet); **[PR]** commit the KV id | W1 |
+| W3 | **[approval]** First deploy of `gridview-api-production`, supplying `ADMIN_TOKEN` with `--secrets-file` | W2 |
 | D1 | **[approval]** Capture and review the season-2026 batch | W3 |
 | D2 | **[approval]** Run production genesis for season 2026 | W3 |
 | D3 | **[approval]** Submit the reviewed batch to production | D1, D2 |
@@ -105,6 +105,14 @@ The amendment must decide:
    ingests".
 
 ### W1. Production configuration **[PR]**
+
+> **Status 2026-10-21: PR #85**, open, not deployed. It commits everything
+> below except the `GRIDVIEW_DATA` KV binding. Wrangler 4.112 creates a new
+> namespace on deploy for a KV binding with no `id`, and no production
+> namespace exists, so the binding waits for W2's real id. Until then the
+> Worker answers `500` on every route it was tested on. Persisted Workers
+> Logs are committed **off** (`[env.production.observability] enabled =
+> false`), the fail-safe while D-L is open.
 
 - *(Done in PR #84: the genesis operation, route and refusals with tests, and
   the `production` ingest admission.)*
@@ -226,18 +234,37 @@ does the same.
 ```text
 cd services/edge-api
 npx wrangler kv namespace create GRIDVIEW_DATA --env production
-npx wrangler secret put ADMIN_TOKEN --env production   # new value, stored like staging's (DPAPI), never printed
 ```
 
-Commit the returned KV id to `[env.production]` and validate with
-`npm run validate:worker-config` and a `wrangler deploy --dry-run --env production`.
+Commit the returned KV id to `[env.production]` as `[[env.production.kv_namespaces]]`
+with `binding = "GRIDVIEW_DATA"`. Review any change Wrangler offers to make to
+`wrangler.toml` instead of accepting it unseen. The PR replaces the
+`kv_namespaces` `toEqual([])` assertion in
+`test/config/production-worker-config.test.ts`; that test already refuses
+staging's id. Validate with `npm run validate:worker-config` and a
+`wrangler deploy --dry-run --env production`.
+
+**Do not run `wrangler secret put ADMIN_TOKEN --env production` here.** For a
+Worker that does not exist yet, Wrangler 4.112 first creates one, uploading a
+placeholder script (`export default { fetch() {} }`), and confirms by default
+in non-interactive use. That would be an unreviewed first deployment. Generate
+the new value now and store it as staging's is stored (DPAPI, never printed).
+It is uploaded with the first deploy in W3.
 
 ### W3. Deploy **[approval]**
 
+The first deploy supplies the required secret. Without one, Wrangler refuses
+because `[env.production.secrets] required = ["ADMIN_TOKEN"]`.
+
 ```text
 cd services/edge-api
-npx wrangler deploy --env production
+npx wrangler deploy --env production --secrets-file <file outside the repository>
 ```
+
+The file holds one line, `ADMIN_TOKEN=<value>`. It is written from the
+DPAPI-stored value just before the deploy, and deleted right after. Later
+deploys need no file: Wrangler binds a required secret that is already set
+as inherited.
 
 Verify:
 - `GET /v1/status` returns `200` with `environment=production` and `maintenance=false`.
