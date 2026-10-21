@@ -77,8 +77,10 @@ describe('I1: corroboration is reachable', () => {
    * every slot again.
    */
   const changingAt = (slot: number): RoundScript =>
+    // A is first seen two slots before, so it is accepted (AU-D5) before
+    // B appears.
     switching(
-      checkTime(ANCHOR, slot - 1),
+      checkTime(ANCHOR, slot - 2),
       always(failed),
       switching(
         checkTime(ANCHOR, slot),
@@ -236,10 +238,12 @@ describe('a failed check between observations (T6)', () => {
     };
 
   it('keeps the confirmations it interrupts, so settlement is not delayed', async () => {
-    // Confirmations at slots 1, 5 and 12; the checks at 9 and 11 fail.
+    // Sighted at slot 1; confirmations at slots 2, 5 and 12; the checks at 9
+    // and 11 fail.
     const simulation = await started(
       bySlot({
         1: observed(A),
+        2: observed(A),
         5: observed(A),
         9: failed,
         11: failed,
@@ -255,10 +259,16 @@ describe('a failed check between observations (T6)', () => {
   });
 
   it('neither corroborates nor discards a pending revision', async () => {
-    // B is seen at the slot-5 confirmation; pending, it is asked for again
-    // at slot 6, which fails, and at slot 7.
+    // A is accepted at slot 2; B is seen at the slot-5 confirmation; pending,
+    // it is asked for again at slot 6, which fails, and at slot 7.
     const simulation = await started(
-      bySlot({ 1: observed(A), 5: observed(B), 6: failed, 7: observed(B) }),
+      bySlot({
+        1: observed(A),
+        2: observed(A),
+        5: observed(B),
+        6: failed,
+        7: observed(B),
+      }),
     );
     const ticks = await atSlots(simulation, 7);
 
@@ -275,7 +285,7 @@ describe('a failed check between observations (T6)', () => {
 
 describe('I3: dense and daily polling terminate', () => {
   it.each([
-    ['an ordinary result', always(observed(A)), [1, 5, 9, 11, 12]],
+    ['an ordinary result', always(observed(A)), [1, 2, 5, 9, 11, 12]],
     [
       'a source that never answers',
       always(failed),
@@ -359,7 +369,7 @@ describe('I4: a late correction stays observable through the slow reread path', 
 });
 
 describe('I5: the ordinary case targets reconciled data within 24 hours', () => {
-  it('publishes at the first tick at or after +1 h 30 min and settles at +24h', async () => {
+  it('publishes at the second check, the tick after +1 h 30 min, and settles at +24h', async () => {
     const simulation = await started(always(observed(A)));
     const ticks = await simulation.run(
       plus(ANCHOR, -DAY),
@@ -371,8 +381,9 @@ describe('I5: the ordinary case targets reconciled data within 24 hours', () => 
         tick.result!.decision.rounds.some((entry) => entry.round === 1),
     )!;
 
-    // The race starts at 13:00; slot 1 is 14:30, so the 15:17 tick.
-    expect(first.now.toISOString()).toBe('2026-10-04T15:17:00.000Z');
+    // The race starts at 13:00; slot 1 is 14:30, so the 15:17 tick sights
+    // the result and the 16:17 tick, which sees it again, publishes it.
+    expect(first.now.toISOString()).toBe('2026-10-04T16:17:00.000Z');
     expect(first.now.getTime() - Date.parse(ANCHOR)).toBeLessThan(DAY);
     expect(simulation.record(1)!.publishedRevision).toBe(A);
     expect(simulation.record(1)!.settledAt).toBe('2026-10-05T13:17:00.000Z');

@@ -69,13 +69,15 @@ async function startedSeason(): Promise<ObservationHarness> {
 }
 
 /**
- * Round 1 accepted as variant A at its first slot: the + 2 h 17 min tick, the
- * first at or after the race start + 1 h 30 min.
+ * Round 1 accepted as variant A at its second slot: sighted at the + 2 h
+ * 17 min tick, the first at or after the race start + 1 h 30 min, and
+ * accepted at the + 3 h 17 min tick, which sees it again (AU-D5).
  */
 async function firstWrite(): Promise<ObservationHarness> {
   const harness = await startedSeason();
   harness.server.results.set(1, 'A');
   await harness.run(tickAfter(1, 2));
+  await harness.run(tickAfter(1, 3));
   return harness;
 }
 
@@ -241,11 +243,38 @@ describe('a due season-level refresh', () => {
 });
 
 describe('a first classification', () => {
-  it('reads the round at its first slot and accepts it with one confirmation (T0)', async () => {
+  it('reads the round at its first slot, holds it pending, and accepts it when the next slot sees it again (T0, AU-D5)', async () => {
     const harness = await startedSeason();
     harness.server.results.set(1, 'A');
-    const at = tickAfter(1, 2);
+    const sightedAt = tickAfter(1, 2);
 
+    const sighting = await harness.run(sightedAt);
+
+    expect(sighting.outcome).toMatchObject({
+      status: 'observed',
+      plan: 'publication',
+      providerRequests: 7,
+      events: { 'classification.pending-observed': 1 },
+      // A pending round withholds the season until its next cadence check.
+      publication: { outcome: 'withheld', publishCalls: 0, next: 'cadence' },
+    });
+    expect(sighting.requests).toEqual([...seasonPaths, paths.results(1)]);
+    expect(sighting.reservations).toBe(7);
+    // Observed once the seventh response arrived, not when the run was planned.
+    const sighted = paced(sightedAt, 7);
+    expect(await harness.record(1)).toMatchObject({
+      checkIndex: 1,
+      // Pending: the next check is the next hourly slot, + 2 h 30 min.
+      nextDueAt: checkTime(anchorOf(1).toISOString(), 2).toISOString(),
+      contentRevision: null,
+      candidateRevision: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      candidateFirstSeenAt: sighted,
+      provenance: 'absent',
+      reviewState: 'absent',
+      markers: ['pending'],
+    });
+
+    const at = tickAfter(1, 3);
     const run = await harness.run(at);
 
     expect(run.outcome).toMatchObject({
@@ -256,22 +285,22 @@ describe('a first classification', () => {
       publication: refusedByD14,
     });
     expect(run.requests).toEqual([...seasonPaths, paths.results(1)]);
-    expect(run.reservations).toBe(7);
     const record = await harness.record(1);
-    // Observed once the seventh response arrived, not when the run was planned.
     const observed = paced(at, 7);
     expect(record).toMatchObject({
-      checkIndex: 1,
+      checkIndex: 2,
       lastAttemptedAt: observed,
       lastSuccessfulObservationAt: observed,
       // Accepted: next read at the first confirmation slot, + 5 h 30 min.
       nextDueAt: checkTime(anchorOf(1).toISOString(), 5).toISOString(),
       contentRevision: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      candidateRevision: null,
       consecutiveConfirmations: 1,
       provenance: 'reconciled',
       reviewState: 'unsettled',
       markers: [],
-      sourceObservedAt: observed,
+      // Dated from its first sighting.
+      sourceObservedAt: sighted,
     });
     // No other round is eligible yet, so none is recorded.
     expect((await harness.snapshot()).classifications).toHaveLength(1);
@@ -476,11 +505,9 @@ describe('a late correction to a settled round (D2.5, D2.8)', () => {
       paths.results(2),
     ]);
     expect(sighting.reservations).toBe(8);
+    // Round 2's first sighting is pending too (AU-D5).
     expect(sighting.outcome).toMatchObject({
-      events: {
-        'classification.first-write': 1,
-        'classification.pending-observed': 1,
-      },
+      events: { 'classification.pending-observed': 2 },
     });
     expect(changedFields(settled, sighted)).toEqual([
       'candidateFirstSeenAt',
@@ -568,7 +595,7 @@ describe('a scheduled cadence check and an O-3 reread stay distinct', () => {
     expect(reread.outcome).toMatchObject({
       events: {
         'classification.observation-not-applied': 1,
-        'classification.first-write': 1,
+        'classification.pending-observed': 1,
       },
     });
     expect(changedFields(first, await harness.record(1))).toEqual(

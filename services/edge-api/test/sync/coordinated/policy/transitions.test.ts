@@ -133,23 +133,181 @@ function reviewAxis(record: ClassificationRecord) {
   };
 }
 
-describe('T0: a first valid write', () => {
-  it('is accepted without corroboration and counts its own check', () => {
-    const record = newClassificationRecord(2026, anchorOf(1, ANCHOR));
-    const step = cadence(record, 1, observed(A));
+describe('T0: a first valid write (AU-D5)', () => {
+  const fresh = () => newClassificationRecord(2026, anchorOf(1, ANCHOR));
+
+  it('holds a first sighting in the window pending and writes nothing', () => {
+    const step = cadence(fresh(), 1, observed(A));
+
+    expect(step.record).toMatchObject({
+      contentRevision: null,
+      candidateRevision: A,
+      candidateFirstSeenAt: iso(1),
+      consecutiveConfirmations: 0,
+      provenance: 'absent',
+      reviewState: 'absent',
+      sourceObservedAt: null,
+      markers: ['pending'],
+      checkIndex: 1,
+      // Pending: the next check is the next hourly slot.
+      nextDueAt: iso(2),
+    });
+    expect(categories(step)).toEqual(['classification.pending-observed']);
+  });
+
+  it('writes it when the next check returns it again, dated from its sighting', () => {
+    const first = cadence(fresh(), 1, observed(A)).record;
+    const step = cadence(first, 2, observed(A));
 
     expect(step.record).toMatchObject({
       contentRevision: A,
+      candidateRevision: null,
+      candidateFirstSeenAt: null,
       provenance: 'reconciled',
       reviewState: 'unsettled',
+      // One confirmation, as any first write: the pair is not three spaced
+      // confirmations, so settling keeps its cadence.
       consecutiveConfirmations: 1,
       sourceObservedAt: iso(1),
-      checkIndex: 1,
+      supersededRevisions: [],
+      markers: [],
+      checkIndex: 2,
       // Accepted: the next check is the first confirmation slot (+5 h 30 min).
       nextDueAt: iso(5),
       publishedRevision: null,
     });
     expect(categories(step)).toEqual(['classification.first-write']);
+  });
+
+  it('replaces a first sighting that the next check does not return, and writes neither', () => {
+    const first = cadence(fresh(), 1, observed(A)).record;
+    const second = cadence(first, 2, observed(B));
+
+    expect(second.record).toMatchObject({
+      contentRevision: null,
+      candidateRevision: B,
+      candidateFirstSeenAt: iso(2),
+      unstableSightings: 1,
+      supersededRevisions: [],
+      nextDueAt: iso(3),
+    });
+    expect(categories(second)).toEqual(['classification.pending-replaced']);
+
+    const third = cadence(second.record, 3, observed(B));
+    expect(third.record).toMatchObject({
+      contentRevision: B,
+      sourceObservedAt: iso(2),
+      unstableSightings: 0,
+      supersededRevisions: [],
+    });
+  });
+
+  it('keeps a first sighting pending through a deferred or unattempted check', () => {
+    const first = cadence(fresh(), 1, observed(A)).record;
+    for (const outcome of [
+      { status: 'deferred', retryAt: iso(2) },
+      { status: 'not-attempted' },
+    ] as const) {
+      const step = cadence(first, 2, outcome);
+      expect(step.record).toMatchObject({
+        contentRevision: null,
+        candidateRevision: A,
+        candidateFirstSeenAt: iso(1),
+        checkIndex: 1,
+      });
+    }
+  });
+
+  it('a manual run that returns the pending first sighting writes it, dated from the sighting', () => {
+    const first = cadence(fresh(), 1, observed(A)).record;
+    const step = check(first, { kind: 'manual' }, observed(A), slotTime(1));
+
+    expect(step.record).toMatchObject({
+      contentRevision: A,
+      candidateRevision: null,
+      consecutiveConfirmations: 0,
+      sourceObservedAt: iso(1),
+      checkIndex: 1,
+    });
+    expect(categories(step)).toEqual(['classification.first-write']);
+  });
+
+  it('keeps a first sighting pending through a failed check', () => {
+    const first = cadence(fresh(), 1, observed(A)).record;
+    const step = cadence(first, 2, failed);
+
+    expect(step.record).toMatchObject({
+      contentRevision: null,
+      candidateRevision: A,
+      candidateFirstSeenAt: iso(1),
+      nextDueAt: iso(3),
+    });
+  });
+
+  it.each([10, 11, 12, 18])(
+    'writes a first sighting at once at slot %i, whose next check is hours away (C-1)',
+    (slot) => {
+      const step = cadence(fresh(), slot, observed(A));
+
+      expect(step.record).toMatchObject({
+        contentRevision: A,
+        candidateRevision: null,
+        consecutiveConfirmations: 1,
+        sourceObservedAt: iso(slot),
+      });
+      expect(categories(step)).toEqual(['classification.first-write']);
+    },
+  );
+
+  it('corroborates a first sighting held across missed slots at the next check', () => {
+    const first = cadence(fresh(), 9, observed(A)).record;
+    expect(first.contentRevision).toBeNull();
+
+    const step = cadence(first, 11, observed(A));
+    expect(step.record).toMatchObject({
+      contentRevision: A,
+      sourceObservedAt: iso(9),
+    });
+  });
+
+  it("writes what the window's last slot observes, discarding a different pending sighting", () => {
+    const first = cadence(fresh(), 9, observed(A)).record;
+    const step = cadence(first, 10, observed(B));
+
+    expect(step.record).toMatchObject({
+      contentRevision: B,
+      candidateRevision: null,
+      consecutiveConfirmations: 1,
+      sourceObservedAt: iso(10),
+      supersededRevisions: [],
+    });
+    expect(categories(step)).toEqual([
+      'classification.pending-discarded',
+      'classification.first-write',
+    ]);
+  });
+
+  it('discards a first sighting still pending at the ceiling and writes nothing', () => {
+    let record = cadence(fresh(), 1, observed(A)).record;
+    for (let slot = 2; slot < 25; slot += 1) {
+      record = cadence(record, slot, failed).record;
+    }
+    expect(record.candidateRevision).toBe(A);
+    const step = cadence(record, 25, failed);
+
+    expect(step.record).toMatchObject({
+      contentRevision: null,
+      candidateRevision: null,
+      candidateFirstSeenAt: null,
+      terminalReason: 'never-reconciled-abandoned',
+      nextDueAt: null,
+      markers: [],
+    });
+    expect(categories(step)).toEqual([
+      'classification.check-failed',
+      'classification.pending-discarded',
+      'classification.never-reconciled',
+    ]);
   });
 
   it('counts no confirmation and consumes no slot when manual', () => {
@@ -166,6 +324,24 @@ describe('T0: a first valid write', () => {
       sourceObservedAt: iso(3),
     });
     expect(record.nextDueAt).toBe(iso(1));
+  });
+
+  it('a manual first write clears a pending first sighting (O-8)', () => {
+    const first = cadence(
+      newClassificationRecord(2026, anchorOf(1, ANCHOR)),
+      1,
+      observed(A),
+    ).record;
+    const step = check(first, { kind: 'manual' }, observed(B), slotTime(1));
+
+    expect(step.record).toMatchObject({
+      contentRevision: B,
+      candidateRevision: null,
+      candidateFirstSeenAt: null,
+      consecutiveConfirmations: 0,
+      checkIndex: 1,
+      markers: [],
+    });
   });
 });
 

@@ -379,15 +379,26 @@ describe('the run log line', () => {
     const harness = await startedSeason();
     harness.server.results.set(1, 'A');
     await harness.run(FIRST_CHECK);
-    await harness.run(FIRST_CHECK, { ledger: null });
+    const accepted = tickAfter(1, 6);
+    await harness.run(accepted);
+    await harness.run(accepted, { ledger: null });
 
     const lines = harness.logger.events.filter(
       (event) => event.operation === 'sync.coordinated.observation',
     );
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
+    // The first sighting is pending and withholds the season until the next
+    // cadence check: a deliberate wait, so the line is quiet (AU-D5).
+    expect(lines[2]).toMatchObject({
+      level: 'info',
+      reconciliationEvents: { 'classification.pending-observed': 1 },
+      publicationOutcome: 'withheld',
+      publicationNextDue: 'cadence',
+      publicationReason: 'classification-pending',
+    });
     // The candidate is refused by the D14 guard against the mock baseline
     // and held for an operator, so the line warns, with closed values only.
-    expect(lines[2]).toEqual({
+    expect(lines[3]).toEqual({
       level: 'warn',
       operation: 'sync.coordinated.observation',
       season: SEASON,
@@ -398,16 +409,15 @@ describe('the run log line', () => {
       observationPlan: 'publication',
       reconciliationEvents: {
         'classification.first-write': 1,
-        // Both standings tables moved from empty to round 1.
-        'refresh.overwrite': 2,
-        'refresh.unchanged': 3,
+        // The standings tables moved to round 1 in the run before.
+        'refresh.unchanged': 5,
       },
       publicationOutcome: 'not-applied',
       publicationNextDue: 'blocked',
       publicationStatus: 'rejected',
       publicationReason: 'guard-round-coverage-regression',
     });
-    expect(lines[3]).toMatchObject({
+    expect(lines[4]).toMatchObject({
       level: 'warn',
       coordinationStatus: 'coordinated-runtime-unavailable',
       failureCategory: 'coordinated-runtime-unavailable',

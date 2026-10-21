@@ -16,6 +16,12 @@
  * at + 10 h 30 min, then at + 15 h, + 24 h and daily to day 14. For a race at
  * minute 00 the ticks are + 2 h 17 min, + 3 h 17 min, ... + 11 h 17 min.
  *
+ * A first sighting inside the window is held pending and published when the
+ * next hourly tick sees it again (AU-D5); from the window's last check on, a
+ * first sighting is published at once. Two equal sightings are not proof that
+ * a classification is complete: they only keep a page that changed within the
+ * hour from being published.
+ *
  * The app half of the gate - the Flutter data layer itself refreshing from
  * the same stage over HTTP - is `app-gate.test.ts`.
  */
@@ -70,6 +76,17 @@ async function winnerPoints(
   return body.data.entries.find((entry) => entry.position === 1)!.points;
 }
 
+/** How many classified entries the API serves for `round`, or `null`. */
+async function entryCount(
+  stage: AutomaticUpdateStage,
+  round: number,
+): Promise<number | null> {
+  const response = await stage.fetch(results(round));
+  if (response.status !== 200) return null;
+  const body = (await response.json()) as { data: { entries: unknown[] } };
+  return body.data.entries.length;
+}
+
 /** The first tick that committed a release, or `undefined`. */
 const firstRelease = (ticks: readonly TickRecord[]) =>
   ticks.find((tick) => tick.releasesAfter > tick.releasesBefore);
@@ -103,7 +120,7 @@ describe(
   'automatic updates, end to end (gate AU-3)',
   { timeout: 180_000 },
   () => {
-    it('starts polling at race start + 1 h 30 min, publishes the result at that first check, and the client receives it', async () => {
+    it('starts polling at race start + 1 h 30 min, publishes the result when the next check sees it again, and the client receives it', async () => {
       const stage = await started();
       // Jolpica has the result two hours after the race starts.
       stage.source.available(1, afterRace(1, 2));
@@ -117,9 +134,10 @@ describe(
       );
 
       // Nothing asks for the result before + 1 h 30 min; the first tick at or
-      // after it is + 2 h 17 min, and it publishes.
+      // after it is + 2 h 17 min, which sights it, and + 3 h 17 min, which
+      // sees it again, publishes it (AU-D5).
       expect(askedFor(ticks, 1)[0]).toBe(tickAfterRace(1, 2));
-      expect(firstRelease(ticks)?.at).toBe(tickAfterRace(1, 2));
+      expect(firstRelease(ticks)?.at).toBe(tickAfterRace(1, 3));
       expect(stage.releases()).toHaveLength(2);
       expect(await client.refresh(results(1))).toBe(200);
       expect(await client.refresh('/v1/content/manifest')).toBe(200);
@@ -130,6 +148,7 @@ describe(
       // + 9 h 30 min, + 15 h and + 24 h, never hourly.
       expect(askedFor(ticks, 1)).toEqual([
         tickAfterRace(1, 2),
+        tickAfterRace(1, 3),
         tickAfterRace(1, 6),
         tickAfterRace(1, 10),
         tickAfterRace(1, 15),
@@ -146,16 +165,17 @@ describe(
     });
 
     it.each([
-      ['an on-time race, published two hours after the start', 2, 2],
+      ['an on-time race, served two hours after the start', 2, 3],
+      ['an unusually long race (red flags), served at + 3 h 45 min', 3.75, 5],
+      ['a start delayed by three hours, served at + 5 h 30 min', 5.5, 7],
+      ['served one hour before the window’s last check', 9.5, 11],
       [
-        'an unusually long race (red flags), published at + 3 h 45 min',
-        3.75,
-        4,
+        'served by the window’s last check, which publishes it at once',
+        10.5,
+        11,
       ],
-      ['a start delayed by three hours, published at + 5 h 30 min', 5.5, 6],
-      ['a result first published at the window’s last check', 10.5, 11],
     ])(
-      'asks hourly while the result is missing and publishes it on the next tick: %s',
+      'asks hourly while the result is missing and publishes it once it is seen twice, or at the last check: %s',
       async (_label, availableAfterHours, publishedTickHour) => {
         const stage = await started();
         stage.source.available(1, afterRace(1, availableAfterHours));
@@ -248,49 +268,86 @@ describe(
       );
 
       // + 2 h 17 min and + 3 h 17 min read the incomplete page: neither is
-      // accepted, and nothing is published from it.
+      // accepted, and nothing is published from it. + 4 h 17 min sights the
+      // complete one and + 5 h 17 min publishes it.
       for (const tick of ticks.filter((entry) => entry.at < afterRace(1, 4))) {
         expect(tick.releasesAfter).toBe(tick.releasesBefore);
       }
-      expect(askedFor(ticks, 1).slice(0, 3)).toEqual(ticksAfterRace(2, 4));
-      expect(firstRelease(ticks)?.at).toBe(tickAfterRace(1, 4));
+      expect(askedFor(ticks, 1).slice(0, 4)).toEqual(ticksAfterRace(2, 5));
+      expect(firstRelease(ticks)?.at).toBe(tickAfterRace(1, 5));
       expect(before).not.toBe(stage.activeVersion());
       expect(await winnerPoints(stage, 1)).toBe(25);
     });
 
-    it('replaces a self-consistent but short classification once the complete one is corroborated', async () => {
+    it('never publishes a self-consistent but short classification that changes within the hour (AU-D5)', async () => {
       // Variant D is A without its last classified driver, on a page whose
       // `total` agrees: nothing structural tells it from a complete result.
       const stage = await started();
       stage.source
         .available(1, afterRace(1, 2), 'D')
         .available(1, afterRace(1, 3), 'A');
-      const client = new ConditionalClient(stage);
+      const before = stage.activeVersion();
 
-      const ticks = await stage.hourly(
+      // + 2 h 17 min sights D; + 3 h 17 min sees A instead, which replaces
+      // the pending sighting. Nothing is published from either.
+      const sightings = await stage.hourly(
         tickAfterRace(1, -1),
+        tickAfterRace(1, 3),
+      );
+      expect(firstRelease(sightings)).toBeUndefined();
+      expect(stage.activeVersion()).toBe(before);
+      expect(await entryCount(stage, 1)).toBeNull();
+
+      // + 4 h 17 min sees A again and publishes it: the only release.
+      const ticks = await stage.hourly(
+        tickAfterRace(1, 4),
         tickAfterRace(1, 8),
       );
-
       const releases = ticks.filter(
         (tick) => tick.releasesAfter > tick.releasesBefore,
       );
-      // Published as first seen; A is sighted at the + 5 h 30 min
-      // confirmation, pending, asked for again on the next hourly tick, and
-      // published there (ADR 0020 D2.1).
-      expect(releases.map((tick) => tick.at)).toEqual([
+      expect(releases.map((tick) => tick.at)).toEqual([tickAfterRace(1, 4)]);
+      expect(askedFor([...sightings, ...ticks], 1)).toEqual([
         tickAfterRace(1, 2),
-        tickAfterRace(1, 7),
-      ]);
-      expect(askedFor(ticks, 1)).toEqual([
-        tickAfterRace(1, 2),
+        tickAfterRace(1, 3),
+        tickAfterRace(1, 4),
         tickAfterRace(1, 6),
-        tickAfterRace(1, 7),
       ]);
-      expect(await client.refresh(results(1))).toBe(200);
-      const entries = client.body<{ data: { entries: unknown[] } }>(results(1))!
-        .data.entries;
-      expect(entries.length).toBeGreaterThan(1);
+      expect(await entryCount(stage, 1)).toBeGreaterThan(1);
+      const record = await stage.harness.record(1);
+      // D was never accepted, so nothing was superseded.
+      expect(record?.supersededRevisions).toEqual([]);
+      expect(record?.contentRevision).toBe(record?.publishedRevision);
+    });
+
+    it('publishes a short classification served unchanged for an hour, then replaces it: two equal sightings do not prove it complete', async () => {
+      const stage = await started();
+      stage.source
+        .available(1, afterRace(1, 2), 'D')
+        .available(1, afterRace(1, 4), 'A');
+
+      // D is sighted at + 2 h 17 min, seen again at + 3 h 17 min and
+      // published as first seen: the residual AU-D5 accepts.
+      const short = await stage.hourly(
+        tickAfterRace(1, -1),
+        tickAfterRace(1, 3),
+      );
+      expect(firstRelease(short)?.at).toBe(tickAfterRace(1, 3));
+      const shortCount = await entryCount(stage, 1);
+      expect(shortCount).not.toBeNull();
+
+      // A is sighted at the + 5 h 30 min confirmation (+ 6 h 17 min),
+      // pending, and published on the next hourly tick (ADR 0020 D2.1).
+      const ticks = await stage.hourly(
+        tickAfterRace(1, 4),
+        tickAfterRace(1, 8),
+      );
+      expect(
+        ticks
+          .filter((tick) => tick.releasesAfter > tick.releasesBefore)
+          .map((tick) => tick.at),
+      ).toEqual([tickAfterRace(1, 7)]);
+      expect(await entryCount(stage, 1)).toBe(shortCount! + 1);
       expect((await stage.harness.record(1))?.supersededRevisions).toHaveLength(
         1,
       );
@@ -332,7 +389,7 @@ describe(
         .available(1, afterRace(1, 8), 'B');
 
       await stage.hourly(tickAfterRace(1, -1), tickAfterRace(1, 10));
-      // Published at + 2 h 17 min; the + 9 h 30 min confirmation (the
+      // Published at + 3 h 17 min; the + 9 h 30 min confirmation (the
       // + 10 h 17 min tick) saw B once, and one sighting is only pending
       // (ADR 0020 D2.1).
       expect(await winnerPoints(stage, 1)).toBe(25);
@@ -409,18 +466,20 @@ describe(
         expect(tick.requests.length).toBeLessThanOrEqual(7);
       expect(askedFor(during, 1)).toEqual(ticksAfterRace(2, 5));
 
+      // + 6 h 17 min sights it once the outage ends; + 7 h 17 min publishes.
       const recovered = await stage.hourly(
         tickAfterRace(1, 6),
-        tickAfterRace(1, 7),
+        tickAfterRace(1, 8),
       );
-      expect(firstRelease(recovered)?.at).toBe(tickAfterRace(1, 6));
+      expect(firstRelease(recovered)?.at).toBe(tickAfterRace(1, 7));
       expect(await winnerPoints(stage, 1)).toBe(25);
     });
 
     it('recovers a lost commit answer without publishing twice', async () => {
       const stage = await started();
       stage.source.available(1, afterRace(1, 4.5));
-      await stage.hourly(tickAfterRace(1, -1), tickAfterRace(1, 4));
+      // + 5 h 17 min sights it; + 6 h 17 min publishes it.
+      await stage.hourly(tickAfterRace(1, -1), tickAfterRace(1, 5));
       expect(await winnerPoints(stage, 1)).toBeNull();
       // The sequencer commits the release, but every answer to `finalize` in
       // this tick is lost on the way back, as a stalled isolate would lose it.
@@ -434,14 +493,14 @@ describe(
         }
         return answer;
       };
-      await stage.tick(tickAfterRace(1, 5));
+      await stage.tick(tickAfterRace(1, 6));
       transport.intercept = null;
       // The first answer and its one re-drive (ADR 0025 D4) were both lost.
       expect(lost).toBeGreaterThanOrEqual(1);
       const committed = stage.activeVersion();
       expect(await winnerPoints(stage, 1)).toBe(25);
 
-      await stage.hourly(tickAfterRace(1, 6), tickAfterRace(1, 30));
+      await stage.hourly(tickAfterRace(1, 7), tickAfterRace(1, 30));
       expect(stage.activeVersion()).toBe(committed);
       expect(new Set(stage.releases()).size).toBe(stage.releases().length);
       expect((await stage.harness.season()).publicationDisposition).toBeNull();
@@ -465,7 +524,7 @@ describe(
         tickAfterRace(1, -1),
         tickAfterRace(1, 6),
       );
-      expect(firstRelease(ticks)?.at).toBe(tickAfterRace(1, 2));
+      expect(firstRelease(ticks)?.at).toBe(tickAfterRace(1, 3));
       expect(await winnerPoints(stagedStart, 1)).toBe(25);
       expect(
         stagedStart.workerRequests.some((path) => path.startsWith('/internal')),

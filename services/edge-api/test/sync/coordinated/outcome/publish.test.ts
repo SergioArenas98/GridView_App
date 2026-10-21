@@ -247,6 +247,18 @@ describe.each(sequencerTransports)(
       const digests = [(await harness.season()).lastPublication!.digest];
 
       harness.server.results.set(1, 'A');
+      // A first sighting is pending: the run withholds, and the next hourly
+      // check accepts and publishes it (AU-D5).
+      const sighting = await harness.run(tickAfter(1, 4));
+      expect(sighting.outcome).toMatchObject({
+        events: { 'classification.pending-observed': 1 },
+        publication: {
+          outcome: 'withheld',
+          cause: 'classification-pending',
+          publishCalls: 0,
+          next: 'cadence',
+        },
+      });
       const first = await harness.run(tickAfter(1, 5));
       expect(first.outcome).toMatchObject({
         providerRequests: 7,
@@ -404,6 +416,7 @@ describe.each(sequencerTransports)(
     it('holds a staged correction for an operator instead of retrying every hour', async () => {
       const { harness } = await prePublished();
       harness.server.results.set(1, 'A');
+      await harness.run(tickAfter(1, 4));
       await harness.run(tickAfter(1, 5));
       harness.server.results.set(1, 'B');
       for (const hours of [9, 15, 24]) await harness.run(tickAfter(1, hours));
@@ -541,6 +554,7 @@ describe.each(sequencerTransports)(
     it('holds a D15 refusal for an operator, and asks again only at a cadence check', async () => {
       const { harness } = await prePublished();
       harness.server.results.set(1, 'A');
+      await harness.run(tickAfter(1, 4));
       await harness.run(tickAfter(1, 5));
       const releases = harness.releases().length;
 

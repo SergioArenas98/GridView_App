@@ -147,9 +147,13 @@ void main() {
 
         // The race. Only the Worker's hourly runs happen; its first check is
         // the first tick at or after the start + 90 min, + 2 h 17 min, and
-        // Jolpica has the result from + 2 h.
+        // Jolpica has the result from + 2 h. That check only sights it; the
+        // next hourly tick, + 3 h 17 min, sees it again and publishes it.
         await stage.advance(at(2, 17).toIso8601String());
         l = await launch(at(2, 30).toIso8601String());
+        expect(await roundOneClassified(l), isFalse);
+        await stage.advance(at(3, 17).toIso8601String());
+        l = await launch(at(3, 30).toIso8601String());
         expect(await roundOneClassified(l), isTrue);
         // The user opens the Grand Prix.
         await l.repositories.results.refreshResults(season: 2026, round: 1);

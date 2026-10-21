@@ -445,9 +445,13 @@ describe.each(sequencerTransports)(
           checkIndex: 0,
           consecutiveConfirmations: 0,
         });
+        // A scheduled first sighting consumes its slot and is held pending
+        // for the next one (AU-D5).
         expect(await scheduledFirst.round(1)).toMatchObject({
           checkIndex: 5,
-          consecutiveConfirmations: 1,
+          contentRevision: null,
+          candidateRevision: expect.stringMatching(/^sha256:/),
+          consecutiveConfirmations: 0,
         });
 
         // The slot the manual run left is still served by the next tick.
