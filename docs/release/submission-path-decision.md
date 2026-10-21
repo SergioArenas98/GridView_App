@@ -4,6 +4,10 @@ Decision W-P in `production-release-plan.md` §3. Prepared on 2026-10-20 at
 master `527444b`, which includes PR #84 (production genesis). Nothing was
 purchased, enabled, provisioned or deployed.
 
+> **Decided 2026-10-20: Path A.** The owner chose Workers Paid for production
+> submissions (§5). This selects the submission path only. It does not
+> authorise buying the plan, which stays a separate owner step.
+
 ## 1. The problem in one paragraph
 
 A reviewed season batch is published by one authenticated
@@ -66,8 +70,21 @@ runs exactly as tested.
 | DO duration | 0.9 M short lookups (each well under 50 ms at 128 MB) | under 6,000 GB-s | 400,000 |
 | Storage | One season's releases, under 50 MB | well under 1 GB | 1 GB |
 
-**Expected cost: USD 5.00 per month before tax.** Spanish VAT at 21% would
-make it about USD 6.05, if Cloudflare charges VAT on this account.
+**Expected cost: USD 5.00 per month before tax.** The tax depends on the
+billing country of the Cloudflare account, which has not been checked.
+Cloudflare says it "collects sales tax on sales of our services based on your
+billing address" (*Sales tax*, last updated 2026-05-29), but that page does
+not describe EU VAT. For an individual in the EU without a VAT number, the
+billing country's standard VAT rate is the likely charge:
+
+| Billing country | Standard VAT | Monthly total |
+|---|---|---|
+| Ireland (the controller's country, recorded 2026-10-20) | 23% | about USD 6.15 |
+| Spain (the country on the Play listing) | 21% | about USD 6.05 |
+
+The country that counts is the billing address on the account when the plan
+is bought, not the Play listing's country or the policy's. Confirm the amount
+on Cloudflare's checkout or first invoice.
 
 The first threshold the assumptions approach is the **1 M included Durable
 Object requests**. That is about 1,100 active devices at 30 requests a day.
@@ -231,6 +248,13 @@ window. Until all of it lands, D3 cannot run on Path B.
 
 ## 5. Owner decision
 
+**Recorded 2026-10-20: A.** Nothing was bought. W1 is a separate PR. Buying
+the plan (before D3), and creating the KV namespace and the `ADMIN_TOKEN`
+secret (W2), are separate owner-authorised steps
+(`production-release-plan.md` §2).
+
+The options were:
+
 - **A:** approve Workers Paid. W1 then proceeds with the existing ingest. The
   purchase is a separate owner step, not done here.
 - **B:** approve the redesign. W1 and D3 then wait for its PR and §4.7.
@@ -245,6 +269,10 @@ window. Until all of it lands, D3 cannot run on Path B.
   https://developers.cloudflare.com/workers/platform/limits/
 - Cloudflare, *KV limits* (2026-10-08) and *Durable Objects limits*
   (2026-06-01) and *pricing* (2026-10-18).
+- Cloudflare, *Sales tax* (last updated 2026-05-29):
+  https://developers.cloudflare.com/billing/sales-tax/
+- Irish standard VAT rate of 23%: PwC *Worldwide Tax Summaries*, Ireland,
+  "Other taxes" (reviewed 2026-03-06).
 - Staging CPU: the 2026-10-14 and 2026-10-19 submission records (operator
   evidence, outside the repository).
 - Local measurements: ADR 0025 D12, "Amendment (2026-10-20)", Free-plan cost.

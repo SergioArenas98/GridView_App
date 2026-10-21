@@ -26,7 +26,7 @@ Steps marked **[PR]** are reviewable repository changes.
 | Gate | Action | Depends on |
 |---|---|---|
 | W0 | **[done]** Production genesis design and implementation (ADR 0025 O-16 amendment), PR #84, merged 2026-10-20 as `527444b` | — |
-| W-P | **[decision]** The submission path: Workers Paid or the Free-plan redesign (`submission-path-decision.md`) | W0 |
+| W-P | **[decided 2026-10-20: A, Workers Paid]** The submission path (`submission-path-decision.md`). Buying the plan is a separate owner step | W0 |
 | W1 | **[PR]** The production Worker configuration, plus whatever W-P requires | W0, W-P |
 | W2 | **[approval]** Create the production KV namespace and `ADMIN_TOKEN` secret; **[PR]** commit the KV id | W1 |
 | W3 | **[approval]** Deploy `gridview-api-production` | W2 |
@@ -207,7 +207,10 @@ reliable candidates:
   including the Durable Object side, and its failure handling are untested.
 
 Keeping the single request on Free is listed there only as an explicitly
-accepted risk. The plan does not assume Paid; buying it is an owner step.
+accepted risk.
+
+**Decided 2026-10-20: A, Workers Paid.** D3 follows Path A. Buying the plan
+is still a separate owner step, and it must be done before D3.
 
 Public traffic on Free is a separate budget. Each uncached public read is one
 Worker request, one Durable Object request and two KV reads, against 100,000
@@ -357,9 +360,9 @@ The details are in PR #82, `data-safety.md` §1.
 
   Its review items (data-safety R1–R8) need the owner's privacy review, P-R,
   before **any** Data safety submission (P0, P3, R7). Data-safety item R7 is
-  the controller
-  naming: the policy now names the individual the Play listing shows,
-  publishing as Sejuma, in Spain.
+  the controller naming. The owner confirmed it on 2026-10-20: Sergio Arenas
+  del Amo, an individual in Ireland, publishing as Sejuma, with no registered
+  business. The Play listing still shows Spain (PR #82 `data-safety.md` §6).
 - **P2 [approval]:** publish `privacy_policies.html` at https://gridview.netlify.app,
   the URL already on the listing and in `config/dart_defines/production.json`.
   - It must be live before P3 and A2.
@@ -424,6 +427,12 @@ Steps (each owner-run; only step 3 changes Play Console):
 5. Existing Alpha installs keep whatever they have (Play says so). They are
    covered by the policy's 1.x section, which stays published (PR #82 policy
    §9).
+
+Pausing the track, or any other Play step, stops **distribution** only. It
+does not stop 1.x copies that are already installed from requesting ads. They
+keep requesting them until the device updates to 2.0.0 or the app is
+uninstalled. Stopping ad serving to them is a separate AdMob decision (PR #82
+`data-safety.md` §3.6).
 
 Not used: promoting 2.0.0 to Alpha to replace versionCode 2. That would make a
 closed test of 2.0.0, which §7 does not need.
@@ -633,7 +642,7 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | # | Decision | Needed before |
 |---|---|---|
 | W0 | Production genesis design (ADR 0025 O-16 amendment): **done**, PR #84 merged as `527444b` | — |
-| W-P | Submission path (`submission-path-decision.md`): A, Workers Paid (USD 5/month, existing ingest); B, Free-plan redesign (untested, needs a PR and the §4.7 tests); or explicitly accept the single request on Free. Nothing is bought by this plan | W1, D3 |
+| W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). Buying the plan is a separate owner step, before D3 | — |
 | D-T1 | Retain versionCode 7 for API 21–23 or not (recommended: not) | R4, R7 |
 | D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | P0 or R7 |
 | D-R | Confirm no closed-testing stage: one controlled Play-delivered upgrade (R3), then the staged rollout (§7) | R5 |
