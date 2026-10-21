@@ -14,6 +14,11 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 
+import {
+  demonstrationSection,
+  withoutDemonstration,
+} from '../config/demonstration-environment';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..', '..');
 
@@ -184,16 +189,25 @@ describe('the API documentation licence notice', () => {
     expect(description).not.toMatch(/\b(live|real-time) (provider )?data\b/i);
   });
 
-  it('keeps "not automatically" true: no committed environment selects coordinated mode', () => {
+  it('keeps "not automatically" true: no committed environment selects coordinated mode against the network', () => {
     // The coordinated runtime is the only Worker path that could request
     // Jolpica F1. While any source is active the notice and the app say no
     // Worker retrieves it, so selecting that mode needs new wording first.
+    // The one exception is the demonstration Worker (gate AU-3): its Jolpica
+    // transport reads controlled documents from its own KV namespace, never
+    // the network, so it retrieves nothing from Jolpica F1.
     if (!record.sources.some((source) => source.status === 'active')) return;
-    const modes = [
-      ...wrangler.matchAll(/^\s*PROVIDER_MODE\s*=\s*["']([^"']*)["']/gm),
-    ].map((match) => match[1]);
-    expect(modes.length).toBeGreaterThan(0);
-    expect(modes).not.toContain('coordinated');
+    const modesIn = (toml: string) =>
+      [...toml.matchAll(/^\s*PROVIDER_MODE\s*=\s*["']([^"']*)["']/gm)].map(
+        (match) => match[1],
+      );
+    const elsewhere = withoutDemonstration(wrangler);
+    expect(modesIn(elsewhere).length).toBeGreaterThan(0);
+    expect(modesIn(elsewhere)).not.toContain('coordinated');
+    expect(elsewhere).not.toMatch(/^\s*CONTROLLED_PROVIDER_SOURCE\s*=/m);
+    const demonstration = demonstrationSection(wrangler);
+    expect(modesIn(demonstration)).toEqual(['coordinated']);
+    expect(demonstration).toMatch(/^CONTROLLED_PROVIDER_SOURCE = "kv"$/m);
   });
 
   it('never reverts to blanket ownership or a single blanket licence', () => {

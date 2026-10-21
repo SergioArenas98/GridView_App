@@ -71,7 +71,7 @@ const ADMIN_TOKEN = 'local-test-token';
 const INGEST = '/internal/admin/season/ingest';
 const SYNC = '/internal/admin/sync/full';
 
-type Environment = '' | 'staging' | 'production';
+type Environment = '' | 'staging' | 'production' | 'e2e';
 
 /** The configuration Wrangler resolves for one environment (`''` = top level). */
 function resolved(environment: Environment) {
@@ -131,7 +131,7 @@ describe('the resolved configuration', () => {
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
   });
 
-  it('gives staging and production an explicitly empty cron list and leaves development unscheduled', () => {
+  it('gives staging, production and the demonstration Worker an explicitly empty cron list and leaves development unscheduled', () => {
     // Empty, not absent: `wrangler deploy` PUTs the schedules only when
     // `crons` is set, so `[]` removes the live `17 3 * * *` and an absent key
     // would silently keep it.
@@ -141,10 +141,14 @@ describe('the resolved configuration', () => {
     // Production (W1) schedules nothing, explicitly too. Development declared
     // no trigger before and still does not.
     expect(resolved('production').triggers).toEqual({ crons: [] });
+    // The demonstration Worker (AU-2) is deployed unscheduled; its hourly
+    // schedule is AU-3's own step.
+    expect(resolved('e2e').triggers).toEqual({ crons: [] });
     expect(resolved('').triggers.crons).toBeUndefined();
     expect(rawConfig.match(/^\[[^\]]*triggers\]$/gm)).toEqual([
       '[env.staging.triggers]',
       '[env.production.triggers]',
+      '[env.e2e.triggers]',
     ]);
   });
 

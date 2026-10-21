@@ -22,6 +22,7 @@ import {
   type ProviderQuotaPolicy,
 } from '../../src/providers/provider-source';
 import type { SyncProviderAccounting } from '../../src/sync/sync-service';
+import { withoutDemonstration } from '../config/demonstration-environment';
 import {
   adminRequest,
   createHarness,
@@ -216,7 +217,7 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
     'utf8',
   );
 
-  it('admits exactly mock, none and coordinated, and commits no coordinated mode', () => {
+  it('admits exactly mock, none and coordinated, and commits no coordinated mode outside the demonstration Worker', () => {
     const environment = readFileSync(
       join(repoRoot, 'services', 'edge-api', 'src', 'config', 'environment.ts'),
       'utf8',
@@ -226,7 +227,12 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
       "const validProviderModes = ['mock', 'none', 'coordinated'] as const;",
     );
     expect(wrangler).not.toMatch(
-      /PROVIDER_MODE = "(jolpica|openf1|live|dual|coordinated)"/,
+      /PROVIDER_MODE = "(jolpica|openf1|live|dual)"/,
+    );
+    // The demonstration Worker (`[env.e2e]`, gate AU-3) is the one exception,
+    // pinned in `demonstration-worker-config.test.ts`.
+    expect(withoutDemonstration(wrangler)).not.toMatch(
+      /PROVIDER_MODE = "coordinated"/,
     );
   });
 
@@ -242,8 +248,9 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
 
   it('declares the Durable Object binding and SQLite export in every environment', () => {
     // Configuration only: nothing is provisioned or deployed by this phase.
+    // Development, staging, production and the demonstration Worker.
     const bindings = wrangler.match(/name = "PROVIDER_RATE_LIMITER"/g) ?? [];
-    expect(bindings).toHaveLength(3);
+    expect(bindings).toHaveLength(4);
     expect(wrangler).toContain('[exports.ProviderRateLimiter]');
     expect(wrangler).toContain('storage = "sqlite"');
     expect(wrangler).toContain('class_name = "ProviderRateLimiter"');

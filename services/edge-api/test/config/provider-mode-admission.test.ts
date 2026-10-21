@@ -1,7 +1,7 @@
 /**
  * `PROVIDER_MODE` admission (runtime activation decision O-1): `coordinated`
  * is admitted in staging and production only, and admitting it selects it
- * nowhere.
+ * nowhere but the isolated demonstration Worker (`[env.e2e]`, gate AU-3).
  */
 
 import { readFileSync } from 'node:fs';
@@ -16,6 +16,10 @@ import {
   type EnvironmentName,
 } from '../../src/config/environment';
 import { CapturingLogger } from '../../src/logging/logger';
+import {
+  demonstrationSection,
+  withoutDemonstration,
+} from './demonstration-environment';
 
 type Admission = 'mock' | 'none' | 'coordinated' | 'error';
 
@@ -88,17 +92,21 @@ describe('PROVIDER_MODE admission', () => {
     }
   });
 
-  it('is selected by no committed environment', () => {
+  it('is selected by no committed environment but the demonstration Worker', () => {
     const wrangler = readFileSync(
       join(__dirname, '..', '..', 'wrangler.toml'),
       'utf8',
     );
-    const modes = [...wrangler.matchAll(/^PROVIDER_MODE = "([^"]*)"/gm)].map(
-      (match) => match[1],
-    );
+    const modesIn = (toml: string) =>
+      [...toml.matchAll(/^PROVIDER_MODE = "([^"]*)"/gm)].map(
+        (match) => match[1],
+      );
     // Staging `none` (it was `mock` until the season-batch ingest
     // configuration) and production `none`; development leaves it unset.
-    expect(modes).toEqual(['none', 'none']);
-    expect(wrangler).not.toContain('coordinated');
+    const elsewhere = withoutDemonstration(wrangler);
+    expect(modesIn(elsewhere)).toEqual(['none', 'none']);
+    expect(elsewhere).not.toContain('coordinated');
+    // The demonstration Worker (AU-2) selects it, with its controlled source.
+    expect(modesIn(demonstrationSection(wrangler))).toEqual(['coordinated']);
   });
 });

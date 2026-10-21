@@ -7,6 +7,10 @@ import { CutoverPreparationService } from '../../src/publication/cutover/service
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
 import { adminRequest, createHarness } from '../support/edge-harness';
 import {
+  demonstrationSection,
+  withoutDemonstration,
+} from './demonstration-environment';
+import {
   SEASON,
   checkpointFor,
   cutoverContext,
@@ -134,16 +138,22 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     ]);
     // The seed phase is no longer configured anywhere.
     expect(config).not.toMatch(/^[^#\n]*"seed:/m);
-    // Each is assigned exactly twice in the file: here and in production's
-    // genesis configuration (W1, `production-worker-config.test.ts`). The
-    // top-level development table sets neither; the names still appear in
-    // the comments that explain the values.
-    expect(
-      config.match(/^\s*"?SEASON_PUBLICATION_CUTOVER_CONTROL"?\s*=/gm),
-    ).toHaveLength(2);
-    expect(
-      config.match(/^\s*"?SEASON_PUBLICATION_AUTHORITY"?\s*=/gm),
-    ).toHaveLength(2);
+    // Outside the demonstration Worker, each is assigned exactly twice: here
+    // and in production's genesis configuration (W1,
+    // `production-worker-config.test.ts`). The top-level development table
+    // sets neither; the names still appear in the comments that explain the
+    // values. The demonstration Worker assigns each once, for its own genesis
+    // (`demonstration-worker-config.test.ts`).
+    const elsewhere = withoutDemonstration(config);
+    const demonstration = demonstrationSection(config);
+    for (const name of [
+      'SEASON_PUBLICATION_CUTOVER_CONTROL',
+      'SEASON_PUBLICATION_AUTHORITY',
+    ]) {
+      const assigned = new RegExp(`^\\s*"?${name}"?\\s*=`, 'gm');
+      expect(elsewhere.match(assigned), name).toHaveLength(2);
+      expect(demonstration.match(assigned), name).toHaveLength(1);
+    }
   });
 
   it('pins the production variables to the genesis configuration (W1)', () => {

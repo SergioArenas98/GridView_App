@@ -10,6 +10,8 @@
 #   production Worker, KV or Durable Object namespace, R2 bucket, route,
 #   domain or secret exists. Its declaration is deliberately incomplete (no
 #   KV binding) until the namespace is created; see the section itself.
+# - `env.e2e` is the isolated demonstration Worker of release gate AU-3 and
+#   has never been deployed: only its KV namespace exists. See the section.
 
 name = "gridview-api-dev"
 main = "src/index.ts"
@@ -284,6 +286,85 @@ enabled = true
 head_sampling_rate = 1
 
 [env.production.observability.logs]
+enabled = true
+persist = true
+invocation_logs = false
+
+# The isolated demonstration Worker of release gate AU-3 (ADR 0028 D10;
+# `docs/release/automatic-updates.md` section 8.1). DECLARED ONLY; NEVER
+# DEPLOYED: no `gridview-api-e2e` Worker, Durable Object namespace, secret or
+# schedule exists. Only its KV namespace exists, `gridview-snapshots-e2e`,
+# created on 2026-10-21 (AU-2 step 1) and bound below.
+#
+# It is the only environment that selects the automatic path, binds the
+# reconciliation ledger or reads a controlled provider source, and it shares
+# no resource with staging or production:
+# - its own Worker name, KV namespace and Durable Object namespaces, so a
+#   deploy creates three new ones and leaves staging's two and staging's
+#   rollback history untouched;
+# - `CONTROLLED_PROVIDER_SOURCE = "kv"`: its Jolpica transport reads the
+#   controlled documents loaded into its own KV namespace, never the network;
+# - its season 2026 is born through genesis (`genesis:2026`), never through a
+#   capture, a submission or the staging seed. The batch ingest is left unset,
+#   so it refuses every request as `ingest-disabled`.
+# `ENVIRONMENT = "staging"` is what admits the controlled source; production
+# can never select it. Deploying it, its `ADMIN_TOKEN`, its genesis, the data
+# load and the schedule are each separately authorized (AU-2 steps 3-4, AU-3).
+[env.e2e]
+name = "gridview-api-e2e"
+workers_dev = true
+preview_urls = false
+
+[env.e2e.vars]
+ENVIRONMENT = "staging"
+PROVIDER_MODE = "coordinated"
+CONTROLLED_PROVIDER_SOURCE = "kv"
+PUBLIC_BASE_URL = "https://gridview-api-e2e.sejuma18.workers.dev"
+SEASON_PUBLICATION_AUTHORITY = "sequencer"
+SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"
+
+# A named environment's exports table replaces the top-level one, so it
+# restates both top-level classes and adds the ledger.
+[env.e2e.exports.ProviderRateLimiter]
+type = "durable-object"
+storage = "sqlite"
+
+[env.e2e.exports.SeasonPublicationSequencer]
+type = "durable-object"
+storage = "sqlite"
+
+[env.e2e.exports.ReconciliationLedger]
+type = "durable-object"
+storage = "sqlite"
+
+[[env.e2e.durable_objects.bindings]]
+name = "PROVIDER_RATE_LIMITER"
+class_name = "ProviderRateLimiter"
+
+[[env.e2e.durable_objects.bindings]]
+name = "SEASON_PUBLICATION_SEQUENCER"
+class_name = "SeasonPublicationSequencer"
+
+[[env.e2e.durable_objects.bindings]]
+name = "RECONCILIATION_LEDGER"
+class_name = "ReconciliationLedger"
+
+[[env.e2e.kv_namespaces]]
+binding = "GRIDVIEW_DATA"
+id = "f8970084eef14b6a8e24db521d015df3"
+
+[env.e2e.secrets]
+required = ["ADMIN_TOKEN"]
+
+# Empty at deploy; the hourly schedule is AU-3's own authorized step.
+[env.e2e.triggers]
+crons = []
+
+[env.e2e.observability]
+enabled = true
+head_sampling_rate = 1
+
+[env.e2e.observability.logs]
 enabled = true
 persist = true
 invocation_logs = false

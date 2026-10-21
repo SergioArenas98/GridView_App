@@ -120,7 +120,7 @@ The operator path for a staged correction is in the staging runbook, section
 | Cron wall time | 15 min | Coordination aborts at 240 s; publication starts only within 300 s and with 300 s of the 10-minute lease left |
 | Subrequests | 10,000 per invocation | A season-end publication: about 300 KV operations, 260 cache deletes and 40 Durable Object calls, plus ≤ 29 fetches |
 | KV writes | 1 M a month included | About 121 a publication, ≤ 6 publications a weekend; the heartbeat 24 a day |
-| Workers Logs | 20 M events a month included; 7 days kept | A few lines a run, about 3,000 a month |
+| Workers Logs | 7 days kept. The included allowance (20 M events a month, then USD 0.60 a million) applies only until 2026-12-01; from then on Workers Logs uses Cloudflare Observability pricing, so assume no included allowance and re-read the price before AU-7 | A few lines a run, about 3,000 a month |
 | Cost | USD 5/month base | Unchanged from `submission-path-decision.md` §3 |
 
 ## 5. Failure handling
@@ -187,7 +187,7 @@ run e-mails the owner through GitHub's own notifications. Known limits:
 | Gate | Action | Authorization | Depends on |
 |---|---|---|---|
 | AU-0 | This change merged, dormant: genesis-capable coordinated runs, calendar horizon, the + 90 min / hourly / back-off polling plan, heartbeat, production logging design, monitor, controlled source, gate tests | **[PR]** | PR #85 |
-| AU-1 | Workers Paid bought (the plan is account-wide, so staging gets it too) | **[approval]** owner | — |
+| AU-1 | Workers Paid bought (the plan is account-wide, so staging gets it too). **Done 2026-10-21:** read-only, the dashboard shows Workers Paid active, renewing 2026-11-21, on account `786e24f1…e6bf`, the account Wrangler uses; one invoice that day, USD 5.00, paid (the invoice itself, and so any VAT line, was not opened) | **[approval]** owner | — |
 | AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis | **[approval]** each, **[PR]** | AU-0, AU-1 |
 | AU-3 | **The end-to-end demonstration with controlled data** (§8.2). Also on the release commit: the in-process gate in CI and the app half locally | **[approval]** the KV load and the schedule; **[record]** the evidence | AU-2 |
 | AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2) | **[approval]** each of the three; cutover-sensitive | AU-3 |
@@ -209,11 +209,20 @@ staging state").
 ### 8.1 The demonstration Worker (AU-2)
 
 1. Create its namespace: `npm exec -- wrangler kv namespace create
-   GRIDVIEW_DATA --env e2e` (after the block below is committed without
-   `kv_namespaces`, as W1 did for production). Record the id.
+   gridview-snapshots-e2e`, **without** `--env`. Wrangler 4.112 titles a
+   namespace `<env>-<argument>`, so `GRIDVIEW_DATA --env e2e` would create
+   `e2e-GRIDVIEW_DATA` instead of following staging's
+   `gridview-snapshots-staging`. Without `--env` the command reads no
+   environment block, so it can run before the block is committed. For a TOML
+   configuration Wrangler only prints a snippet and edits nothing. Record the
+   id.
+   **Done 2026-10-21:** `gridview-snapshots-e2e`, id
+   `f8970084eef14b6a8e24db521d015df3`, after Workers Paid (AU-1) was
+   confirmed active on the same account.
 2. Commit the block, with that id, and flip the dormancy tests that pin
-   `coordinated`, the ledger and the cron as absent. They stay pinned for
-   staging and production.
+   `coordinated`, the ledger, the controlled source and the cron as absent, so
+   that they allow them in `env.e2e` only. They stay pinned for staging and
+   production.
 
    ```toml
    [env.e2e]
@@ -252,7 +261,7 @@ staging state").
 
    [[env.e2e.kv_namespaces]]
    binding = "GRIDVIEW_DATA"
-   id = "<the id from step 1>"
+   id = "f8970084eef14b6a8e24db521d015df3"
 
    [env.e2e.secrets]
    required = ["ADMIN_TOKEN"]
