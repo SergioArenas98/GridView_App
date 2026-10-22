@@ -356,11 +356,10 @@ id = "f8970084eef14b6a8e24db521d015df3"
 [env.e2e.secrets]
 required = ["ADMIN_TOKEN"]
 
-# Hourly at minute 17 for the AU-3 demonstration (runbook §8.2 step 3). It
-# takes effect only through `wrangler triggers deploy --env e2e`; after the
-# demonstration the list returns to `[]`.
+# Empty: AU-3 was paused on 2026-10-22 before its timed checks (runbook §8.2).
+# A replay schedules it again through its own PR and `triggers deploy`.
 [env.e2e.triggers]
-crons = ["17 * * * *"]
+crons = []
 
 [env.e2e.observability]
 enabled = true

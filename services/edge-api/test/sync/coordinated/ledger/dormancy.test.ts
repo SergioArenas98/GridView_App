@@ -92,11 +92,11 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
       'PROVIDER_MODE = "coordinated"',
     );
     // The staging cron was removed (an explicit empty list) by the same
-    // configuration; no environment schedules a run except the demonstration
-    // Worker, hourly for gate AU-3.
+    // configuration; no environment schedules a run, the demonstration Worker
+    // included since the AU-3 pause.
     expect(declared).toContain('crons = []');
-    expect(withoutDemonstration(declared)).not.toMatch(/crons = \[\s*"/);
-    expect(demonstrationSection(declared)).toContain('crons = ["17 * * * *"]');
+    expect(declared).not.toMatch(/crons = \[\s*"/);
+    expect(demonstrationSection(declared)).toContain('crons = []');
   });
 
   it('reads one optional Durable Object binding and no test hook', () => {

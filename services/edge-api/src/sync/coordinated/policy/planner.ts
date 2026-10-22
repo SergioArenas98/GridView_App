@@ -50,7 +50,14 @@ import type {
   RefreshResource,
   SeasonRecord,
 } from '../ledger/model';
-import { currentSlot, isEligible, slotSetFor } from './cadence';
+import {
+  FINAL_CHECK_SLOT,
+  checkTime,
+  currentSlot,
+  isEligible,
+  slotSetFor,
+} from './cadence';
+import { rescheduledClassificationRecord } from './classification';
 
 export type RunTrigger = 'scheduled' | 'manual';
 
@@ -202,7 +209,10 @@ function deferredUntil(snapshot: LedgerSnapshot): number {
   }, Number.NEGATIVE_INFINITY);
 }
 
-/** The anchor a round is scheduled from: its record's, else the calendar's. */
+/**
+ * The anchor a round is scheduled from: its record's, else the calendar's.
+ * `records` already carries a moved race's re-anchored record.
+ */
 function anchorsByRound(
   calendar: readonly CalendarAnchor[],
   records: ReadonlyMap<number, ClassificationRecord>,
@@ -218,12 +228,41 @@ function anchorsByRound(
   return [...anchors.values()].sort((left, right) => left.round - right.round);
 }
 
+/**
+ * A moved race's re-anchored record, only while its new ceiling is still
+ * ahead. Past it the restarted cadence has no check left but its last, and a
+ * calendar alternating between two old starts would revive an abandoned
+ * round on every change; the record keeps its anchor instead. The ledger
+ * write follows the planned anchor (`recordRunObservations`), so this is the
+ * only place the instant decides.
+ */
+function followedMove(
+  record: ClassificationRecord,
+  moved: CalendarAnchor,
+  now: Date,
+): ClassificationRecord | null {
+  if (checkTime(moved.anchor, FINAL_CHECK_SLOT).getTime() <= now.getTime()) {
+    return null;
+  }
+  return rescheduledClassificationRecord(record, moved);
+}
+
 function selectChecks(
   input: PlanInput,
   calendar: readonly CalendarAnchor[],
 ): PlannedCheck[] {
+  // A round with nothing observed follows a race the calendar has moved
+  // (`rescheduledClassificationRecord`); any other keeps its record's anchor.
+  const scheduled = new Map(calendar.map((entry) => [entry.round, entry]));
   const records = new Map(
-    input.snapshot.classifications.map(({ record }) => [record.round, record]),
+    input.snapshot.classifications.map(({ record }) => {
+      const moved = scheduled.get(record.round);
+      const effective =
+        moved === undefined
+          ? record
+          : (followedMove(record, moved, input.now) ?? record);
+      return [record.round, effective];
+    }),
   );
   const checks: PlannedCheck[] = [];
   for (const anchor of anchorsByRound(calendar, records)) {

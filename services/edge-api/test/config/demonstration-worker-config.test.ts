@@ -137,13 +137,12 @@ describe('the demonstration Worker configuration (AU-2)', () => {
     expect(demonstrationSection(rawConfig)).not.toContain(STAGING_KV_ID);
   });
 
-  it('requires ADMIN_TOKEN without committing it, runs hourly as the gate does and persists its logs', () => {
+  it('requires ADMIN_TOKEN without committing it, schedules nothing since the AU-3 pause and persists its logs', () => {
     const demonstration = resolved('e2e');
     expect(demonstration.secrets).toEqual({ required: ['ADMIN_TOKEN'] });
-    // The schedule the gate's stage plays as `hourly()` (AU-3, §8.2 step 3).
-    expect(demonstration.triggers).toEqual({
-      crons: [AUTOMATIC_ACTIVATION_DELTA.cron],
-    });
+    // AU-3 was paused before its timed checks (§8.2). A replay commits the
+    // schedule the gate's stage plays as `hourly()` again, through §8.2 step 3.
+    expect(demonstration.triggers).toEqual({ crons: [] });
     expect(DEMONSTRATION_SCHEDULE_LINE).toBe('crons = ["17 * * * *"]');
     expect(readFileSync(runbookPath, 'utf8')).toContain(
       `commit \`${DEMONSTRATION_SCHEDULE_LINE}\` for \`env.e2e\``,
@@ -155,17 +154,13 @@ describe('the demonstration Worker configuration (AU-2)', () => {
     });
   });
 
-  it('is the block the runbook prints, line for line, with the AU-3 schedule', () => {
-    // §8.1 prints the block as AU-2 deployed it, unscheduled; §8.2 step 3
-    // changes its cron list and nothing else.
+  it('is the block the runbook prints, line for line, unscheduled again', () => {
+    // §8.1 prints the block as AU-2 deployed it; the AU-3 pause restored its
+    // empty cron list.
     const printed = declarations(runbookBlock());
     expect(printed.filter((line) => line.startsWith('crons'))).toEqual([
       'crons = []',
     ]);
-    expect(declarations(demonstrationSection(rawConfig))).toEqual(
-      printed.map((line) =>
-        line === 'crons = []' ? DEMONSTRATION_SCHEDULE_LINE : line,
-      ),
-    );
+    expect(declarations(demonstrationSection(rawConfig))).toEqual(printed);
   });
 });
