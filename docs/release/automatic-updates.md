@@ -189,7 +189,7 @@ run e-mails the owner through GitHub's own notifications. Known limits:
 | AU-0 | This change merged, dormant: genesis-capable coordinated runs, calendar horizon, the + 90 min / hourly / back-off polling plan, heartbeat, production logging design, monitor, controlled source, gate tests | **[PR]** | PR #85 |
 | AU-1 | Workers Paid bought (the plan is account-wide, so staging gets it too). **Done 2026-10-21:** read-only, the dashboard shows Workers Paid active, renewing 2026-11-21, on account `786e24f1…e6bf`, the account Wrangler uses; one invoice that day, USD 5.00, paid (the invoice itself, and so any VAT line, was not opened) | **[approval]** owner | — |
 | AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis. **Done 2026-10-21:** all four steps (§8.1) | **[approval]** each, **[PR]** | AU-0, AU-1 |
-| AU-3 | **The end-to-end demonstration with controlled data** (§8.2). Also on the release commit: the in-process gate in CI and the app half locally | **[approval]** the KV load and the schedule; **[record]** the evidence | AU-2 |
+| AU-3 | **The end-to-end demonstration with controlled data** (§8.2). Also on the release commit: the in-process gate in CI and the app half locally. **Paused 2026-10-22, not passed:** the first release and the phone bootstrap passed; the timed result and correction checks were not run (§8.2, "Status") | **[approval]** the KV load and the schedule; **[record]** the evidence | AU-2 |
 | AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2) | **[approval]** each of the three; cutover-sensitive | AU-3 |
 | AU-5 | The monitor's hourly `schedule:` for staging | **[approval]**, **[PR]** | AU-4, AU-6 |
 | AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1) | **[approval]**, **[record]** | AU-0 |
@@ -344,6 +344,33 @@ staging state").
    | Throughout | `lastSuccessfulSyncAt` advances hourly; the monitor passes; no admin request appears in the logs after genesis |
 
    Then remove the schedule (`crons = []`, `triggers deploy`).
+
+**Status: paused 2026-10-22, AU-3 not passed.** The run used
+`T = 2026-10-23T09:00Z`.
+- Step 2: the source was loaded on 2026-10-21. It held 29 keys, each read back
+  byte-identical.
+- Step 3: the schedule went live on 2026-10-22 at 12:03:56Z.
+- First tick (12:17Z): no release.
+- Second tick (13:17Z): the first release was published, rounds 1–21 served.
+  This was earlier than the 07:17Z on 10-23 that the plan assumed, which step 1
+  allows.
+- The 15:17Z run advanced `lastSuccessfulSyncAt`.
+- Step 4 passed at 16:12Z. A clean install of the e2e app made one request,
+  `GET /v1/bootstrap`, which returned the e2e release: Home showed round 22
+  next and round 21 latest.
+
+The owner then paused the demonstration before `T`, because the operator's
+machine was being shut down. This change returns the schedule to `crons = []`,
+which takes effect through `triggers deploy --env e2e`. **Not
+done:** the checks at `T` + 0:17 through + 11:17, namely Home moving on, the
+round 22 result sighted then published, the app showing it, the confirmation,
+and the correction sighted then published.
+
+The Worker `91ff2541`, its KV namespace (the controlled source plus the first
+release) and its Durable Objects are kept as they are. Its genesis was not
+reset. A replay needs a new `T`, a regenerated source and its own approvals
+for each of steps 2–5. It also has to account for the release this run
+already committed.
 
 ### 8.3 Live staging (AU-4)
 
