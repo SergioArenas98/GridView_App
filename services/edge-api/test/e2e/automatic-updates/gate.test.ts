@@ -257,6 +257,55 @@ describe(
       );
     });
 
+    it.each([
+      ['postponed three days, announced after its first check', 3, 3],
+      ['postponed three days, announced just before its start', 3, -2],
+      ['postponed sixteen days, past its first ceiling', 16, 3],
+    ])(
+      'follows a race the calendar moves after it was first asked for: %s',
+      async (_label, days, announcedAfterHours) => {
+        const stage = await started();
+        const start = afterRace(1, days * 24);
+        stage.source.reschedule(1, afterRace(1, announcedAfterHours), start);
+        stage.source.available(1, later(start, 2 * HOUR));
+        // The postponed race is the one under test: no later round runs.
+        for (let round = 2; round <= 24; round += 1) {
+          stage.source.reschedule(round, PRE_SEASON, later(start, round * DAY));
+        }
+        const tickAfterStart = (hours: number) =>
+          later(start, hours * HOUR + 17 * MINUTE);
+
+        const ticks = await stage.hourly(
+          tickAfterRace(1, -3),
+          tickAfterStart(30),
+        );
+
+        // Polling restarts from the new start: the first check at + 2 h 17
+        // min sights the result and the next one publishes it (AU-D5), as for
+        // a race that was never moved.
+        const asked = askedFor(ticks, 1).filter((at) => at > start);
+        expect(asked.slice(0, 2)).toEqual([
+          tickAfterStart(2),
+          tickAfterStart(3),
+        ]);
+        const published = ticks.find(
+          (tick) => tick.at > start && tick.releasesAfter > tick.releasesBefore,
+        );
+        expect(published?.at).toBe(tickAfterStart(3));
+        expect(await winnerPoints(stage, 1)).toBe(25);
+        // The standings never ran ahead of an accepted result.
+        const withheld = ticks.flatMap((tick) =>
+          tick.logs.map((line) => String(line.publicationReason)),
+        );
+        expect(withheld).not.toContain('standings-round-incoherent');
+        // It settles at + 24 h from the new start, as an on-time race does.
+        expect(await stage.harness.record(1)).toMatchObject({
+          anchor: start,
+          terminalReason: 'settled',
+        });
+      },
+    );
+
     it('rejects a structurally incomplete page, keeps asking hourly, and publishes the complete result', async () => {
       const stage = await started();
       stage.source.incomplete(1, afterRace(1, 2)).available(1, afterRace(1, 4));

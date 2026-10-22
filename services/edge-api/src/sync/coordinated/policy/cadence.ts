@@ -22,7 +22,9 @@
  * re-read hourly, and it still settles at `+24h`.
  *
  * The anchor is Jolpica's scheduled race **start**, never a first-publication
- * time, so the ceiling is fixed when the race is scheduled. Nothing here reads
+ * time, so the ceiling is fixed when the race is scheduled. A race the
+ * calendar moves while nothing has been observed for it is scheduled again
+ * from its new start (`rescheduledClassificationRecord`). Nothing here reads
  * a wall clock: every function takes the instant it reasons about.
  */
 
