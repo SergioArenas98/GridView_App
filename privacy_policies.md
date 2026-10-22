@@ -136,8 +136,9 @@ Instead:
   Versions 1.x **do not show a consent message** before ads are requested.
 - **Firebase Cloud Messaging.** Versions 1.x include Google's **Firebase Cloud
   Messaging** and **Firebase Installations** SDKs, in the same Firebase
-  project as version 2.0.0. GridView 1.x has no feature that uses them, but
-  they start when the app opens. They create a random **Firebase installation
+  project as version 2.0.0. GridView 1.x has no notification feature, and we
+  have never sent it notifications. The SDKs start when the app opens even
+  so. They create a random **Firebase installation
   ID** and a messaging registration token for the installation and send them
   to Google, with the app version and technical details of the Firebase SDK.
   Google receives your device's **IP address** with that connection, as with

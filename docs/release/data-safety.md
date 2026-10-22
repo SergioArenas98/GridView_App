@@ -17,7 +17,11 @@ committed through PRs #85 and #86, so the earlier keep-or-disable choice
 bundles for versionCodes 7 and 2 were inspected. They replace the imported
 source tree as the 1.x evidence and show that 1.x also starts Firebase Cloud
 Messaging (§3.5). The deletion question R3 was settled on the facts, and the
-policy no longer promises deletion (§3.1, R3).
+policy no longer promises deletion (§3.1, R3). Later still on 2026-10-22,
+R9 was reworked as an evidence question. The bundles were read again for
+notification code, the owner's statement on notifications was recorded, and
+§3.6 now separates what the uploaded builds show from what only the imported
+tree shows. R9 is now a privacy-review blocker, not an owner choice (§4).
 
 ## 1. Why the current declaration must change
 
@@ -125,6 +129,9 @@ or publishing step.
 | Firebase, *Manage Firebase installations* (https://firebase.google.com/docs/projects/manage-installations, updated 2026-10-22) and the Admin SDK `Installations.deleteInstallation` reference | Deleting an installation ID and its data; the 180-day removal (R3) |
 | Crashlytics REST API, `projects.apps.users.deleteCrashReports` (v1alpha) | Crash-report deletion by a Crashlytics **user ID** only (R3) |
 | Firebase, *Set up a Firebase Cloud Messaging client app on Android* (https://firebase.google.com/docs/cloud-messaging/android/client, updated 2026-10-22) | FCM auto-initialization uploads "the identifier and configuration data to Firebase" (§3.5) |
+| `firebase-messaging` 24.1.0 `.aar` from Google's Maven repository, its `AndroidManifest.xml` | The SDK itself declares `POST_NOTIFICATIONS`, `WAKE_LOCK` and `c2dm.permission.RECEIVE` (§3.5) |
+| Play Console Help, *Provide information for Google Play's Data safety section* (support.google.com/googleplay/android-developer/answer/10787469, read 2026-10-22) | The purpose definitions used for R9: App functionality is "Used for features that are available in the app"; Developer communications is "Used to send news or notifications about the app or the developer" |
+| Owner statement, 2026-10-22 | No push-notification feature was implemented, and no push notification was sent to 1.x users. Firebase was configured, but FCM was not intentionally used for any feature (§3.5) |
 
 ## 3. Proposed answers
 
@@ -231,6 +238,8 @@ They were inspected without being installed or run:
 | AdMob app ID (manifest) | `ca-app-pub-4763306780710624~5227286262` | the same |
 | Consent SDK | User Messaging Platform 3.1.0, packaged by the ads plugin, never called | the same |
 | Firebase | Cloud Messaging 24.1.0 and Installations 18.0.0 (BoM 33.9.0); project `gridview-fb20f`, the same Android app as 2.0.0's production `google-services.json` | the same |
+| FlutterFire plugins | Android side only of `firebase_core` and `firebase_messaging` (classes in `classes.dex`, components in the manifest); no Dart side | the same |
+| Notification permission | `POST_NOTIFICATIONS`, merged from the `firebase-messaging` manifest | the same |
 | Unity Ads | 4.14.1, never started | absent |
 | Ads permissions | `AD_ID`, `ACCESS_ADSERVICES_AD_ID`, `ACCESS_ADSERVICES_ATTRIBUTION`, `ACCESS_ADSERVICES_TOPICS` | the same |
 
@@ -257,10 +266,69 @@ They were inspected without being installed or run:
     token. Firebase's client guide says: "When a FCM registration is
     generated, the library uploads the identifier and configuration data to
     Firebase."
-  - No Dart code uses Firebase. Neither snapshot has a Firebase plugin
-    channel, and versionCode 2's lists no `package:firebase_*` source.
+  - **Correction (2026-10-22, second reading).** The Android side of the
+    FlutterFire `firebase_core` and `firebase_messaging` plugins is packaged.
+    Both manifests register `FlutterFirebaseMessagingInitProvider`,
+    `FlutterFirebaseMessagingService` (for `com.google.firebase.MESSAGING_EVENT`),
+    `FlutterFirebaseMessagingReceiver` (for `c2dm.intent.RECEIVE`) and
+    `FlutterFirebaseMessagingBackgroundService`. The earlier reading said only
+    that no Dart code uses Firebase, which is still true: neither snapshot has
+    a Firebase plugin channel, and versionCode 2's lists no `package:firebase_*`
+    source. So the plugins were declared in the build, and the Dart compiler
+    dropped their unused Dart code.
   - **This is inferred from the packaged SDKs and their documented behaviour.
     It was not observed on a device.**
+
+**Notifications in 1.x.** The question is whether 1.x ever offered or used
+notifications.
+
+- **Observed in the bundles:**
+  - The notification capability is packaged: the FCM service and receiver
+    above, and `POST_NOTIFICATIONS`. The permission comes from the
+    `firebase-messaging` 24.1.0 manifest, not from GridView's own manifest
+    (see the sources table).
+  - No GridView code uses it. Neither Dart snapshot reaches Firebase. Both
+    package an unused `assets/images/icons/notifications.png`: the snapshots
+    reference every other Settings icon path, but not this one.
+  - The other `notification` strings in the snapshots are Flutter framework
+    names (`NotificationListener`, `ChangeNotifier`'s "while dispatching
+    notifications for"). There is also one bare "notifications" string whose
+    source could not be attributed. Neither snapshot has a notification
+    plugin channel.
+- **Observed in the imported tree** (`f8a0ad4`, not the build source):
+  - `lib/pages/settings_page.dart` has a "Notifications" Settings button with
+    that icon, commented out. Its handler opened the updates dialog, not a
+    notification setting.
+  - `frontend/.firebaserc` names a second Firebase project ID,
+    `notificationsgridview`, as its CLI default. Nothing in the bundles refers
+    to it. The bundles use `gridview-fb20f`.
+- **Owner statement (2026-10-22):**
+  - "I never implemented a push-notification feature and never sent push
+    notifications to 1.x users."
+  - Firebase was configured in the project, but FCM was not intentionally
+    used for an app feature.
+- **Not checked:**
+  - **The Firebase console's Messaging campaign history**, for
+    `gridview-fb20f` or `notificationsgridview`. The browser extension did
+    not connect on 2026-10-22, and no Firebase or gcloud CLI is signed in on
+    this machine. The owner can check it read-only under Messaging, in both
+    projects if the second one exists.
+- **Inferred, not tested:**
+  - Had a notification campaign been sent from `gridview-fb20f`, the packaged
+    FCM service would have displayed it while the app was in the background.
+  - On Android 13 and later, a target-SDK-35 app shows notifications only after
+    the user grants `POST_NOTIFICATIONS`. 1.x code never asks, so those
+    devices would show nothing unless the user enabled notifications in
+    Android settings.
+  - On Android 12 and earlier, the permission is granted at install.
+- **Conclusion:**
+  - 1.x offered no notification feature. Its code never used FCM.
+  - The SDK's automatic registration still ran on every install. It
+    processed a Firebase installation ID and a registration token, sent to
+    Google, whether or not anything was ever sent. This is inferred from the
+    packaged SDK, as above.
+  - "No notification was ever sent" rests on the owner's statement until the
+    campaign history is read.
 - **Unity Ads (versionCode 7 only).** Its AndroidX Startup initializer,
   `AdsSdkInitializer`, runs at launch. In 4.14.1 it records the application
   context and start time and installs the Play services Cronet provider. The
@@ -292,7 +360,7 @@ Firebase Cloud Messaging adds this row:
 
 | Play category → type | Collected | Shared | Purposes |
 |---|---|---|---|
-| Device or other IDs → **Device or other IDs** (Firebase installation ID, FCM registration token) | yes | no (Google processes it for GridView) | **Review item R9** |
+| Device or other IDs → **Device or other IDs** (Firebase installation ID, FCM registration token) | yes | no (Google processes it for GridView) | **Blocked: privacy review R9.** No purpose is supported by the evidence yet |
 
 - These rows are **required**: 1.x has no switch, and it starts the SDK before
   showing anything. They are **not processed ephemerally**: Play says data
@@ -306,7 +374,10 @@ Firebase Cloud Messaging adds this row:
 - In state T, "Is all user data encrypted in transit?" stays **Yes** (TLS for
   both SDKs, HTTPS to the API).
 - The Firebase row adds no new type, because Device or other IDs is already
-  declared, as shared, for the ads SDK. It adds the purpose R9 settles.
+  declared, as shared, for the ads SDK. Play's form takes purposes per data
+  type, not per SDK. So R9 asks whether that type's purposes must also cover
+  the FCM registration, and if so, which purpose is true. It does not ask
+  whether to declare the type.
 - Both bundles ship `play-services-ads` 23.6.0. Google publishes the
   disclosure for its current SDK only, so the review should confirm that it
   applies (R5).
@@ -321,27 +392,46 @@ new installs and updates:
 - not retaining versionCode 7 in the 2.0.0 release;
 - unpublishing the app.
 
-**What the code shows.** Evidence: the imported 1.x tree (`f8a0ad4`, read as
-`git show 7524998^:<path>`). Its `pubspec.lock` pins `google_mobile_ads`
-7.0.0.
+**What the uploaded builds show (observed).**
+
+- **versionCode 7 (1.2.1):**
+  - The Dart snapshot holds exactly seven ad unit IDs. They are the same
+    seven that the imported tree's `lib/services/ad_provider.dart` hard-codes.
+  - It also holds that file's two log literals, `" banner loaded"` and
+    `" banner failed to load: "`, and `loadBannerAd`.
+  - The snapshot is obfuscated, so which code calls these, in what order and
+    how often cannot be read.
+- **versionCode 2 (1.0.0):**
+  - The snapshot holds two ad unit IDs, not seven.
+  - Its unobfuscated names show a separate `_loadBannerAd` in four libraries
+    and a `_loadAds` in one. This looks like banners loaded page by page.
+    It does not match versionCode 7's splash-time sequence.
+- **Both bundles:**
+  - Neither has a Remote Config SDK or a consent call.
+  - Both reach only the dead Railway URLs for data.
+
+**What only the imported tree shows** (`f8a0ad4`, read as
+`git show 7524998^:<path>`). It is not the source of either upload (§3.5): it
+pins `google_mobile_ads` 7.0.0, published after both uploads. So the following
+is an inference for versionCode 7, consistent with its strings but not
+confirmed by them:
 
 - `lib/main.dart` calls `MobileAds.instance.initialize()` on every launch,
   before the first frame, with no condition.
 - `lib/pages/splash_page.dart` then loads the data and the ads in sequence.
   `GrandPrixProvider.fetchGrandsPrix()` catches every error, so the dead
-  Railway server does **not** stop the next steps. Every cold start requests
-  the standings banner, then the six other banners in the background.
-  `lib/services/ad_provider.dart` holds the seven ad unit IDs, hard-coded.
+  Railway server does not stop the next steps. Each cold start then requests
+  the standings banner, and the six other banners in the background: seven
+  banner requests per cold start.
 - Each request is a plain `AdRequest()`. There is no `RequestConfiguration`
   and no consent code.
-- There is no remote switch: no Remote Config, no server flag (the only
-  server is shut down), and no in-app update prompt.
 
-**Limit of this evidence.** The imported tree is not the source of the
-uploaded builds (§3.5). The Play bundles confirm the ads SDK, the seven ad
-unit IDs, the AdMob app ID and the dead Railway URLs. versionCode 7's Dart
-snapshot is obfuscated, so the call sequence above is confirmed only by the
-imported tree.
+**What the wording may say.** That 1.x requests ads from Google's SDK at
+launch and keeps doing so is supported. The Google Mobile Ads SDK and its
+init provider ship in both builds, no switch exists, and versionCode 2 is
+plainly page-driven. "Seven banner requests on every cold start" is an
+inference for versionCode 7 only. It is not a fact about 1.x, and it is
+wrong for versionCode 2. No policy text uses the figure.
 
 **Consequence.** Nothing GridView controls, in the app or on a server, can
 switch the ads off in an installed 1.x copy. The Firebase registration
@@ -386,7 +476,7 @@ the units are archived.
 | R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). Archiving the 1.x ad units in AdMob (decision D-A, §3.6) would stop ads being served to them, but not the SDK's requests. |
 | R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. Two follow-ups remain: the Play listing still says Spain (§6.2), and the review decides whether email alone is enough (§6.1). |
 | R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions:** declare it, if the review agrees. Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines:** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. It holds once W3/AU-7 verify it on the deployed Worker. |
-| R9 | 1.x Firebase Cloud Messaging (§3.5): the purpose for its Device or other IDs row, and the legal basis | **Owner decision.** **Purpose:** Play requires one. FCM's only documented purpose is sending messages to the app, which is Play's App functionality, although 1.x never used it. Engineering input: declare App functionality. Leaving the row out would contradict the bundles. **Legal basis:** the policy's section 4 states none for it. One option is to leave it so, as for the 1.x ads: transparent, but it records processing with no stated basis. The other is to claim legitimate interests, which is weak because no feature used the data. The policy describes the processing either way (section 3.4). |
+| R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Blocked: specific privacy review. Not an owner choice, and not engineering-settled.** **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent (the campaign history is unchecked). The SDK still registered every install and sent an installation ID and a token to Google. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. No other Play purpose fits. The evidence supports no purpose. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy's section 4 therefore states no basis for it. It must not be published with one chosen to complete it. See §4.2 for the questions and the possible outcomes. |
 
 ### 4.1 Owner decisions and their options
 
@@ -401,13 +491,61 @@ The facts above are settled. The classifications and the treatment of the
 | | Optional | Needs an in-app switch, a product change |
 | R8 | Declare App interactions for Sessions (recommended if the review agrees) | Matches Firebase's disclosure of the session start |
 | | Do not declare it | Only if the review finds a session start is not an app interaction |
-| R9 | Purpose App functionality for the 1.x Firebase row (recommended) | The only purpose FCM documents, though 1.x never used it |
-| | Legal basis: state none, as for the 1.x ads (policy section 4 unchanged) | Transparent, but records processing with no stated basis |
-| | Legal basis: legitimate interests | Weak, because no 1.x feature used the data |
+| R9 | Not an owner option. A privacy-review blocker (§4.2) | Data safety states 0 and T, and the policy's publication, wait for it |
 | R6, D-A | Leave the 1.x ad units serving | 1.x revenue continues. Ads with no consent message keep being served to installed copies until they update or uninstall |
 | | Archive the 1.x ad units in AdMob (§3.6) | Serving stops, irreversibly, and 1.x revenue ends. The SDK's requests and the Firebase registration continue until update or uninstall. The AdMob account (publisher `pub-4763306780710624`) was not reachable from either Google account signed in to Chrome on 2026-10-22, so whoever holds it must check the units and act |
 | D-DEL | No in-app deletion control (current) | Data safety answers No to deletion. The policy says one installation's data cannot be found or deleted |
 | | Add one (`FirebaseInstallations.delete()`) | A product change and a new release. Data is removed within 180 days. Answer Yes once it is verified on the real project |
+
+### 4.2 R9 privacy-review blocker: 1.x Firebase Cloud Messaging
+
+**What is established.** These come from §3.5. Each is labelled with how it
+is known.
+
+- **Observed:** the bundles package FCM, Firebase Installations, the Android
+  side of FlutterFire messaging and `POST_NOTIFICATIONS`. No GridView code
+  uses any of them, and no notification UI exists.
+- **Inferred:** FCM auto-initializes at startup, so every 1.x install sends a
+  Firebase installation ID, an FCM registration token and the IP address to
+  Google, for project `gridview-fb20f`. That project is also 2.0.0's.
+- **Owner statement:** no feature was implemented, and no notification was
+  sent.
+- **Unchecked:** the Messaging campaign history.
+
+**Questions for the review.**
+
+1. **Data safety purpose.** Device or other IDs is declared anyway, for the
+   ads SDK. Must its purposes also account for the FCM registration? If so,
+   which Play purpose is accurate for data an SDK collected with no feature
+   using it? Is "none of the purposes" an accurate answer for that part?
+2. **Legal basis.** What basis, if any, covered the FCM registration for EEA,
+   UK and Swiss users? A related question is whether storing and reading the
+   installation ID on the device needed consent under the ePrivacy rules.
+   This is a question for the review, not a finding.
+3. **Remediation.** Is disclosure enough, or is more needed?
+
+**Possible outcomes and their consequences.** The review chooses. Nothing
+here is selected.
+
+| Outcome | Consequence |
+|---|---|
+| No purpose is added for FCM; the type keeps the ads SDK's purposes | The form describes only what the evidence shows. The review must accept that Play's purposes do not cover every collection of the type |
+| Developer communications is added | It describes FCM's capability. It also tells users that 1.x sent, or could send, notifications, which the owner says never happened. It could be read as overstating use |
+| App functionality is added | Not supported: no 1.x feature used the data. Shown only so it is not chosen by default |
+| The policy states no basis for the FCM registration (as now) | Transparent. It records processing with no stated basis for the review to address |
+| The policy states a basis the review identifies | Only with the review's reasoning. Legitimate interests is not substantiated by the current facts |
+| Remediation measures are added (for example a Firebase-side measure for 1.x only, or deleting 1.x installation data) | Not evaluated. 1.x and 2.0.0 share one Firebase Android app, so any project setting must be checked against 2.0.0 first (§3.6) |
+
+**What waits on it:**
+
+- Data safety states 0 and T: the FCM part of the Device or other IDs
+  purposes.
+- Publishing the policy: section 4's silence on the FCM registration must be
+  confirmed or replaced.
+- Merging PR #82.
+
+**What would firm up the facts first.** Read the Messaging campaign history,
+read-only, in `gridview-fb20f` and, if it exists, `notificationsgridview`.
 
 ## 5. Related store items
 
