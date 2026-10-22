@@ -22,6 +22,10 @@ R9 was reworked as an evidence question. The bundles were read again for
 notification code, the owner's statement on notifications was recorded, and
 §3.6 now separates what the uploaded builds show from what only the imported
 tree shows. R9 is now a privacy-review blocker, not an owner choice (§4).
+Last on 2026-10-22 (master `8347adf`), §3.4, R2 and R8 record that W3
+deployed and verified the production logging settings, and §3.5 and §4.2
+record a read-only check of the Firebase Messaging campaign history, kept
+separate from the owner's statement.
 
 ## 1. Why the current declaration must change
 
@@ -177,7 +181,8 @@ beyond serving the request, so this is ephemeral processing (**review item
 R2**). It holds only while no persisted record carries the IP address or
 anything that links a request to an installation.
 
-**What production persists (ADR 0028 D8, committed, not yet deployed).**
+**What production persists (ADR 0028 D8, deployed and verified in W3 on
+2026-10-22).**
 `services/edge-api/wrangler.toml` `[env.production.observability]` has
 `enabled = true` and `logs.persist = true`, with
 `logs.invocation_logs = false`. Cloudflare's automatic invocation records,
@@ -207,10 +212,16 @@ the service and is not collected about the user (**review item R8**).
 
 **Conditions before submitting state T or F.** State 0 (1.x only) does not
 include this answer.
-- The first production deploy (W3, AU-7) must show the deployed version
-  carries these settings.
-- A Workers Logs query after a few public requests must show no
-  invocation record and no line for those requests.
+- The deployed version must carry these settings, and a Workers Logs query
+  after a few public requests must show no invocation record and no line for
+  those requests.
+- **Done for W3 on 2026-10-22** (release plan W3): version `62bf40e9…`, in
+  the bootstrap configuration, shows logs persisted with
+  `invocation_logs = false`, and the dashboard's Workers Logs held no event
+  for the public requests sent after the deploy. This is an engineering
+  check. It does not approve the policy's wording (AU-D3).
+- The AU-7 deploy replaces that version, so AU-7 repeats both checks on its
+  own version.
 - If production ever persists an IP address, a header, a public request's
   ID or a line per public request, revisit this section and §3.2 (R2, R8).
 
@@ -307,12 +318,23 @@ notifications.
     notifications to 1.x users."
   - Firebase was configured in the project, but FCM was not intentionally
     used for an app feature.
+- **Observed in the Firebase console (read-only, 2026-10-22, separate from
+  the owner statement):**
+  - `gridview-fb20f`, Messaging → Campaigns: the page opens on the
+    first-campaign onboarding screen ("create your first campaign"). The
+    console lists no campaign, so none was ever composed there.
+  - `gridview-fb20f`, Messaging → Reports, Notification and All views, last
+    90 days (2026-07-24 to 2026-10-22): no sent, received, impression or open
+    data. The console offers no range longer than 90 days.
+  - The signed-in Google account that can open the console lists only
+    `gridview-fb20f`. For it, `notificationsgridview` does not exist or is
+    not visible. The other signed-in account was stopped by Firebase's
+    multi-factor enrolment requirement and was not used.
 - **Not checked:**
-  - **The Firebase console's Messaging campaign history**, for
-    `gridview-fb20f` or `notificationsgridview`. The browser extension did
-    not connect on 2026-10-22, and no Firebase or gcloud CLI is signed in on
-    this machine. The owner can check it read-only under Messaging, in both
-    projects if the second one exists.
+  - Sends before 2026-07-24, and sends through the FCM HTTP API or an Admin
+    SDK rather than a console campaign. Neither appears in the console views
+    above.
+  - `notificationsgridview`, from an account that can see it, if one exists.
 - **Inferred, not tested:**
   - Had a notification campaign been sent from `gridview-fb20f`, the packaged
     FCM service would have displayed it while the app was in the background.
@@ -327,8 +349,11 @@ notifications.
     processed a Firebase installation ID and a registration token, sent to
     Google, whether or not anything was ever sent. This is inferred from the
     packaged SDK, as above.
-  - "No notification was ever sent" rests on the owner's statement until the
-    campaign history is read.
+  - "No notification was ever sent" rests on the owner's statement. The
+    console is consistent with it: no campaign was ever created in
+    `gridview-fb20f`, and no message was sent in the last 90 days. The
+    console cannot show API sends or older reports, so it does not prove the
+    statement.
 - **Unity Ads (versionCode 7 only).** Its AndroidX Startup initializer,
   `AdsSdkInitializer`, runs at launch. In 4.14.1 it records the application
   context and start time and installs the Play services Cronet provider. The
@@ -469,14 +494,14 @@ the units are archived.
 | # | Question | Engineering recommendation |
 |---|---|---|
 | R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | Declare it, if the review agrees it applies. Firebase's own disclosure lists it for Performance Monitoring. Country-level location is coarser than Play's 3 km² threshold, and Play's "Approximate location" type covers that. Play requires the declaration to be accurate and complete and may act on any discrepancy, in either direction. The answer must therefore follow the review's finding, not a preference for declaring more. |
-| R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | Yes. The production logging condition in §3.4 is committed (W1, PR #85, then ADR 0028 D8, PR #86). It must still be verified on the deployed Worker (W3, AU-7). Until then, do not submit state T or F. |
+| R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | Yes. The production logging condition in §3.4 is committed (W1, PR #85, then ADR 0028 D8, PR #86). W3 verified it on the deployed Worker on 2026-10-22 (§3.4), and AU-7 repeats the check on the version it deploys. Do not submit state T or F until the check has passed for the version deployed at the time. |
 | R3 | Deletion-request answer | **Settled on the facts, 2026-10-22: no verified procedure exists.** Official Firebase documentation (read 2026-10-22) gives two routes. **(a) Delete the installation** by its Firebase installation ID, in the app (`FirebaseInstallations.delete()`) or on a server (Admin SDK `deleteInstallation(fid)`). The data tied to that ID is then removed "from live and backup systems of all Firebase services" within 180 days. **(b) Crashlytics `deleteCrashReports`** works only by a user ID set with the Crashlytics SDK. GridView sets none (`lib/core/observability/firebase/firebase_observability.dart`), so (b) cannot be used. Route (a) needs the installation ID, and the app shows it to nobody. A user's description of a crash (time, device model) does not yield it, and no console route from a crash to its installation ID was found or verified. Route (a)'s 180 days are longer than Crashlytics' 90-day and Performance Monitoring's 60- and 30-day retention, so for those it is no faster than expiry. It would remove the installation ID itself, which Firebase otherwise keeps until deleted. **Done:** the policy no longer promises deletion ("or until they are deleted at your request" is removed from section 6). It says one installation's Firebase data cannot currently be found or deleted. **Data safety:** answer **No**. **Owner decision D-DEL** (a product change, not made): an in-app control that calls `FirebaseInstallations.delete()` would let a user delete their own installation's data. Once it is verified on the real project, the answer could become Yes and the policy would describe it. GridView has no accounts, so Play's separate account-deletion requirement does not apply. |
 | R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
 | R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to `play-services-ads` 23.6.0, the version both bundles ship. |
 | R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). Archiving the 1.x ad units in AdMob (decision D-A, §3.6) would stop ads being served to them, but not the SDK's requests. |
 | R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. Two follow-ups remain: the Play listing still says Spain (§6.2), and the review decides whether email alone is enough (§6.1). |
-| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions:** declare it, if the review agrees. Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines:** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. It holds once W3/AU-7 verify it on the deployed Worker. |
-| R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Blocked: specific privacy review. Not an owner choice, and not engineering-settled.** **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent (the campaign history is unchecked). The SDK still registered every install and sent an installation ID and a token to Google. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. No other Play purpose fits. The evidence supports no purpose. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy's section 4 therefore states no basis for it. It must not be published with one chosen to complete it. See §4.2 for the questions and the possible outcomes. |
+| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions:** declare it, if the review agrees. Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines:** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. W3 verified it on the deployed Worker on 2026-10-22, and AU-7 repeats the check (§3.4). |
+| R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Blocked: specific privacy review. Not an owner choice, and not engineering-settled.** **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent. Separately, the Firebase console (read 2026-10-22) shows no campaign ever created in `gridview-fb20f` and no message in the last 90 days; it cannot show API sends or older reports. The SDK still registered every install and sent an installation ID and a token to Google. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. No other Play purpose fits. The evidence supports no purpose. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy's section 4 therefore states no basis for it. It must not be published with one chosen to complete it. See §4.2 for the questions and the possible outcomes. |
 
 ### 4.1 Owner decisions and their options
 
@@ -510,7 +535,12 @@ is known.
   Google, for project `gridview-fb20f`. That project is also 2.0.0's.
 - **Owner statement:** no feature was implemented, and no notification was
   sent.
-- **Unchecked:** the Messaging campaign history.
+- **Observed in the Firebase console, read-only, 2026-10-22:** no campaign
+  was ever created in `gridview-fb20f`, and its reports show no message in
+  the last 90 days. This is consistent with the owner statement but does not
+  prove it (§3.5).
+- **Unchecked:** API sends, reports older than 90 days, and
+  `notificationsgridview`.
 
 **Questions for the review.**
 
@@ -544,8 +574,12 @@ here is selected.
   confirmed or replaced.
 - Merging PR #82.
 
-**What would firm up the facts first.** Read the Messaging campaign history,
-read-only, in `gridview-fb20f` and, if it exists, `notificationsgridview`.
+**What the console check did not settle.** The Messaging campaign history of
+`gridview-fb20f` was read on 2026-10-22 (§3.5). `notificationsgridview` was
+not visible to the account that could open the console; whoever can open it,
+if it exists, can read its Messaging pages read-only. None of this decides
+R9: the review's questions are about the registration itself, which ran
+whether or not anything was sent.
 
 ## 5. Related store items
 

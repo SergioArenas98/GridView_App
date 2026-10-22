@@ -611,7 +611,7 @@ merged commit** A2 builds, never a branch head or an older run.
 | Production AAB build; internal Play installation | A0b | A2 and R2 |
 | Performance targets | A0b | The Performance traces from R3's controlled upgrade against the targets in Implementation Plan §15.4 |
 | Security review | A0 | CodeQL and the secret scan green on that commit, plus a recorded review of the release diff |
-| Privacy review | A0 | PR #82's R1–R9 answered by the owner |
+| Privacy review | A0 | PR #82's R1–R8 answered in the owner's privacy review, and R9 resolved by the specific privacy review it needs (`data-safety.md` §4.2) |
 | Provider legal gate | A0 | ADR 0019 and Implementation Plan §14.2, re-confirmed for automatic publication of race results (ADR 0028 D11, D12); Jolpica's terms and rate limits re-read from its public repository, without contacting the API |
 
 A failing, missing or stale A0 item blocks A2. A failing A0b item blocks R5.
