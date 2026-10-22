@@ -373,6 +373,61 @@ reset. A replay needs a new `T`, a regenerated source and its own approvals
 for each of steps 2–5. It also has to account for the release this run
 already committed.
 
+**Replay (prepared 2026-10-22, not run).** The replay runs on the same Worker,
+after a deploy. It keeps the Worker, its KV namespace, Durable Objects,
+`ADMIN_TOKEN`, genesis and first release, and the e2e app installed on the
+phone. So it needs no new namespace, genesis or app install.
+- **Why the same Worker works.** On `91ff2541` a regenerated source wedges the
+  season: round 22's checks stay on the old calendar's anchor, and from the
+  first shifted standings every run is withheld as
+  `standings-round-incoherent`.
+- **What fixed it.** PR #91 re-anchors a moved race that has nothing
+  observed.
+- **The proof.** `controlled-source.test.ts` ("replays on the paused
+  demonstration") plays the paused run, then a source regenerated for a new
+  `T′`.
+
+Each numbered step is its own **[approval]**:
+
+1. Deploy the release-candidate commit with `npm exec -- wrangler deploy --env
+   e2e`, from a clean checkout, with `crons = []` still committed.
+   - No `--secrets-file`: the Worker keeps its `ADMIN_TOKEN`.
+   - Expect only a new version: the same three Durable Object namespaces,
+     bindings and KV values, schedules `[]`, and unchanged public ETags.
+   - Rolling back to `91ff2541` stays possible, because no class is added.
+2. Choose `T′` and generate its source (step 1 above).
+   - Before loading, replay those exact bytes in-process the way the test
+     does: the paused source over the 2026-10-22 ticks, then the new file.
+   - The load (step 2) overwrites the same 29 keys.
+3. Schedule it at least 3 h before `T′` (step 3 above).
+4. Open the installed e2e app once after the first replay release. Do not
+   reinstall it.
+5. Watch, read-only. `F` is the first tick after the schedule goes live:
+
+   | Instant | Expect |
+   |---|---|
+   | `F` | Rounds 22 and 23 asked for on their old anchors, an empty answer; rounds 20 and 21 settled on deadline; the moved calendar read; no release (`classification-unavailable`) |
+   | `F` + 2 h | Release: the moved calendar, round 22 at `T′`; Home still on round 22 |
+   | `T′` + 0:17, + 1:17 | No run due, no release: rounds 20 and 21 settled on deadline at `F` |
+   | `T′` + 2:17 | Round 22 re-anchored (`classification.rescheduled`), its result sighted, pending; no release |
+   | `T′` + 3:17 | Its result published (winner 25 points); Home moves on to round 23 |
+   | App, next launch | Shows the round 22 result |
+   | `T′` + 6:17 | Confirmation; no release |
+   | `T′` + 10:17 | The correction sighted, pending; no release |
+   | `T′` + 11:17 | The correction published (winner 26 points); the app converges at its next launch |
+   | Throughout | `lastSuccessfulSyncAt` advances hourly; the monitor (`--base-url` of the e2e host) passes; never `standings-round-incoherent`; no admin request |
+
+   Then remove the schedule (`crons = []`, `triggers deploy`).
+
+Round 22's first ceiling fell on 2026-11-06T09:00Z (14 days after the old
+`T`). For any `F` after it, as with the test's `T′` = 2026-11-12T09:00Z, the
+first run also marks round 22 `never-reconciled`, and the move revives it at
+`T′` + 2:17.
+
+The genesis and the first release came from `91ff2541`. The replay's
+releases come from the commit deployed in step 1, and the in-process gate on
+that commit covers the path from genesis.
+
 ### 8.3 Live staging (AU-4)
 
 1. **[approval]** Deploy `[env.staging]` with `PROVIDER_MODE =
