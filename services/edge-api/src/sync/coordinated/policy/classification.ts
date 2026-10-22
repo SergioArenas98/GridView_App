@@ -136,7 +136,8 @@ export function newClassificationRecord(
  * The anchor is Jolpica's scheduled race start (Evaluation §10.4), so when
  * the calendar names a different start for a round with **nothing
  * observed** - no accepted result, no pending sighting, nothing staged or
- * locked - its checks so far asked for a race that had not been run. Its
+ * locked, nothing the authority serves - its checks so far asked for a race
+ * that had not been run. Its
  * cadence restarts from the new start (slot 1 at + 1 h 30 min), and a round
  * abandoned at its first ceiling is asked for again. Without this, the
  * moved race is asked for on the old anchor's back-off or daily slots, or
@@ -160,6 +161,7 @@ export function rescheduledClassificationRecord(
   if (
     record.contentRevision !== null ||
     record.candidateRevision !== null ||
+    record.publishedRevision !== null ||
     isInOperatorBacklog(record)
   ) {
     return null;

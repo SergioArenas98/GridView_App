@@ -50,7 +50,13 @@ import type {
   RefreshResource,
   SeasonRecord,
 } from '../ledger/model';
-import { currentSlot, isEligible, slotSetFor } from './cadence';
+import {
+  FINAL_CHECK_SLOT,
+  checkTime,
+  currentSlot,
+  isEligible,
+  slotSetFor,
+} from './cadence';
 import { rescheduledClassificationRecord } from './classification';
 
 export type RunTrigger = 'scheduled' | 'manual';
@@ -222,6 +228,25 @@ function anchorsByRound(
   return [...anchors.values()].sort((left, right) => left.round - right.round);
 }
 
+/**
+ * A moved race's re-anchored record, only while its new ceiling is still
+ * ahead. Past it the restarted cadence has no check left but its last, and a
+ * calendar alternating between two old starts would revive an abandoned
+ * round on every change; the record keeps its anchor instead. The ledger
+ * write follows the planned anchor (`recordRunObservations`), so this is the
+ * only place the instant decides.
+ */
+function followedMove(
+  record: ClassificationRecord,
+  moved: CalendarAnchor,
+  now: Date,
+): ClassificationRecord | null {
+  if (checkTime(moved.anchor, FINAL_CHECK_SLOT).getTime() <= now.getTime()) {
+    return null;
+  }
+  return rescheduledClassificationRecord(record, moved);
+}
+
 function selectChecks(
   input: PlanInput,
   calendar: readonly CalendarAnchor[],
@@ -235,7 +260,7 @@ function selectChecks(
       const effective =
         moved === undefined
           ? record
-          : (rescheduledClassificationRecord(record, moved) ?? record);
+          : (followedMove(record, moved, input.now) ?? record);
       return [record.round, effective];
     }),
   );

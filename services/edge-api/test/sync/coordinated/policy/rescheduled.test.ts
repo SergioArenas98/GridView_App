@@ -160,6 +160,63 @@ describe('a race moved after its first check', () => {
       terminalReason: null,
     });
   });
+
+  it('follows every later move until a result is observed', async () => {
+    const first = plus(ANCHOR, 3 * DAY);
+    const second = plus(ANCHOR, 5 * DAY);
+    const simulation = new Simulation([anchorOf(1, ANCHOR)]).script(1, (now) =>
+      now.getTime() >= plus(second, 2 * HOUR).getTime() ? observed(A) : failed,
+    );
+    await simulation.tick(plus(ANCHOR, -DAY));
+    await simulation.run(plus(ANCHOR, HOUR), plus(ANCHOR, 12 * HOUR));
+
+    simulation.calendar = [anchorOf(1, first.toISOString())];
+    await simulation.run(plus(ANCHOR, 12 * HOUR), plus(first, 4 * HOUR));
+    expect(simulation.record(1)).toMatchObject({
+      anchor: first.toISOString(),
+      contentRevision: null,
+    });
+
+    // Moved again before anything was observed: it restarts once more.
+    simulation.calendar = [anchorOf(1, second.toISOString())];
+    const after = await simulation.run(
+      plus(first, 4 * HOUR),
+      plus(second, 4 * HOUR),
+    );
+
+    expect(cadenceSlots(after, 1)).toEqual([3, 1, 2]);
+    expect(firstWriteAt(simulation)).toBe(
+      plus(second, 3 * HOUR + 17 * (HOUR / 60)).toISOString(),
+    );
+    expect(simulation.record(1)).toMatchObject({
+      anchor: second.toISOString(),
+      contentRevision: A,
+    });
+    expect(rescheduledEvents(simulation)).toBe(2);
+  });
+
+  describe('once its new ceiling has passed', () => {
+    const abandoned = () =>
+      unanswered({
+        checkIndex: 25,
+        nextDueAt: null,
+        terminalReason: 'never-reconciled-abandoned',
+      });
+    const now = plus(ANCHOR, 15 * DAY);
+
+    it('is not revived, so a calendar alternating between old starts asks nothing', () => {
+      const behind = plus(ANCHOR, 12 * HOUR).toISOString();
+      expect(checksOf(planAt(now, behind, abandoned()))).toEqual([]);
+      expect(checksOf(planAt(now, ANCHOR, abandoned()))).toEqual([]);
+    });
+
+    it('is revived while the new ceiling is ahead', () => {
+      const ahead = plus(ANCHOR, 2 * DAY).toISOString();
+      expect(checksOf(planAt(now, ahead, abandoned()))).toEqual([
+        '1:cadence:24',
+      ]);
+    });
+  });
 });
 
 describe('a round that is not re-anchored', () => {
@@ -190,6 +247,42 @@ describe('a round that is not re-anchored', () => {
     expect(
       rescheduledClassificationRecord(accepted, anchorOf(1, moved)),
     ).toBeNull();
+  });
+
+  it('keeps the anchor of a result the authority serves', () => {
+    const served = unanswered({ publishedRevision: A });
+    expect(
+      rescheduledClassificationRecord(served, anchorOf(1, moved)),
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      'a pending first sighting',
+      { candidateRevision: A, markers: ['pending' as const] },
+    ],
+    [
+      'an accepted result',
+      {
+        contentRevision: A,
+        provenance: 'reconciled' as const,
+        reviewState: 'unsettled' as const,
+        consecutiveConfirmations: 1,
+      },
+    ],
+  ])('keeps the original 14-day ceiling of %s', (_label, observedFields) => {
+    const record = unanswered({
+      checkIndex: 24,
+      nextDueAt: plus(ANCHOR, 14 * DAY).toISOString(),
+      candidateFirstSeenAt:
+        'candidateRevision' in observedFields
+          ? plus(ANCHOR, 2 * HOUR).toISOString()
+          : null,
+      ...observedFields,
+    });
+    expect(
+      checksOf(planAt(plus(ANCHOR, 14 * DAY + HOUR), moved, record)),
+    ).toEqual(['1:cadence:25']);
   });
 
   it('is unchanged when the calendar still names its anchor', () => {
