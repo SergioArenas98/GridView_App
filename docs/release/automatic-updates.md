@@ -372,6 +372,17 @@ reset. A replay needs a new `T`, a regenerated source and its own approvals
 for each of steps 2–5. It also has to account for the release this run
 already committed.
 
+**Replay finding and fix (2026-10-22).** An in-process rehearsal of a replay
+on the existing e2e state wedged the season: every run after the calendar
+release was withheld (`standings-round-incoherent`). The cause was a
+classification record that kept its first anchor after the calendar moved
+the race. PR #91 (merged as `e3c9f0f`) re-anchors a record when the calendar
+moves a race and nothing has been observed yet. With it, the same rehearsal
+publishes the result and the correction. The deployed e2e Worker `91ff2541`
+predates PR #91. A replay therefore first needs an approved deploy that
+includes it, on this Worker or on a fresh one, before steps 2–5. Until then
+the e2e schedule stays at `crons = []`.
+
 ### 8.3 Live staging (AU-4)
 
 1. **[approval]** Deploy `[env.staging]` with `PROVIDER_MODE =

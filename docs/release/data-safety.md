@@ -13,7 +13,11 @@ On 2026-10-21 the owner's controller and contact decisions were recorded
 On 2026-10-22 the API answers (§3.2-§3.4, R2, R8) were brought up to date
 with master `ec19caf`. Production logging is now settled by ADR 0028 D8,
 committed through PRs #85 and #86, so the earlier keep-or-disable choice
-(D-L) no longer applies.
+(D-L) no longer applies. Later on 2026-10-22 (master `e3c9f0f`) the Play
+bundles for versionCodes 7 and 2 were inspected. They replace the imported
+source tree as the 1.x evidence and show that 1.x also starts Firebase Cloud
+Messaging (§3.5). The deletion question R3 was settled on the facts, and the
+policy no longer promises deletion (§3.1, R3).
 
 ## 1. Why the current declaration must change
 
@@ -22,7 +26,8 @@ The live listing declares **"No data collected"** and **"No data shared"**
 
 - **Wrong for 1.2.1 today.** Version 1.2.1 shows Google AdMob banners on every
   page. It initializes the Google Mobile Ads SDK at startup, and that SDK
-  collects and shares data (§3.5).
+  collects and shares data. It also starts Firebase Cloud Messaging, which
+  sends a Firebase installation ID to Google (§3.5).
 - **Wrong for 2.0.0.** It packages Firebase Crashlytics and Performance
   Monitoring and activates them in production builds
   (`../technical/GridView_Observability.md` §4, §7). Version 2.0.0 contains no
@@ -51,8 +56,8 @@ Play Console Help, *Provide information for Google Play's Data safety section*
 
 | Artifact | Track (Play Console, read 2026-10-20) | minSdk | Data practices |
 |---|---|---|---|
-| versionCode 7, 1.2.1 | Production, full rollout | 21 | Google Mobile Ads SDK (§3.5) |
-| versionCode 2, 1.x | Closed testing "Alpha" | not read | **Not verified.** Assumed to match 1.2.1 (Google Mobile Ads SDK) until inspected (§1.4 step 0). |
+| versionCode 7, 1.2.1 | Production, full rollout | 21 | Google Mobile Ads SDK; Firebase Cloud Messaging and Installations; Unity Ads packaged, never started (§3.5) |
+| versionCode 2, 1.0.0 | Closed testing "Alpha" | 21 | Inspected 2026-10-22: the same Google Mobile Ads and Firebase SDKs as versionCode 7, and no Unity Ads (§3.5) |
 | versionCode 8, 2.0.0 | not yet uploaded | **24** (Flutter 3.44 default, `flutter.minSdkVersion`) | Firebase (§3.2) |
 
 1.x builds stay distributed in any of these cases:
@@ -67,8 +72,8 @@ Play Console Help, *Provide information for Google Play's Data safety section*
 
 | State | When | Data safety | Ads declaration |
 |---|---|---|---|
-| **0 - now** | Only 1.x is distributed (today) | §3.5 only (1.x, AdMob) | **Yes** |
-| **T - transition** | From its submission, just before 2.0.0 first reaches a non-internal track (closed, open or production), until no 1.x artifact is distributed on any non-internal track | The **union**: §3.2 (2.0.0, Firebase) **plus** §3.5 (1.x, AdMob) | **Yes** |
+| **0 - now** | Only 1.x is distributed (today) | §3.5 only (1.x: AdMob and Firebase Cloud Messaging) | **Yes** |
+| **T - transition** | From its submission, just before 2.0.0 first reaches a non-internal track (closed, open or production), until no 1.x artifact is distributed on any non-internal track | The **union**: §3.2 (2.0.0, Firebase) **plus** §3.5 (1.x: AdMob and Firebase Cloud Messaging) | **Yes** |
 | **F - final** | 2.0.0 is the only distributed build: rollout at 100%, versionCode 7 not retained, Alpha closed or replaced | §3.2 only | **No** |
 
 ### 1.4 Order of the store steps
@@ -76,15 +81,12 @@ Play Console Help, *Provide information for Google Play's Data safety section*
 None of these steps is done; each is a separate, owner-authorized Play Console
 or publishing step.
 
-0. **Settle the Alpha build first, before steps 1 and 2.** The policy's
-   section 3.4 and §3.5 here are evidenced from the 1.2.1 source only. Both
-   the policy and the form must also be true of versionCode 2 while it is
-   distributed.
-   - **Either** inspect it: download it from Play Console (App bundle
-     explorer) and check its SDKs and manifest against §3.5, then add any
-     difference to both documents.
-   - **Or** stop distributing it first: deactivate the Alpha track, or
-     replace its build (D-T2).
+0. **The Alpha build: done 2026-10-22.** versionCode 2 was downloaded
+   read-only from the App bundle explorer and inspected (§3.5). It has the
+   same ads and Firebase SDKs as versionCode 7 and no Unity Ads, so the
+   policy's section 3.4 and §3.5 here are true of it. Steps 1 and 2 no
+   longer wait on it. Pausing the Alpha track (D-T2) is still recommended,
+   because it shortens state T.
 1. **Publish the transition policy** (`privacy_policies.md` and `.html` in this
    PR) at https://gridview.netlify.app. It covers 1.x (section 3.4) and 2.0.0.
    Publish it **before** the 2.0.0 Data safety change and before the release is
@@ -93,7 +95,7 @@ or publishing step.
    describe its ads.
 2. **Correct the live form now (state 0).** The live "No data collected" is
    already inaccurate for 1.2.1, so declare §3.5 with Ads **Yes**. This does
-   not depend on 2.0.0 or on the production Worker. Step 0 comes first.
+   not depend on 2.0.0 or on the production Worker.
 3. **Submit state T** before 2.0.0 reaches any non-internal track (closed,
    open or production). State T includes the 2.0.0 API answer (§3.4), so it
    also waits until the deployed production Worker's persisted logs are
@@ -119,6 +121,10 @@ or publishing step.
 | `lib/core/network/gridview_dio.dart` | API requests carry `Accept` and a random per-request `X-Request-Id`; no user or device identifier |
 | `android/app/src/main/AndroidManifest.xml` | No `usesCleartextTraffic` or network-security override, so cleartext HTTP is blocked (target SDK 36) |
 | `lib/core/legacy/`, `../technical/GridView_Preferences_And_Settings.md` | Preferences and the content cache stay on the device |
+| Play bundles, versionCodes 7 and 2 (App bundle explorer, original uploads, read 2026-10-22) | What 1.x really ships (§3.5) |
+| Firebase, *Manage Firebase installations* (https://firebase.google.com/docs/projects/manage-installations, updated 2026-10-22) and the Admin SDK `Installations.deleteInstallation` reference | Deleting an installation ID and its data; the 180-day removal (R3) |
+| Crashlytics REST API, `projects.apps.users.deleteCrashReports` (v1alpha) | Crash-report deletion by a Crashlytics **user ID** only (R3) |
+| Firebase, *Set up a Firebase Cloud Messaging client app on Android* (https://firebase.google.com/docs/cloud-messaging/android/client, updated 2026-10-22) | FCM auto-initialization uploads "the identifier and configuration data to Firebase" (§3.5) |
 
 ## 3. Proposed answers
 
@@ -128,7 +134,7 @@ or publishing step.
 |---|---|---|
 | Does your app collect or share any of the required user data types? | **Yes** | Firebase collects the types in §3.2 |
 | Is all of the user data collected by your app encrypted in transit? | **Yes** | Firebase sends over HTTPS; the GridView API is HTTPS-only and cleartext is blocked by the platform |
-| Do you provide a way for users to request that their data is deleted? | **Open (R3).** Do not answer until a workable way to identify and delete one installation's Firebase data is verified | The policy offers deletion requests at gridviewapp1@gmail.com, a mailbox the owner confirmed he uses (§6). No identification and deletion procedure has been verified yet; see R3 |
+| Do you provide a way for users to request that their data is deleted? | **No**, unless the owner first adds an in-app deletion control (decision D-DEL, R3) | No verified way exists to identify and delete one installation's Firebase data (R3). The policy no longer offers deletion. It says that one installation's Firebase data cannot currently be found or deleted (policy section 6) |
 
 ### 3.2 Data types
 
@@ -207,17 +213,67 @@ The release plan's W3 step notes that tail cannot prove what is persisted.
 
 ### 3.5 Versions 1.x (states 0 and T)
 
-Evidence: the pre-reconstruction tree (`git show 7524998^:pubspec.yaml`, `lib/`
-and `android/`), which declares `version: 1.2.1+7`.
+**Evidence: the Play bundles.** On 2026-10-22 the original uploads of
+versionCode 7 (1.2.1, uploaded 2025-04-19) and versionCode 2 (1.0.0, uploaded
+2025-03-04) were downloaded read-only from Play Console's App bundle explorer.
+They were inspected without being installed or run:
 
-- `google_mobile_ads: ^7.0.0` is initialized in `lib/main.dart`
-  (`MobileAds.instance.initialize()`). Banner ads appear on the calendar,
-  driver, Grand Prix, list and standings pages.
-- The manifest carries `com.google.android.gms.ads.APPLICATION_ID`.
-- There is no User Messaging Platform or other consent code.
-- `unity_ads_plugin: ^0.3.24` is a dependency, but no Dart code references
-  Unity Ads.
-- There is no Firebase SDK dependency.
+- the dependency metadata
+  (`BUNDLE-METADATA/com.android.tools.build.libraries/dependencies.pb`);
+- the base manifest and resources;
+- the strings and Flutter plugin channels in the Dart snapshot (`libapp.so`).
+
+| | versionCode 7 (1.2.1) | versionCode 2 (1.0.0) |
+|---|---|---|
+| `.aab` SHA-256 | `560f5634…e3cd` | `1ef7d378…e9cf` |
+| min / target SDK (Play Console) | 21 / 35 | 21 / 35 |
+| Google Mobile Ads SDK | `play-services-ads` 23.6.0; seven banner ad unit IDs | 23.6.0; two ad unit IDs |
+| AdMob app ID (manifest) | `ca-app-pub-4763306780710624~5227286262` | the same |
+| Consent SDK | User Messaging Platform 3.1.0, packaged by the ads plugin, never called | the same |
+| Firebase | Cloud Messaging 24.1.0 and Installations 18.0.0 (BoM 33.9.0); project `gridview-fb20f`, the same Android app as 2.0.0's production `google-services.json` | the same |
+| Unity Ads | 4.14.1, never started | absent |
+| Ads permissions | `AD_ID`, `ACCESS_ADSERVICES_AD_ID`, `ACCESS_ADSERVICES_ATTRIBUTION`, `ACCESS_ADSERVICES_TOPICS` | the same |
+
+**What they do.**
+
+- **Ads.** The Dart snapshots use the ads plugin's channel, alongside
+  `shared_preferences`, `url_launcher` and `path_provider`. Neither contains
+  `ConsentInformation` or `ConsentRequest`. versionCode 2's snapshot is not
+  obfuscated. It lists the ads plugin's `mobile_ads.dart`, `ad_containers.dart`
+  and `request_configuration.dart`, and no consent source. So the consent SDK
+  ships but is never called, and no consent message is shown.
+  - versionCode 7's snapshot is obfuscated, so its call order cannot be read.
+    The launch-time `MobileAds.instance.initialize()` (§3.6) comes from the
+    imported tree.
+- **Firebase Cloud Messaging.** Both manifests register `FirebaseInitProvider`,
+  and the resources carry the `gridview-fb20f` values (`google_app_id`,
+  `gcm_defaultSenderId`, `google_api_key`, `project_id`). The default Firebase
+  app therefore starts with the process.
+  - firebase-messaging 24.1.0 registers `FirebaseMessaging` as an always-eager
+    component. This was checked in `FirebaseMessagingRegistrar`, in Google's
+    published 24.1.0 artifact.
+  - Neither manifest turns off `firebase_messaging_auto_init_enabled`.
+  - So the SDK obtains a Firebase installation ID and an FCM registration
+    token. Firebase's client guide says: "When a FCM registration is
+    generated, the library uploads the identifier and configuration data to
+    Firebase."
+  - No Dart code uses Firebase. Neither snapshot has a Firebase plugin
+    channel, and versionCode 2's lists no `package:firebase_*` source.
+  - **This is inferred from the packaged SDKs and their documented behaviour.
+    It was not observed on a device.**
+- **Unity Ads (versionCode 7 only).** Its AndroidX Startup initializer,
+  `AdsSdkInitializer`, runs at launch. In 4.14.1 it records the application
+  context and start time and installs the Play services Cronet provider. The
+  Dart snapshot has no Unity channel, so Unity Ads itself is never
+  initialized.
+- **Railway.** Both snapshots hold the dead `f1connectbackend-production`
+  URLs.
+
+**The imported tree is not the source of these builds.** Its `pubspec.lock`
+pins google_mobile_ads 7.0.0 (published on pub.dev 2025-12-16) and
+unity_ads_plugin 0.3.30 (2026-03-17), both later than the uploads. It also
+declares no Firebase package. Earlier drafts of this section relied on it,
+and the facts above replace it.
 
 The Google Mobile Ads SDK disclosure
 (developers.google.com/admob/android/privacy/play-data-disclosure, updated
@@ -232,6 +288,12 @@ State T adds these rows to §3.2:
 | App info and performance → **Diagnostics** | yes | **yes** | the same |
 | Device or other IDs → **Device or other IDs** (advertising ID, app set ID) | yes | **yes** | the same |
 
+Firebase Cloud Messaging adds this row:
+
+| Play category → type | Collected | Shared | Purposes |
+|---|---|---|---|
+| Device or other IDs → **Device or other IDs** (Firebase installation ID, FCM registration token) | yes | no (Google processes it for GridView) | **Review item R9** |
+
 - These rows are **required**: 1.x has no switch, and it starts the SDK before
   showing anything. They are **not processed ephemerally**: Play says data
   used to build advertising profiles cannot be.
@@ -243,7 +305,9 @@ State T adds these rows to §3.2:
   fraud purposes.
 - In state T, "Is all user data encrypted in transit?" stays **Yes** (TLS for
   both SDKs, HTTPS to the API).
-- The SDK version in 1.2.1 resolves from `^7.0.0`. Google publishes the
+- The Firebase row adds no new type, because Device or other IDs is already
+  declared, as shared, for the ads SDK. It adds the purpose R9 settles.
+- Both bundles ship `play-services-ads` 23.6.0. Google publishes the
   disclosure for its current SDK only, so the review should confirm that it
   applies (R5).
 
@@ -273,15 +337,18 @@ new installs and updates:
 - There is no remote switch: no Remote Config, no server flag (the only
   server is shut down), and no in-app update prompt.
 
-**Limit of this evidence.** The import is labelled "sanitized", and it is
-not proven to be the uploaded bundle. Play reports target SDK 35 for
-versionCode 7, while the imported `android/app/build.gradle` says 36.
-Downloading versionCodes 7 and 2 from the App bundle explorer would settle
-it (§1.4 step 0). That is a read-only Play Console step, and it was not done
-here.
+**Limit of this evidence.** The imported tree is not the source of the
+uploaded builds (§3.5). The Play bundles confirm the ads SDK, the seven ad
+unit IDs, the AdMob app ID and the dead Railway URLs. versionCode 7's Dart
+snapshot is obfuscated, so the call sequence above is confirmed only by the
+imported tree.
 
 **Consequence.** Nothing GridView controls, in the app or on a server, can
-switch the ads off in an installed 1.x copy. Ad requests from a device end
+switch the ads off in an installed 1.x copy. The Firebase registration
+(§3.5) also continues until the copy is updated or uninstalled. That traffic
+goes to GridView's own Firebase project. Whether a project setting could stop
+it without affecting 2.0.0, which uses the same project and Android app, was
+not evaluated. Ad requests from a device end
 only when it updates to 2.0.0 or the app is uninstalled. Devices on API 21
 to 23 cannot update (2.0.0 has minSdk 24), so they keep requesting until the
 app is uninstalled.
@@ -313,12 +380,34 @@ the units are archived.
 |---|---|---|
 | R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | Declare it, if the review agrees it applies. Firebase's own disclosure lists it for Performance Monitoring. Country-level location is coarser than Play's 3 km² threshold, and Play's "Approximate location" type covers that. Play requires the declaration to be accurate and complete and may act on any discrepancy, in either direction. The answer must therefore follow the review's finding, not a preference for declaring more. |
 | R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | Yes. The production logging condition in §3.4 is committed (W1, PR #85, then ADR 0028 D8, PR #86). It must still be verified on the deployed Worker (W3, AU-7). Until then, do not submit state T or F. |
-| R3 | Deletion-request answer | **Open.** The owner confirmed on 2026-10-20 that he uses gridviewapp1@gmail.com, so requests can be received. That does not show they can be fulfilled. Play's guidance prescribes no mechanism and accepts a dedicated email address. GridView has no accounts, so Play's separate account-deletion requirement does not apply. **Identification:** the app shows the user no installation ID and sets no Crashlytics user identifier (`lib/core/observability/firebase/firebase_observability.dart` only enables collection). A user can offer only a crash's approximate time and device model. **Deletion:** no Firebase console or API procedure for deleting one installation's Crashlytics and Performance data has been verified. Until one is, data expires only after 90, 60 or 30 days (§2). Answer "Yes" once a procedure is verified on the real project. If none works, change the policy's deletion wording (section 6, including "or until they are deleted at your request") before it is published (P2), instead of answering "No" while the policy says otherwise. |
+| R3 | Deletion-request answer | **Settled on the facts, 2026-10-22: no verified procedure exists.** Official Firebase documentation (read 2026-10-22) gives two routes. **(a) Delete the installation** by its Firebase installation ID, in the app (`FirebaseInstallations.delete()`) or on a server (Admin SDK `deleteInstallation(fid)`). The data tied to that ID is then removed "from live and backup systems of all Firebase services" within 180 days. **(b) Crashlytics `deleteCrashReports`** works only by a user ID set with the Crashlytics SDK. GridView sets none (`lib/core/observability/firebase/firebase_observability.dart`), so (b) cannot be used. Route (a) needs the installation ID, and the app shows it to nobody. A user's description of a crash (time, device model) does not yield it, and no console route from a crash to its installation ID was found or verified. Route (a)'s 180 days are longer than Crashlytics' 90-day and Performance Monitoring's 60- and 30-day retention, so for those it is no faster than expiry. It would remove the installation ID itself, which Firebase otherwise keeps until deleted. **Done:** the policy no longer promises deletion ("or until they are deleted at your request" is removed from section 6). It says one installation's Firebase data cannot currently be found or deleted. **Data safety:** answer **No**. **Owner decision D-DEL** (a product change, not made): an in-app control that calls `FirebaseInstallations.delete()` would let a user delete their own installation's data. Once it is verified on the real project, the answer could become Yes and the policy would describe it. GridView has no accounts, so Play's separate account-deletion requirement does not apply. |
 | R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
-| R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to the SDK version 1.2.1 resolved. |
+| R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to `play-services-ads` 23.6.0, the version both bundles ship. |
 | R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). Archiving the 1.x ad units in AdMob (decision D-A, §3.6) would stop ads being served to them, but not the SDK's requests. |
 | R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. Two follow-ups remain: the Play listing still says Spain (§6.2), and the review decides whether email alone is enough (§6.1). |
 | R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions:** declare it, if the review agrees. Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines:** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. It holds once W3/AU-7 verify it on the deployed Worker. |
+| R9 | 1.x Firebase Cloud Messaging (§3.5): the purpose for its Device or other IDs row, and the legal basis | **Owner decision.** **Purpose:** Play requires one. FCM's only documented purpose is sending messages to the app, which is Play's App functionality, although 1.x never used it. Engineering input: declare App functionality. Leaving the row out would contradict the bundles. **Legal basis:** the policy's section 4 states none for it. One option is to leave it so, as for the 1.x ads: transparent, but it records processing with no stated basis. The other is to claim legitimate interests, which is weak because no feature used the data. The policy describes the processing either way (section 3.4). |
+
+### 4.1 Owner decisions and their options
+
+The facts above are settled. The classifications and the treatment of the
+1.x ads are not, and they stay with the owner and the privacy review.
+
+| # | Option | Consequence |
+|---|---|---|
+| R1 | Declare Approximate location (recommended if the review agrees that Performance Monitoring's IP-to-country mapping is location) | The listing shows location collected. Matches Firebase's own disclosure |
+| | Do not declare it | Only if the review finds it is not location. Otherwise it is a discrepancy Play may act on |
+| R4 | Required (today's fact) | No change needed |
+| | Optional | Needs an in-app switch, a product change |
+| R8 | Declare App interactions for Sessions (recommended if the review agrees) | Matches Firebase's disclosure of the session start |
+| | Do not declare it | Only if the review finds a session start is not an app interaction |
+| R9 | Purpose App functionality for the 1.x Firebase row (recommended) | The only purpose FCM documents, though 1.x never used it |
+| | Legal basis: state none, as for the 1.x ads (policy section 4 unchanged) | Transparent, but records processing with no stated basis |
+| | Legal basis: legitimate interests | Weak, because no 1.x feature used the data |
+| R6, D-A | Leave the 1.x ad units serving | 1.x revenue continues. Ads with no consent message keep being served to installed copies until they update or uninstall |
+| | Archive the 1.x ad units in AdMob (§3.6) | Serving stops, irreversibly, and 1.x revenue ends. The SDK's requests and the Firebase registration continue until update or uninstall. The AdMob account (publisher `pub-4763306780710624`) was not reachable from either Google account signed in to Chrome on 2026-10-22, so whoever holds it must check the units and act |
+| D-DEL | No in-app deletion control (current) | Data safety answers No to deletion. The policy says one installation's data cannot be found or deleted |
+| | Add one (`FirebaseInstallations.delete()`) | A product change and a new release. Data is removed within 180 days. Answer Yes once it is verified on the real project |
 
 ## 5. Related store items
 

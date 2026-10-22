@@ -32,7 +32,8 @@ Contact: **gridviewapp1@gmail.com**
   what you tap. Firebase records when a session starts (section 3.3). The
   GridView API keeps no record of the app's requests, only a short record of
   its own errors (section 3.2). In versions 1.x, the advertising SDK collects
-  app launches, taps and ad views (section 3.4).
+  app launches, taps and ad views, and Firebase registers each installation
+  for messaging (section 3.4).
 - Your language and theme choices and the Formula 1 data the app downloads are
   stored **on your device**.
 - To fix crashes and keep the app fast, GridView sends **crash reports and
@@ -133,8 +134,16 @@ Instead:
   settings allow, personalised ads), analytics and fraud prevention, under its
   own policies: https://policies.google.com/technologies/partner-sites.
   Versions 1.x **do not show a consent message** before ads are requested.
-- **Unity Ads SDK.** Versions 1.x also include the Unity Ads SDK. The app's own
-  code never starts it.
+- **Firebase Cloud Messaging.** Versions 1.x include Google's **Firebase Cloud
+  Messaging** and **Firebase Installations** SDKs, in the same Firebase
+  project as version 2.0.0. GridView 1.x has no feature that uses them, but
+  they start when the app opens. They create a random **Firebase installation
+  ID** and a messaging registration token for the installation and send them
+  to Google, with the app version and technical details of the Firebase SDK.
+  Google receives your device's **IP address** with that connection, as with
+  any connection. Firebase keeps the installation ID until it is deleted.
+- **Unity Ads SDK.** Version 1.2.1 also includes the Unity Ads SDK. The app's
+  own code never starts it.
 - **The 1.x data server.** Versions 1.x downloaded Formula 1 data from a
   separate GridView server hosted on Railway, which received your device's IP
   address with each request. That server has been shut down and no longer
@@ -178,7 +187,8 @@ advertising purposes: https://policies.google.com/technologies/partner-sites.
 Information is processed on our behalf by these service providers, under their
 data-processing terms:
 
-- **Google** (Firebase Crashlytics and Performance Monitoring):
+- **Google** (Firebase Crashlytics and Performance Monitoring; in versions
+  1.x, Firebase Cloud Messaging and Installations):
   https://firebase.google.com/support/privacy
 - **Cloudflare** (hosting of the GridView API):
   https://www.cloudflare.com/privacypolicy/
@@ -193,14 +203,18 @@ We may also disclose information if the law requires it.
 
 - **Stop future collection**: uninstall the app. Without the app, nothing
   more is sent. Reports already sent stay with Firebase until their retention
-  period ends (section 3.3), or until they are deleted at your request (below).
+  period ends (section 3.3).
 - **Reset the identifiers**: clear the app's data in Android settings. This
   gives the installation new random identifiers.
 - **Your rights**: depending on where you live, you can ask for access to,
   correction or deletion of your information, or object to or restrict its
-  processing. Write to gridviewapp1@gmail.com. Because GridView does not know
-  who you are, we may need your help to find the information concerned (for
-  example, the approximate date and time of a crash).
+  processing. Write to gridviewapp1@gmail.com.
+- **What we can and cannot do**: GridView does not know who you are. Firebase
+  links its data to random installation identifiers that the app does not
+  show to you or to us. We therefore cannot currently find, or delete, the
+  Firebase data of one particular installation. Crash reports and performance
+  measurements are deleted automatically when their retention period ends
+  (section 3.3).
 - **Complaints**: you can complain to a data protection authority, in
   particular in the country where you live or work, or where you believe your
   rights were infringed. GridView's controller is based in Ireland, where the
