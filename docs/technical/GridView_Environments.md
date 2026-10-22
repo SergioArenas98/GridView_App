@@ -306,8 +306,8 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 |---|---|---|
 | development | `gridview-api-dev` | Local `wrangler dev` only |
 | staging | `gridview-api-staging` | **Publicly reachable, observed 2026-08-17.** See below for exactly what that does and does not establish. Redeployed 2026-09-12 as version `00012c06-6c09-4b2f-b24c-02d6e51ec08d` (season-2026 admission closure; superseded version `985115b7-abb3-4346-8845-d8ff41c80cf6`). Redeployed twice more on 2026-09-13, for the season-2026 recovery window: reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`, then reclosure version `c35f99c0-9e89-4dd7-8fbe-449d295fb567`, carrying `seed:2026`. Redeployed on 2026-09-15 as version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`, which adds `SEASON_PUBLICATION_AUTHORITY = "sequencer"` and keeps `seed:2026`. Redeployed on 2026-09-16 as version `c297d260-c81b-4110-bdf2-7572e1206af3`, which keeps `sequencer` and moves the control to `activate:2026`; season 2026 was activated that day. Redeployed on 2026-10-07 as version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275` (Stage A; operator-recorded source `3228725`), which keeps every var, the cron and both Durable Object bindings. Redeployed on 2026-10-13 as version `3b3b8273-41d4-4781-867c-8e517f132823` (from `6ce0ed6`: `PROVIDER_MODE = none`, `SEASON_BATCH_INGEST = 2026`, no schedule), on 2026-10-18 as `ddf551e9-c295-4f87-8ea7-fd6af8da11ed` (from `0cfa312`) and on 2026-10-19 as `453af4fb-e478-42a2-abd6-acdaa1d6473f` (from `d351118`), which is **current, verified read-only 2026-10-21** (staging runbook §2, "Live staging state"). See the Durable Object state below. |
-| production | `gridview-api-production` | Not provisioned. Configuration committed 2026-10-21 (release plan W1), deliberately incomplete: no KV binding until the namespace exists (below) |
-| e2e | `gridview-api-e2e` | **Never deployed.** The isolated demonstration Worker of gate AU-3 (`docs/release/automatic-updates.md` §8.1). Its KV namespace `gridview-snapshots-e2e` (`f8970084eef14b6a8e24db521d015df3`) was created on 2026-10-21 (AU-2 step 1), and `[env.e2e]` binds it. No Worker, Durable Object namespace, secret or schedule exists for it |
+| production | `gridview-api-production` | **Never deployed.** Configuration committed 2026-10-21 (release plan W1). Its KV namespace `gridview-snapshots-production` (`d76328b37da343db92d927142c072593`) was created on 2026-10-22 (W2 step 1), and `[env.production]` binds it (the W2 PR). No Worker, Durable Object namespace, secret or schedule exists for it |
+| e2e | `gridview-api-e2e` | **Deployed 2026-10-21** (AU-2 step 3, version `91ff2541`), with its own three Durable Object namespaces and `ADMIN_TOKEN`; season 2026 born there by genesis (AU-2 step 4). The isolated demonstration Worker of gate AU-3 (`docs/release/automatic-updates.md` §8.1). Its KV namespace `gridview-snapshots-e2e` (`f8970084eef14b6a8e24db521d015df3`) was created on 2026-10-21 (AU-2 step 1), and `[env.e2e]` binds it. AU-3 was paused on 2026-10-22: no schedule |
 
 > **Staging: public availability observed; administrative state not verified.**
 >
@@ -336,13 +336,14 @@ Wrangler environments are defined in `services/edge-api/wrangler.toml`:
 >
 > Production remains unprovisioned, and nothing above changes that.
 
-Production Cloudflare account resources (KV namespaces, R2 buckets, routes,
-domains, secrets) do not exist; provisioning happens with approval in the owning
-phase.
+Production Cloudflare account resources (R2 buckets, routes, domains,
+secrets, Durable Object namespaces) do not exist; provisioning happens with
+approval in the owning phase. The one exception is the KV namespace
+`gridview-snapshots-production` (`d76328b37da343db92d927142c072593`), created on 2026-10-22 (release plan W2 step 1).
 
 **Production Worker configuration (release plan W1), committed 2026-10-21,
 never deployed.** The owner chose submission path A, Workers Paid, on
-2026-10-20; nothing was bought. `[env.production]` now commits:
+2026-10-20 and bought it on 2026-10-21 (AU-1). `[env.production]` now commits:
 
 - `workers_dev = true`, `preview_urls = false`: the host
   `gridview-api-production.sejuma18.workers.dev` that
@@ -362,16 +363,20 @@ never deployed.** The owner chose submission path A, Workers Paid, on
   paths as `/internal/*`, so nothing about app users or credentials is
   stored. PR #85 had committed `enabled = false` as the fail-safe.
 
-It deliberately commits **no `GRIDVIEW_DATA` KV binding**. No production
-namespace exists, and Wrangler 4.112 provisions a new namespace on deploy for a
-KV binding that has no `id`, so a binding without one would create
-infrastructure. Release plan W2 creates the namespace and the secret, each
-separately authorized, and commits the real id. Until then the Worker fails
+W1 deliberately committed **no `GRIDVIEW_DATA` KV binding**: no production
+namespace existed, and Wrangler 4.112 provisions a new namespace on deploy for
+a KV binding that has no `id`, so a binding without one would create
+infrastructure. Release plan W2 created `gridview-snapshots-production` on
+2026-10-22, and its PR binds it with the real id
+`d76328b37da343db92d927142c072593`. Without the binding the Worker fails
 closed with `500 INTERNAL_ERROR` (`GRIDVIEW_DATA KV binding is required in
-production`; the message is not returned): the test shows it for `/v1/status`, a
-season read and the ingest. A first
-`wrangler deploy` refuses for the missing required secret unless one is
-supplied with `--secrets-file`. **Do not deploy this configuration.**
+production`; the message is not returned): the test still shows it for
+`/v1/status`, a season read and the ingest. A first `wrangler deploy` refuses
+for the missing required secret unless one is supplied with
+`--secrets-file`. **Do not deploy this configuration without W3's
+authorization.** It stays the bootstrap configuration (`PROVIDER_MODE =
+"none"`, no ledger, no schedule); the coordinated production configuration is
+gate AU-7 (`docs/release/automatic-updates.md` §8.4).
 
 Once deployed, production serves no season until genesis and the first batch:
 before genesis the season resources answer `404 SEASON_NOT_FOUND` and
@@ -440,7 +445,7 @@ narrowed:** a season published under this policy must not be rolled back by
 a Worker on `mock`; `none` and `coordinated` re-stamp it identically.
 
 **`CONTROLLED_PROVIDER_SOURCE` (code 2026-10-21; committed only in `[env.e2e]`,
-never deployed).** `kv` makes a
+deployed there on 2026-10-21).** `kv` makes a
 coordinated **staging** Worker's Jolpica transport read time-aware controlled
 documents from its own `GRIDVIEW_DATA` instead of the network: the isolated
 demonstration Worker `gridview-api-e2e` of gate AU-3 (ADR 0028 D10,
@@ -449,11 +454,12 @@ production, development or a non-coordinated Worker, is a configuration
 error on every request.
 
 Admitting the value activates nothing. Even where it is selected, the
-coordinated runtime needs a bound reconciliation ledger (G9), and no deployed
-Worker has one. Wherever it is unbound, every coordinated run stops as
-`ledger-unbound` before any transport, client or port is constructed, with
-zero provider requests. No committed environment declares the binding either;
-see "Reconciliation ledger binding: removed, Stage B parked" below.
+coordinated runtime needs a bound reconciliation ledger (G9). Only the e2e
+Worker declares and binds one (deployed 2026-10-21, unscheduled since
+2026-10-22); staging and production do not. Wherever it is unbound, every
+coordinated run stops as `ledger-unbound` before any transport, client or port
+is constructed, with zero provider requests. See "Reconciliation ledger
+binding: removed, Stage B parked" below for staging.
 
 **`SEASON_BATCH_INGEST`, code committed (2026-10-12); staging value
 committed (2026-10-13); live in staging since 2026-10-13.** It names the one season the guarded

@@ -50,9 +50,9 @@ Steps marked **[PR]** are reviewable repository changes.
 | Gate | Action | Depends on |
 |---|---|---|
 | W0 | **[done]** Production genesis design and implementation (ADR 0025 O-16 amendment), PR #84, merged 2026-10-20 as `527444b` | — |
-| W-P | **[decided 2026-10-20: A, Workers Paid]** The submission path (`submission-path-decision.md`). Buying the plan is a separate owner step | W0 |
-| W1 | **[PR]** The production Worker configuration, plus whatever W-P requires: **PR #85**, without the KV binding | W0, W-P |
-| W2 | **[approval]** Create the production KV namespace and a new `ADMIN_TOKEN` value (not uploaded yet); **[PR]** commit the KV id | W1 |
+| W-P | **[decided 2026-10-20: A, Workers Paid]** The submission path (`submission-path-decision.md`). **Bought 2026-10-21** (AU-1) | W0 |
+| W1 | **[done]** The production Worker configuration, without the KV binding: PR #85, merged 2026-10-21 as `65388ba` | W0, W-P |
+| W2 | **Step 1 done 2026-10-22:** the namespace `gridview-snapshots-production` (`d76328b37da343db92d927142c072593`). **[PR]** commit the KV id (the W2 PR). **[approval]** a new `ADMIN_TOKEN` value (not uploaded yet), or generate it in W3 | W1 |
 | W3 | **[approval]** First deploy of `gridview-api-production`, supplying `ADMIN_TOKEN` with `--secrets-file` | W2 |
 | D1 | **Superseded 2026-10-21** (ADR 0028 D3): no capture. Kept only as the manual fallback in `none` mode | — |
 | D2 | **[approval]** Run production genesis for season 2026 | W3 |
@@ -131,13 +131,15 @@ The amendment must decide:
 
 ### W1. Production configuration **[PR]**
 
-> **Status 2026-10-21: PR #85**, open, not deployed. It commits everything
-> below except the `GRIDVIEW_DATA` KV binding. Wrangler 4.112 creates a new
-> namespace on deploy for a KV binding with no `id`, and no production
-> namespace exists, so the binding waits for W2's real id. Until then the
-> Worker answers `500` on every route it was tested on. Persisted Workers
-> Logs are committed **off** (`[env.production.observability] enabled =
-> false`), the fail-safe while D-L is open.
+> **Status 2026-10-22: merged in PR #85** (`65388ba`, 2026-10-21), not
+> deployed. PR #85 committed everything below except the `GRIDVIEW_DATA` KV
+> binding, because Wrangler 4.112 creates a new namespace on deploy for a KV
+> binding with no `id`. W2 created the namespace and its PR commits the real
+> id (W2 below).
+> - PR #85 committed persisted Workers Logs **off** as the fail-safe while
+>   D-L was open.
+> - PR #86 (ADR 0028 D8) then turned them on, with `invocation_logs = false`
+>   and production's line restrictions (D-L below).
 
 - *(Done in PR #84: the genesis operation, route and refusals with tests, and
   the `production` ingest admission.)*
@@ -159,7 +161,8 @@ The amendment must decide:
   - The sequencer inertness test (`test/publication/sequencer/inertness.test.ts`)
     asserts that production declares no sequencer binding. It must be
     reframed, not deleted, in the same PR.
-  - The `GRIDVIEW_DATA` KV binding, with its id added in W2.
+  - The `GRIDVIEW_DATA` KV binding, with its id added in W2
+    (`d76328b37da343db92d927142c072593`).
   - `[env.production.secrets] required = ["ADMIN_TOKEN"]`.
   - `[env.production.triggers] crons = []`.
   - Observability on, with `invocation_logs = false` and no log line that
@@ -250,7 +253,7 @@ Keeping the single request on Free is listed there only as an explicitly
 accepted risk.
 
 **Decided 2026-10-20: A, Workers Paid.** D3 follows Path A. Buying the plan
-is still a separate owner step, and it must be done before D3.
+was a separate owner step: **done 2026-10-21** (AU-1).
 
 > **2026-10-21:** D3 is superseded by automatic publication (ADR 0028), which
 > needs Workers Paid for the same reason (O-10). Buying the plan is gate AU-1,
@@ -269,16 +272,32 @@ does the same.
 
 ```text
 cd services/edge-api
-npx wrangler kv namespace create GRIDVIEW_DATA --env production
+npm.cmd exec -- wrangler kv namespace create gridview-snapshots-production --binding GRIDVIEW_DATA
 ```
 
+Run it **without `--env`**. Wrangler 4.112 titles a namespace
+`<env>-<argument>`, so the earlier `GRIDVIEW_DATA --env production` would
+have created `production-GRIDVIEW_DATA` instead of following staging's
+`gridview-snapshots-staging` and e2e's `gridview-snapshots-e2e`
+(`automatic-updates.md` §8.1 step 1). For a TOML configuration Wrangler only
+prints a snippet and edits nothing. In Git Bash, `npx wrangler …` is the same.
+
+> **Step 1 done 2026-10-22T19:46:08Z** (owner-authorized, run once): namespace
+> `gridview-snapshots-production`, id `d76328b37da343db92d927142c072593`,
+> empty. Before and after, Wrangler used account `786e24f1…e6bf`; the staging
+> and e2e namespaces were unchanged and no production Worker existed.
+
 Commit the returned KV id to `[env.production]` as `[[env.production.kv_namespaces]]`
-with `binding = "GRIDVIEW_DATA"`. Review any change Wrangler offers to make to
-`wrangler.toml` instead of accepting it unseen. The PR replaces the
-`kv_namespaces` `toEqual([])` assertion in
-`test/config/production-worker-config.test.ts`; that test already refuses
-staging's id. Validate with `npm run validate:worker-config` and a
+with `binding = "GRIDVIEW_DATA"`. The PR replaces the `kv_namespaces`
+`toEqual([])` assertion in `test/config/production-worker-config.test.ts`
+with one that pins exactly this binding, an id different from staging's and
+e2e's that appears once. Validate with `npm run validate:worker-config` and a
 `wrangler deploy --dry-run --env production`.
+
+The W2 PR keeps production's **bootstrap configuration**:
+`PROVIDER_MODE = "none"`, no reconciliation ledger, `crons = []`. The
+coordinated (automatic-updates) production configuration is the later gate
+AU-7 (`automatic-updates.md` §8.4), its own PR and approvals.
 
 **Do not run `wrangler secret put ADMIN_TOKEN --env production` here.** For a
 Worker that does not exist yet, Wrangler 4.112 first creates one, uploading a
@@ -305,19 +324,17 @@ as inherited.
 Verify:
 - `GET /v1/status` returns `200` with `environment=production` and `maintenance=false`.
 - The season resources are unavailable, as W0 item 4 expects.
-- **Persisted Workers Logs match D-L.** This is the premise of P3.
-  `wrangler tail` cannot prove it: it is a real-time stream, carries request
-  metadata itself, and stores nothing.
-  - The deployed version's configuration matches D-L. Check
-    `npx wrangler versions view <version-id> --env production` or the
+- **Persisted Workers Logs match ADR 0028 D8**, which resolves D-L. This is
+  the premise of P3 (PR #82 `data-safety.md` §3.4). `wrangler tail` cannot
+  prove it: it is a real-time stream, carries request metadata itself, and
+  stores nothing.
+  - The deployed version's configuration has `invocation_logs = false`.
+    Check `npx wrangler versions view <version-id> --env production` or the
     dashboard's Observability settings.
-    - **D-L keep:** `invocation_logs = false`.
-    - **D-L disable:** observability logs disabled.
   - Send a few public requests, then query the Workers Logs dataset in the
-    dashboard (Observability → Logs) for that window.
-    - **D-L keep:** no invocation record with request metadata. Only
-      `request.completed` lines appear, with no IP address or header.
-    - **D-L disable:** no records at all.
+    dashboard (Observability → Logs) for that window. Expect no invocation
+    record and no line for those requests: production writes no
+    `request.completed` line for a public request.
 
 Record the deployed version id.
 
@@ -731,7 +748,7 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | # | Decision | Needed before |
 |---|---|---|
 | W0 | Production genesis design (ADR 0025 O-16 amendment): **done**, PR #84 merged as `527444b` | — |
-| W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). Buying the plan is a separate owner step: AU-1, before AU-2 and W3 (D3 is superseded) | — |
+| W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). **Bought 2026-10-21** (AU-1; Workers Paid is the current plan of the Wrangler account) | — |
 | D-T1 | Retain versionCode 7 for API 21–23 or not (recommended: not) | R4, R7 |
 | D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | P0 or R7 |
 | D-A | Archive the 1.x ad units in AdMob, or not. It stops ads being served to installed 1.x copies, which pausing a track does not, but not the SDK's requests (PR #82 `data-safety.md` §3.6). Irreversible; ends 1.x ad revenue | — (owner's choice of timing) |
