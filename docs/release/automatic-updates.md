@@ -417,8 +417,11 @@ prerequisites hold. That PR commits:
 
 Then:
 
-1. **W3, deploy [approval]:** with `--secrets-file`. Then read the Workers Logs
-   for two public GETs, which must leave **no** event.
+1. **Deploy [approval]:** the AU-7 configuration. Then read the Workers Logs
+   for two public GETs, which must leave **no** event. W3 itself already
+   happened: on 2026-10-22 the bootstrap configuration was deployed as
+   version `62bf40e9-426f-40b7-9fc1-44ab4c42999b` (`production-release-plan.md`
+   W3), so this deploy replaces that version and needs no `--secrets-file`.
 2. **D2, genesis [approval].**
 3. **[approval] Schedule:** `crons = ["17 * * * *"]`, `triggers deploy`. The
    first two ticks bootstrap and publish the first release, from genesis, with
