@@ -253,6 +253,9 @@ the plan (before D3), and creating the KV namespace and the `ADMIN_TOKEN`
 secret (W2), are separate owner-authorised steps
 (`production-release-plan.md` §2).
 
+> **Since:** the owner bought Workers Paid on 2026-10-21 (gate AU-1), and W2
+> created the production KV namespace on 2026-10-22.
+
 The options were:
 
 - **A:** approve Workers Paid. W1 then proceeds with the existing ingest. The

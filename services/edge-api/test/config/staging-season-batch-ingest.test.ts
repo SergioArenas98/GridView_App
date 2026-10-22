@@ -176,8 +176,10 @@ describe('the resolved configuration', () => {
     expect(resolved('staging').kv_namespaces).toEqual([
       { binding: 'GRIDVIEW_DATA', id: '1d0fb55486a745a1ad12e03d9f04942b' },
     ]);
-    // No production namespace exists yet (W2 commits its id).
-    expect(resolved('production').kv_namespaces).toEqual([]);
+    // Production binds its own namespace (release plan W2).
+    expect(resolved('production').kv_namespaces).toEqual([
+      { binding: 'GRIDVIEW_DATA', id: 'd76328b37da343db92d927142c072593' },
+    ]);
   });
 });
 

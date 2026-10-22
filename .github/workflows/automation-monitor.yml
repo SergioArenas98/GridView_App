@@ -6,9 +6,9 @@ name: Automation monitor
 # the failed run.
 #
 # MANUAL ONLY. There is deliberately no `schedule:` trigger: adding one is the
-# separately authorized activation step AU-6 of
+# separately authorized activation step AU-5 of
 # `docs/release/automatic-updates.md`, after the target environment is
-# automatic (a heartbeat exists) and the alert drill below has reached the
+# automatic (a heartbeat exists) and the alert drill (AU-6) has reached the
 # owner. Scheduled workflows in a public repository are disabled by GitHub
 # after 60 days without repository activity; the runbook covers that.
 #

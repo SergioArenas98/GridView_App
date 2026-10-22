@@ -50,9 +50,11 @@ describe('wrangler staging configuration', () => {
     expect(config).not.toContain('replace-with-disposable-local-token');
   });
 
-  it('does not add account IDs or production storage bindings', () => {
+  it('adds no account ID and binds production only to its own KV namespace', () => {
     expect(config).not.toMatch(/^account_id\s*=/m);
-    expect(config).not.toContain('[[env.production.kv_namespaces]]');
+    expect(config).toMatch(
+      /\[\[env\.production\.kv_namespaces\]\]\nbinding = "GRIDVIEW_DATA"\nid = "d76328b37da343db92d927142c072593"/,
+    );
     expect(config).toMatch(
       /\[env\.production\.vars\][\s\S]*ENVIRONMENT = "production"[\s\S]*PROVIDER_MODE = "none"/,
     );
