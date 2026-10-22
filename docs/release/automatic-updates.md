@@ -406,7 +406,7 @@ Each numbered step is its own **[approval]**:
 
    | Instant | Expect |
    |---|---|
-   | `F` | Rounds 22 and 23 asked for on their old anchors, an empty answer, the moved calendar read; no release (`classification-unavailable`) |
+   | `F` | Rounds 22 and 23 asked for on their old anchors, an empty answer; rounds 20 and 21 settled on deadline; the moved calendar read; no release (`classification-unavailable`) |
    | `F` + 2 h | Release: the moved calendar, round 22 at `T′`; Home still on round 22 |
    | `T′` + 0:17, + 1:17 | No run due, no release: rounds 20 and 21 settled on deadline at `F` |
    | `T′` + 2:17 | Round 22 re-anchored (`classification.rescheduled`), its result sighted, pending; no release |
@@ -419,10 +419,14 @@ Each numbered step is its own **[approval]**:
 
    Then remove the schedule (`crons = []`, `triggers deploy`).
 
-When `F` falls after round 22's first ceiling (14 days after 2026-10-23T09:00Z),
-round 22 is first marked `never-reconciled` at `F`, and the move revives it. The genesis and the first release came from
-`91ff2541`. The replay's releases come from the commit deployed in step 1, and
-the in-process gate on that commit covers the path from genesis.
+Round 22's first ceiling fell on 2026-11-06T09:00Z (14 days after the old
+`T`). For any `F` after it, as with the test's `T′` = 2026-11-12T09:00Z, the
+first run also marks round 22 `never-reconciled`, and the move revives it at
+`T′` + 2:17.
+
+The genesis and the first release came from `91ff2541`. The replay's
+releases come from the commit deployed in step 1, and the in-process gate on
+that commit covers the path from genesis.
 
 ### 8.3 Live staging (AU-4)
 

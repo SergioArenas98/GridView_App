@@ -25,7 +25,7 @@ import {
   controlledSeasonDocuments,
   shiftedRaceStart,
 } from './controlled-season';
-import { AutomaticUpdateStage, HOUR, MINUTE } from './stage';
+import { AutomaticUpdateStage, HOUR, MINUTE, type TickRecord } from './stage';
 
 const globalFetch = vi.fn(async () => {
   throw new Error('the global fetch must not be reached');
@@ -304,46 +304,77 @@ describe('the staging demonstration, from the documents an operator loads', () =
           Date.parse(REPLAY_START) + hours * HOUR + 17 * MINUTE,
         ).toISOString();
 
-      const ticks = await stage.hourly(tickAt(-3), tickAt(16));
-      const published = ticks
-        .filter((tick) => tick.releasesAfter > tick.releasesBefore)
-        .map((tick) => tick.at);
+      const events = (tick: TickRecord) =>
+        tick.logs.reduce<Record<string, number>>(
+          (all, line) => ({
+            ...all,
+            ...(line.reconciliationEvents as
+              Record<string, number> | undefined),
+          }),
+          {},
+        );
+      const view = async () => {
+        const home = (await (
+          await stage.fetch('/v1/home?season=2026')
+        ).json()) as { data: { featuredEvent: { round: number } } };
+        const response = await stage.fetch(
+          '/v1/seasons/2026/grand-prix/22/results',
+        );
+        const results =
+          response.status === 200
+            ? ((await response.json()) as {
+                data: { entries: { position: number; points: number }[] };
+              })
+            : null;
+        return {
+          featuredRound: home.data.featuredEvent.round,
+          winnerPoints:
+            results?.data.entries.find((entry) => entry.position === 1)
+              ?.points ?? null,
+        };
+      };
+
       // The first run still asks for rounds 22 and 23 on the old calendar's
-      // anchors, fails, and reads the moved calendar; the release two ticks
-      // later serves it. No run is due at the race start (rounds 20 and 21
-      // settled on deadline at the first run), so Home moves on with the
-      // result. Round 22 follows its new start (PR #91): sighted at + 2 h
-      // 17 min, published at + 3 h 17 min, the correction at + 11 h 17 min.
-      expect(published).toEqual([tickAt(-1), tickAt(3), tickAt(11)]);
-      const sighted = ticks.find((tick) => tick.at === tickAt(2))!;
+      // anchors and fails; rounds 20 and 21 settle on deadline, round 22 is
+      // past its first ceiling, and the moved calendar is read. The release
+      // two ticks later serves that calendar.
+      const before = await stage.hourly(tickAt(-3), tickAt(1));
+      expect(events(before[0]!)).toMatchObject({
+        'classification.check-failed': 2,
+        'classification.settled-on-deadline': 2,
+        'classification.never-reconciled': 1,
+        'refresh.overwrite': 1,
+      });
+      // No run is due at the race start, so Home stays on round 22.
       expect(
-        sighted.logs.some(
-          (line) =>
-            (line.reconciliationEvents as Record<string, number> | undefined)?.[
-              'classification.rescheduled'
-            ] === 1,
-        ),
-      ).toBe(true);
+        before.map((tick) => tick.releasesAfter > tick.releasesBefore),
+      ).toEqual([false, false, true, false, false]);
+      expect(await view()).toEqual({ featuredRound: 22, winnerPoints: null });
+
+      // Round 22 follows its new start (PR #91): sighted at + 2 h 17 min,
+      // published at + 3 h 17 min, when Home moves on.
+      const result = await stage.hourly(tickAt(2), tickAt(3));
+      expect(events(result[0]!)['classification.rescheduled']).toBe(1);
+      expect(result[0]!.releasesAfter).toBe(result[0]!.releasesBefore);
+      expect(result[1]!.releasesAfter).toBe(result[1]!.releasesBefore + 1);
+      expect(await view()).toEqual({ featuredRound: 23, winnerPoints: 25 });
+
+      // The correction: sighted at + 10 h 17 min, published an hour later.
+      const rest = await stage.hourly(tickAt(4), tickAt(16));
       expect(
-        ticks.flatMap((tick) =>
+        rest
+          .filter((tick) => tick.releasesAfter > tick.releasesBefore)
+          .map((tick) => tick.at),
+      ).toEqual([tickAt(11)]);
+      expect(await view()).toEqual({ featuredRound: 23, winnerPoints: 26 });
+      expect(
+        [...before, ...result, ...rest].flatMap((tick) =>
           tick.logs.map((line) => String(line.publicationReason)),
         ),
       ).not.toContain('standings-round-incoherent');
       expect(await stage.harness.record(22)).toMatchObject({
         anchor: REPLAY_START,
       });
-      const home = (await (
-        await stage.fetch('/v1/home?season=2026')
-      ).json()) as { data: { featuredEvent: { round: number } } };
-      expect(home.data.featuredEvent.round).toBe(23);
-      const results = (await (
-        await stage.fetch('/v1/seasons/2026/grand-prix/22/results')
-      ).json()) as {
-        data: { entries: { position: number; points: number }[] };
-      };
-      expect(
-        results.data.entries.find((entry) => entry.position === 1)?.points,
-      ).toBe(26);
       expect(
         stage.workerRequests.every((path) => path.startsWith('/v1/')),
       ).toBe(true);
