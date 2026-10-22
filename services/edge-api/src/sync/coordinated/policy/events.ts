@@ -38,6 +38,7 @@ export const policyEventCategories = [
   'classification.pending-observed',
   'classification.pending-replaced',
   'classification.rejected-superseded',
+  'classification.rescheduled',
   'classification.revision-history-capacity',
   'classification.settled',
   'classification.settled-on-deadline',

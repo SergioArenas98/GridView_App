@@ -26,10 +26,11 @@ import type {
 import {
   applyClassificationCheck,
   newClassificationRecord,
+  rescheduledClassificationRecord,
   type CheckOutcome,
   type ClassificationCheck,
 } from './classification';
-import type { PolicyEvent } from './events';
+import { policyEvent, type PolicyEvent } from './events';
 import type { PlannedCheck, RunPlan } from './planner';
 import { decidePublication, type PublicationDecision } from './publishability';
 import { applySeasonObservations, type SeasonOutcomes } from './refresh';
@@ -97,7 +98,17 @@ export function recordRunObservations(
   const checks = plan.kind === 'publication' ? plan.checks : [];
   for (const planned of [...checks].sort((l, r) => l.round - r.round)) {
     const current = stored.get(planned.round) ?? null;
+    // The planner scheduled a moved race from its new start; the stored
+    // record is re-anchored on it before the check is applied.
+    const rescheduled =
+      current === null
+        ? null
+        : rescheduledClassificationRecord(current.record, planned.anchor);
+    if (rescheduled !== null) {
+      events.push(policyEvent('classification.rescheduled'));
+    }
     const record =
+      rescheduled ??
       current?.record ??
       newClassificationRecord(snapshot.season, planned.anchor);
     const step = applyClassificationCheck(record, {

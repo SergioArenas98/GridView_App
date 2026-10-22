@@ -129,6 +129,52 @@ export function newClassificationRecord(
   };
 }
 
+/**
+ * The record of a round whose race the calendar has moved, or `null` when the
+ * round keeps its anchor.
+ *
+ * The anchor is Jolpica's scheduled race start (Evaluation §10.4), so when
+ * the calendar names a different start for a round with **nothing
+ * observed** - no accepted result, no pending sighting, nothing staged or
+ * locked - its checks so far asked for a race that had not been run. Its
+ * cadence restarts from the new start (slot 1 at + 1 h 30 min), and a round
+ * abandoned at its first ceiling is asked for again. Without this, the
+ * moved race is asked for on the old anchor's back-off or daily slots, or
+ * never, while the standings already reflect it, and the season is withheld
+ * as `standings-round-incoherent` until then.
+ *
+ * A round with a result accepted or pending keeps the anchor that result was
+ * read against: a late first result never moves its ceiling. Only the
+ * cadence changes; nothing on the review axis does.
+ */
+export function rescheduledClassificationRecord(
+  record: ClassificationRecord,
+  anchor: CalendarAnchor,
+): ClassificationRecord | null {
+  if (
+    record.anchor === anchor.anchor &&
+    record.anchorKind === anchor.anchorKind
+  ) {
+    return null;
+  }
+  if (
+    record.contentRevision !== null ||
+    record.candidateRevision !== null ||
+    isInOperatorBacklog(record)
+  ) {
+    return null;
+  }
+  return {
+    ...record,
+    anchor: anchor.anchor,
+    anchorKind: anchor.anchorKind,
+    checkIndex: 0,
+    nextDueAt: nextCheckAt(anchor.anchor, 0),
+    // Only `never-reconciled-abandoned` can stand without a result.
+    terminalReason: null,
+  };
+}
+
 /** Held for an operator: T11-T11d are unreachable from any run. */
 export function isInOperatorBacklog(record: ClassificationRecord): boolean {
   return (

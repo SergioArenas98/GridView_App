@@ -51,6 +51,7 @@ import type {
   SeasonRecord,
 } from '../ledger/model';
 import { currentSlot, isEligible, slotSetFor } from './cadence';
+import { rescheduledClassificationRecord } from './classification';
 
 export type RunTrigger = 'scheduled' | 'manual';
 
@@ -202,7 +203,10 @@ function deferredUntil(snapshot: LedgerSnapshot): number {
   }, Number.NEGATIVE_INFINITY);
 }
 
-/** The anchor a round is scheduled from: its record's, else the calendar's. */
+/**
+ * The anchor a round is scheduled from: its record's, else the calendar's.
+ * `records` already carries a moved race's re-anchored record.
+ */
 function anchorsByRound(
   calendar: readonly CalendarAnchor[],
   records: ReadonlyMap<number, ClassificationRecord>,
@@ -222,8 +226,18 @@ function selectChecks(
   input: PlanInput,
   calendar: readonly CalendarAnchor[],
 ): PlannedCheck[] {
+  // A round with nothing observed follows a race the calendar has moved
+  // (`rescheduledClassificationRecord`); any other keeps its record's anchor.
+  const scheduled = new Map(calendar.map((entry) => [entry.round, entry]));
   const records = new Map(
-    input.snapshot.classifications.map(({ record }) => [record.round, record]),
+    input.snapshot.classifications.map(({ record }) => {
+      const moved = scheduled.get(record.round);
+      const effective =
+        moved === undefined
+          ? record
+          : (rescheduledClassificationRecord(record, moved) ?? record);
+      return [record.round, effective];
+    }),
   );
   const checks: PlannedCheck[] = [];
   for (const anchor of anchorsByRound(calendar, records)) {

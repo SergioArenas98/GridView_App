@@ -41,6 +41,7 @@ import {
 } from '../../../src/providers/http/provider-rate-limiter';
 import { ReconciliationLedger } from '../../../src/sync/coordinated/ledger';
 import { runtimeSnapshotValidator } from '../../../src/validation/snapshot-validator';
+import { envelope, fullSeasonRaces } from '../../providers/jolpica/support';
 import { emptyResultsEnvelope } from '../../providers/jolpica/results-support';
 import {
   HOUR,
@@ -128,6 +129,13 @@ interface ResultChange {
   readonly variant: ServedResult;
 }
 
+/** A calendar change moving one round's race to a new start. */
+interface Reschedule {
+  readonly round: number;
+  readonly at: number;
+  readonly start: string;
+}
+
 /** Variant A with its last row missing, while `total` still counts it. */
 function incompletePage(round: number): Record<string, unknown> {
   const body = structuredClone(resultsBody(round, 'A')) as {
@@ -139,12 +147,14 @@ function incompletePage(round: number): Record<string, unknown> {
 
 /**
  * The controlled Jolpica source. Season-level resources are always
- * available; each round's race classification follows its own schedule, and
- * an outage makes every request fail with `503` for a window.
+ * available; each round's race classification follows its own schedule, the
+ * calendar can move a round's race to a new start, and an outage makes every
+ * request fail with `503` for a window.
  */
 export class ControlledJolpica {
   private readonly changes = new Map<number, ResultChange[]>();
   private readonly outages: { from: number; to: number }[] = [];
+  private readonly reschedules: Reschedule[] = [];
 
   /** Round `round`'s result becomes `variant` from `at` on. */
   available(round: number, at: string, variant: ResultVariant = 'A'): this {
@@ -161,6 +171,16 @@ export class ControlledJolpica {
     list.push({ at: Date.parse(at), variant });
     list.sort((left, right) => left.at - right.at);
     this.changes.set(round, list);
+    return this;
+  }
+
+  /**
+   * From `at` on, the calendar moves round `round`'s race to `start`, as
+   * Jolpica's calendar does when a race is postponed.
+   */
+  reschedule(round: number, at: string, start: string): this {
+    this.reschedules.push({ round, at: Date.parse(at), start });
+    this.reschedules.sort((left, right) => left.at - right.at);
     return this;
   }
 
@@ -189,6 +209,7 @@ export class ControlledJolpica {
       instants.add(from);
       instants.add(to);
     }
+    for (const { at } of this.reschedules) instants.add(at);
     return [...instants].sort((left, right) => left - right);
   }
 
@@ -212,6 +233,26 @@ export class ControlledJolpica {
           ? { kind: 'json', body: incompletePage(round) }
           : { kind: 'json', body: resultsBody(round, variant) };
       });
+    }
+    const starts = new Map<number, string>();
+    for (const change of this.reschedules) {
+      if (change.at <= now) starts.set(change.round, change.start);
+    }
+    if (starts.size > 0) {
+      const races = fullSeasonRaces().map((race) => {
+        const start = starts.get(Number(race.round));
+        return start === undefined
+          ? race
+          : {
+              ...race,
+              date: start.slice(0, 10),
+              time: `${start.slice(11, 19)}Z`,
+            };
+      });
+      server.answers.set('/races/', () => ({
+        kind: 'json',
+        body: envelope(races),
+      }));
     }
     if (down) {
       for (const path of [
