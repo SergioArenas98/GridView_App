@@ -1,6 +1,6 @@
 # GridView Privacy Policy
 
-Last updated: 21 October 2026
+Last updated: 22 October 2026
 
 This policy explains what information the GridView Android application
 ("GridView", "the app") processes, why, for how long, and what choices you
@@ -30,10 +30,9 @@ Contact: **gridviewapp1@gmail.com**
   Google AdMob (section 3.4).
 - From version 2.0.0, GridView does **not** track which screens you open or
   what you tap. Firebase records when a session starts (section 3.3). The
-  GridView API may keep short-lived logs of which kind of data each request
-  fetched, with no IP address and no account or device identifier (section
-  3.2). In versions 1.x,
-  the advertising SDK collects app launches, taps and ad views (section 3.4).
+  GridView API keeps no record of the app's requests, only a short record of
+  its own errors (section 3.2). In versions 1.x, the advertising SDK collects
+  app launches, taps and ad views (section 3.4).
 - Your language and theme choices and the Formula 1 data the app downloads are
   stored **on your device**.
 - To fix crashes and keep the app fast, GridView sends **crash reports and
@@ -72,11 +71,12 @@ request). Apart from the IP address and those request details, requests
 contain no account, device identifier or other personal information.
 
 We use this only to deliver the data and to keep the service working and
-secure. We do not use it to identify you or to build a profile. The API may
-keep short-lived operational logs, one line per request: which kind of data
-was requested, the random request number, the result and how long it took.
-They do not include your IP address or any account or device identifier. The
-request number is random and generated for each request.
+secure. We do not use it to identify you or to build a profile. The API keeps
+no record of the app's requests. If the API itself fails with an internal
+error while answering one, it keeps a short technical record of that error
+for 7 days: the type of error, how long the request took and, where known,
+which kind of data was requested. That record does not include your IP
+address, the request number, or any account or device identifier.
 
 ### 3.3 Crash reports and performance measurements (Firebase)
 

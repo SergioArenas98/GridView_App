@@ -10,6 +10,10 @@ Prepared 2026-10-20 at `6aefcbf`. The transition sections (§1, §1.1-§1.4 and
 §3.5) and the controller check (§6) were added the same day, before merge.
 On 2026-10-21 the owner's controller and contact decisions were recorded
 (§6), and §3.6 was added on ads that installed 1.x copies keep requesting.
+On 2026-10-22 the API answers (§3.2-§3.4, R2, R8) were brought up to date
+with master `ec19caf`. Production logging is now settled by ADR 0028 D8,
+committed through PRs #85 and #86, so the earlier keep-or-disable choice
+(D-L) no longer applies.
 
 ## 1. Why the current declaration must change
 
@@ -92,7 +96,8 @@ or publishing step.
    not depend on 2.0.0 or on the production Worker. Step 0 comes first.
 3. **Submit state T** before 2.0.0 reaches any non-internal track (closed,
    open or production). State T includes the 2.0.0 API answer (§3.4), so it
-   also waits for production logging to be verified off.
+   also waits until the deployed production Worker's persisted logs are
+   verified free of app traffic (§3.4).
 4. **Release 2.0.0.** Recommendation (owner decision D-T1): do **not** retain
    versionCode 7. The legacy backend is dead, so on API 21 to 23 1.2.1 can show
    ads but no Formula 1 data. Also deactivate the closed "Alpha" track or
@@ -134,10 +139,10 @@ ephemerally** = no, **required** (the user cannot turn it off in the app).
 | Play category → type | Source | Purpose |
 |---|---|---|
 | App info and performance → **Crash logs** | Crashlytics stack traces and app state at crash | Analytics |
-| App info and performance → **Diagnostics** | Performance Monitoring (start time, trace durations, CPU and memory); Sessions metrics. If production keeps Workers Logs (§3.4, option (a)), also each API request's duration and status in the persisted `request.completed` line | Analytics; **App functionality** if the API logs are kept |
+| App info and performance → **Diagnostics** | Performance Monitoring (start time, trace durations, CPU and memory); Sessions metrics | Analytics |
 | Device or other IDs → **Device or other IDs** | Firebase installation ID; Crashlytics installation UUID | Analytics |
 | Location → **Approximate location** | Performance Monitoring maps IP addresses to countries. The GridView API also receives the IP address with each request, to serve it; that part is ephemeral (§3.4), but Firebase's part is not, so the type as a whole is not | Analytics; **App functionality** (the API) — **review items R1, R2** |
-| App activity → **App interactions** | Firebase Sessions records when the app is foregrounded to start a session ("application metrics", Firebase disclosure). If production keeps Workers Logs (§3.4), the API also persists one `request.completed` line per request, with the route template (which resource was fetched), a random request ID and the outcome, but no IP, header or device identifier | Analytics; **App functionality** if the API logs are kept — **review item R8** |
+| App activity → **App interactions** | Firebase Sessions records when the app is foregrounded to start a session ("application metrics", Firebase disclosure). The API's persisted logs add nothing here (§3.4) | Analytics — **review item R8** |
 
 "Analytics" is Play's purpose for monitoring app performance and diagnosing
 problems. GridView uses this data for nothing else.
@@ -146,58 +151,59 @@ problems. GridView uses this data for nothing else.
 
 Personal info (name, email, user IDs, address, phone), financial info, health
 and fitness, messages, photos and videos, audio, files and documents, calendar,
-contacts, web browsing, and precise location. Of **app activity**, only these
-are collected (both in the §3.2 row):
-
-- the session start;
-- if production keeps Workers Logs (§3.4, option (a)), the API's per-request
-  route logs.
-
-There is no screen-view, tap or search analytics, and the build forbids the
-Analytics SDK.
+contacts, web browsing, and precise location. Of **app activity**, only the
+session start is collected (§3.2). The API keeps no record of the app's
+requests (§3.4). There is no screen-view, tap or search analytics,
+and the build forbids the Analytics SDK.
 
 ### 3.4 GridView API traffic
 
 Requests to the GridView API (Cloudflare Workers) expose the device IP address
 to Cloudflare, as any network request does. GridView does not store or use it
-beyond serving the request. This is ephemeral processing, provided the
-production Worker keeps request logging off: `invocation_logs = false`, and no
-application log line records an IP or a header.
+beyond serving the request, so this is ephemeral processing (**review item
+R2**). It holds only while no persisted record carries the IP address or
+anything that links a request to an installation.
 
-**That condition is not enforced in this repository yet.**
+**What production persists (ADR 0028 D8, committed, not yet deployed).**
+`services/edge-api/wrangler.toml` `[env.production.observability]` has
+`enabled = true` and `logs.persist = true`, with
+`logs.invocation_logs = false`. Cloudflare's automatic invocation records,
+which carry request metadata, are therefore off. Only the Worker's own lines
+persist, for Cloudflare's 7-day retention. `src/logging/request-log.ts`
+restricts those lines in production:
 
-- Today `services/edge-api/wrangler.toml` sets `invocation_logs = false` only
-  for staging. Production has no such setting, and production is not
-  deployed.
-- PR #83's `docs/release/production-release-plan.md` gate W1 must commit it
-  for `[env.production]`, and W3 checks it on the deployed Worker.
-- **Do not submit this answer** (state T or F) until that production setting
-  is committed and verified on the deployed Worker. State 0 (1.x only) does
-  not include it.
-- If the production configuration ever persists IP addresses, revisit this
-  section (**review item R2**).
+- A **public request the Worker answers** writes **no line**, whatever the
+  status (`200`, `304`, `404`, `503` and so on). That covers all ordinary app
+  traffic.
+- A public request that hits an **unexpected internal error** (`500`) writes
+  `request.failed`. The line holds the route template where known
+  (otherwise `unknown`), the status, the duration and a closed failure
+  category (`configuration` or `internal`). It holds **no request ID**: the
+  app receives that ID and could keep it with a crash report. It also holds
+  no IP address, header or device identifier.
+- **Internal (operator) requests** keep both lines. An unauthenticated or
+  unrouted internal request is logged as `/internal/*`, so no client-chosen
+  path text is persisted.
+- A caller's `X-Request-ID` is adopted only as an opaque token
+  (`[0-9A-Za-z-]{1,64}`), so no free text reaches a response or a line.
 
-**Persisted application logs are a separate question.**
+**Consequence for the form.** No persisted line can be linked to a user, a
+device or an installation, so the Worker's logs add no Data safety row (ADR
+0028 D8). An internal-error line's route template is operational data about
+the service and is not collected about the user (**review item R8**).
 
-- `invocation_logs = false` turns off only Cloudflare's automatic invocation
-  records.
-- With Workers Logs enabled, as staging has it, each public request still
-  persists the Worker's own `request.completed` line (`src/index.ts`): the
-  route template, a random request ID, the cache outcome and the status. It
-  has no IP, header or device identifier.
-- Google Play may count the route template, which says which resource the app
-  fetched, as **App interactions**. Production must take one of two routes
-  before state T or F (owner decision with W1, review item R8):
-  - **(a) Keep the logs** for operations, and declare them under App
-    interactions with the App functionality purpose (§3.2).
-  - **(b) Turn persisted logs off** for production with an **explicit**
-    `[env.production.observability] enabled = false`.
-    - Omitting the block is not enough: Cloudflare enables observability by
-      default for new Workers.
-    - Verify the setting on the deployed version, and that the Workers Logs
-      dataset stays empty after test requests (PR #83, W3), before submitting.
-    - The declaration then stays Firebase-only, and production operations
-      rely on metrics and `wrangler tail`.
+**Conditions before submitting state T or F.** State 0 (1.x only) does not
+include this answer.
+- The first production deploy (W3, AU-7) must show the deployed version
+  carries these settings.
+- A Workers Logs query after a few public requests must show no
+  invocation record and no line for those requests.
+- If production ever persists an IP address, a header, a public request's
+  ID or a line per public request, revisit this section and §3.2 (R2, R8).
+
+A live `wrangler tail` session, opened by the operator, streams request
+metadata in real time and stores nothing. That is also ephemeral processing.
+The release plan's W3 step notes that tail cannot prove what is persisted.
 
 ### 3.5 Versions 1.x (states 0 and T)
 
@@ -305,14 +311,14 @@ the units are archived.
 
 | # | Question | Engineering recommendation |
 |---|---|---|
-| R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | Declare it. Country-level location is coarser than Play's 3 km² threshold, so declaring is the conservative reading. Over-declaring is not a policy violation; under-declaring is. |
-| R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | Yes, but only once the production logging condition in §3.4 is committed (PR #83, W1) and verified on the deployed Worker (W3). Until then, do not submit the form. |
+| R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | Declare it, if the review agrees it applies. Firebase's own disclosure lists it for Performance Monitoring. Country-level location is coarser than Play's 3 km² threshold, and Play's "Approximate location" type covers that. Play requires the declaration to be accurate and complete and may act on any discrepancy, in either direction. The answer must therefore follow the review's finding, not a preference for declaring more. |
+| R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | Yes. The production logging condition in §3.4 is committed (W1, PR #85, then ADR 0028 D8, PR #86). It must still be verified on the deployed Worker (W3, AU-7). Until then, do not submit state T or F. |
 | R3 | Deletion-request answer | **Open.** The owner confirmed on 2026-10-20 that he uses gridviewapp1@gmail.com, so requests can be received. That does not show they can be fulfilled. Play's guidance prescribes no mechanism and accepts a dedicated email address. GridView has no accounts, so Play's separate account-deletion requirement does not apply. **Identification:** the app shows the user no installation ID and sets no Crashlytics user identifier (`lib/core/observability/firebase/firebase_observability.dart` only enables collection). A user can offer only a crash's approximate time and device model. **Deletion:** no Firebase console or API procedure for deleting one installation's Crashlytics and Performance data has been verified. Until one is, data expires only after 90, 60 or 30 days (§2). Answer "Yes" once a procedure is verified on the real project. If none works, change the policy's deletion wording (section 6, including "or until they are deleted at your request") before it is published (P2), instead of answering "No" while the policy says otherwise. |
 | R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
 | R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to the SDK version 1.2.1 resolved. |
 | R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). Archiving the 1.x ad units in AdMob (decision D-A, §3.6) would stop ads being served to them, but not the SDK's requests. |
 | R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. Two follow-ups remain: the Play listing still says Spain (§6.2), and the review decides whether email alone is enough (§6.1). |
-| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted `request.completed` route logs (§3.4), if kept? | Declare the Sessions data: it is usage data about the app coming to the foreground, and over-declaring is not a violation. For the API logs, choose (a) keep and declare them with the App functionality purpose, or (b) turn them off in production (§3.4). |
+| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions:** declare it, if the review agrees. Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines:** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. It holds once W3/AU-7 verify it on the deployed Worker. |
 
 ## 5. Related store items
 

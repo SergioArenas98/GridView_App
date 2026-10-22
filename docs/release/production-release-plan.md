@@ -61,7 +61,7 @@ Steps marked **[PR]** are reviewable repository changes.
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
 | P2 | **[approval]** Publish the policy at https://gridview.netlify.app | P1 |
 | P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2, P-R, §5.1 step 2 or step 3 (Alpha inspected or paused) |
-| P3 | **[approval]** Data safety in transition state T, Ads = **Yes**, including the App interactions row D-L requires | P2, P-R, D-L, W3 (the deployed observability setting matches D-L); before R2 |
+| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, P-R, W3 (the deployed logs match ADR 0028 D8, which resolves D-L); before R2 |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
 | A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1, P1, AU-3, every W/D/AU PR merged |
 | A0b | **[record]** Release-candidate gate, post-build part: the AAB, the internal installation and performance | A2, R2, R3 |
@@ -131,13 +131,15 @@ The amendment must decide:
 
 ### W1. Production configuration **[PR]**
 
-> **Status 2026-10-21: PR #85**, open, not deployed. It commits everything
-> below except the `GRIDVIEW_DATA` KV binding. Wrangler 4.112 creates a new
-> namespace on deploy for a KV binding with no `id`, and no production
-> namespace exists, so the binding waits for W2's real id. Until then the
-> Worker answers `500` on every route it was tested on. Persisted Workers
-> Logs are committed **off** (`[env.production.observability] enabled =
-> false`), the fail-safe while D-L is open.
+> **Status 2026-10-22: merged in PR #85**, not deployed. PR #85 committed
+> everything below except the `GRIDVIEW_DATA` KV binding. Wrangler 4.112
+> creates a new namespace on deploy for a KV binding with no `id`, and no
+> production namespace exists, so the binding waits for W2's real id. Until
+> then the Worker answers `500` on every route it was tested on.
+> - PR #85 committed persisted Workers Logs **off** as the fail-safe while
+>   D-L was open.
+> - PR #86 (ADR 0028 D8) then turned them on, with production's line
+>   restrictions (D-L below).
 
 - *(Done in PR #84: the genesis operation, route and refusals with tests, and
   the `production` ingest admission.)*
@@ -305,19 +307,17 @@ as inherited.
 Verify:
 - `GET /v1/status` returns `200` with `environment=production` and `maintenance=false`.
 - The season resources are unavailable, as W0 item 4 expects.
-- **Persisted Workers Logs match D-L.** This is the premise of P3.
-  `wrangler tail` cannot prove it: it is a real-time stream, carries request
-  metadata itself, and stores nothing.
-  - The deployed version's configuration matches D-L. Check
-    `npx wrangler versions view <version-id> --env production` or the
+- **Persisted Workers Logs match ADR 0028 D8**, which resolves D-L. This is
+  the premise of P3 (PR #82 `data-safety.md` §3.4). `wrangler tail` cannot
+  prove it: it is a real-time stream, carries request metadata itself, and
+  stores nothing.
+  - The deployed version's configuration has `invocation_logs = false`.
+    Check `npx wrangler versions view <version-id> --env production` or the
     dashboard's Observability settings.
-    - **D-L keep:** `invocation_logs = false`.
-    - **D-L disable:** observability logs disabled.
   - Send a few public requests, then query the Workers Logs dataset in the
-    dashboard (Observability → Logs) for that window.
-    - **D-L keep:** no invocation record with request metadata. Only
-      `request.completed` lines appear, with no IP address or header.
-    - **D-L disable:** no records at all.
+    dashboard (Observability → Logs) for that window. Expect no invocation
+    record and no line for those requests: production writes no
+    `request.completed` line for a public request.
 
 Record the deployed version id.
 
@@ -456,21 +456,21 @@ The details are in PR #82, `data-safety.md` §1.
   - Publish only the version that covers 1.x. A 2.0.0-only text must never
     replace the live page while 1.x is distributed.
 - **P3 precondition.** The Data safety answer that API traffic is processed
-  ephemerally (`data-safety.md` §3.4, data-safety review item R2) holds only once production logging is
-  off. W1 must commit `invocation_logs = false` for `[env.production]`, and W3
-  must verify it on the deployed Worker, before P3 is submitted.
+  ephemerally (`data-safety.md` §3.4, data-safety review item R2) holds only
+  while no persisted line carries an IP address or links a request to an
+  installation. W1 (PR #85) and ADR 0028 D8 (PR #86) committed that for
+  `[env.production]`. W3 must verify it on the deployed Worker before P3 is
+  submitted.
 - **P0 [approval]:** in Play Console, correct the live form now to **state
   0**: the 1.x AdMob rows only, with Ads **Yes**. The live "No data collected"
   is already inaccurate for 1.2.1. State 0 does not depend on 2.0.0 or on the
   production Worker.
 - **P3 [approval]:** submit Data safety in **state T**: the 2.0.0 Firebase
   rows plus the 1.x AdMob rows, with Ads **Yes**.
-  - **Prerequisites:** P-R is done, and D-L is decided.
-  - If D-L keeps the persisted `request.completed` logs, the App interactions
-    row also carries the API source and the App functionality purpose
-    (PR #82 `data-safety.md` §3.2, §3.4).
-  - If D-L disables them, W3 has verified that the deployed production
-    version has persisted logs off.
+  - **Prerequisites:** P-R is done, and W3 has verified the deployed
+    production version's persisted logs against ADR 0028 D8.
+  - The Worker's logs add no Data safety row (PR #82 `data-safety.md` §3.2,
+    §3.4, R8).
   - Play counts closed, open and production tracks, and exempts only apps that
     are active exclusively on internal testing. GridView is not internal-only,
     so this plan takes the conservative reading and submits state T before
