@@ -3490,6 +3490,7 @@ was purchased, provisioned or deployed, and there was no Cloudflare request.**
 | Deliberately absent | The `GRIDVIEW_DATA` KV binding. Wrangler 4.112 provisions a namespace on deploy for a binding without an `id`, and no production namespace exists. W2 commits the real id. Until then the Worker answers `500` and a first deploy refuses for the missing secret. |
 | Tests | New `test/config/production-worker-config.test.ts` (15) reads the configuration through `unstable_readConfig` and drives the real Worker: no cron, fail-closed without KV, no season served before genesis or before the first batch, seed and activation refused, no provider built. The tests that pinned production as inert are reframed, not deleted: `inertness.test.ts`, `wrangler-config.test.ts`, `staging-season-batch-ingest.test.ts`, `ledger-binding-absent.test.ts`. Staging's resolved configuration is asserted unchanged. |
 | Still open | W2 (KV namespace, `ADMIN_TOKEN`, the KV id PR), the Workers Paid purchase (before D3), D-L, W3 deployment, D1-D3. Each needs the owner's authorization. |
+| Since (2026-10-22) | Workers Paid bought 2026-10-21 (AU-1). D-L's engineering side resolved by ADR 0028 D8 (PR #86): persisted logs on, invocation logs off. W2 step 1 created `gridview-snapshots-production` (`d76328b37da343db92d927142c072593`) on 2026-10-22, and the W2 PR binds it. Still open: `ADMIN_TOKEN`, W3, D2. |
 
 ### 14.0.61 Automatic end-to-end updates (ADR 0028) - code, tests and documentation, not activated
 

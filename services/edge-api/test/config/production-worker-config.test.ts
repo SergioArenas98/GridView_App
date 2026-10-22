@@ -68,8 +68,11 @@ const NOW = '2026-07-20T12:00:00.000Z';
 const ADMIN_TOKEN = 'local-test-token';
 const IDENTITY = 'gridview-production-2026-genesis-01';
 const STAGING_KV_ID = '1d0fb55486a745a1ad12e03d9f04942b';
+const DEMONSTRATION_KV_ID = 'f8970084eef14b6a8e24db521d015df3';
+// `gridview-snapshots-production`, created in release plan W2.
+const PRODUCTION_KV_ID = 'd76328b37da343db92d927142c072593';
 
-function resolved(environment: 'staging' | 'production') {
+function resolved(environment: 'staging' | 'production' | 'e2e') {
   return unstable_readConfig(
     { config: configPath, env: environment },
     { hideWarnings: true },
@@ -170,20 +173,29 @@ describe('the resolved production configuration', () => {
     );
   });
 
-  it('declares no KV binding until the real namespace id exists (W2)', () => {
+  it('binds only the KV namespace created in W2', () => {
     // Wrangler 4 provisions a new namespace on deploy for a KV binding with no
-    // id, so a binding without one would create infrastructure. When W2
-    // commits the real id, it must be a namespace id and not staging's.
-    // The loop is empty until W2; W2 then replaces the `toEqual([])` below.
-    const namespaces = resolved('production').kv_namespaces;
-    for (const namespace of namespaces) {
-      expect(namespace.binding).toBe('GRIDVIEW_DATA');
-      expect(namespace.id).toMatch(/^[0-9a-f]{32}$/);
-      expect(namespace.id).not.toBe(STAGING_KV_ID);
-      expect(namespace.id).not.toMatch(/^(0+|f+|1234.*)$/);
+    // id, so the one binding must carry W2's id, and no other environment's.
+    expect(resolved('production').kv_namespaces).toEqual([
+      { binding: 'GRIDVIEW_DATA', id: PRODUCTION_KV_ID },
+    ]);
+    expect(PRODUCTION_KV_ID).toMatch(/^[0-9a-f]{32}$/);
+    expect(PRODUCTION_KV_ID).not.toMatch(/^(0+|f+|1234.*)$/);
+    expect([STAGING_KV_ID, DEMONSTRATION_KV_ID]).not.toContain(
+      PRODUCTION_KV_ID,
+    );
+    for (const id of [PRODUCTION_KV_ID, STAGING_KV_ID, DEMONSTRATION_KV_ID]) {
+      expect(declaredConfig.match(new RegExp(id, 'g'))).toHaveLength(1);
     }
-    expect(namespaces).toEqual([]);
-    expect(declaredConfig).not.toContain('[[env.production.kv_namespaces]]');
+  });
+
+  it('leaves the demonstration Worker bound to its own namespace, unscheduled', () => {
+    const demonstration = resolved('e2e');
+    expect(demonstration.name).toBe('gridview-api-e2e');
+    expect(demonstration.kv_namespaces).toEqual([
+      { binding: 'GRIDVIEW_DATA', id: DEMONSTRATION_KV_ID },
+    ]);
+    expect(demonstration.triggers).toEqual({ crons: [] });
   });
 
   it('leaves the staging configuration exactly as it was', () => {

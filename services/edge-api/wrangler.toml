@@ -6,12 +6,11 @@
 # - `env.staging` is deployed to Cloudflare (first in Phase 5B, 2026-07-20).
 #   The 2026-09-12 staging deployment provisioned both Durable Object bindings
 #   declared for it below; no code path in that configuration looks either up.
-# - `env.production` is declared only and has never been deployed: no
-#   production Worker, KV or Durable Object namespace, R2 bucket, route,
-#   domain or secret exists. Its declaration is deliberately incomplete (no
-#   KV binding) until the namespace is created; see the section itself.
-# - `env.e2e` is the isolated demonstration Worker of release gate AU-3 and
-#   has never been deployed: only its KV namespace exists. See the section.
+# - `env.production` has never been deployed: no production Worker, Durable
+#   Object namespace, R2 bucket, route, domain or secret exists. Only its KV
+#   namespace exists (release plan W2); see the section itself.
+# - `env.e2e` is the isolated demonstration Worker of release gate AU-3,
+#   deployed on 2026-10-21 and unscheduled since 2026-10-22. See the section.
 
 name = "gridview-api-dev"
 main = "src/index.ts"
@@ -197,19 +196,20 @@ enabled = true
 persist = true
 invocation_logs = false
 
-# Production (release plan W1; submission path A, Workers Paid). DECLARED
-# ONLY; NEVER DEPLOYED: no `gridview-api-production` Worker, KV or Durable
-# Object namespace or secret exists on the Cloudflare account.
+# Production (release plan W1 and W2; submission path A, Workers Paid). NEVER
+# DEPLOYED: no `gridview-api-production` Worker, Durable Object namespace or
+# secret exists on the Cloudflare account. Only its KV namespace exists,
+# `gridview-snapshots-production`, created on 2026-10-22 (W2) and bound below.
 #
-# INCOMPLETE BY DESIGN - DO NOT DEPLOY. There is deliberately no production
-# KV namespace binding: no production namespace exists,
-# and Wrangler 4 creates a new namespace on deploy for a KV binding that has
-# no `id`. Release plan W2 creates the namespace and the `ADMIN_TOKEN` secret,
-# each separately authorized, and commits the real id here. Until then the
-# Worker fails closed (`GRIDVIEW_DATA KV binding is required in production`),
-# and a first `wrangler deploy` refuses for the missing required secret unless
-# one is supplied with `--secrets-file`. Each production deployment (W3) is
-# separately authorized.
+# DO NOT DEPLOY without W3's authorization. A first `wrangler deploy` refuses
+# for the missing required secret unless one is supplied with
+# `--secrets-file`. Each production deployment (W3) is separately authorized.
+#
+# This is the bootstrap configuration: `PROVIDER_MODE = "none"`, no
+# reconciliation ledger and no schedule, so data arrives only through the
+# guarded ingest. The automatic-updates configuration belongs to the later
+# gate AU-7 (`docs/release/automatic-updates.md` section 8.4), its own
+# authorized change.
 #
 # Season 2026 is born through production genesis (ADR 0025 D12, "Amendment
 # (2026-10-20)"), never through the staging seed and activation:
@@ -262,6 +262,13 @@ class_name = "SeasonPublicationSequencer"
 [env.production.secrets]
 required = ["ADMIN_TOKEN"]
 
+# `gridview-snapshots-production`, created on 2026-10-22 (release plan W2).
+# The id is required: Wrangler 4 creates a new namespace on deploy for a KV
+# binding without one.
+[[env.production.kv_namespaces]]
+binding = "GRIDVIEW_DATA"
+id = "d76328b37da343db92d927142c072593"
+
 # No scheduled trigger, explicitly: an empty list makes `wrangler deploy` set
 # no schedule, where an absent key would leave any existing one in place.
 [env.production.triggers]
@@ -291,10 +298,12 @@ persist = true
 invocation_logs = false
 
 # The isolated demonstration Worker of release gate AU-3 (ADR 0028 D10;
-# `docs/release/automatic-updates.md` section 8.1). DECLARED ONLY; NEVER
-# DEPLOYED: no `gridview-api-e2e` Worker, Durable Object namespace, secret or
-# schedule exists. Only its KV namespace exists, `gridview-snapshots-e2e`,
-# created on 2026-10-21 (AU-2 step 1) and bound below.
+# `docs/release/automatic-updates.md` section 8.1). DEPLOYED on 2026-10-21
+# (AU-2 step 3, version `91ff2541`), with its own three Durable Object
+# namespaces and `ADMIN_TOKEN`; season 2026 was born there by genesis (AU-2
+# step 4). Its KV namespace, `gridview-snapshots-e2e`, was created on
+# 2026-10-21 (AU-2 step 1) and is bound below. AU-3 ran on it and was paused
+# on 2026-10-22, so it has no schedule.
 #
 # It is the only environment that selects the automatic path, binds the
 # reconciliation ledger or reads a controlled provider source, and it shares

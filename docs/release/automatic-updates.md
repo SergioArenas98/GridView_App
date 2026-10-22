@@ -404,10 +404,12 @@ shared, so releases re-stamp consistently.
 
 ### 8.4 Production (AU-7)
 
-PR #85's configuration is the interim state. At W2/W3, the production PR
-commits:
+PR #85's configuration is the interim state. The W2 PR (2026-10-22) commits
+only the production KV id and keeps that bootstrap configuration
+(`PROVIDER_MODE = "none"`, no ledger, `crons = []`). The coordinated
+configuration comes afterwards, in its own AU-7 PR, once AU-7's
+prerequisites hold. That PR commits:
 
-- the KV id;
 - `PROVIDER_MODE = "coordinated"`;
 - the production exports table with the three classes, and the
   `RECONCILIATION_LEDGER` binding;
