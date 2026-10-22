@@ -2203,6 +2203,8 @@ Plus two scheduling keys, both persisted and both restart-safe: `lastSweptAt`
 
 ##### Cadence
 
+> **Amended 2026-10-21 by [ADR 0028](../adr/0028-automatic-end-to-end-season-updates.md) D5:** the dense +5/+9/+15/+24 h checks and the 17-check limit below are replaced by the first check at the first hourly tick at or after race start + 90 minutes, hourly checks through + 10 h 30 min while no result is accepted (or a change is pending), then + 15 h, + 24 h and daily to day 14 (25 checks). The settling predicate and the 14-day ceiling are unchanged.
+
 | Phase | Checks | Terminates at |
 |---|---|---|
 | **Dense** | +5, +9, +15, +24 hours from the Jolpica start anchor (§10.4) | Always after 4 checks |
@@ -2280,6 +2282,8 @@ action, deliberately requested by a human against one named backlog record:
 | Failure | A failed, empty, malformed or rate-limited verification is T6: `stagedCorrection`, `candidateRevision`, `competingCorrection` and every confirmation counter are preserved exactly. |
 | If it never happens | The record simply stays in the backlog unchanged and T11-T11d never execute. That is a supported steady state, not a stall. |
 | Disposition | Still only T12. Verification informs an operator; it never decides for them. |
+
+> **Amended 2026-10-21 by [ADR 0028](../adr/0028-automatic-end-to-end-season-updates.md) D5 item 5 (AU-D5, accepted by the owner for 2.0.0 the same day, ADR 0028 D13; implemented on PR #86):** inside the hourly window (slots 1-9) a cadence check's first valid payload is held pending and written only when the next successful cadence check returns the same revision, still with `consecutiveConfirmations` := 1 and `sourceObservedAt` from the first sighting; a different one replaces it as T4 does. From slot 10 on, and for a manual run, T0 below is unchanged.
 
 | # | From | Observation | Effect |
 |---|---|---|---|

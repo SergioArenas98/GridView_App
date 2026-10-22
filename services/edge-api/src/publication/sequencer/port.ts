@@ -35,6 +35,8 @@ import type {
   PrepareOutcome,
   PrepareRequest,
   SeasonAuthority,
+  SeasonGenesisOutcome,
+  SeasonGenesisRequest,
 } from './model';
 import type { SeasonPublicationCoordinator } from './coordinator';
 
@@ -76,6 +78,13 @@ export interface SeasonPublicationSequencerPort {
   activateCutover(
     request: CutoverActivationRequest,
   ): Promise<CutoverActivationOutcome>;
+  /**
+   * Records a `genesis` season with no release, only where the object holds
+   * no state for it (ADR 0025 D12, "Amendment (2026-10-20)"). Idempotent for
+   * one fingerprint. Over the Durable Object transport a lost answer is
+   * `uncertain`, never a rejection.
+   */
+  commitGenesis(request: SeasonGenesisRequest): Promise<SeasonGenesisOutcome>;
 }
 
 /**
@@ -131,5 +140,11 @@ export class LocalSeasonPublicationSequencer implements SeasonPublicationSequenc
     request: CutoverActivationRequest,
   ): Promise<CutoverActivationOutcome> {
     return this.coordinator.activateCutover(request);
+  }
+
+  async commitGenesis(
+    request: SeasonGenesisRequest,
+  ): Promise<SeasonGenesisOutcome> {
+    return this.coordinator.commitGenesis(request);
   }
 }

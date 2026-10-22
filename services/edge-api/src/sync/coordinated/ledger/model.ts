@@ -81,9 +81,9 @@ export const LEASE_TTL_MS = 10 * 60 * 1000;
 /** The highest round a record may name. Far above any real season. */
 export const MAXIMUM_ROUND = 100;
 
-/** The §10.4.1 cadence has at most 17 checks. */
-export const MAXIMUM_CHECK_INDEX = 17;
-export const MAXIMUM_CONSECUTIVE_CONFIRMATIONS = 17;
+/** The §10.4.1 cadence, on ADR 0028 D5's schedule, has at most 25 checks. */
+export const MAXIMUM_CHECK_INDEX = 25;
+export const MAXIMUM_CONSECUTIVE_CONFIRMATIONS = 25;
 
 /** The unstable-source event is raised at the third sighting. */
 export const MAXIMUM_UNSTABLE_SIGHTINGS = 3;

@@ -136,6 +136,8 @@ class RacingPort implements SeasonPublicationSequencerPort {
   ) => this.inner.acknowledgeCleanup(r);
   activateCutover: SeasonPublicationSequencerPort['activateCutover'] = (r) =>
     this.inner.activateCutover(r);
+  commitGenesis: SeasonPublicationSequencerPort['commitGenesis'] = (r) =>
+    this.inner.commitGenesis(r);
 
   async recoverCutoverSeed(
     request: CutoverSeedRecoveryRequest,

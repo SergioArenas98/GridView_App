@@ -89,25 +89,50 @@ export function seasonAttention(
 }
 
 /**
+ * What the closing read found: the attention conditions, if any, and whether
+ * the season's publication is stopped - held, durably blocked, or left
+ * `blocked` by its last settlement (a guard rejection, a staged or locked
+ * correction). A stopped season does not beat (`../heartbeat.ts`), even where
+ * no attention condition holds.
+ */
+export interface SeasonReading {
+  readonly attention: SeasonAttention | null;
+  readonly stopped: boolean;
+}
+
+/** Whether `snapshot`'s season cannot publish without an operator. */
+export function publicationStopped(snapshot: LedgerSnapshot): boolean {
+  const record = snapshot.seasonRecord?.record ?? null;
+  return (
+    record !== null &&
+    (record.operatorHold != null ||
+      record.durableBlock != null ||
+      record.publicationDisposition?.state === 'blocked')
+  );
+}
+
+/**
  * Reads the season once and writes the attention line when a condition
  * holds. Takes no lease and writes nothing to the ledger. A read that fails
- * writes no attention line: the run's own line already reports the ledger
- * failure. It never throws into the run.
+ * writes no attention line and answers `null`: the run's own line already
+ * reports the ledger failure. It never throws into the run.
  */
 export async function signalAttention(
   ledger: ReconciliationLedgerPort,
   season: number,
   logger: Logger,
-): Promise<SeasonAttention | null> {
+): Promise<SeasonReading | null> {
   let attention: SeasonAttention | null;
+  let stopped: boolean;
   try {
     const read = await ledger.readSeason(season);
     if (read.outcome !== 'read') return null;
     attention = seasonAttention(read.snapshot);
+    stopped = publicationStopped(read.snapshot);
   } catch {
     return null;
   }
-  if (attention === null) return null;
+  if (attention === null) return { attention, stopped };
   const event = {
     operation: RECONCILIATION_ATTENTION_OPERATION,
     season: attention.season,
@@ -121,5 +146,5 @@ export async function signalAttention(
   };
   if (attention.level === 'error') logger.error(event);
   else logger.warn(event);
-  return attention;
+  return { attention, stopped };
 }

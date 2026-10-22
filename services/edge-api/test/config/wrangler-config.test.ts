@@ -7,6 +7,10 @@ import { CutoverPreparationService } from '../../src/publication/cutover/service
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
 import { adminRequest, createHarness } from '../support/edge-harness';
 import {
+  demonstrationSection,
+  withoutDemonstration,
+} from './demonstration-environment';
+import {
   SEASON,
   checkpointFor,
   cutoverContext,
@@ -134,21 +138,32 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     ]);
     // The seed phase is no longer configured anywhere.
     expect(config).not.toMatch(/^[^#\n]*"seed:/m);
-    // Each is assigned exactly once anywhere in the file - so neither the
-    // top-level development table nor production sets it; the names still
-    // appear in the comments that explain the values.
-    expect(
-      config.match(/^\s*"?SEASON_PUBLICATION_CUTOVER_CONTROL"?\s*=/gm),
-    ).toHaveLength(1);
-    expect(
-      config.match(/^\s*"?SEASON_PUBLICATION_AUTHORITY"?\s*=/gm),
-    ).toHaveLength(1);
+    // Outside the demonstration Worker, each is assigned exactly twice: here
+    // and in production's genesis configuration (W1,
+    // `production-worker-config.test.ts`). The top-level development table
+    // sets neither; the names still appear in the comments that explain the
+    // values. The demonstration Worker assigns each once, for its own genesis
+    // (`demonstration-worker-config.test.ts`).
+    const elsewhere = withoutDemonstration(config);
+    const demonstration = demonstrationSection(config);
+    for (const name of [
+      'SEASON_PUBLICATION_CUTOVER_CONTROL',
+      'SEASON_PUBLICATION_AUTHORITY',
+    ]) {
+      const assigned = new RegExp(`^\\s*"?${name}"?\\s*=`, 'gm');
+      expect(elsewhere.match(assigned), name).toHaveLength(2);
+      expect(demonstration.match(assigned), name).toHaveLength(1);
+    }
   });
 
-  it('leaves the production variables exactly as they were', () => {
+  it('pins the production variables to the genesis configuration (W1)', () => {
     expect(assignments(productionVarsBlock(config))).toEqual([
       'ENVIRONMENT = "production"',
       'PROVIDER_MODE = "none"',
+      'PUBLIC_BASE_URL = "https://gridview-api-production.sejuma18.workers.dev"',
+      'SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"',
+      'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
+      'SEASON_BATCH_INGEST = "2026"',
     ]);
   });
 
@@ -169,15 +184,21 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     });
   });
 
-  it('resolves development and production to the legacy authority with no cutover control', () => {
+  it('resolves development to the legacy authority with no cutover control', () => {
     const development = resolvedVars(developmentVarsBlock(config));
-    const production = resolvedVars(productionVarsBlock(config));
     expect(development.environment).toBe('development');
+    expect(development.publicationAuthorityMode).toBe('legacy');
+    expect(development.publicationCutoverControl).toEqual({ kind: 'disabled' });
+  });
+
+  it('resolves production to the sequencer authority in the season 2026 genesis phase', () => {
+    const production = resolvedVars(productionVarsBlock(config));
     expect(production.environment).toBe('production');
-    for (const resolved of [development, production]) {
-      expect(resolved.publicationAuthorityMode).toBe('legacy');
-      expect(resolved.publicationCutoverControl).toEqual({ kind: 'disabled' });
-    }
+    expect(production.publicationAuthorityMode).toBe('sequencer');
+    expect(production.publicationCutoverControl).toEqual({
+      kind: 'genesis',
+      season: 2026,
+    });
   });
 
   it('leaves every staging binding, the secret and observability untouched, with an empty cron', () => {
@@ -288,18 +309,20 @@ describe('the committed activation phase activates nothing by itself (ADR 0025 D
   it('refuses both operations under the committed development and production variables', async () => {
     const context = await cutoverContext();
     await context.service.seed(checkpointFor());
-    for (const block of [
-      developmentVarsBlock(config),
-      productionVarsBlock(config),
-    ]) {
+    // Development has no control at all; production's `genesis:2026` phase
+    // permits genesis only, never the staging seed or activation.
+    for (const [block, refusal] of [
+      [developmentVarsBlock(config), 'disabled'],
+      [productionVarsBlock(config), 'phase-not-permitted'],
+    ] as const) {
       const service = committedService(block, context);
       expect(await service.seed(checkpointFor())).toEqual({
         kind: 'refused',
-        refusal: 'disabled',
+        refusal,
       });
       expect(await service.activate(checkpointFor(), true)).toEqual({
         kind: 'refused',
-        refusal: 'disabled',
+        refusal,
       });
     }
     expect(await context.port.readAuthority(SEASON)).toMatchObject({

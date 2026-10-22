@@ -100,6 +100,7 @@ Cloudflare Access remains a Phase 5B+ hardening option.
 - `GET /internal/admin/publication/cutover/status`
 - `POST /internal/admin/publication/cutover/seed`
 - `POST /internal/admin/publication/cutover/activate`
+- `POST /internal/admin/publication/cutover/genesis`
 - `GET /internal/admin/publication/standings-predecessor`
 - `GET /internal/admin/reconciliation`
 - `POST /internal/admin/reconciliation/hold`
@@ -124,6 +125,17 @@ phase since 2026-09-12 and `sequencer` since 2026-09-15 (version
 `phase-not-permitted`, and an identical activation retry returns
 `already-active` — see
 [Staging cutover preparation](#staging-cutover-preparation-adr-0025-d12--provisioned-still-disabled).
+
+`POST /internal/admin/publication/cutover/genesis` (added 2026-10-20, not
+deployed) is the production genesis of ADR 0025 D12, "Amendment (2026-10-20)".
+It takes `{ season, genesisIdentity, confirmGenesis: true }`. It runs only under
+`SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:<season>"` with the
+`sequencer` authority, in production or staging, and only for a season with no
+legacy pointer and no sequencer state. It records the season as `genesis`:
+authoritative, with no release. The season's public reads answer
+`503 SNAPSHOT_NOT_READY` until its first guarded season batch
+(`expectedActiveVersion: null`) commits. No committed environment sets a
+`genesis:` control.
 
 ## Synchronization Flow
 

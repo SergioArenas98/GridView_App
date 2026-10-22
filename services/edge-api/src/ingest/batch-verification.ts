@@ -18,8 +18,9 @@
  * 3. **The source.** The assembled source is deep-validated as untrusted
  *    input (`source-validation.ts`).
  * 4. **Completeness.** Every calendar round whose race was at least five hours
- *    old at the capture instant must be classified - the runtime's own
- *    eligibility rule - and the capture must declare exactly those rounds.
+ *    old at the capture instant must be classified - the batch capture rule
+ *    (`isBatchCaptureEligible`), which ADR 0028 D5 left at the runtime's
+ *    former first check - and the capture must declare exactly those rounds.
  * 5. **The documents.** The documents are regenerated here, from the source,
  *    at the batch's own instant and version, and must equal the submitted
  *    documents and their reviewed digests byte for byte. So what the operator
@@ -42,7 +43,7 @@ import {
 } from '../snapshots/generator';
 import { calendarAnchorsOf } from '../sync/coordinated/observation/revisions';
 import type { CuratedSeasonMetadata } from '../sync/coordinated/outcome/metadata';
-import { isEligible } from '../sync/coordinated/policy/cadence';
+import { isBatchCaptureEligible } from '../sync/coordinated/policy/cadence';
 import {
   artifactFile,
   artifactKind,
@@ -518,7 +519,7 @@ function sourceLabelsMatch(source: ProviderSeasonSource, release: Json) {
 
 // --- Completeness and documents ---------------------------------------------
 
-/** The rounds the runtime would classify at `observedAt`, or `null`. */
+/** The rounds a capture at `observedAt` must classify, or `null`. */
 function eligibleRounds(
   source: ProviderSeasonSource,
   observedAt: string,
@@ -531,7 +532,7 @@ function eligibleRounds(
   if (anchors === null) return null;
   const now = new Date(observedAt);
   return anchors
-    .filter((anchor) => isEligible(anchor.anchor, now))
+    .filter((anchor) => isBatchCaptureEligible(anchor.anchor, now))
     .map((anchor) => anchor.round);
 }
 

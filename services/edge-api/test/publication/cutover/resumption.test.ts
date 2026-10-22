@@ -84,6 +84,7 @@ function perSeasonPort(): SeasonPublicationSequencerPort {
     seedCutover: (s) => at(s.season).seedCutover(s),
     recoverCutoverSeed: (r) => at(r.season).recoverCutoverSeed(r),
     activateCutover: (r) => at(r.season).activateCutover(r),
+    commitGenesis: (r) => at(r.season).commitGenesis(r),
   };
 }
 

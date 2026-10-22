@@ -1,5 +1,6 @@
 /**
- * No committed environment declares the `RECONCILIATION_LEDGER` binding or
+ * No committed environment but the isolated demonstration Worker
+ * (`[env.e2e]`, gate AU-3) declares the `RECONCILIATION_LEDGER` binding or
  * registers the `ReconciliationLedger` class, as Wrangler itself resolves
  * `wrangler.toml`. Staging resolves to the two Durable Object registrations
  * and bindings that Stage A deployed on 2026-10-07; the staging-only ledger
@@ -28,7 +29,6 @@ import type {
   ReservationOutcome,
 } from '../../src/providers/http/provider-rate-limiter';
 import { SequencedPublicationService } from '../../src/publication/sequenced/service';
-import { MemorySnapshotStorage } from '../../src/storage/local';
 import type { LedgerNamespace } from '../../src/sync/coordinated/ledger';
 import { resolveReconciliationLedger } from '../../src/sync/coordinated/ledger-port';
 import { SynchronizationService } from '../../src/sync/sync-service';
@@ -44,7 +44,7 @@ const configPath = join(
 );
 
 /** The configuration Wrangler resolves for one environment (`''` = top level). */
-function resolved(environment: '' | 'staging' | 'production') {
+function resolved(environment: '' | 'staging' | 'production' | 'e2e') {
   return unstable_readConfig(
     { config: configPath, env: environment === '' ? undefined : environment },
     { hideWarnings: true },
@@ -63,7 +63,7 @@ function bindingNames(config: ReturnType<typeof resolved>): string[] {
   );
 }
 
-describe('the committed configuration declares no reconciliation ledger, as Wrangler resolves it', () => {
+describe('the committed configuration declares no reconciliation ledger outside the demonstration Worker, as Wrangler resolves it', () => {
   it('resolves staging to the two Durable Objects Stage A deployed, with no migration', () => {
     const staging = resolved('staging');
     expect(staging.exports).toEqual(topLevelExports);
@@ -80,41 +80,64 @@ describe('the committed configuration declares no reconciliation ledger, as Wran
   it('gives staging no exports table of its own, so it inherits the top-level one', () => {
     // A named environment's `exports` table would replace the top-level one;
     // without one, staging resolves to exactly the top-level registrations.
-    expect(rawConfig).not.toMatch(/^\[env\.[a-z]+\.exports/m);
+    // Only the demonstration Worker has its own (asserted below).
+    expect(
+      [...rawConfig.matchAll(/^\[env\.([a-z0-9]+)\.exports/gm)].map(
+        (match) => match[1],
+      ),
+    ).toEqual(['e2e', 'e2e', 'e2e']);
     expect(resolved('staging').exports).toEqual(resolved('').exports);
     expect(resolved('').exports).toEqual(topLevelExports);
   });
 
-  it('leaves development and production without the class or the binding', () => {
-    for (const environment of ['', 'production'] as const) {
-      const config = resolved(environment);
-      expect(config.exports, environment).toEqual(topLevelExports);
-      expect(bindingNames(config), environment).toEqual([
-        'PROVIDER_RATE_LIMITER',
-      ]);
-      expect(config.migrations, environment).toEqual([]);
-    }
+  it('leaves development without the season binding, and gives production the same two as staging', () => {
+    const development = resolved('');
+    expect(development.exports).toEqual(topLevelExports);
+    expect(bindingNames(development)).toEqual(['PROVIDER_RATE_LIMITER']);
+    expect(development.migrations).toEqual([]);
+    // Production genesis (release plan W1) binds the sequencer too, and
+    // inherits the top-level exports like staging.
+    const production = resolved('production');
+    expect(production.exports).toEqual(topLevelExports);
+    expect(bindingNames(production)).toEqual([
+      'PROVIDER_RATE_LIMITER',
+      'SEASON_PUBLICATION_SEQUENCER',
+    ]);
+    expect(production.migrations).toEqual([]);
   });
 
   it('keeps staging and production on none, with no scheduled trigger anywhere', () => {
     const staging = resolved('staging');
     const production = resolved('production');
     expect(staging.vars.PROVIDER_MODE).toBe('none');
-    expect(production.vars).toEqual({
-      ENVIRONMENT: 'production',
-      PROVIDER_MODE: 'none',
-    });
+    expect(production.vars.PROVIDER_MODE).toBe('none');
+    expect(JSON.stringify(production.vars)).not.toMatch(/RECONCILIATION/);
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
-    // Explicitly empty since the season-batch ingest configuration.
+    // Explicitly empty: staging since the season-batch ingest configuration,
+    // production since its own configuration (W1).
     expect(staging.triggers.crons).toEqual([]);
-    expect(production.triggers.crons).toBeUndefined();
+    expect(production.triggers.crons).toEqual([]);
     expect(resolved('').triggers.crons).toBeUndefined();
   });
 
-  it('fails closed in every environment, none of which declares the binding', () => {
+  it('resolves the demonstration Worker to the three registrations and bindings, the ledger included', () => {
+    const demonstration = resolved('e2e');
+    expect(demonstration.exports).toEqual({
+      ...topLevelExports,
+      ReconciliationLedger: sqlite,
+    });
+    expect(bindingNames(demonstration)).toEqual([
+      'PROVIDER_RATE_LIMITER',
+      'SEASON_PUBLICATION_SEQUENCER',
+      'RECONCILIATION_LEDGER',
+    ]);
+    expect(demonstration.migrations).toEqual([]);
+  });
+
+  it('fails closed in every environment but the demonstration Worker, none of which declares the binding', () => {
     // A namespace for every binding each environment declares, as a
     // deployment of it would carry.
-    const boundEnv = (environment: '' | 'staging' | 'production') =>
+    const boundEnv = (environment: '' | 'staging' | 'production' | 'e2e') =>
       Object.fromEntries(
         bindingNames(resolved(environment)).map((name) => [
           name,
@@ -127,6 +150,8 @@ describe('the committed configuration declares no reconciliation ledger, as Wran
         environment,
       ).toBeNull();
     }
+    // The demonstration Worker's bindings carry it, so it resolves there.
+    expect(resolveReconciliationLedger(boundEnv('e2e'))).not.toBeNull();
     // The same namespace under the ledger's own name would be resolved, so
     // the nulls above come from the configuration, not from the namespace.
     expect(
@@ -256,13 +281,10 @@ describe('the committed provider modes with a bound RECONCILIATION_LEDGER namesp
   it.each(['staging', 'production'] as const)(
     'the committed %s variables never look the ledger up, request a provider or publish through the coordinated path',
     async (environment) => {
-      // Staging selects the sequencer authority, so its Worker reads season
-      // 2026 from an active in-process sequencer, as live staging does.
-      // Production selects none and reads legacy storage.
-      const ctx =
-        environment === 'staging'
-          ? await sequencedContext({ cutover: 'active' })
-          : null;
+      // Both select the sequencer authority, so each Worker reads season 2026
+      // from an active in-process sequencer: as live staging does, and as
+      // production will once genesis and its first batch have committed.
+      const ctx = await sequencedContext({ cutover: 'active' });
       const namespace = countingNamespace();
       const limiter = new CountingLimiter();
       let transportCalls = 0;
@@ -271,8 +293,8 @@ describe('the committed provider modes with a bound RECONCILIATION_LEDGER namesp
         ...committedVars(environment),
         ADMIN_TOKEN,
         RECONCILIATION_LEDGER: namespace as unknown as DurableObjectNamespace,
-        __LOCAL_STORAGE: ctx?.storage ?? new MemorySnapshotStorage(),
-        ...(ctx ? { __SEASON_PUBLICATION_SEQUENCER: ctx.port } : {}),
+        __LOCAL_STORAGE: ctx.storage,
+        __SEASON_PUBLICATION_SEQUENCER: ctx.port,
         __CACHE_PURGER: new MemoryCachePurgeAdapter(),
         __SNAPSHOT_VALIDATOR: runtimeSnapshotValidator,
         __LOGGER: logger,
@@ -303,19 +325,9 @@ describe('the committed provider modes with a bound RECONCILIATION_LEDGER namesp
         });
       }
 
-      // The sync entry points took the whole-season path. Production commits
-      // no `PUBLIC_BASE_URL`, so its scheduled run stops at configuration,
-      // before any synchronization, as it always has...
-      if (environment === 'staging') {
-        expect(wholeSeason).toHaveBeenCalledTimes(2);
-      } else {
-        expect(wholeSeason).toHaveBeenCalledTimes(1);
-        expect(
-          logger.events.filter(
-            (event) => event.operation === 'scheduled.failed',
-          ),
-        ).toHaveLength(1);
-      }
+      // The sync entry points took the whole-season path, the scheduled run
+      // and the manual one alike...
+      expect(wholeSeason).toHaveBeenCalledTimes(2);
       // ...and nothing touched the ledger, a provider or the coordinated path.
       expect(namespace.touched()).toBe(0);
       expect(limiter.calls).toBe(0);

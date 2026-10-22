@@ -65,7 +65,11 @@ export const FIRST_PUBLICATION = later(PRE_SEASON, HOUR);
 /** What the resolver answers: a fresh ledger client per call, or `null`. */
 export type LedgerBinding = (() => ReconciliationLedgerPort) | null;
 
-/** The publication writes a Worker call could make. */
+/**
+ * The publication writes a Worker call could make. The sync-state write is
+ * counted on its own (`heartbeats`): a coordinated scheduled run makes it as
+ * its heartbeat (ADR 0028 D7), which publishes nothing.
+ */
 const storageWrites = [
   'writeVersionedDocument',
   'writeVersionInventory',
@@ -74,7 +78,6 @@ const storageWrites = [
   'setActiveVersion',
   'setPreviousVersion',
   'setCurrentSeason',
-  'setSyncState',
   'setQuotaState',
   'setContentMetadata',
   'deleteUnpublishedVersion',
@@ -87,6 +90,8 @@ export interface CallRecord {
   readonly prepares: number;
   readonly finalizes: number;
   readonly storageWrites: number;
+  /** Sync-state writes: the coordinated heartbeat. */
+  readonly heartbeats: number;
   readonly ledgerCalls: readonly string[];
   readonly logs: readonly LogEvent[];
   readonly mockProviderCalls: number;
@@ -109,6 +114,7 @@ export class EntryPointHarness {
   private prepares = 0;
   private finalizes = 0;
   private writes = 0;
+  private syncStateWrites = 0;
   /** What the resolver answers for this harness's calls. */
   private binding: LedgerBinding = null;
   /** Called before each `prepare` the Worker's sequencer port receives. */
@@ -337,10 +343,11 @@ export class EntryPointHarness {
     const requests = this.server.requests.length;
     const reservations = this.limiter.reservations.length;
     const logs = this.harness.logger.events.length;
-    const [prepares, finalizes, writes] = [
+    const [prepares, finalizes, writes, heartbeats] = [
       this.prepares,
       this.finalizes,
       this.writes,
+      this.syncStateWrites,
     ];
     const mock = providerCalls(this.provider);
     await call();
@@ -350,6 +357,7 @@ export class EntryPointHarness {
       prepares: this.prepares - prepares,
       finalizes: this.finalizes - finalizes,
       storageWrites: this.writes - writes,
+      heartbeats: this.syncStateWrites - heartbeats,
       ledgerCalls: [...this.harness.ledgerCalls],
       logs: this.harness.logger.events.slice(logs),
       mockProviderCalls: providerCalls(this.provider) - mock,
@@ -385,6 +393,12 @@ export class EntryPointHarness {
         );
       };
     }
+    counted.setSyncState = (
+      ...args: Parameters<SnapshotStorage['setSyncState']>
+    ) => {
+      this.syncStateWrites += 1;
+      return storage.setSyncState(...args);
+    };
     return counted as unknown as SnapshotStorage;
   }
 }

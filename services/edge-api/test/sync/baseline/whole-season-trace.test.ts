@@ -17,20 +17,45 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
+  asAmendedByAdr0028,
   combinations,
   steps,
   wholeSeasonTrace,
   type StepTrace,
 } from './whole-season-trace';
 
-const recorded = JSON.parse(
+const recording = JSON.parse(
   readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), 'whole-season-trace.json'),
     'utf8',
   ),
 ) as Record<string, StepTrace[]>;
+/** The recording, with the one amendment made since (ADR 0028 D8). */
+const recorded = asAmendedByAdr0028(recording);
 
 describe('the whole-season modes are unchanged from the baseline', () => {
+  it('differs from the recording only by the production public request lines', () => {
+    for (const key of Object.keys(recording)) {
+      if (!key.startsWith('production/')) {
+        expect(recorded[key], key).toEqual(recording[key]);
+      }
+    }
+    const dropped = Object.values(recording)
+      .flat()
+      .flatMap((step) => step.logs).length;
+    const kept = Object.values(recorded)
+      .flat()
+      .flatMap((step) => step.logs).length;
+    const publicSuccessLines = Object.entries(recording)
+      .filter(([key]) => key.startsWith('production/'))
+      .flatMap(([, traces]) => traces)
+      .filter((step) => step.step.startsWith('GET /v1/'))
+      .flatMap((step) => step.logs)
+      .filter((line) => line.operation === 'request.completed').length;
+    expect(publicSuccessLines).toBeGreaterThan(0);
+    expect(dropped - kept).toBe(publicSuccessLines);
+  });
+
   it('records every combination and every step', () => {
     expect(Object.keys(recorded)).toEqual(
       combinations.map(

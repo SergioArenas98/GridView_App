@@ -531,10 +531,12 @@ fails with `source must not be null`. **Do not downgrade.**
    production release APK added a Console-confirmed controlled fatal and
    `gv_sync_run`. A green test suite is still not evidence of delivery, and neither
    is an accepted HTTP batch — only a Console record is.
-2. **Privacy policy URL** is unset (`PRIVACY_POLICY_URL`). A production build
-   with no policy URL shows no policy affordance at all. Publishing a policy and
-   supplying the URL is a **release blocker**, tracked here rather than surfaced
-   to users at runtime.
+2. **Privacy policy URL** is supplied for release builds since 2026-10-20:
+   `config/dart_defines/production.json` sets `PRIVACY_POLICY_URL` to
+   https://gridview.netlify.app, the URL already on the Play listing. A build
+   without that define still shows no policy affordance at all. The remaining
+   **release blocker** is the page's content: the policy covering 1.x and
+   2.0.0 (PR #82) must be published there (release plan gate P2).
 3. **Advertising** — no longer an open item. The decision is recorded:
    advertising is **not retained for v1**
    ([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)). No approval to

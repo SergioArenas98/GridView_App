@@ -1,0 +1,66 @@
+name: Automation monitor
+
+# Outside-in alerting for GridView's automatic updates (ADR 0028 D9). It reads
+# three public API resources and fails when the coordinated runtime's
+# heartbeat is stale or a race result is late, so GitHub notifies the owner of
+# the failed run.
+#
+# MANUAL ONLY. There is deliberately no `schedule:` trigger: adding one is the
+# separately authorized activation step AU-6 of
+# `docs/release/automatic-updates.md`, after the target environment is
+# automatic (a heartbeat exists) and the alert drill below has reached the
+# owner. Scheduled workflows in a public repository are disabled by GitHub
+# after 60 days without repository activity; the runbook covers that.
+#
+# No secret is used, and the job can read nothing a user of the app could not.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which API to check
+        type: choice
+        options: [staging, production]
+        default: staging
+      skip_heartbeat:
+        description: Skip the heartbeat check (the environment is not automatic yet)
+        type: boolean
+        default: false
+      simulate_failure:
+        description: Fail after the reads, to verify that the alert reaches the owner
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: automation-monitor-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: services/edge-api/scripts/monitor
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the automatic path
+        env:
+          TARGET: ${{ inputs.environment }}
+          SKIP_HEARTBEAT: ${{ inputs.skip_heartbeat }}
+          SIMULATE_FAILURE: ${{ inputs.simulate_failure }}
+        run: |
+          case "$TARGET" in
+            staging) base="https://gridview-api-staging.sejuma18.workers.dev" ;;
+            production) base="https://gridview-api-production.sejuma18.workers.dev" ;;
+            *) echo "unknown environment" >&2; exit 2 ;;
+          esac
+          args=(--base-url "$base")
+          if [ "$SKIP_HEARTBEAT" = "true" ]; then args+=(--skip-heartbeat); fi
+          if [ "$SIMULATE_FAILURE" = "true" ]; then args+=(--simulate-failure); fi
+          node services/edge-api/scripts/monitor/automation-monitor.mjs "${args[@]}"

@@ -15,6 +15,13 @@ import { errorResponse } from './http/envelope';
 import { SeasonBatchIngest } from './ingest/service';
 import { consoleLogger } from './logging/logger';
 import {
+  completedLine,
+  failedLine,
+  internalRouteTemplate,
+  requestIdFor,
+  requestLogScope,
+} from './logging/request-log';
+import {
   resolvePublicationAuthority,
   type PublicationAuthority,
 } from './publication/authority';
@@ -30,6 +37,10 @@ import { SnapshotPublisher } from './publication/publisher';
 import { freshnessPolicyFor } from './publication/sequenced/freshness-horizon';
 import { SequencedPublicationService } from './publication/sequenced/service';
 import { handlePublicRequest } from './public/router';
+import {
+  controlledSourceTransport,
+  resolveControlledProviderSource,
+} from './providers/controlled/source';
 import { resolveProvider } from './providers/factory';
 import {
   resolveProviderRateLimiter,
@@ -65,17 +76,18 @@ export { ProviderRateLimiter } from './providers/http/provider-rate-limiter';
 
 /**
  * Durable Object class registered as the `SEASON_PUBLICATION_SEQUENCER` binding
- * for `env.staging` only (ADR 0025 D1, D12). Wrangler resolves a Durable Object
+ * for `env.staging` and `env.production` (ADR 0025 D1, D12). Wrangler resolves a Durable Object
  * class through a named export of the Worker's main module, so any deployment
  * that binds the namespace needs this export to exist.
  *
  * **Exported is not enabled.** Exporting it creates no namespace, deploys
  * nothing, seeds no season and activates none, and a provisioned namespace is
- * not an invoked object. Production declares no such binding at all, and
- * development and production leave `SEASON_PUBLICATION_AUTHORITY` unset - so
- * there `resolvePublicationAuthority` returns `legacy`, no code path performs
- * the lookup, and every cutover operation is refused at the authority-mode
- * gate. Only `env.staging` selects `sequencer`. Which environment has the
+ * not an invoked object. Development declares no such binding and leaves
+ * `SEASON_PUBLICATION_AUTHORITY` unset - so there `resolvePublicationAuthority`
+ * returns `legacy`, no code path performs the lookup, and every cutover
+ * operation is refused at the authority-mode gate. `env.staging` and
+ * `env.production` select `sequencer`; production's `genesis:` control
+ * permits only production genesis. Which environment has the
  * namespace provisioned, and which authority and cutover control are committed
  * and deployed where, is recorded in `docs/technical/GridView_Environments.md`.
  */
@@ -98,9 +110,16 @@ export { ReconciliationLedger } from './sync/coordinated/ledger/durable-object';
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const startedAt = Date.now();
-    const requestId =
-      request.headers.get('X-Request-ID') ?? crypto.randomUUID();
+    const requestId = requestIdFor(request.headers.get('X-Request-ID'), () =>
+      crypto.randomUUID(),
+    );
     const url = new URL(request.url);
+    // What this request's own lines may carry (ADR 0028 D8): in production
+    // a public request persists no line on success and no request ID.
+    const logScope = requestLogScope(
+      env.ENVIRONMENT,
+      isInternalPath(url.pathname),
+    );
     const isHead = request.method === 'HEAD';
     const logger = env.__LOGGER ?? consoleLogger;
     const clock = env.__CLOCK ?? systemClock;
@@ -110,6 +129,12 @@ export default {
 
     try {
       const config = resolveRuntimeConfig(env);
+      // Fails closed on a misconfigured controlled source, for every request.
+      resolveControlledProviderSource(
+        env.CONTROLLED_PROVIDER_SOURCE,
+        config.environment,
+        config.providerMode,
+      );
       const storage = resolveStorage(env);
       const purger = resolveCachePurger(env, config);
       const authority = resolvePublicationAuthority(env, config);
@@ -180,6 +205,7 @@ export default {
           ingest: new SeasonBatchIngest({
             environment: config.environment,
             providerMode: config.providerMode,
+            cutoverControl: config.publicationCutoverControl,
             enabledSeason: env.SEASON_BATCH_INGEST,
             guarded,
             clock,
@@ -209,7 +235,11 @@ export default {
           },
           clock,
         });
-        routeTemplate = url.pathname;
+        routeTemplate = internalRouteTemplate(
+          env.ENVIRONMENT,
+          url.pathname,
+          response.status,
+        );
       } else if (request.method !== 'GET' && !isHead) {
         response = errorResponse(
           405,
@@ -244,7 +274,7 @@ export default {
         cacheOutcome = result.cacheOutcome;
       }
 
-      logger.info({
+      const completed = completedLine(logScope, {
         operation: 'request.completed',
         requestId,
         routeTemplate,
@@ -252,6 +282,7 @@ export default {
         durationMs: Date.now() - startedAt,
         cacheOutcome,
       });
+      if (completed !== null) logger.info(completed);
       return response;
     } catch (error) {
       const response = errorResponse(
@@ -263,15 +294,17 @@ export default {
         false,
         requestId,
       );
-      logger.error({
-        operation: 'request.failed',
-        requestId,
-        routeTemplate,
-        status: response.status,
-        durationMs: Date.now() - startedAt,
-        failureCategory:
-          error instanceof ConfigurationError ? 'configuration' : 'internal',
-      });
+      logger.error(
+        failedLine(logScope, {
+          operation: 'request.failed',
+          requestId,
+          routeTemplate,
+          status: response.status,
+          durationMs: Date.now() - startedAt,
+          failureCategory:
+            error instanceof ConfigurationError ? 'configuration' : 'internal',
+        }),
+      );
       return isHead
         ? new Response(null, {
             status: response.status,
@@ -300,6 +333,11 @@ async function runScheduled(env: Env): Promise<void> {
   const logger = env.__LOGGER ?? consoleLogger;
   try {
     const config = resolveRuntimeConfig(env);
+    resolveControlledProviderSource(
+      env.CONTROLLED_PROVIDER_SOURCE,
+      config.environment,
+      config.providerMode,
+    );
     const storage = resolveStorage(env);
     if (coordinatedMode(config)) {
       await runScheduledCoordinated(env, config, storage, clock, logger);
@@ -393,7 +431,9 @@ async function runScheduledCoordinated(
  * no committed environment declares, so there it is absent.
  *
  * `__PROVIDER_TRANSPORT` and `__PACER_SLEEP` are test hooks: with neither, a
- * composed runtime sends through the runtime `fetch` and paces with a timer.
+ * composed runtime sends through the runtime `fetch` and paces with a timer,
+ * unless a coordinated staging Worker selects the controlled source
+ * (`providerTransport`).
  */
 function coordinatedDependencies(
   env: Env,
@@ -410,11 +450,40 @@ function coordinatedDependencies(
     guarded,
     purgeOrigin,
     ledger: resolveReconciliationLedger(env),
-    transport: env.__PROVIDER_TRANSPORT,
+    transport: providerTransport(env, clock),
     sleep: env.__PACER_SLEEP,
     logger,
     clock,
   };
+}
+
+/**
+ * The transport a composed runtime hands its hardened client: the test hook,
+ * else the controlled KV source a coordinated staging Worker selected (ADR
+ * 0028 D10), else `undefined` - the runtime `fetch`. The controlled source
+ * makes no request until the composed runtime calls it, and it reads only
+ * the Worker's own namespace.
+ */
+function providerTransport(
+  env: Env,
+  clock: import('./runtime/clock').Clock,
+):
+  | import('./providers/http/provider-http-client').ProviderTransport
+  | undefined {
+  if (env.__PROVIDER_TRANSPORT) return env.__PROVIDER_TRANSPORT;
+  const config = resolveRuntimeConfig(env);
+  const source = resolveControlledProviderSource(
+    env.CONTROLLED_PROVIDER_SOURCE,
+    config.environment,
+    config.providerMode,
+  );
+  if (source !== 'kv') return undefined;
+  if (!env.GRIDVIEW_DATA) {
+    throw new ConfigurationError(
+      'The controlled provider source needs the GRIDVIEW_DATA KV binding.',
+    );
+  }
+  return controlledSourceTransport(env.GRIDVIEW_DATA, () => clock.now());
 }
 
 /**
@@ -487,11 +556,12 @@ function runSignal(env: Env): { readonly signal?: AbortSignal } {
  * - `seed:` - and `activate:` under any authority other than a reachable
  *   sequencer - wraps the whole surface, so the season is refused
  *   unconditionally.
- * - `activate:` under a reachable sequencer puts the boundary in the sequenced
- *   service's **legacy fallback slot** instead. The service reads the season's
- *   durable authority once per command: only a positive `active`,
- *   authoritative answer runs the two-phase protocol; `uninitialized` and
- *   `seeded` fall through to the boundary and are refused; an unreadable or
+ * - `activate:` and `genesis:` under a reachable sequencer put the boundary in
+ *   the sequenced service's **legacy fallback slot** instead. The service reads
+ *   the season's durable authority once per command: only a positive `active`,
+ *   authoritative answer - or `genesis`, authoritative with no release - runs
+ *   the two-phase protocol; `uninitialized` and `seeded` fall through to the
+ *   boundary and are refused; an unreadable or
  *   `unavailable` authority fails closed inside the service. Either way the
  *   controlled season never reaches `SnapshotPublisher`, so the activation
  *   request itself - not a further configuration change - is what resumes its
@@ -553,7 +623,7 @@ function buildPublicationCommands(
       purgeOrigin,
       freshnessPolicy: freshnessPolicyFor(config.providerMode),
     });
-  if (control.kind === 'activate') {
+  if (control.kind === 'activate' || control.kind === 'genesis') {
     const service = sequenced(
       new CutoverPausedPublicationCommands(legacy, control.season),
     );

@@ -219,6 +219,8 @@ describe.each(sequencerTransports)(
     it('still enforces D14: a rollback that drops a classified round is refused, and the hold stays', async () => {
       const { harness, env } = await prePublished();
       harness.server.results.set(1, 'A');
+      // Sighted once, so the next check accepts and publishes it (AU-D5).
+      await harness.run(tickAfter(1, 4));
       await harness.run(tickAfter(1, 5));
       const classified = harness.activeVersion();
       expect(harness.releases()).toHaveLength(2);

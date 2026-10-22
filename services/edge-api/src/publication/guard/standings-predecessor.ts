@@ -48,6 +48,12 @@ export const standingsPredecessorRefusals = [
   'authority-unavailable',
   /** The season is not `active` and authoritative on the sequencer. */
   'authority-not-active',
+  /**
+   * The season is in `genesis` (ADR 0025 D12, "Amendment (2026-10-20)"):
+   * authoritative with no committed release, so there is no predecessor to
+   * check. Its first release is guarded against the empty predecessor.
+   */
+  'authority-without-release',
   /** The inventory or a document could not be read, or read as absent. */
   'release-unavailable',
   /** The inventory or a results document is not a valid release's. */
@@ -143,6 +149,7 @@ type ReleaseRefusal = Exclude<
   | 'authority-not-sequenced'
   | 'authority-unavailable'
   | 'authority-not-active'
+  | 'authority-without-release'
   | 'authority-changed'
 >;
 
@@ -216,7 +223,10 @@ type ActiveVersionRead =
   | { readonly kind: 'read'; readonly version: string }
   | {
       readonly kind: 'refused';
-      readonly reason: 'authority-unavailable' | 'authority-not-active';
+      readonly reason:
+        | 'authority-unavailable'
+        | 'authority-not-active'
+        | 'authority-without-release';
     };
 
 async function readActiveVersion(
@@ -231,6 +241,9 @@ async function readActiveVersion(
   }
   if (authority.cutoverState === 'unavailable') {
     return { kind: 'refused', reason: 'authority-unavailable' };
+  }
+  if (authority.cutoverState === 'genesis') {
+    return { kind: 'refused', reason: 'authority-without-release' };
   }
   if (authority.cutoverState !== 'active' || !authority.authoritative) {
     return { kind: 'refused', reason: 'authority-not-active' };

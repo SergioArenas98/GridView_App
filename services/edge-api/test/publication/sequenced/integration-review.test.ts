@@ -951,6 +951,7 @@ function portWith(
     seedCutover: (r) => base.seedCutover(r),
     recoverCutoverSeed: (r) => base.recoverCutoverSeed(r),
     activateCutover: (r) => base.activateCutover(r),
+    commitGenesis: (r) => base.commitGenesis(r),
     ...overrides,
   };
 }

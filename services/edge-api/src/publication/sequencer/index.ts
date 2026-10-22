@@ -78,5 +78,6 @@ export {
   decodeFinalizeOutcome,
   decodePrepareOutcome,
   decodeSeasonAuthority,
+  decodeSeasonGenesisOutcome,
   prepareAssignmentsMatchRequest,
 } from './wire-decoders';

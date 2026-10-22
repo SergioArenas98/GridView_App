@@ -1,0 +1,5 @@
+{
+  "APP_ENV": "production",
+  "API_BASE_URL": "https://gridview-api-production.sejuma18.workers.dev",
+  "PRIVACY_POLICY_URL": "https://gridview.netlify.app"
+}

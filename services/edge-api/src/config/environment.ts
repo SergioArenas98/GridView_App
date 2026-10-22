@@ -17,8 +17,8 @@ const validProviderModes = ['mock', 'none', 'coordinated'] as const;
  * `sequencer` - the two-phase `SeasonPublicationSequencer` protocol
  * (ADR 0025). Selecting it only makes the integrated path *constructible*; the
  * sequencer itself still refuses every mutator until a season's cutover has
- * reached `cutoverState: 'active'`, which no environment has performed. It
- * exists so the Integration path can be exercised end to end in tests.
+ * reached `cutoverState: 'active'` (or a season was born `genesis`). Which
+ * environment has done so is recorded in `docs/technical/GridView_Environments.md`.
  */
 export type EnvironmentName = (typeof validEnvironments)[number];
 export type ProviderMode = (typeof validProviderModes)[number];
@@ -102,7 +102,7 @@ export interface Env extends TestOnlyBindings {
    * Durable Object namespace backing the per-season publication sequencer
    * (ADR 0025 D1). Optional in the type because availability is
    * environment-specific: `wrangler.toml` declares the binding for
-   * `env.staging` only and production declares none. Which environment has it
+   * `env.staging` and `env.production`, not for development. Which environment has it
    * provisioned is recorded in `docs/technical/GridView_Environments.md` and
    * the staging runbook, not here. A bound namespace enables nothing by itself:
    * the resolver only looks it up when `SEASON_PUBLICATION_AUTHORITY` is
@@ -150,6 +150,15 @@ export interface Env extends TestOnlyBindings {
    * `PROVIDER_MODE=coordinated` and every other gated dependency.
    */
   RECONCILIATION_LEDGER?: DurableObjectNamespace;
+  /**
+   * `kv` makes a coordinated **staging** Worker's Jolpica transport answer
+   * from controlled documents in its own `GRIDVIEW_DATA` namespace instead of
+   * the network: the automatic-updates staging demonstration (ADR 0028 D10).
+   * **No committed environment sets it.** Any other value, and `kv` outside a
+   * coordinated staging Worker, is a configuration error, so production can
+   * never select it (`src/providers/controlled/source.ts`).
+   */
+  CONTROLLED_PROVIDER_SOURCE?: string;
 }
 
 /**
@@ -266,7 +275,7 @@ export function resolvePublicationCutoverControl(
   const control = parseCutoverControl(value);
   if (control === null) {
     throw new ConfigurationError(
-      'SEASON_PUBLICATION_CUTOVER_CONTROL must be "seed:<supported season>" or "activate:<supported season>".',
+      'SEASON_PUBLICATION_CUTOVER_CONTROL must be "seed:<supported season>", "activate:<supported season>" or "genesis:<supported season>".',
     );
   }
   return control;

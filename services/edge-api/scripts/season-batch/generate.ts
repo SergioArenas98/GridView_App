@@ -70,7 +70,7 @@ import {
 } from '../../src/snapshots/generator';
 import { calendarAnchorsOf } from '../../src/sync/coordinated/observation/revisions';
 import { curatedSeasonMetadata } from '../../src/sync/coordinated/outcome/metadata';
-import { isEligible } from '../../src/sync/coordinated/policy/cadence';
+import { isBatchCaptureEligible } from '../../src/sync/coordinated/policy/cadence';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
 import {
   decodeCaptureManifest,
@@ -291,8 +291,9 @@ async function coordinate(
 }
 
 /**
- * The rounds the runtime would plan at `observedAt`: every calendar round
- * whose race anchor is at least five hours old (`isEligible`). A capture must
+ * The rounds a capture at `observedAt` must carry: every calendar round whose
+ * race anchor is at least five hours old (`isBatchCaptureEligible`, the
+ * runtime's former first check, unchanged by ADR 0028 D5). A capture must
  * hold exactly these - a missing one would publish a season behind its own
  * calendar, and a later one was recorded before Jolpica could have a result.
  */
@@ -306,7 +307,7 @@ function eligibilityRefusal(
   if (anchors === null) return refuse('calendar-unanchored');
   const now = new Date(manifest.observedAt);
   const eligible = anchors
-    .filter((anchor) => isEligible(anchor.anchor, now))
+    .filter((anchor) => isBatchCaptureEligible(anchor.anchor, now))
     .map((anchor) => anchor.round);
   const declared = manifest.classificationRounds;
   const same =

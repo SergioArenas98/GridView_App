@@ -95,6 +95,34 @@ describe('submission builder CLI: arguments', () => {
     });
   });
 
+  it('accepts --first-release in place of the expected version, and only alone', () => {
+    const first = [
+      '--batch',
+      'b',
+      '--manifest-sha256',
+      SHA,
+      '--first-release',
+      '--out',
+      'o.json',
+    ];
+    expect(parseSubmissionArguments(first)).toEqual({
+      ok: true,
+      batch: 'b',
+      manifestSha256: SHA,
+      expectedActiveVersion: null,
+      out: 'o.json',
+    });
+    expect(parseSubmissionArguments([...valid, '--first-release']).reason).toBe(
+      'conflicting-arguments',
+    );
+    expect(parseSubmissionArguments([...first, '--first-release']).reason).toBe(
+      'repeated-argument',
+    );
+    expect(parseSubmissionArguments(first.slice(0, 5)).reason).toBe(
+      'missing-argument',
+    );
+  });
+
   it('refuses missing, repeated, unknown or invalid arguments', () => {
     expect(parseSubmissionArguments(valid.slice(0, 6)).reason).toBe(
       'missing-argument',

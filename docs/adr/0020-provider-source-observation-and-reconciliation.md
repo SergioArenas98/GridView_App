@@ -2577,6 +2577,39 @@ complete.**
 
 The decision above is unchanged.
 
+### Automatic operation (2026-10-21)
+
+[ADR 0028](0028-automatic-end-to-end-season-updates.md) makes this runtime the
+operating model once activated. It accepts a `genesis` season, stamps the
+calendar horizon, records a heartbeat after a healthy scheduled run (step 10
+in `observe.ts`), and closes OD-1 through an outside-in monitor with a
+verified delivery drill (AU-6). None of the activation steps above is taken:
+the ledger binding, `coordinated`, the hourly cron, the first provider-backed
+run and production delivery remain separately authorized
+(`docs/release/automatic-updates.md`).
+
+**The race cadence is amended by ADR 0028 D5 (2026-10-21).** The first check
+is the first hourly tick at or after the race start + 90 minutes, not
+`anchor + 5h`; a round with no accepted result, or with a change pending, is
+asked for on every hourly tick through + 10 h 30 min, then at + 15 h, + 24 h
+and daily to day 14 (25 slots, not 17). An accepted result takes only the
+confirmation slots (+ 5 h 30 min, + 9 h 30 min, then the back-off). The
+settling rules (D2.1-D2.9, three confirmations never before `+24h`), the
+ceiling and I1-I5 hold; the I1-I5 demonstrations above are restated on the
+new slots in `test/sync/coordinated/policy/invariants.test.ts`, and the
+operator verification's eligibility (step 4 of E3) is the planner's new
++ 1 h 30 min.
+
+**A T0 amendment is made by ADR 0028 D5 item 5 (AU-D5, accepted by the owner
+for 2.0.0 on 2026-10-21, ADR 0028 D13; implemented on PR #86)** inside the
+hourly window:
+a first result found in slots 1-9 is held pending and written only when the
+next successful cadence check returns it again. Two matching observations do
+not prove the classification complete. From slot 10 on, and for a
+manual run, a first result is still written without corroboration.
+
+The decision above is unchanged.
+
 ## Reopening conditions
 
 | Trigger | Consequence |

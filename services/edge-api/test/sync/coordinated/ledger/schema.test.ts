@@ -81,14 +81,14 @@ describe('the classification record schema', () => {
     ],
     ['a fractional round', (r: Record<string, unknown>) => (r.round = 1.5)],
     ['a season before 1900', (r: Record<string, unknown>) => (r.season = 1899)],
-    ['check index 18', (r: Record<string, unknown>) => (r.checkIndex = 18)],
+    ['check index 26', (r: Record<string, unknown>) => (r.checkIndex = 26)],
     [
       'a negative check index',
       (r: Record<string, unknown>) => (r.checkIndex = -1),
     ],
     [
-      '18 confirmations',
-      (r: Record<string, unknown>) => (r.consecutiveConfirmations = 18),
+      '26 confirmations',
+      (r: Record<string, unknown>) => (r.consecutiveConfirmations = 26),
     ],
     [
       '4 unstable sightings',

@@ -11,6 +11,7 @@
 
 import { MemoryCachePurgeAdapter } from '../../../src/cache/purge';
 import { CapturingLogger } from '../../../src/logging/logger';
+import { genesisFingerprint } from '../../../src/publication/cutover/genesis';
 import { SnapshotPublisher } from '../../../src/publication/publisher';
 import {
   revisionInputForDocument,
@@ -48,6 +49,8 @@ import { runtimeSnapshotValidator } from '../../../src/validation/snapshot-valid
 
 export const SEASON = 2026;
 export const CUTOVER_FINGERPRINT = 'integration-cutover-2026';
+/** The genesis identity a `cutover: 'genesis'` context commits. */
+export const GENESIS_IDENTITY = 'gridview-integration-2026-genesis';
 export const SEED_VERSION = 'v-seed-legacy';
 /** Sits behind every generated set's `sourceUpdatedAt`, so a later publish is admitted. */
 export const SEED_ORDERING_INPUT = '2026-07-10T00:00:00.000Z';
@@ -299,9 +302,12 @@ export async function sequencedContext(
     /**
      * How far the sequencer's cutover goes: `active` (the default) seeds and
      * activates it; `seeded` stops after the seed; `none` leaves the season
-     * `uninitialized`. The legacy publication of the seed happens regardless.
+     * `uninitialized`. The legacy publication of the seed happens for all
+     * three. `genesis` instead commits production genesis (ADR 0025 D12,
+     * "Amendment (2026-10-20)") and publishes nothing: no legacy pointer,
+     * no release, as in a new production namespace.
      */
-    cutover?: 'active' | 'seeded' | 'none';
+    cutover?: 'active' | 'seeded' | 'none' | 'genesis';
     /**
      * The seed's release-wide ordering input and high-water mark. Defaults to
      * `SEED_ORDERING_INPUT`; a test whose candidates are ordered earlier in
@@ -310,10 +316,19 @@ export async function sequencedContext(
     seedOrderingInput?: string;
     /** The service's `staleAfter` policy; `interval` when omitted. */
     freshnessPolicy?: FreshnessPolicy;
+    /**
+     * When the seed release is generated and published. Defaults to
+     * 2026-07-20T12:00Z; a test whose clock runs earlier in the year seeds
+     * before it, so its publication instants are not bounded by a future
+     * predecessor.
+     */
+    seedAt?: string;
   } = {},
 ): Promise<SequencedContext> {
   const seedOrderingInput = options.seedOrderingInput ?? SEED_ORDERING_INPUT;
-  const clock = new FixedClock(new Date('2026-07-20T12:00:00.000Z'));
+  const clock = new FixedClock(
+    new Date(options.seedAt ?? '2026-07-20T12:00:00.000Z'),
+  );
   const storage = options.storage ?? new MemorySnapshotStorage();
   const logger = new CapturingLogger();
   const purger = new MemoryCachePurgeAdapter();
@@ -332,7 +347,11 @@ export async function sequencedContext(
   const seedSet = options.seedTransform
     ? options.seedTransform(generatedSeed)
     : generatedSeed;
-  const seededPublication = await legacy.publish(seedSet);
+  const cutover = options.cutover ?? 'active';
+  const seededPublication =
+    cutover === 'genesis'
+      ? ({ status: 'applied' } as const)
+      : await legacy.publish(seedSet);
   if (seededPublication.status !== 'applied') {
     throw new Error(
       `seed publish failed: ${JSON.stringify(seededPublication)}`,
@@ -370,7 +389,19 @@ export async function sequencedContext(
     );
     port = new LocalSeasonPublicationSequencer(coordinator);
   }
-  const inventory = await readStoredInventory(storage, SEASON, SEED_VERSION);
+  if (cutover === 'genesis') {
+    const created = await port.commitGenesis({
+      season: SEASON,
+      genesisFingerprint: await genesisFingerprint(SEASON, GENESIS_IDENTITY),
+    });
+    if (created.outcome !== 'created') {
+      throw new Error(`commitGenesis: ${JSON.stringify(created)}`);
+    }
+  }
+  const inventory =
+    cutover === 'genesis'
+      ? ({ kind: 'documents', documents: [] } as const)
+      : await readStoredInventory(storage, SEASON, SEED_VERSION);
   if (inventory.kind !== 'documents') {
     throw new Error('seed inventory not readable');
   }
@@ -396,8 +427,7 @@ export async function sequencedContext(
     seasonSnapshotObservedAtHighWaterMark:
       options.seedOrderingInput ?? SEED_HIGH_WATER_MARK,
   };
-  const cutover = options.cutover ?? 'active';
-  if (cutover !== 'none') {
+  if (cutover !== 'none' && cutover !== 'genesis') {
     const seeded = coordinator.seedCutover(seed);
     if (seeded.outcome !== 'seeded') {
       throw new Error(`seedCutover: ${JSON.stringify(seeded)}`);
@@ -528,6 +558,14 @@ export function countingPort(
             reason: 'state-corrupt' as const,
           }),
     ),
+    commitGenesis: record('commitGenesis', (r) =>
+      inner
+        ? inner.commitGenesis(r)
+        : Promise.resolve({
+            outcome: 'rejected' as const,
+            reason: 'state-corrupt' as const,
+          }),
+    ),
   };
 }
 
@@ -546,6 +584,7 @@ export function portWith(
     seedCutover: (r) => base.seedCutover(r),
     recoverCutoverSeed: (r) => base.recoverCutoverSeed(r),
     activateCutover: (r) => base.activateCutover(r),
+    commitGenesis: (r) => base.commitGenesis(r),
     ...overrides,
   };
 }

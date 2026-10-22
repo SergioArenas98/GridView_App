@@ -178,7 +178,14 @@ async function resolveVersions(
         ),
       };
     }
-    if (read.cutoverState === 'unavailable') {
+    if (
+      read.cutoverState === 'unavailable' ||
+      read.cutoverState === 'genesis'
+    ) {
+      // `genesis` (ADR 0025 D12, "Amendment (2026-10-20)"): the sequencer owns
+      // the season and no release has committed, so it is not ready - never a
+      // legacy pointer read, and never "not found" for a season that is about
+      // to publish.
       return {
         kind: 'response',
         value: result(

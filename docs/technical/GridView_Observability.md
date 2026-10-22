@@ -672,8 +672,10 @@ maintained in parity, and `privacy_status_test.dart` covers every state
 including the indistinguishable one.
 
 **Google Play Data Safety** must be updated before release to cover the
-categories above. **The hosted privacy-policy URL remains unset and is an
-external release blocker.**
+categories above. **The privacy-policy URL is supplied** for release builds
+(`config/dart_defines/production.json`, https://gridview.netlify.app, since
+2026-10-20). **Publishing the updated policy at that URL remains an external
+release blocker** (PR #82; release plan gate P2).
 
 ## 8. Symbols and obfuscation
 

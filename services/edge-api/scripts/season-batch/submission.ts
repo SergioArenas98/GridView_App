@@ -47,8 +47,11 @@ export interface SubmissionBuildInput {
   readonly artifactBytes: Uint8Array;
   /** The SHA-256 of the manifest the operator reviewed, lower-case hex. */
   readonly reviewedManifestSha256: string;
-  /** The active release the operator reviewed the batch against. */
-  readonly expectedActiveVersion: string;
+  /**
+   * The active release the operator reviewed the batch against, or `null` for
+   * a `genesis` season's first release.
+   */
+  readonly expectedActiveVersion: string | null;
   readonly now: Date;
   /** The attribution record; defaults to the repository's. Tests inject. */
   readonly attributionRecord?: unknown;
@@ -62,7 +65,7 @@ export interface SubmissionSummary {
   readonly classifiedRounds: readonly number[];
   readonly manifestSha256: string;
   readonly artifactSha256: string;
-  readonly expectedActiveVersion: string;
+  readonly expectedActiveVersion: string | null;
   readonly submissionBytes: number;
   readonly submissionSha256: string;
   /** The local record's status for the source; the Worker needs `active`. */

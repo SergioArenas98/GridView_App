@@ -291,9 +291,24 @@
 >   here and nothing implements it. "There is no sequencer genesis" (D4,
 >   "Amendment (2026-09-27)") stays true.
 >
+>   *(Superseded on 2026-10-20: the design is written and implemented. See
+>   D12, "Amendment (2026-10-20): production genesis (O-16)".)*
+>
 > The same day, OD-3 made a coordinated-mode rollback require an operator
 > hold (ADR 0020, "E1"). The prerequisite exists only as a dormant function.
 > D8, D14/D15 and `POST /internal/admin/rollback` are unchanged.
+>
+> **Production genesis (2026-10-20) — repository only, not deployed.** O-16's
+> design is written and implemented. A season with **no earlier release and no
+> sequencer state** can be brought into the sequencer as `genesis`:
+> authoritative, with no release. That takes an authenticated operator request
+> under a new `genesis:<season>` cutover control, in production or staging.
+> Its first guarded season batch then commits against the empty predecessor
+> and makes it `active` with no previous version. Public reads stay
+> unavailable until that commit, and rollback is refused until a second
+> release exists. Staging is unchanged. Production configuration declares
+> none of it, so nothing is enabled anywhere. See D12, "Amendment
+> (2026-10-20): production genesis (O-16)".
 >
 > **Logical publication instant (2026-10-14) — repository only, not
 > deployed.** Snapshot `meta.generatedAt` is now the release's publication
@@ -1479,6 +1494,9 @@ exactly as any committed release's do.
   ordinary mock synchronization.
 - There is no sequencer genesis (curator decision C3) and no break-glass
   correction (C4).
+  *(Superseded on 2026-10-20 for a season with no earlier release: D12,
+  "Amendment (2026-10-20): production genesis (O-16)". The rest of this list
+  item is unchanged.)*
 - The public API, the normalized contract and OpenAPI are unchanged.
 
 The new publication reasons are internal:
@@ -4458,6 +4476,217 @@ of the cutover sequence above).
   precondition"'s four conditions to be recorded as satisfied for that
   season before the transition to `active` is permitted, and that its
   absence blocks activation rather than being silently assumed.
+
+#### Amendment (2026-10-20): production genesis (O-16)
+
+This amendment is the separate production genesis design that owner decision
+O-16 (curator decision C3, 2026-09-30) approved. It applies **only to a season
+with no earlier release and no sequencer state**. It is implemented in the
+repository and covered by focused tests. Nothing was provisioned, deployed,
+seeded or published, and no committed environment selects it.
+
+**Why D12's migration cannot serve production.** D12 seeds the sequencer from
+an operator-approved legacy release: an exact `__inventory`, its documents and
+its provenance. Production has never published a release of any season, so
+there is nothing to seed from, and the seed and activation gate refuses every
+environment except staging. Before this amendment a production season could
+therefore never become sequencer-authoritative, and the guarded season-batch
+ingest refused production outright.
+
+**The new durable state, `genesis`.** `cutoverState` gains a fourth value
+beside `uninitialized`, `seeded` and `active`:
+
+- `genesis` means the season was born in the sequencer. It is authoritative
+  and its mutators are admitted, but **no release has committed**.
+- Its authority record carries the genesis fingerprint and nothing else. Active
+  version, previous version, committed ordering input and high-water mark are
+  all `null`, and the operation epoch is `0`. The durable codec reads a
+  `genesis` record carrying any of them as corrupt. It also reads one whose
+  fingerprint lacks the reserved `genesis1:` prefix (below) as corrupt, and so
+  does the wire decoder. A `seeded` or `active` record still needs its active
+  version.
+- `readAuthority` answers
+  `{ cutoverState: 'genesis', authoritative: true, activeVersion: null,
+  previousVersion: null, cutoverFingerprint }`. The wire decoder refuses any
+  other genesis shape.
+- The first committed `finalize` moves the season to `active`, with that
+  release active and `previousVersion` `null`. Nothing moves a season back to
+  `genesis`.
+- An older Worker or object reads a `genesis` record as corrupt, so during a
+  deployment it fails closed rather than treating the season as legacy.
+
+**`commitGenesis(season, genesisFingerprint)`.** A new sequencer command, one
+atomic transaction:
+
+- It writes only when the object holds **no state for the season at all**: no
+  authority record in any state, no operation, no pending cleanup and no
+  per-key row. Anything else is `sequencer-state-present`, and a corrupt
+  record is `state-corrupt`. Nothing is ever overwritten.
+- A retry with the same fingerprint writes nothing. It answers
+  `already-genesis`, or `already-active` once the first release has committed.
+- **The `genesis1:` fingerprint prefix is reserved.** `commitGenesis` accepts
+  only a fingerprint carrying it, and a seed whose fingerprint carries it is
+  `invalid-cutover-fingerprint`. The object keeps no history, so the prefix is
+  how it, and the Worker, tell a genesis-born season from a migrated one for as
+  long as the season exists.
+- Over the Durable Object transport a lost or undecodable answer is the
+  client-only `uncertain`, never a rejection, as for `prepare` and `finalize`.
+
+**Genesis enables no other transition.** `activateCutover` refuses a genesis
+season as `cutover-not-seeded`, so no `active` record can exist without an
+active version. `seedCutover` and `recoverCutoverSeed` treat it as a conflicting
+seed under every fingerprint.
+
+**The operator act.** `POST /internal/admin/publication/cutover/genesis` with
+`{ season, genesisIdentity, confirmGenesis: true }`, behind `ADMIN_TOKEN`. It
+answers 200 with a receipt, or 409 with a bounded refusal or failure.
+
+1. **Gate (no read).** All of these hold together, or the request is refused:
+   - `SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:<season>"`, a third control
+     phase. `seed:` and `activate:` cannot run a genesis, and `genesis:`
+     cannot seed or activate.
+   - `ENVIRONMENT` is `production` or `staging`. Development is
+     `environment-not-permitted`. Seed and activation stay staging-only.
+   - `SEASON_PUBLICATION_AUTHORITY = "sequencer"` with a reachable port.
+2. **Confirmation and identity.** `confirmGenesis` must be the literal `true`.
+   `genesisIdentity` is a bounded operator reference (the audit-reference
+   charset, at most 200 characters).
+3. **Fingerprint.** `genesis1:` followed by the SHA-256 of `gv-genesis/1`,
+   then the season and the identity, each framed as `|<utf8 bytes>:<value>`.
+4. **The sequencer's own answer first.** The same genesis, still in genesis or
+   since published, is answered from it with no legacy read and no write. Any
+   other state fails as `sequencer-state-present`, and an unreadable authority
+   fails as `authority-unreadable`.
+5. **No legacy release.** The season's legacy `active:` and `previous:`
+   pointers must both be absent. A present pointer fails as
+   `legacy-release-present`, and a failed read as `legacy-state-unreadable`.
+   This cannot race a legacy release: the same `genesis:` control closes the
+   season's legacy publication and rollback admission in this Worker.
+6. **`commitGenesis`.** An `uncertain` answer is followed by **one** authority
+   read. The genesis in place is `reconciled`, and anything else is
+   `genesis-unconfirmed`, which is safe to retry. There is no second write and
+   no loop.
+
+Genesis publishes nothing and writes no Workers KV key.
+
+**Composition under `genesis:`.** It is the same as under `activate:`. The
+legacy publisher sits in the sequenced service's fallback slot behind the
+admission boundary, so the season never reaches `SnapshotPublisher`. A
+`genesis` or `active` season runs the two-phase protocol, and an
+`uninitialized` one is refused.
+
+**The empty predecessor.** A genesis season's predecessor is empty **because
+the authority says so**, never because a read failed: a predecessor that could
+not be read is still never empty.
+
+- `prepare` admits a genesis season. The expected-predecessor binding
+  (Amendment 2026-09-27) is satisfied only by
+  `{ activeVersion: null, guardDocuments: [] }`. A null version naming any
+  results document is `invalid-expected-predecessor`, and an `active` season
+  presented with `null` is `stale-predecessor`. `prepared` returns
+  `priorVersion: null`, and the client binds that `null` exactly as it binds a
+  version.
+- The D14/D15 guard compares the candidate against the empty guard, which
+  every valid candidate contains.
+- The logical publication instant (Amendment 2026-10-14) is the clock reading
+  itself, with no active release to clear.
+- With no committed baseline and no floor, ordering admission does not apply.
+  Every key is a fresh activation at `now`.
+
+**Rollback needs a previous release.**
+
+- While a genesis-born season (a `genesis1:` fingerprint) has no previous
+  version - in `genesis`, and after its first commit until a second one - two
+  layers refuse every rollback:
+  - `prepare` refuses `rollback-republication` as `no-committed-release`;
+  - the sequenced service refuses it first, whatever its target.
+- The reason is that in a genesis-born season every release was committed by
+  this sequencer. With no previous version there is no earlier release, so any
+  other named version is an uncommitted candidate.
+- A migrated season keeps D8 unchanged.
+
+**Public reads stay unavailable until the first release commits.**
+
+- The public router answers every read of a genesis season with the
+  retryable `503 SNAPSHOT_NOT_READY`, never a legacy pointer read and never
+  "not found".
+- `/v1/status` reports no active version.
+- The read-only A3.5 standings predecessor gate answers
+  `authority-without-release`, distinct from a season that is not `active`.
+  There is no predecessor to check before the first release.
+- The current-season pointer and content metadata are written only by the
+  first commit's post-commit maintenance, so `/v1/seasons/current` also stays
+  `503` until then.
+
+**The first season batch.**
+
+- The guarded ingest now admits `production` as well as `staging`.
+  Development is still refused.
+- In production it additionally requires `genesis:<the ingested season>`
+  (`genesis-control-required`), so production can only ever ingest into a
+  genesis-born season.
+- The submission's `expectedActiveVersion` may be an explicit `null`, and only
+  `null`: an absent member is malformed. The builder takes `--first-release`
+  in place of `--expected-active-version`.
+
+**Retries, concurrency and failed writes.**
+
+- **First-release retries.** A retry after the first release committed,
+  whether its answer arrived or was lost, names `null` against an active
+  season and is refused as `guard-predecessor-stale` before any write.
+- **Concurrent first releases.** Single-flight admits one; the other is
+  `operation-in-progress`.
+- **Failed candidate write.** The operation is cancelled and collected, and
+  the season stays in `genesis` until a retry commits.
+- **Concurrent genesis requests.** The same identity settles on one record
+  (`created` and `already-genesis`). Different identities let exactly one
+  succeed.
+
+**What this does not change.**
+
+- Staging. Its control is `activate:2026` and its season was seeded, so every
+  committed staging path behaves exactly as before.
+- D12's seed and activation, which stay staging-only.
+- The public API, the normalized contract and OpenAPI.
+- Production configuration, which still declares no sequencer binding, no
+  authority, no control and no ingest flag. Committing those, provisioning the
+  production namespace and deploying are separate owner-authorized steps.
+
+**Free-plan cost (2026-10-20, local measurement; no Cloudflare contact).**
+
+| What was measured | Result |
+| --- | --- |
+| Genesis request, warm, averaged over 300 calls | 0.1-0.4 ms CPU locally |
+| First batch against the empty predecessor, real 2026-10-19 body (407,580 B, 117 documents) | 93-157 ms warm, 218-251 ms cold, locally |
+| Next batch against that release | 124-172 ms warm, 219-234 ms cold, locally |
+| Same body on staging, Workers Free | 362 ms on 2026-10-19 (269 ms on 2026-10-14 with a smaller predecessor path) |
+
+- **Genesis fits the Free plan's 10 ms CPU limit.**
+- **Submissions do not.** Staging ran 1.6-2.5 times the local figures, so each
+  submission costs about 25-36 times the 10 ms limit.
+- Batch verification (about 65 ms locally) and per-document revision hashing
+  (about 39 ms) dominate. Generation and contract validation are each under
+  1 ms.
+- Cloudflare documents only "built-in flexibility" for occasional overruns,
+  and termination (error 1102) for a Worker that exceeds the limit
+  consistently. Two tolerated staging submissions do not make this path
+  reliable on Free.
+- The reliable paths are recorded for the owner in the production release
+  plan.
+
+**Implementation.** The new files are `src/publication/cutover/genesis.ts`
+and `src/publication/cutover/gate.ts`, with changes across the sequencer,
+the sequenced service, the router, the status route, the ingest and the
+submission builder. Tests:
+
+- `test/publication/sequencer/genesis.test.ts`
+- `test/publication/cutover/genesis.test.ts`
+- `test/publication/sequenced/genesis-publication.test.ts`
+- additions to the control, ingest, builder and transport tests.
+
+"There is no sequencer genesis" (Amendment 2026-09-27, and the O-16 status
+note) was true when written. It is superseded by this amendment, for a season
+with no earlier release only.
 
 ## Safety reasoning: why KV cannot be the authority
 

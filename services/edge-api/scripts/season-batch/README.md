@@ -71,8 +71,10 @@ nothing else:
 - **`observedAt`** is the instant the capture was complete. Every
   clock-dependent rule runs at that instant.
 - **`classificationRounds`** must be exactly the rounds whose race anchor is
-  at least five hours old at `observedAt`. That is the runtime's
-  `isEligible` rule.
+  at least five hours old at `observedAt`. That is the batch capture rule,
+  `isBatchCaptureEligible`: the coordinated runtime's former first check,
+  which ADR 0028 D5 deliberately left unchanged for batches (the runtime now
+  asks from race start + 1 h 30 min).
 - **`responses`** holds:
   - the six season-level requests: races, circuits, drivers, constructors,
     driver standings and constructor standings;
@@ -187,7 +189,11 @@ batch keeps the app's "Sample data" label and credits no source.
 ## Submission builder (guarded staging ingest)
 
 `npm run season-batch:submission -- --batch <dir> --manifest-sha256 <hex> --expected-active-version <version> --out <file>`
-(`submission-cli.mjs`, `submission-guards.mjs`, `submission.ts`) turns one
+(`submission-cli.mjs`, `submission-guards.mjs`, `submission.ts`). For the first
+release of a season in `genesis`, which has no release to name (ADR 0025 D12,
+"Amendment (2026-10-20)"), pass `--first-release` instead of
+`--expected-active-version`; the body then carries an explicit
+`"expectedActiveVersion": null`. The builder turns one
 reviewed batch into the exact request body of
 `POST /internal/admin/season/ingest`, the guarded staging ingest in
 `src/ingest/`. It first runs **the Worker's own batch verification**

@@ -41,3 +41,4 @@ GridView reconstruction.
 | [0025](0025-season-publication-authority-and-rollback-republication.md) | Season publication authority and rollback republication | Accepted |
 | [0026](0026-season-participation-semantics-and-derivation.md) | Season participation semantics and derivation | Accepted |
 | [0027](0027-legacy-preference-migration-and-storage-removal.md) | Legacy preference migration and legacy storage removal | Accepted |
+| [0028](0028-automatic-end-to-end-season-updates.md) | Automatic end-to-end season updates | Accepted |

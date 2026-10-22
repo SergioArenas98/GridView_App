@@ -170,6 +170,8 @@ describe.each(sequencerTransports)(
         const { harness } = await held(later(FIRST_PUBLICATION, MINUTE));
         const before = await harness.season();
         harness.server.results.set(1, 'A');
+        // Sighted once, so the next check accepts it (AU-D5).
+        await harness.run(tickAfter(1, 4));
 
         const run = await harness.run(tickAfter(1, 5));
 
@@ -347,6 +349,8 @@ describe.each(sequencerTransports)(
       it('lets recovery record a publication a crash left unfinished, and publishes nothing more', async () => {
         const { harness } = await prePublished();
         harness.server.results.set(1, 'A');
+        // Sighted once, so the next check accepts it (AU-D5).
+        await harness.run(tickAfter(1, 4));
         // The run publishes, then crashes before its outcome commit.
         const base = harness.freshLedger();
         let commits = 0;
@@ -391,6 +395,8 @@ describe.each(sequencerTransports)(
       it('keeps an operator out while a run holds the lease', async () => {
         const { harness } = await prePublished();
         harness.server.results.set(1, 'A');
+        // Sighted once, so the next check accepts it (AU-D5).
+        await harness.run(tickAfter(1, 4));
         const attempts: string[] = [];
         harness.onPublish = async () => {
           const acquired = await harness.freshLedger().acquireLease(SEASON);
@@ -490,6 +496,8 @@ describe.each(sequencerTransports)(
       it('still enforces D14: a rollback that drops a classified round is refused, and the hold stays', async () => {
         const { harness } = await prePublished();
         harness.server.results.set(1, 'A');
+        // Sighted once, so the next check accepts it (AU-D5).
+        await harness.run(tickAfter(1, 4));
         await harness.run(tickAfter(1, 5));
         const classified = harness.activeVersion();
         expect(harness.releases()).toHaveLength(2);
@@ -584,6 +592,8 @@ describe.each(sequencerTransports)(
       async function superseded() {
         const { harness } = await prePublished();
         harness.server.results.set(1, 'A');
+        // Sighted once, so the next check accepts it (AU-D5).
+        await harness.run(tickAfter(1, 4));
         await harness.run(tickAfter(1, 5));
         harness.server.results.set(1, 'B');
         for (const hours of [9, 15, 24]) await harness.run(tickAfter(1, hours));

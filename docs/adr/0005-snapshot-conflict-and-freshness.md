@@ -275,6 +275,11 @@ the Home snapshot, with no detail snapshot yet) has no detail freshness and is
 treated as **stale**, so the UI shows content immediately while a detail refresh
 completes.
 
+> **Extended 2026-10-21 by ADR 0028 D4:** the `calendar-horizon` policy also
+> applies to the coordinated runtime, which publishes only changed content.
+> Only `mock` keeps the fixed interval, so `none` and `coordinated` re-stamp a
+> rollback identically.
+
 ## Consequences
 
 - A failed refresh never erases valid cached data (the write is skipped, not the
