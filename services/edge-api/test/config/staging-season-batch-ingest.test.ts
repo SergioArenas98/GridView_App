@@ -59,6 +59,7 @@ import {
   type Batch,
   type Json,
 } from '../ingest/support';
+import { withoutDemonstration } from './demonstration-environment';
 
 const configPath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -137,13 +138,14 @@ describe('the resolved configuration', () => {
     // would silently keep it.
     expect(resolved('staging').triggers).toEqual({ crons: [] });
     expect(rawConfig).toMatch(/^\[env\.staging\.triggers\]\ncrons = \[\]\n/m);
-    expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
+    expect(withoutDemonstration(rawConfig)).not.toMatch(
+      /^\s*crons\s*=\s*\[\s*"/m,
+    );
     // Production (W1) schedules nothing, explicitly too. Development declared
     // no trigger before and still does not.
     expect(resolved('production').triggers).toEqual({ crons: [] });
-    // The demonstration Worker (AU-2) is deployed unscheduled; its hourly
-    // schedule is AU-3's own step.
-    expect(resolved('e2e').triggers).toEqual({ crons: [] });
+    // Only the demonstration Worker runs hourly, for AU-3.
+    expect(resolved('e2e').triggers).toEqual({ crons: ['17 * * * *'] });
     expect(resolved('').triggers.crons).toBeUndefined();
     expect(rawConfig.match(/^\[[^\]]*triggers\]$/gm)).toEqual([
       '[env.staging.triggers]',

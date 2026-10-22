@@ -356,9 +356,11 @@ id = "f8970084eef14b6a8e24db521d015df3"
 [env.e2e.secrets]
 required = ["ADMIN_TOKEN"]
 
-# Empty at deploy; the hourly schedule is AU-3's own authorized step.
+# Hourly at minute 17 for the AU-3 demonstration (runbook §8.2 step 3). It
+# takes effect only through `wrangler triggers deploy --env e2e`; after the
+# demonstration the list returns to `[]`.
 [env.e2e.triggers]
-crons = []
+crons = ["17 * * * *"]
 
 [env.e2e.observability]
 enabled = true
