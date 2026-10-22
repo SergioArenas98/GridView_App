@@ -7,6 +7,12 @@ Workflows (see `../../docs/technical/GridView_TRD.md` section 34):
 - `automation-monitor.yml` (manual only) - the outside-in monitor of the
   automatic updates (ADR 0028 D9): three public GETs, no secret. Its hourly
   `schedule:` is a separately authorized step (AU-5).
+- `au3-e2e-observer.yml` (temporary) - gate AU-3's daytime observer for the
+  replay on 2026-11-05 only: the same monitor plus ten public reads of the
+  e2e host, kept as 90-day artifacts; no secret, read-only. A date guard
+  makes it send nothing on any other day. Merging it is its activation, and
+  it is removed with the e2e unschedule PR (`docs/release/automatic-updates.md`
+  section 8.2).
 - `pull_request.yml` (active) - runs on pull requests and pushes to master:
   Flutter format/analyze/test + dev debug APK, edge API
   typecheck/lint/format/test, and a gitleaks secret scan. Uses no private

@@ -428,6 +428,92 @@ The genesis and the first release came from `91ff2541`. The replay's
 releases come from the commit deployed in step 1, and the in-process gate on
 that commit covers the path from genesis.
 
+**Replay evidence (added 2026-10-23, with the temporary observer).** The
+criteria in the table above are unchanged. This sets out what proves each
+one. The replay candidate is `T′ = 2026-11-05T09:00Z` with
+`F = 2026-11-04T20:17Z`. The owner attends 17:00–24:00 on both days, so 11-05
+00:00–17:00 runs unattended.
+
+- **Every necessary scheduled run needs its own evidence.** The necessary
+  runs are every :17 tick from `F` through `T′` + 11:17. A criterion about
+  what a run did is proven only by that run's own
+  `sync.coordinated.observation` line. That covers "no run due", the re-anchor
+  and pending sighting, the confirmation, the operation count, the withheld
+  reason and every stop event. The line must be seen in a live `wrangler
+  tail` or read from persisted Workers Logs. A release criterion also needs
+  the published version in KV and, unattended, the observer's public answers.
+- **Missing evidence leaves the criterion unproven.** Two cases:
+  - a run whose line is in neither the tail nor the saved logs;
+  - an hour with no observer run inside it.
+
+  Either leaves that run's criteria **unproven**, and AU-3 does not pass on
+  this replay. Nothing is inferred from the run before or after. Nothing is
+  inferred from the code either: for example, a 12:17 publication does not
+  stand in for the 11:17 sighting.
+- **The absence of a line proves nothing.** Persisted Workers Logs dropped
+  every event of the 2026-10-22 15:17Z run, yet that run wrote its heartbeat.
+  The consequences:
+  - "never `standings-round-incoherent`" and "no stop event" are shown run by
+    run, from each necessary run's own line, never from a search that comes
+    back empty;
+  - "no admin request" cannot be established by logs alone. The record states
+    which request lines were present and leaves that criterion open for the
+    owner to judge; it is not marked passed on an empty search.
+- **The observer** (`.github/workflows/au3-e2e-observer.yml`) covers the
+  unattended hours. It runs at :27 and :52, 00:27–16:52Z on 11-05. Each run
+  executes the real `automation-monitor.mjs` against the e2e host and keeps
+  10 public answers verbatim, with their instants, as a 90-day artifact. It
+  sends public GETs to the e2e origin only, with no credential, and has
+  read-only permissions.
+  - The tick at `HH:17` has a proven heartbeat when an observer run that
+    started in `[HH:17, HH+1:17)` read `lastSuccessfulSyncAt` at `HH:17:xx`.
+  - "The monitor passes" for that hour requires such a run with
+    `monitorOk: true`.
+  - Each run records its delay from its slot (`meta.json`, or `skipped.json`)
+    and the runner's own start (`runner.json`, written even when the
+    observer never starts). The GitHub run's `created_at` and
+    `run_started_at` are taken from the API when the artifacts are
+    downloaded.
+  - A slot GitHub dropped, or started after the next tick, is a gap. A later
+    run shows only the newer beat, so a gap hour stays unproven.
+  - The observer cannot see a run's internal events, so it never replaces the
+    line.
+
+**Activation, 2026-11-04 (each step its own [approval]):**
+1. The read-only re-check. Then the KV load and its read-back, passed by
+   19:17.
+2. Merge the schedule PR, then run `triggers deploy --env e2e` between 19:18
+   and 20:00.
+3. Watch `F` at 20:17 live. Then read `F`'s own line from persisted logs; it
+   must match the tail field by field. If that fails, unschedule before 22:17
+   and do not merge the observer.
+4. Merge the observer PR, before 23:59. Merging is its activation: a
+   scheduled workflow runs only from `master`, and its first slot is 00:27 on
+   11-05.
+   - Optional: one `rehearsal` dispatch, its own approval. It is marked
+     `rehearsal-not-evidence` and sends up to 16 public GETs to e2e (the
+     monitor's 3 reads, each retried at most once, and the 10 captures).
+   - Otherwise nothing is dispatched.
+5. Watch the 22:17 calendar release and the 23:17 tick live. Save the
+   persisted logs from 20:00 onwards.
+
+**Removal, 2026-11-05 evening:**
+1. After the 20:17 correction and the phone checks, export the persisted logs
+   through the last tick.
+2. Download every observer run's artifact. Record each run's `created_at`,
+   `run_started_at` and conclusion, and list the slots with no run.
+3. One PR, its own [approval]:
+   - sets `crons = []` for `env.e2e`;
+   - deletes the observer workflow, its script and its test.
+
+   Its cron would otherwise fire again on 2027-11-05, where the date guard
+   would only skip.
+4. Merge it, run `triggers deploy --env e2e`, and confirm `[]` through the
+   schedules API. The artifacts outlive the workflow file by their 90 days.
+5. Compare the record with the expected per-tick lines. Mark each criterion
+   proven, or unproven with the missing evidence named. AU-3 is passed only if
+   every criterion is proven.
+
 ### 8.3 Live staging (AU-4)
 
 1. **[approval]** Deploy `[env.staging]` with `PROVIDER_MODE =

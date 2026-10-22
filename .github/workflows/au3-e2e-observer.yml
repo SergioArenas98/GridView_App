@@ -1,0 +1,86 @@
+name: AU-3 e2e observer (temporary)
+
+# TEMPORARY, for gate AU-3's replay on 2026-11-05 only
+# (docs/release/automatic-updates.md section 8.2, "Replay"). The owner is
+# away from the operator's machine that day until 17:00, so this observer
+# keeps what an attended watch would have seen: the real automation monitor
+# against the e2e host, and the e2e host's public answers, each run kept as
+# an artifact for 90 days. It reads only public resources of the isolated e2e
+# Worker, with no secret; it is not the AU-5 monitor schedule, which stays
+# unchanged in `automation-monitor.yml`.
+#
+# Merging this file is what activates it; the runbook says when (after the
+# 4 November KV read-back). Remove it in the pull request that unschedules
+# the e2e Worker after the replay: the cron line below would otherwise fire
+# again on 5 November 2027. The observer's own date guard (2026-11-05T00:00Z
+# to 18:00Z) already makes any such run write `skipped.json` and send
+# nothing.
+#
+# Known limits that affect what the record proves:
+# - GitHub may start a scheduled run late, or drop it, under load. Each run
+#   records the runner's start, the script's start and its delay from the
+#   nominal slot; a dropped or late slot is a gap the record shows, not one
+#   it hides.
+# - Scheduled workflows only run from the default branch, so nothing runs
+#   until this file is merged.
+
+on:
+  schedule:
+    # Twice an hour, between the e2e Worker's :17 ticks, 00:27-16:52 UTC on
+    # 5 November. Two slots an hour keep one observation of each tick's
+    # heartbeat even when one slot is late or dropped.
+    - cron: "27,52 0-16 5 11 *"
+  workflow_dispatch:
+    inputs:
+      rehearsal:
+        description: Bypass the date guard; the artifact is marked as a rehearsal and is never AU-3 evidence
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# No concurrency group: it would cancel a queued slot, and a late slot is
+# still an observation.
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # First, so the artifact exists and dates the run even if a later step
+      # fails before the observer writes anything. Outside the workspace,
+      # which checkout empties.
+      - name: Record the runner's start
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/observation"
+          printf '{"runnerStartedAt":"%s","event":"%s"}\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" "$EVENT" \
+            > "$RUNNER_TEMP/observation/runner.json"
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: services/edge-api/scripts/monitor
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Observe the e2e host
+        # Worst case: the monitor's 3 reads x 2 attempts and the 10 captures,
+        # each bounded at 15 s, are 4 minutes.
+        timeout-minutes: 6
+        env:
+          REHEARSAL: ${{ github.event_name == 'workflow_dispatch' && inputs.rehearsal }}
+        run: |
+          args=(--out "$RUNNER_TEMP/observation")
+          if [ "$REHEARSAL" = "true" ]; then args+=(--rehearsal); fi
+          node services/edge-api/scripts/monitor/au3-e2e-observer.mjs "${args[@]}"
+      - name: Keep the observation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: au3-e2e-observation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/observation
+          if-no-files-found: error
+          retention-days: 90
