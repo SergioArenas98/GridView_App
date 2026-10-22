@@ -168,7 +168,8 @@ node scripts/monitor/automation-monitor.mjs --base-url https://gridview-api-stag
 (`--skip-heartbeat` only before the environment is automatic.)
 
 `.github/workflows/automation-monitor.yml` runs it, **manual-only**. A failed
-run e-mails the owner through GitHub's own notifications. Known limits:
+run e-mails the owner through GitHub's own notifications; the AU-6 drill
+verified that delivery on 2026-10-22 (§7). Known limits:
 
 - GitHub can delay scheduled runs;
 - GitHub disables scheduled workflows in a public repository after 60 days
@@ -192,7 +193,7 @@ run e-mails the owner through GitHub's own notifications. Known limits:
 | AU-3 | **The end-to-end demonstration with controlled data** (§8.2). Also on the release commit: the in-process gate in CI and the app half locally. **Paused 2026-10-22, not passed:** the first release and the phone bootstrap passed; the timed result and correction checks were not run (§8.2, "Status") | **[approval]** the KV load and the schedule; **[record]** the evidence | AU-2 |
 | AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2) | **[approval]** each of the three; cutover-sensitive | AU-3 |
 | AU-5 | The monitor's hourly `schedule:` for staging | **[approval]**, **[PR]** | AU-4, AU-6 |
-| AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1) | **[approval]**, **[record]** | AU-0 |
+| AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1). **Passed 2026-10-22:** one owner-authorised dispatch against staging (`skip_heartbeat`, `simulate_failure`), [run 39852057415](https://github.com/SergioArenas98/GridView_App/actions/runs/39852057415) on `master` at `09e0686`, failed as expected with the single finding `simulated-failure` (pendingRound 18); the owner confirmed, with a screenshot, that GitHub's failure e-mail for it arrived at 21:49 Irish time (20:49Z) the same day. OD-1 is closed. The workflow is still manual-only: no monitor schedule was enabled (that is AU-5), and no Worker schedule changed | **[approval]**, **[record]** | AU-0 |
 | AU-7 | Production automatic (§8.4): W2/W3 with the production delta, genesis, the first automatic release, persisted logs verified free of app traffic, the monitor scheduled for production | **[approval]** each | AU-4 soak (one race weekend published automatically), AU-6, D-A (§9) |
 | AU-8 | Release-candidate check: on the exact commit A2 builds, `gate.test.ts` and the app half pass, and staging and production heartbeats are fresh | **[record]** | AU-7, before R5 |
 
