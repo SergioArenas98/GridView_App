@@ -52,10 +52,10 @@ Steps marked **[PR]** are reviewable repository changes.
 | W0 | **[done]** Production genesis design and implementation (ADR 0025 O-16 amendment), PR #84, merged 2026-10-20 as `527444b` | — |
 | W-P | **[decided 2026-10-20: A, Workers Paid]** The submission path (`submission-path-decision.md`). **Bought 2026-10-21** (AU-1) | W0 |
 | W1 | **[done]** The production Worker configuration, without the KV binding: PR #85, merged 2026-10-21 as `65388ba` | W0, W-P |
-| W2 | **Step 1 done 2026-10-22:** the namespace `gridview-snapshots-production` (`d76328b37da343db92d927142c072593`). **[PR]** commit the KV id (the W2 PR). **[approval]** a new `ADMIN_TOKEN` value (not uploaded yet), or generate it in W3 | W1 |
-| W3 | **[approval]** First deploy of `gridview-api-production`, supplying `ADMIN_TOKEN` with `--secrets-file` | W2 |
+| W2 | **[done]** The namespace `gridview-snapshots-production` (`d76328b37da343db92d927142c072593`), created 2026-10-22; its id committed by PR #92, merged 2026-10-22 as `09e0686`. The `ADMIN_TOKEN` value was generated in W3 | W1 |
+| W3 | **[done 2026-10-22]** First deploy of `gridview-api-production` from `09e0686`, supplying `ADMIN_TOKEN` with `--secrets-file`: version `62bf40e9-426f-40b7-9fc1-44ab4c42999b`, bootstrap configuration (W3 below) | W2 |
 | D1 | **Superseded 2026-10-21** (ADR 0028 D3): no capture. Kept only as the manual fallback in `none` mode | — |
-| D2 | **[approval]** Run production genesis for season 2026 | W3 |
+| D2 | **[approval]** Run production genesis for season 2026. It waits until the automatic production configuration (AU-7, `automatic-updates.md` §8.4) is deployed | W3, the AU-7 configuration deployed |
 | D3 | **Superseded 2026-10-21** (ADR 0028 D3): the first release is published automatically after genesis (AU-7). Kept only as the manual fallback | — |
 | AU-0…AU-8 | Automatic updates: code (AU-0), Workers Paid (AU-1), the isolated demonstration Worker (AU-2), **the end-to-end demonstration with controlled data (AU-3)**, live staging automatic (AU-4), monitor schedule (AU-5), alert drill (AU-6), production automatic (AU-7), release-candidate check (AU-8) — `automatic-updates.md` §7 | W1, W-P; AU-7 also D2 and D-A |
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
@@ -308,6 +308,24 @@ It is uploaded with the first deploy in W3.
 
 ### W3. Deploy **[approval]**
 
+> **Status 2026-10-22: deployed** under the owner's authorization, from
+> `09e0686`.
+> - Version **`62bf40e9-426f-40b7-9fc1-44ab4c42999b`**, deployed
+>   2026-10-22.
+> - Bootstrap configuration: `PROVIDER_MODE = "none"`, the production KV
+>   namespace bound and empty, no reconciliation ledger, `crons = []`, and
+>   no genesis or season data.
+> - The checks below passed. `/v1/status` returned `200`; the season
+>   resources answered `404 SEASON_NOT_FOUND`, and `/v1/seasons/current`
+>   answered `503 SNAPSHOT_NOT_READY`. The deployed settings show logs
+>   persisted with `invocation_logs = false`. The dashboard's Workers Logs
+>   held no event for the public requests sent after the deploy.
+> - **Agreed sequence:** W3 was deployed now, with the bootstrap
+>   configuration. D2 waits until the later automatic production
+>   configuration (AU-7, `automatic-updates.md` §8.4) is deployed. That
+>   deploy replaces this version; it is not a first deploy, so it needs no
+>   `--secrets-file`.
+
 The first deploy supplies the required secret. Without one, Wrangler refuses
 because `[env.production.secrets] required = ["ADMIN_TOKEN"]`.
 
@@ -473,9 +491,14 @@ The details are in PR #82, `data-safety.md` §1.
   - Publish only the version that covers 1.x. A 2.0.0-only text must never
     replace the live page while 1.x is distributed.
 - **P3 precondition.** The Data safety answer that API traffic is processed
-  ephemerally (`data-safety.md` §3.4, data-safety review item R2) holds only once production logging is
-  off. W1 must commit `invocation_logs = false` for `[env.production]`, and W3
-  must verify it on the deployed Worker, before P3 is submitted.
+  ephemerally (`data-safety.md` §3.4, data-safety review item R2) holds only
+  while production stores no record of a public request. Under ADR 0028 D8
+  production logs stay persisted, with `invocation_logs = false` and no
+  `request.completed` line for a public request. W3 verified this on
+  the deployed Worker on 2026-10-22 (W3 above): the settings show
+  `invocation_logs = false`, and the public-request log check passed. This is
+  an engineering verification only. It does not approve PR #82's privacy
+  wording (AU-D3), which stays an owner decision.
 - **P0 [approval]:** in Play Console, correct the live form now to **state
   0**: the 1.x AdMob rows only, with Ads **Yes**. The live "No data collected"
   is already inaccurate for 1.2.1. State 0 does not depend on 2.0.0 or on the
@@ -483,11 +506,11 @@ The details are in PR #82, `data-safety.md` §1.
 - **P3 [approval]:** submit Data safety in **state T**: the 2.0.0 Firebase
   rows plus the 1.x AdMob rows, with Ads **Yes**.
   - **Prerequisites:** P-R is done, and D-L is decided.
-  - If D-L keeps the persisted `request.completed` logs, the App interactions
-    row also carries the API source and the App functionality purpose
-    (PR #82 `data-safety.md` §3.2, §3.4).
-  - If D-L disables them, W3 has verified that the deployed production
-    version has persisted logs off.
+  - D-L's engineering side is resolved by ADR 0028 D8. Logs persist, but no
+    line records a public request, and W3 verified that on the deployed
+    version. If PR #82's wording review (AU-D3) still wants an App
+    interactions row for Worker logs, the row carries the API source and
+    the App functionality purpose (PR #82 `data-safety.md` §3.2, §3.4).
   - Play counts closed, open and production tracks, and exempts only apps that
     are active exclusively on internal testing. GridView is not internal-only,
     so this plan takes the conservative reading and submits state T before
