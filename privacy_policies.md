@@ -1,6 +1,6 @@
 # GridView Privacy Policy
 
-Last updated: 22 October 2026
+Last updated: 23 October 2026
 
 This policy explains what information the GridView Android application
 ("GridView", "the app") processes, why, for how long, and what choices you
@@ -126,7 +126,8 @@ Instead:
   - your device's **IP address**, from which an approximate location can be
     derived;
   - **app interactions** such as app launches, taps and ad views;
-  - **diagnostic information** such as app launch time and performance;
+  - **diagnostic information** such as crash logs, app launch time and
+    performance;
   - **device identifiers**, including the Android **advertising ID** and app
     set ID.
 

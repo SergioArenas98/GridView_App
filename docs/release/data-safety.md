@@ -31,7 +31,12 @@ D-DEL (no in-app deletion control), C4 (email stays the only contact
 channel) and AU-D3 (the policy's wording on the API's records). R4 is
 recorded as a technical fact, and R5 was checked against archived copies of
 Google's disclosure for SDK 23.6.0 (§3.5). These decisions do not answer R1,
-R2, R5, R8 or R9, which stay open for the privacy review (§4, §4.1).
+R2, R5, R8 or R9, which stay open for the privacy review (§4, §4.1). Later
+on 2026-10-23 the R5 crash-logs omission was closed on the engineering side.
+The 23.6.0 disclosure names crash logs, and Play defines Crash logs as a
+separate type. So states 0 and T gain a 1.x Crash logs row, and the policy's
+1.x list names crash logs (§3.5). This is a recommendation awaiting the
+owner's final sign-off.
 
 ## 1. Why the current declaration must change
 
@@ -142,7 +147,7 @@ or publishing step.
 | Crashlytics REST API, `projects.apps.users.deleteCrashReports` (v1alpha) | Crash-report deletion by a Crashlytics **user ID** only (R3) |
 | Firebase, *Set up a Firebase Cloud Messaging client app on Android* (https://firebase.google.com/docs/cloud-messaging/android/client, updated 2026-10-22) | FCM auto-initialization uploads "the identifier and configuration data to Firebase" (§3.5) |
 | `firebase-messaging` 24.1.0 `.aar` from Google's Maven repository, its `AndroidManifest.xml` | The SDK itself declares `POST_NOTIFICATIONS`, `WAKE_LOCK` and `c2dm.permission.RECEIVE` (§3.5) |
-| Play Console Help, *Provide information for Google Play's Data safety section* (support.google.com/googleplay/android-developer/answer/10787469, read 2026-10-22) | The purpose definitions used for R9: App functionality is "Used for features that are available in the app"; Developer communications is "Used to send news or notifications about the app or the developer" |
+| Play Console Help, *Provide information for Google Play's Data safety section* (support.google.com/googleplay/android-developer/answer/10787469, read 2026-10-22 and 2026-10-23) | The purpose definitions used for R9: App functionality is "Used for features that are available in the app"; Developer communications is "Used to send news or notifications about the app or the developer". The data types used for R5: Crash logs is "Crash log data from your app. For example, the number of times your app has crashed, stack traces"; Diagnostics is "Information about the performance of your app. For example battery life, loading time, latency, framerate". Collection includes data "transmitted off device from your app by libraries and/or SDKs used in your app" |
 | Owner statement, 2026-10-22 | No push-notification feature was implemented, and no push notification was sent to 1.x users. Firebase was configured, but FCM was not intentionally used for any feature (§3.5) |
 
 ## 3. Proposed answers
@@ -378,18 +383,21 @@ declares no Firebase package. Earlier drafts of this section relied on it,
 and the facts above replace it.
 
 The Google Mobile Ads SDK disclosure
-(developers.google.com/admob/android/privacy/play-data-disclosure) lists four data
-types as **collected and shared automatically** for advertising, analytics
-and fraud prevention, all encrypted in transit. The page covers only the
-SDK's latest version. The rows below therefore rest on two Internet Archive
-captures of the page taken while 1.x's version, 23.6.0, was the latest
-release (R5, below the tables). State T adds these rows to §3.2:
+(developers.google.com/admob/android/privacy/play-data-disclosure) lists four
+kinds of data as **collected and shared automatically** for advertising,
+analytics and fraud prevention, all encrypted in transit. The page covers
+only the SDK's latest version. The rows below therefore rest on two
+Internet Archive captures of the page taken while 1.x's version, 23.6.0, was
+the latest release (R5, below the tables). Its "Diagnostic information" maps
+to two Play types, Crash logs and Diagnostics. State 0 declares these rows,
+and state T adds them to §3.2:
 
 | Play category → type | Collected | Shared | Purposes |
 |---|---|---|---|
 | Location → **Approximate location** (IP address) | yes | **yes** | Advertising or marketing; Analytics; Fraud prevention, security and compliance |
 | App activity → **App interactions** | yes | **yes** | the same |
-| App info and performance → **Diagnostics** | yes | **yes** | the same |
+| App info and performance → **Crash logs** | yes | **yes** | the same |
+| App info and performance → **Diagnostics** (app launch time, hang rate, energy usage) | yes | **yes** | the same |
 | Device or other IDs → **Device or other IDs** (advertising ID, app set ID) | yes | **yes** | the same |
 
 Firebase Cloud Messaging adds this row:
@@ -401,9 +409,10 @@ Firebase Cloud Messaging adds this row:
 - These rows are **required**: 1.x has no switch, and it starts the SDK before
   showing anything. They are **not processed ephemerally**: Play says data
   used to build advertising profiles cannot be.
-- Where a type is already declared in §3.2 (Approximate location, Diagnostics,
-  Device or other IDs), state T marks it **shared**, adds the advertising and
-  fraud purposes, and keeps Analytics.
+- Where a type is already declared in §3.2 (Approximate location, Crash
+  logs, Diagnostics, Device or other IDs), state T marks it **shared**, adds
+  the advertising and fraud purposes, and keeps Analytics. For Crash logs,
+  2.0.0's Crashlytics row is not shared; the 1.x ads SDK's crash logs are.
 - **App activity → App interactions** is also declared for 2.0.0 (Firebase
   Sessions, §3.2). State T marks it **shared** and adds the advertising and
   fraud purposes.
@@ -420,23 +429,35 @@ Firebase Cloud Messaging adds this row:
   disclosure page fall in that window, 2025-01-08 23:16Z and 2025-02-11
   16:20Z, and their text is identical. Both say the page lists "the
   end-user data collected by only the latest version (version 23.6.0)" of
-  the SDK. Both list the four types above, for advertising, analytics and
-  fraud prevention, encrypted in transit with TLS. The live page (read
-  2026-10-23) covers 25.5.0 of the "Google Mobile Ads SDK (Legacy)". Apart
-  from the product name, it differs in one example only.
-  - **That difference.** For 23.6.0, "Diagnostic information" includes
-    "crash logs, app launch time, hang rate, and energy usage". The live page
-    no longer names crash logs. Play has a separate **Crash logs** type, and
-    the rows above declare only Diagnostics for the ads SDK. Whether states 0
-    and T also need App info and performance → Crash logs, collected and
-    shared, with these purposes, is open under R5. Nothing is selected here.
-    The policy's 1.x list (section 3.4) gives examples only ("such as") and
-    is unchanged.
-  - **Remaining gaps.** The captures are a third party's archive of
-    Google's page, not a Google document published for that version. They
-    are Google's statement about its SDK, not an observation of what 1.x
-    sends: no 1.x traffic was captured. 23.6.0's release notes say nothing
-    about data collection either way.
+  the SDK. Both list the same four kinds of data, for advertising,
+  analytics and fraud prevention, encrypted in transit with TLS. The live
+  page (read 2026-10-23) covers 25.5.0 of the "Google Mobile Ads SDK
+  (Legacy)". Apart from the product name, it differs in one example only.
+  The saved copies were re-hashed on 2026-10-23 and match the SHA-256 values
+  recorded when they were downloaded.
+  - **Crash logs (engineering recommendation, awaiting the owner's final
+    sign-off).** For 23.6.0, "Diagnostic information" "Collects information
+    related to the performance of your app and the SDK, including crash
+    logs, app launch time, hang rate, and energy usage". The live page no
+    longer names crash logs, but 1.x ships 23.6.0. Play defines **Crash
+    logs** as "Crash log data from your app" and **Diagnostics** as
+    "Information about the performance of your app". So the crash logs map to
+    App info and performance → Crash logs, and the rest of that entry (app
+    launch time, hang rate, energy usage) to Diagnostics. The same section
+    says the SDK "collects and shares" every listed type "automatically for
+    advertising, analytics, and fraud prevention purposes". The Crash logs
+    row above therefore carries collected, shared, those three purposes and
+    TLS in transit, like the other ads rows. The policy's 1.x list
+    (section 3.4) now names crash logs too.
+  - **What the evidence is.** These are archived copies of Google's
+    published disclosure for its SDK, taken by the Internet Archive while
+    23.6.0 was current. They are not a Google document dated for that
+    version, and they are not an observation of what 1.x sends: no 1.x
+    traffic was captured. The bundles confirm the SDK and its version
+    (§3.5). Nothing found contradicts the disclosure, and no implementation
+    detail of 1.x is unresolved for these rows, so a traffic capture is not
+    a prerequisite. 23.6.0's release notes say nothing about data collection
+    either way.
 
 ### 3.6 Ads that installed 1.x copies keep requesting
 
@@ -531,7 +552,7 @@ the units are archived.
 | R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | Yes. The production logging condition in §3.4 is committed (W1, PR #85, then ADR 0028 D8, PR #86). W3 verified it on the deployed Worker on 2026-10-22 (§3.4), and AU-7 repeats the check on the version it deploys. Do not submit state T or F until the check has passed for the version deployed at the time. |
 | R3 | Deletion-request answer | **Settled on the facts, 2026-10-22: no verified procedure exists.** Official Firebase documentation (read 2026-10-22) gives two routes. **(a) Delete the installation** by its Firebase installation ID, in the app (`FirebaseInstallations.delete()`) or on a server (Admin SDK `deleteInstallation(fid)`). The data tied to that ID is then removed "from live and backup systems of all Firebase services" within 180 days. **(b) Crashlytics `deleteCrashReports`** works only by a user ID set with the Crashlytics SDK. GridView sets none (`lib/core/observability/firebase/firebase_observability.dart`), so (b) cannot be used. Route (a) needs the installation ID, and the app shows it to nobody. A user's description of a crash (time, device model) does not yield it, and no console route from a crash to its installation ID was found or verified. Route (a)'s 180 days are longer than Crashlytics' 90-day and Performance Monitoring's 60- and 30-day retention, so for those it is no faster than expiry. It would remove the installation ID itself, which Firebase otherwise keeps until deleted. **Done:** the policy no longer promises deletion ("or until they are deleted at your request" is removed from section 6). It says one installation's Firebase data cannot currently be found or deleted. **Data safety:** answer **No**. **Owner decision D-DEL, decided 2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality. The answer stays No, and the policy keeps saying that no verified procedure exists and one installation's data cannot be found or deleted. A control that calls `FirebaseInstallations.delete()` stays possible as a later product change. The remaining privacy obligations, such as how an erasure request is answered without a procedure, stay with the review. GridView has no accounts, so Play's separate account-deletion requirement does not apply. |
 | R4 | Is the data collection optional? | **Required. A technical fact, not a classification:** no in-app switch exists, so the user cannot turn collection off. Adding one would be a product change. |
-| R5 | State T rows for 1.x (§3.5) | Declare them as listed, subject to the owner's sign-off in the review. **Evidence checked 2026-10-23 (§3.5):** two Internet Archive captures of Google's disclosure, taken while 23.6.0 was the latest release, say they cover version 23.6.0. They list the same four types and purposes as the rows. **Still open:** that text also names crash logs, which Play treats as a separate type, and no row declares it for the ads SDK. The evidence is also an archived copy of Google's statement, not observed 1.x traffic. |
+| R5 | The 1.x rows of states 0 and T (§3.5) | **Engineering recommendation, awaiting the owner's final sign-off:** declare them as listed, including the 1.x **Crash logs** row (collected, shared; advertising, analytics and fraud prevention). **Evidence (§3.5):** two Internet Archive captures of Google's disclosure, taken while 23.6.0 was the latest release, say they cover version 23.6.0. Their "Diagnostic information" names crash logs, which Play's definitions place under Crash logs, and the rest under Diagnostics. **Limits:** archived copies of Google's published statement about its SDK, not observed 1.x traffic. Nothing contradicts them, so no traffic capture is required. |
 | R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). The owner decided on 2026-10-23 to archive the 1.x ad units in AdMob before AU-7 (D-A, §3.6). That will stop ads being served to installed copies, but not the SDK's requests. The archiving is a separate AdMob step and has not been done. |
 | R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. **C4, decided 2026-10-23:** email stays the only contact channel (§6.1). One owner step remains: the Play listing still says Spain (§6.2). Whether rules outside the privacy notice require a geographic address stays open for the review (§6.1). |
 | R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions:** declare it, if the review agrees. Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines:** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. W3 verified it on the deployed Worker on 2026-10-22, and AU-7 repeats the check (§3.4). |
@@ -562,8 +583,8 @@ sign-off in the privacy review, and R9 needs the specific review in §4.2.
 | | Do not declare it | Only if the review finds it is not location. Otherwise it is a discrepancy Play may act on |
 | R2 | Accept that the API's handling of the IP address is ephemeral (§3.2, §3.4) | Holds only while the deployed Worker's logs pass the check (W3 done; AU-7 repeats it) |
 | | Do not accept it | The review decides what changes. Approximate location is already declared as not ephemeral as a whole, because of Firebase's part (§3.2) |
-| R5 | Declare the 1.x rows as listed (§3.5) | Rests on the archived 23.6.0 disclosure, not on observed 1.x traffic |
-| | Also declare Crash logs, collected and shared, for the ads SDK | Follows the 23.6.0 text, which names crash logs. Only if the review finds that the SDK's crash logs are Play's Crash logs type |
+| R5 | Sign off the 1.x rows as listed (§3.5), including Crash logs (engineering recommendation) | States 0 and T declare what Google's 23.6.0 disclosure lists, mapped to Play's types. Rests on archived copies of Google's statement, not on observed 1.x traffic |
+| | Do not sign off | States 0 and T cannot be submitted until the review settles the 1.x rows |
 | R8 | Declare App interactions for Sessions (recommended if the review agrees) | Matches Firebase's disclosure of the session start |
 | | Do not declare it | Only if the review finds a session start is not an app interaction |
 | R9 | Not an owner option. A privacy-review blocker (§4.2) | Data safety states 0 and T, and the policy's publication, wait for it |
