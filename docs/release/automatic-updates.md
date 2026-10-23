@@ -168,7 +168,8 @@ node scripts/monitor/automation-monitor.mjs --base-url https://gridview-api-stag
 (`--skip-heartbeat` only before the environment is automatic.)
 
 `.github/workflows/automation-monitor.yml` runs it, **manual-only**. A failed
-run e-mails the owner through GitHub's own notifications. Known limits:
+run e-mails the owner through GitHub's own notifications; the AU-6 drill
+verified that delivery on 2026-10-22 (§7). Known limits:
 
 - GitHub can delay scheduled runs;
 - GitHub disables scheduled workflows in a public repository after 60 days
@@ -192,7 +193,7 @@ run e-mails the owner through GitHub's own notifications. Known limits:
 | AU-3 | **The end-to-end demonstration with controlled data** (§8.2). Also on the release commit: the in-process gate in CI and the app half locally. **Paused 2026-10-22, not passed:** the first release and the phone bootstrap passed; the timed result and correction checks were not run (§8.2, "Status") | **[approval]** the KV load and the schedule; **[record]** the evidence | AU-2 |
 | AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2) | **[approval]** each of the three; cutover-sensitive | AU-3 |
 | AU-5 | The monitor's hourly `schedule:` for staging | **[approval]**, **[PR]** | AU-4, AU-6 |
-| AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1) | **[approval]**, **[record]** | AU-0 |
+| AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1). **Passed 2026-10-22:** one owner-authorised dispatch against staging (`skip_heartbeat`, `simulate_failure`), [run 39852057415](https://github.com/SergioArenas98/GridView_App/actions/runs/39852057415) on `master` at `09e0686`, failed as expected with the single finding `simulated-failure` (pendingRound 18); the owner confirmed, with a screenshot, that GitHub's failure e-mail for it arrived at 21:49 Irish time (20:49Z) the same day. OD-1 is closed. The workflow is still manual-only: no monitor schedule was enabled (that is AU-5), and no Worker schedule changed | **[approval]**, **[record]** | AU-0 |
 | AU-7 | Production automatic (§8.4): W2/W3 with the production delta, genesis, the first automatic release, persisted logs verified free of app traffic, the monitor scheduled for production | **[approval]** each | AU-4 soak (one race weekend published automatically), AU-6, D-A (§9) |
 | AU-8 | Release-candidate check: on the exact commit A2 builds, `gate.test.ts` and the app half pass, and staging and production heartbeats are fresh | **[record]** | AU-7, before R5 |
 
@@ -372,16 +373,60 @@ reset. A replay needs a new `T`, a regenerated source and its own approvals
 for each of steps 2–5. It also has to account for the release this run
 already committed.
 
-**Replay finding and fix (2026-10-22).** An in-process rehearsal of a replay
-on the existing e2e state wedged the season: every run after the calendar
-release was withheld (`standings-round-incoherent`). The cause was a
-classification record that kept its first anchor after the calendar moved
-the race. PR #91 (merged as `e3c9f0f`) re-anchors a record when the calendar
-moves a race and nothing has been observed yet. With it, the same rehearsal
-publishes the result and the correction. The deployed e2e Worker `91ff2541`
-predates PR #91. A replay therefore first needs an approved deploy that
-includes it, on this Worker or on a fresh one, before steps 2–5. Until then
-the e2e schedule stays at `crons = []`.
+**Replay (prepared 2026-10-22, not run).** The replay runs on the same Worker,
+after a deploy. It keeps the Worker, its KV namespace, Durable Objects,
+`ADMIN_TOKEN`, genesis and first release, and the e2e app installed on the
+phone. So it needs no new namespace, genesis or app install.
+- **Why the same Worker works.** On `91ff2541` a regenerated source wedges the
+  season: round 22's checks stay on the old calendar's anchor, and from the
+  first shifted standings every run is withheld as
+  `standings-round-incoherent`.
+- **What fixed it.** PR #91 re-anchors a moved race that has nothing
+  observed.
+- **The proof.** `controlled-source.test.ts` ("replays on the paused
+  demonstration") plays the paused run, then a source regenerated for a new
+  `T′`.
+
+Each numbered step is its own **[approval]**:
+
+1. Deploy the release-candidate commit with `npm exec -- wrangler deploy --env
+   e2e`, from a clean checkout, with `crons = []` still committed.
+   - No `--secrets-file`: the Worker keeps its `ADMIN_TOKEN`.
+   - Expect only a new version: the same three Durable Object namespaces,
+     bindings and KV values, schedules `[]`, and unchanged public ETags.
+   - Rolling back to `91ff2541` stays possible, because no class is added.
+2. Choose `T′` and generate its source (step 1 above).
+   - Before loading, replay those exact bytes in-process the way the test
+     does: the paused source over the 2026-10-22 ticks, then the new file.
+   - The load (step 2) overwrites the same 29 keys.
+3. Schedule it at least 3 h before `T′` (step 3 above).
+4. Open the installed e2e app once after the first replay release. Do not
+   reinstall it.
+5. Watch, read-only. `F` is the first tick after the schedule goes live:
+
+   | Instant | Expect |
+   |---|---|
+   | `F` | Rounds 22 and 23 asked for on their old anchors, an empty answer; rounds 20 and 21 settled on deadline; the moved calendar read; no release (`classification-unavailable`) |
+   | `F` + 2 h | Release: the moved calendar, round 22 at `T′`; Home still on round 22 |
+   | `T′` + 0:17, + 1:17 | No run due, no release: rounds 20 and 21 settled on deadline at `F` |
+   | `T′` + 2:17 | Round 22 re-anchored (`classification.rescheduled`), its result sighted, pending; no release |
+   | `T′` + 3:17 | Its result published (winner 25 points); Home moves on to round 23 |
+   | App, next launch | Shows the round 22 result |
+   | `T′` + 6:17 | Confirmation; no release |
+   | `T′` + 10:17 | The correction sighted, pending; no release |
+   | `T′` + 11:17 | The correction published (winner 26 points); the app converges at its next launch |
+   | Throughout | `lastSuccessfulSyncAt` advances hourly; the monitor (`--base-url` of the e2e host) passes; never `standings-round-incoherent`; no admin request |
+
+   Then remove the schedule (`crons = []`, `triggers deploy`).
+
+Round 22's first ceiling fell on 2026-11-06T09:00Z (14 days after the old
+`T`). For any `F` after it, as with the test's `T′` = 2026-11-12T09:00Z, the
+first run also marks round 22 `never-reconciled`, and the move revives it at
+`T′` + 2:17.
+
+The genesis and the first release came from `91ff2541`. The replay's
+releases come from the commit deployed in step 1, and the in-process gate on
+that commit covers the path from genesis.
 
 ### 8.3 Live staging (AU-4)
 
