@@ -57,13 +57,13 @@ Steps marked **[PR]** are reviewable repository changes.
 | D1 | **Superseded 2026-10-21** (ADR 0028 D3): no capture. Kept only as the manual fallback in `none` mode | — |
 | D2 | **[approval]** Run production genesis for season 2026. It waits until the automatic production configuration (AU-7, `automatic-updates.md` §8.4) is deployed | W3, the AU-7 configuration deployed |
 | D3 | **Superseded 2026-10-21** (ADR 0028 D3): the first release is published automatically after genesis (AU-7). Kept only as the manual fallback | — |
-| AU-0…AU-8 | Automatic updates: code (AU-0), Workers Paid (AU-1), the isolated demonstration Worker (AU-2), **the end-to-end demonstration with controlled data (AU-3)**, live staging automatic (AU-4), monitor schedule (AU-5), alert drill (AU-6), production automatic (AU-7), release-candidate check (AU-8) — `automatic-updates.md` §7 | W1, W-P; AU-7 also D2 and D-A |
+| AU-0…AU-8 | Automatic updates: code (AU-0), Workers Paid (AU-1), the isolated demonstration Worker (AU-2), **the end-to-end demonstration with controlled data (AU-3)**, live staging automatic (AU-4), monitor schedule (AU-5), alert drill (AU-6), production automatic (AU-7), release-candidate check (AU-8) — `automatic-updates.md` §7. **AU-3 status 2026-10-22: paused, not passed.** The first release and the phone bootstrap passed; the result and correction checks did not run. The e2e schedule is off (`crons = []`, PR #90) and stays off until a replay is approved. PR #91 (merged as `e3c9f0f`) fixes the re-anchoring wedge that a replay would have hit, and the original e2e deployment, `91ff2541` (2026-10-21, from `38d84ed`), predates it. The replay deployment, `6b52bc02` (2026-10-22 22:53Z, from master `eeca9bf`, which includes PR #91), replaced the code only, with the schedule still off. The replay's source load, schedule and checks have not run and each needs its own approval, so AU-3 is still not passed (`automatic-updates.md` §8.2) | W1, W-P; AU-7 also D2 and D-A |
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
 | P2 | **[approval]** Publish the policy at https://gridview.netlify.app | P1 |
-| P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2, P-R, §5.1 step 2 or step 3 (Alpha inspected or paused) |
-| P3 | **[approval]** Data safety in transition state T, Ads = **Yes**, including the App interactions row D-L requires | P2, P-R, D-L, W3 (the deployed observability setting matches D-L); before R2 |
+| P0 | **[approval]** Correct the live Data safety form now: state 0 (the 1.x AdMob and Firebase rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2, P-R (the Alpha build was inspected on 2026-10-22, §5.1 step 2) |
+| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, P-R, W3 (the deployed logs match ADR 0028 D8, which resolves D-L); before R2 |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
-| A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1, P1, AU-3, every W/D/AU PR merged |
+| A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1, P1, AU-3 (not passed yet), every W/D/AU PR merged |
 | A0b | **[record]** Release-candidate gate, post-build part: the AAB, the internal installation and performance | A2, R2, R3 |
 | A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A0, A1, P2, AU-7 (production live and holding its first automatic release; D3 is superseded) |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
@@ -182,7 +182,8 @@ The amendment must decide:
     Worker writes no `request.completed` line for a public request, keeps
     `request.failed` without the request ID, and logs refused internal paths
     as `/internal/*`. App traffic is not stored, so no App interactions row
-    is needed for Worker logs. The privacy wording stays with PR #82 (AU-D3).
+    is needed for Worker logs. The owner accepted PR #82's privacy wording
+    for it on 2026-10-23 (AU-D3).
 
 ### W-P. Cost of genesis and submissions, and the submission path (decision)
 
@@ -480,7 +481,7 @@ The details are in PR #82, `data-safety.md` §1.
     and 2.0.0 everywhere else;
   - `docs/release/data-safety.md`.
 
-  Its review items (data-safety R1–R8) need the owner's privacy review, P-R,
+  Its review items (data-safety R1–R9) need the owner's privacy review, P-R,
   before **any** Data safety submission (P0, P3, R7). Data-safety item R7 is
   the controller naming. The owner confirmed it on 2026-10-20: Sergio Arenas
   del Amo, an individual in Ireland, publishing as Sejuma, with no registered
@@ -492,25 +493,35 @@ The details are in PR #82, `data-safety.md` §1.
     replace the live page while 1.x is distributed.
 - **P3 precondition.** The Data safety answer that API traffic is processed
   ephemerally (`data-safety.md` §3.4, data-safety review item R2) holds only
-  while production stores no record of a public request. Under ADR 0028 D8
-  production logs stay persisted, with `invocation_logs = false` and no
-  `request.completed` line for a public request. W3 verified this on
-  the deployed Worker on 2026-10-22 (W3 above): the settings show
-  `invocation_logs = false`, and the public-request log check passed. This is
-  an engineering verification only. It does not approve PR #82's privacy
-  wording (AU-D3), which stays an owner decision.
+  while no persisted line carries an IP address or links a request to an
+  installation. Under ADR 0028 D8 production logs stay persisted, with
+  `invocation_logs = false`, no line for a public request the Worker answers,
+  and only an identifier-free `request.failed` line for one that hits an
+  internal error. W3 verified this on the deployed Worker on 2026-10-22 (W3
+  above, version `62bf40e9…`): the settings show `invocation_logs = false`,
+  and the public-request log check passed. The AU-7 deploy replaces that
+  version, so AU-7 repeats the check on its own version. This is an
+  engineering verification only. It did not approve PR #82's privacy
+  wording; the owner accepted that wording separately on 2026-10-23
+  (AU-D3).
 - **P0 [approval]:** in Play Console, correct the live form now to **state
-  0**: the 1.x AdMob rows only, with Ads **Yes**. The live "No data collected"
-  is already inaccurate for 1.2.1. State 0 does not depend on 2.0.0 or on the
-  production Worker.
+  0**: the 1.x rows only (AdMob and Firebase Cloud Messaging), with Ads
+  **Yes**. The live "No data collected" is already inaccurate for 1.2.1.
+  State 0 does not depend on 2.0.0 or on the production Worker.
 - **P3 [approval]:** submit Data safety in **state T**: the 2.0.0 Firebase
-  rows plus the 1.x AdMob rows, with Ads **Yes**.
-  - **Prerequisites:** P-R is done, and D-L is decided.
-  - D-L's engineering side is resolved by ADR 0028 D8. Logs persist, but no
-    line records a public request, and W3 verified that on the deployed
-    version. If PR #82's wording review (AU-D3) still wants an App
-    interactions row for Worker logs, the row carries the API source and
-    the App functionality purpose (PR #82 `data-safety.md` §3.2, §3.4).
+  rows plus the 1.x rows (AdMob and Firebase Cloud Messaging), with Ads
+  **Yes**.
+  - **Prerequisites:** P-R is done (R1–R9; R9 blocks the FCM part of the
+    Device or other IDs purposes). The owner accepted the Worker-log
+    wording on 2026-10-23 (AU-D3). The log verification is done: W3,
+    2026-10-22, above.
+    If P3 is submitted after the AU-7 deploy, AU-7's repeat of the check
+    must have passed too.
+  - D-L's engineering side is resolved by ADR 0028 D8, so the Worker's logs
+    add no Data safety row (PR #82 `data-safety.md` §3.4, R8). If the
+    privacy review of R8 still wants an App interactions row for
+    them, the row carries the API source and the App functionality purpose
+    (PR #82 `data-safety.md` §3.2, §3.4).
   - Play counts closed, open and production tracks, and exempts only apps that
     are active exclusively on internal testing. GridView is not internal-only,
     so this plan takes the conservative reading and submits state T before
@@ -543,13 +554,13 @@ Steps (each owner-run; only step 3 changes Play Console):
 
 1. **Read the Alpha track's status** in Play Console, read-only: Superseded,
    Active or Paused. Record it.
-2. **Settle what versionCode 2 contains** before any declaration relies on it.
-   Either inspect it in the App bundle explorer against PR #82
-   `data-safety.md` §3.5, or skip the inspection because step 3 runs first.
-   This is PR #82 §1.4 step 0.
+2. **Settle what versionCode 2 contains: done 2026-10-22.** It was
+   downloaded read-only from the App bundle explorer. It is 1.0.0, with the
+   same Google Mobile Ads and Firebase SDKs as versionCode 7 and no Unity Ads
+   (PR #82 `data-safety.md` §3.5, §1.4 step 0). App bundle explorer lists the
+   bundle as active. The track's own status was not read.
 3. **Pause the Alpha track** (Manage track → Pause track). This ends the
-   test whatever step 1 found. It must happen before P0 if versionCode 2 was
-   not inspected, and in any case before R7.
+   test whatever step 1 found. It must happen before R7.
 4. **Verify:** the track shows Paused, and no release on any closed or open
    track names versionCode 1–7.
 5. Existing Alpha installs keep whatever they have (Play says so). They are
@@ -603,7 +614,7 @@ merged commit** A2 builds, never a branch head or an older run.
 | Production AAB build; internal Play installation | A0b | A2 and R2 |
 | Performance targets | A0b | The Performance traces from R3's controlled upgrade against the targets in Implementation Plan §15.4 |
 | Security review | A0 | CodeQL and the secret scan green on that commit, plus a recorded review of the release diff |
-| Privacy review | A0 | PR #82's R1–R8 answered by the owner |
+| Privacy review | A0 | PR #82's R1–R8 answered in the owner's privacy review, and R9 resolved by the specific privacy review it needs (`data-safety.md` §4.2) |
 | Provider legal gate | A0 | ADR 0019 and Implementation Plan §14.2, re-confirmed for automatic publication of race results (ADR 0028 D11, D12); Jolpica's terms and rate limits re-read from its public repository, without contacting the API |
 
 A failing, missing or stale A0 item blocks A2. A failing A0b item blocks R5.
@@ -773,15 +784,16 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | W0 | Production genesis design (ADR 0025 O-16 amendment): **done**, PR #84 merged as `527444b` | — |
 | W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). **Bought 2026-10-21** (AU-1; Workers Paid is the current plan of the Wrangler account) | — |
 | D-T1 | Retain versionCode 7 for API 21–23 or not (recommended: not) | R4, R7 |
-| D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | P0 or R7 |
-| D-A | Archive the 1.x ad units in AdMob, or not. It stops ads being served to installed 1.x copies, which pausing a track does not, but not the SDK's requests (PR #82 `data-safety.md` §3.6). Irreversible; ends 1.x ad revenue | — (owner's choice of timing) |
+| D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | R7 |
+| D-A | Archive the 1.x ad units in AdMob, or not. It stops ads being served to installed 1.x copies, which pausing a track does not, but not the SDK's requests (PR #82 `data-safety.md` §3.6). Irreversible; ends 1.x ad revenue. **Decided by the owner on 2026-10-23: archive, before AU-7** (AU-D2), accepting the loss of 1.x ad revenue. The AdMob operation itself is separate and not done | AU-7 |
+| D-DEL | Add an in-app control that deletes the installation's Firebase data (`FirebaseInstallations.delete()`), or not. **Decided by the owner on 2026-10-23: no control.** 2.0.0 keeps its current functionality, Data safety answers **No** to deletion requests, and the policy says no verified procedure exists and one installation's data cannot be found or deleted (PR #82 `data-safety.md` R3). The remaining privacy obligations stay with P-R | — |
 | D-R | Confirm no closed-testing stage: one controlled Play-delivered upgrade (R3), then the staged rollout (§7) | R5 |
 | D-C | Commit a reviewed Jolpica capture tool to the repository, or keep the private operator script | D1 |
-| D-L | Production persisted application logs. **Engineering resolved 2026-10-21 by ADR 0028 D8:** persisted, invocation logs off, no public-request line and no client data or credential stored. The privacy wording stays an owner decision in PR #82 (AU-D3) | P3 |
+| D-L | Production persisted application logs. **Engineering resolved 2026-10-21 by ADR 0028 D8:** persisted, invocation logs off, no public-request line and no client data or credential stored. The privacy wording was accepted by the owner on 2026-10-23 (AU-D3, PR #82) | — |
 | D-U | Approve the replacements for the upgrade-matrix rows the single pass does not cover: slow network, older Android, and populated and corrupted legacy cache (§8). Or supply devices for them | R3 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
-| P-R | Privacy review of PR #82 `data-safety.md` review items R1–R8 (not the R-track gates) | P0 |
+| P-R | Privacy review of PR #82 `data-safety.md` review items R1–R9 (not the R-track gates) | P0 |
 | M | Ship 2.0.0 with placeholder media (no R2, no approved media) | R5 |
 | O | **Changed 2026-10-21:** nobody runs D1/D3 each race weekend (automatic). Who answers alerts and staged corrections (ADR 0028 D6, D9), and the 2027 dataset work | R5 |
 | AU-D1, AU-D5 | **Accepted by the owner for 2.0.0 on 2026-10-21, including their documented limitations** (ADR 0028 D13; `automatic-updates.md` §9): AU-D1, O-5(a), a staged correction freezes the season until an operator acts; AU-D5, a first race result inside the window is seen twice before it is published, which reduces but does not remove the risk of a short classification shown as "Final". The acceptance authorises no merge, purchase, provisioning, deployment or activation | — |
-| AU-D2…AU-D4 | D-A before AU-7; privacy wording for Worker logs; alert channel (`automatic-updates.md` §9) | AU-7 |
+| AU-D2…AU-D4 | D-A before AU-7 and the privacy wording for Worker logs: **both accepted by the owner on 2026-10-23** (AU-D2, AU-D3). The alert channel (AU-D4) is still open (`automatic-updates.md` §9) | AU-7 |

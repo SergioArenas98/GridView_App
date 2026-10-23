@@ -190,7 +190,7 @@ verified that delivery on 2026-10-22 (§7). Known limits:
 | AU-0 | This change merged, dormant: genesis-capable coordinated runs, calendar horizon, the + 90 min / hourly / back-off polling plan, heartbeat, production logging design, monitor, controlled source, gate tests | **[PR]** | PR #85 |
 | AU-1 | Workers Paid bought (the plan is account-wide, so staging gets it too). **Done 2026-10-21:** read-only, the dashboard shows Workers Paid active, renewing 2026-11-21, on account `786e24f1…e6bf`, the account Wrangler uses; one invoice that day, USD 5.00, paid (the invoice itself, and so any VAT line, was not opened) | **[approval]** owner | — |
 | AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis. **Done 2026-10-21:** all four steps (§8.1) | **[approval]** each, **[PR]** | AU-0, AU-1 |
-| AU-3 | **The end-to-end demonstration with controlled data** (§8.2). Also on the release commit: the in-process gate in CI and the app half locally. **Paused 2026-10-22, not passed:** the first release and the phone bootstrap passed; the timed result and correction checks were not run (§8.2, "Status") | **[approval]** the KV load and the schedule; **[record]** the evidence | AU-2 |
+| AU-3 | **The end-to-end demonstration with controlled data** (§8.2). Also on the release commit: the in-process gate in CI and the app half locally. **Paused 2026-10-22, not passed:** the first release and the phone bootstrap passed; the timed result and correction checks were not run (§8.2, "Status"). The replay's deploy is done (`6b52bc02`, 2026-10-22); its load, schedule and checks are not (§8.2, "Replay") | **[approval]** the KV load and the schedule; **[record]** the evidence | AU-2 |
 | AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2) | **[approval]** each of the three; cutover-sensitive | AU-3 |
 | AU-5 | The monitor's hourly `schedule:` for staging | **[approval]**, **[PR]** | AU-4, AU-6 |
 | AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1). **Passed 2026-10-22:** one owner-authorised dispatch against staging (`skip_heartbeat`, `simulate_failure`), [run 39852057415](https://github.com/SergioArenas98/GridView_App/actions/runs/39852057415) on `master` at `09e0686`, failed as expected with the single finding `simulated-failure` (pendingRound 18); the owner confirmed, with a screenshot, that GitHub's failure e-mail for it arrived at 21:49 Irish time (20:49Z) the same day. OD-1 is closed. The workflow is still manual-only: no monitor schedule was enabled (that is AU-5), and no Worker schedule changed | **[approval]**, **[record]** | AU-0 |
@@ -395,6 +395,12 @@ Each numbered step is its own **[approval]**:
    - Expect only a new version: the same three Durable Object namespaces,
      bindings and KV values, schedules `[]`, and unchanged public ETags.
    - Rolling back to `91ff2541` stays possible, because no class is added.
+   - **Done 2026-10-22 22:53Z**, from master `eeca9bf` (the replay
+     deployment): version `6b52bc02`, at 100 %, schedules still `[]`. Only
+     the code changed. The KV values, the Durable Objects, `ADMIN_TOKEN`,
+     the genesis and the first release are unchanged from the original
+     deployment, `91ff2541` (AU-2 step 3, 2026-10-21). Steps 2–5 are still
+     pending, each with its own approval, and AU-3 is still not passed.
 2. Choose `T′` and generate its source (step 1 above).
    - Before loading, replay those exact bytes in-process the way the test
      does: the paused source over the 2026-10-22 ticks, then the new file.
@@ -488,14 +494,15 @@ Then:
 
 On 2026-10-21 the owner explicitly accepted **AU-D1** and **AU-D5** for
 version 2.0.0, including their documented limitations (ADR 0028 D13).
-AU-D2, AU-D3 and AU-D4 remain open. Accepting a decision authorises no merge,
+On 2026-10-23 the owner accepted **AU-D2** and **AU-D3** (PR #82). AU-D4
+remains open. Accepting a decision authorises no merge,
 purchase, provisioning, deployment or activation; those stay the separately
 authorised steps of §7 and §8.
 
 | # | Decision | Status / recommendation |
 |---|---|---|
 | AU-D1 | O-5(a): a staged correction withholds the whole season until an operator acts | **Accepted by the owner for 2.0.0 on 2026-10-21, with its limitation:** keep O-5(a), with the 3 h heartbeat alert; a staged correction holds every later change, a new race result included, until an operator disposes of it. O-5(b) (per-round carry-over) is a later design change |
-| AU-D2 | D-A, archive the 1.x AdMob units, before Jolpica data is published automatically in production (ADR 0028 D11) | Yes, before AU-7 |
-| AU-D3 | Privacy wording for production Worker logs (PR #82, still open; D-L engineering resolved by ADR 0028 D8) | Say that Worker logs store no app-user data and are kept 7 days |
+| AU-D2 | D-A, archive the 1.x AdMob units, before Jolpica data is published automatically in production (ADR 0028 D11) | **Accepted by the owner on 2026-10-23:** archive them before AU-7, accepting the irreversible end of 1.x ad revenue. The archiving is a separate AdMob operation, not done yet; AU-7 waits for it |
+| AU-D3 | Privacy wording for production Worker logs (PR #82; D-L engineering resolved by ADR 0028 D8) | **Accepted by the owner on 2026-10-23:** the policy's current wording in PR #82 (sections 2 and 3.2). The API keeps no record of the app's normal requests, and keeps a technical record of its own internal errors for 7 days, without the IP address, the request number or any device identifier |
 | AU-D4 | The alert channel: GitHub e-mail (committed) or an additional Cloudflare custom alert (beta, webhook) | GitHub e-mail first; revisit when the beta ends |
 | AU-D5 | A short but self-consistent race classification cannot be told from a complete one (curator decision C-1), and the API serves it as `final`. Options: keep publishing a first result at once (documented limitation); publish it as `provisional` and confirm it later (a contract change: the revision hashes `status`, and `provisional` means the provisional source); or see it twice before the first publication | **Accepted by the owner for 2.0.0 on 2026-10-21, with the limitation below** (implemented on PR #86): see a first result twice inside the window (§2 item 5, ADR 0028 D5 item 5). One hour of latency, no contract, API or app change. **Limitation:** Two matching observations reduce the risk of publishing a transient short classification; they do not prove that a classification is complete, and a short result Jolpica serves unchanged for an hour or more may still appear as "Final" until it is corrected (§3). A field-size completeness rule stays out: it can wrongly withhold a legitimately smaller field |
