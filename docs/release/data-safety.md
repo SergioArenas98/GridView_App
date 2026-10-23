@@ -25,7 +25,13 @@ tree shows. R9 is now a privacy-review blocker, not an owner choice (§4).
 Last on 2026-10-22 (master `8347adf`), §3.4, R2 and R8 record that W3
 deployed and verified the production logging settings, and §3.5 and §4.2
 record a read-only check of the Firebase Messaging campaign history, kept
-separate from the owner's statement.
+separate from the owner's statement. On 2026-10-23 (master `eeca9bf`) four
+owner decisions were recorded: D-A (archive the 1.x ad units before AU-7),
+D-DEL (no in-app deletion control), C4 (email stays the only contact
+channel) and AU-D3 (the policy's wording on the API's records). R4 is
+recorded as a technical fact, and R5 was checked against archived copies of
+Google's disclosure for SDK 23.6.0 (§3.5). These decisions do not answer R1,
+R2, R5, R8 or R9, which stay open for the privacy review (§4, §4.1).
 
 ## 1. Why the current declaration must change
 
@@ -123,6 +129,8 @@ or publishing step.
 |---|---|
 | `../technical/GridView_Observability.md` §2, §7 | Packaged Firebase components; what GridView adds to reports; what Firebase may process |
 | `android/app/build.gradle`, `verify<Variant>FirebaseDependencies` | Resolved set: Crashlytics, Performance, Remote Config, ABT, Installations, Sessions. Forbidden and absent: Analytics, measurement, ads, ads-identifier, Messaging, Auth, Crashlytics NDK |
+| Google Mobile Ads SDK, *Google Play's data disclosure requirements* (developers.google.com/admob/android/privacy/play-data-disclosure): Internet Archive captures `web.archive.org/web/20250108231607/` and `web.archive.org/web/20250211162031/` of that URL, and the live page read 2026-10-23 | Both captures say the page lists the data of "only the latest version (version 23.6.0)" of the SDK. The live page covers 25.5.0 of the "Google Mobile Ads SDK (Legacy)" (§3.5, R5) |
+| Google Mobile Ads SDK for Android, release notes (developers.google.com/admob/android/rel-notes, read 2026-10-23) | 23.6.0 was released on 2024-12-03 and 24.0.0 on 2025-02-24, so 23.6.0 was the latest version when both captures were taken. 23.6.0's notes say nothing about data collection (R5) |
 | Firebase, *Prepare your app for Google Play's Data safety section* (https://firebase.google.com/docs/android/play-data-disclosure, updated 2026-10-16) | Per-SDK data, purposes, HTTPS in transit, Performance's IP-to-country use |
 | Firebase, *Privacy and Security in Firebase* (https://firebase.google.com/support/privacy, updated 2026-10-14) | Retention: Crashlytics 90 days; Performance 60 days (IP-linked events 30); installation IDs until deleted; Google acts as processor |
 | Production-flavor profile APK built at `6aefcbf` (`aapt2 dump permissions`) | Permissions: `INTERNET`, `ACCESS_NETWORK_STATE` and the app's own non-exported receiver permission. No `AD_ID`, location, contacts, storage or camera permission |
@@ -145,7 +153,7 @@ or publishing step.
 |---|---|---|
 | Does your app collect or share any of the required user data types? | **Yes** | Firebase collects the types in §3.2 |
 | Is all of the user data collected by your app encrypted in transit? | **Yes** | Firebase sends over HTTPS; the GridView API is HTTPS-only and cleartext is blocked by the platform |
-| Do you provide a way for users to request that their data is deleted? | **No**, unless the owner first adds an in-app deletion control (decision D-DEL, R3) | No verified way exists to identify and delete one installation's Firebase data (R3). The policy no longer offers deletion. It says that one installation's Firebase data cannot currently be found or deleted (policy section 6) |
+| Do you provide a way for users to request that their data is deleted? | **No.** The owner decided on 2026-10-23 not to add an in-app deletion control (D-DEL, R3) | No verified way exists to identify and delete one installation's Firebase data (R3). The policy no longer offers deletion. It says that one installation's Firebase data cannot currently be found or deleted (policy section 6) |
 
 ### 3.2 Data types
 
@@ -219,7 +227,8 @@ include this answer.
   the bootstrap configuration, shows logs persisted with
   `invocation_logs = false`, and the dashboard's Workers Logs held no event
   for the public requests sent after the deploy. This is an engineering
-  check. It does not approve the policy's wording (AU-D3).
+  check. It did not approve the policy's wording; the owner accepted that
+  wording separately on 2026-10-23 (AU-D3).
 - The AU-7 deploy replaces that version, so AU-7 repeats both checks on its
   own version.
 - If production ever persists an IP address, a header, a public request's
@@ -369,10 +378,12 @@ declares no Firebase package. Earlier drafts of this section relied on it,
 and the facts above replace it.
 
 The Google Mobile Ads SDK disclosure
-(developers.google.com/admob/android/privacy/play-data-disclosure, updated
-2026-10-16) lists four data types as **collected and shared automatically**
-for advertising, analytics and fraud prevention, all encrypted in transit.
-State T adds these rows to §3.2:
+(developers.google.com/admob/android/privacy/play-data-disclosure) lists four data
+types as **collected and shared automatically** for advertising, analytics
+and fraud prevention, all encrypted in transit. The page covers only the
+SDK's latest version. The rows below therefore rest on two Internet Archive
+captures of the page taken while 1.x's version, 23.6.0, was the latest
+release (R5, below the tables). State T adds these rows to §3.2:
 
 | Play category → type | Collected | Shared | Purposes |
 |---|---|---|---|
@@ -403,9 +414,29 @@ Firebase Cloud Messaging adds this row:
   type, not per SDK. So R9 asks whether that type's purposes must also cover
   the FCM registration, and if so, which purpose is true. It does not ask
   whether to declare the type.
-- Both bundles ship `play-services-ads` 23.6.0. Google publishes the
-  disclosure for its current SDK only, so the review should confirm that it
-  applies (R5).
+- **R5, the SDK version (checked 2026-10-23).** Both bundles ship
+  `play-services-ads` 23.6.0. Google released it on 2024-12-03 and 24.0.0 on
+  2025-02-24 (SDK release notes). Two Internet Archive captures of the
+  disclosure page fall in that window, 2025-01-08 23:16Z and 2025-02-11
+  16:20Z, and their text is identical. Both say the page lists "the
+  end-user data collected by only the latest version (version 23.6.0)" of
+  the SDK. Both list the four types above, for advertising, analytics and
+  fraud prevention, encrypted in transit with TLS. The live page (read
+  2026-10-23) covers 25.5.0 of the "Google Mobile Ads SDK (Legacy)". Apart
+  from the product name, it differs in one example only.
+  - **That difference.** For 23.6.0, "Diagnostic information" includes
+    "crash logs, app launch time, hang rate, and energy usage". The live page
+    no longer names crash logs. Play has a separate **Crash logs** type, and
+    the rows above declare only Diagnostics for the ads SDK. Whether states 0
+    and T also need App info and performance → Crash logs, collected and
+    shared, with these purposes, is open under R5. Nothing is selected here.
+    The policy's 1.x list (section 3.4) gives examples only ("such as") and
+    is unchanged.
+  - **Remaining gaps.** The captures are a third party's archive of
+    Google's page, not a Google document published for that version. They
+    are Google's statement about its SDK, not an observation of what 1.x
+    sends: no 1.x traffic was captured. 23.6.0's release notes say nothing
+    about data collection either way.
 
 ### 3.6 Ads that installed 1.x copies keep requesting
 
@@ -468,8 +499,11 @@ only when it updates to 2.0.0 or the app is uninstalled. Devices on API 21
 to 23 cannot update (2.0.0 has minSdk 24), so they keep requesting until the
 app is uninstalled.
 
-**What would stop ad serving** (owner decision **D-A**, not taken; no AdMob
-change was made):
+**What will stop ad serving** (owner decision **D-A**, accepted on
+2026-10-23: archive the 1.x ad units before automatic production publication,
+AU-7, accepting that it irreversibly ends 1.x ad revenue). The archiving
+itself is a separate AdMob operation. It has not been done, and no AdMob
+change was made:
 
 - **Archive (remove) the 1.x ad units in AdMob.** Google's AdMob blog,
   *Archiving ad units* (2017-01-12), says "all ad serving and settings
@@ -495,32 +529,44 @@ the units are archived.
 |---|---|---|
 | R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | Declare it, if the review agrees it applies. Firebase's own disclosure lists it for Performance Monitoring. Country-level location is coarser than Play's 3 km² threshold, and Play's "Approximate location" type covers that. Play requires the declaration to be accurate and complete and may act on any discrepancy, in either direction. The answer must therefore follow the review's finding, not a preference for declaring more. |
 | R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | Yes. The production logging condition in §3.4 is committed (W1, PR #85, then ADR 0028 D8, PR #86). W3 verified it on the deployed Worker on 2026-10-22 (§3.4), and AU-7 repeats the check on the version it deploys. Do not submit state T or F until the check has passed for the version deployed at the time. |
-| R3 | Deletion-request answer | **Settled on the facts, 2026-10-22: no verified procedure exists.** Official Firebase documentation (read 2026-10-22) gives two routes. **(a) Delete the installation** by its Firebase installation ID, in the app (`FirebaseInstallations.delete()`) or on a server (Admin SDK `deleteInstallation(fid)`). The data tied to that ID is then removed "from live and backup systems of all Firebase services" within 180 days. **(b) Crashlytics `deleteCrashReports`** works only by a user ID set with the Crashlytics SDK. GridView sets none (`lib/core/observability/firebase/firebase_observability.dart`), so (b) cannot be used. Route (a) needs the installation ID, and the app shows it to nobody. A user's description of a crash (time, device model) does not yield it, and no console route from a crash to its installation ID was found or verified. Route (a)'s 180 days are longer than Crashlytics' 90-day and Performance Monitoring's 60- and 30-day retention, so for those it is no faster than expiry. It would remove the installation ID itself, which Firebase otherwise keeps until deleted. **Done:** the policy no longer promises deletion ("or until they are deleted at your request" is removed from section 6). It says one installation's Firebase data cannot currently be found or deleted. **Data safety:** answer **No**. **Owner decision D-DEL** (a product change, not made): an in-app control that calls `FirebaseInstallations.delete()` would let a user delete their own installation's data. Once it is verified on the real project, the answer could become Yes and the policy would describe it. GridView has no accounts, so Play's separate account-deletion requirement does not apply. |
-| R4 | Is the data collection optional? | **Required.** No in-app switch exists. Adding one would be a product change. |
-| R5 | State T rows for 1.x (§3.5) | Declare them as listed. Confirm the Google Mobile Ads disclosure applies to `play-services-ads` 23.6.0, the version both bundles ship. |
-| R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). Archiving the 1.x ad units in AdMob (decision D-A, §3.6) would stop ads being served to them, but not the SDK's requests. |
-| R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. Two follow-ups remain: the Play listing still says Spain (§6.2), and the review decides whether email alone is enough (§6.1). |
+| R3 | Deletion-request answer | **Settled on the facts, 2026-10-22: no verified procedure exists.** Official Firebase documentation (read 2026-10-22) gives two routes. **(a) Delete the installation** by its Firebase installation ID, in the app (`FirebaseInstallations.delete()`) or on a server (Admin SDK `deleteInstallation(fid)`). The data tied to that ID is then removed "from live and backup systems of all Firebase services" within 180 days. **(b) Crashlytics `deleteCrashReports`** works only by a user ID set with the Crashlytics SDK. GridView sets none (`lib/core/observability/firebase/firebase_observability.dart`), so (b) cannot be used. Route (a) needs the installation ID, and the app shows it to nobody. A user's description of a crash (time, device model) does not yield it, and no console route from a crash to its installation ID was found or verified. Route (a)'s 180 days are longer than Crashlytics' 90-day and Performance Monitoring's 60- and 30-day retention, so for those it is no faster than expiry. It would remove the installation ID itself, which Firebase otherwise keeps until deleted. **Done:** the policy no longer promises deletion ("or until they are deleted at your request" is removed from section 6). It says one installation's Firebase data cannot currently be found or deleted. **Data safety:** answer **No**. **Owner decision D-DEL, decided 2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality. The answer stays No, and the policy keeps saying that no verified procedure exists and one installation's data cannot be found or deleted. A control that calls `FirebaseInstallations.delete()` stays possible as a later product change. The remaining privacy obligations, such as how an erasure request is answered without a procedure, stay with the review. GridView has no accounts, so Play's separate account-deletion requirement does not apply. |
+| R4 | Is the data collection optional? | **Required. A technical fact, not a classification:** no in-app switch exists, so the user cannot turn collection off. Adding one would be a product change. |
+| R5 | State T rows for 1.x (§3.5) | Declare them as listed, subject to the owner's sign-off in the review. **Evidence checked 2026-10-23 (§3.5):** two Internet Archive captures of Google's disclosure, taken while 23.6.0 was the latest release, say they cover version 23.6.0. They list the same four types and purposes as the rows. **Still open:** that text also names crash logs, which Play treats as a separate type, and no row declares it for the ads SDK. The evidence is also an archived copy of Google's statement, not observed 1.x traffic. |
+| R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). The owner decided on 2026-10-23 to archive the 1.x ad units in AdMob before AU-7 (D-A, §3.6). That will stop ads being served to installed copies, but not the SDK's requests. The archiving is a separate AdMob step and has not been done. |
+| R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. **C4, decided 2026-10-23:** email stays the only contact channel (§6.1). One owner step remains: the Play listing still says Spain (§6.2). Whether rules outside the privacy notice require a geographic address stays open for the review (§6.1). |
 | R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions:** declare it, if the review agrees. Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines:** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. W3 verified it on the deployed Worker on 2026-10-22, and AU-7 repeats the check (§3.4). |
 | R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Blocked: specific privacy review. Not an owner choice, and not engineering-settled.** **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent. Separately, the Firebase console (read 2026-10-22) shows no campaign ever created in `gridview-fb20f` and no message in the last 90 days; it cannot show API sends or older reports. The SDK still registered every install and sent an installation ID and a token to Google. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. No other Play purpose fits. The evidence supports no purpose. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy's section 4 therefore states no basis for it. It must not be published with one chosen to complete it. See §4.2 for the questions and the possible outcomes. |
 
 ### 4.1 Owner decisions and their options
 
-The facts above are settled. The classifications and the treatment of the
-1.x ads are not, and they stay with the owner and the privacy review.
+The facts above are settled. On 2026-10-23 the owner decided D-A, D-DEL, C4
+and AU-D3, and R4 is recorded as a technical fact. **These decisions do not
+answer R1, R2, R5, R8 or R9.** R1, R2, R5 and R8 still need the owner's
+sign-off in the privacy review, and R9 needs the specific review in §4.2.
+
+**Decided**
+
+| # | Decision | Consequence |
+|---|---|---|
+| R4 | Not a decision: collection is **required**, because no in-app switch exists | No change needed. Making it optional would need a switch, a product change |
+| R6, D-A | **2026-10-23: archive the 1.x ad units in AdMob** (§3.6) before automatic production publication (AU-7, `automatic-updates.md` AU-D2). The irreversible end of 1.x ad revenue is accepted | Once archived, ads stop being served to installed copies. The SDK's requests and the Firebase registration continue until update or uninstall. The archiving is a separate AdMob operation, not done yet. Whoever holds publisher `pub-4763306780710624` must first check that the units belong only to 1.x; that account was not reachable from either Google account signed in to Chrome on 2026-10-22. Whether anything more is needed for the ads served without a consent message stays with the review (R6) |
+| D-DEL | **2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality | Data safety answers No to deletion. The policy says no verified procedure exists and one installation's data cannot be found or deleted. The remaining privacy obligations stay with the review |
+| C4 | **2026-10-23: email (gridviewapp1@gmail.com) stays the only contact channel** | No policy change. Whether a geographic address is required by rules outside the privacy notice stays open for the review (§6.1) |
+| AU-D3 | **2026-10-23: accept the policy's current wording** on the API (sections 2 and 3.2): no record of the app's normal requests, and a 7-day technical record of the API's own internal errors | No policy change. It accepts the wording only; the classification behind it is R2 and R8. W3's log check stands, and AU-7 repeats it on its own version |
+
+**Still open**
 
 | # | Option | Consequence |
 |---|---|---|
 | R1 | Declare Approximate location (recommended if the review agrees that Performance Monitoring's IP-to-country mapping is location) | The listing shows location collected. Matches Firebase's own disclosure |
 | | Do not declare it | Only if the review finds it is not location. Otherwise it is a discrepancy Play may act on |
-| R4 | Required (today's fact) | No change needed |
-| | Optional | Needs an in-app switch, a product change |
+| R2 | Accept that the API's handling of the IP address is ephemeral (§3.2, §3.4) | Holds only while the deployed Worker's logs pass the check (W3 done; AU-7 repeats it) |
+| | Do not accept it | The review decides what changes. Approximate location is already declared as not ephemeral as a whole, because of Firebase's part (§3.2) |
+| R5 | Declare the 1.x rows as listed (§3.5) | Rests on the archived 23.6.0 disclosure, not on observed 1.x traffic |
+| | Also declare Crash logs, collected and shared, for the ads SDK | Follows the 23.6.0 text, which names crash logs. Only if the review finds that the SDK's crash logs are Play's Crash logs type |
 | R8 | Declare App interactions for Sessions (recommended if the review agrees) | Matches Firebase's disclosure of the session start |
 | | Do not declare it | Only if the review finds a session start is not an app interaction |
 | R9 | Not an owner option. A privacy-review blocker (§4.2) | Data safety states 0 and T, and the policy's publication, wait for it |
-| R6, D-A | Leave the 1.x ad units serving | 1.x revenue continues. Ads with no consent message keep being served to installed copies until they update or uninstall |
-| | Archive the 1.x ad units in AdMob (§3.6) | Serving stops, irreversibly, and 1.x revenue ends. The SDK's requests and the Firebase registration continue until update or uninstall. The AdMob account (publisher `pub-4763306780710624`) was not reachable from either Google account signed in to Chrome on 2026-10-22, so whoever holds it must check the units and act |
-| D-DEL | No in-app deletion control (current) | Data safety answers No to deletion. The policy says one installation's data cannot be found or deleted |
-| | Add one (`FirebaseInstallations.delete()`) | A product change and a new release. Data is removed within 180 days. Answer Yes once it is verified on the real project |
 
 ### 4.2 R9 privacy-review blocker: 1.x Firebase Cloud Messaging
 
@@ -622,14 +668,15 @@ page 35. **No home address is assumed to be publishable.**
 | Requirement | What the policy gives | Assessment |
 |---|---|---|
 | Art. 13(1)(a): "the identity and the contact details of the controller" | Full legal name, the developer name, the country and an email address | **Met.** Article 13 does not require a postal address, and email is a contact detail. |
-| WP260 Annex on Art. 13(1)(a): the information "should allow for easy identification of the controller and preferably allow for different forms of communications with the data controller (e.g. phone number, email, postal address, etc.)" | One channel: email | **Meets the requirement, not the recommendation.** "Preferably" is guidance. Whether one channel is enough is for the privacy review. A second channel, if wanted, should **not** be the home address; a correspondence or mail-forwarding address would do. That is an owner decision, and nothing here assumes one. |
+| WP260 Annex on Art. 13(1)(a): the information "should allow for easy identification of the controller and preferably allow for different forms of communications with the data controller (e.g. phone number, email, postal address, etc.)" | One channel: email | **Meets the requirement, not the recommendation.** "Preferably" is guidance. **Owner decision C4, 2026-10-23: email stays the only channel.** No second channel is added, and no home address is published. |
 | Art. 13(1)(a): the representative | None | **Not applicable.** Article 27 applies only to controllers not established in the EU. |
 | Art. 13(1)(b): the data protection officer | None | Applies only where a DPO is designated. None is. |
 | Art. 12(2) and (3): facilitate the exercise of rights; answer within one month | A mailbox the owner uses | **Met for receiving requests**, given the owner's confirmation. Fulfilling a deletion request is still open (R3). |
 | Art. 13(2)(d) with Art. 77: the right to complain, "in particular in the Member State of his or her habitual residence, place of work or of an alleged infringement" (WP260 Annex) | That wording, and the Irish Data Protection Commission as the controller's authority | **Met.** The policy no longer names only the Spanish AEPD. |
 
 **Not assessed here:** information duties outside the privacy notice, such
-as the e-commerce rules on a service provider's "geographic address". They
+as the e-commerce rules on a service provider's "geographic address". C4
+does not settle them. They
 are for the privacy review.
 
 ### 6.2 Inconsistencies left for owner steps
