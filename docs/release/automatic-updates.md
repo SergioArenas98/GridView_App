@@ -325,7 +325,7 @@ Each phase stays observable until the next is explicitly advanced.
 | Phase | Who acts | What happens | It lasts until |
 |---|---|---|---|
 | 1. First result | Nobody | The controlled provider serves round 22's result; GridView fetches, validates and publishes it on its own schedule | The result is served, then it stays served |
-| 2. First check | The owner, whenever convenient | Opens the installed app and sees the result | The operator advances, at the latest `T′` + 13 days |
+| 2. First check | The owner, whenever convenient | Opens the installed app and sees the result | The operator advances, at the latest `T′` + 12 days |
 | 3. Advance | The operator | One `kv bulk put` changes the controlled provider's round 22 document to the correction | Immediate |
 | 4. Correction | Nobody, then the owner whenever convenient | GridView fetches, validates and publishes the correction; a later app launch shows it | The correction stays served |
 
@@ -352,8 +352,8 @@ All six must pass. The record keeps each one's evidence with its instant.
 
 **Failure.** Any of these fails the demonstration: a result or correction that
 never reaches the API or the app; a wrong winner or points; a staged
-correction; a stop or block that needs an operator; a heartbeat stale while
-the schedule is live and the monitor can read it.
+correction; a stop or block that needs an operator; a heartbeat that goes
+stale after the first scheduled run, while the schedule is live.
 
 **Missing logs are not a failure.** A persisted line that cannot be found, an
 observer run GitHub dropped, or an hour with no sample is a diagnostic evidence
@@ -392,22 +392,28 @@ A correction must reach an unsettled result. A result settles at `T′` + 24 h,
 and a correction after that is staged and stops the season for an operator
 (§3), which this demonstration must not need. So phase 1's source keeps the
 result unsettled: from `T′` + 20 h round 22's document answers empty. GridView
-treats that as a failed check. The last release keeps serving, the heartbeat
-keeps advancing, and unchanged content publishes nothing, so the result stays
-visible.
+treats that as a failed check and withholds those runs, so nothing publishes.
+The last release keeps serving, the heartbeat keeps advancing, and the result
+stays visible.
 
-- **Latest advance: `T′` + 13 days.** Round 22 reaches its ceiling at day 14.
-  After that a correction would be staged, so do not load it. The demonstration
-  has then not passed, and it needs a new plan: round 22 cannot be replayed once
-  it is published.
+- **Latest advance: `T′` + 12 days.** Never load the correction later. Round
+  22's last check is at day 14, and a correction first read there is staged,
+  which stops the season for an operator. Any load after the `T′` + 13 days
+  00:17 run ends that way, so this limit leaves a day's margin. Past it the
+  demonstration has not passed and needs a new plan: round 22 cannot be replayed
+  once it is published.
 - **Preferred advance: within 5 days of `T′`,** so that the correction is
-  published before round 23 starts. A later advance still works, but round 23
-  never gets a result, so from `T′` + 7 days 12 h the monitor fails hourly on
-  `results-late`, and Home changes again.
-- **Expected findings.** A monitor run fails, and GitHub e-mails the owner, for
-  `results-late` in two cases only: from the first run until the calendar
-  release two hours later (round 22's old start), and from `T′` + 7 days 12 h
-  (round 23). Anything else is a real finding.
+  published before round 23 starts. A later advance still works, but Home
+  changes again once round 23 has started.
+- **Expected findings.** A monitor run fails, and GitHub e-mails the owner, in
+  three cases only:
+  - `heartbeat-stale`, before the first scheduled run writes its heartbeat;
+  - `results-late`, from then until the calendar release two hours later
+    (round 22's old start);
+  - `results-late`, hourly from `T′` + 7 days 12 h until the removal, in any
+    phase, because round 23 never gets a result.
+
+  Anything else is a real finding.
 
 The hold is test setup in the source file. It changes nothing in GridView.
 
@@ -425,8 +431,9 @@ its own **[approval]**:
 
 1. Re-read the e2e and staging state read-only, and confirm the schedule is `[]`.
 2. Choose a race instant `T′` at minute 00, at least 4 h ahead and early enough
-   that the shifted season stays in 2026; the export refuses otherwise. Generate
-   both phases' files outside the repository, once each:
+   that the shifted season stays in 2026; the export refuses otherwise. From a
+   checkout of the schedule PR's head, because `master` has no phases until it
+   merges, generate both phases' files outside the repository, once each:
 
    ```text
    GRIDVIEW_CONTROLLED_SOURCE_OUT=<file> GRIDVIEW_CONTROLLED_RACE_START=<T′>
@@ -436,9 +443,10 @@ its own **[approval]**:
 
    `result` writes 29 documents, about 125 KB: rounds 1–21 classified, round 22
    racing at `T′` with its result from `T′` + 2 h, and the hold. `correction`
-   writes the one document the advance changes. Replay both files' exact bytes
-   in-process before loading, the way `controlled-source.test.ts` does. Keep
-   the correction file for phase 3.
+   writes the one document the advance changes. Confirm both: 29 entries with
+   round 22's document ending empty, and exactly 1 entry. Replay both files'
+   exact bytes in-process before loading, the way `controlled-source.test.ts`
+   does. Keep the correction file for phase 3.
 3. Load the `result` file: `npm exec -- wrangler kv bulk put <file> --binding
    GRIDVIEW_DATA --env e2e --remote`. Read it back. It overwrites the same 29
    keys.
@@ -489,12 +497,14 @@ its own **[approval]**:
 #### Removal
 
 The served result outlives the schedule, so removal can wait until A1–A6 are
-recorded. Each step is its own **[approval]**:
+recorded. Do it soon after: from `T′` + 7 days 12 h every observer run fails.
+Each step is its own **[approval]**:
 
 1. Download the observer artifacts for the two publications, and export any
    persisted logs still within their 7 days as diagnostics.
-2. One PR sets `crons = []` for `env.e2e` and deletes the observer workflow, its
-   script and its test. The artifacts outlive the workflow by their 90 days.
+2. One PR sets `crons = []` for `env.e2e`, reverts the four tests that pin the
+   schedule (Setup, step 4), and deletes the observer workflow, its script and
+   its test. The artifacts outlive the workflow by their 90 days.
 3. Merge it, run `triggers deploy --env e2e`, and confirm `[]` through the
    schedules API.
 4. Record A1–A6 with their evidence, the coverage limits above and any evidence

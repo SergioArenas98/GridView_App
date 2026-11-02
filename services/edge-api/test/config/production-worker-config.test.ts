@@ -192,7 +192,7 @@ describe('the resolved production configuration', () => {
     }
   });
 
-  it('leaves the demonstration Worker bound to its own namespace, scheduled for the AU-3 replay', () => {
+  it('leaves the demonstration Worker bound to its own namespace, scheduled for the AU-3 demonstration', () => {
     const demonstration = resolved('e2e');
     expect(demonstration.name).toBe('gridview-api-e2e');
     expect(demonstration.kv_namespaces).toEqual([
