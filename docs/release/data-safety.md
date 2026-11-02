@@ -35,8 +35,13 @@ R2, R5, R8 or R9, which stay open for the privacy review (§4, §4.1). Later
 on 2026-10-23 the R5 crash-logs omission was closed on the engineering side.
 The 23.6.0 disclosure names crash logs, and Play defines Crash logs as a
 separate type. So states 0 and T gain a 1.x Crash logs row, and the policy's
-1.x list names crash logs (§3.5). This is a recommendation awaiting the
+1.x list names crash logs (§3.5). This was a recommendation awaiting the
 owner's final sign-off.
+On 2026-11-02 the owner's acceptances were recorded (§4, §4.1): R1 for the
+draft, R5 including Crash logs, R8 for Firebase Sessions, and R2
+conditionally, with confirmation of the complete processing scope still
+open. R9, R6's remediation and the geographic-address question (§6.1) stay
+unresolved.
 
 ## 1. Why the current declaration must change
 
@@ -171,8 +176,8 @@ ephemerally** = no, **required** (the user cannot turn it off in the app).
 | App info and performance → **Crash logs** | Crashlytics stack traces and app state at crash | Analytics |
 | App info and performance → **Diagnostics** | Performance Monitoring (start time, trace durations, CPU and memory); Sessions metrics | Analytics |
 | Device or other IDs → **Device or other IDs** | Firebase installation ID; Crashlytics installation UUID | Analytics |
-| Location → **Approximate location** | Performance Monitoring maps IP addresses to countries. The GridView API also receives the IP address with each request, to serve it; that part is ephemeral (§3.4), but Firebase's part is not, so the type as a whole is not | Analytics; **App functionality** (the API) — **review items R1, R2** |
-| App activity → **App interactions** | Firebase Sessions records when the app is foregrounded to start a session ("application metrics", Firebase disclosure). The API's persisted logs add nothing here (§3.4) | Analytics — **review item R8** |
+| Location → **Approximate location** | Performance Monitoring maps IP addresses to countries. The GridView API also receives the IP address with each request, to serve it; that part is ephemeral (§3.4), but Firebase's part is not, so the type as a whole is not | Analytics; **App functionality** (the API) — **R1 accepted for the draft; R2 conditionally accepted (§4.1)** |
+| App activity → **App interactions** | Firebase Sessions records when the app is foregrounded to start a session ("application metrics", Firebase disclosure). The API's persisted logs add nothing here (§3.4) | Analytics — **R8 accepted for Sessions (§4.1)** |
 
 "Analytics" is Play's purpose for monitoring app performance and diagnosing
 problems. GridView uses this data for nothing else.
@@ -190,9 +195,10 @@ and the build forbids the Analytics SDK.
 
 Requests to the GridView API (Cloudflare Workers) expose the device IP address
 to Cloudflare, as any network request does. GridView does not store or use it
-beyond serving the request, so this is ephemeral processing (**review item
-R2**). It holds only while no persisted record carries the IP address or
-anything that links a request to an installation.
+beyond serving the request, so this is ephemeral processing (**R2,
+conditionally accepted, with the complete processing scope still to be
+confirmed; §4.1**). It holds only while no persisted record carries the IP
+address or anything that links a request to an installation.
 
 **What production persists (ADR 0028 D8, deployed and verified in W3 on
 2026-10-22).**
@@ -435,8 +441,8 @@ Firebase Cloud Messaging adds this row:
   (Legacy)". Apart from the product name, it differs in one example only.
   The saved copies were re-hashed on 2026-10-23 and match the SHA-256 values
   recorded when they were downloaded.
-  - **Crash logs (engineering recommendation, awaiting the owner's final
-    sign-off).** For 23.6.0, "Diagnostic information" "Collects information
+  - **Crash logs (accepted by the owner, R5, §4.1).** For 23.6.0,
+    "Diagnostic information" "Collects information
     related to the performance of your app and the SDK, including crash
     logs, app launch time, hang rate, and energy usage". The live page no
     longer names crash logs, but 1.x ships 23.6.0. Play defines **Crash
@@ -548,22 +554,25 @@ the units are archived.
 
 | # | Question | Engineering recommendation |
 |---|---|---|
-| R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | Declare it, if the review agrees it applies. Firebase's own disclosure lists it for Performance Monitoring. Country-level location is coarser than Play's 3 km² threshold, and Play's "Approximate location" type covers that. Play requires the declaration to be accurate and complete and may act on any discrepancy, in either direction. The answer must therefore follow the review's finding, not a preference for declaring more. |
-| R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | Yes. The production logging condition in §3.4 is committed (W1, PR #85, then ADR 0028 D8, PR #86). W3 verified it on the deployed Worker on 2026-10-22 (§3.4), and AU-7 repeats the check on the version it deploys. Do not submit state T or F until the check has passed for the version deployed at the time. |
+| R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | **Accepted by the owner for the draft (recorded 2026-11-02): declare Approximate location.** Firebase's own disclosure lists it for Performance Monitoring. Country-level location is coarser than Play's 3 km² threshold, and Play's "Approximate location" type covers that. Play requires the declaration to be accurate and complete and may act on any discrepancy, in either direction. The answer must therefore follow the review's finding, not a preference for declaring more. |
+| R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | **Conditionally accepted by the owner (recorded 2026-11-02): confirmation of the complete processing scope is still open.** The engineering answer is yes. The production logging condition in §3.4 is committed (W1, PR #85, then ADR 0028 D8, PR #86). W3 verified it on the deployed Worker on 2026-10-22 (§3.4), and AU-7 repeats the check on the version it deploys. Do not submit state T or F until the check has passed for the version deployed at the time. |
 | R3 | Deletion-request answer | **Settled on the facts, 2026-10-22: no verified procedure exists.** Official Firebase documentation (read 2026-10-22) gives two routes. **(a) Delete the installation** by its Firebase installation ID, in the app (`FirebaseInstallations.delete()`) or on a server (Admin SDK `deleteInstallation(fid)`). The data tied to that ID is then removed "from live and backup systems of all Firebase services" within 180 days. **(b) Crashlytics `deleteCrashReports`** works only by a user ID set with the Crashlytics SDK. GridView sets none (`lib/core/observability/firebase/firebase_observability.dart`), so (b) cannot be used. Route (a) needs the installation ID, and the app shows it to nobody. A user's description of a crash (time, device model) does not yield it, and no console route from a crash to its installation ID was found or verified. Route (a)'s 180 days are longer than Crashlytics' 90-day and Performance Monitoring's 60- and 30-day retention, so for those it is no faster than expiry. It would remove the installation ID itself, which Firebase otherwise keeps until deleted. **Done:** the policy no longer promises deletion ("or until they are deleted at your request" is removed from section 6). It says one installation's Firebase data cannot currently be found or deleted. **Data safety:** answer **No**. **Owner decision D-DEL, decided 2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality. The answer stays No, and the policy keeps saying that no verified procedure exists and one installation's data cannot be found or deleted. A control that calls `FirebaseInstallations.delete()` stays possible as a later product change. The remaining privacy obligations, such as how an erasure request is answered without a procedure, stay with the review. GridView has no accounts, so Play's separate account-deletion requirement does not apply. |
 | R4 | Is the data collection optional? | **Required. A technical fact, not a classification:** no in-app switch exists, so the user cannot turn collection off. Adding one would be a product change. |
-| R5 | The 1.x rows of states 0 and T (§3.5) | **Engineering recommendation, awaiting the owner's final sign-off:** declare them as listed, including the 1.x **Crash logs** row (collected, shared; advertising, analytics and fraud prevention). **Evidence (§3.5):** two Internet Archive captures of Google's disclosure, taken while 23.6.0 was the latest release, say they cover version 23.6.0. Their "Diagnostic information" names crash logs, which Play's definitions place under Crash logs, and the rest under Diagnostics. **Limits:** archived copies of Google's published statement about its SDK, not observed 1.x traffic. Nothing contradicts them, so no traffic capture is required. |
+| R5 | The 1.x rows of states 0 and T (§3.5) | **Accepted by the owner (recorded 2026-11-02):** declare them as listed, including the 1.x **Crash logs** row (collected, shared; advertising, analytics and fraud prevention). **Evidence (§3.5):** two Internet Archive captures of Google's disclosure, taken while 23.6.0 was the latest release, say they cover version 23.6.0. Their "Diagnostic information" names crash logs, which Play's definitions place under Crash logs, and the rest under Diagnostics. **Limits:** archived copies of Google's published statement about its SDK, not observed 1.x traffic. Nothing contradicts them, so no traffic capture is required. |
 | R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). The owner decided on 2026-10-23 to archive the 1.x ad units in AdMob before AU-7 (D-A, §3.6). That will stop ads being served to installed copies, but not the SDK's requests. The archiving is a separate AdMob step and has not been done. |
 | R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. **C4, decided 2026-10-23:** email stays the only contact channel (§6.1). One owner step remains: the Play listing still says Spain (§6.2). Whether rules outside the privacy notice require a geographic address stays open for the review (§6.1). |
-| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions:** declare it, if the review agrees. Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines:** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. W3 verified it on the deployed Worker on 2026-10-22, and AU-7 repeats the check (§3.4). |
+| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions: accepted by the owner (recorded 2026-11-02), declare App interactions.** Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines (not part of that acceptance, §4.1):** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. W3 verified it on the deployed Worker on 2026-10-22, and AU-7 repeats the check (§3.4). |
 | R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Blocked: specific privacy review. Not an owner choice, and not engineering-settled.** **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent. Separately, the Firebase console (read 2026-10-22) shows no campaign ever created in `gridview-fb20f` and no message in the last 90 days; it cannot show API sends or older reports. The SDK still registered every install and sent an installation ID and a token to Google. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. No other Play purpose fits. The evidence supports no purpose. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy's section 4 therefore states no basis for it. It must not be published with one chosen to complete it. See §4.2 for the questions and the possible outcomes. |
 
 ### 4.1 Owner decisions and their options
 
 The facts above are settled. On 2026-10-23 the owner decided D-A, D-DEL, C4
-and AU-D3, and R4 is recorded as a technical fact. **These decisions do not
-answer R1, R2, R5, R8 or R9.** R1, R2, R5 and R8 still need the owner's
-sign-off in the privacy review, and R9 needs the specific review in §4.2.
+and AU-D3, and R4 is recorded as a technical fact. Those decisions do not
+answer R1, R2, R5, R8 or R9. The owner's acceptances recorded on 2026-11-02
+answer R1 for the draft, R5 and R8's Sessions part, and R2 conditionally.
+**They do not answer R9, which needs the specific review in §4.2, and they do
+not decide R6's remediation or whether the geographic-address rules apply
+(§6.1).**
 
 **Decided**
 
@@ -574,19 +583,19 @@ sign-off in the privacy review, and R9 needs the specific review in §4.2.
 | D-DEL | **2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality | Data safety answers No to deletion. The policy says no verified procedure exists and one installation's data cannot be found or deleted. The remaining privacy obligations stay with the review |
 | C4 | **2026-10-23: email (gridviewapp1@gmail.com) stays the only contact channel** | No policy change. Whether a geographic address is required by rules outside the privacy notice stays open for the review (§6.1) |
 | AU-D3 | **2026-10-23: accept the policy's current wording** on the API (sections 2 and 3.2): no record of the app's normal requests, and a 7-day technical record of the API's own internal errors | No policy change. It accepts the wording only; the classification behind it is R2 and R8. W3's log check stands, and AU-7 repeats it on its own version |
+| R1 | **Accepted for the draft (recorded 2026-11-02): declare Approximate location** for Performance Monitoring's IP-to-country mapping | The listing shows location collected. Matches Firebase's own disclosure |
+| R5 | **Accepted (recorded 2026-11-02): the 1.x rows as listed (§3.5), including Crash logs** | States 0 and T declare what Google's 23.6.0 disclosure lists, mapped to Play's types. Rests on archived copies of Google's statement, not on observed 1.x traffic. It does not settle the purpose of the Firebase Cloud Messaging row, so both states still wait for R9 |
+| R8 | **Accepted (recorded 2026-11-02): declare App interactions for Firebase Sessions** | Matches Firebase's disclosure of the session start. It names Sessions only, so the API's lines stay open below |
 
 **Still open**
 
 | # | Option | Consequence |
 |---|---|---|
-| R1 | Declare Approximate location (recommended if the review agrees that Performance Monitoring's IP-to-country mapping is location) | The listing shows location collected. Matches Firebase's own disclosure |
-| | Do not declare it | Only if the review finds it is not location. Otherwise it is a discrepancy Play may act on |
-| R2 | Accept that the API's handling of the IP address is ephemeral (§3.2, §3.4) | Holds only while the deployed Worker's logs pass the check (W3 done; AU-7 repeats it) |
-| | Do not accept it | The review decides what changes. Approximate location is already declared as not ephemeral as a whole, because of Firebase's part (§3.2) |
-| R5 | Sign off the 1.x rows as listed (§3.5), including Crash logs (engineering recommendation) | States 0 and T declare what Google's 23.6.0 disclosure lists, mapped to Play's types. Rests on archived copies of Google's statement, not on observed 1.x traffic |
-| | Do not sign off | States 0 and T cannot be submitted until the review settles the 1.x rows |
-| R8 | Declare App interactions for Sessions (recommended if the review agrees) | Matches Firebase's disclosure of the session start |
-| | Do not declare it | Only if the review finds a session start is not an app interaction |
+| R2 | **Conditionally accepted (recorded 2026-11-02):** the API's handling of the IP address is ephemeral (§3.2, §3.4). **Confirmation of the complete processing scope is still open** | Holds only once that scope is confirmed, and while the deployed Worker's logs pass the check (W3 done; AU-7 repeats it) |
+| | If the scope is not confirmed | The review decides what changes. Approximate location is already declared as not ephemeral as a whole, because of Firebase's part (§3.2) |
+| R8, API lines | No row for the API's persisted lines (engineering recommendation, §3.4). The acceptance above does not name them | If the review wants a row, it carries the API source and the App functionality purpose (release plan P3) |
+| R6 | Whether more than disclosure and D-A is needed for the 1.x ads served without a consent message. Unresolved | The review decides (§4) |
+| §6.1 | Whether a geographic address is required by rules outside the privacy notice. Unresolved | The review decides (§6.1) |
 | R9 | Not an owner option. A privacy-review blocker (§4.2) | Data safety states 0 and T, and the policy's publication, wait for it |
 
 ### 4.2 R9 privacy-review blocker: 1.x Firebase Cloud Messaging
