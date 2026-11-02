@@ -309,9 +309,11 @@ staging state").
 ### 8.2 The demonstration (AU-3)
 
 **Revised by the owner on 2026-11-02.** The demonstration is asynchronous and
-functional. Nobody has to be present at a set time. This replaces the timed
-watch, its fixed dates and its rule that every scheduled run needs its own
-evidence. AU-3 stays pending until the criteria below pass.
+functional. The owner does not have to be present at a set time. The
+operator's session does stay on through an evening run, to observe, advance
+and stop. This replaces the timed watch, its fixed dates and its rule that every
+scheduled run needs its own evidence. AU-3 stays pending until the criteria
+below pass.
 
 The demonstration answers one question: does a race result, and then a
 correction to it, reach the installed app with nobody acting on GridView?
@@ -324,10 +326,10 @@ Each phase stays observable until the next is explicitly advanced.
 
 | Phase | Who acts | What happens | It lasts until |
 |---|---|---|---|
-| 1. First result | Nobody | The controlled provider serves round 22's result; GridView fetches, validates and publishes it on its own schedule | The result is served, then it stays served |
+| 1. First result | GridView, with the operator observing | The controlled provider serves round 22's result; GridView fetches, validates and publishes it on its own schedule | The result is served, then it stays served |
 | 2. First check | The owner, whenever convenient | Opens the installed app and sees the result | The operator advances, at the latest `T′` + 12 days |
 | 3. Advance | The operator | One `kv bulk put` changes the controlled provider's round 22 document to the correction | Immediate |
-| 4. Correction | Nobody, then the owner whenever convenient | GridView fetches, validates and publishes the correction; a later app launch shows it | The correction stays served |
+| 4. Correction | GridView, then the owner whenever convenient | GridView fetches, validates and publishes the correction; a later app launch shows it | The correction stays served |
 
 Changing the controlled provider is test setup: it stands for Jolpica changing
 its data. Nothing is sent to GridView's admin routes at any point, and nothing
@@ -445,7 +447,8 @@ that race (`controlled-source.test.ts`). The Worker carries that fix since
 deployment `6b52bc02`.
 
 Each step below is an **[approval]**. The owner may give one approval for the
-whole bounded sequence, naming `F` and the reviewed commits it runs from.
+whole bounded sequence, naming `F`, the reviewed commits it runs from, and any
+retry with a later `F` it allows.
 
 1. Re-read the e2e and staging state read-only, and confirm the schedule is `[]`.
 2. Choose `F`, the first `:17` run the steps below can reach. The race instant
@@ -474,11 +477,18 @@ whole bounded sequence, naming `F` and the reviewed commits it runs from.
    Run `npm exec -- wrangler triggers deploy --env e2e` there, and confirm through
    the schedules API. The PR is not merged for the run, so `master` stays at
    `crons = []` and stays the stop.
+   - **Do not merge the PR until Removal step 4 has returned it to `crons = []`.**
+     Merged with the cron, `master` would set the schedule again instead of
+     stopping it. Until then the PR head's `wrangler.toml` says scheduled, even
+     after the stop.
    - **The first scheduled run must come before round 22's result exists.**
-     Confirm from `/v1/status` that the heartbeat moved at `F`. If it has not by
-     `F` + 30 min, stop before `F` + 43 min, choose a new `F` and regenerate. A
-     first run after that reads the result on round 22's old anchor, and the
-     correction does not publish. Round 22 cannot be replayed after that.
+     Confirm from `/v1/status`, read with `Cache-Control: no-cache`, that the
+     heartbeat moved at `F`. If it has not by `F` + 30 min, stop before `F` + 43
+     min, choose a new `F` and regenerate. A first run after that reads the
+     result on round 22's old anchor, and the correction does not publish. Round
+     22 cannot be replayed after that. The heartbeat shows that the run happened,
+     not that it read the calendar; the read-back in step 3 covers the calendar
+     document.
    - **The load comes first for the same reason.**
    - The PR changes that one list in `wrangler.toml` and the four tests that
      pin it: `demonstration-worker-config.test.ts`,
@@ -489,7 +499,7 @@ whole bounded sequence, naming `F` and the reviewed commits it runs from.
      `wrangler deploy --env e2e` from that checkout would set it too, because a
      deploy applies the committed list.
    - To stop at once, run `triggers deploy` from a clean checkout of `master`,
-     after resolving its e2e list to `[]`.
+     after confirming that it resolves e2e to `[]`.
 5. Observe from the operator's machine. After each scheduled run, run the
    observer once from PR #96's head: `node scripts/monitor/au3-e2e-observer.mjs
    --out <dir>`. It executes the real `automation-monitor.mjs` against the e2e
@@ -501,9 +511,9 @@ whole bounded sequence, naming `F` and the reviewed commits it runs from.
 
 #### Running the phases
 
-1. **Phase 1, unattended.** Nothing to do. Read A1 at any later time from the
-   observer's record or one public GET. If the API has no result at `F` + 4 h,
-   stop and diagnose.
+1. **Phase 1.** Nobody acts on GridView. The operator confirms the first run,
+   then reads A1 from the observer's record or one public GET. If the API has no
+   result at `F` + 4 h, stop and diagnose.
 2. **Phase 2, the owner.** Open the installed e2e app, do not reinstall it, and
    take a screenshot (A2). Any time after A1, for as long as the phase lasts.
 3. **Phase 3, one [approval].** After A1 and A2 and before the latest advance,
@@ -511,7 +521,7 @@ whole bounded sequence, naming `F` and the reviewed commits it runs from.
    the same `kv bulk put`. Read it back: exactly one key changes (A3). To finish
    the same evening, load it at least 5 minutes before the `F` + 3 h run, which
    allows for KV propagation. A later load only moves phase 4.
-4. **Phase 4, unattended.** Read A4 as A1. If the API has not changed two days
+4. **Phase 4.** Nobody acts on GridView. Read A4 as A1. If the API has not changed two days
    and three hours after the advance, stop and diagnose. Then the owner opens
    the app and takes a screenshot (A5). Any launch after A4 finds the correction,
    because the manifest expires an hour after each release.
@@ -523,8 +533,8 @@ passes, before the owner's second phone check. Each step is an **[approval]**,
 which the sequence's one approval may cover:
 
 1. Run `npm exec -- wrangler triggers deploy --env e2e` from a clean checkout of
-   `master`, after resolving its e2e list to `[]`. Confirm `[]` through the
-   schedules API; with an empty list the command can print "Deployed" and never
+   `master`, after confirming that it resolves e2e to `[]`. Confirm `[]` through
+   the schedules API; with an empty list the command can print "Deployed" and never
    exit, so verify, then end it.
 2. Save the observer records, and export any persisted logs still within their
    7 days as diagnostics.
@@ -532,8 +542,8 @@ which the sequence's one approval may cover:
    gaps. AU-3 is passed only if all six pass.
 4. Before the schedule PR merges, its branch returns to `crons = []` and reverts
    the four tests that pin the schedule (Setup, step 4), so `master` never
-   carries a cron. If PR #96 was merged, delete its workflow, script and test in
-   the same change.
+   carries a cron. If PR #96 was merged, disable its workflow at the stop, and
+   delete the workflow, script and test in a separate PR.
 
 ### 8.3 Live staging (AU-4)
 

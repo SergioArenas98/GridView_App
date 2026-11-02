@@ -28,13 +28,7 @@ import {
   demonstrationPhases,
   shiftedRaceStart,
 } from './controlled-season';
-import {
-  AutomaticUpdateStage,
-  DAY,
-  HOUR,
-  MINUTE,
-  type TickRecord,
-} from './stage';
+import { AutomaticUpdateStage, HOUR, MINUTE, type TickRecord } from './stage';
 
 const globalFetch = vi.fn(async () => {
   throw new Error('the global fetch must not be reached');
@@ -478,22 +472,17 @@ describe.each(['2026-11-05T09:00:00.000Z', '2026-11-12T09:00:00.000Z'])(
     });
 
     it.each([
-      ['within the hour, so that one evening holds both', 0, 2 * HOUR],
-      ['an hour late, at the next confirmation', HOUR, 5 * HOUR],
-      [
-        'after the result would have settled',
-        2 * DAY - 6 * HOUR,
-        2 * DAY + 3 * HOUR,
-      ],
-      [
-        'at the latest advance, after round 23 has started',
-        12 * DAY - 6 * HOUR,
-        2 * DAY + 3 * HOUR,
-      ],
+      // The last run before the load and the hours from it to publication,
+      // as measured. The slowest case is the 50 h after a daily check.
+      ['within the hour, so that one evening holds both', 5, 2],
+      ['an hour late, at the next confirmation', 6, 5],
+      ['after the result would have settled', 47, 25],
+      ['at the latest advance, after round 23 has started', 12 * 24 - 1, 27],
+      ['just past the latest advance, the slowest case', 12 * 24, 50],
     ])(
       'publishes the result, holds it, and publishes the correction advanced %s',
       { timeout: 180_000 },
-      async (_when, heldFor, publishedWithin) => {
+      async (_when, lastRunHour, publishedAfterHours) => {
         const kv = new MemoryKv();
         const stage = await pausedStage(kv);
         const phases = demonstrationPhases(RACE_START);
@@ -517,10 +506,8 @@ describe.each(['2026-11-05T09:00:00.000Z', '2026-11-12T09:00:00.000Z'])(
 
         // Phase 2: however long the owner takes, the result stays served and
         // the runs stay healthy.
-        const lastHeld = new Date(
-          Date.parse(published) + heldFor,
-        ).toISOString();
-        if (heldFor > 0) {
+        const lastHeld = after(lastRunHour * HOUR + 17 * MINUTE);
+        if (lastHeld !== published) {
           await stage.hourly(
             new Date(Date.parse(published) + HOUR).toISOString(),
             lastHeld,
@@ -535,11 +522,14 @@ describe.each(['2026-11-05T09:00:00.000Z', '2026-11-12T09:00:00.000Z'])(
         // Phase 3: the only act is loading the changed document.
         kv.values.set(RESULTS_KEY, JSON.stringify(correction.get(RESULTS_KEY)));
 
-        // Phase 4.
+        // Phase 4: published at this run and no earlier.
+        const publication = Date.parse(lastHeld) + publishedAfterHours * HOUR;
         await stage.hourly(
           new Date(Date.parse(lastHeld) + HOUR).toISOString(),
-          new Date(Date.parse(lastHeld) + publishedWithin).toISOString(),
+          new Date(publication - HOUR).toISOString(),
         );
+        expect(await winnerPoints(stage)).toBe(25);
+        await stage.tick(new Date(publication).toISOString());
         expect(await winnerPoints(stage)).toBe(26);
         expect(stage.activeVersion()).not.toBe(first);
         expect(await stage.harness.record(22)).toMatchObject({
