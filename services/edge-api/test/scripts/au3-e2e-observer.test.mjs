@@ -1,10 +1,10 @@
 /**
- * AU-3's temporary daytime observer: its date guard, what it sends and what
- * it keeps, over a local fetch double. Nothing here reaches a network.
+ * AU-3's temporary observer: what it sends and what it keeps, over a local
+ * fetch double. Nothing here reaches a network.
  */
 
 import { createHash } from 'node:crypto';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,13 +13,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   E2E_BASE_URL,
-  OBSERVATION_WINDOW,
   PUBLIC_PATHS,
-  SLOT_HOURS,
-  SLOT_MINUTES,
   e2eOnly,
-  insideWindow,
-  nominalSlot,
   observe,
   parseObserverArguments,
 } from '../../scripts/monitor/au3-e2e-observer.mjs';
@@ -113,52 +108,6 @@ const readJson = async (name) =>
   JSON.parse(await readFile(join(out, name), 'utf8'));
 const entryFor = (index, path) => index.find((entry) => entry.path === path);
 
-describe('the AU-3 observer date guard', () => {
-  it('observes only on 5 November 2026, 00:00 to 18:00 UTC', () => {
-    expect(insideWindow(new Date('2026-11-05T00:00:00.000Z'))).toBe(true);
-    expect(insideWindow(new Date('2026-11-05T17:59:59.999Z'))).toBe(true);
-    expect(insideWindow(new Date('2026-11-04T23:59:59.999Z'))).toBe(false);
-    expect(insideWindow(new Date('2026-11-05T18:00:00.000Z'))).toBe(false);
-    expect(insideWindow(new Date('2027-11-05T12:27:00.000Z'))).toBe(false);
-  });
-
-  it('sends nothing outside the window and records why', async () => {
-    const host = e2eHost();
-    const result = await observe(
-      { out, rehearsal: false },
-      {
-        fetch: host.fetch,
-        now: () => new Date('2027-11-05T12:27:00.000Z'),
-        env: {},
-      },
-    );
-    expect(result).toEqual({ skipped: true, ok: true });
-    expect(host.requests).toEqual([]);
-    expect(await readdir(out)).toEqual(['skipped.json']);
-    expect(await readJson('skipped.json')).toMatchObject({
-      skipped: 'outside-window',
-      evidenceKind: 'au3-observation',
-      window: OBSERVATION_WINDOW,
-    });
-  });
-
-  it('runs outside the window only as a rehearsal, marked as never evidence', async () => {
-    const host = e2eHost();
-    const result = await observe(
-      { out, rehearsal: true },
-      {
-        fetch: host.fetch,
-        now: () => new Date('2026-11-04T21:00:00.000Z'),
-        env: {},
-      },
-    );
-    expect(result.skipped).toBe(false);
-    expect((await readJson('meta.json')).evidenceKind).toBe(
-      'rehearsal-not-evidence',
-    );
-  });
-});
-
 describe('the AU-3 observation', () => {
   it('keeps the real monitor report and every public answer, timestamped', async () => {
     const host = e2eHost();
@@ -170,10 +119,10 @@ describe('the AU-3 observation', () => {
       GITHUB_REPOSITORY: 'owner/repo',
     };
     const result = await observe(
-      { out, rehearsal: false },
+      { out },
       { fetch: host.fetch, now: () => NOON, env },
     );
-    expect(result).toEqual({ skipped: false, ok: true, failedReads: 1 });
+    expect(result).toEqual({ ok: true, failedReads: 1 });
 
     const expected = await runMonitor(
       parseArguments(['--base-url', E2E_BASE_URL]),
@@ -220,11 +169,8 @@ describe('the AU-3 observation', () => {
     });
 
     expect(await readJson('meta.json')).toMatchObject({
-      evidenceKind: 'au3-observation',
       startedAt: NOON.toISOString(),
       finishedAt: NOON.toISOString(),
-      slot: '2026-11-05T12:27:00.000Z',
-      delaySeconds: 4,
       monitorOk: true,
       failedReads: 1,
       run: { runId: '42', event: 'schedule', sha: 'deadbeef' },
@@ -233,10 +179,7 @@ describe('the AU-3 observation', () => {
 
   it('sends only public GETs to the e2e host, with no credential and no redirect', async () => {
     const host = e2eHost();
-    await observe(
-      { out, rehearsal: false },
-      { fetch: host.fetch, now: () => NOON, env: {} },
-    );
+    await observe({ out }, { fetch: host.fetch, now: () => NOON, env: {} });
     expect(new Set(host.requests.map((request) => request.origin))).toEqual(
       new Set([E2E_BASE_URL]),
     );
@@ -274,7 +217,7 @@ describe('the AU-3 observation', () => {
   it('keeps observing when the monitor itself fails, and reports not ok', async () => {
     const host = e2eHost();
     const result = await observe(
-      { out, rehearsal: false },
+      { out },
       {
         fetch: host.fetch,
         now: () => NOON,
@@ -284,7 +227,7 @@ describe('the AU-3 observation', () => {
         },
       },
     );
-    expect(result).toEqual({ skipped: false, ok: false, failedReads: 1 });
+    expect(result).toEqual({ ok: false, failedReads: 1 });
     expect(await readJson('monitor-report.json')).toEqual({
       checkedAt: NOON.toISOString(),
       baseUrl: E2E_BASE_URL,
@@ -311,7 +254,7 @@ describe('the AU-3 observation', () => {
       return new Response(body, { status: 200, headers: { etag: 'W/"x"' } });
     };
     const result = await observe(
-      { out, rehearsal: false },
+      { out },
       { fetch: broken, now: () => NOON, env: {} },
     );
     expect(result.failedReads).toBe(2);
@@ -342,11 +285,8 @@ describe('the AU-3 observation', () => {
             { status: 200 },
           )
         : host.fetch(url, init);
-    const result = await observe(
-      { out, rehearsal: false },
-      { fetch: stale, now: late, env: {} },
-    );
-    expect(result).toEqual({ skipped: false, ok: false, failedReads: 1 });
+    const result = await observe({ out }, { fetch: stale, now: late, env: {} });
+    expect(result).toEqual({ ok: false, failedReads: 1 });
     expect((await readJson('monitor-report.json')).findings).toEqual([
       expect.objectContaining({ code: 'heartbeat-stale' }),
     ]);
@@ -355,37 +295,12 @@ describe('the AU-3 observation', () => {
 });
 
 describe('the AU-3 observer schedule', () => {
-  it('attributes a start to its latest slot, across the hour', () => {
-    expect(nominalSlot(new Date('2026-11-05T09:27:00.000Z'))).toEqual({
-      slot: '2026-11-05T09:27:00.000Z',
-      delaySeconds: 0,
-    });
-    expect(nominalSlot(new Date('2026-11-05T10:05:30.000Z'))).toEqual({
-      slot: '2026-11-05T09:52:00.000Z',
-      delaySeconds: 810,
-    });
-  });
-
-  it('attributes only to real slots: none before 00:27, none after 16:52', () => {
-    expect(nominalSlot(new Date('2026-11-05T00:05:00.000Z'))).toEqual({
-      slot: null,
-      delaySeconds: null,
-    });
-    // The 16:52 slot started late; there is no 17:27 slot.
-    expect(nominalSlot(new Date('2026-11-05T17:40:00.000Z'))).toEqual({
-      slot: '2026-11-05T16:52:00.000Z',
-      delaySeconds: 48 * 60,
-    });
-  });
-
-  it('matches the workflow: two slots an hour, 00-16 UTC, 5 November only', async () => {
+  it('runs hourly between the Worker ticks, on no fixed date', async () => {
     const workflow = await readFile(WORKFLOW, 'utf8');
     const crons = [...workflow.matchAll(/cron: (['"])([^'"]+)\1/g)].map(
       (match) => match[2],
     );
-    expect(crons).toEqual([
-      `${SLOT_MINUTES.join(',')} ${SLOT_HOURS.first}-${SLOT_HOURS.last} 5 11 *`,
-    ]);
+    expect(crons).toEqual(['27 * * * *']);
     expect(workflow).toContain('retention-days: 90');
     expect(workflow).toMatch(
       /if: always\(\)\n\s+uses: actions\/upload-artifact@/,
@@ -403,13 +318,12 @@ describe('the AU-3 observer schedule', () => {
   });
 
   it('parses its arguments', () => {
-    expect(parseObserverArguments(['--out', 'o', '--rehearsal'])).toEqual({
-      out: 'o',
-      rehearsal: true,
-    });
+    expect(parseObserverArguments(['--out', 'o'])).toEqual({ out: 'o' });
     expect(() => parseObserverArguments([])).toThrow('--out is required');
-    expect(() =>
-      parseObserverArguments(['--out', 'o', '--base-url', 'x']),
-    ).toThrow('unknown argument');
+    for (const extra of ['--base-url', '--rehearsal']) {
+      expect(() => parseObserverArguments(['--out', 'o', extra])).toThrow(
+        'unknown argument',
+      );
+    }
   });
 });
