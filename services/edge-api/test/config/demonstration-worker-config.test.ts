@@ -140,7 +140,7 @@ describe('the demonstration Worker configuration (AU-2)', () => {
   it('requires ADMIN_TOKEN without committing it, runs hourly as the gate does and persists its logs', () => {
     const demonstration = resolved('e2e');
     expect(demonstration.secrets).toEqual({ required: ['ADMIN_TOKEN'] });
-    // The schedule the gate's stage plays as `hourly()` (AU-3, §8.2 step 3).
+    // The schedule the gate's stage plays as `hourly()` (AU-3, §8.2 "Setup").
     expect(demonstration.triggers).toEqual({
       crons: [AUTOMATIC_ACTIVATION_DELTA.cron],
     });
@@ -156,7 +156,7 @@ describe('the demonstration Worker configuration (AU-2)', () => {
   });
 
   it('is the block the runbook prints, line for line, with the AU-3 schedule', () => {
-    // §8.1 prints the block as AU-2 deployed it, unscheduled; §8.2 step 3
+    // §8.1 prints the block as AU-2 deployed it, unscheduled; §8.2 "Setup"
     // changes its cron list and nothing else.
     const printed = declarations(runbookBlock());
     expect(printed.filter((line) => line.startsWith('crons'))).toEqual([
