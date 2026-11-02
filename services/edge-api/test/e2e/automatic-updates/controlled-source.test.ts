@@ -21,6 +21,7 @@ import {
 import { createHarness, request } from '../../support/edge-harness';
 import {
   MemoryKv,
+  RESULT_AFTER_HOURS,
   RESULT_HOLD_AFTER_HOURS,
   controlledPaths,
   controlledSeasonDocuments,
@@ -467,7 +468,7 @@ describe.each(['2026-11-05T09:00:00.000Z', '2026-11-12T09:00:00.000Z'])(
       }
       expect(result.get(RESULTS_KEY)!.versions.map((v) => v.from)).toEqual([
         '1970-01-01T00:00:00.000Z',
-        after(2 * HOUR),
+        after(RESULT_AFTER_HOURS * HOUR),
         after(RESULT_HOLD_AFTER_HOURS * HOUR),
       ]);
       expect(
@@ -477,21 +478,36 @@ describe.each(['2026-11-05T09:00:00.000Z', '2026-11-12T09:00:00.000Z'])(
     });
 
     it.each([
-      ['the same day', 8 * HOUR],
-      ['after the result would have settled', 2 * DAY],
-      ['at the latest advance, after round 23 has started', 12 * DAY],
+      ['within the hour, so that one evening holds both', 0, 2 * HOUR],
+      ['an hour late, at the next confirmation', HOUR, 5 * HOUR],
+      [
+        'after the result would have settled',
+        2 * DAY - 6 * HOUR,
+        2 * DAY + 3 * HOUR,
+      ],
+      [
+        'at the latest advance, after round 23 has started',
+        12 * DAY - 6 * HOUR,
+        2 * DAY + 3 * HOUR,
+      ],
     ])(
       'publishes the result, holds it, and publishes the correction advanced %s',
       { timeout: 180_000 },
-      async (_when, advanceAfter) => {
+      async (_when, heldFor, publishedWithin) => {
         const kv = new MemoryKv();
         const stage = await pausedStage(kv);
         const phases = demonstrationPhases(RACE_START);
         const correction = await controlledSeasonDocuments(phases.correction);
 
-        // Phase 1: the source is loaded, the Worker is scheduled, nobody acts.
+        // Phase 1: the first scheduled run reads the moved calendar before the
+        // result exists, the next finds it, and the next publishes it.
         kv.load(await controlledSeasonDocuments(phases.result));
-        await stage.hourly(after(-3 * HOUR + 17 * MINUTE), tickAfter(4 * HOUR));
+        const firstRun = after(3 * HOUR + 17 * MINUTE);
+        const published = after(5 * HOUR + 17 * MINUTE);
+        const runs = await stage.hourly(firstRun, published);
+        expect(
+          runs.map((run) => run.releasesAfter > run.releasesBefore),
+        ).toEqual([false, false, true]);
         expect(await winnerPoints(stage)).toBe(25);
         const first = stage.activeVersion();
         const home = (await (
@@ -501,25 +517,33 @@ describe.each(['2026-11-05T09:00:00.000Z', '2026-11-12T09:00:00.000Z'])(
 
         // Phase 2: however long the owner takes, the result stays served and
         // the runs stay healthy.
-        const advanceBy = tickAfter(advanceAfter - HOUR);
-        const held = await stage.hourly(tickAfter(5 * HOUR), advanceBy);
+        const lastHeld = new Date(
+          Date.parse(published) + heldFor,
+        ).toISOString();
+        if (heldFor > 0) {
+          await stage.hourly(
+            new Date(Date.parse(published) + HOUR).toISOString(),
+            lastHeld,
+          );
+        }
         expect(await winnerPoints(stage)).toBe(25);
         expect(stage.activeVersion()).toBe(first);
         expect(Date.parse(await heartbeat(stage))).toBeGreaterThanOrEqual(
-          Date.parse(held.at(-1)!.at),
+          Date.parse(lastHeld),
         );
 
         // Phase 3: the only act is loading the changed document.
         kv.values.set(RESULTS_KEY, JSON.stringify(correction.get(RESULTS_KEY)));
 
-        // Phase 4: at most two days and three hours later.
+        // Phase 4.
         await stage.hourly(
-          new Date(Date.parse(advanceBy) + HOUR).toISOString(),
-          new Date(Date.parse(advanceBy) + 2 * DAY + 3 * HOUR).toISOString(),
+          new Date(Date.parse(lastHeld) + HOUR).toISOString(),
+          new Date(Date.parse(lastHeld) + publishedWithin).toISOString(),
         );
         expect(await winnerPoints(stage)).toBe(26);
         expect(stage.activeVersion()).not.toBe(first);
         expect(await stage.harness.record(22)).toMatchObject({
+          anchor: RACE_START,
           stagedCorrection: null,
           competingCorrection: null,
         });
@@ -535,7 +559,7 @@ describe.each(['2026-11-05T09:00:00.000Z', '2026-11-12T09:00:00.000Z'])(
     );
 
     it('loses the correction when the first run comes after the result exists', async () => {
-      // Why the runbook has the schedule live before `T′` + 2 h.
+      // Why the runbook stops if the first run has not happened by `T′` + 4 h.
       const kv = new MemoryKv();
       const stage = await pausedStage(kv);
       const phases = demonstrationPhases(RACE_START);

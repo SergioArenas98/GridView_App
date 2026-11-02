@@ -66,12 +66,22 @@ export interface ControlledSeasonOptions {
 export const RESULT_HOLD_AFTER_HOURS = 20;
 
 /**
+ * When the demonstration's result appears. The race anchor is set 3 h 17 min
+ * before the first scheduled run (runbook §8.2, "Setup"), so that run reads the
+ * moved calendar before any result exists, and the next one finds it. On that
+ * anchor the result is published in time for the + 5 h 30 min confirmation to
+ * sight a correction, so one evening holds both: the shortest normal sequence
+ * of any anchor, at five hourly runs.
+ */
+export const RESULT_AFTER_HOURS = 4;
+
+/**
  * The demonstration's corrected document says its correction applies from here
  * on. It is loaded after the result was seen, so this is always in the past
  * and the correction is served as soon as the load lands. A fixed value keeps
  * the file deterministic: one race instant gives the same two files.
  */
-export const CORRECTION_AFTER_HOURS = 3;
+export const CORRECTION_AFTER_HOURS = 5;
 
 export type DemonstrationPhase = 'result' | 'correction';
 
@@ -79,7 +89,11 @@ export type DemonstrationPhase = 'result' | 'correction';
 export function demonstrationPhases(
   raceStart: string,
 ): Record<DemonstrationPhase, ControlledSeasonOptions> {
-  const race = { raceRound: 22, raceStart };
+  const race = {
+    raceRound: 22,
+    raceStart,
+    availableAfterHours: RESULT_AFTER_HOURS,
+  };
   return {
     result: { ...race, holdAfterHours: RESULT_HOLD_AFTER_HOURS },
     correction: {

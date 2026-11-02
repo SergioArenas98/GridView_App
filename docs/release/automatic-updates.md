@@ -190,7 +190,7 @@ verified that delivery on 2026-10-22 (§7). Known limits:
 | AU-0 | This change merged, dormant: genesis-capable coordinated runs, calendar horizon, the + 90 min / hourly / back-off polling plan, heartbeat, production logging design, monitor, controlled source, gate tests | **[PR]** | PR #85 |
 | AU-1 | Workers Paid bought (the plan is account-wide, so staging gets it too). **Done 2026-10-21:** read-only, the dashboard shows Workers Paid active, renewing 2026-11-21, on account `786e24f1…e6bf`, the account Wrangler uses; one invoice that day, USD 5.00, paid (the invoice itself, and so any VAT line, was not opened) | **[approval]** owner | — |
 | AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis. **Done 2026-10-21:** all four steps (§8.1) | **[approval]** each, **[PR]** | AU-0, AU-1 |
-| AU-3 | **The end-to-end demonstration with controlled data** (§8.2): asynchronous, in persistent phases, passed on its acceptance criteria A1–A6. Also on the release commit: the in-process gate in CI and the app half locally. **Pending:** the 2026-10-22 run passed its first release and phone bootstrap and was paused before its race; the asynchronous demonstration has not run | **[approval]** each source load and the schedule; **[record]** the evidence | AU-2 |
+| AU-3 | **The end-to-end demonstration with controlled data** (§8.2): asynchronous, in persistent phases, passed on its acceptance criteria A1–A6. Also on the release commit: the in-process gate in CI and the app half locally. **Pending:** the 2026-10-22 run passed its first release and phone bootstrap and was paused before its race; the asynchronous demonstration has not run | **[approval]** each source load and the schedule, which one bounded approval may cover; **[record]** the evidence | AU-2 |
 | AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2) | **[approval]** each of the three; cutover-sensitive | AU-3 |
 | AU-5 | The monitor's hourly `schedule:` for staging | **[approval]**, **[PR]** | AU-4, AU-6 |
 | AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1). **Passed 2026-10-22:** one owner-authorised dispatch against staging (`skip_heartbeat`, `simulate_failure`), [run 39852057415](https://github.com/SergioArenas98/GridView_App/actions/runs/39852057415) on `master` at `09e0686`, failed as expected with the single finding `simulated-failure` (pendingRound 18); the owner confirmed, with a screenshot, that GitHub's failure e-mail for it arrived at 21:49 Irish time (20:49Z) the same day. OD-1 is closed. The workflow is still manual-only: no monitor schedule was enabled (that is AU-5), and no Worker schedule changed | **[approval]**, **[record]** | AU-0 |
@@ -333,9 +333,23 @@ Changing the controlled provider is test setup: it stands for Jolpica changing
 its data. Nothing is sent to GridView's admin routes at any point, and nothing
 is published by hand.
 
-**Waiting periods.** Phase 1 ends about 3 h 20 min after `T′`. Phase 4 ends
-within about two days of the advance. Its exact time depends on the cadence,
-and no criterion depends on it.
+**Timing.** The whole demonstration fits one evening when the advance is on
+time, with `F` the first scheduled run:
+
+| Run | What it does |
+|---|---|
+| `F` | Reads the moved calendar. No result exists yet |
+| `F` + 1 h | Sights the result, pending |
+| `F` + 2 h | Sees it again and publishes it |
+| `F` + 3 h | Confirmation: sights a correction loaded by then, pending |
+| `F` + 4 h | Sees it again and publishes it |
+
+Five hourly runs are the shortest normal sequence. An in-process search of
+every race anchor found none shorter, because a calendar change takes effect at
+the next run, each publication needs two sightings an hour apart, and an
+accepted result is re-read only at its confirmation slots. A later advance
+loses nothing: loaded after `F` + 3 h, the correction is published at `F` + 8 h,
+and later still within about two days. No criterion depends on these times.
 
 #### Acceptance criteria
 
@@ -371,10 +385,13 @@ These are what this demonstration does **not** show:
 - **Every run.** The hourly heartbeat, each scheduled run and each monitor
   verdict are sampled, not proven one by one. Request budgets and the planner's
   decisions stay in the automated tests.
-- **Natural settling.** From `T′` + 20 h the phase 1 source answers empty for
-  round 22 (see "The hold"), so no deployed run shows a result settling on its
-  own, and a correction loaded after `T′` + 24 h is found by a daily check, not
-  in the hourly window.
+- **Natural settling.** An evening run ends before anything settles. From
+  `T′` + 20 h the phase 1 source answers empty for round 22 (see "The hold"), so
+  no deployed run shows a result settling on its own, and a correction loaded
+  after `T′` + 24 h is found by a daily check, not in the hourly window.
+- **A real race day.** The race anchor is synthetic and already past when the
+  source is loaded, so the first check, a delayed start and the hours before a
+  result are not shown here.
 - **Failure paths.** A post-settlement correction, an outage, a lost commit, an
   incomplete page and a late publication stay in `gate.test.ts`.
 - **Live data and production.** The data is controlled and the Worker is the
@@ -402,13 +419,14 @@ stays visible.
   00:17 run ends that way, so this limit leaves a day's margin. Past it the
   demonstration has not passed and needs a new plan: round 22 cannot be replayed
   once it is published.
-- **Preferred advance: within 5 days of `T′`,** so that the correction is
-  published before round 23 starts. A later advance still works, but Home
-  changes again once round 23 has started.
+- **Preferred advance: in the hour after the result,** which finishes in one
+  evening. Otherwise within 5 days of `T′`, so that the correction is published
+  before round 23 starts. A later advance still works, but Home changes again
+  once round 23 has started.
 - **Expected findings.** A monitor run fails, and GitHub e-mails the owner, in
   three cases only:
   - `heartbeat-stale`, before the first scheduled run writes its heartbeat;
-  - `results-late`, from then until the calendar release two hours later
+  - `results-late`, from then until the result is published two hours later
     (round 22's old start);
   - `results-late`, hourly from `T′` + 7 days 12 h until the removal, in any
     phase, because round 23 never gets a result.
@@ -426,14 +444,15 @@ already installed on the phone (`8caa3be9`). Only the source changes. A run on
 that race (`controlled-source.test.ts`). The Worker carries that fix since
 deployment `6b52bc02`.
 
-Everything below happens in one sitting of about 30 minutes, and each step is
-its own **[approval]**:
+Each step below is an **[approval]**. The owner may give one approval for the
+whole bounded sequence, naming `F` and the reviewed commits it runs from.
 
 1. Re-read the e2e and staging state read-only, and confirm the schedule is `[]`.
-2. Choose a race instant `T′` at minute 00, at least 4 h ahead and early enough
-   that the shifted season stays in 2026; the export refuses otherwise. From a
-   checkout of the schedule PR's head, because `master` has no phases until it
-   merges, generate both phases' files outside the repository, once each:
+2. Choose `F`, the first `:17` run the steps below can reach. The race instant
+   is `T′` = `F` − 3 h 17 min, at minute 00, already past. The shifted season
+   must stay in 2026; the export refuses otherwise. From a checkout of the
+   schedule PR's head, because `master` has no phases until it merges, generate
+   both phases' files outside the repository, once each:
 
    ```text
    GRIDVIEW_CONTROLLED_SOURCE_OUT=<file> GRIDVIEW_CONTROLLED_RACE_START=<T′>
@@ -442,53 +461,56 @@ its own **[approval]**:
    ```
 
    `result` writes 29 documents, about 125 KB: rounds 1–21 classified, round 22
-   racing at `T′` with its result from `T′` + 2 h, and the hold. `correction`
-   writes the one document the advance changes. Confirm both: 29 entries with
-   round 22's document ending empty, and exactly 1 entry. Replay both files'
-   exact bytes in-process before loading, the way `controlled-source.test.ts`
-   does. Keep the correction file for phase 3.
+   raced at `T′` with its result from `T′` + 4 h, which is `F` + 43 min, and the
+   hold. `correction` writes the one document the advance changes. Confirm both:
+   29 entries with round 22's document ending empty, and exactly 1 entry. Replay
+   both files' exact bytes in-process before loading, the way
+   `controlled-source.test.ts` does. Keep the correction file for phase 3.
 3. Load the `result` file: `npm exec -- wrangler kv bulk put <file> --binding
    GRIDVIEW_DATA --env e2e --remote`. Read it back. It overwrites the same 29
    keys.
-4. Only after that read-back, merge the schedule PR and schedule it. The PR
-   must commit `crons = ["17 * * * *"]` for `env.e2e`. Then run `npm exec --
-   wrangler triggers deploy --env e2e` from a clean checkout of the merge, and
-   confirm through the schedules API.
+4. Only after that read-back, and before `F`, schedule it from a clean checkout
+   of the reviewed schedule PR's head. The PR must commit `crons = ["17 * * * *"]` for `env.e2e`.
+   Run `npm exec -- wrangler triggers deploy --env e2e` there, and confirm through
+   the schedules API. The PR is not merged for the run, so `master` stays at
+   `crons = []` and stays the stop.
    - **The first scheduled run must come before round 22's result exists.**
-     Have the schedule live at least 1 h before `T′`. If it is not, do not
-     schedule it: choose a new `T′` and regenerate. A first run after `T′` + 2 h
-     reads the result on round 22's old anchor, and the correction does not
-     publish.
+     Confirm from `/v1/status` that the heartbeat moved at `F`. If it has not by
+     `F` + 30 min, stop before `F` + 43 min, choose a new `F` and regenerate. A
+     first run after that reads the result on round 22's old anchor, and the
+     correction does not publish. Round 22 cannot be replayed after that.
    - **The load comes first for the same reason.**
    - The PR changes that one list in `wrangler.toml` and the four tests that
      pin it: `demonstration-worker-config.test.ts`,
      `production-worker-config.test.ts`,
      `staging-season-batch-ingest.test.ts` and the ledger `dormancy.test.ts`.
      Staging and production stay `[]`.
-   - Merging changes nothing on Cloudflare. `triggers deploy` sets the
-     schedule and keeps the deployed version. Once it is merged, a `wrangler
-     deploy --env e2e` from `master` also sets it, because a deploy applies
-     the committed list.
-   - To stop at once, run `triggers deploy` from a checkout still at `crons =
-     []`; from `master` it would only set the schedule again.
-5. Merge the observer PR. Merging is its activation: a scheduled workflow runs
-   only from `master`, and `.github/workflows/au3-e2e-observer.yml` then runs
-   hourly at :27. Each run executes the real `automation-monitor.mjs` against
-   the e2e host and keeps 10 public answers verbatim, with their instants, as a
-   90-day artifact. It sends public GETs to the e2e origin only, with no
-   credential, and has read-only permissions. `workflow_dispatch` takes an extra
-   observation at any time.
+   - `triggers deploy` sets the schedule and keeps the deployed version. A
+     `wrangler deploy --env e2e` from that checkout would set it too, because a
+     deploy applies the committed list.
+   - To stop at once, run `triggers deploy` from a clean checkout of `master`,
+     after resolving its e2e list to `[]`.
+5. Observe from the operator's machine. After each scheduled run, run the
+   observer once from PR #96's head: `node scripts/monitor/au3-e2e-observer.mjs
+   --out <dir>`. It executes the real `automation-monitor.mjs` against the e2e
+   host and keeps 10 public answers verbatim, with their instants. It sends
+   public GETs to the e2e origin only, with no credential. If the run will
+   outlast the operator's session, merging PR #96 runs the same script hourly
+   from GitHub instead, with 90-day artifacts. Merging is its activation, and the
+   removal then deletes it.
 
 #### Running the phases
 
 1. **Phase 1, unattended.** Nothing to do. Read A1 at any later time from the
-   observer's artifacts or one public GET. If the API has no result at `T′` +
-   12 h, stop and diagnose.
+   observer's record or one public GET. If the API has no result at `F` + 4 h,
+   stop and diagnose.
 2. **Phase 2, the owner.** Open the installed e2e app, do not reinstall it, and
    take a screenshot (A2). Any time after A1, for as long as the phase lasts.
 3. **Phase 3, one [approval].** After A1 and A2 and before the latest advance,
    confirm the API still serves 25 points, then load the correction file with
-   the same `kv bulk put`. Read it back: exactly one key changes (A3).
+   the same `kv bulk put`. Read it back: exactly one key changes (A3). To finish
+   the same evening, load it at least 5 minutes before the `F` + 3 h run, which
+   allows for KV propagation. A later load only moves phase 4.
 4. **Phase 4, unattended.** Read A4 as A1. If the API has not changed two days
    and three hours after the advance, stop and diagnose. Then the owner opens
    the app and takes a screenshot (A5). Any launch after A4 finds the correction,
@@ -496,19 +518,22 @@ its own **[approval]**:
 
 #### Removal
 
-The served result outlives the schedule, so removal can wait until A1–A6 are
-recorded. Do it soon after: from `T′` + 7 days 12 h every observer run fails.
-Each step is its own **[approval]**:
+The served result outlives the schedule, so the Worker can stop as soon as A4
+passes, before the owner's second phone check. Each step is an **[approval]**,
+which the sequence's one approval may cover:
 
-1. Download the observer artifacts for the two publications, and export any
-   persisted logs still within their 7 days as diagnostics.
-2. One PR sets `crons = []` for `env.e2e`, reverts the four tests that pin the
-   schedule (Setup, step 4), and deletes the observer workflow, its script and
-   its test. The artifacts outlive the workflow by their 90 days.
-3. Merge it, run `triggers deploy --env e2e`, and confirm `[]` through the
-   schedules API.
-4. Record A1–A6 with their evidence, the coverage limits above and any evidence
+1. Run `npm exec -- wrangler triggers deploy --env e2e` from a clean checkout of
+   `master`, after resolving its e2e list to `[]`. Confirm `[]` through the
+   schedules API; with an empty list the command can print "Deployed" and never
+   exit, so verify, then end it.
+2. Save the observer records, and export any persisted logs still within their
+   7 days as diagnostics.
+3. Record A1–A6 with their evidence, the coverage limits above and any evidence
    gaps. AU-3 is passed only if all six pass.
+4. Before the schedule PR merges, its branch returns to `crons = []` and reverts
+   the four tests that pin the schedule (Setup, step 4), so `master` never
+   carries a cron. If PR #96 was merged, delete its workflow, script and test in
+   the same change.
 
 ### 8.3 Live staging (AU-4)
 
