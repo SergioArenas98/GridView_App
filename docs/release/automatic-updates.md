@@ -327,6 +327,18 @@ staging state").
 3. **[approval]** Schedule it: commit `crons = ["17 * * * *"]` for `env.e2e`
    and run `npm exec -- wrangler triggers deploy --env e2e`, at least 3 h
    before `T`.
+   - The PR changes that one list in `wrangler.toml` and the four tests that
+     pin it: `demonstration-worker-config.test.ts`,
+     `production-worker-config.test.ts`,
+     `staging-season-batch-ingest.test.ts` and the ledger `dormancy.test.ts`.
+     Staging and production stay `[]`.
+   - Merging changes nothing on Cloudflare. `triggers deploy` sets the
+     schedule and keeps the deployed version. Once it is merged, a `wrangler
+     deploy --env e2e` from `master` also sets it, because a deploy applies
+     the committed list.
+   - Removing the schedule reverts the same files. To stop at once, run
+     `triggers deploy` from a checkout still at `crons = []`; from `master` it
+     would only set the schedule again.
 4. Install the staging app built for `https://gridview-api-e2e.sejuma18.workers.dev`
    (a phone step of its own) and open it once before `T`.
 5. Watch, read-only. Pass criteria:
@@ -399,7 +411,11 @@ Each numbered step is its own **[approval]**:
    - Before loading, replay those exact bytes in-process the way the test
      does: the paused source over the 2026-10-22 ticks, then the new file.
    - The load (step 2) overwrites the same 29 keys.
-3. Schedule it at least 3 h before `T′` (step 3 above).
+3. Schedule it at least 3 h before `T′` (step 3 above), and only after the
+   load has been read back; merge the schedule PR after that read-back too.
+   Scheduled first, a run reads round 22's old result on its old anchor, and
+   the result and the correction miss their releases at `T′` + 3:17 and
+   + 11:17.
 4. Open the installed e2e app once after the first replay release. Do not
    reinstall it.
 5. Watch, read-only. `F` is the first tick after the schedule goes live:

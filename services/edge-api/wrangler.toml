@@ -10,7 +10,8 @@
 #   Object namespace, R2 bucket, route, domain or secret exists. Only its KV
 #   namespace exists (release plan W2); see the section itself.
 # - `env.e2e` is the isolated demonstration Worker of release gate AU-3,
-#   deployed on 2026-10-21 and unscheduled since 2026-10-22. See the section.
+#   deployed on 2026-10-21. It commits the AU-3 replay's schedule. See the
+#   section.
 
 name = "gridview-api-dev"
 main = "src/index.ts"
@@ -303,7 +304,7 @@ invocation_logs = false
 # namespaces and `ADMIN_TOKEN`; season 2026 was born there by genesis (AU-2
 # step 4). Its KV namespace, `gridview-snapshots-e2e`, was created on
 # 2026-10-21 (AU-2 step 1) and is bound below. AU-3 ran on it and was paused
-# on 2026-10-22, so it has no schedule.
+# on 2026-10-22; its replay's schedule is committed below.
 #
 # It is the only environment that selects the automatic path, binds the
 # reconciliation ledger or reads a controlled provider source, and it shares
@@ -365,10 +366,12 @@ id = "f8970084eef14b6a8e24db521d015df3"
 [env.e2e.secrets]
 required = ["ADMIN_TOKEN"]
 
-# Empty: AU-3 was paused on 2026-10-22 before its timed checks (runbook §8.2).
-# A replay schedules it again through its own PR and `triggers deploy`.
+# Hourly at minute 17 for the AU-3 replay (runbook §8.2 step 3). Committing it
+# changes nothing on Cloudflare: `wrangler triggers deploy --env e2e` sets the
+# schedule, and so would any `wrangler deploy --env e2e`. After the replay the
+# list returns to `[]`.
 [env.e2e.triggers]
-crons = []
+crons = ["17 * * * *"]
 
 [env.e2e.observability]
 enabled = true

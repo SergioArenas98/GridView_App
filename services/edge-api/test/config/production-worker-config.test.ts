@@ -55,6 +55,7 @@ import { syncStateKey } from '../../src/storage/keys';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
 import { submissionFor, syntheticBatch, type Batch } from '../ingest/support';
 import { checkpointFor } from '../publication/cutover/support';
+import { withoutDemonstration } from './demonstration-environment';
 
 const configPath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -156,8 +157,10 @@ describe('the resolved production configuration', () => {
     // `crons` is set.
     expect(resolved('production').triggers).toEqual({ crons: [] });
     expect(rawConfig).toMatch(/^\[env\.production\.triggers\]\ncrons = \[\]$/m);
-    // No environment declares a schedule, the paused demonstration included.
-    expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
+    // Only the demonstration Worker (AU-3) declares a schedule.
+    expect(withoutDemonstration(rawConfig)).not.toMatch(
+      /^\s*crons\s*=\s*\[\s*"/m,
+    );
   });
 
   it('persists the Worker lines, never the invocation logs (ADR 0028 D8)', () => {
@@ -189,13 +192,13 @@ describe('the resolved production configuration', () => {
     }
   });
 
-  it('leaves the demonstration Worker bound to its own namespace, unscheduled', () => {
+  it('leaves the demonstration Worker bound to its own namespace, scheduled for the AU-3 replay', () => {
     const demonstration = resolved('e2e');
     expect(demonstration.name).toBe('gridview-api-e2e');
     expect(demonstration.kv_namespaces).toEqual([
       { binding: 'GRIDVIEW_DATA', id: DEMONSTRATION_KV_ID },
     ]);
-    expect(demonstration.triggers).toEqual({ crons: [] });
+    expect(demonstration.triggers).toEqual({ crons: ['17 * * * *'] });
   });
 
   it('leaves the staging configuration exactly as it was', () => {
