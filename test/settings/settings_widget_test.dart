@@ -29,6 +29,23 @@ const String _batchOnlyEs =
     'cambian cuando se publica un lote nuevo y pueden ir con retraso respecto '
     'a la fuente.';
 
+/// The credit of an `automatic` source (owner decision 2026-11-03): GridView's
+/// service retrieves it on a schedule, a batch is still possible, and it is
+/// true before anything from the source is published.
+const String _automaticEn =
+    "GridView's service checks this source automatically, at most once an "
+    "hour, and publishes its data only after the data passes GridView's "
+    "checks. GridView's operator can also publish reviewed batches of it. "
+    'Either way, data from it can lag behind the source, and a published '
+    'result can later be corrected.';
+const String _automaticEs =
+    'El servicio de GridView consulta esta fuente automáticamente, como '
+    'máximo una vez por hora, y solo publica sus datos después de que superen '
+    'las comprobaciones de GridView. El operador de GridView también puede '
+    'publicar lotes revisados de estos datos. En ambos casos, los datos de '
+    'esta fuente pueden ir con retraso respecto a ella, y un resultado '
+    'publicado puede corregirse más tarde.';
+
 Future<void> pumpSettings(
   WidgetTester tester, {
   String location = '/settings',
@@ -586,9 +603,11 @@ void main() {
       expect(find.text('Jolpica F1'), findsOneWidget);
 
       final String all = renderedText(tester).join(' ');
-      // Active (O-9): published only in operator-run batches. The credit is
-      // true before the first batch too, so it never says data is shown.
-      expect(all, contains(_batchOnlyEn));
+      // Automatic (owner decision 2026-11-03, superseding the batch-only
+      // credit): retrieved on a schedule, a batch still possible. The credit
+      // is true before anything is published, so it never says data is shown.
+      expect(all, contains(_automaticEn));
+      expect(all, isNot(contains(_batchOnlyEn)));
       expect(all, isNot(contains('Not connected yet')));
       expect(all, isNot(contains('GridView retrieves data from this source.')));
       // The modification, licence and non-endorsement notices.
@@ -637,7 +656,7 @@ void main() {
       }
     });
 
-    testWidgets('credits Jolpica F1 in Spanish as published only in batches', (
+    testWidgets('credits Jolpica F1 in Spanish as retrieved automatically', (
       WidgetTester tester,
     ) async {
       await pumpSettings(
@@ -649,7 +668,8 @@ void main() {
 
       final String all = renderedText(tester).join(' ');
       expect(all, contains('Jolpica F1'));
-      expect(all, contains(_batchOnlyEs));
+      expect(all, contains(_automaticEs));
+      expect(all, isNot(contains(_batchOnlyEs)));
       expect(all, isNot(contains('Todavía no está conectada')));
       expect(all, isNot(contains('GridView obtiene datos de esta fuente.')));
       expect(
@@ -680,6 +700,58 @@ void main() {
           'en tiempo real',
           'retrieves data from this source.',
           'obtiene datos de esta fuente.',
+        ]) {
+          expect(lower, isNot(contains(claim)), reason: claim);
+        }
+      });
+    }
+
+    // Both locales: the automatic credit names the schedule and the batch
+    // path, warns of lag and corrections, and claims neither live data nor
+    // that data is shown.
+    for (final (Locale locale, String text, List<String> required)
+        in <(Locale, String, List<String>)>[
+          (
+            const Locale('en'),
+            _automaticEn,
+            <String>[
+              'automatically',
+              'once an hour',
+              'batches',
+              'lag behind',
+              'corrected',
+            ],
+          ),
+          (
+            const Locale('es'),
+            _automaticEs,
+            <String>[
+              'automáticamente',
+              'una vez por hora',
+              'lotes',
+              'con retraso',
+              'corregirse',
+            ],
+          ),
+        ]) {
+      test('the  automatic credit describes both paths '
+          'without claiming live data', () async {
+        final AppLocalizations l10n = await AppLocalizations.delegate.load(
+          locale,
+        );
+        expect(l10n.settingsSourceStatusAutomatic, text);
+        final String lower = text.toLowerCase();
+        for (final String phrase in required) {
+          expect(lower, contains(phrase), reason: phrase);
+        }
+        for (final String claim in <String>[
+          'live',
+          'real-time',
+          'real time',
+          'en directo',
+          'en tiempo real',
+          'what you see',
+          'lo que ves',
         ]) {
           expect(lower, isNot(contains(claim)), reason: claim);
         }
@@ -794,6 +866,7 @@ void main() {
         ),
       );
       expect(all, isNot(contains(_batchOnlyEn)));
+      expect(all, isNot(contains(_automaticEn)));
     });
 
     testWidgets('an unreadable record says so and never reads as no sources', (

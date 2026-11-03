@@ -163,7 +163,7 @@ describe('curated season metadata (O-14)', () => {
     expect(curatedSeasonMetadata(2026)).toEqual({
       contentVersion: '2026.10.07.1',
       mediaVersion: null,
-      attributionVersion: 'data-sources-v2',
+      attributionVersion: 'data-sources-v3',
       seasonLabel: '2026 FIA Formula One World Championship',
     });
   });
@@ -180,14 +180,14 @@ describe('curated season metadata (O-14)', () => {
   };
   const attribution = {
     kind: 'data-source-attribution',
-    version: 'data-sources-v2',
+    version: 'data-sources-v4',
   };
 
   it('carries a null label and a later attribution version exactly', () => {
     expect(curatedSeasonMetadata(2026, [record], attribution)).toEqual({
       contentVersion: '2026.09.29.1',
       mediaVersion: null,
-      attributionVersion: 'data-sources-v2',
+      attributionVersion: 'data-sources-v4',
       seasonLabel: null,
     });
   });

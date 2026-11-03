@@ -83,8 +83,8 @@
           "description": "Link to the licence."
         },
         "status": {
-          "description": "`dormant`: no path exists for data from this source to reach GridView, so the screen must not claim that data from it is being served. `active`: data derived from it may reach GridView only through operator-run, reviewed batches (ADR 0021 amendment A1, ADR 0023 amendment A4); no Worker retrieves it automatically, and the wording must stay true before the first batch is published. Moving to `active` is an explicit activation decision (O-9), not a side effect of this file; a status meaning automatic retrieval would be a new decision and a new value.",
-          "enum": ["dormant", "active"]
+          "description": "`dormant`: no path exists for data from this source to reach GridView, so the screen must not claim that data from it is being served. `active`: data derived from it may reach GridView only through operator-run, reviewed batches (ADR 0021 amendment A1, ADR 0023 amendment A4); no Worker retrieves it automatically, and the wording must stay true before the first batch is published (O-9, owner decision 2026-10-13). `automatic`: a GridView Worker may also request data from the source itself, on a schedule, and publish it without an operator once it passes validation and the publication guard (ADR 0028; owner decision 2026-11-03, which supersedes the batches-only wording for a source recorded this way). Data from it may still arrive as an operator-run batch, so the wording must stay true for either path and before anything is published; it must never claim live data. Each status change is an explicit owner decision, not a side effect of this file, and none of them is a legal clearance.",
+          "enum": ["dormant", "active", "automatic"]
         },
         "copyrightNotice": {
           "$ref": "#/$defs/notice",

@@ -581,12 +581,13 @@ describe('the attribution admission gate (DP-7)', () => {
     return record;
   };
 
-  it('refuses a record that does not credit the source as active exactly once', async () => {
+  it('refuses a record that does not credit the source exactly once with a status admitting a batch', async () => {
     const ctx = await ingestContext();
     const active = withJolpica('active');
     const jolpica = (active.sources as Json[])[0]!;
     for (const record of [
       withJolpica('dormant'),
+      withJolpica('live'),
       { ...active, sources: [] },
       { ...active, sources: [jolpica, jolpica] },
     ]) {
@@ -603,7 +604,17 @@ describe('the attribution admission gate (DP-7)', () => {
     }
   });
 
-  it('admits the committed record, which credits Jolpica as active under data-sources-v2', async () => {
+  it('admits a record crediting the source as active or automatic, the two statuses whose wording covers a batch', async () => {
+    const ctx = await ingestContext();
+    for (const status of ['active', 'automatic']) {
+      const admitted = ingestFor(ctx, ctx.service, {
+        attributionRecord: withJolpica(status),
+      }).admit();
+      expect(typeof admitted, status).not.toBe('string');
+    }
+  });
+
+  it('admits the committed record, which credits Jolpica as automatic under data-sources-v3', async () => {
     const ctx = await ingestContext();
     const admitted = ingestFor(ctx, ctx.service, {
       attributionRecord: undefined,
@@ -612,7 +623,7 @@ describe('the attribution admission gate (DP-7)', () => {
     expect(admitted.credit).toEqual({
       active: true,
       attribution: {
-        recordVersion: 'data-sources-v2',
+        recordVersion: 'data-sources-v3',
         name: 'Jolpica F1',
         sourceUrl: 'https://github.com/jolpica/jolpica-f1',
         licenseName: 'CC BY-NC-SA 4.0',

@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   demonstrationSection,
+  environmentSection,
   withoutDemonstration,
 } from '../config/demonstration-environment';
 
@@ -75,6 +76,12 @@ const knownSourceNames: readonly string[] = [
   'Sportmonks',
   'API-Sports',
 ];
+
+/** The `PROVIDER_MODE` values a TOML fragment assigns, comments excluded. */
+const modesIn = (toml: string) =>
+  [...toml.matchAll(/^\s*PROVIDER_MODE\s*=\s*["']([^"']*)["']/gm)].map(
+    (match) => match[1],
+  );
 
 /** The description with line breaks folded, so phrases can span lines. */
 const description = info.description.replace(/\s+/g, ' ');
@@ -137,79 +144,110 @@ describe('the API documentation licence notice', () => {
 
   it("states each source's status as the record does", () => {
     for (const source of record.sources) {
-      if (source.status === 'dormant') {
-        expect(description).toContain(
-          `No GridView runtime retrieves data from ${source.name} yet`,
-        );
-        continue;
+      switch (source.status) {
+        case 'dormant':
+          expect(description).toContain(
+            `No GridView runtime retrieves data from ${source.name} yet`,
+          );
+          break;
+        case 'active':
+          // O-9, DP-7 (2026-10-13): operator-run batches only, never
+          // retrieved by a Worker. Superseded for Jolpica F1 by `automatic`.
+          expect(description).toContain(
+            `No GridView Worker retrieves data from ${source.name} automatically`,
+          );
+          expect(description).toContain(
+            `${source.name}-derived data reaches this service only as an operator-run batch`,
+          );
+          expect(description).toContain('can lag behind');
+          break;
+        case 'automatic':
+          // Owner decision 2026-11-03 (gate AU-4): a Worker requests the
+          // source itself on a schedule, and a batch is still possible. The
+          // wording must hold for either path, wherever it is enabled.
+          expect(description).toContain(
+            `Where automatic updates are enabled, a GridView Worker requests data from ${source.name} itself, without an operator`,
+          );
+          expect(description).toContain(
+            'An hourly schedule decides what is due',
+          );
+          expect(description).toContain(
+            `stays within ${source.name}'s published rate limits`,
+          );
+          expect(description).toContain(
+            'published only if it passes verification and the publication guard',
+          );
+          expect(description).toContain(
+            `Where automatic updates are not enabled, ${source.name}-derived data reaches this service only as an operator-run batch`,
+          );
+          expect(description).toContain('Neither path is live');
+          expect(description).toContain('can lag behind');
+          expect(description).toContain('a published result can be corrected');
+          break;
+        default:
+          throw new Error(`unknown status ${source.status}`);
       }
-      // `active` (O-9, DP-7): published through operator-run batches only,
-      // never retrieved by a Worker.
-      expect(source.status).toBe('active');
-      expect(description).toContain(
-        `No GridView Worker retrieves data from ${source.name} automatically`,
-      );
-      expect(description).toContain(
-        `${source.name}-derived data reaches this service only as an operator-run batch`,
-      );
-      expect(description).toContain(
-        'Production accepts no batch and serves no provider data',
-      );
-      expect(description).toContain('can lag behind');
     }
   });
 
-  it('credits Jolpica F1 as active, so the batch wording above is exercised', () => {
+  it('credits Jolpica F1 as automatic, so the automatic wording above is exercised', () => {
     expect(
       record.sources.find((source) => source.name === 'Jolpica F1')?.status,
-    ).toBe('active');
+    ).toBe('automatic');
   });
 
   it('tells a reader which releases carry provider-derived data', () => {
-    // Before the first batch staging serves the mock dataset under an active
-    // record; the per-release attribution version is what makes the notice
-    // true in that window as well as after it.
+    // A release carries Jolpica F1-derived data only when its manifest names
+    // an attribution version that credits it; the per-release version is what
+    // keeps the notice true before an environment's first publication.
     expect(description).toContain(
       '`GET /v1/content/manifest`, `attributionVersion`',
     );
-    expect(description).toContain(`\`${record.version}\` or later`);
+    expect(description).toContain('`data-sources-v2` or later');
     expect(description).toContain(
       'A release with any other value contains no Jolpica F1-derived data',
     );
-    expect(description).toContain(
-      "GridView's mock dataset carries `1`, and staging serves it until a first batch is published",
-    );
+    expect(description).toContain("GridView's mock dataset carries `1`");
     expect(mockAttributionVersion).toBe('1');
   });
 
-  it('never claims that GridView retrieves provider data itself', () => {
-    expect(description).not.toMatch(
-      /\bGridView (retrieves|fetches|polls|downloads|synchroni[sz]es)\b/i,
-    );
+  it('never claims live provider data, and claims retrieval only while a source is automatic', () => {
     expect(description).not.toMatch(/\b(live|real-time) (provider )?data\b/i);
+    const retrieves =
+      /\bGridView (Worker )?(retrieves|fetches|polls|downloads|synchroni[sz]es|requests)\b/i;
+    if (record.sources.some((source) => source.status === 'automatic')) {
+      expect(description).toMatch(retrieves);
+    } else {
+      expect(description).not.toMatch(retrieves);
+    }
   });
 
-  it('keeps "not automatically" true: no committed environment selects coordinated mode against the network', () => {
-    // The coordinated runtime is the only Worker path that could request
-    // Jolpica F1. While any source is active the notice and the app say no
-    // Worker retrieves it, so selecting that mode needs new wording first.
-    // The one exception is the demonstration Worker (gate AU-3): its Jolpica
-    // transport reads controlled documents from its own KV namespace, never
-    // the network, so it retrieves nothing from Jolpica F1.
-    if (!record.sources.some((source) => source.status === 'active')) return;
-    const modesIn = (toml: string) =>
-      [...toml.matchAll(/^\s*PROVIDER_MODE\s*=\s*["']([^"']*)["']/gm)].map(
-        (match) => match[1],
-      );
+  it('keeps the record true to the committed configuration: a source is automatic exactly when an environment other than the demonstration Worker selects coordinated mode against the network', () => {
+    // The coordinated runtime is the only Worker path that requests Jolpica
+    // F1. The notice and the app may say a Worker retrieves it only if a
+    // committed environment does, and must say so once one does. The
+    // demonstration Worker (gate AU-3) is not such an environment: its
+    // Jolpica transport reads controlled documents from its own KV
+    // namespace, never the network.
     const elsewhere = withoutDemonstration(wrangler);
     expect(modesIn(elsewhere).length).toBeGreaterThan(0);
-    expect(modesIn(elsewhere)).not.toContain('coordinated');
     expect(elsewhere).not.toMatch(/^\s*CONTROLLED_PROVIDER_SOURCE\s*=/m);
+    const automatic = record.sources.some(
+      (source) => source.status === 'automatic',
+    );
+    expect(modesIn(elsewhere).includes('coordinated')).toBe(automatic);
     const demonstration = demonstrationSection(wrangler);
     expect(modesIn(demonstration)).toEqual(['coordinated']);
     expect(demonstration).toMatch(/^CONTROLLED_PROVIDER_SOURCE = "kv"$/m);
   });
 
+  it('keeps production off the automatic path until its own gate (AU-7)', () => {
+    // The notice covers an environment without automatic updates; production
+    // is one until AU-7 commits its own coordinated configuration.
+    expect(modesIn(environmentSection(wrangler, 'production'))).toEqual([
+      'none',
+    ]);
+  });
   it('never reverts to blanket ownership or a single blanket licence', () => {
     for (const phrase of [
       /GridView-owned (snapshots|data)/i,

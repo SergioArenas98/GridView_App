@@ -100,10 +100,11 @@ class DataSourceAttributionCard extends ConsumerWidget {
       return l10n.settingsSourceStatusFrozen(captureDateLabel(capturedAt));
     }
     return switch (source.status) {
-      // Neither claims that data from the source is being served: the build
-      // cannot know whether the service has published a batch yet.
+      // None claims that data from the source is being served: the build
+      // cannot know whether the service has published anything from it yet.
       DataSourceStatus.dormant => l10n.settingsSourceStatusDormant,
       DataSourceStatus.active => l10n.settingsSourceStatusActive,
+      DataSourceStatus.automatic => l10n.settingsSourceStatusAutomatic,
     };
   }
 

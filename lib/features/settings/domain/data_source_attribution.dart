@@ -1,13 +1,15 @@
 import '../application/external_links.dart';
 
-/// Whether data from a source can reach GridView at all.
+/// Whether and how data from a source can reach GridView.
 ///
-/// The screen's wording depends on it, and neither wording claims that data
-/// from the source is being shown: a `dormant` source is credited before any
-/// path for its data exists; an `active` one is published only through
-/// operator-run, reviewed batches, never retrieved automatically, and is
-/// credited the same way before the first batch as after it.
-enum DataSourceStatus { dormant, active }
+/// The screen's wording depends on it, and no wording claims that data from
+/// the source is being shown: a `dormant` source is credited before any path
+/// for its data exists; an `active` one is published only through
+/// operator-run, reviewed batches, never retrieved automatically; an
+/// `automatic` one is retrieved by GridView's service on a schedule and may
+/// also arrive in a batch. Each is credited the same way before anything is
+/// published as after.
+enum DataSourceStatus { dormant, active, automatic }
 
 /// The attribution one licensor is owed (ADR 0019 decision 5;
 /// GridView_Provider_Evaluation.md §7.6.2).
@@ -86,6 +88,7 @@ class DataSourceAttributions {
       status: switch (source['status']) {
         'dormant' => DataSourceStatus.dormant,
         'active' => DataSourceStatus.active,
+        'automatic' => DataSourceStatus.automatic,
         final Object? other => throw FormatException('unknown status $other'),
       },
       copyrightNotice: _optionalText(source, 'copyrightNotice'),

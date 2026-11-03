@@ -23,6 +23,11 @@ export const ISSUED_ATTRIBUTION_VERSIONS = Object.freeze({
   // published through operator-reviewed batches only.
   'data-sources-v2':
     'f01bb6fb532291cccc1ba7aac9a22cbde37a459b312e5ab325bce3c9a6a07afa',
+  // Jolpica `active` -> `automatic` (owner decision 2026-11-03, release gate
+  // AU-4): a GridView Worker may also retrieve data from it on a schedule.
+  // Supersedes the batches-only meaning for this source; nothing else changed.
+  'data-sources-v3':
+    '45579bfa9c7d94148bbb04d1884e50083941c87675246faf4dc7c311cb99cb72',
 });
 
 /** Serializes a JSON value with object keys sorted, so digests ignore key order. */

@@ -32,12 +32,13 @@ const withFirstSource = (changes) => ({
 
 describe('the shipped attribution record', () => {
   it('satisfies every rule at its issued version', () => {
-    expect(shipped.version).toBe('data-sources-v2');
+    expect(shipped.version).toBe('data-sources-v3');
     expect(validateAttributionDocument(shipped)).toEqual([]);
   });
 
-  // O-9 / DP-7: the only change from data-sources-v1 is the status.
-  it('credits Jolpica F1, active, under CC BY-NC-SA 4.0', () => {
+  // O-9 / DP-7, then the owner decision of 2026-11-03 (gate AU-4): each
+  // version since data-sources-v1 changed the status alone.
+  it('credits Jolpica F1, automatic, under CC BY-NC-SA 4.0', () => {
     expect(shipped.sources).toHaveLength(1);
     expect(shipped.sources[0]).toMatchObject({
       sourceId: 'jolpica',
@@ -45,18 +46,25 @@ describe('the shipped attribution record', () => {
       sourceUrl: 'https://github.com/jolpica/jolpica-f1',
       licenseName: 'CC BY-NC-SA 4.0',
       licenseUrl: 'https://creativecommons.org/licenses/by-nc-sa/4.0/',
-      status: 'active',
+      status: 'automatic',
     });
   });
 
-  it('differs from data-sources-v1 in the status alone', () => {
-    // v1 stays issued, unchanged: it still names the dormant record.
+  it('differs from data-sources-v1 and data-sources-v2 in the status alone', () => {
+    // Both stay issued, unchanged: v1 names the dormant record, v2 the
+    // batches-only one.
     const v1 = { ...withFirstSource({ status: 'dormant' }) };
     v1.version = 'data-sources-v1';
     expect(ISSUED_ATTRIBUTION_VERSIONS['data-sources-v1']).toBe(
       'cda4922b7de59cc86ebdb1f23994429c0c3b6cd8eac3971c3f8e140cb61c8621',
     );
     expect(validateAttributionDocument(v1)).toEqual([]);
+    const v2 = { ...withFirstSource({ status: 'active' }) };
+    v2.version = 'data-sources-v2';
+    expect(ISSUED_ATTRIBUTION_VERSIONS['data-sources-v2']).toBe(
+      'f01bb6fb532291cccc1ba7aac9a22cbde37a459b312e5ab325bce3c9a6a07afa',
+    );
+    expect(validateAttributionDocument(v2)).toEqual([]);
   });
 });
 
@@ -80,7 +88,7 @@ describe('attribution versions', () => {
 
   it('refuses a version that was never issued, naming the digest to pin', () => {
     const next = { ...withFirstSource({ status: 'dormant' }) };
-    next.version = 'data-sources-v3';
+    next.version = 'data-sources-v4';
     const [problem] = validateAttributionDocument(next);
     expect(problem).toContain('has not been issued');
     expect(problem).toContain(attributionContentDigest(next));
@@ -88,10 +96,10 @@ describe('attribution versions', () => {
 
   it('accepts new content once its version is issued', () => {
     const next = { ...withFirstSource({ copyrightNotice: '(c) Example' }) };
-    next.version = 'data-sources-v3';
+    next.version = 'data-sources-v4';
     const issued = {
       ...ISSUED_ATTRIBUTION_VERSIONS,
-      'data-sources-v3': attributionContentDigest(next),
+      'data-sources-v4': attributionContentDigest(next),
     };
     expect(validateAttributionDocument(next, issued)).toEqual([]);
   });

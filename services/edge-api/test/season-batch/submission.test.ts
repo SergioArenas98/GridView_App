@@ -53,7 +53,8 @@ describe('season-batch submission builder', () => {
       manifestSha256: batch.manifestSha256,
       classifiedRounds: [1, 2, 3],
       submissionSha256: sha256(result.text),
-      // The committed record calls the source active (data-sources-v2).
+      // The committed record calls the source automatic (data-sources-v3),
+      // which admits a batch.
       attributionStatus: 'active',
     });
 

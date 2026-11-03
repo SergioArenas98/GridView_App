@@ -12,9 +12,10 @@
  *
  * - whether `expectedActiveVersion` is still the active release when the
  *   body arrives (the operator reads it from the cutover status first);
- * - whether the deployed attribution record credits the source as `active`.
- *   The local record's status is reported as `attributionStatus`; the Worker
- *   refuses every batch while its own record is not `active`.
+ * - whether the deployed attribution record credits the source with a status
+ *   that admits a batch, `active` or `automatic`. The local record's
+ *   admission is reported as `attributionStatus`; the Worker refuses every
+ *   batch while its own record admits none.
  *
  * Dormant and offline: it reads two local files, sends nothing, reads no
  * credential and is not part of the Worker bundle.
@@ -68,7 +69,10 @@ export interface SubmissionSummary {
   readonly expectedActiveVersion: string | null;
   readonly submissionBytes: number;
   readonly submissionSha256: string;
-  /** The local record's status for the source; the Worker needs `active`. */
+  /**
+   * Whether the local record's status for the source admits a batch: `active`
+   * for `active` or `automatic`, as the Worker requires.
+   */
   readonly attributionStatus: 'active' | 'not-active';
 }
 

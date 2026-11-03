@@ -26,13 +26,12 @@ ENVIRONMENT = "development"
 #
 # Declared here for every environment. Declaring is not provisioning, and
 # provisioning is not use: the staging namespace was provisioned by the
-# 2026-09-12 staging deployment, and production has never been deployed. No
-# provider adapter exists and no production module constructs the provider
-# HTTP client, so nothing looks the binding up. Staging cannot reach a live
-# provider because its `PROVIDER_MODE` selects no live provider (committed
-# `none` since the season-batch ingest configuration; `mock` before) - not
-# because of this binding. Wherever the namespace is absent, the resolver fails
-# closed and no provider request is issued.
+# 2026-09-12 staging deployment. Only the automatic-updates runtime constructs
+# the provider HTTP client, which reserves through this binding: the
+# demonstration Worker (controlled source, never the network) and, once
+# AU-4 step 1 is deployed, staging. Live staging (`none`) and production
+# (`none`) build no provider. Wherever the namespace is absent, the resolver
+# fails closed and no provider request is issued.
 [[durable_objects.bindings]]
 name = "PROVIDER_RATE_LIMITER"
 class_name = "ProviderRateLimiter"
@@ -82,21 +81,27 @@ preview_urls = false
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-# No provider (decision pack 2026-10-07 DP-6(b)). Committed 2026-10-13 and
-# LIVE since that day's deployment (version `3b3b8273-…`); the current live
-# version `453af4fb-…` (2026-10-19, from `d351118`) keeps it, verified
-# read-only on 2026-10-21. This is an interim state, not the operating model:
-# automatic updates (an owner release requirement since 2026-10-21) replace
-# it with
-# the automatic provider mode, a separately authorized change. With `none`
-# the whole-season sync routes (`POST /internal/admin/sync/full` and the
-# others) and the scheduled handler build no provider and fail fast as
-# `provider-unavailable`, so they never construct, guard or publish a mock
-# candidate. No schedule invokes that handler: the staging triggers below are
-# empty. The only way season data reaches staging is the
-# guarded season-batch ingest below. Changing this value from the live one is
-# cutover-sensitive (staging runbook, section 6).
-PROVIDER_MODE = "none"
+# Automatic updates (ADR 0028; release gate AU-4,
+# `docs/release/automatic-updates.md` section 8.3). COMMITTED, NOT YET
+# DEPLOYED: the live version `453af4fb-…` (2026-10-19, from `d351118`) still
+# runs `none`, the interim state committed and deployed on 2026-10-13, under
+# which season data reached staging only through the guarded season-batch
+# ingest below.
+#
+# `coordinated` selects the coordinated runtime against the network: staging
+# sets no `CONTROLLED_PROVIDER_SOURCE`, so its Jolpica transport is the
+# hardened HTTP client behind the global `ProviderRateLimiter`. A run needs the
+# reconciliation ledger bound below and sends nothing without it. The guarded
+# ingest refuses every batch under this mode (`provider-mode-coordinated`). The
+# schedule stays empty (triggers below), so until AU-4 step 3 nothing runs
+# unless the operator sends an authenticated `POST /internal/admin/sync/full`.
+#
+# Deploying this value is AU-4 step 1: cutover-sensitive (staging runbook,
+# section 6) and separately authorized. Creating the ledger class there
+# permanently blocks `wrangler rollback` to every earlier version (see the
+# ledger entry below). Falling back to manual batches is a deploy of
+# `PROVIDER_MODE = "none"` that keeps the ledger class and binding.
+PROVIDER_MODE = "coordinated"
 PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
 
 # Season 2026 cutover phase (ADR 0025 D12) - ACTIVATION PHASE, LIVE IN STAGING
@@ -137,9 +142,11 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 # four-digit season `2026`, which has curated season metadata; anything else
 # (`2026 `, `2099`, `abcd`) is refused as `ingest-misconfigured`. Setting it
 # admits nothing by itself: the route still needs `ADMIN_TOKEN`, refuses
-# outside staging and under a live-provider `PROVIDER_MODE`, needs the
-# reachable sequencer above, and needs a bundled attribution record that
-# credits Jolpica as `active`. Every admitted batch then publishes through the
+# under `PROVIDER_MODE = "coordinated"` (so it refuses every batch while the
+# mode above is committed), needs the reachable sequencer above, and needs a
+# bundled attribution record that credits Jolpica as `active` or `automatic`.
+# It stays set so that falling back to `none` admits batches again. Every
+# admitted batch then publishes through the
 # D14-D16 guard and the `prepare` CAS bound to the submission's
 # `expectedActiveVersion`. Deploying it and submitting a batch are each
 # separately authorized (staging runbook, section 6, "Guarded season-batch
@@ -162,6 +169,39 @@ class_name = "ProviderRateLimiter"
 [[env.staging.durable_objects.bindings]]
 name = "SEASON_PUBLICATION_SEQUENCER"
 class_name = "SeasonPublicationSequencer"
+
+# The reconciliation ledger (ADR 0020, ADR 0028 D2): the coordinated runtime's
+# durable record of what it observed, what is due and what it published.
+# COMMITTED FOR AU-4 STEP 1, NOT YET DEPLOYED.
+#
+# A named environment's exports table replaces the top-level one, so staging
+# restates both top-level classes (unchanged: the namespaces the 2026-09-12
+# deployment created keep their identity and storage) and adds the ledger.
+#
+# IRREVERSIBLE FOR ROLLBACK. The deploy that first ships this class creates a
+# third staging namespace. A Durable Object class change blocks
+# `wrangler rollback` to every earlier version, permanently, and redeploying
+# an older commit also fails, because its staging exports table lacks the
+# class (decision pack 2026-10-07). Recovery from then on is only a forward
+# deploy from a commit that keeps these three exports: `PROVIDER_MODE =
+# "none"` falls back to manual batches, and removing only the binding below
+# stops every coordinated run (`ledger-unbound`) while keeping the ledger's
+# data. Never remove the exports entry itself: a deleted class is permanent.
+[env.staging.exports.ProviderRateLimiter]
+type = "durable-object"
+storage = "sqlite"
+
+[env.staging.exports.SeasonPublicationSequencer]
+type = "durable-object"
+storage = "sqlite"
+
+[env.staging.exports.ReconciliationLedger]
+type = "durable-object"
+storage = "sqlite"
+
+[[env.staging.durable_objects.bindings]]
+name = "RECONCILIATION_LEDGER"
+class_name = "ReconciliationLedger"
 
 [env.staging.secrets]
 required = ["ADMIN_TOKEN"]
@@ -306,9 +346,9 @@ invocation_logs = false
 # 2026-10-21 (AU-2 step 1) and is bound below. AU-3's demonstration ran on it
 # and passed on 2026-11-03; its schedule was stopped that night, so it has none.
 #
-# It is the only environment that selects the automatic path, binds the
-# reconciliation ledger or reads a controlled provider source, and it shares
-# no resource with staging or production:
+# It is the only environment that reads a controlled provider source; it
+# selects the automatic path and binds the reconciliation ledger, as staging
+# commits for AU-4. It shares no resource with staging or production:
 # - its own Worker name, KV namespace and Durable Object namespaces, so a
 #   deploy creates three new ones and leaves staging's two and staging's
 #   rollback history untouched;

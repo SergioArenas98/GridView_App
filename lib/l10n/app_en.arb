@@ -1542,6 +1542,10 @@
   "@settingsSourceStatusActive": {
     "description": "Status of a credited data source whose data GridView publishes only through operator-run, reviewed batches. Must stay true before the first batch is published (it must not claim that data from the source is being shown) and must not imply automatic or live retrieval."
   },
+  "settingsSourceStatusAutomatic": "GridView's service checks this source automatically, at most once an hour, and publishes its data only after the data passes GridView's checks. GridView's operator can also publish reviewed batches of it. Either way, data from it can lag behind the source, and a published result can later be corrected.",
+  "@settingsSourceStatusAutomatic": {
+    "description": "Status of a credited data source whose data GridView's service retrieves automatically on a schedule, and may also publish in operator-run batches. Must stay true before anything from the source is published (it must not claim that data from the source is being shown), and must not claim live or real-time data."
+  },
   "settingsSourceStatusFrozen": "This test build contains a fixed snapshot of data from this source, captured {date}. It receives no updates.",
   "@settingsSourceStatusFrozen": {
     "description": "Status of a credited data source in a test-only build that bundles a frozen snapshot of its data. Must not claim live retrieval.",

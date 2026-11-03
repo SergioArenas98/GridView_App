@@ -1,21 +1,25 @@
 /**
- * The isolated demonstration Worker's section of `wrangler.toml`
- * (`[env.e2e]`, release gate AU-3; `docs/release/automatic-updates.md` §8.1).
+ * Environment sections of `wrangler.toml`, for the pins that allow a
+ * declaration in named environments only.
  *
- * It is the one environment allowed to select the automatic path, bind the
- * reconciliation ledger and read a controlled provider source. The dormancy
- * pins that forbid those everywhere else read the file through
- * `withoutDemonstration`, so a declaration can be excused only by sitting
- * inside this section, never by a whole-file match.
+ * Two environments are allowed to select the automatic path and bind the
+ * reconciliation ledger: the isolated demonstration Worker (`[env.e2e]`,
+ * release gate AU-3; `docs/release/automatic-updates.md` §8.1) and, since
+ * gate AU-4, live staging (`[env.staging]`, §8.3). Only the demonstration
+ * Worker may read a controlled provider source. The dormancy pins that forbid
+ * those everywhere else read the file through `withoutDemonstration` or
+ * `withoutAutomatic`, so a declaration can be excused only by sitting inside
+ * an allowed section, never by a whole-file match.
  */
 
 export const DEMONSTRATION_ENVIRONMENT = 'e2e';
 
-const header = `[env.${DEMONSTRATION_ENVIRONMENT}]`;
+/** The environments that select `coordinated` and bind the ledger. */
+export const AUTOMATIC_ENVIRONMENTS = ['staging', DEMONSTRATION_ENVIRONMENT];
 
-/** Whether a table header line belongs to the demonstration environment. */
-function isDemonstrationHeader(line: string): boolean {
-  return /^\[\[?env\.e2e[.\]]/.test(line.trim());
+/** Whether a table header line belongs to the named environment. */
+function isEnvironmentHeader(line: string, name: string): boolean {
+  return new RegExp(`^\\[\\[?env\\.${name}[.\\]]`).test(line.trim());
 }
 
 /** Whether a line opens any TOML table or array of tables. */
@@ -23,8 +27,15 @@ function isHeader(line: string): boolean {
   return /^\[/.test(line.trim());
 }
 
-/** `[start, end)` line indexes of the section; it must appear exactly once. */
-function sectionBounds(lines: readonly string[]): [number, number] {
+/**
+ * `[start, end)` line indexes of one environment's section: its header up to
+ * the next table of another environment. The header must appear exactly once.
+ */
+function sectionBounds(
+  lines: readonly string[],
+  name: string,
+): [number, number] {
+  const header = `[env.${name}]`;
   const starts = lines.flatMap((line, index) =>
     line.trim() === header ? [index] : [],
   );
@@ -34,21 +45,43 @@ function sectionBounds(lines: readonly string[]): [number, number] {
   const start = starts[0];
   const after = lines.findIndex(
     (line, index) =>
-      index > start && isHeader(line) && !isDemonstrationHeader(line),
+      index > start && isHeader(line) && !isEnvironmentHeader(line, name),
   );
   return [start, after === -1 ? lines.length : after];
 }
 
+/** One environment's section: its header up to the next foreign table. */
+export function environmentSection(toml: string, name: string): string {
+  const lines = toml.split('\n');
+  const [start, end] = sectionBounds(lines, name);
+  return lines.slice(start, end).join('\n');
+}
+
+/** Every line of the file except the named environments' sections. */
+export function withoutEnvironments(
+  toml: string,
+  names: readonly string[],
+): string {
+  const lines = toml.split('\n');
+  const excluded = new Set<number>();
+  for (const name of names) {
+    const [start, end] = sectionBounds(lines, name);
+    for (let index = start; index < end; index += 1) excluded.add(index);
+  }
+  return lines.filter((_line, index) => !excluded.has(index)).join('\n');
+}
+
 /** The demonstration section: its header up to the next foreign table. */
 export function demonstrationSection(toml: string): string {
-  const lines = toml.split('\n');
-  const [start, end] = sectionBounds(lines);
-  return lines.slice(start, end).join('\n');
+  return environmentSection(toml, DEMONSTRATION_ENVIRONMENT);
 }
 
 /** Every line of the file except the demonstration section. */
 export function withoutDemonstration(toml: string): string {
-  const lines = toml.split('\n');
-  const [start, end] = sectionBounds(lines);
-  return [...lines.slice(0, start), ...lines.slice(end)].join('\n');
+  return withoutEnvironments(toml, [DEMONSTRATION_ENVIRONMENT]);
+}
+
+/** Every line of the file except the sections allowed the automatic path. */
+export function withoutAutomatic(toml: string): string {
+  return withoutEnvironments(toml, AUTOMATIC_ENVIRONMENTS);
 }

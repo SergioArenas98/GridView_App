@@ -1160,6 +1160,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'GridView no obtiene datos de esta fuente de forma automática. Los datos de esta fuente que GridView pueda mostrar los ha capturado, revisado y publicado manualmente el operador de GridView, por lotes, así que solo cambian cuando se publica un lote nuevo y pueden ir con retraso respecto a la fuente.';
 
   @override
+  String get settingsSourceStatusAutomatic =>
+      'El servicio de GridView consulta esta fuente automáticamente, como máximo una vez por hora, y solo publica sus datos después de que superen las comprobaciones de GridView. El operador de GridView también puede publicar lotes revisados de estos datos. En ambos casos, los datos de esta fuente pueden ir con retraso respecto a ella, y un resultado publicado puede corregirse más tarde.';
+
+  @override
   String settingsSourceStatusFrozen(String date) {
     return 'Esta versión de prueba contiene una instantánea fija de datos de esta fuente, capturada el $date. No recibe actualizaciones.';
   }
