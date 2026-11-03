@@ -237,6 +237,9 @@ enabled = true
 persist = true
 invocation_logs = false
 
+[env.staging.observability.traces]
+enabled = false
+
 # Production (release plan W1 and W2; submission path A, Workers Paid). NEVER
 # DEPLOYED: no `gridview-api-production` Worker, Durable Object namespace or
 # secret exists on the Cloudflare account. Only its KV namespace exists,
@@ -337,6 +340,13 @@ head_sampling_rate = 1
 enabled = true
 persist = true
 invocation_logs = false
+
+# Workers Traces OFF, pinned rather than left to the dashboard default: a
+# trace records each request with its metadata, which would persist a record
+# per public request and void the logging guarantee above (PR #82
+# `data-safety.md` section 3.4). Live since W3 as `enabled: false`.
+[env.production.observability.traces]
+enabled = false
 
 # The isolated demonstration Worker of release gate AU-3 (ADR 0028 D10;
 # `docs/release/automatic-updates.md` section 8.1). DEPLOYED on 2026-10-21
