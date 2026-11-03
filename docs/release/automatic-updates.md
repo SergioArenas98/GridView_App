@@ -3,11 +3,13 @@
 Prepared 2026-10-21 on `feat/automatic-updates` (stacked on PR #85). The
 decision record is [ADR 0028](../adr/0028-automatic-end-to-end-season-updates.md).
 
-**Nothing in this document is authorized by the change that adds it.** No
-environment selects `coordinated`, binds the reconciliation ledger or has a
-schedule. No provider was contacted, nothing was deployed, and no Cloudflare
-plan, trigger, Play Console or AdMob setting was changed. Every step marked
-**[approval]** below is a separate owner authorization, given in order.
+**Nothing in this document is authorized by the change that adds it.** When
+it was written no environment selected `coordinated`, bound the
+reconciliation ledger or had a schedule. Since then the demonstration Worker
+(AU-2, AU-3) and, committed but not deployed, staging (AU-4 step 1, §8.3)
+select `coordinated` and bind the ledger; no environment has a schedule.
+Every step marked **[approval]** below is a separate owner authorization,
+given in order.
 
 **Requirement (owner, 2026-10-21).** A newly available race result must reach
 the app without a manual capture or submission. PR #85's
@@ -191,7 +193,7 @@ verified that delivery on 2026-10-22 (§7). Known limits:
 | AU-1 | Workers Paid bought (the plan is account-wide, so staging gets it too). **Done 2026-10-21:** read-only, the dashboard shows Workers Paid active, renewing 2026-11-21, on account `786e24f1…e6bf`, the account Wrangler uses; one invoice that day, USD 5.00, paid (the invoice itself, and so any VAT line, was not opened) | **[approval]** owner | — |
 | AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis. **Done 2026-10-21:** all four steps (§8.1) | **[approval]** each, **[PR]** | AU-0, AU-1 |
 | AU-3 | **The end-to-end demonstration with controlled data** (§8.2): asynchronous, in persistent phases, passed on its acceptance criteria A1–A6. Also on the release commit: the in-process gate in CI and the app half locally. **Passed 2026-11-03:** one bounded asynchronous run from `F` = 2026-11-02 20:17Z published the result at the 22:17Z run and its correction at the 00:17Z run with nobody acting on GridView, and the installed app showed both; A1–A6 evidenced, the operator's record accepted by the owner (§8.2, "Result"). The e2e schedule is stopped. The two parts on the release commit stay due with it (AU-8) | **[approval]** each source load and the schedule, which one bounded approval may cover; **[record]** the evidence | AU-2 |
-| AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2) | **[approval]** each of the three; cutover-sensitive | AU-3 |
+| AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2). **Prepared 2026-11-03:** step 1's configuration, the `automatic` attribution record (`data-sources-v3`, owner decision of that day) and the app and API wording committed; the first runs rehearsed in process against `…1d`; nothing deployed | **[approval]** each of the three; cutover-sensitive | AU-3 |
 | AU-5 | The monitor's hourly `schedule:` for staging | **[approval]**, **[PR]** | AU-4, AU-6 |
 | AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1). **Passed 2026-10-22:** one owner-authorised dispatch against staging (`skip_heartbeat`, `simulate_failure`), [run 39852057415](https://github.com/SergioArenas98/GridView_App/actions/runs/39852057415) on `master` at `09e0686`, failed as expected with the single finding `simulated-failure` (pendingRound 18); the owner confirmed, with a screenshot, that GitHub's failure e-mail for it arrived at 21:49 Irish time (20:49Z) the same day. OD-1 is closed. The workflow is still manual-only: no monitor schedule was enabled (that is AU-5), and no Worker schedule changed | **[approval]**, **[record]** | AU-0 |
 | AU-7 | Production automatic (§8.4): W2/W3 with the production delta, genesis, the first automatic release, persisted logs verified free of app traffic, the monitor scheduled for production | **[approval]** each | AU-4 soak (one race weekend published automatically), AU-6, D-A (§9) |
@@ -575,33 +577,112 @@ which the sequence's one approval may cover:
 
 ### 8.3 Live staging (AU-4)
 
-1. **[approval]** Deploy `[env.staging]` with `PROVIDER_MODE =
-   "coordinated"`, the staging exports table restating both existing classes
-   plus `ReconciliationLedger`, the `RECONCILIATION_LEDGER` binding, and still
-   `crons = []`.
-   - **Irreversible for rollback:** creating the ledger class blocks `wrangler
-     rollback` to every earlier version, permanently (decision pack
-     2026-10-07).
-   - Expect a third Durable Object namespace. The ingest then refuses
-     (`coordinated`).
-2. **[approval]** The first live provider requests: one authenticated manual
-   `POST /internal/admin/sync/full?season=2026` (bootstrap calendar: one
-   request), then one more (a forced publication run: 6 + 17 requests today).
-   - Measure CPU with `wrangler tail --format json`.
-   - Compare the release with `pm1-…1d` document by document. Expect only
-     freshness and anything Jolpica changed since 2026-10-19; treat any other
-     difference as a stop and review it before step 3.
-   - Check the Wrangler 4.112 `kv bulk put` and `tail` flags with `--help`
-     first.
-   - Manual runs corroborate nothing (O-8).
-3. **[approval]** The hourly schedule: `crons = ["17 * * * *"]`, `triggers
-   deploy`. Soak through one race weekend; the R18 example in §2 is the first
-   chance.
+**Prepared 2026-11-03; nothing deployed.** The AU-4 PR commits step 1's
+configuration (`[env.staging]`: `PROVIDER_MODE = "coordinated"`, the staging
+exports table restating both existing classes plus `ReconciliationLedger`,
+the `RECONCILIATION_LEDGER` binding, still `crons = []`) and the
+attribution record `data-sources-v3`, which credits Jolpica F1 as
+`automatic` (owner decision 2026-11-03, superseding the batches-only wording
+of 2026-10-13; it is not a legal clearance). Live staging is still
+`453af4fb-…` (`none`, two Durable Object namespaces, active
+`pm1-000000000001d-aed72435`). Merging the PR deploys nothing.
 
-**Stop:** set `crons = []` and run `triggers deploy`. Nothing publishes. **Fall
-back to manual batches:** deploy `PROVIDER_MODE = "none"` with the ledger
-binding kept; the ingest is admitted again. The calendar-horizon policy is
-shared, so releases re-stamp consistently.
+**Rehearsed in process** (`test/e2e/automatic-updates/staging-first-run-rehearsal.test.ts`,
+opt-in, over the 2026-10-19 capture that `…1d` was published from, seeded as
+`…1d` and credited `data-sources-v2`; the committed staging variables, a
+ledger over the real class, the real limiter and hardened client; no network):
+
+| Instant | Run 1 | Run 2 (forced publication) |
+|---|---|---|
+| 2026-10-19T19:00Z (Jolpica as captured) | 1 request (`/races/`), plan `observation`, nothing published | 23 requests (6 season resources + rounds 1-17); one release published; 117 documents, none added or removed; the only content change is `content:manifest` `attributionVersion` `data-sources-v2` → `data-sources-v3`, every other document differs in instants only |
+| 2026-11-04T10:00Z (rounds 18 and 19 raced, answered as not yet published) | 1 request, nothing published | 25 requests (rounds 18 and 19 added); `withheld`, `classification-unavailable`; `…1d` keeps serving |
+| 2026-11-04T10:00Z (rounds 18 and 19 answered with synthesized results) | 1 request, nothing published | 25 requests; one release published, credited `data-sources-v3`; 119 documents: `grand-prix:18:results` and `grand-prix:19:results` added, none removed; content changes only in `bootstrap`, `calendar`, `season`, `home` (latest completed round 19, featured round 20), `grand-prix:18`, `grand-prix:19`, their two circuits and `content:manifest` |
+
+The third row's results are synthesized from the capture, because nothing may
+ask Jolpica for them: each round answers round 17's classification under its
+own calendar entry, and both standings tables are restated at round 19 with
+round 17's totals. It shows that a run which finds both results passes
+mapping, the standings round-coherence check, validation and the publication
+guard, and what that release changes. It does not show the real content.
+**Untested until step 2:** the real classifications of rounds 18 and 19
+(their drivers, any new participant, DNF/DSQ shapes), real standings after
+round 19 and their coherence with those results, and any change Jolpica made
+since 2026-10-19 to rounds 1-17 or to the season resources, which the
+publication guard would judge for the first time live. In the real step 2,
+compare the release with `…1d` as listed below.
+The in-process run took 173 ms of Node wall time; Workers CPU is measured at
+step 2.
+
+**What the deploy cannot undo.** Creating the `ReconciliationLedger` class is
+a Durable Object class lifecycle change. Cloudflare refuses `wrangler
+rollback` across one, so after step 1 no rollback can reach `453af4fb-…` or
+any earlier version, permanently. Redeploying an older commit also fails,
+because its staging exports table lacks the class. Rollback stays possible
+between versions deployed after step 1, as long as none changes a class
+again. Never remove the class from `exports`: deleting a class is permanent
+and destroys the ledger's data. Only staging is affected: the demonstration
+Worker and production are separate scripts.
+
+Every step below is its own **[approval]**; each is cutover-sensitive
+(staging runbook §6, "Automatic updates on staging (AU-4)", which holds the
+commands and checks).
+
+0. **Preflight, read-only.** Clean checkout of the merged commit; `npm ci`,
+   typecheck, tests; `wrangler deploy --env staging --dry-run` lists the three
+   Durable Object bindings, `PROVIDER_MODE=coordinated`, no schedule; live
+   staging re-read (§2 of the runbook): `453af4fb` at 100 %, schedules `[]`,
+   two namespaces, active `…1d`, the 52 public ETags recorded. Check
+   `wrangler deploy`, `tail` and `triggers deploy` flags with `--help`.
+1. **[approval] Deploy** step 1's configuration. Expect a new version, a
+   third namespace (`ReconciliationLedger`), schedules still `[]`, the same
+   active release and public ETags (a deploy publishes nothing), and the
+   ingest refusing as `provider-mode-coordinated`. Nothing runs: there is no
+   schedule. Stop on any other difference.
+2. **[approval] The first live provider requests:** two authenticated
+   `POST /internal/admin/sync/full?season=2026`, a few minutes apart, with
+   `wrangler tail --env staging --format json` open. The first sends one
+   request (the calendar); the second sends 6 + one per raced round (25
+   today) and is expected to publish.
+   - Record each run's CPU from the tail (RB-7 check 2); compare with the
+     15-minute cron limit and the 362 ms ingest.
+   - Compare the new release with `…1d` document by document. Expected:
+     `attributionVersion` `data-sources-v3`, instants, rounds 18-19 results,
+     standings, Home and the calendar's classified flags. Any other
+     difference is a stop: review it before step 3.
+   - Manual runs corroborate nothing (O-8) and do not beat the heartbeat.
+3. **[approval] The hourly schedule:** a PR committing `crons = ["17 * * * *"]`
+   and `wrangler triggers deploy --env staging`. Soak through one race
+   weekend; the next are São Paulo (R20, 2026-11-08 17:00Z, first check
+   19:17Z), Las Vegas (R21, 2026-11-22 04:00Z) and Qatar (R22, 2026-11-29
+   16:00Z). Then AU-5 schedules the monitor.
+
+The staging app needs a build with the new wording (`data-sources-v3`)
+before an installed staging app describes the automatic path; installing it
+is its own approval.
+
+**Recovery.** None of these needs a Worker rollback:
+
+- **Stop the schedule** (after step 3): set `crons = []` and run `wrangler
+  triggers deploy --env staging`. Schedules are not part of a version, so this
+  changes no code. Nothing publishes afterwards.
+- **Stop every coordinated run, keep the ledger's data:** deploy a commit
+  without the `RECONCILIATION_LEDGER` binding but with the three exports.
+  Runs stop at `ledger-unbound` before any request.
+- **Fall back to manual batches:** deploy `PROVIDER_MODE = "none"` with the
+  exports and the binding kept. The ingest is admitted again (the
+  `automatic` record admits a batch). A batch generated before
+  `data-sources-v3` is refused as `curated-metadata-mismatch` (pinned in
+  `test/config/staging-season-batch-ingest.test.ts`); regenerate it at
+  the deployed commit. The calendar-horizon policy is shared, so releases
+  re-stamp consistently.
+- **A bad automatic release:** under `coordinated`, a release rollback
+  needs a hold first: `POST /internal/admin/reconciliation/hold`, then
+  `POST /internal/admin/rollback?season=2026`; the D14/D15 guard still
+  applies. Keep the hold until the cause is fixed: releasing it is consent,
+  and the next run republishes through every guard, including what the
+  rollback replaced. Runbook §6, "Reconciliation operator routes".
+- **A code defect:** a forward fix, deployed from a commit that keeps the
+  three exports.
 
 ### 8.4 Production (AU-7)
 

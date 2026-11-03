@@ -13,12 +13,12 @@
  * The class is a named export of the Worker entry point so that a later,
  * separately authorized change can register and bind it. **Exporting it
  * provisions nothing**: Wrangler uploads a Durable Object class's lifecycle
- * only from a declared `[exports.<Class>]` entry (or a migration), and no
- * committed configuration declares either, nor any binding. The client below
- * is constructed only by `ledgerClientFor`, which
- * `resolveReconciliationLedger` calls with the optional `RECONCILIATION_LEDGER`
- * binding. No committed environment declares that binding, so the resolver
- * answers `null` there and every coordinated run stops at `ledger-unbound`.
+ * only from a declared `[exports.<Class>]` entry (or a migration). Only the
+ * demonstration Worker and staging (release gate AU-4) declare an entry and
+ * the binding. The client below is constructed only by `ledgerClientFor`,
+ * which `resolveReconciliationLedger` calls with the optional
+ * `RECONCILIATION_LEDGER` binding. Wherever it is not declared, the resolver
+ * answers `null` and every coordinated run stops at `ledger-unbound`.
  *
  * ## Why the classic `fetch` interface
  *

@@ -3,22 +3,27 @@
  * PR-4, DP-6(b)), as Wrangler itself resolves `wrangler.toml`, driven through
  * the real Worker entry points.
  *
- * `env.staging` sets `SEASON_BATCH_INGEST = "2026"`, moves `PROVIDER_MODE`
- * from `mock` to `none` and replaces the nightly `17 3 * * *` with an explicit
- * empty cron list. Development and the absent reconciliation-ledger binding
- * do not change. Production's own configuration (release plan W1) is pinned
- * in `production-worker-config.test.ts`. This file proves four things about
- * that resolved configuration:
+ * `env.staging` sets `SEASON_BATCH_INGEST = "2026"` and an explicit empty
+ * cron list. Since release gate AU-4 it selects `PROVIDER_MODE =
+ * "coordinated"` and binds the reconciliation ledger
+ * (`staging-automatic-updates.test.ts` drives that path); the `none` it
+ * committed from 2026-10-13 is now its documented fallback to manual
+ * batches, a deploy that changes only the mode. Production's own
+ * configuration (release plan W1) is pinned in
+ * `production-worker-config.test.ts`. This file proves five things about the
+ * resolved configuration:
  *
  * - staging schedules nothing, and says so explicitly: Wrangler replaces a
  *   Worker's schedules only when `crons` is set, so an empty list removes the
  *   live one where an absent key would leave it;
- * - no scheduled run - should one ever be invoked, for example by a trigger
- *   restored separately - and no manual whole-season sync can build or
- *   publish a mock candidate in staging any more;
+ * - the committed staging ingest refuses every batch under `coordinated`,
+ *   before reading it, so there is never a second provider budget;
+ * - under the fallback, no scheduled run and no manual whole-season sync can
+ *   build or publish a mock candidate;
  * - production cannot ingest without its own genesis control;
- * - the staging ingest still needs `ADMIN_TOKEN` and still publishes only
- *   through the guarded sequencer, bound to the reviewed active release.
+ * - under the fallback, the staging ingest still needs `ADMIN_TOKEN` and
+ *   still publishes only through the guarded sequencer, bound to the
+ *   reviewed active release.
  *
  * `unstable_readConfig` only reads the file. Nothing here deploys, provisions
  * or contacts Cloudflare, Jolpica or staging; every sequencer is in process
@@ -52,6 +57,8 @@ import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validato
 import type { SequencedContext } from '../publication/sequenced/support';
 import {
   ingestContext,
+  reanchored,
+  rehashDocuments,
   SEASON,
   SEED_VERSION,
   submissionFor,
@@ -91,6 +98,14 @@ function resolvedVars(environment: Environment): Partial<Env> {
   );
 }
 
+/**
+ * Staging's documented fallback to manual batches: the committed variables
+ * with `PROVIDER_MODE = "none"`, the ledger binding kept.
+ */
+function fallbackVars(): Partial<Env> {
+  return { ...resolvedVars('staging'), PROVIDER_MODE: 'none' };
+}
+
 function bindingNames(environment: Environment): string[] {
   return resolved(environment).durable_objects.bindings.map(
     (binding: { readonly name: string }) => binding.name,
@@ -98,10 +113,10 @@ function bindingNames(environment: Environment): string[] {
 }
 
 describe('the resolved configuration', () => {
-  it('sets exactly SEASON_BATCH_INGEST "2026" and PROVIDER_MODE "none" in staging', () => {
+  it('sets exactly SEASON_BATCH_INGEST "2026" and PROVIDER_MODE "coordinated" in staging', () => {
     expect(resolved('staging').vars).toEqual({
       ENVIRONMENT: 'staging',
-      PROVIDER_MODE: 'none',
+      PROVIDER_MODE: 'coordinated',
       PUBLIC_BASE_URL: 'https://gridview-api-staging.sejuma18.workers.dev',
       SEASON_PUBLICATION_CUTOVER_CONTROL: 'activate:2026',
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',
@@ -112,14 +127,18 @@ describe('the resolved configuration', () => {
     expect(resolved('production').vars).toMatchObject({
       SEASON_BATCH_INGEST: '2026',
     });
-    // No environment commits the mock provider any more.
+    // No environment commits the mock provider any more, and staging reads
+    // Jolpica from the network, never from a controlled source.
     expect(rawConfig).not.toMatch(/^\s*PROVIDER_MODE\s*=\s*"mock"/m);
+    expect(resolved('staging').vars).not.toHaveProperty(
+      'CONTROLLED_PROVIDER_SOURCE',
+    );
   });
 
-  it('resolves staging to no provider under the unchanged sequencer and activation phase', () => {
+  it('resolves staging to the coordinated mode under the unchanged sequencer and activation phase', () => {
     const config = resolveRuntimeConfig(resolvedVars('staging'));
     expect(config.environment).toBe('staging');
-    expect(config.providerMode).toBe('none');
+    expect(config.providerMode).toBe('coordinated');
     expect(config.publicationAuthorityMode).toBe('sequencer');
     expect(config.publicationCutoverControl).toEqual({
       kind: 'activate',
@@ -152,22 +171,30 @@ describe('the resolved configuration', () => {
     ]);
   });
 
-  it('leaves the bindings and the absent ledger unchanged', () => {
+  it('adds only the ledger to the staging bindings, and leaves development and production without it', () => {
     expect(bindingNames('staging')).toEqual([
       'PROVIDER_RATE_LIMITER',
       'SEASON_PUBLICATION_SEQUENCER',
+      'RECONCILIATION_LEDGER',
+    ]);
+    expect(Object.keys(resolved('staging').exports)).toEqual([
+      'ProviderRateLimiter',
+      'SeasonPublicationSequencer',
+      'ReconciliationLedger',
     ]);
     expect(bindingNames('')).toEqual(['PROVIDER_RATE_LIMITER']);
     expect(bindingNames('production')).toEqual([
       'PROVIDER_RATE_LIMITER',
       'SEASON_PUBLICATION_SEQUENCER',
     ]);
-    for (const environment of ['', 'staging', 'production'] as const) {
-      const config = resolved(environment);
-      expect(Object.keys(config.exports), environment).toEqual([
+    for (const environment of ['', 'production'] as const) {
+      expect(Object.keys(resolved(environment).exports), environment).toEqual([
         'ProviderRateLimiter',
         'SeasonPublicationSequencer',
       ]);
+    }
+    for (const environment of ['', 'staging', 'production'] as const) {
+      const config = resolved(environment);
       expect(config.migrations, environment).toEqual([]);
       expect(JSON.stringify(config.vars), environment).not.toMatch(
         /RECONCILIATION/,
@@ -246,9 +273,9 @@ function adminPost(path: string, body?: unknown, token = ADMIN_TOKEN) {
   });
 }
 
-describe('the committed staging variables cannot publish mock data', () => {
-  // Committed staging schedules nothing (above). The handler is still
-  // exercised: a trigger restored separately would invoke it.
+describe("staging's fallback variables cannot publish mock data", () => {
+  // The fallback schedules nothing either. The handler is still exercised: a
+  // trigger left in place would invoke it.
   it('a scheduled run, if one is invoked, builds no provider, publishes nothing and writes only its sync state', async () => {
     const context = await ingestContext();
     const before = await context.coordinator.readAuthority(SEASON);
@@ -258,7 +285,7 @@ describe('the committed staging variables cannot publish mock data', () => {
 
     await worker.scheduled?.(
       {} as ScheduledController,
-      workerEnv(resolvedVars('staging'), context, logger),
+      workerEnv(fallbackVars(), context, logger),
     );
 
     expect(spies.mockFetch).not.toHaveBeenCalled();
@@ -301,7 +328,7 @@ describe('the committed staging variables cannot publish mock data', () => {
 
       const response = await worker.fetch(
         adminPost(path, body),
-        workerEnv(resolvedVars('staging'), context),
+        workerEnv(fallbackVars(), context),
       );
 
       // The route answers the run's own result: failed, before any provider.
@@ -324,13 +351,13 @@ describe('the committed staging variables cannot publish mock data', () => {
     },
   );
 
-  it('is sensitive: the same run under the live Stage A value mock does build and publish a mock candidate', async () => {
+  it('is sensitive: the same run under the Stage A value mock does build and publish a mock candidate', async () => {
     const context = await ingestContext();
     const spies = publicationSpies();
 
     await worker.scheduled?.(
       {} as ScheduledController,
-      workerEnv({ ...resolvedVars('staging'), PROVIDER_MODE: 'mock' }, context),
+      workerEnv({ ...fallbackVars(), PROVIDER_MODE: 'mock' }, context),
     );
 
     expect(spies.mockFetch).toHaveBeenCalledTimes(1);
@@ -399,7 +426,168 @@ describe('the committed production ingest needs its genesis control', () => {
   );
 });
 
-describe('the committed staging ingest stays authenticated and guarded', () => {
+describe('the committed staging ingest under the coordinated mode', () => {
+  it('refuses a valid, authenticated submission as provider-mode-coordinated, before reading it', async () => {
+    const context = await ingestContext();
+    const before = await context.coordinator.readAuthority(SEASON);
+    context.storage.writeLog.length = 0;
+    const spies = publicationSpies();
+    const env = workerEnv(resolvedVars('staging'), context);
+    expect(env.PROVIDER_MODE).toBe('coordinated');
+
+    const answer = await ingestResponse(
+      env,
+      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+    );
+
+    expect(answer).toEqual({
+      status: 409,
+      data: {
+        outcome: 'refused',
+        stage: 'admission',
+        reason: 'provider-mode-coordinated',
+      },
+      bodyUsed: false,
+    });
+    expect(spies.guardedPublish).not.toHaveBeenCalled();
+    expect(context.storage.writeLog).toEqual([]);
+    expect(await context.coordinator.readAuthority(SEASON)).toEqual(before);
+  });
+
+  it('is sensitive: the fallback to none admits the same submission', async () => {
+    const context = await ingestContext();
+    const answer = await ingestResponse(
+      workerEnv(fallbackVars(), context),
+      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+    );
+    expect(answer.status).toBe(200);
+  });
+});
+
+/**
+ * A reconciliation ledger namespace that records every call and answers none,
+ * so a test can show that a Worker with it bound never used it.
+ */
+function recordingLedger(): {
+  readonly calls: string[];
+  readonly namespace: DurableObjectNamespace;
+} {
+  const calls: string[] = [];
+  const refuse = (name: string) => (): never => {
+    calls.push(name);
+    throw new Error(`the ledger was used: ${name}`);
+  };
+  const namespace = {
+    idFromName: refuse('idFromName'),
+    idFromString: refuse('idFromString'),
+    newUniqueId: refuse('newUniqueId'),
+    get: refuse('get'),
+    getByName: refuse('getByName'),
+    jurisdiction: refuse('jurisdiction'),
+  } as unknown as DurableObjectNamespace;
+  return { calls, namespace };
+}
+
+/**
+ * `batch` as the generator wrote it before `data-sources-v3`: credited
+ * `data-sources-v2` throughout, every digest consistent, so only a check of
+ * the attribution version can refuse it.
+ */
+function creditedV2(fresh: Batch): Batch {
+  const rewrite = (value: Json): Json =>
+    JSON.parse(
+      JSON.stringify(value).replaceAll('data-sources-v3', 'data-sources-v2'),
+    ) as Json;
+  const manifest = rewrite(fresh.manifest);
+  const artifact = rewrite(fresh.artifact);
+  rehashDocuments(manifest, artifact);
+  return reanchored(manifest, artifact);
+}
+
+describe('the forward fallback to manual batches, the ledger kept', () => {
+  // AU-4's recovery (`docs/release/automatic-updates.md` §8.3): once a deploy
+  // has created the ledger class, staging returns to manual batches only by a
+  // forward deploy of `PROVIDER_MODE = "none"` that keeps the ledger's exports
+  // and binding. The bound ledger must change nothing there, and a batch
+  // generated before `data-sources-v3` must be regenerated.
+  function fallbackEnv(
+    context: SequencedContext,
+    ledger: DurableObjectNamespace,
+    logger = new CapturingLogger(),
+  ): Env {
+    return {
+      ...workerEnv(fallbackVars(), context, logger),
+      RECONCILIATION_LEDGER: ledger,
+    };
+  }
+
+  it('publishes a current batch, and runs nothing automatic, without using the bound ledger', async () => {
+    const context = await ingestContext();
+    const ledger = recordingLedger();
+    const logger = new CapturingLogger();
+    const env = fallbackEnv(context, ledger.namespace, logger);
+    expect(env.PROVIDER_MODE).toBe('none');
+
+    const ingested = await ingestResponse(
+      env,
+      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+    );
+    expect(ingested.status).toBe(200);
+    expect(ingested.data.publication).toMatchObject({ status: 'applied' });
+    const committed = (ingested.data.publication as Json).version;
+
+    await worker.scheduled?.({} as ScheduledController, env);
+    const manual = await worker.fetch(adminPost(SYNC, {}), env);
+    expect(((await manual.json()) as { data: Json }).data).toMatchObject({
+      status: 'failed',
+      failureCategory: 'provider-unavailable',
+      providerCallCount: 0,
+    });
+
+    expect(ledger.calls).toEqual([]);
+    expect(globalFetch).not.toHaveBeenCalled();
+    expect(
+      logger.events.find((event) => event.operation === 'sync.failed'),
+    ).toMatchObject({ failureCategory: 'provider-unavailable' });
+    expect(await context.coordinator.readAuthority(SEASON)).toMatchObject({
+      activeVersion: committed,
+    });
+  });
+
+  it('refuses a batch generated under data-sources-v2 until it is regenerated', async () => {
+    const context = await ingestContext();
+    const ledger = recordingLedger();
+    const env = fallbackEnv(context, ledger.namespace);
+    const stale = creditedV2(batch);
+    expect(stale.artifact).not.toEqual(batch.artifact);
+    context.storage.writeLog.length = 0;
+
+    const refused = await ingestResponse(
+      env,
+      adminPost(INGEST, submissionFor(stale, SEED_VERSION)),
+    );
+    // The release's attribution version is checked against this Worker's
+    // curated metadata before the credit itself, so that check refuses it.
+    expect(refused).toMatchObject({
+      status: 422,
+      data: {
+        outcome: 'refused',
+        stage: 'verification',
+        reason: 'curated-metadata-mismatch',
+      },
+    });
+    expect(context.storage.writeLog).toEqual([]);
+
+    const regenerated = await ingestResponse(
+      env,
+      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+    );
+    expect(regenerated.status).toBe(200);
+    expect(ledger.calls).toEqual([]);
+  });
+});
+
+describe("the staging ingest stays authenticated and guarded (committed token check; the fallback's publication)", () => {
   it('refuses a missing, wrong or unconfigured token with 401 before reading the body', async () => {
     const context = await ingestContext();
     context.storage.writeLog.length = 0;
@@ -422,7 +610,7 @@ describe('the committed staging ingest stays authenticated and guarded', () => {
   it('publishes a reviewed batch through the guarded sequencer only, and refuses its resend as stale', async () => {
     const context = await ingestContext();
     const spies = publicationSpies();
-    const env = workerEnv(resolvedVars('staging'), context);
+    const env = workerEnv(fallbackVars(), context);
 
     const first = await ingestResponse(
       env,
@@ -468,7 +656,7 @@ describe('the committed staging ingest stays authenticated and guarded', () => {
     // fewer classified rounds than the batch, as mock round 12 does against a
     // real capture. D14 refuses any rollback that drops a classified round.
     const context = await ingestContext();
-    const env = workerEnv(resolvedVars('staging'), context);
+    const env = workerEnv(fallbackVars(), context);
     const first = await ingestResponse(
       env,
       adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
@@ -498,7 +686,7 @@ describe('the committed staging ingest stays authenticated and guarded', () => {
     context.storage.writeLog.length = 0;
     const spies = publicationSpies();
     const env = {
-      ...workerEnv(resolvedVars('staging'), context),
+      ...workerEnv(fallbackVars(), context),
       __SEASON_PUBLICATION_SEQUENCER: undefined,
     } as Env;
 

@@ -30,12 +30,12 @@ void main() {
       expect(pubspec, contains('- $dataSourceAttributionsAsset'));
     });
 
-    test('credits Jolpica F1 alone, active, under CC BY-NC-SA 4.0', () {
+    test('credits Jolpica F1 alone, automatic, under CC BY-NC-SA 4.0', () {
       final DataSourceAttributions record = DataSourceAttributions.fromJson(
         _shipped(),
       );
 
-      expect(record.version, 'data-sources-v2');
+      expect(record.version, 'data-sources-v3');
       expect(record.sources, hasLength(1));
       final DataSourceAttribution jolpica = record.sources.single;
       expect(jolpica.sourceId, 'jolpica');
@@ -58,13 +58,30 @@ void main() {
         jolpica.licenseLink.uri,
         Uri.parse('https://creativecommons.org/licenses/by-nc-sa/4.0/'),
       );
-      // Active since data-sources-v2 (O-9, decision pack DP-7): published
-      // through operator-run batches only.
-      expect(jolpica.status, DataSourceStatus.active);
+      // Automatic since data-sources-v3 (owner decision 2026-11-03, gate
+      // AU-4), superseding the batches-only `active` of data-sources-v2.
+      expect(jolpica.status, DataSourceStatus.automatic);
       expect(jolpica.copyrightNotice, isNull);
       expect(jolpica.creatorDesignation, isNull);
       expect(jolpica.warrantyDisclaimerNotice, isNotNull);
     });
+  });
+
+  test('parsing reads every status the schema defines', () {
+    for (final (String status, DataSourceStatus parsed)
+        in <(String, DataSourceStatus)>[
+          ('dormant', DataSourceStatus.dormant),
+          ('active', DataSourceStatus.active),
+          ('automatic', DataSourceStatus.automatic),
+        ]) {
+      expect(
+        DataSourceAttributions.fromJson(
+          _withSource(<String, Object?>{'status': status}),
+        ).sources.single.status,
+        parsed,
+        reason: status,
+      );
+    }
   });
 
   group('parsing refuses a record it could only show incompletely', () {

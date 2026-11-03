@@ -270,7 +270,7 @@ export class ControlledJolpica {
 }
 
 /** The real limiter logic over an in-memory host, on the stage's clock. */
-function realLimiter(now: () => Date): ReservationCoordinator {
+export function realLimiter(now: () => Date): ReservationCoordinator {
   const values = new Map<string, unknown>();
   let queue: Promise<unknown> = Promise.resolve();
   const host: ReservationHost = {

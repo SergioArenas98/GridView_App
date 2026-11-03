@@ -1763,16 +1763,22 @@ Coverage:
 
 The reconciliation orchestration (ADR 0020, C3/C4) is now **wired** to the
 Worker's scheduled handler and `POST /internal/admin/sync/full` in
-`coordinated` mode. It is **not active**: the resolver answers `null` without
-a `RECONCILIATION_LEDGER` binding, which no environment declares, so the
-entry point's gate refuses every run in every environment. *(A staging
-declaration committed on 2026-10-07 was removed the same day before any
-deployment. `test/config/ledger-binding-absent.test.ts` pins, through
-Wrangler's own configuration reader, that no environment declares the
-binding or registers the class, and that staging resolves to the two
-Durable Objects Stage A deployed. It also proves the committed staging
-(`mock`) and production (`none`) variables never look a bound namespace
-up.)* The tests keep the two states apart.
+`coordinated` mode. Without a `RECONCILIATION_LEDGER` binding the resolver
+answers `null`, so the entry point's gate refuses the run. *(Updated
+2026-11-03 for AU-4.)* `test/config/ledger-binding.test.ts` (formerly
+`ledger-binding-absent.test.ts`) pins, through Wrangler's own configuration
+reader, that only staging and the demonstration Worker declare the binding
+and register the class, that staging restates the two existing classes
+unchanged, and that development and production resolve as before. It also
+proves that `none` - production's, and staging's fallback to manual batches
+- never looks a bound namespace up. `test/config/staging-automatic-updates.test.ts`
+drives the committed staging variables through the coordinated path, and the
+opt-in `test/e2e/automatic-updates/staging-first-run-rehearsal.test.ts`
+replays AU-4 step 2 over an operator capture, including a scenario with
+rounds 18 and 19 synthesized from it. `test/config/staging-season-batch-ingest.test.ts`
+pins the forward fallback: `none` with the ledger bound publishes a current
+batch without calling the ledger, and a batch generated under
+`data-sources-v2` must be regenerated. The tests keep the states apart.
 
 **Wired: the orchestration through the real entry points.** These are in
 `services/edge-api/test/sync/coordinated/entry-points/`. They run over both

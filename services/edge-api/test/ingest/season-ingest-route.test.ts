@@ -3,9 +3,9 @@
  * with the attribution record exactly as committed: authentication, the
  * composition root and the response headers are the real ones.
  *
- * Every committed environment leaves `SEASON_BATCH_INGEST` unset, so the
- * route admits nothing anywhere - and refuses before it reads a byte of the
- * body. The committed record calls Jolpica `active` (`data-sources-v2`), so
+ * Without `SEASON_BATCH_INGEST` the route admits nothing - and refuses before
+ * it reads a byte of the body. The committed record calls Jolpica
+ * `automatic` (`data-sources-v3`), a status whose wording covers a batch, so
  * once a staging Worker is fully configured the attribution gate passes.
  */
 

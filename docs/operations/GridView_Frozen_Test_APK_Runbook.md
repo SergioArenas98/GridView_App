@@ -27,9 +27,10 @@ reviewed Jolpica capture.
 
 The normal app is unchanged: production never serves fixtures, a normal
 fixture build is labelled "Sample data", and its Jolpica card shows the bundled
-record's status line. Since `data-sources-v2` that is the `active` line, which
-says data from Jolpica F1 reaches GridView only in operator-run batches and
-never claims that any is shown.
+record's status line. Since `data-sources-v3` that is the `automatic` line,
+which describes scheduled retrieval and operator-run batches and never claims
+live data or that any is shown (from `data-sources-v2`, the batch-only
+`active` line). A frozen build still shows its own captured-snapshot line.
 
 ## Tools (all offline except step 2)
 

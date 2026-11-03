@@ -200,9 +200,9 @@ reviewed batch into the exact request body of
 (`verifySeasonBatch`) on the batch, so a batch the Worker would refuse is
 refused here with the same closed reason and no file is written. It never
 overwrites a file, refuses a batch or output inside this repository, sends
-nothing and reads no credential. It reports the local attribution record's
-status for the source: the Worker refuses every batch while its own record is
-not `active`.
+nothing and reads no credential. It reports whether the local attribution
+record's status for the source admits a batch: the Worker refuses every batch
+while its own record calls the source neither `active` nor `automatic`.
 
 The ingest never publishes the submitted documents. It requires them to be
 exactly what its generator makes of the submitted `source` at the batch's own

@@ -1149,6 +1149,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'GridView does not retrieve data from this source automatically. Any data from it that GridView shows was captured, reviewed and published by GridView\'s operator, by hand and in batches, so it changes only when a new batch is published and can lag behind the source.';
 
   @override
+  String get settingsSourceStatusAutomatic =>
+      'GridView\'s service can check this source automatically, on an hourly schedule, and publishes its data only after the data passes GridView\'s checks. While that automatic checking is switched off, GridView\'s operator can publish reviewed batches of it instead. Either way, data from it can lag behind the source, and a published result can later be corrected.';
+
+  @override
   String settingsSourceStatusFrozen(String date) {
     return 'This test build contains a fixed snapshot of data from this source, captured $date. It receives no updates.';
   }

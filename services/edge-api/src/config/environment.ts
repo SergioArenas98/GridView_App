@@ -115,13 +115,14 @@ export interface Env extends TestOnlyBindings {
   ADMIN_TOKEN?: string;
   /**
    * The one season the guarded staging ingest of a reviewed season batch
-   * accepts (`POST /internal/admin/season/ingest`). **Unset in every committed
-   * environment**, which disables the route: it refuses before reading a
-   * body. Even when set, it admits nothing outside `staging`, under
-   * `PROVIDER_MODE=coordinated`, without a reachable sequencer, or while the
-   * bundled attribution record calls the batch's source anything but
-   * `active`. A value that is not a four-digit season with curated metadata
-   * is refused as `ingest-misconfigured`, never read as a different season.
+   * accepts (`POST /internal/admin/season/ingest`). Unset, the route is
+   * disabled: it refuses before reading a body. Even when set, it admits
+   * nothing outside `staging` and `production` (production only under its
+   * genesis control), under `PROVIDER_MODE=coordinated`, without a reachable
+   * sequencer, or while the bundled attribution record calls the batch's
+   * source anything but `active` or `automatic`. A value that is not a
+   * four-digit season with curated metadata is refused as
+   * `ingest-misconfigured`, never read as a different season.
    */
   SEASON_BATCH_INGEST?: string;
   MOCK_PROVIDER_FAILURE?: string;
@@ -141,9 +142,10 @@ export interface Env extends TestOnlyBindings {
   /**
    * Durable Object namespace backing the global reconciliation ledger (G9;
    * runtime activation decision O-6). Optional in the type because
-   * availability is environment-specific, and **no committed environment
-   * declares it**: `wrangler.toml` has no `[exports.ReconciliationLedger]`
-   * entry, binding or migration (see `docs/technical/GridView_Environments.md`).
+   * availability is environment-specific: only the demonstration Worker
+   * (`env.e2e`) and, since release gate AU-4, staging declare it, with their
+   * own `exports` entry and no migration; development and production do not
+   * (see `docs/technical/GridView_Environments.md`).
    * The resolver fails closed: absent, or not a namespace, it answers `null`
    * and every coordinated run stops at `ledger-unbound`. A bound namespace
    * enables nothing by itself - the coordinated paths are reached only with
@@ -154,7 +156,8 @@ export interface Env extends TestOnlyBindings {
    * `kv` makes a coordinated **staging** Worker's Jolpica transport answer
    * from controlled documents in its own `GRIDVIEW_DATA` namespace instead of
    * the network: the automatic-updates staging demonstration (ADR 0028 D10).
-   * **No committed environment sets it.** Any other value, and `kv` outside a
+   * **Only the demonstration Worker (`env.e2e`) sets it**; staging's
+   * coordinated runtime reads the network. Any other value, and `kv` outside a
    * coordinated staging Worker, is a configuration error, so production can
    * never select it (`src/providers/controlled/source.ts`).
    */
@@ -207,10 +210,10 @@ export class ConfigurationError extends Error {
  * - `none`: no provider, so nothing is synchronized.
  * - `coordinated`: the coordinated runtime (`src/sync/coordinated/`), admitted
  *   in staging and production only. **Admitting the value activates nothing.**
- *   No committed environment selects it. Even where it is selected, every
+ *   The demonstration Worker (`env.e2e`) and, since release gate AU-4, staging
+ *   select it; production does not. Wherever it is selected, every
  *   coordinated run is refused before any provider request while no
- *   `RECONCILIATION_LEDGER` namespace is bound (`ledger-unbound`), and no
- *   committed environment binds one.
+ *   `RECONCILIATION_LEDGER` namespace is bound (`ledger-unbound`).
  *
  * Any other value, and `coordinated` in development, is a `ConfigurationError`.
  */

@@ -91,8 +91,8 @@ interface AdminContext {
   reconciliation: OperatorReconciliation;
   /**
    * The guarded staging ingest of a reviewed season batch. Always
-   * constructed, and disabled by its own admission: no committed environment
-   * sets `SEASON_BATCH_INGEST`, so it refuses before reading a body.
+   * constructed, and gated by its own admission: without `SEASON_BATCH_INGEST`
+   * it refuses before reading a body, and under `coordinated` it refuses too.
    */
   ingest: SeasonBatchIngest;
   clock: Clock;

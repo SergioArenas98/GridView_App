@@ -325,6 +325,13 @@ export interface HarnessOptions {
    * classified round, which any complete candidate contains.
    */
   readonly seed?: 'mock' | 'unclassified';
+  /**
+   * Replaces the seeded release outright, as a rehearsal over a real
+   * release does; `seed` is then ignored.
+   */
+  readonly seedTransform?: (set: GeneratedSnapshotSet) => GeneratedSnapshotSet;
+  /** The seed's committed ordering input; `SEED_ORDERING` when omitted. */
+  readonly seedOrderingInput?: string;
   /** When the seed release is published; see `sequencedContext`. */
   readonly seedAt?: string;
 }
@@ -401,11 +408,13 @@ export class ObservationHarness {
       cutover: settings.cutover ?? 'active',
       transport,
       sequencerClock: clock,
-      seedOrderingInput: SEED_ORDERING,
+      seedOrderingInput: settings.seedOrderingInput ?? SEED_ORDERING,
       ...(settings.seedAt === undefined ? {} : { seedAt: settings.seedAt }),
-      ...(settings.seed === 'unclassified'
-        ? { seedTransform: unclassified }
-        : {}),
+      ...(settings.seedTransform !== undefined
+        ? { seedTransform: settings.seedTransform }
+        : settings.seed === 'unclassified'
+          ? { seedTransform: unclassified }
+          : {}),
     });
     return new ObservationHarness(context, transport, clock);
   }
