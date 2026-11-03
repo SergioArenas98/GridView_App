@@ -178,7 +178,8 @@ const creditedSourceId = 'jolpica';
 
 export interface Credit {
   readonly attribution: SourceAttribution;
-  readonly active: boolean;
+  /** Whether the status admits an operator-run batch. */
+  readonly admitsBatch: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -217,7 +218,7 @@ export function attributionCredit(record: unknown): Credit | null {
       licenseName: entry.licenseName as string,
       licenseUrl: entry.licenseUrl as string,
     },
-    active: batchCreditStatuses.includes(entry.status),
+    admitsBatch: batchCreditStatuses.includes(entry.status),
   };
 }
 
@@ -264,7 +265,7 @@ export class SeasonBatchIngest {
     }
     if (this.deps.guarded === null) return 'authority-not-sequenced';
     const credit = attributionCredit(this.attributionRecord);
-    if (credit === null || !credit.active) return 'attribution-not-active';
+    if (credit === null || !credit.admitsBatch) return 'attribution-not-active';
     return { season: Number(raw), guarded: this.deps.guarded, credit };
   }
 

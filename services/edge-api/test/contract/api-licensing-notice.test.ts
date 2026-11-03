@@ -14,6 +14,8 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 
+import { quotaPolicyFor } from '../../src/providers/provider-source';
+
 import {
   demonstrationSection,
   environmentSection,
@@ -172,7 +174,7 @@ describe('the API documentation licence notice', () => {
             'An hourly schedule decides what is due',
           );
           expect(description).toContain(
-            `stays within ${source.name}'s published rate limits`,
+            `enforces ${source.name}'s published rate limits as GridView recorded them (4 requests a second, 500 an hour)`,
           );
           expect(description).toContain(
             'published only if it passes verification and the publication guard',
@@ -180,7 +182,7 @@ describe('the API documentation licence notice', () => {
           expect(description).toContain(
             `Where automatic updates are not enabled, ${source.name}-derived data reaches this service only as an operator-run batch`,
           );
-          expect(description).toContain('Neither path is live');
+          expect(description).toContain('Neither path updates in real time');
           expect(description).toContain('can lag behind');
           expect(description).toContain('a published result can be corrected');
           break;
@@ -188,6 +190,20 @@ describe('the API documentation licence notice', () => {
           throw new Error(`unknown status ${source.status}`);
       }
     }
+  });
+
+  it('cites the Jolpica F1 limits the limiter enforces', () => {
+    // The notice names the published limits GridView recorded; the limiter
+    // must enforce exactly those, so the sentence stays true.
+    expect(
+      quotaPolicyFor('jolpica').windows.map(({ window, limit }) => ({
+        window,
+        limit,
+      })),
+    ).toEqual([
+      { window: 'second', limit: 4 },
+      { window: 'hour', limit: 500 },
+    ]);
   });
 
   it('credits Jolpica F1 as automatic, so the automatic wording above is exercised', () => {

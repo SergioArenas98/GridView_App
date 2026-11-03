@@ -55,7 +55,7 @@ describe('season-batch submission builder', () => {
       submissionSha256: sha256(result.text),
       // The committed record calls the source automatic (data-sources-v3),
       // which admits a batch.
-      attributionStatus: 'active',
+      attributionStatus: 'admits-batch',
     });
 
     const ctx = await ingestContext();
@@ -76,7 +76,7 @@ describe('season-batch submission builder', () => {
       status: 'dormant',
     }));
     const result = await buildSubmission(input({ attributionRecord: dormant }));
-    expect(result.ok && result.summary.attributionStatus).toBe('not-active');
+    expect(result.ok && result.summary.attributionStatus).toBe('refuses-batch');
   });
 
   it('refuses any manifest but the reviewed one', async () => {

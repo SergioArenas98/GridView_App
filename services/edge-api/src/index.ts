@@ -68,7 +68,8 @@ export type { Env };
  * Exporting it does not provision or start anything, and where a deployment has
  * bound the namespace nothing reserves through it. Only a composed coordinated
  * runtime reserves, and composition requires `PROVIDER_MODE=coordinated` plus
- * a bound reconciliation ledger, which no committed environment binds.
+ * a bound reconciliation ledger, which only the demonstration Worker and,
+ * once AU-4 step 1 is deployed, staging bind.
  * Provider requests are governed by that mode and those dependencies, not by
  * this export or its binding.
  */
@@ -428,7 +429,7 @@ async function runScheduledCoordinated(
  * no transport or port, performs no Durable Object lookup and makes no
  * request; a bound namespace yields only its client. The reconciliation
  * ledger is present only for a bound `RECONCILIATION_LEDGER` namespace, which
- * no committed environment declares, so there it is absent.
+ * only the demonstration Worker and staging declare; elsewhere it is absent.
  *
  * `__PROVIDER_TRANSPORT` and `__PACER_SLEEP` are test hooks: with neither, a
  * composed runtime sends through the runtime `fetch` and paces with a timer,

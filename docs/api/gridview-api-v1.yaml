@@ -48,17 +48,20 @@ info:
     operator. An hourly schedule decides what is due: a race's result from 90
     minutes after its scheduled start, and the calendar, standings,
     participants and circuits less often. Each run sends a bounded number of
-    `GET` requests through one paced client that stays within Jolpica F1's
-    published rate limits. What it receives is validated, mapped to GridView's
+    `GET` requests through one paced client that enforces Jolpica F1's
+    published rate limits as GridView recorded them (4 requests a second, 500
+    an hour). What it receives is validated, mapped to GridView's
     curated identities and published only if it passes verification and the
     publication guard; otherwise nothing changes and the last published
     release keeps serving. Where automatic updates are not enabled, Jolpica
     F1-derived data reaches this service only as an operator-run batch:
     GridView's operator captures the responses, reviews them offline and
     submits the batch, which is published under the same verification and
-    guard. Neither path is live. A release changes only when a newer one is
-    published, so it can lag behind Jolpica F1, and a published result can be
-    corrected later.
+    guard. Neither path updates in real time: a release changes only when a
+    newer one is published, so it can lag behind Jolpica F1, and a published
+    result can be corrected later. Whether a given environment's release
+    carries Jolpica F1-derived data at all is stated by its attribution version
+    (below).
 
     **Which responses carry it.** Every release names its attribution version
     in the content manifest (`GET /v1/content/manifest`, `attributionVersion`).

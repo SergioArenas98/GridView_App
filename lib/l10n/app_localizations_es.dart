@@ -1161,7 +1161,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsSourceStatusAutomatic =>
-      'El servicio de GridView consulta esta fuente automáticamente, como máximo una vez por hora, y solo publica sus datos después de que superen las comprobaciones de GridView. El operador de GridView también puede publicar lotes revisados de estos datos. En ambos casos, los datos de esta fuente pueden ir con retraso respecto a ella, y un resultado publicado puede corregirse más tarde.';
+      'El servicio de GridView puede consultar esta fuente automáticamente, de forma programada cada hora, y solo publica sus datos después de que superen las comprobaciones de GridView. El operador de GridView también puede publicar lotes revisados de estos datos. En ambos casos, los datos de esta fuente pueden ir con retraso respecto a ella, y un resultado publicado puede corregirse más tarde.';
 
   @override
   String settingsSourceStatusFrozen(String date) {

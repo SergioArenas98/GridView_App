@@ -30,8 +30,8 @@ const String _batchOnly =
 
 /// The credit of the shipped record since `data-sources-v3` (`automatic`).
 const String _automatic =
-    "GridView's service checks this source automatically, at most once an "
-    "hour, and publishes its data only after the data passes GridView's "
+    "GridView's service can check this source automatically, on an hourly "
+    "schedule, and publishes its data only after the data passes GridView's "
     "checks. GridView's operator can also publish reviewed batches of it. "
     'Either way, data from it can lag behind the source, and a published '
     'result can later be corrected.';

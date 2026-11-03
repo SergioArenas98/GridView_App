@@ -1900,9 +1900,11 @@ provider mode, binding or route was created or changed.**
 > coordinated runtime composition (Implementation Plan §14.0.29) it is in
 > the Worker bundle, routed by `JolpicaResourcePort`. It is constructed only
 > when `PROVIDER_MODE` is `coordinated` and every coordinated dependency is
-> bound. No committed environment selects that mode (staging `mock`,
-> production `none`), and the reconciliation ledger has no binding, so a
-> coordinated run stops at `ledger-unbound`. The port has made **no provider
+> bound. No committed environment selected that mode then (staging `mock`,
+> production `none`), and the reconciliation ledger had no binding, so a
+> coordinated run stopped at `ledger-unbound`. *(Since 2026-11-03 staging
+> commits the mode and the ledger for release gate AU-4, not deployed; the
+> demonstration Worker has run it on controlled data since 2026-10-21.)* The port has made **no provider
 > request**. *(Updated 2026-09-28.)* Round coherence is decided and
 > implemented, dormant (A3.5 item 1; Implementation Plan §14.0.33): a
 > candidate carries standings only when both tables are bound to the latest

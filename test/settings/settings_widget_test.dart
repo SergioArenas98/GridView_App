@@ -33,14 +33,14 @@ const String _batchOnlyEs =
 /// service retrieves it on a schedule, a batch is still possible, and it is
 /// true before anything from the source is published.
 const String _automaticEn =
-    "GridView's service checks this source automatically, at most once an "
-    "hour, and publishes its data only after the data passes GridView's "
+    "GridView's service can check this source automatically, on an hourly "
+    "schedule, and publishes its data only after the data passes GridView's "
     "checks. GridView's operator can also publish reviewed batches of it. "
     'Either way, data from it can lag behind the source, and a published '
     'result can later be corrected.';
 const String _automaticEs =
-    'El servicio de GridView consulta esta fuente automáticamente, como '
-    'máximo una vez por hora, y solo publica sus datos después de que superen '
+    'El servicio de GridView puede consultar esta fuente automáticamente, de '
+    'forma programada cada hora, y solo publica sus datos después de que superen '
     'las comprobaciones de GridView. El operador de GridView también puede '
     'publicar lotes revisados de estos datos. En ambos casos, los datos de '
     'esta fuente pueden ir con retraso respecto a ella, y un resultado '
@@ -716,7 +716,7 @@ void main() {
             _automaticEn,
             <String>[
               'automatically',
-              'once an hour',
+              'hourly schedule',
               'batches',
               'lag behind',
               'corrected',
@@ -727,7 +727,7 @@ void main() {
             _automaticEs,
             <String>[
               'automáticamente',
-              'una vez por hora',
+              'cada hora',
               'lotes',
               'con retraso',
               'corregirse',

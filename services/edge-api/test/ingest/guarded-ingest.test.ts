@@ -621,7 +621,7 @@ describe('the attribution admission gate (DP-7)', () => {
     }).admit();
     if (typeof admitted === 'string') throw new Error(admitted);
     expect(admitted.credit).toEqual({
-      active: true,
+      admitsBatch: true,
       attribution: {
         recordVersion: 'data-sources-v3',
         name: 'Jolpica F1',

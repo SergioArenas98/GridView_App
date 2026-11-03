@@ -70,10 +70,10 @@ export interface SubmissionSummary {
   readonly submissionBytes: number;
   readonly submissionSha256: string;
   /**
-   * Whether the local record's status for the source admits a batch: `active`
-   * for `active` or `automatic`, as the Worker requires.
+   * Whether the local record's status for the source admits a batch, as the
+   * Worker requires: `active` and `automatic` do.
    */
-  readonly attributionStatus: 'active' | 'not-active';
+  readonly attributionStatus: 'admits-batch' | 'refuses-batch';
 }
 
 export type SubmissionBuildResult =
@@ -174,7 +174,8 @@ export async function buildSubmission(
       expectedActiveVersion: submission.expectedActiveVersion,
       submissionBytes: bytes.byteLength,
       submissionSha256: await sha256Hex(bytes),
-      attributionStatus: credit?.active === true ? 'active' : 'not-active',
+      attributionStatus:
+        credit?.admitsBatch === true ? 'admits-batch' : 'refuses-batch',
     },
   };
 }

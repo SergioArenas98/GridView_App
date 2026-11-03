@@ -99,7 +99,7 @@ was written, deployed or triggered, and no provider was contacted.
 | Fact | Value |
 |---|---|
 | Version at 100% | `453af4fb-e478-42a2-abd6-acdaa1d6473f`, created 2026-10-19T18:08:17Z (operator-recorded source `d351118`) |
-| Vars | `ENVIRONMENT=staging`, `PROVIDER_MODE=none`, `PUBLIC_BASE_URL`, `SEASON_BATCH_INGEST=2026`, `SEASON_PUBLICATION_AUTHORITY=sequencer`, `SEASON_PUBLICATION_CUTOVER_CONTROL=activate:2026` — identical to the committed `[env.staging.vars]` |
+| Vars | `ENVIRONMENT=staging`, `PROVIDER_MODE=none`, `PUBLIC_BASE_URL`, `SEASON_BATCH_INGEST=2026`, `SEASON_PUBLICATION_AUTHORITY=sequencer`, `SEASON_PUBLICATION_CUTOVER_CONTROL=activate:2026` — identical to the committed `[env.staging.vars]` then; since the AU-4 PR (2026-11-03) the committed `PROVIDER_MODE` is `coordinated`, the only variable that differs |
 | Bindings | `GRIDVIEW_DATA` (`1d0fb554…942b`), `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER`; secret `ADMIN_TOKEN` (name only) |
 | Schedules | `[]` |
 | Durable Object namespaces | two: `ProviderRateLimiter`, `SeasonPublicationSequencer` (SQLite); no ledger |
@@ -1567,7 +1567,8 @@ outside the repository.
    ```
 
    It prints the summary, `submissionSha256` and `attributionStatus` (the
-   local record's; the Worker needs `active`). The real R16 batch makes a
+   local record's: `admits-batch` for `active` or `automatic`, which the
+   Worker requires). The real R16 batch makes a
    body of about 0.4 MB; the Worker reads at most 2 MiB.
 4. Send it **once**, with the token decrypted into process memory only (section
    4), for example:

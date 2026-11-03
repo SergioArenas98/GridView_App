@@ -1150,7 +1150,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSourceStatusAutomatic =>
-      'GridView\'s service checks this source automatically, at most once an hour, and publishes its data only after the data passes GridView\'s checks. GridView\'s operator can also publish reviewed batches of it. Either way, data from it can lag behind the source, and a published result can later be corrected.';
+      'GridView\'s service can check this source automatically, on an hourly schedule, and publishes its data only after the data passes GridView\'s checks. GridView\'s operator can also publish reviewed batches of it. Either way, data from it can lag behind the source, and a published result can later be corrected.';
 
   @override
   String settingsSourceStatusFrozen(String date) {
