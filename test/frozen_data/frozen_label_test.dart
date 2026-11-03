@@ -32,8 +32,8 @@ const String _batchOnly =
 const String _automatic =
     "GridView's service can check this source automatically, on an hourly "
     "schedule, and publishes its data only after the data passes GridView's "
-    "checks. GridView's operator can also publish reviewed batches of it. "
-    'Either way, data from it can lag behind the source, and a published '
+    "checks. While that automatic checking is switched off, GridView's "
+    'operator can publish reviewed batches of it instead. Either way, data from it can lag behind the source, and a published '
     'result can later be corrected.';
 const String _frozenStatus =
     'This test build contains a fixed snapshot of data from this source, '
