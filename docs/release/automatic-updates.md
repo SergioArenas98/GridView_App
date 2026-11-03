@@ -169,7 +169,9 @@ node scripts/monitor/automation-monitor.mjs --base-url https://gridview-api-stag
 
 (`--skip-heartbeat` only before the environment is automatic.)
 
-`.github/workflows/automation-monitor.yml` runs it, **manual-only**. A failed
+`.github/workflows/automation-monitor.yml` runs it: by hand for either
+environment, and, from gate AU-5, every hour at minute 47 for staging with
+the heartbeat check on (thirty minutes after the Worker's tick). A failed
 run e-mails the owner through GitHub's own notifications; the AU-6 drill
 verified that delivery on 2026-10-22 (§7). Known limits:
 
@@ -194,7 +196,7 @@ verified that delivery on 2026-10-22 (§7). Known limits:
 | AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis. **Done 2026-10-21:** all four steps (§8.1) | **[approval]** each, **[PR]** | AU-0, AU-1 |
 | AU-3 | **The end-to-end demonstration with controlled data** (§8.2): asynchronous, in persistent phases, passed on its acceptance criteria A1–A6. Also on the release commit: the in-process gate in CI and the app half locally. **Passed 2026-11-03:** one bounded asynchronous run from `F` = 2026-11-02 20:17Z published the result at the 22:17Z run and its correction at the 00:17Z run with nobody acting on GridView, and the installed app showed both; A1–A6 evidenced, the operator's record accepted by the owner (§8.2, "Result"). The e2e schedule is stopped. The two parts on the release commit stay due with it (AU-8) | **[approval]** each source load and the schedule, which one bounded approval may cover; **[record]** the evidence | AU-2 |
 | AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2). **Prepared 2026-11-03:** step 1's configuration, the `automatic` attribution record (`data-sources-v3`, owner decision of that day) and the app and API wording committed; the first runs rehearsed in process against `…1d`; nothing deployed | **[approval]** each of the three; cutover-sensitive | AU-3 |
-| AU-5 | The monitor's hourly `schedule:` for staging | **[approval]**, **[PR]** | AU-4, AU-6 |
+| AU-5 | The monitor's hourly `schedule:` for staging. **Drafted 2026-11-03** on its own PR, stacked on AU-4's: `47 * * * *`, staging, heartbeat checked; merge only after AU-4 step 3 and a first scheduled heartbeat | **[approval]**, **[PR]** | AU-4, AU-6 |
 | AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1). **Passed 2026-10-22:** one owner-authorised dispatch against staging (`skip_heartbeat`, `simulate_failure`), [run 39852057415](https://github.com/SergioArenas98/GridView_App/actions/runs/39852057415) on `master` at `09e0686`, failed as expected with the single finding `simulated-failure` (pendingRound 18); the owner confirmed, with a screenshot, that GitHub's failure e-mail for it arrived at 21:49 Irish time (20:49Z) the same day. OD-1 is closed. The workflow is still manual-only: no monitor schedule was enabled (that is AU-5), and no Worker schedule changed | **[approval]**, **[record]** | AU-0 |
 | AU-7 | Production automatic (§8.4): W2/W3 with the production delta, genesis, the first automatic release, persisted logs verified free of app traffic, the monitor scheduled for production | **[approval]** each | AU-4 soak (one race weekend published automatically), AU-6, D-A (§9) |
 | AU-8 | Release-candidate check: on the exact commit A2 builds, `gate.test.ts` and the app half pass, and staging and production heartbeats are fresh | **[record]** | AU-7, before R5 |
