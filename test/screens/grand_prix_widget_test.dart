@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/widgets/widgets.dart';
+import 'package:gridview/features/calendar/application/grand_prix_detail_state.dart';
 import 'package:gridview/features/calendar/presentation/calendar_screen.dart';
 import 'package:gridview/features/calendar/presentation/grand_prix_detail_screen.dart';
+import 'package:gridview/features/calendar/presentation/widgets/grand_prix_hero.dart';
 import 'package:gridview/features/circuits/presentation/circuit_detail_screen.dart';
 import 'package:gridview/features/constructors/presentation/constructor_detail_screen.dart';
 import 'package:gridview/features/drivers/presentation/driver_detail_screen.dart';
@@ -14,8 +16,11 @@ import 'package:gridview/features/shared/domain/entities/grand_prix_view.dart';
 import 'package:gridview/features/shared/domain/entities/race_result.dart';
 import 'package:gridview/features/shared/domain/entities/resource_key.dart';
 import 'package:gridview/features/shared/domain/entities/session.dart';
+import 'package:gridview/features/shared/domain/freshness_evaluator.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
 import 'package:gridview/features/shared/presentation/not_found_screen.dart';
+import 'package:gridview/l10n/app_localizations_en.dart';
+import 'package:gridview/l10n/app_localizations_es.dart';
 
 import '../support/domain_fixtures.dart';
 import '../support/fake_repository.dart';
@@ -147,6 +152,14 @@ Future<void> _open(
   disableAnimations: true,
 );
 
+/// [text] inside the identity header, as opposed to the app-bar title.
+Finder _inHero(String text) =>
+    find.descendant(of: find.byType(GrandPrixHero), matching: find.text(text));
+
+/// [text] as the app-bar title.
+Finder _inAppBar(String text) =>
+    find.descendant(of: find.byType(AppBar), matching: find.text(text));
+
 void main() {
   group('Grand Prix header and weekend facts', () {
     testWidgets('shows identity, status, format, location and dates', (
@@ -161,7 +174,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Belgian Grand Prix'), findsOneWidget);
+      expect(_inHero('Belgian Grand Prix'), findsOneWidget);
       expect(
         find.text('Formula 1 Mock Belgian Grand Prix 2026'),
         findsOneWidget,
@@ -186,7 +199,7 @@ void main() {
         tester,
         repository: _repo(detail: _detail(officialName: 'Belgian Grand Prix')),
       );
-      expect(find.text('Belgian Grand Prix'), findsOneWidget);
+      expect(_inHero('Belgian Grand Prix'), findsOneWidget);
     });
 
     testWidgets('a missing locality, country and timezone simply vanish', (
@@ -222,6 +235,135 @@ void main() {
 
       expect(find.text('Status unknown'), findsOneWidget);
       expect(find.text('Format unknown'), findsOneWidget);
+    });
+  });
+
+  group('Screen title', () {
+    testWidgets('the app bar names the race instead of a generic label', (
+      WidgetTester tester,
+    ) async {
+      await _open(tester);
+
+      expect(_inAppBar('Belgian Grand Prix'), findsOneWidget);
+      expect(_inAppBar('Grand Prix'), findsNothing);
+      // The header keeps its own copy of the name.
+      expect(_inHero('Belgian Grand Prix'), findsOneWidget);
+    });
+
+    testWidgets('Spanish names the race too, not just "Gran Premio"', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        locale: const Locale('es'),
+        location: '/calendar/2026/22',
+        repository: _repo(detail: _detail(round: 22, name: 'Qatar Grand Prix')),
+      );
+
+      expect(_inAppBar('Qatar Grand Prix'), findsOneWidget);
+      expect(find.text('Gran Premio'), findsNothing);
+    });
+
+    testWidgets('the race stays named while its classification is read', (
+      WidgetTester tester,
+    ) async {
+      // A phone-sized surface, so the header scrolls away as the results come
+      // into view.
+      await _open(
+        tester,
+        surfaceSize: const Size(400, 800),
+        repository: _repo(
+          detail: _detail(
+            round: 22,
+            name: 'Qatar Grand Prix',
+            status: EventStatus.completed,
+            hasResults: true,
+          ),
+          results: <RaceResult>[_race()],
+        ),
+      );
+
+      await tester.scrollUntilVisible(
+        find.text('Oscar Piastri'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      expect(_inHero('Qatar Grand Prix').hitTestable(), findsNothing);
+      expect(_inAppBar('Qatar Grand Prix').hitTestable(), findsOneWidget);
+    });
+
+    testWidgets('a failed refresh keeps the saved name in the title', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        repository: _repo(
+          onRefreshGrandPrix: (int s, int r) async => const RefreshFailure(
+            ApiFailure(kind: ApiFailureKind.networkUnavailable),
+          ),
+        ),
+      );
+
+      expect(
+        find.text("Couldn't refresh — showing saved data."),
+        findsOneWidget,
+      );
+      expect(_inAppBar('Belgian Grand Prix'), findsOneWidget);
+    });
+
+    testWidgets('a blank stored name falls back to the localized label', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        repository: _repo(detail: _detail(name: '  ')),
+      );
+      expect(_inAppBar('Grand Prix'), findsOneWidget);
+    });
+
+    testWidgets('a blank stored name falls back in Spanish', (
+      WidgetTester tester,
+    ) async {
+      await _open(
+        tester,
+        locale: const Locale('es'),
+        repository: _repo(detail: _detail(name: '')),
+      );
+      expect(_inAppBar('Gran Premio'), findsOneWidget);
+    });
+
+    test('states without a detail use the generic label in both languages', () {
+      final List<GrandPrixDetailState> states = <GrandPrixDetailState>[
+        const GrandPrixLoading(),
+        const GrandPrixNotFound(),
+        const GrandPrixFirstLoadError(
+          ApiFailure(kind: ApiFailureKind.networkUnavailable),
+        ),
+      ];
+      for (final GrandPrixDetailState state in states) {
+        expect(grandPrixScreenTitle(AppLocalizationsEn(), state), 'Grand Prix');
+        expect(
+          grandPrixScreenTitle(AppLocalizationsEs(), state),
+          'Gran Premio',
+        );
+      }
+    });
+
+    test('a ready detail uses its trimmed name in both languages', () {
+      final GrandPrixReady ready = GrandPrixReady(
+        view: _detail(name: ' Qatar Grand Prix '),
+        freshness: FreshnessState.fresh,
+      );
+      expect(
+        grandPrixScreenTitle(AppLocalizationsEn(), ready),
+        'Qatar Grand Prix',
+      );
+      expect(
+        grandPrixScreenTitle(AppLocalizationsEs(), ready),
+        'Qatar Grand Prix',
+      );
     });
   });
 
@@ -555,7 +697,7 @@ void main() {
 
       expect(find.text("Can't load results"), findsOneWidget);
       // The weekend information is untouched.
-      expect(find.text('Belgian Grand Prix'), findsOneWidget);
+      expect(_inHero('Belgian Grand Prix'), findsOneWidget);
       expect(find.byType(GvSessionRow), findsNWidgets(5));
     });
 
@@ -740,7 +882,7 @@ void main() {
     ) async {
       await _open(tester, location: '/calendar/2026/13');
       expect(find.byType(GrandPrixDetailScreen), findsOneWidget);
-      expect(find.text('Belgian Grand Prix'), findsOneWidget);
+      expect(_inHero('Belgian Grand Prix'), findsOneWidget);
     });
 
     testWidgets('an invalid season or round stays controlled', (
