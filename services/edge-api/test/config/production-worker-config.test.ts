@@ -156,7 +156,8 @@ describe('the resolved production configuration', () => {
     // `crons` is set.
     expect(resolved('production').triggers).toEqual({ crons: [] });
     expect(rawConfig).toMatch(/^\[env\.production\.triggers\]\ncrons = \[\]$/m);
-    // No environment declares a schedule, the paused demonstration included.
+    // No environment declares a schedule, the demonstration included since
+    // AU-3 passed.
     expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
   });
 

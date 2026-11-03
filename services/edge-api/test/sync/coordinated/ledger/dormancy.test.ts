@@ -93,7 +93,7 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     );
     // The staging cron was removed (an explicit empty list) by the same
     // configuration; no environment schedules a run, the demonstration Worker
-    // included since the AU-3 pause.
+    // included since AU-3 passed.
     expect(declared).toContain('crons = []');
     expect(declared).not.toMatch(/crons = \[\s*"/);
     expect(demonstrationSection(declared)).toContain('crons = []');

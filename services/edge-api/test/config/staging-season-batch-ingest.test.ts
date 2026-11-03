@@ -141,7 +141,7 @@ describe('the resolved configuration', () => {
     // Production (W1) schedules nothing, explicitly too. Development declared
     // no trigger before and still does not.
     expect(resolved('production').triggers).toEqual({ crons: [] });
-    // The demonstration Worker ran hourly for AU-3 until its pause and is
+    // The demonstration Worker ran hourly for AU-3 until it passed and is
     // unscheduled again.
     expect(resolved('e2e').triggers).toEqual({ crons: [] });
     expect(resolved('').triggers.crons).toBeUndefined();
