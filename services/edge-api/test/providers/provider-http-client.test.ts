@@ -748,6 +748,59 @@ describe('timeout, cancellation and network failures', () => {
 });
 
 describe('provider 429 and Retry-After', () => {
+  it('reports every 429 to the limiter with its parsed Retry-After, and nothing else', async () => {
+    const reports: [RealProviderSourceId, string | null][] = [];
+    const limiter: ProviderRateLimiterClient = {
+      reserve: allowAll.reserve,
+      recordRateLimited: async (sourceId, retryAfter) => {
+        reports.push([sourceId, retryAfter]);
+      },
+    };
+    const answers = [
+      new Response('', { status: 429, headers: { 'Retry-After': '30' } }),
+      new Response('', { status: 429 }),
+      new Response('', { status: 503 }),
+      new Response('{}', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ];
+    const { client } = clientWith(async () => answers.shift()!, limiter);
+
+    for (let index = 0; index < 4; index += 1) {
+      await client.getJson({
+        sourceId: 'jolpica',
+        path: '/ergast/f1/2026.json',
+      });
+    }
+
+    expect(reports).toEqual([
+      ['jolpica', '2026-07-20T12:00:30.000Z'],
+      ['jolpica', null],
+    ]);
+  });
+
+  it('still answers a typed 429 when the report throws', async () => {
+    const limiter: ProviderRateLimiterClient = {
+      reserve: allowAll.reserve,
+      recordRateLimited: async () => {
+        throw new Error('limiter down');
+      },
+    };
+    const { client } = clientWith(
+      async () => new Response('', { status: 429 }),
+      limiter,
+    );
+
+    const result = await client.getJson({
+      sourceId: 'jolpica',
+      path: '/ergast/f1/2026.json',
+    });
+
+    expect(!result.ok && result.kind).toBe('provider-rate-limited');
+    expect(!result.ok && result.requestAttempted).toBe(true);
+  });
+
   it('parses delta-seconds', async () => {
     const transport: ProviderTransport = async () =>
       new Response('', { status: 429, headers: { 'Retry-After': '30' } });
