@@ -134,8 +134,9 @@ It takes `{ season, genesisIdentity, confirmGenesis: true }`. It runs only under
 legacy pointer and no sequencer state. It records the season as `genesis`:
 authoritative, with no release. The season's public reads answer
 `503 SNAPSHOT_NOT_READY` until its first guarded season batch
-(`expectedActiveVersion: null`) commits. No committed environment sets a
-`genesis:` control.
+(`expectedActiveVersion: null`) commits, or, under `coordinated`, its first
+automatic run publishes. Production and the demonstration Worker commit
+`genesis:2026`; staging's season was born by the seed and activation.
 
 ## Synchronization Flow
 

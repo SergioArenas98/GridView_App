@@ -11,7 +11,8 @@
  * would build - so every ledger command crosses the real Durable Object
  * client and its serialized protocol.
  *
- * - Without the binding - every committed environment - both entry points
+ * - Without the binding - development and production, or a staging deploy
+ *   that dropped it - both entry points
  *   stop at `ledger-unbound` before any lease, limiter reservation, provider
  *   request or publication write.
  * - With a usable binding, the gate passes and runs reach the orchestration.
@@ -159,7 +160,7 @@ const withheldLine = (syncTrigger: 'manual' | 'scheduled') => ({
   providerOperationCallCount: 0,
 });
 
-describe('without a RECONCILIATION_LEDGER binding, as in every committed environment', () => {
+describe('without a RECONCILIATION_LEDGER binding, as in development and production', () => {
   it('stops both entry points at ledger-unbound before any lease, reservation, request or publication write', async () => {
     const harness = await harnessWith(() => undefined);
     expect('RECONCILIATION_LEDGER' in harness.env).toBe(false);

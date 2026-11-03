@@ -21,8 +21,11 @@ import {
 import { createHarness, request } from '../../support/edge-harness';
 import {
   MemoryKv,
+  RESULT_AFTER_HOURS,
+  RESULT_HOLD_AFTER_HOURS,
   controlledPaths,
   controlledSeasonDocuments,
+  demonstrationPhases,
   shiftedRaceStart,
 } from './controlled-season';
 import { AutomaticUpdateStage, HOUR, MINUTE, type TickRecord } from './stage';
@@ -267,7 +270,7 @@ describe('the staging demonstration, from the documents an operator loads', () =
     );
   });
 
-  // The AU-3 replay (runbook §8.2): the paused Worker keeps its ledger, its
+  // The paused AU-3 run (runbook §8.2): the Worker keeps its ledger, its
   // sequencer and its first release, and a source regenerated for a new race
   // instant overwrites the same keys. Every race moves weeks later, and
   // round 22, never observed, is past its first ceiling at the new load.
@@ -381,3 +384,185 @@ describe('the staging demonstration, from the documents an operator loads', () =
     },
   );
 });
+
+// The deployed demonstration (runbook §8.2): one load publishes the result,
+// and a later load, whenever the owner has seen it, supplies the correction.
+// Everything between the two loads runs with nobody acting. It starts from the
+// paused Worker, as the deployed one does. Exact polling instants are the
+// gate's (`gate.test.ts`); these cases pin only what the phases rely on. The
+// two race instants fall either side of round 22's old ceiling, 2026-11-06.
+describe.each(['2026-11-05T09:00:00.000Z', '2026-11-12T09:00:00.000Z'])(
+  'the asynchronous demonstration, phase by phase, racing at %s',
+  (RACE_START) => {
+    const PAUSED_START = '2026-10-23T09:00:00.000Z';
+    const RESULTS_KEY = `${CONTROLLED_SOURCE_KEY_PREFIX}/ergast/f1/2026/22/results/?limit=100`;
+    const after = (millis: number) =>
+      new Date(Date.parse(RACE_START) + millis).toISOString();
+    /** The first :17 tick at or after `millis` past the race start. */
+    const tickAfter = (millis: number) => {
+      const at = Date.parse(RACE_START) + millis;
+      const hour = Math.floor(at / HOUR) * HOUR;
+      const tick = hour + 17 * MINUTE;
+      return new Date(tick >= at ? tick : tick + HOUR).toISOString();
+    };
+
+    const pausedStage = async (kv: MemoryKv) => {
+      kv.load(
+        await controlledSeasonDocuments({
+          raceRound: 22,
+          raceStart: PAUSED_START,
+          correction: { afterHours: 8, variant: 'B' },
+        }),
+      );
+      const stage = await AutomaticUpdateStage.create('demonstration', {
+        controlledSource: kv,
+      });
+      await stage.hourly(
+        '2026-10-22T12:17:00.000Z',
+        '2026-10-22T16:17:00.000Z',
+      );
+      return stage;
+    };
+
+    const winnerPoints = async (stage: AutomaticUpdateStage) => {
+      const response = await stage.fetch(
+        '/v1/seasons/2026/grand-prix/22/results',
+      );
+      if (response.status !== 200) return null;
+      const body = (await response.json()) as {
+        data: { entries: { position: number; points: number }[] };
+      };
+      return body.data.entries.find((entry) => entry.position === 1)!.points;
+    };
+
+    const heartbeat = async (stage: AutomaticUpdateStage) => {
+      const status = (await (await stage.fetch('/v1/status')).json()) as {
+        data: { lastSuccessfulSyncAt: string };
+      };
+      return status.data.lastSuccessfulSyncAt;
+    };
+
+    it('changes one provider document between the phases, and holds only the result', async () => {
+      const phases = demonstrationPhases(RACE_START);
+      const result = await controlledSeasonDocuments(phases.result);
+      const correction = await controlledSeasonDocuments(phases.correction);
+      expect([...correction.keys()].sort()).toEqual([...result.keys()].sort());
+      expect(
+        [...correction]
+          .filter(
+            ([key, document]) =>
+              JSON.stringify(document) !== JSON.stringify(result.get(key)),
+          )
+          .map(([key]) => key),
+      ).toEqual([RESULTS_KEY]);
+      for (const documents of [result, correction]) {
+        for (const [key, document] of documents) {
+          expect(decodeControlledDocument(document), key).not.toBeNull();
+        }
+      }
+      expect(result.get(RESULTS_KEY)!.versions.map((v) => v.from)).toEqual([
+        '1970-01-01T00:00:00.000Z',
+        after(RESULT_AFTER_HOURS * HOUR),
+        after(RESULT_HOLD_AFTER_HOURS * HOUR),
+      ]);
+      expect(
+        await controlledSeasonDocuments(phases.correction),
+        'the same race instant gives the same file',
+      ).toEqual(correction);
+    });
+
+    it.each([
+      // The last run before the load and the hours from it to publication,
+      // as measured. The slowest case is the 50 h after a daily check.
+      ['within the hour, so that one evening holds both', 5, 2],
+      ['an hour late, at the next confirmation', 6, 5],
+      ['after the result would have settled', 47, 25],
+      ['at the latest advance, after round 23 has started', 12 * 24 - 1, 27],
+      ['just past the latest advance, the slowest case', 12 * 24, 50],
+    ])(
+      'publishes the result, holds it, and publishes the correction advanced %s',
+      { timeout: 180_000 },
+      async (_when, lastRunHour, publishedAfterHours) => {
+        const kv = new MemoryKv();
+        const stage = await pausedStage(kv);
+        const phases = demonstrationPhases(RACE_START);
+        const correction = await controlledSeasonDocuments(phases.correction);
+
+        // Phase 1: the first scheduled run reads the moved calendar before the
+        // result exists, the next finds it, and the next publishes it.
+        kv.load(await controlledSeasonDocuments(phases.result));
+        const firstRun = after(3 * HOUR + 17 * MINUTE);
+        const published = after(5 * HOUR + 17 * MINUTE);
+        const runs = await stage.hourly(firstRun, published);
+        expect(
+          runs.map((run) => run.releasesAfter > run.releasesBefore),
+        ).toEqual([false, false, true]);
+        expect(await winnerPoints(stage)).toBe(25);
+        const first = stage.activeVersion();
+        const home = (await (
+          await stage.fetch('/v1/home?season=2026')
+        ).json()) as { data: { featuredEvent: { round: number } } };
+        expect(home.data.featuredEvent.round).toBe(23);
+
+        // Phase 2: however long the owner takes, the result stays served and
+        // the runs stay healthy.
+        const lastHeld = after(lastRunHour * HOUR + 17 * MINUTE);
+        if (lastHeld !== published) {
+          await stage.hourly(
+            new Date(Date.parse(published) + HOUR).toISOString(),
+            lastHeld,
+          );
+        }
+        expect(await winnerPoints(stage)).toBe(25);
+        expect(stage.activeVersion()).toBe(first);
+        expect(Date.parse(await heartbeat(stage))).toBeGreaterThanOrEqual(
+          Date.parse(lastHeld),
+        );
+
+        // Phase 3: the only act is loading the changed document.
+        kv.values.set(RESULTS_KEY, JSON.stringify(correction.get(RESULTS_KEY)));
+
+        // Phase 4: published at this run and no earlier.
+        const publication = Date.parse(lastHeld) + publishedAfterHours * HOUR;
+        await stage.hourly(
+          new Date(Date.parse(lastHeld) + HOUR).toISOString(),
+          new Date(publication - HOUR).toISOString(),
+        );
+        expect(await winnerPoints(stage)).toBe(25);
+        await stage.tick(new Date(publication).toISOString());
+        expect(await winnerPoints(stage)).toBe(26);
+        expect(stage.activeVersion()).not.toBe(first);
+        expect(await stage.harness.record(22)).toMatchObject({
+          anchor: RACE_START,
+          stagedCorrection: null,
+          competingCorrection: null,
+        });
+        expect(
+          stage.ticks.flatMap((tick) =>
+            tick.logs.map((line) => String(line.publicationReason)),
+          ),
+        ).not.toContain('standings-round-incoherent');
+        expect(
+          stage.workerRequests.every((path) => path.startsWith('/v1/')),
+        ).toBe(true);
+      },
+    );
+
+    it('loses the correction when the first run comes after the result exists', async () => {
+      // Why the runbook stops if the first run has not happened by `T′` + 4 h.
+      const kv = new MemoryKv();
+      const stage = await pausedStage(kv);
+      const phases = demonstrationPhases(RACE_START);
+      const correction = await controlledSeasonDocuments(phases.correction);
+      kv.load(await controlledSeasonDocuments(phases.result));
+      await stage.tick(tickAfter(4 * HOUR));
+      expect(await stage.harness.record(22)).toMatchObject({
+        anchor: PAUSED_START,
+      });
+      await stage.hourly(tickAfter(5 * HOUR), tickAfter(29 * HOUR));
+      kv.values.set(RESULTS_KEY, JSON.stringify(correction.get(RESULTS_KEY)));
+      await stage.hourly(tickAfter(30 * HOUR), tickAfter(80 * HOUR));
+      expect(await winnerPoints(stage)).toBe(25);
+    });
+  },
+);

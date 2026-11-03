@@ -2114,6 +2114,12 @@ abstract class AppLocalizations {
   /// **'GridView does not retrieve data from this source automatically. Any data from it that GridView shows was captured, reviewed and published by GridView\'s operator, by hand and in batches, so it changes only when a new batch is published and can lag behind the source.'**
   String get settingsSourceStatusActive;
 
+  /// Status of a credited data source whose data GridView's service can retrieve automatically on a schedule, or, while that is switched off, publish in operator-run batches; the two never run at once, because a Worker that checks automatically refuses batches. Stated as a capability: an environment may not run the schedule yet. Must stay true before anything from the source is published (it must not claim that data from the source is being shown), and must not claim live or real-time data.
+  ///
+  /// In en, this message translates to:
+  /// **'GridView\'s service can check this source automatically, on an hourly schedule, and publishes its data only after the data passes GridView\'s checks. While that automatic checking is switched off, GridView\'s operator can publish reviewed batches of it instead. Either way, data from it can lag behind the source, and a published result can later be corrected.'**
+  String get settingsSourceStatusAutomatic;
+
   /// Status of a credited data source in a test-only build that bundles a frozen snapshot of its data. Must not claim live retrieval.
   ///
   /// In en, this message translates to:

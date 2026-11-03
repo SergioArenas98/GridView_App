@@ -31,8 +31,9 @@
  *   `publishGuarded` itself (`guard-authority-not-sequenced`); there is no
  *   legacy path.
  * - The bundled attribution record credits the batch's source as `active`
- *   (DP-7: real data is not published while the app calls the source
- *   dormant).
+ *   or `automatic` (DP-7: real data is not published while the app calls the
+ *   source dormant). Both statuses' wording covers a batch, so a Worker that
+ *   falls back from `coordinated` to manual batches is admitted again.
  *
  * ## Publication
  *
@@ -177,16 +178,21 @@ const creditedSourceId = 'jolpica';
 
 export interface Credit {
   readonly attribution: SourceAttribution;
-  readonly active: boolean;
+  /** Whether the status admits an operator-run batch. */
+  readonly admitsBatch: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** The statuses whose wording covers an operator-run batch. */
+const batchCreditStatuses: readonly unknown[] = ['active', 'automatic'];
+
 /**
- * An attribution record's credit for the batch's source, and whether it is
- * `active`, or `null` for a record that does not credit it exactly once.
+ * An attribution record's credit for the batch's source, and whether its
+ * status admits a batch (`active` or `automatic`), or `null` for a record
+ * that does not credit it exactly once.
  */
 export function attributionCredit(record: unknown): Credit | null {
   if (
@@ -212,7 +218,7 @@ export function attributionCredit(record: unknown): Credit | null {
       licenseName: entry.licenseName as string,
       licenseUrl: entry.licenseUrl as string,
     },
-    active: entry.status === 'active',
+    admitsBatch: batchCreditStatuses.includes(entry.status),
   };
 }
 
@@ -259,7 +265,7 @@ export class SeasonBatchIngest {
     }
     if (this.deps.guarded === null) return 'authority-not-sequenced';
     const credit = attributionCredit(this.attributionRecord);
-    if (credit === null || !credit.active) return 'attribution-not-active';
+    if (credit === null || !credit.admitsBatch) return 'attribution-not-active';
     return { season: Number(raw), guarded: this.deps.guarded, credit };
   }
 

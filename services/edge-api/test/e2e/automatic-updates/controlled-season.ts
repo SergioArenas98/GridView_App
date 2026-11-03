@@ -11,6 +11,10 @@
  * document holds the versions it passes through, so one load plays the whole
  * weekend with nobody acting during it.
  *
+ * The deployed demonstration is asynchronous instead (`demonstrationPhases`):
+ * one load publishes the result and a later one supplies the correction, each
+ * phase holding until an operator advances it.
+ *
  * The same builder feeds the in-process test of the transport and the file
  * an operator loads with `wrangler kv bulk put` (`controlled-source-export
  * .test.ts`), so what is deployed is what was tested.
@@ -21,6 +25,7 @@ import {
   type ControlledDocument,
   type ControlledVersion,
 } from '../../../src/providers/controlled/source';
+import { emptyResultsEnvelope } from '../../providers/jolpica/results-support';
 import { curatedEventLocators } from '../../providers/jolpica/support';
 import {
   HOUR,
@@ -42,6 +47,59 @@ export interface ControlledSeasonOptions {
   readonly correction?: {
     readonly afterHours: number;
     readonly variant: ResultVariant;
+  };
+  /**
+   * How long after the start `raceRound`'s result document starts answering
+   * empty. The race's other documents keep serving, so standings stay as they
+   * are and GridView keeps the result it already published.
+   */
+  readonly holdAfterHours?: number;
+}
+
+/**
+ * When the demonstration's result phase stops confirming the result. A result
+ * settles at the + 24 h check, and a correction after that needs an operator
+ * (ADR 0028 D6), so the hold takes effect before that check. A check that
+ * fails neither confirms nor settles, which leaves the round correctable until
+ * its ceiling at day 14 (runbook §8.2, "The hold").
+ */
+export const RESULT_HOLD_AFTER_HOURS = 20;
+
+/**
+ * When the demonstration's result appears. The race anchor is set 3 h 17 min
+ * before the first scheduled run (runbook §8.2, "Setup"), so that run reads the
+ * moved calendar before any result exists, and the next one finds it. On that
+ * anchor the result is published in time for the + 5 h 30 min confirmation to
+ * sight a correction, so one evening holds both: the shortest normal sequence
+ * of any anchor, at five hourly runs.
+ */
+export const RESULT_AFTER_HOURS = 4;
+
+/**
+ * The demonstration's corrected document says its correction applies from here
+ * on. It is loaded after the result was seen, so this is always in the past
+ * and the correction is served as soon as the load lands. A fixed value keeps
+ * the file deterministic: one race instant gives the same two files.
+ */
+export const CORRECTION_AFTER_HOURS = 5;
+
+export type DemonstrationPhase = 'result' | 'correction';
+
+/** The source of each phase of the asynchronous demonstration. */
+export function demonstrationPhases(
+  raceStart: string,
+): Record<DemonstrationPhase, ControlledSeasonOptions> {
+  const race = {
+    raceRound: 22,
+    raceStart,
+    availableAfterHours: RESULT_AFTER_HOURS,
+  };
+  return {
+    result: { ...race, holdAfterHours: RESULT_HOLD_AFTER_HOURS },
+    correction: {
+      ...race,
+      correction: { afterHours: CORRECTION_AFTER_HOURS, variant: 'B' },
+    },
   };
 }
 
@@ -151,6 +209,16 @@ export async function controlledSeasonDocuments(
       }
       versions.set(key, list);
     }
+  }
+  if (options.holdAfterHours !== undefined) {
+    const key = `${CONTROLLED_SOURCE_KEY_PREFIX}${SEASON_PATH}/${options.raceRound}/results/${QUERY}`;
+    versions.get(key)?.push({
+      from: new Date(
+        Date.parse(options.raceStart) + options.holdAfterHours * HOUR,
+      ).toISOString(),
+      status: 200,
+      body: emptyResultsEnvelope(),
+    });
   }
   return new Map(
     [...versions].map(([key, list]) => [

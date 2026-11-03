@@ -184,7 +184,7 @@ describe('submission builder CLI: end to end, offline', () => {
     expect(report.summary.submissionSha256).toBe(
       createHash('sha256').update(text).digest('hex'),
     );
-    expect(report.summary.attributionStatus).toBe('active');
+    expect(report.summary.attributionStatus).toBe('admits-batch');
     const body = JSON.parse(text);
     expect(body.reviewedManifestSha256).toBe(batch.manifestSha256);
     expect(body.manifest).toEqual(JSON.parse(batch.manifest));

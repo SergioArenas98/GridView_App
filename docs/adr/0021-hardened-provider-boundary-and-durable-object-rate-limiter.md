@@ -264,6 +264,38 @@ The Frozen Test APK runbook's capture step now passes `--proto =https`,
 generator (Implementation Plan §14.0.46). No capture was run for this
 amendment.
 
+## Amendment A2 - The upstream hold after a provider 429 (2026-11-03)
+
+**Status:** Accepted with the PR that implements it. Not deployed.
+
+**Context.** At AU-4 step 2, the staging Worker's second run sent 23 requests
+to Jolpica. All of them were paced about 260 ms apart, inside the published
+4/s and 500/h, and Jolpica answered `429` to 20 of them. D2.13 typed each
+`429` and parsed `Retry-After`, but nothing acted on it. The limiter's
+windows count only GridView's own sends, so every later reservation was
+`allowed`, and the run kept asking. The published limit is not what Jolpica
+enforced on the Worker. Why is not established: possible causes are a reduced
+limit, Cloudflare egress addresses shared with other callers, and the penalty
+of continuing after a `429`.
+
+**Decision.**
+
+| # | Decision |
+|---|---|
+| A2.1 | The HTTP boundary reports every `429` to the limiter (`recordRateLimited`), with its parsed `Retry-After` or `null`. The report never throws, and it does not change the typed `provider-rate-limited` answer. |
+| A2.2 | The limiter object stores an **upstream hold** per source. It ends at `Retry-After`, bounded to at least 60 s and at most 6 h after the report; a later report can only extend it. While the hold runs, every reservation is `deferred` with `cause: 'provider-hold'`, no limiting window and true headroom, and consumes nothing. A corrupt or foreign hold record fails closed and is never rewritten, like a corrupt or foreign ledger (D1.8, D1.8a). Like any deferral, a held reservation never waits (D1.10). |
+| A2.3 | The per-run pacer holds its own run on the same report and answers locally, without asking the limiter, until the hold ends. A lost report therefore still stops the run. |
+| A2.4 | The pacer's default spacing is one second. This is a starting hypothesis, not a verified safe rate. The 260 ms minimum stays the floor a caller may choose. |
+| A2.5 | Nothing else changes. The windows still enforce the published limits, a window deferral is unchanged, and the ledger, run budget, planner and publication guard are untouched. A held round carries `limiterDeferralUntil`, so the existing planner rule skips scheduled ticks until the hold ends, and the run is withheld as `classification-unavailable`. |
+
+**Consequences.**
+- After a `429`, at most the in-flight request has been sent; no other
+  request leaves GridView until the hold ends, from any trigger.
+- A full publication run takes about 25 s of pacing, well inside the 240 s
+  coordination deadline.
+- The limiter object's wire format gains the optional `cause` and the
+  `/rate-limited` report. Both ship in the same Worker as their only reader.
+
 ## References
 
 - [Workers Rate Limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)

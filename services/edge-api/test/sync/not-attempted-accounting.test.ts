@@ -22,7 +22,7 @@ import {
   type ProviderQuotaPolicy,
 } from '../../src/providers/provider-source';
 import type { SyncProviderAccounting } from '../../src/sync/sync-service';
-import { withoutDemonstration } from '../config/demonstration-environment';
+import { withoutAutomatic } from '../config/demonstration-environment';
 import {
   adminRequest,
   createHarness,
@@ -217,7 +217,7 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
     'utf8',
   );
 
-  it('admits exactly mock, none and coordinated, and commits no coordinated mode outside the demonstration Worker', () => {
+  it('admits exactly mock, none and coordinated, and commits no coordinated mode outside the demonstration Worker and staging', () => {
     const environment = readFileSync(
       join(repoRoot, 'services', 'edge-api', 'src', 'config', 'environment.ts'),
       'utf8',
@@ -229,16 +229,17 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
     expect(wrangler).not.toMatch(
       /PROVIDER_MODE = "(jolpica|openf1|live|dual)"/,
     );
-    // The demonstration Worker (`[env.e2e]`, gate AU-3) is the one exception,
-    // pinned in `demonstration-worker-config.test.ts`.
-    expect(withoutDemonstration(wrangler)).not.toMatch(
+    // The demonstration Worker (`[env.e2e]`, gate AU-3) and, since gate AU-4,
+    // staging are the exceptions, pinned in `demonstration-worker-config.test.ts`
+    // and `staging-automatic-updates.test.ts`.
+    expect(withoutAutomatic(wrangler)).not.toMatch(
       /PROVIDER_MODE = "coordinated"/,
     );
   });
 
-  it('keeps production on none and commits staging to none (mock until the ingest configuration)', () => {
+  it('keeps production on none and commits staging to coordinated (mock until the ingest configuration, then none until AU-4)', () => {
     expect(wrangler).toMatch(
-      /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\n(?:#.*\n)*PROVIDER_MODE = "none"\n/,
+      /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\n(?:#.*\n)*PROVIDER_MODE = "coordinated"\n/,
     );
     expect(wrangler).not.toMatch(/^PROVIDER_MODE = "mock"/m);
     expect(wrangler).toMatch(

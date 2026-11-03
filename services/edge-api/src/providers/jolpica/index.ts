@@ -5,9 +5,10 @@
  * imports it: the coordinated runtime composition,
  * `src/sync/coordinated/composition.ts`. That module is reachable from the
  * Worker, but it constructs nothing unless `PROVIDER_MODE` is `coordinated`
- * and every coordinated dependency is bound. No committed environment selects
- * that mode, and the reconciliation ledger it requires has no binding, so no
- * port here is constructed in any deployed configuration.
+ * and every coordinated dependency is bound. The demonstration Worker selects
+ * that mode with a controlled source, and staging commits it against the
+ * network (release gate AU-4, not deployed); development and production do
+ * not, so no port here is constructed there.
  *
  * It implements exactly six coordinated resources in five ports: the season
  * calendar, the season circuits, the season participants, the race

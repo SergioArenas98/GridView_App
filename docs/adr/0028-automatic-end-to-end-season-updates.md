@@ -89,8 +89,10 @@ Source retrieval → validation → guarded publication → app refresh:
 2. **Plan.** The G5 planner (ADR 0020 C2) decides what is due from the ledger
    alone; nothing due sends nothing.
 3. **Retrieve.** One coordination through the Jolpica routing port, the
-   hardened client and the global `ProviderRateLimiter` (ADR 0021), paced at
-   least 260 ms apart, under the run budget (240 s coordination deadline).
+   hardened client and the global `ProviderRateLimiter` (ADR 0021), paced
+   one second apart by default (never under 260 ms) and held after a provider
+   `429` (ADR 0021 amendment A2), under the run budget (240 s coordination
+   deadline).
 4. **Validate.** Every response is decoded, mapped through the curated
    registries (ADR 0022) and deep-validated (ADR 0024); each classification
    goes through the settling state machine (ADR 0020 §4).
@@ -348,10 +350,17 @@ released:
    `gridview-api-e2e`, born by genesis, whose Jolpica transport reads a
    **time-aware controlled source from its own KV namespace**
    (`CONTROLLED_PROVIDER_SOURCE = "kv"`, admitted only in a coordinated
-   staging Worker, a configuration error in production). One load before the
-   race plays the weekend hands-free; the staging app built for that host
-   shows the result. It is isolated so that controlled data never enters
-   staging's real `pm1-…1d` lineage, which D14 would make forward-only.
+   staging Worker, a configuration error in production). Amended by the
+   owner on 2026-11-02: it runs asynchronously, in persistent phases, with
+   no timed attendance. One load before the race publishes the result with
+   nobody acting; after the owner has seen it, a second load changes the
+   controlled source to a correction, and GridView publishes that with
+   nobody acting too. The staging app built for that host shows both. It
+   proves that the two reach the app; timing, polling and budgets stay in
+   part 1 (runbook §8.2, acceptance criteria and coverage limits). It is
+   isolated so that controlled data never enters staging's real `pm1-…1d`
+   lineage, which D14 would make forward-only. Part 3 passed on 2026-11-03
+   (runbook §8.2, "Result").
 
 ### D11. Compliance
 

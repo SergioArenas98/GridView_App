@@ -36,7 +36,7 @@ import type {
 } from '../../../../src/providers/http/provider-rate-limiter';
 import type { ProviderTransport } from '../../../../src/providers/http/provider-http-client';
 import type { RealProviderSourceId } from '../../../../src/providers/http/reservation-engine';
-import { minimumReservationSpacingMillis } from '../../../../src/providers/http/reservation-pacer';
+import { defaultReservationSpacingMillis } from '../../../../src/providers/http/reservation-pacer';
 import { MemorySequencerHost } from '../../../../src/publication/sequencer/hosts';
 import type { SeasonPublicationSequencerPort } from '../../../../src/publication/sequencer/port';
 import type { SnapshotStorage } from '../../../../src/storage/types';
@@ -105,11 +105,11 @@ export function tickAfter(round: number, hours: number): string {
 
 /**
  * The instant a run started at `at` observes its results: after its
- * reservations, which the pacer spaces `minimumReservationSpacingMillis` apart.
+ * reservations, which the pacer spaces `defaultReservationSpacingMillis` apart.
  */
 export function paced(at: string, reservations: number): string {
   return new Date(
-    Date.parse(at) + (reservations - 1) * minimumReservationSpacingMillis,
+    Date.parse(at) + (reservations - 1) * defaultReservationSpacingMillis,
   ).toISOString();
 }
 
@@ -170,7 +170,12 @@ export function resultsBody(
 /** What the server answers for one path: a body, a status, or a network error. */
 export type Answer =
   | { readonly kind: 'json'; readonly body: unknown }
-  | { readonly kind: 'status'; readonly status: number }
+  | {
+      readonly kind: 'status';
+      readonly status: number;
+      /** Extra response headers, e.g. a `429`'s `Retry-After`. */
+      readonly headers?: Readonly<Record<string, string>>;
+    }
   | { readonly kind: 'network' };
 
 /** The local Jolpica double. Every request is recorded by its path. */
@@ -196,7 +201,7 @@ export class JolpicaServer {
     if (answer.kind === 'status') {
       return new Response('{}', {
         status: answer.status,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...answer.headers },
       });
     }
     return new Response(JSON.stringify(answer.body), {
@@ -325,6 +330,13 @@ export interface HarnessOptions {
    * classified round, which any complete candidate contains.
    */
   readonly seed?: 'mock' | 'unclassified';
+  /**
+   * Replaces the seeded release outright, as a rehearsal over a real
+   * release does; `seed` is then ignored.
+   */
+  readonly seedTransform?: (set: GeneratedSnapshotSet) => GeneratedSnapshotSet;
+  /** The seed's committed ordering input; `SEED_ORDERING` when omitted. */
+  readonly seedOrderingInput?: string;
   /** When the seed release is published; see `sequencedContext`. */
   readonly seedAt?: string;
 }
@@ -401,11 +413,13 @@ export class ObservationHarness {
       cutover: settings.cutover ?? 'active',
       transport,
       sequencerClock: clock,
-      seedOrderingInput: SEED_ORDERING,
+      seedOrderingInput: settings.seedOrderingInput ?? SEED_ORDERING,
       ...(settings.seedAt === undefined ? {} : { seedAt: settings.seedAt }),
-      ...(settings.seed === 'unclassified'
-        ? { seedTransform: unclassified }
-        : {}),
+      ...(settings.seedTransform !== undefined
+        ? { seedTransform: settings.seedTransform }
+        : settings.seed === 'unclassified'
+          ? { seedTransform: unclassified }
+          : {}),
     });
     return new ObservationHarness(context, transport, clock);
   }

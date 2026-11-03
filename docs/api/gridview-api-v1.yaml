@@ -43,24 +43,34 @@ info:
     GridView, and states that it does not guarantee uptime, availability or
     correctness of its data.
 
-    **How Jolpica F1 data reaches GridView.** No GridView Worker retrieves data
-    from Jolpica F1 automatically, on a schedule or in answer to a request.
-    Jolpica F1-derived data reaches this service only as an operator-run batch:
-    GridView's operator captures the responses by hand, reviews them offline
-    and submits the batch to staging, which publishes it only if it passes
-    verification and the publication guard. Production accepts no batch and
-    serves no provider data. A batch is fixed at its capture instant and
-    changes only when a new batch is published, so it can lag behind Jolpica
-    F1.
+    **How Jolpica F1 data reaches GridView.** Where automatic updates are
+    enabled, a GridView Worker requests data from Jolpica F1 itself, without an
+    operator. An hourly schedule decides what is due: a race's result from 90
+    minutes after its scheduled start, and the calendar, standings,
+    participants and circuits less often, and GridView's operator can start
+    a run by hand under the same rules. Each run sends a bounded number of
+    `GET` requests through one paced client that enforces Jolpica F1's
+    published rate limits as GridView recorded them (4 requests a second, 500
+    an hour). What it receives is validated, mapped to GridView's
+    curated identities and published only if it passes verification and the
+    publication guard; otherwise nothing changes and the last published
+    release keeps serving. Where automatic updates are not enabled, Jolpica
+    F1-derived data reaches this service only as an operator-run batch:
+    GridView's operator captures the responses, reviews them offline and
+    submits the batch, which is published under the same verification and
+    guard. A Worker with automatic updates enabled refuses batches. Neither path updates in real time: a release changes only when a
+    newer one is published, so it can lag behind Jolpica F1, and a published
+    result can be corrected later. Whether a given environment's release
+    carries Jolpica F1-derived data at all is stated by its attribution version
+    (below).
 
     **Which responses carry it.** Every release names its attribution version
     in the content manifest (`GET /v1/content/manifest`, `attributionVersion`).
-    A release published from a Jolpica F1 batch carries the version of the
-    attribution record below that it was credited under, `data-sources-v2` or
-    later. A release with any other value contains no Jolpica F1-derived data:
-    GridView's mock dataset carries `1`, and staging serves it until a first
-    batch is published. This notice will be kept current if other sources are
-    added.
+    A release published with Jolpica F1-derived data, automatically or from a
+    batch, carries the version of the attribution record below that it was
+    credited under, `data-sources-v2` or later. A release with any other value
+    contains no Jolpica F1-derived data: GridView's mock dataset carries `1`.
+    This notice will be kept current if other sources are added.
 
     **GridView's own work.** The GridView application and edge API source code
     and this contract document are GridView's own work. They are not licensed by
@@ -79,7 +89,7 @@ info:
 
     The per-source attribution GridView shows is held in the repository record
     `content/attribution/data-sources.json` (attribution version
-    `data-sources-v2`).
+    `data-sources-v3`).
   contact:
     name: GridView
   license:

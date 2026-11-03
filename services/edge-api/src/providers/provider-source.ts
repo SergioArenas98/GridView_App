@@ -96,9 +96,8 @@ const openF1QuotaPolicy: ProviderQuotaPolicy = {
  * Jolpica unauthenticated public access, as published on access date
  * 2026-08-19 (GridView_Provider_Evaluation.md §9.2): burst 4 requests/second,
  * sustained 500 requests/hour. No daily cap is published, and the published
- * limits are stated to be subject to reduction.
- *
- * No Jolpica adapter exists.
+ * limits are stated to be subject to reduction. The coordinated runtime's
+ * hardened client reserves every Jolpica request against these windows.
  */
 const jolpicaQuotaPolicy: ProviderQuotaPolicy = {
   sourceId: 'jolpica',

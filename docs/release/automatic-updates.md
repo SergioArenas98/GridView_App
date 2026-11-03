@@ -3,11 +3,13 @@
 Prepared 2026-10-21 on `feat/automatic-updates` (stacked on PR #85). The
 decision record is [ADR 0028](../adr/0028-automatic-end-to-end-season-updates.md).
 
-**Nothing in this document is authorized by the change that adds it.** No
-environment selects `coordinated`, binds the reconciliation ledger or has a
-schedule. No provider was contacted, nothing was deployed, and no Cloudflare
-plan, trigger, Play Console or AdMob setting was changed. Every step marked
-**[approval]** below is a separate owner authorization, given in order.
+**Nothing in this document is authorized by the change that adds it.** When
+it was written no environment selected `coordinated`, bound the
+reconciliation ledger or had a schedule. Since then the demonstration Worker
+(AU-2, AU-3) and, committed but not deployed, staging (AU-4 step 1, §8.3)
+select `coordinated` and bind the ledger; no environment has a schedule.
+Every step marked **[approval]** below is a separate owner authorization,
+given in order.
 
 **Requirement (owner, 2026-10-21).** A newly available race result must reach
 the app without a manual capture or submission. PR #85's
@@ -114,7 +116,7 @@ The operator path for a staged correction is in the staging runbook, section
 
 | Budget | Limit | GridView's use |
 |---|---|---|
-| Jolpica burst | 4 requests/s | Pacer at least 260 ms apart (≤ 3.85/s); the global limiter enforces 4/s for all callers |
+| Jolpica burst | 4 requests/s published; **not reached from staging** (AU-4 step 2, §8.3) | Pacer one request a second by default (a starting hypothesis, not a verified safe rate; never under 260 ms); the global limiter enforces 4/s for all callers, and a provider `429` holds every caller (§5) |
 | Jolpica sustained | 500 requests/h | At most 6 + classified rounds per run, so ≤ 29 an hour. A missing result adds up to ten hourly runs per race, still one an hour; seeing a first result twice adds one run per race. The gate measured ≤ 9 per run and < 200 a day across two race weekends with one result that never appeared (asked 12 times in its first 30 h) |
 | Cron CPU | 15 min for an hourly trigger | A publication run does the generation, validation and guard the ingest measured at 362 ms on staging, plus ≤ 29 response parses; a nothing-due tick takes milliseconds. Measured at AU-4 before relying on it |
 | Cron wall time | 15 min | Coordination aborts at 240 s; publication starts only within 300 s and with 300 s of the 10-minute lease left |
@@ -131,7 +133,8 @@ visible until the sequencer's `finalize` commits.
 | Failure | Effect | Retry |
 |---|---|---|
 | Result not yet published by Jolpica (empty race list), incomplete page, delayed start, long race | The check fails; the run is withheld | The next hourly tick through + 10 h 30 min, then + 15 h, + 24 h, daily to day 14 |
-| Jolpica 5xx, timeout, 429, block | The check is counted as failed; the run is withheld; the heartbeat stops if no check succeeded, and idle ticks do not restart it until an observation succeeds | Next hourly run; a 429's `Retry-After` is honoured |
+| Jolpica 5xx, timeout, block | The check is counted as failed; the run is withheld; the heartbeat stops if no check succeeded, and idle ticks do not restart it until an observation succeeds | Next hourly run |
+| Jolpica 429 | The refused check is counted as failed. The limiter object then holds Jolpica for every caller until `Retry-After`, at least 60 s and at most 6 h after the `429`; the rest of the run is deferred and sends nothing; the run is withheld | Scheduled ticks plan nothing while a round's deferral runs; a manual run asks the limiter and sends nothing; the first run after the hold asks again |
 | Limiter deferral | Not a check; withheld | At the limiter's `retryAt` |
 | Invalid payload, unmapped identity | Withheld; the mapping needs curation | Next check, after curation |
 | D14/D15 guard refusal | Blocked; the heartbeat stops | Operator |
@@ -190,8 +193,8 @@ verified that delivery on 2026-10-22 (§7). Known limits:
 | AU-0 | This change merged, dormant: genesis-capable coordinated runs, calendar horizon, the + 90 min / hourly / back-off polling plan, heartbeat, production logging design, monitor, controlled source, gate tests | **[PR]** | PR #85 |
 | AU-1 | Workers Paid bought (the plan is account-wide, so staging gets it too). **Done 2026-10-21:** read-only, the dashboard shows Workers Paid active, renewing 2026-11-21, on account `786e24f1…e6bf`, the account Wrangler uses; one invoice that day, USD 5.00, paid (the invoice itself, and so any VAT line, was not opened) | **[approval]** owner | — |
 | AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis. **Done 2026-10-21:** all four steps (§8.1) | **[approval]** each, **[PR]** | AU-0, AU-1 |
-| AU-3 | **The end-to-end demonstration with controlled data** (§8.2). Also on the release commit: the in-process gate in CI and the app half locally. **Paused 2026-10-22, not passed:** the first release and the phone bootstrap passed; the timed result and correction checks were not run (§8.2, "Status"). The replay's deploy is done (`6b52bc02`, 2026-10-22); its load, schedule and checks are not (§8.2, "Replay") | **[approval]** the KV load and the schedule; **[record]** the evidence | AU-2 |
-| AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2) | **[approval]** each of the three; cutover-sensitive | AU-3 |
+| AU-3 | **The end-to-end demonstration with controlled data** (§8.2): asynchronous, in persistent phases, passed on its acceptance criteria A1–A6. Also on the release commit: the in-process gate in CI and the app half locally. **Passed 2026-11-03:** one bounded asynchronous run from `F` = 2026-11-02 20:17Z published the result at the 22:17Z run and its correction at the 00:17Z run with nobody acting on GridView, and the installed app showed both; A1–A6 evidenced, the operator's record accepted by the owner (§8.2, "Result"). The e2e schedule is stopped. The two parts on the release commit stay due with it (AU-8) | **[approval]** each source load and the schedule, which one bounded approval may cover; **[record]** the evidence | AU-2 |
+| AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2). **Prepared 2026-11-03:** step 1's configuration, the `automatic` attribution record (`data-sources-v3`, owner decision of that day) and the app and API wording committed; the first runs rehearsed in process against `…1d`; nothing deployed | **[approval]** each of the three; cutover-sensitive | AU-3 |
 | AU-5 | The monitor's hourly `schedule:` for staging | **[approval]**, **[PR]** | AU-4, AU-6 |
 | AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1). **Passed 2026-10-22:** one owner-authorised dispatch against staging (`skip_heartbeat`, `simulate_failure`), [run 39852057415](https://github.com/SergioArenas98/GridView_App/actions/runs/39852057415) on `master` at `09e0686`, failed as expected with the single finding `simulated-failure` (pendingRound 18); the owner confirmed, with a screenshot, that GitHub's failure e-mail for it arrived at 21:49 Irish time (20:49Z) the same day. OD-1 is closed. The workflow is still manual-only: no monitor schedule was enabled (that is AU-5), and no Worker schedule changed | **[approval]**, **[record]** | AU-0 |
 | AU-7 | Production automatic (§8.4): W2/W3 with the production delta, genesis, the first automatic release, persisted logs verified free of app traffic, the monitor scheduled for production | **[approval]** each | AU-4 soak (one race weekend published automatically), AU-6, D-A (§9) |
@@ -308,161 +311,429 @@ staging state").
 
 ### 8.2 The demonstration (AU-3)
 
-1. Choose a race instant `T` at minute 00, at least 4 h ahead and early
-   enough that the shifted season stays in 2026; the export refuses
-   otherwise. Generate the source outside the repository:
+**Revised by the owner on 2026-11-02.** The demonstration is asynchronous and
+functional. The owner does not have to be present at a set time. The
+operator's session does stay on through an evening run, to observe, advance
+and stop. This replaces the timed watch, its fixed dates and its rule that every
+scheduled run needs its own evidence. It passed on 2026-11-03 (see "Result");
+the procedure stays for a later run.
+
+The demonstration answers one question: does a race result, and then a
+correction to it, reach the installed app with nobody acting on GridView?
+Exact polling cases, planner decisions and request budgets stay proven by the
+automated gate (`test/e2e/automatic-updates/gate.test.ts`, ADR 0028 D10 part 1).
+
+#### Result
+
+**Passed on 2026-11-03,** on one bounded owner approval of 2026-11-02:
+`F` = 2026-11-02 20:17Z (`T′` 17:00Z), the schedule set from PR #97's head
+`f57ec0f`, the observer run from PR #96's head `94b17e7`. Phone times are Irish
+time, which is UTC in November.
+
+| # | Evidence |
+|---|---|
+| A1 | `200` at 22:18:30Z, Norris on 25, release `generatedAt` 22:17:44.031Z, from the `F` + 2 h run |
+| A2 | The owner's screenshots at 22:20: the result's entries as served, and Home on round 23 |
+| A3 | The correction loaded once at 22:28Z, read back at 22:30Z: exactly one controlled key changed |
+| A4 | `200` at 00:18:30Z, Norris on 26, release `generatedAt` 00:17:39.521Z, from the `F` + 4 h run. The only data change from A1 is the winner's points |
+| A5 | The owner's screenshot at 04:22 from the installed app: Norris on 26, the entries matching A4. The owner confirmed no reinstall between the two checks |
+| A6 | The operator's only writes were the two loads and the schedule on and off: no admin request, manual publication, deploy, merge or retry. Accepted by the owner |
+
+Every hourly run from `F` to `F` + 4 h wrote its heartbeat and matched the
+in-process rehearsal. The monitor's only findings were the expected
+`results-late` before the result. The schedule was stopped at 00:19Z from
+`master`; the schedules API showed `[]` for e2e, staging and production, and at
+04:24Z the heartbeat had not moved since the 00:17 run. Staging and production
+kept their versions and public answers. Evidence gaps, none failing: the results
+screen is titled "Gran Premio" without naming Qatar, so both screenshots identify
+round 22 by their entries; persisted logs were not exported. The operator keeps
+the record and its files outside the repository. The coverage limits below
+apply. Round 22 is published on the e2e Worker and cannot be replayed, so a
+later run needs a new plan.
+
+#### The phases
+
+Each phase stays observable until the next is explicitly advanced.
+
+| Phase | Who acts | What happens | It lasts until |
+|---|---|---|---|
+| 1. First result | GridView, with the operator observing | The controlled provider serves round 22's result; GridView fetches, validates and publishes it on its own schedule | The result is served, then it stays served |
+| 2. First check | The owner, whenever convenient | Opens the installed app and sees the result | The operator advances, at the latest `T′` + 12 days |
+| 3. Advance | The operator | One `kv bulk put` changes the controlled provider's round 22 document to the correction | Immediate |
+| 4. Correction | GridView, then the owner whenever convenient | GridView fetches, validates and publishes the correction; a later app launch shows it | The correction stays served |
+
+Changing the controlled provider is test setup: it stands for Jolpica changing
+its data. Nothing is sent to GridView's admin routes at any point, and nothing
+is published by hand.
+
+**Timing.** The whole demonstration fits one evening when the advance is on
+time, with `F` the first scheduled run:
+
+| Run | What it does |
+|---|---|
+| `F` | Reads the moved calendar. No result exists yet |
+| `F` + 1 h | Sights the result, pending |
+| `F` + 2 h | Sees it again and publishes it |
+| `F` + 3 h | Confirmation: sights a correction loaded by then, pending |
+| `F` + 4 h | Sees it again and publishes it |
+
+Five hourly runs are the shortest normal sequence. An in-process search of
+every race anchor found none shorter, because a calendar change takes effect at
+the next run, each publication needs two sightings an hour apart, and an
+accepted result is re-read only at its confirmation slots. A later advance
+loses nothing: loaded after `F` + 3 h, the correction is published at `F` + 8 h,
+and later still within about two days. No criterion depends on these times.
+
+#### Acceptance criteria
+
+All six must pass. The record keeps each one's evidence with its instant.
+
+| # | Criterion | Evidence |
+|---|---|---|
+| A1 | The API serves round 22's result automatically: `/grand-prix/22/results` answers `200` with the winner on 25 points | An observer run's verbatim answer, or the operator's saved public GET, with its instant and the release's `generatedAt` |
+| A2 | The installed app shows that result. Before round 23's start, Home has also moved on to round 23 | The owner's phone screenshot, with the time visible |
+| A3 | The advance changed only the controlled provider: one key, read back byte for byte | The load's record and its read-back |
+| A4 | The API serves the correction automatically: the winner on 26 points, from a later release than A1's | As A1 |
+| A5 | The installed app shows the correction, at a launch after A4, with no reinstall | As A2 |
+| A6 | Only the automatic path published. The operator's record shows that the only writes were the two source loads and the schedule, with no admin request after genesis and no manual publication | The operator's record, as the owner accepts it |
+
+**Failure.** Any of these fails the demonstration: a result or correction that
+never reaches the API or the app; a wrong winner or points; a staged
+correction; a stop or block that needs an operator; a heartbeat that goes
+stale after the first scheduled run, while the schedule is live.
+
+**Missing logs are not a failure.** A persisted line that cannot be found, an
+observer run GitHub dropped, or an hour with no sample is a diagnostic evidence
+gap. The record lists the gap and the demonstration continues. Persisted
+Workers Logs are incomplete: they dropped every event of the 2026-10-22 15:17Z
+run, which did run. So the absence of a line proves nothing either way, and A6
+rests on the operator's record, not on an empty search.
+
+#### Coverage limits
+
+These are what this demonstration does **not** show:
+
+- **When.** It says nothing about polling instants, the hourly window, the
+  second sighting (AU-D5) or the back-off. `gate.test.ts` proves those.
+- **Every run.** The hourly heartbeat, each scheduled run and each monitor
+  verdict are sampled, not proven one by one. Request budgets and the planner's
+  decisions stay in the automated tests.
+- **Natural settling.** An evening run ends before anything settles. From
+  `T′` + 20 h the phase 1 source answers empty for round 22 (see "The hold"), so
+  no deployed run shows a result settling on its own, and a correction loaded
+  after `T′` + 24 h is found by a daily check, not in the hourly window.
+- **A real race day.** The race anchor is synthetic and already past when the
+  source is loaded, so the first check, a delayed start and the hours before a
+  result are not shown here.
+- **Failure paths.** A post-settlement correction, an outage, a lost commit, an
+  incomplete page and a late publication stay in `gate.test.ts`.
+- **Live data and production.** The data is controlled and the Worker is the
+  isolated staging-class `gridview-api-e2e`. Real Jolpica traffic is AU-4 and
+  production is AU-7.
+- **The app.** It is the installed e2e build on one phone, checked at launch.
+  `app-gate.test.ts` covers the data layer. Background behaviour is not covered.
+- **The commit.** The genesis and the first release came from `91ff2541`; the
+  later releases come from the deployed commit. The in-process gate on the
+  release commit covers the path from genesis.
+
+#### The hold
+
+A correction must reach an unsettled result. A result settles at `T′` + 24 h,
+and a correction after that is staged and stops the season for an operator
+(§3), which this demonstration must not need. So phase 1's source keeps the
+result unsettled: from `T′` + 20 h round 22's document answers empty. GridView
+treats that as a failed check and withholds those runs, so nothing publishes.
+The last release keeps serving, the heartbeat keeps advancing, and the result
+stays visible.
+
+- **Latest advance: `T′` + 12 days.** Never load the correction later. Round
+  22's last check is at day 14, and a correction first read there is staged,
+  which stops the season for an operator. Any load after the `T′` + 13 days
+  00:17 run ends that way, so this limit leaves a day's margin. Past it the
+  demonstration has not passed and needs a new plan: round 22 cannot be replayed
+  once it is published.
+- **Preferred advance: in the hour after the result,** which finishes in one
+  evening. Otherwise within 5 days of `T′`, so that the correction is published
+  before round 23 starts. A later advance still works, but Home changes again
+  once round 23 has started.
+- **Expected findings.** A monitor run fails, and GitHub e-mails the owner, in
+  three cases only:
+  - `heartbeat-stale`, before the first scheduled run writes its heartbeat;
+  - `results-late`, from then until the result is published two hours later
+    (round 22's old start);
+  - `results-late`, hourly from `T′` + 7 days 12 h until the removal, in any
+    phase, because round 23 never gets a result.
+
+  Anything else is a real finding.
+
+The hold is test setup in the source file. It changes nothing in GridView.
+
+#### Setup
+
+The demonstration runs on the same Worker as AU-2, with its KV namespace,
+Durable Objects, `ADMIN_TOKEN`, genesis and first release, and the e2e app
+already installed on the phone (`8caa3be9`). Only the source changes. A run on
+2026-10-22 was paused before its race; PR #91 lets the regenerated source move
+that race (`controlled-source.test.ts`). The Worker carries that fix since
+deployment `6b52bc02`.
+
+Each step below is an **[approval]**. The owner may give one approval for the
+whole bounded sequence, naming `F`, the reviewed commits it runs from, and any
+retry with a later `F` it allows.
+
+1. Re-read the e2e and staging state read-only, and confirm the schedule is `[]`.
+2. Choose `F`, the first `:17` run the steps below can reach. The race instant
+   is `T′` = `F` − 3 h 17 min, at minute 00, already past. The shifted season
+   must stay in 2026; the export refuses otherwise. From a clean checkout of
+   `master`, which carries the phases since PR #97, generate both phases' files
+   outside the repository, once each:
 
    ```text
-   GRIDVIEW_CONTROLLED_SOURCE_OUT=<file> GRIDVIEW_CONTROLLED_RACE_START=<T>
+   GRIDVIEW_CONTROLLED_SOURCE_OUT=<file> GRIDVIEW_CONTROLLED_RACE_START=<T′>
+   GRIDVIEW_CONTROLLED_PHASE=<result, then correction>
    npx vitest run test/e2e/automatic-updates/controlled-source-export.test.ts
    ```
 
-   This produces 29 documents, about 125 KB: rounds 1–21 classified,
-   round 22 racing at `T` with its result from `T` + 2 h, and a correction
-   from `T` + 8 h.
-2. **[approval]** Load it: `npm exec -- wrangler kv bulk put <file> --binding
-   GRIDVIEW_DATA --env e2e --remote`. This is the only operator action on the
-   data, and it stands for Jolpica publishing. Nothing is sent to GridView's
-   admin routes.
-3. **[approval]** Schedule it: commit `crons = ["17 * * * *"]` for `env.e2e`
-   and run `npm exec -- wrangler triggers deploy --env e2e`, at least 3 h
-   before `T`.
-4. Install the staging app built for `https://gridview-api-e2e.sejuma18.workers.dev`
-   (a phone step of its own) and open it once before `T`.
-5. Watch, read-only. Pass criteria:
+   `result` writes 29 documents, about 125 KB: rounds 1–21 classified, round 22
+   raced at `T′` with its result from `T′` + 4 h, which is `F` + 43 min, and the
+   hold. `correction` writes the one document the advance changes. Confirm both:
+   29 entries with round 22's document ending empty, and exactly 1 entry. Replay
+   both files' exact bytes in-process before loading, the way
+   `controlled-source.test.ts` does. Keep the correction file for phase 3.
+3. Load the `result` file: `npm exec -- wrangler kv bulk put <file> --binding
+   GRIDVIEW_DATA --env e2e --remote`. Read it back. It overwrites the same 29
+   keys.
+4. Only after that read-back, and before `F`, schedule it from a clean checkout
+   of the reviewed schedule PR's head. The PR must commit `crons = ["17 * * * *"]` for `env.e2e`.
+   Run `npm exec -- wrangler triggers deploy --env e2e` there, and confirm through
+   the schedules API. The PR is not merged for the run, so `master` stays at
+   `crons = []` and stays the stop.
+   - **Do not merge the PR until Removal step 4 has returned it to `crons = []`.**
+     Merged with the cron, `master` would set the schedule again instead of
+     stopping it. Until then the PR head's `wrangler.toml` says scheduled, even
+     after the stop.
+   - **The first scheduled run must come before round 22's result exists.**
+     Confirm from `/v1/status`, read with `Cache-Control: no-cache`, that the
+     heartbeat moved at `F`. If it has not by `F` + 30 min, stop before `F` + 43
+     min, choose a new `F` and regenerate. A first run after that reads the
+     result on round 22's old anchor, and the correction does not publish. Round
+     22 cannot be replayed after that. The heartbeat shows that the run happened,
+     not that it read the calendar; the read-back in step 3 covers the calendar
+     document.
+   - **The load comes first for the same reason.**
+   - The PR changes that one list in `wrangler.toml` and the four tests that
+     pin it: `demonstration-worker-config.test.ts`,
+     `production-worker-config.test.ts`,
+     `staging-season-batch-ingest.test.ts` and the ledger `dormancy.test.ts`.
+     Staging and production stay `[]`.
+   - `triggers deploy` sets the schedule and keeps the deployed version. A
+     `wrangler deploy --env e2e` from that checkout would set it too, because a
+     deploy applies the committed list.
+   - To stop at once, run `triggers deploy` from a clean checkout of `master`,
+     after confirming that it resolves e2e to `[]`.
+5. Observe from the operator's machine. After each scheduled run, run the
+   observer once from PR #96's head (`94b17e7`): `node scripts/monitor/au3-e2e-observer.mjs
+   --out <dir>`. It executes the real `automation-monitor.mjs` against the e2e
+   host and keeps 10 public answers verbatim, with their instants. It sends
+   public GETs to the e2e origin only, with no credential. If the run will
+   outlast the operator's session, merging PR #96 runs the same script hourly
+   from GitHub instead, with 90-day artifacts. Merging is its activation, and the
+   removal then deletes it.
 
-   | Instant | Expect |
-   |---|---|
-   | First tick | Bootstrap (one KV read for the calendar); no release |
-   | Second tick | First release, previous version `null`, rounds 1–21 served |
-   | `T` + 0:17, + 1:17 | A release only if a run is due; Home moves on to round 23; round 22 not asked for yet |
-   | `T` + 2:17 | First check of round 22 (the first tick at or after `T` + 1:30): its result sighted, pending; no release |
-   | `T` + 3:17 | Seen again: its result published |
-   | App, next launch | Shows the round 22 result |
-   | `T` + 6:17 | Confirmation; no release |
-   | `T` + 10:17 | The correction sighted, pending; no release |
-   | `T` + 11:17 | The correction published; the app converges at its next launch |
-   | Throughout | `lastSuccessfulSyncAt` advances hourly; the monitor passes; no admin request appears in the logs after genesis |
+#### Running the phases
 
-   Then remove the schedule (`crons = []`, `triggers deploy`).
+1. **Phase 1.** Nobody acts on GridView. The operator confirms the first run,
+   then reads A1 from the observer's record or one public GET. If the API has no
+   result at `F` + 4 h, stop and diagnose.
+2. **Phase 2, the owner.** Open the installed e2e app, do not reinstall it, and
+   take a screenshot (A2). Any time after A1, for as long as the phase lasts.
+3. **Phase 3, one [approval].** After A1 and A2 and before the latest advance,
+   confirm the API still serves 25 points, then load the correction file with
+   the same `kv bulk put`. Read it back: exactly one key changes (A3). To finish
+   the same evening, load it at least 5 minutes before the `F` + 3 h run, which
+   allows for KV propagation. A later load only moves phase 4.
+4. **Phase 4.** Nobody acts on GridView. Read A4 as A1. If the API has not changed two days
+   and three hours after the advance, stop and diagnose. Then the owner opens
+   the app and takes a screenshot (A5). Any launch after A4 finds the correction,
+   because the manifest expires an hour after each release.
 
-**Status: paused 2026-10-22, AU-3 not passed.** The run used
-`T = 2026-10-23T09:00Z`.
-- Step 2: the source was loaded on 2026-10-21. It held 29 keys, each read back
-  byte-identical.
-- Step 3: the schedule went live on 2026-10-22 at 12:03:56Z.
-- First tick (12:17Z): no release.
-- Second tick (13:17Z): the first release was published, rounds 1–21 served.
-  This was earlier than the 07:17Z on 10-23 that the plan assumed, which step 1
-  allows.
-- The 15:17Z run advanced `lastSuccessfulSyncAt`.
-- Step 4 passed at 16:12Z. A clean install of the e2e app made one request,
-  `GET /v1/bootstrap`, which returned the e2e release: Home showed round 22
-  next and round 21 latest.
+#### Removal
 
-The owner then paused the demonstration before `T`, because the operator's
-machine was being shut down. This change returns the schedule to `crons = []`,
-which takes effect through `triggers deploy --env e2e`. **Not
-done:** the checks at `T` + 0:17 through + 11:17, namely Home moving on, the
-round 22 result sighted then published, the app showing it, the confirmation,
-and the correction sighted then published.
+The served result outlives the schedule, so the Worker can stop as soon as A4
+passes, before the owner's second phone check. Each step is an **[approval]**,
+which the sequence's one approval may cover:
 
-The Worker `91ff2541`, its KV namespace (the controlled source plus the first
-release) and its Durable Objects are kept as they are. Its genesis was not
-reset. A replay needs a new `T`, a regenerated source and its own approvals
-for each of steps 2–5. It also has to account for the release this run
-already committed.
-
-**Replay (prepared 2026-10-22, not run).** The replay runs on the same Worker,
-after a deploy. It keeps the Worker, its KV namespace, Durable Objects,
-`ADMIN_TOKEN`, genesis and first release, and the e2e app installed on the
-phone. So it needs no new namespace, genesis or app install.
-- **Why the same Worker works.** On `91ff2541` a regenerated source wedges the
-  season: round 22's checks stay on the old calendar's anchor, and from the
-  first shifted standings every run is withheld as
-  `standings-round-incoherent`.
-- **What fixed it.** PR #91 re-anchors a moved race that has nothing
-  observed.
-- **The proof.** `controlled-source.test.ts` ("replays on the paused
-  demonstration") plays the paused run, then a source regenerated for a new
-  `T′`.
-
-Each numbered step is its own **[approval]**:
-
-1. Deploy the release-candidate commit with `npm exec -- wrangler deploy --env
-   e2e`, from a clean checkout, with `crons = []` still committed.
-   - No `--secrets-file`: the Worker keeps its `ADMIN_TOKEN`.
-   - Expect only a new version: the same three Durable Object namespaces,
-     bindings and KV values, schedules `[]`, and unchanged public ETags.
-   - Rolling back to `91ff2541` stays possible, because no class is added.
-   - **Done 2026-10-22 22:53Z**, from master `eeca9bf` (the replay
-     deployment): version `6b52bc02`, at 100 %, schedules still `[]`. Only
-     the code changed. The KV values, the Durable Objects, `ADMIN_TOKEN`,
-     the genesis and the first release are unchanged from the original
-     deployment, `91ff2541` (AU-2 step 3, 2026-10-21). Steps 2–5 are still
-     pending, each with its own approval, and AU-3 is still not passed.
-2. Choose `T′` and generate its source (step 1 above).
-   - Before loading, replay those exact bytes in-process the way the test
-     does: the paused source over the 2026-10-22 ticks, then the new file.
-   - The load (step 2) overwrites the same 29 keys.
-3. Schedule it at least 3 h before `T′` (step 3 above).
-4. Open the installed e2e app once after the first replay release. Do not
-   reinstall it.
-5. Watch, read-only. `F` is the first tick after the schedule goes live:
-
-   | Instant | Expect |
-   |---|---|
-   | `F` | Rounds 22 and 23 asked for on their old anchors, an empty answer; rounds 20 and 21 settled on deadline; the moved calendar read; no release (`classification-unavailable`) |
-   | `F` + 2 h | Release: the moved calendar, round 22 at `T′`; Home still on round 22 |
-   | `T′` + 0:17, + 1:17 | No run due, no release: rounds 20 and 21 settled on deadline at `F` |
-   | `T′` + 2:17 | Round 22 re-anchored (`classification.rescheduled`), its result sighted, pending; no release |
-   | `T′` + 3:17 | Its result published (winner 25 points); Home moves on to round 23 |
-   | App, next launch | Shows the round 22 result |
-   | `T′` + 6:17 | Confirmation; no release |
-   | `T′` + 10:17 | The correction sighted, pending; no release |
-   | `T′` + 11:17 | The correction published (winner 26 points); the app converges at its next launch |
-   | Throughout | `lastSuccessfulSyncAt` advances hourly; the monitor (`--base-url` of the e2e host) passes; never `standings-round-incoherent`; no admin request |
-
-   Then remove the schedule (`crons = []`, `triggers deploy`).
-
-Round 22's first ceiling fell on 2026-11-06T09:00Z (14 days after the old
-`T`). For any `F` after it, as with the test's `T′` = 2026-11-12T09:00Z, the
-first run also marks round 22 `never-reconciled`, and the move revives it at
-`T′` + 2:17.
-
-The genesis and the first release came from `91ff2541`. The replay's
-releases come from the commit deployed in step 1, and the in-process gate on
-that commit covers the path from genesis.
+1. Run `npm exec -- wrangler triggers deploy --env e2e` from a clean checkout of
+   `master`, after confirming that it resolves e2e to `[]`. Confirm `[]` through
+   the schedules API; with an empty list the command can print "Deployed" and never
+   exit, so verify, then end it.
+2. Save the observer records, and export any persisted logs still within their
+   7 days as diagnostics.
+3. Record A1–A6 with their evidence, the coverage limits above and any evidence
+   gaps. AU-3 is passed only if all six pass.
+4. Before the schedule PR merges, its branch returns to `crons = []` and reverts
+   the four tests that pin the schedule (Setup, step 4), so `master` never
+   carries a cron. If PR #96 was merged, disable its workflow at the stop, and
+   delete the workflow, script and test in a separate PR.
 
 ### 8.3 Live staging (AU-4)
 
-1. **[approval]** Deploy `[env.staging]` with `PROVIDER_MODE =
-   "coordinated"`, the staging exports table restating both existing classes
-   plus `ReconciliationLedger`, the `RECONCILIATION_LEDGER` binding, and still
-   `crons = []`.
-   - **Irreversible for rollback:** creating the ledger class blocks `wrangler
-     rollback` to every earlier version, permanently (decision pack
-     2026-10-07).
-   - Expect a third Durable Object namespace. The ingest then refuses
-     (`coordinated`).
-2. **[approval]** The first live provider requests: one authenticated manual
-   `POST /internal/admin/sync/full?season=2026` (bootstrap calendar: one
-   request), then one more (a forced publication run: 6 + 17 requests today).
-   - Measure CPU with `wrangler tail --format json`.
-   - Compare the release with `pm1-…1d` document by document. Expect only
-     freshness and anything Jolpica changed since 2026-10-19; treat any other
-     difference as a stop and review it before step 3.
-   - Check the Wrangler 4.112 `kv bulk put` and `tail` flags with `--help`
-     first.
-   - Manual runs corroborate nothing (O-8).
-3. **[approval]** The hourly schedule: `crons = ["17 * * * *"]`, `triggers
-   deploy`. Soak through one race weekend; the R18 example in §2 is the first
-   chance.
+**Prepared 2026-11-03; nothing deployed.** The AU-4 PR commits step 1's
+configuration (`[env.staging]`: `PROVIDER_MODE = "coordinated"`, the staging
+exports table restating both existing classes plus `ReconciliationLedger`,
+the `RECONCILIATION_LEDGER` binding, still `crons = []`) and the
+attribution record `data-sources-v3`, which credits Jolpica F1 as
+`automatic` (owner decision 2026-11-03, superseding the batches-only wording
+of 2026-10-13; it is not a legal clearance). Live staging is still
+`453af4fb-…` (`none`, two Durable Object namespaces, active
+`pm1-000000000001d-aed72435`). Merging the PR deploys nothing.
 
-**Stop:** set `crons = []` and run `triggers deploy`. Nothing publishes. **Fall
-back to manual batches:** deploy `PROVIDER_MODE = "none"` with the ledger
-binding kept; the ingest is admitted again. The calendar-horizon policy is
-shared, so releases re-stamp consistently.
+**Rehearsed in process** (`test/e2e/automatic-updates/staging-first-run-rehearsal.test.ts`,
+opt-in, over the 2026-10-19 capture that `…1d` was published from, seeded as
+`…1d` and credited `data-sources-v2`; the committed staging variables, a
+ledger over the real class, the real limiter and hardened client; no network):
+
+| Instant | Run 1 | Run 2 (forced publication) |
+|---|---|---|
+| 2026-10-19T19:00Z (Jolpica as captured) | 1 request (`/races/`), plan `observation`, nothing published | 23 requests (6 season resources + rounds 1-17); one release published; 117 documents, none added or removed; the only content change is `content:manifest` `attributionVersion` `data-sources-v2` → `data-sources-v3`, every other document differs in instants only |
+| 2026-11-04T10:00Z (rounds 18 and 19 raced, answered as not yet published) | 1 request, nothing published | 25 requests (rounds 18 and 19 added); `withheld`, `classification-unavailable`; `…1d` keeps serving |
+| 2026-11-04T10:00Z (rounds 18 and 19 answered with synthesized results) | 1 request, nothing published | 25 requests; one release published, credited `data-sources-v3`; 119 documents: `grand-prix:18:results` and `grand-prix:19:results` added, none removed; content changes only in `bootstrap`, `calendar`, `season`, `home` (latest completed round 19, featured round 20), `grand-prix:18`, `grand-prix:19`, their two circuits and `content:manifest` |
+
+The third row's results are synthesized from the capture, because nothing may
+ask Jolpica for them: each round answers round 17's classification under its
+own calendar entry, and both standings tables are restated at round 19 with
+round 17's totals. It shows that a run which finds both results passes
+mapping, the standings round-coherence check, validation and the publication
+guard, and what that release changes. It does not show the real content.
+**Untested until step 2:** the real classifications of rounds 18 and 19
+(their drivers, any new participant, DNF/DSQ shapes), real standings after
+round 19 and their coherence with those results, and any change Jolpica made
+since 2026-10-19 to rounds 1-17 or to the season resources, which the
+publication guard would judge for the first time live. In the real step 2,
+compare the release with `…1d` as listed below.
+The in-process run took 173 ms of Node wall time; Workers CPU is measured at
+step 2.
+
+**What the deploy cannot undo.** Creating the `ReconciliationLedger` class is
+a Durable Object class lifecycle change. Cloudflare refuses `wrangler
+rollback` across one, so after step 1 no rollback can reach `453af4fb-…` or
+any earlier version, permanently. Redeploying an older commit also fails,
+because its staging exports table lacks the class. Rollback stays possible
+between versions deployed after step 1, as long as none changes a class
+again. Never remove the class from `exports`: deleting a class is permanent
+and destroys the ledger's data. Only staging is affected: the demonstration
+Worker and production are separate scripts.
+
+Every step below is its own **[approval]**; each is cutover-sensitive
+(staging runbook §6, "Automatic updates on staging (AU-4)", which holds the
+commands and checks).
+
+0. **Preflight, read-only.** Clean checkout of the merged commit; `npm ci`,
+   typecheck, tests; `wrangler deploy --env staging --dry-run` lists the three
+   Durable Object bindings, `PROVIDER_MODE=coordinated`, no schedule; live
+   staging re-read (§2 of the runbook): `453af4fb` at 100 %, schedules `[]`,
+   two namespaces, active `…1d`, the 52 public ETags recorded. Check
+   `wrangler deploy`, `tail` and `triggers deploy` flags with `--help`.
+1. **[approval] Deploy** step 1's configuration. Expect a new version, a
+   third namespace (`ReconciliationLedger`), schedules still `[]`, the same
+   active release and public ETags (a deploy publishes nothing), and the
+   ingest refusing as `provider-mode-coordinated`. Nothing runs: there is no
+   schedule. Stop on any other difference.
+2. **[approval] The first live provider requests:** two authenticated
+   `POST /internal/admin/sync/full?season=2026`, a few minutes apart, with
+   `wrangler tail --env staging --format json` open. The first sends one
+   request (the calendar); the second sends 6 + one per raced round (25
+   today) and is expected to publish.
+   - Record each run's CPU from the tail (RB-7 check 2); compare with the
+     15-minute cron limit and the 362 ms ingest.
+   - Compare the new release with `…1d` document by document. Expected:
+     `attributionVersion` `data-sources-v3`, instants, rounds 18-19 results,
+     standings, Home and the calendar's classified flags. Any other
+     difference is a stop: review it before step 3.
+   - Manual runs corroborate nothing (O-8) and do not beat the heartbeat.
+3. **[approval] The hourly schedule:** a PR committing `crons = ["17 * * * *"]`
+   and `wrangler triggers deploy --env staging`. Soak through one race
+   weekend; the next are São Paulo (R20, 2026-11-08 17:00Z, first check
+   19:17Z), Las Vegas (R21, 2026-11-22 04:00Z) and Qatar (R22, 2026-11-29
+   16:00Z). Then AU-5 schedules the monitor.
+
+The staging app needs a build with the new wording (`data-sources-v3`)
+before an installed staging app describes the automatic path; installing it
+is its own approval.
+
+**Recovery.** None of these needs a Worker rollback:
+
+- **Stop the schedule** (after step 3): set `crons = []` and run `wrangler
+  triggers deploy --env staging`. Schedules are not part of a version, so this
+  changes no code. Nothing publishes afterwards.
+- **Stop every coordinated run, keep the ledger's data:** deploy a commit
+  without the `RECONCILIATION_LEDGER` binding but with the three exports.
+  Runs stop at `ledger-unbound` before any request.
+- **Fall back to manual batches:** deploy `PROVIDER_MODE = "none"` with the
+  exports and the binding kept. The ingest is admitted again (the
+  `automatic` record admits a batch). A batch generated before
+  `data-sources-v3` is refused as `curated-metadata-mismatch` (pinned in
+  `test/config/staging-season-batch-ingest.test.ts`); regenerate it at
+  the deployed commit. The calendar-horizon policy is shared, so releases
+  re-stamp consistently.
+- **A bad automatic release:** under `coordinated`, a release rollback
+  needs a hold first: `POST /internal/admin/reconciliation/hold`, then
+  `POST /internal/admin/rollback?season=2026`; the D14/D15 guard still
+  applies. Keep the hold until the cause is fixed: releasing it is consent,
+  and the next run republishes through every guard, including what the
+  rollback replaced. Runbook §6, "Reconciliation operator routes".
+- **A code defect:** a forward fix, deployed from a commit that keeps the
+  three exports.
+
+### 8.3.1 Step 2 result (2026-11-03) and the pacing fix
+
+**Result.** Step 1 deployed `b469718c` (from `ba44a9e`) at 20:08Z. Step 2's
+first run (20:17Z) behaved as rehearsed: one request, 106 ms CPU, nothing
+published. The second (20:22Z) sent 23 requests. Jolpica answered `200` to
+the calendar and rounds 1 and 12, and `429` to the other 20, from the second
+request on, at the pacer's ~260 ms spacing. Only the last three `429`s
+carried a `Retry-After` (about 10 s). The run used 115 ms CPU and 7 s wall
+time. It was withheld as `classification-unavailable`, so `…1d` kept
+serving. Evidence: `~/.gridview/evidence/au4-step2-sync-2026-11-03/`.
+
+**Why the run kept asking.** The limiter's windows count only GridView's
+own sends, inside the published 4/s and 500/h, so every reservation was
+`allowed`. The HTTP boundary parsed each `429` but told neither the pacer
+nor the limiter. The coordinator moved on to the next resource. Across
+runs, the limiter's 1-second window had long emptied after run 1, so run 2
+started with full burst headroom whatever Jolpica was enforcing.
+
+**Fix (this PR).**
+- The pacer spaces a run's requests one second apart by default.
+- Every `429` is reported to the limiter object. The object holds Jolpica
+  for every run, isolate and trigger until `Retry-After`, never less than
+  60 s and never more than 6 h after the `429`. Each held reservation is
+  `deferred` (`cause: provider-hold`) and consumes no window.
+- The run's own pacer holds too, so a lost report cannot let the rest of
+  the run through.
+- A held round keeps its `limiterDeferralUntil`. So the run is withheld,
+  and scheduled ticks plan nothing until the hold ends.
+- The publication guard, the run budget (240 s coordination deadline) and
+  the request budgets are unchanged. A full publication run now takes about
+  25 s of pacing.
+
+**Repeating step 2 (needs its own approval).**
+1. Deploy the merged fix to staging. The deploy changes code only: no
+   class, binding, var or schedule. Staging is past the step-1 rollback
+   floor, so recovery stays forward-only (preflight F5).
+2. Wait at least 24 h after 2026-11-03 20:22Z before the next request, so
+   that no Jolpica-side penalty from the step-2 burst can carry over.
+3. Send **one** manual run, with `wrangler tail` open. Do not send the
+   bootstrap run again: the ledger already holds the calendar.
+4. If it publishes, compare the release with `…1d` as above. Rounds 18 and
+   19 are new; rounds 1-17 should change only in instants.
+5. If any `429` appears, the run stops by itself after it. Do **not** send
+   another run on the same day. Record the hold's `retryAt` and whether a
+   `Retry-After` was sent. Then choose between a slower pacer (one request
+   every 2-3 s) and asking Jolpica about the shared Cloudflare egress
+   addresses. A `429` on the **first** request of a run means GridView's
+   pacing is not the cause, and step 3 stays blocked.
+6. Step 3 (the schedule) only after a run with no `429`.
 
 ### 8.4 Production (AU-7)
 

@@ -8,7 +8,11 @@ Scope and constraints:
 
 - Staging only. Production is **not** deployed in Phase 5B. Do not create the
   production Worker, a production KV namespace, a custom domain or a DNS route.
-- Committed and deployed staging match (verified read-only 2026-10-21,
+- **Committed staging is ahead of live (AU-4, 2026-11-03):** `master` commits
+  `PROVIDER_MODE = coordinated` and the reconciliation ledger, still with no
+  schedule; nothing of it is deployed (section 6, "Automatic updates on
+  staging (AU-4)"). Until that deploy, live staging is as follows.
+- Committed and deployed staging matched until then (verified read-only 2026-10-21,
   "Live staging state" in section 2): `PROVIDER_MODE = none`,
   `SEASON_BATCH_INGEST = "2026"` and no schedule, in version `453af4fb-…`
   (deployed 2026-10-19 from `d351118`). The Worker has no provider and no
@@ -72,13 +76,13 @@ actually live.
 | KV binding | `GRIDVIEW_DATA` |
 | KV namespace id | `1d0fb55486a745a1ad12e03d9f04942b` |
 | `ENVIRONMENT` | `staging` |
-| `PROVIDER_MODE` | **Committed: `none`** since 2026-10-13 (decision pack 2026-10-07 DP-6(b)); `mock` before. **Live: `none`** since 2026-10-13 (version `3b3b8273-…`), kept by `ddf551e9-…` and the current `453af4fb-…`. Committed and live match. |
+| `PROVIDER_MODE` | **Committed: `coordinated`** since the AU-4 PR (2026-11-03); `none` from 2026-10-13 (decision pack 2026-10-07 DP-6(b)), `mock` before. **Live: `none`** since 2026-10-13 (version `3b3b8273-…`), kept by `ddf551e9-…` and the current `453af4fb-…`. Committed and live differ until AU-4 step 1 is deployed. |
 | `SEASON_BATCH_INGEST` | **Committed: `2026`** since 2026-10-13 (decision pack PR-4); unset before. **Live: `2026`** since 2026-10-13. Two batches committed through it (2026-10-14 `pm1-…1c`, 2026-10-19 `pm1-…1d`). See "Guarded season-batch ingest" in section 6. |
 | `PUBLIC_BASE_URL` | `https://gridview-api-staging.sejuma18.workers.dev` |
 | Cron trigger | **Committed: none** (`crons = []`, explicitly empty) since 2026-10-13; `17 3 * * *` before. **Live: none** since the 2026-10-13 deployment removed `17 3 * * *`; the schedules API answered `[]` on 2026-10-21. The empty list is what removed the live schedule on deploy; an absent key would have kept it. See section 3. |
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
-| Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`); since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`) the sequencer is looked up, and the rate limiter still is not. Stage A (2026-10-07, version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275`) and every later version, through the current `453af4fb-…`, kept both; the account holds exactly these two namespaces (read 2026-10-21). **No `RECONCILIATION_LEDGER` binding**, committed or live: a staging-only declaration committed on 2026-10-07 was removed the same day before any deployment, and Stage B is parked under the no-cost requirement. See "Reconciliation ledger binding (committed and removed 2026-10-07; Stage B parked)" in section 6 and `../technical/GridView_Environments.md` |
+| Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`); since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`) the sequencer is looked up, and the rate limiter still is not. Stage A (2026-10-07, version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275`) and every later version, through the current `453af4fb-…`, kept both; the account holds exactly these two namespaces (read 2026-10-21). **`RECONCILIATION_LEDGER`: committed, not live.** The AU-4 PR (2026-11-03) commits the binding and a staging `exports` table adding `ReconciliationLedger`; live staging has no ledger. An earlier staging-only declaration (2026-10-07) was removed the same day before any deployment. Deploying the class blocks `wrangler rollback` to every earlier version. See "Automatic updates on staging (AU-4)" in section 6 and `../technical/GridView_Environments.md` |
 | `SEASON_PUBLICATION_CUTOVER_CONTROL` | **Committed: `activate:2026`**, prepared on 2026-09-15 after the season-2026 seed committed; see "Season-2026 seed record and activation phase (2026-09-15)" in section 6. Before that, `master` carried `seed:2026`, restored by the reclosure configuration (PR #24). **Live: `activate:2026`**, since 2026-09-16 (version `c297d260-c81b-4110-bdf2-7572e1206af3`), so committed and live match again. The earlier `seed:2026` was first deployed on 2026-09-12 from source revision `d3de839a7b297c060e6e4ee7cf1d9974a198be93` (version `00012c06-6c09-4b2f-b24c-02d6e51ec08d`). It was absent only during the separately authorized recovery window on 2026-09-13 (reopening version `38b5169a-6e3b-4e44-aed1-89ef74c0995c`). The reclosure deployment from `549bb5f3f3ee3963727a816b96fa39752355e9cd` restored it the same day as version `c35f99c0-9e89-4dd7-8fbe-449d295fb567` at 100% traffic, and version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c` kept it on 2026-09-15. Season 2026's legacy publication and rollback admission was **closed** from 2026-09-12, and `activate:2026` kept it closed until the activation. **Season 2026 was activated on 2026-09-16**, so `admissionClosed` is now `false` and its publication and rollback run through the sequencer, never through the legacy pointers; see "Recovery window record (2026-09-13)" and "Season-2026 activation-phase deployment and activation (2026-09-16)" in section 6. Any change to the live value is cutover-sensitive (section 6). Neither phase activates anything by itself. See [ADR 0025 D12](../adr/0025-season-publication-authority-and-rollback-republication.md#d12-activation-boundary). |
 | `SEASON_PUBLICATION_AUTHORITY` | **Committed: `sequencer`**, staging only, prepared on 2026-09-15 for the approved season-2026 seed. **Live: `sequencer`** since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`), kept unchanged by version `c297d260-c81b-4110-bdf2-7572e1206af3` on 2026-09-16; every earlier live version lacked it. A later deployment that omits or changes it is cutover-sensitive (section 6). See "Season-2026 seed authority (prepared 2026-09-15, not deployed)" and "Season-2026 seed record and activation phase (2026-09-15)" in section 6. |
 
@@ -95,7 +99,7 @@ was written, deployed or triggered, and no provider was contacted.
 | Fact | Value |
 |---|---|
 | Version at 100% | `453af4fb-e478-42a2-abd6-acdaa1d6473f`, created 2026-10-19T18:08:17Z (operator-recorded source `d351118`) |
-| Vars | `ENVIRONMENT=staging`, `PROVIDER_MODE=none`, `PUBLIC_BASE_URL`, `SEASON_BATCH_INGEST=2026`, `SEASON_PUBLICATION_AUTHORITY=sequencer`, `SEASON_PUBLICATION_CUTOVER_CONTROL=activate:2026` — identical to the committed `[env.staging.vars]` |
+| Vars | `ENVIRONMENT=staging`, `PROVIDER_MODE=none`, `PUBLIC_BASE_URL`, `SEASON_BATCH_INGEST=2026`, `SEASON_PUBLICATION_AUTHORITY=sequencer`, `SEASON_PUBLICATION_CUTOVER_CONTROL=activate:2026` — identical to the committed `[env.staging.vars]` then; since the AU-4 PR (2026-11-03) the committed `PROVIDER_MODE` is `coordinated`, the only variable that differs |
 | Bindings | `GRIDVIEW_DATA` (`1d0fb554…942b`), `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER`; secret `ADMIN_TOKEN` (name only) |
 | Schedules | `[]` |
 | Durable Object namespaces | two: `ProviderRateLimiter`, `SeasonPublicationSequencer` (SQLite); no ledger |
@@ -226,9 +230,10 @@ cutover-sensitive gate below is checked.
 > **Amended 2026-09-27: the gate compares five things, not two.** Besides
 > the two vars below, a deploy is cutover-sensitive when the dry-run and the
 > live version differ in `PROVIDER_MODE`, in the cron trigger, or in any
-> Durable Object binding (added, removed or renamed). That includes any
-> future reconciliation-ledger binding, which no environment declares and
-> which is parked (see "Reconciliation ledger binding" below). Each of these
+> Durable Object binding (added, removed or renamed). That includes the
+> reconciliation-ledger binding, which staging commits for AU-4 and which no
+> deployed staging version has (see "Automatic updates on staging (AU-4)"
+> below). Each of these
 > changes when, how and from
 > where season-2026 publications run. The comparison procedure, the
 > authorization it requires and the rule that merging authorizes nothing are
@@ -893,6 +898,12 @@ are parked. Check 2 has not been done.)*
 
 ### Reconciliation ledger binding (committed and removed 2026-10-07; Stage B parked)
 
+> **Superseded 2026-11-03 (AU-4).** Workers Paid was bought on 2026-10-21,
+> and staging commits the ledger again for automatic updates: see
+> "Automatic updates on staging (AU-4)" below. The record of 2026-10-07 is
+> kept as written; `ledger-binding-absent.test.ts` is now
+> `ledger-binding.test.ts`.
+
 **No environment declares the ledger, and none ever deployed it.** On
 2026-10-07 `wrangler.toml` briefly gave staging its own `exports` table
 registering the `ReconciliationLedger` class, plus the
@@ -1377,12 +1388,14 @@ submitting a batch are each separate, explicitly authorized steps.
 | `environment-not-permitted` | `ENVIRONMENT` is neither `staging` nor `production`. Production ingests only under its `genesis:` control (`genesis-control-required` otherwise). |
 | `provider-mode-coordinated` | `PROVIDER_MODE = coordinated`: never a second provider budget. |
 | `authority-not-sequenced` | The publication authority is not a reachable sequencer. |
-| `attribution-not-active` | The Worker's bundled `content/attribution/data-sources.json` does not credit Jolpica as `active` exactly once. The committed record is `data-sources-v2`, `active` (DP-7, O-9); a Worker built before it (every deployed Worker today bundles `data-sources-v1`, `dormant`) refuses every batch. |
+| `attribution-not-active` | The Worker's bundled `content/attribution/data-sources.json` does not credit Jolpica exactly once as `active` or `automatic`. The committed record is `data-sources-v3`, `automatic` (owner decision 2026-11-03), which admits a batch; `data-sources-v2`, `active` (DP-7, O-9) did too; a Worker bundling `data-sources-v1`, `dormant`, refuses every batch. A batch generated under another record version is refused at verification as `curated-metadata-mismatch` (its release names another attribution version than this Worker's curated metadata). |
 
 **Preconditions for a real submission, all separately authorized:** a Worker
-bundling the `active` attribution record (`data-sources-v2`, committed); the
+bundling an attribution record that admits a batch (`data-sources-v2`
+`active`, live; `data-sources-v3` `automatic`, committed); the
 staging configuration setting `SEASON_BATCH_INGEST = "2026"` and
-`PROVIDER_MODE = "none"` (committed 2026-10-13); its preflighted deployment
+`PROVIDER_MODE = "none"` (committed 2026-10-13 to 2026-11-03; after AU-4 a
+fallback deploy); its preflighted deployment
 (deploy checks below); one authorized capture and a batch generated from a
 clean tree at the deployed commit. After the first real release staging
 cannot return to mock data for 2026 (D14; "No way back to the mock release"
@@ -1554,7 +1567,8 @@ outside the repository.
    ```
 
    It prints the summary, `submissionSha256` and `attributionStatus` (the
-   local record's; the Worker needs `active`). The real R16 batch makes a
+   local record's: `admits-batch` for `active` or `automatic`, which the
+   Worker requires). The real R16 batch makes a
    body of about 0.4 MB; the Worker reads at most 2 MiB.
 4. Send it **once**, with the token decrypted into process memory only (section
    4), for example:
@@ -1655,6 +1669,82 @@ restoring the nightly mock publication takes both halves of deploy check 4:
 `wrangler rollback` to `cc8d9a54-…` **and** a separate
 `wrangler triggers deploy` of `17 3 * * *`. Without both, staging keeps
 serving the last mock release unchanged.
+
+### Automatic updates on staging (AU-4; committed 2026-11-03, not deployed)
+
+`docs/release/automatic-updates.md` §8.3 is the plan, the rehearsal result
+and the recovery list; this section holds the commands. Each numbered step is
+a cutover-sensitive deploy or action of its own (the gate above: it changes
+`PROVIDER_MODE`, adds a Durable Object binding and later the cron), needing
+the owner's authorization naming staging, the reviewed commit and the step.
+Merging the PR authorizes none of them.
+
+**What the committed configuration changes against live `453af4fb-…`:**
+`PROVIDER_MODE` `none` → `coordinated`; a staging `exports` table restating
+`ProviderRateLimiter` and `SeasonPublicationSequencer` unchanged and adding
+`ReconciliationLedger`; the `RECONCILIATION_LEDGER` binding; the bundled
+attribution record `data-sources-v3` (Jolpica `automatic`). Unchanged:
+`SEASON_PUBLICATION_AUTHORITY`, `SEASON_PUBLICATION_CUTOVER_CONTROL`,
+`SEASON_BATCH_INGEST`, the KV binding, the secret, observability and
+`crons = []`. The deploy also ships every source change since `d351118`
+(genesis, the automatic path, the re-anchor fix), all of which the AU-3
+demonstration Worker ran.
+
+**Irreversible for rollback.** The first deploy creates the ledger class,
+a Durable Object class lifecycle change. `wrangler rollback` refuses any
+target across one, so `453af4fb-…` and every earlier version become
+unreachable, and redeploying an older commit fails too. Every later recovery
+is a forward deploy that keeps the three exports, or a trigger change.
+
+**Step 0, read-only preflight.** From a clean checkout of the merged commit:
+
+```text
+npm ci
+npm run typecheck
+npm test
+npm exec -- wrangler whoami
+npm exec -- wrangler deploy --env staging --dry-run --outdir <temporary dir>
+npm exec -- wrangler deployments status --env staging
+npm exec -- wrangler versions view <live version id> --env staging
+```
+
+The dry-run must list `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER`
+and `RECONCILIATION_LEDGER`, `PROVIDER_MODE=coordinated` and no schedule.
+Live must still be `453af4fb-…` at 100 %, with schedules `[]`, two Durable
+Object namespaces and season 2026 active at `pm1-000000000001d-aed72435`
+(cutover status GET). Record the public ETags of the 52 routes. Read
+`--help` for `deploy`, `tail` and `triggers deploy` in the pinned Wrangler.
+
+**Step 1, deploy.** `npm exec -- wrangler deploy --env staging`. Then
+re-read: the new version at 100 %; three namespaces; schedules `[]`; the
+cutover status and every public ETag unchanged. Under `coordinated` the
+ingest refuses as `provider-mode-coordinated`, and nothing runs without a schedule.
+
+**Step 2, the first live requests.** With `npm exec -- wrangler tail --env
+staging --format json` open, send two authenticated `POST
+/internal/admin/sync/full?season=2026` a few minutes apart. Expected (the
+in-process rehearsal): the first sends one request and publishes nothing;
+the second sends 6 + one per raced round and publishes one release. Record
+each run's CPU, its answer and its `sync.coordinated.observation` line. Then
+compare the new release with `…1d` document by document; differences other
+than `attributionVersion`, instants and what Jolpica published since
+2026-10-19 are a stop.
+
+**Step 3, the schedule.** A PR committing `crons = ["17 * * * *"]`, then
+`npm exec -- wrangler triggers deploy --env staging`, then the dashboard
+(Worker → Settings → Triggers) and the schedules read.
+
+**Stop and fall back.** `crons = []` with `triggers deploy` stops the
+schedule without a version. Removing only the binding (exports kept) stops
+every coordinated run at `ledger-unbound`. `PROVIDER_MODE = "none"` with the
+exports and binding kept re-admits the ingest; regenerate any batch made
+before `data-sources-v3`, which is refused as `curated-metadata-mismatch`. A bad
+release is rolled back under a hold ("Reconciliation operator routes"
+above).
+
+`test/config/staging-automatic-updates.test.ts`,
+`test/config/ledger-binding.test.ts` and
+`test/config/staging-season-batch-ingest.test.ts` pin the configuration.
 
 ## 7. Initial synchronization and publication
 

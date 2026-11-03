@@ -1,7 +1,8 @@
 /**
  * `PROVIDER_MODE` admission (runtime activation decision O-1): `coordinated`
  * is admitted in staging and production only, and admitting it selects it
- * nowhere but the isolated demonstration Worker (`[env.e2e]`, gate AU-3).
+ * nowhere but the isolated demonstration Worker (`[env.e2e]`, gate AU-3) and,
+ * since gate AU-4, live staging.
  */
 
 import { readFileSync } from 'node:fs';
@@ -18,7 +19,8 @@ import {
 import { CapturingLogger } from '../../src/logging/logger';
 import {
   demonstrationSection,
-  withoutDemonstration,
+  environmentSection,
+  withoutAutomatic,
 } from './demonstration-environment';
 
 type Admission = 'mock' | 'none' | 'coordinated' | 'error';
@@ -92,7 +94,7 @@ describe('PROVIDER_MODE admission', () => {
     }
   });
 
-  it('is selected by no committed environment but the demonstration Worker', () => {
+  it('is selected by no committed environment but the demonstration Worker and staging', () => {
     const wrangler = readFileSync(
       join(__dirname, '..', '..', 'wrangler.toml'),
       'utf8',
@@ -101,12 +103,15 @@ describe('PROVIDER_MODE admission', () => {
       [...toml.matchAll(/^PROVIDER_MODE = "([^"]*)"/gm)].map(
         (match) => match[1],
       );
-    // Staging `none` (it was `mock` until the season-batch ingest
-    // configuration) and production `none`; development leaves it unset.
-    const elsewhere = withoutDemonstration(wrangler);
-    expect(modesIn(elsewhere)).toEqual(['none', 'none']);
+    // Production `none`; development leaves it unset.
+    const elsewhere = withoutAutomatic(wrangler);
+    expect(modesIn(elsewhere)).toEqual(['none']);
     expect(elsewhere).not.toContain('coordinated');
-    // The demonstration Worker (AU-2) selects it, with its controlled source.
+    // The demonstration Worker (AU-2) selects it, with its controlled source,
+    // and staging (AU-4) against the network.
     expect(modesIn(demonstrationSection(wrangler))).toEqual(['coordinated']);
+    expect(modesIn(environmentSection(wrangler, 'staging'))).toEqual([
+      'coordinated',
+    ]);
   });
 });

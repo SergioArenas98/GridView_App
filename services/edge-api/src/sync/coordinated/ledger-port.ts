@@ -25,14 +25,14 @@
  *
  * `resolveReconciliationLedger` reads one optional Durable Object binding,
  * `RECONCILIATION_LEDGER`, and fails closed: without a usable namespace there
- * it answers `null`. **No committed environment declares that binding** - no
- * `[exports.ReconciliationLedger]` entry, binding or migration exists in
- * `wrangler.toml` - and no test hook supplies a ledger, so it answers `null`
- * in every committed environment. Every coordinated run, scheduled or manual,
- * is therefore refused as `ledger-unbound` at the entry point's gate - wired,
- * but unbound - before any lease, limiter reservation, provider request or
- * publication write, and every operator route and the coordinated rollback
- * are refused as `ledger-unbound` before reading anything.
+ * it answers `null`. Only the demonstration Worker and staging (release gate
+ * AU-4) declare that binding, each with its own `exports` entry and no
+ * migration; no test hook supplies a ledger. Wherever it is absent, every
+ * coordinated run, scheduled or manual, is refused as `ledger-unbound` at the
+ * entry point's gate - wired, but unbound - before any lease, limiter
+ * reservation, provider request or publication write, and every operator
+ * route and the coordinated rollback are refused as `ledger-unbound` before
+ * reading anything.
  */
 
 import type { Env } from '../../config/environment';
