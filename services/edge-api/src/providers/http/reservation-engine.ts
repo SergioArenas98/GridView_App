@@ -154,6 +154,31 @@ export function reconcileLedger(
 }
 
 /**
+ * The headroom every window has at `at`, without reserving anything.
+ *
+ * Used when a reservation is refused for a reason other than the windows (an
+ * upstream hold), so the answer still reports true capacity and the ledger is
+ * not touched.
+ */
+export function currentHeadroom(
+  ledger: ReservationLedger,
+  policy: ProviderQuotaPolicy,
+  at: Date,
+): WindowHeadroom[] {
+  const atMillis = at.getTime();
+  const active = prune(ledger.timestamps, policy, atMillis);
+  return policy.windows.map((window) => {
+    const windowStart = atMillis - window.durationSeconds * 1000;
+    const used = active.filter((value) => value > windowStart).length;
+    return {
+      window: window.window,
+      limit: window.limit,
+      remaining: Math.max(0, window.limit - used),
+    };
+  });
+}
+
+/**
  * Attempts one reservation.
  *
  * Admission is all-or-nothing: the timestamp counts simultaneously against

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  decodeReservationOutcome,
   DurableObjectRateLimiterClient,
   ProviderRateLimiter,
+  rateLimitReportUrl,
   ReservationCoordinator,
   reservationRequestUrl,
   type ReservationHost,
@@ -384,5 +386,171 @@ describe('fail-closed limiter clients', () => {
 
     // The same global name every time: one budget, not one per isolate.
     expect(names).toEqual(['jolpica', 'jolpica']);
+  });
+});
+
+describe('the upstream hold in the limiter object (AU-4 step 2)', () => {
+  const iso = (offsetMillis: number) =>
+    new Date(base + offsetMillis).toISOString();
+  const jolpicaHeadroom = [
+    { window: 'second', limit: 4, remaining: 4 },
+    { window: 'hour', limit: 500, remaining: 500 },
+  ];
+
+  function report(body: unknown): Request {
+    return new Request(rateLimitReportUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('records a 429 through the object and defers every reservation until the hold ends', async () => {
+    let offset = 0;
+    const host = new FakeHost();
+    const object = new ProviderRateLimiter(host);
+    // The object's own clock: replace its coordinator's with the test's.
+    (object as unknown as { coordinator: ReservationCoordinator }).coordinator =
+      coordinatorAt(host, () => offset);
+
+    const held = await object.fetch(
+      report({ sourceId: 'jolpica', retryAfter: null }),
+    );
+    expect(held.status).toBe(200);
+    expect(await held.json()).toEqual({
+      outcome: 'held',
+      sourceId: 'jolpica',
+      until: iso(60_000),
+    });
+
+    offset = 59_999;
+    const coordinator = coordinatorAt(host, () => offset);
+    expect(await coordinator.reserve('jolpica')).toEqual({
+      outcome: 'deferred',
+      sourceId: 'jolpica',
+      retryAt: iso(60_000),
+      limitingWindows: [],
+      headroom: jolpicaHeadroom,
+      cause: 'provider-hold',
+    });
+    offset = 60_000;
+    expect((await coordinator.reserve('jolpica')).outcome).toBe('allowed');
+  });
+
+  it('only ever extends a hold', async () => {
+    let offset = 0;
+    const host = new FakeHost();
+    const coordinator = coordinatorAt(host, () => offset);
+
+    await coordinator.recordRateLimit('jolpica', iso(10 * 60_000));
+    const puts = host.putCount;
+    // A shorter report later on changes nothing and writes nothing.
+    offset = 1_000;
+    expect(await coordinator.recordRateLimit('jolpica', null)).toEqual({
+      outcome: 'held',
+      sourceId: 'jolpica',
+      until: iso(10 * 60_000),
+    });
+    expect(host.putCount).toBe(puts);
+
+    offset = 5 * 60_000;
+    expect(await coordinator.reserve('jolpica')).toMatchObject({
+      outcome: 'deferred',
+      cause: 'provider-hold',
+      retryAt: iso(10 * 60_000),
+    });
+  });
+
+  it('fails closed on a corrupt or foreign hold record, and leaves it as found', async () => {
+    for (const stored of [
+      null,
+      'soon',
+      { sourceId: 'openf1', until: base + 60_000 },
+      { sourceId: 'jolpica', until: -1 },
+      { sourceId: 'jolpica', until: 1.5 },
+    ]) {
+      const host = new FakeHost();
+      host.values.set('upstream-hold', stored);
+      const coordinator = coordinatorAt(host, () => 0);
+      expect(await coordinator.reserve('jolpica')).toEqual({
+        outcome: 'unavailable',
+        sourceId: 'jolpica',
+        reason: 'state-corrupt',
+      });
+      expect((await coordinator.recordRateLimit('jolpica', null)).outcome).toBe(
+        'unavailable',
+      );
+      expect(host.values.get('upstream-hold')).toEqual(stored);
+    }
+  });
+
+  it('refuses a report whose retryAfter is not null or a canonical instant', async () => {
+    const host = new FakeHost();
+    const object = new ProviderRateLimiter(host);
+    for (const retryAfter of ['tomorrow', 10, iso(0).replace('Z', '+00:00')]) {
+      const response = await object.fetch(
+        report({ sourceId: 'jolpica', retryAfter }),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(host.values.has('upstream-hold')).toBe(false);
+  });
+
+  it('decodes a hold deferral only with no limiting window, and rejects an unknown cause', () => {
+    const hold = {
+      outcome: 'deferred',
+      sourceId: 'jolpica',
+      retryAt: iso(60_000),
+      limitingWindows: [],
+      headroom: jolpicaHeadroom,
+      cause: 'provider-hold',
+    };
+    expect(decodeReservationOutcome(hold, 'jolpica')).toEqual(hold);
+    expect(
+      decodeReservationOutcome(
+        {
+          ...hold,
+          limitingWindows: [{ window: 'second', limit: 4, retryAt: iso(1) }],
+        },
+        'jolpica',
+      ),
+    ).toBeNull();
+    expect(
+      decodeReservationOutcome({ ...hold, cause: 'unknown' }, 'jolpica'),
+    ).toBeNull();
+    // A window deferral still needs its limiting windows.
+    const windowDeferral: Record<string, unknown> = { ...hold };
+    delete windowDeferral.cause;
+    expect(decodeReservationOutcome(windowDeferral, 'jolpica')).toBeNull();
+  });
+
+  it('sends the report to the source object and swallows every failure', async () => {
+    const sent: { url: string; body: unknown }[] = [];
+    const client = new DurableObjectRateLimiterClient({
+      idFromName: () => ({}) as DurableObjectId,
+      get: () => ({
+        fetch: async (url: string, init: RequestInit) => {
+          sent.push({ url, body: JSON.parse(String(init.body)) });
+          return new Response('{}', { status: 200 });
+        },
+      }),
+    } as unknown as DurableObjectNamespace);
+    await client.recordRateLimited('jolpica', iso(30_000));
+    expect(sent).toEqual([
+      {
+        url: rateLimitReportUrl,
+        body: { sourceId: 'jolpica', retryAfter: iso(30_000) },
+      },
+    ]);
+
+    const broken = new DurableObjectRateLimiterClient({
+      idFromName: () => {
+        throw new Error('unbound');
+      },
+      get: () => ({}),
+    } as unknown as DurableObjectNamespace);
+    await expect(
+      broken.recordRateLimited('jolpica', null),
+    ).resolves.toBeUndefined();
   });
 });

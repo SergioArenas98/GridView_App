@@ -359,6 +359,7 @@ export class ProviderHttpClient {
         providerLimitingWindow: outcome.limitingWindows
           .map((window) => window.window)
           .join(','),
+        providerDeferralCause: outcome.cause ?? 'window',
         providerWindowHeadroom: headroomCounts(outcome.headroom),
       });
     } else {
@@ -446,6 +447,10 @@ export class ProviderHttpClient {
           durationMs: this.now().getTime() - startedAt,
           ...(retryAfter ? { providerRetryAfter: retryAfter } : {}),
         });
+        // Hold the source before answering, so no further reservation in
+        // this run - or, through the limiter, in any other - reaches the
+        // provider until the hold ends (AU-4 step 2, 2026-11-03).
+        await this.reportRateLimit(sourceId, retryAfter);
         return {
           ok: false,
           sourceId,
@@ -540,6 +545,18 @@ export class ProviderHttpClient {
     } finally {
       clearTimeout(timer);
       request.signal?.removeEventListener('abort', onCallerAbort);
+    }
+  }
+
+  /** Never throws: a lost report must not turn a `429` into another failure. */
+  private async reportRateLimit(
+    sourceId: RealProviderSourceId,
+    retryAfter: string | null,
+  ): Promise<void> {
+    try {
+      await this.limiter.recordRateLimited?.(sourceId, retryAfter);
+    } catch {
+      // The limiter seam documents that it must not throw; this is the guard.
     }
   }
 

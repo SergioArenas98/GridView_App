@@ -1,21 +1,26 @@
 /**
  * The per-run reservation pacer (runtime activation decision O-11).
  *
- * The Jolpica limiter admits four requests per second and never waits
- * (ADR 0021 D1.10). A coordinated run issues its requests one after another,
- * so without local pacing a burst of fast answers would defer itself on the
- * second window, and one deferred resource withholds the whole season.
+ * A coordinated run issues its requests one after another, and the global
+ * limiter never waits (ADR 0021 D1.10). This decorator spaces its own
+ * reservations by `spacingMillis` **before** asking the limiter, and stops the
+ * run's requests once the provider has said `429`:
  *
- * This decorator spaces its own reservations by at least
- * `minimumReservationSpacingMillis` **before** asking the limiter. It changes
- * nothing else:
- *
- * - The global limiter stays the only authority. Every reservation still asks
- *   it exactly once, so a deferral caused by another isolate, the cron or a
- *   manual run is still honoured.
- * - **A deferral is final for that attempt.** The answer is returned as is.
- *   The pacer never re-asks the limiter, waits for `retryAt` or retries, so a
- *   deferred reservation stays a not-attempted request.
+ * - **Spacing.** The default is `defaultReservationSpacingMillis`, one request
+ *   per second. Jolpica publishes four per second, but on 2026-11-03 it
+ *   answered `429` to staging at that pace (AU-4 step 2), so one per second is
+ *   a conservative starting point, not a verified safe rate. Anything at or
+ *   above `minimumReservationSpacingMillis` is accepted.
+ * - **Upstream hold.** `recordRateLimited` (called by the HTTP boundary on a
+ *   `429`) holds this pacer until `upstreamHoldUntil(now, retryAfter)` and
+ *   forwards the report to the limiter, whose own hold then covers every other
+ *   run. While the pacer is held it answers `deferred` (`cause:
+ *   'provider-hold'`) **without asking the limiter**, so a lost report cannot
+ *   let the rest of the run reach the provider.
+ * - The global limiter stays the authority for everything else: every
+ *   reservation outside a hold asks it exactly once, and its answer is final.
+ *   The pacer never re-asks, waits for `retryAt` or retries, so a deferred
+ *   reservation stays a not-attempted request.
  * - A limiter that throws or answers `unavailable` fails closed exactly as it
  *   would without the pacer. The hardened HTTP client handles both.
  *
@@ -23,19 +28,23 @@
  * serialized, so two concurrent callers cannot both skip the spacing.
  */
 
-import type {
-  ProviderRateLimiterClient,
-  ReservationOutcome,
+import {
+  upstreamHoldUntil,
+  type ProviderRateLimiterClient,
+  type ReservationOutcome,
 } from './provider-rate-limiter';
 import type { RealProviderSourceId } from './reservation-engine';
 
 /** The smallest spacing the pacer accepts: just above 1000 ms / 4 requests. */
 export const minimumReservationSpacingMillis = 260;
 
+/** The spacing a run uses unless told otherwise: one request per second. */
+export const defaultReservationSpacingMillis = 1000;
+
 export type PacerSleep = (millis: number) => Promise<void>;
 
 export interface PacedReservationClientOptions {
-  /** The limiter client every reservation is still decided by. */
+  /** The limiter client every reservation outside a hold is decided by. */
   readonly limiter: ProviderRateLimiterClient;
   /** The run's clock. */
   readonly now: () => Date;
@@ -54,10 +63,11 @@ export class PacedReservationClient implements ProviderRateLimiterClient {
   private readonly sleep: PacerSleep;
   private readonly spacingMillis: number;
   private lastReservationAt: number | null = null;
+  private readonly heldUntil = new Map<RealProviderSourceId, number>();
   private turn: Promise<unknown> = Promise.resolve();
 
   constructor(options: PacedReservationClientOptions) {
-    const spacing = options.spacingMillis ?? minimumReservationSpacingMillis;
+    const spacing = options.spacingMillis ?? defaultReservationSpacingMillis;
     if (
       !Number.isSafeInteger(spacing) ||
       spacing < minimumReservationSpacingMillis
@@ -79,9 +89,27 @@ export class PacedReservationClient implements ProviderRateLimiterClient {
     return reservation;
   }
 
+  async recordRateLimited(
+    sourceId: RealProviderSourceId,
+    retryAfter: string | null,
+  ): Promise<void> {
+    const until = upstreamHoldUntil(this.now(), retryAfter);
+    this.heldUntil.set(
+      sourceId,
+      Math.max(this.heldUntil.get(sourceId) ?? 0, until),
+    );
+    try {
+      await this.limiter.recordRateLimited?.(sourceId, retryAfter);
+    } catch {
+      // The local hold already stops this run; see the class comment.
+    }
+  }
+
   private async reserveInTurn(
     sourceId: RealProviderSourceId,
   ): Promise<ReservationOutcome> {
+    const held = this.held(sourceId);
+    if (held !== null) return held;
     if (this.lastReservationAt !== null) {
       const remaining =
         this.lastReservationAt + this.spacingMillis - this.now().getTime();
@@ -90,5 +118,19 @@ export class PacedReservationClient implements ProviderRateLimiterClient {
     this.lastReservationAt = this.now().getTime();
     // Exactly one question per reservation, and its answer is final.
     return this.limiter.reserve(sourceId);
+  }
+
+  /** The local deferral while this run is held, or `null`. */
+  private held(sourceId: RealProviderSourceId): ReservationOutcome | null {
+    const until = this.heldUntil.get(sourceId);
+    if (until === undefined || until <= this.now().getTime()) return null;
+    return {
+      outcome: 'deferred',
+      sourceId,
+      retryAt: new Date(until).toISOString(),
+      limitingWindows: [],
+      headroom: [],
+      cause: 'provider-hold',
+    };
   }
 }

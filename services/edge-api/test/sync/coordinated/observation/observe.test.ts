@@ -11,7 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { minimumReservationSpacingMillis } from '../../../../src/providers/http/reservation-pacer';
+import { defaultReservationSpacingMillis } from '../../../../src/providers/http/reservation-pacer';
 import { LEASE_TTL_MS } from '../../../../src/sync/coordinated/ledger';
 import { checkTime } from '../../../../src/sync/coordinated/policy';
 import {
@@ -558,8 +558,8 @@ describe('a late correction to a settled round (D2.5, D2.8)', () => {
           round: 1,
           revision: sighted!.candidateRevision,
           // The ledger's own clock at commit: after 8 reservations paced
-          // 260 ms apart.
-          enteredAt: later(stagedAt, 7 * minimumReservationSpacingMillis),
+          // one second apart.
+          enteredAt: later(stagedAt, 7 * defaultReservationSpacingMillis),
         },
       ],
     });

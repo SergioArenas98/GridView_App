@@ -38,6 +38,8 @@ export interface LogEvent {
   providerRetryAfter?: string;
   /** Comma-joined bounded window kinds (`second`, `minute`, `hour`). */
   providerLimitingWindow?: string;
+  /** Why a reservation was deferred: `window` or `provider-hold`. */
+  providerDeferralCause?: string;
   /** Bounded `window kind -> integer remaining`. Never a provider value. */
   providerWindowHeadroom?: Record<string, number>;
   /** Bounded declared role of a coordinated source: reconciled/provisional. */
