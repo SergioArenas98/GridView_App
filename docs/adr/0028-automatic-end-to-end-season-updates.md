@@ -357,7 +357,8 @@ released:
    proves that the two reach the app; timing, polling and budgets stay in
    part 1 (runbook §8.2, acceptance criteria and coverage limits). It is
    isolated so that controlled data never enters staging's real `pm1-…1d`
-   lineage, which D14 would make forward-only.
+   lineage, which D14 would make forward-only. Part 3 passed on 2026-11-03
+   (runbook §8.2, "Result").
 
 ### D11. Compliance
 

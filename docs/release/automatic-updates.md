@@ -190,7 +190,7 @@ verified that delivery on 2026-10-22 (§7). Known limits:
 | AU-0 | This change merged, dormant: genesis-capable coordinated runs, calendar horizon, the + 90 min / hourly / back-off polling plan, heartbeat, production logging design, monitor, controlled source, gate tests | **[PR]** | PR #85 |
 | AU-1 | Workers Paid bought (the plan is account-wide, so staging gets it too). **Done 2026-10-21:** read-only, the dashboard shows Workers Paid active, renewing 2026-11-21, on account `786e24f1…e6bf`, the account Wrangler uses; one invoice that day, USD 5.00, paid (the invoice itself, and so any VAT line, was not opened) | **[approval]** owner | — |
 | AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis. **Done 2026-10-21:** all four steps (§8.1) | **[approval]** each, **[PR]** | AU-0, AU-1 |
-| AU-3 | **The end-to-end demonstration with controlled data** (§8.2): asynchronous, in persistent phases, passed on its acceptance criteria A1–A6. Also on the release commit: the in-process gate in CI and the app half locally. **Pending:** the 2026-10-22 run passed its first release and phone bootstrap and was paused before its race; the asynchronous demonstration has not run | **[approval]** each source load and the schedule, which one bounded approval may cover; **[record]** the evidence | AU-2 |
+| AU-3 | **The end-to-end demonstration with controlled data** (§8.2): asynchronous, in persistent phases, passed on its acceptance criteria A1–A6. Also on the release commit: the in-process gate in CI and the app half locally. **Passed 2026-11-03:** one bounded asynchronous run from `F` = 2026-11-02 20:17Z published the result at the 22:17Z run and its correction at the 00:17Z run with nobody acting on GridView, and the installed app showed both; A1–A6 evidenced, the operator's record accepted by the owner (§8.2, "Result"). The e2e schedule is stopped. The two parts on the release commit stay due with it (AU-8) | **[approval]** each source load and the schedule, which one bounded approval may cover; **[record]** the evidence | AU-2 |
 | AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2) | **[approval]** each of the three; cutover-sensitive | AU-3 |
 | AU-5 | The monitor's hourly `schedule:` for staging | **[approval]**, **[PR]** | AU-4, AU-6 |
 | AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1). **Passed 2026-10-22:** one owner-authorised dispatch against staging (`skip_heartbeat`, `simulate_failure`), [run 39852057415](https://github.com/SergioArenas98/GridView_App/actions/runs/39852057415) on `master` at `09e0686`, failed as expected with the single finding `simulated-failure` (pendingRound 18); the owner confirmed, with a screenshot, that GitHub's failure e-mail for it arrived at 21:49 Irish time (20:49Z) the same day. OD-1 is closed. The workflow is still manual-only: no monitor schedule was enabled (that is AU-5), and no Worker schedule changed | **[approval]**, **[record]** | AU-0 |
@@ -312,13 +312,41 @@ staging state").
 functional. The owner does not have to be present at a set time. The
 operator's session does stay on through an evening run, to observe, advance
 and stop. This replaces the timed watch, its fixed dates and its rule that every
-scheduled run needs its own evidence. AU-3 stays pending until the criteria
-below pass.
+scheduled run needs its own evidence. It passed on 2026-11-03 (see "Result");
+the procedure stays for a later run.
 
 The demonstration answers one question: does a race result, and then a
 correction to it, reach the installed app with nobody acting on GridView?
 Exact polling cases, planner decisions and request budgets stay proven by the
 automated gate (`test/e2e/automatic-updates/gate.test.ts`, ADR 0028 D10 part 1).
+
+#### Result
+
+**Passed on 2026-11-03,** on one bounded owner approval of 2026-11-02:
+`F` = 2026-11-02 20:17Z (`T′` 17:00Z), the schedule set from PR #97's head
+`f57ec0f`, the observer run from PR #96's head `94b17e7`. Phone times are Irish
+time, which is UTC in November.
+
+| # | Evidence |
+|---|---|
+| A1 | `200` at 22:18:30Z, Norris on 25, release `generatedAt` 22:17:44.031Z, from the `F` + 2 h run |
+| A2 | The owner's screenshots at 22:20: the result's entries as served, and Home on round 23 |
+| A3 | The correction loaded once at 22:28Z, read back at 22:30Z: exactly one controlled key changed |
+| A4 | `200` at 00:18:30Z, Norris on 26, release `generatedAt` 00:17:39.521Z, from the `F` + 4 h run. The only data change from A1 is the winner's points |
+| A5 | The owner's screenshot at 04:22 from the installed app: Norris on 26, the entries matching A4. The owner confirmed no reinstall between the two checks |
+| A6 | The operator's only writes were the two loads and the schedule on and off: no admin request, manual publication, deploy, merge or retry. Accepted by the owner |
+
+Every hourly run from `F` to `F` + 4 h wrote its heartbeat and matched the
+in-process rehearsal. The monitor's only findings were the expected
+`results-late` before the result. The schedule was stopped at 00:19Z from
+`master`; the schedules API showed `[]` for e2e, staging and production, and at
+04:24Z the heartbeat had not moved since the 00:17 run. Staging and production
+kept their versions and public answers. Evidence gaps, none failing: the results
+screen is titled "Gran Premio" without naming Qatar, so both screenshots identify
+round 22 by their entries; persisted logs were not exported. The operator keeps
+the record and its files outside the repository. The coverage limits below
+apply. Round 22 is published on the e2e Worker and cannot be replayed, so a
+later run needs a new plan.
 
 #### The phases
 
@@ -453,9 +481,9 @@ retry with a later `F` it allows.
 1. Re-read the e2e and staging state read-only, and confirm the schedule is `[]`.
 2. Choose `F`, the first `:17` run the steps below can reach. The race instant
    is `T′` = `F` − 3 h 17 min, at minute 00, already past. The shifted season
-   must stay in 2026; the export refuses otherwise. From a checkout of the
-   schedule PR's head, because `master` has no phases until it merges, generate
-   both phases' files outside the repository, once each:
+   must stay in 2026; the export refuses otherwise. From a clean checkout of
+   `master`, which carries the phases since PR #97, generate both phases' files
+   outside the repository, once each:
 
    ```text
    GRIDVIEW_CONTROLLED_SOURCE_OUT=<file> GRIDVIEW_CONTROLLED_RACE_START=<T′>
@@ -501,7 +529,7 @@ retry with a later `F` it allows.
    - To stop at once, run `triggers deploy` from a clean checkout of `master`,
      after confirming that it resolves e2e to `[]`.
 5. Observe from the operator's machine. After each scheduled run, run the
-   observer once from PR #96's head: `node scripts/monitor/au3-e2e-observer.mjs
+   observer once from PR #96's head (`94b17e7`): `node scripts/monitor/au3-e2e-observer.mjs
    --out <dir>`. It executes the real `automation-monitor.mjs` against the e2e
    host and keeps 10 public answers verbatim, with their instants. It sends
    public GETs to the e2e origin only, with no credential. If the run will

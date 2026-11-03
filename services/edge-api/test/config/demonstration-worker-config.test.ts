@@ -46,7 +46,7 @@ const runbookPath = join(
 const DEMONSTRATION_KV_ID = 'f8970084eef14b6a8e24db521d015df3';
 const STAGING_KV_ID = '1d0fb55486a745a1ad12e03d9f04942b';
 
-/** The demonstration's cron declaration while AU-3 runs (§8.2 step 3). */
+/** The demonstration's cron declaration while AU-3 runs (§8.2 "Setup", step 4). */
 const DEMONSTRATION_SCHEDULE_LINE = `crons = ["${AUTOMATIC_ACTIVATION_DELTA.cron}"]`;
 
 function resolved(environment: 'staging' | 'e2e') {
@@ -137,13 +137,13 @@ describe('the demonstration Worker configuration (AU-2)', () => {
     expect(demonstrationSection(rawConfig)).not.toContain(STAGING_KV_ID);
   });
 
-  it('requires ADMIN_TOKEN without committing it, runs hourly as the gate does and persists its logs', () => {
+  it('requires ADMIN_TOKEN without committing it, schedules nothing since AU-3 passed and persists its logs', () => {
     const demonstration = resolved('e2e');
     expect(demonstration.secrets).toEqual({ required: ['ADMIN_TOKEN'] });
-    // The schedule the gate's stage plays as `hourly()` (AU-3, §8.2 "Setup").
-    expect(demonstration.triggers).toEqual({
-      crons: [AUTOMATIC_ACTIVATION_DELTA.cron],
-    });
+    // AU-3 passed on 2026-11-03 and its schedule was stopped (§8.2). A later
+    // run sets the schedule the gate's stage plays as `hourly()` from its own
+    // unmerged PR (§8.2 "Setup", step 4).
+    expect(demonstration.triggers).toEqual({ crons: [] });
     expect(DEMONSTRATION_SCHEDULE_LINE).toBe('crons = ["17 * * * *"]');
     expect(readFileSync(runbookPath, 'utf8')).toContain(
       `commit \`${DEMONSTRATION_SCHEDULE_LINE}\` for \`env.e2e\``,
@@ -155,17 +155,13 @@ describe('the demonstration Worker configuration (AU-2)', () => {
     });
   });
 
-  it('is the block the runbook prints, line for line, with the AU-3 schedule', () => {
-    // §8.1 prints the block as AU-2 deployed it, unscheduled; §8.2 "Setup"
-    // changes its cron list and nothing else.
+  it('is the block the runbook prints, line for line, unscheduled again', () => {
+    // §8.1 prints the block as AU-2 deployed it; the end of AU-3 restored its
+    // empty cron list.
     const printed = declarations(runbookBlock());
     expect(printed.filter((line) => line.startsWith('crons'))).toEqual([
       'crons = []',
     ]);
-    expect(declarations(demonstrationSection(rawConfig))).toEqual(
-      printed.map((line) =>
-        line === 'crons = []' ? DEMONSTRATION_SCHEDULE_LINE : line,
-      ),
-    );
+    expect(declarations(demonstrationSection(rawConfig))).toEqual(printed);
   });
 });
