@@ -87,13 +87,16 @@ decision 5; `../docs/technical/GridView_Provider_Evaluation.md` §7.6.2). The
 Flutter app bundles this exact file and renders it on the Acknowledgements
 screen; the public API documentation carries the equivalent notice. The edge
 API bundles it too: the offline season-batch generator and the guarded staging
-ingest credit a batch under it, and the ingest refuses every batch unless it
-calls the source `active`. It is never served as a file.
+ingest credit a batch under it, the coordinated runtime credits each
+automatic release under it, and the ingest refuses every batch unless it
+calls the source `active` or `automatic`. It is never served as a file.
 
-It credits **Jolpica F1** alone, with status **`active`** (since
-`data-sources-v2`): data from it reaches GridView only through operator-run,
-reviewed batches, never automatically, and the app says so without claiming
-that any is shown. OpenF1 is not listed, because no OpenF1 adapter exists.
+It credits **Jolpica F1** alone, with status **`automatic`** (since
+`data-sources-v3`): GridView's service may retrieve its data on a schedule
+and publish it once it passes validation and the publication guard, and
+operator-run, reviewed batches remain possible. The app says so without
+claiming live data or that any is shown. OpenF1 is not listed, because no
+OpenF1 adapter exists.
 Changing a status is part of an explicit activation decision, never a side
 effect of editing this file.
 
@@ -103,15 +106,16 @@ added, and an entry removed at the licensor's request (CC BY-NC-SA 4.0
 §3(a)(3)), without changing code. The source's name, licence name and notices
 are shown as published; GridView's explanatory copy is localized in the app.
 
-**`version`** (`data-sources-v2` today) identifies the exact content of the
+**`version`** (`data-sources-v3` today) identifies the exact content of the
 `sources` array: every entry and every field, in order. Any change to that
 content, including a link, a notice or a status, needs a new version, and a
 version is never reused. `npm run validate:content` enforces this through the
 append-only `ISSUED_ATTRIBUTION_VERSIONS` digest table in
 `services/edge-api/scripts/lib/attribution-rules.mjs`; the failure message
-prints the digest to pin. A release built from a reviewed season batch carries
-this value as its `attributionVersion` (the content manifest exposes it), and
-the guarded staging ingest refuses a batch credited under any other version.
+prints the digest to pin. A release built from a reviewed season batch, or
+published automatically, carries this value as its `attributionVersion` (the
+content manifest exposes it), and the guarded staging ingest refuses a batch
+credited under any other version.
 The mock provider's `attributionVersion` (`1`) is unrelated to it, so a release
 carrying `1` contains no data credited here.
 
@@ -121,6 +125,15 @@ GridView, but only through operator-run, reviewed batches; no Worker retrieves
 it automatically. The app's wording for `active` says so, and claims no data is
 shown, because a Worker bundling this record accepts batches before the first
 one exists and keeps serving the mock dataset until then.
+
+`data-sources-v3` (owner decision 2026-11-03, release gate AU-4) changes only
+the status again, to `automatic`, and supersedes the batches-only wording for
+Jolpica F1: a GridView Worker may request its data itself, on a schedule, and
+publish it without an operator once it passes validation and the publication
+guard; a batch is still possible. The app's wording for `automatic` describes
+both paths, the lag and later corrections, and still claims neither live data
+nor that any is shown, because it must hold before an environment's first
+automatic publication and in one that publishes batches only.
 
 This record is not a legal conclusion about commercial use, it does not
 complete the production licence review, and activating it authorizes no

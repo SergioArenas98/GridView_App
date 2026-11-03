@@ -165,14 +165,17 @@ and only when the build serves fixtures:
 
 | Bundled data | Banner | Settings → Data source | Jolpica credit |
 |---|---|---|---|
-| No descriptor (the committed samples) | Sample data — not live results | Sample data | record status (`active` since `data-sources-v2`: batch-only line, no claim that data is shown) |
+| No descriptor (the committed samples) | Sample data — not live results | Sample data | record status (`automatic` since `data-sources-v3`; `active`, the batch-only line, from `data-sources-v2`; neither claims that data is shown) |
 | `origin: synthetic` | Sample data — not live results | Sample data | record status (as above) |
 | `origin: provider-capture` | Frozen test data captured <date> — not live, no updates | Frozen test data captured <date> | a fixed snapshot captured <date>, no updates; licence CC BY-NC-SA 4.0 |
 | A descriptor that cannot be read | Test data of unverified origin — not live results | Test data of unverified origin | record status |
 
 "Record status" is the attribution record bundled into the APK, so it is the
-record of the commit the APK was built from. Since `data-sources-v2`
-(2026-10-13) the committed record credits Jolpica `active`: its data is
+record of the commit the APK was built from. Since `data-sources-v3`
+(2026-11-03) the committed record credits Jolpica `automatic`, and an APK
+built from it shows the automatic line (scheduled retrieval, batches still
+possible, lag and corrections, no claim that data is shown). From
+`data-sources-v2` (2026-10-13) it credited Jolpica `active`: its data is
 eligible for publication through operator-captured, reviewed batches only.
 That line says GridView does not retrieve the data automatically and never
 claims that any is shown, because a sample-data build shows none. An APK built
@@ -419,15 +422,15 @@ provider request can be issued at all.
 changed 2026-10-13).** The code admits `mock`,
 `none` and `coordinated` (Implementation Plan §14.0.29). `coordinated` is
 admitted only when `ENVIRONMENT` is `staging` or `production`, and is a
-configuration error in development. **No environment selects it**, committed
-or live (live re-read 2026-10-21). Automatic updates select it for staging
-and production in a separately authorized activation (an owner release
-requirement since 2026-10-21):
+configuration error in development. **Live, only the demonstration Worker
+selects it** (`env.e2e`, below). **Committed, staging selects it too since the
+AU-4 PR (2026-11-03), not deployed:** live staging is still `none`.
+Production selects it at gate AU-7, its own change:
 
 | Environment | Committed (`wrangler.toml`) | Live |
 |---|---|---|
 | development | unset (`mock`) | local only |
-| staging | `none` since 2026-10-13 (decision pack DP-6(b), with `SEASON_BATCH_INGEST` below); `mock` before | `none` since 2026-10-13 (version `3b3b8273-…`); current `453af4fb-…` (from `d351118`). `mock` in Stage A `cc8d9a54-…`, 2026-10-07 to 2026-10-13 |
+| staging | `coordinated` since the AU-4 PR (2026-11-03, with the ledger below); `none` from 2026-10-13 (decision pack DP-6(b), with `SEASON_BATCH_INGEST` below); `mock` before | `none` since 2026-10-13 (version `3b3b8273-…`); current `453af4fb-…` (from `d351118`). `mock` in Stage A `cc8d9a54-…`, 2026-10-07 to 2026-10-13 |
 | production | `none` | not provisioned |
 
 `PROVIDER_MODE` also selects the `staleAfter` policy of every sequenced
@@ -454,9 +457,11 @@ production, development or a non-coordinated Worker, is a configuration
 error on every request.
 
 Admitting the value activates nothing. Even where it is selected, the
-coordinated runtime needs a bound reconciliation ledger (G9). Only the e2e
+coordinated runtime needs a bound reconciliation ledger (G9). The e2e
 Worker declares and binds one (deployed 2026-10-21, unscheduled since AU-3
-passed on 2026-11-03); staging and production do not. Wherever it is unbound, every
+passed on 2026-11-03); staging commits one since the AU-4 PR (2026-11-03, not
+deployed); production does not. Staging's coordinated runtime reads the
+network: it sets no `CONTROLLED_PROVIDER_SOURCE`. Wherever it is unbound, every
 coordinated run stops as `ledger-unbound` before any transport, client or port
 is constructed, with zero provider requests. See "Reconciliation ledger
 binding: removed, Stage B parked" below for staging.
@@ -477,11 +482,14 @@ reading its body:
 | staging | `2026` since 2026-10-13 (decision pack PR-4); unset before | `2026` since 2026-10-13 (`3b3b8273-…`); current `453af4fb-…` |
 | production | `2026` since 2026-10-21 (release plan W1), admitted only under `genesis:2026`; unset before | not provisioned |
 
-The same staging change commits `PROVIDER_MODE = none` (table above) and an
+The same staging change committed `PROVIDER_MODE = none` (table above) and an
 explicitly empty cron list, so a Worker deployed from it builds no provider
 and has no schedule. Its manual whole-season sync fails fast as
 `provider-unavailable` and never builds or publishes a mock candidate. Its
-only source of season data is the ingest.
+only source of season data is the ingest. **Since the AU-4 PR (2026-11-03)
+staging commits `coordinated`, under which the ingest refuses every batch
+(`provider-mode-coordinated`); `SEASON_BATCH_INGEST` stays set, so falling
+back to `none` re-admits it.**
 
 **Staging cron, committed and live (2026-10-13; re-read 2026-10-21).**
 Committed: none (`[env.staging.triggers] crons = []`). Live: none; the
@@ -501,20 +509,29 @@ the same season (`genesis-control-required`, ADR 0025 D12 "Amendment
 (2026-10-20)"), under `PROVIDER_MODE = coordinated`, without a
 reachable sequencer, and while the record bundled in the Worker
 (`content/attribution/data-sources.json`) calls Jolpica anything but
-`active`: committed and deployed `active` (see "Jolpica attribution"
-below). Enabling it on staging
+`active` or `automatic`: committed `automatic`, deployed `active` (see
+"Jolpica attribution" below). Enabling it on staging
 is a configuration change and a deployment, each separately authorized; see
 the staging runbook, section 6, "Guarded season-batch ingest".
 
 **Jolpica attribution: committed record, deployed Worker and served release
-(2026-10-13; staging row re-read 2026-10-21).** These are three separate facts, and only the last one says
-whether Jolpica data is being served:
+(2026-10-13; updated 2026-11-03 for AU-4).** These are three separate facts,
+and only the last one says whether Jolpica data is being served:
 
 | Environment | Committed record (`content/attribution/data-sources.json`) | Record bundled in the deployed Worker | Served release (`GET /v1/content/manifest`, `attributionVersion`) |
 |---|---|---|---|
-| development | `data-sources-v2`, Jolpica `active` | local only | mock dataset, `1` |
-| staging | `data-sources-v2`, Jolpica `active` | `data-sources-v2`, Jolpica `active` (since `3b3b8273-…`, built from `6ce0ed6`; current `453af4fb-…`) | `data-sources-v2` since release `pm1-…1c` (2026-10-14); active `pm1-…1d` (2026-10-19) |
-| production | `data-sources-v2`, Jolpica `active` | not provisioned | none |
+| development | `data-sources-v3`, Jolpica `automatic` | local only | mock dataset, `1` |
+| staging | `data-sources-v3`, Jolpica `automatic` | `data-sources-v2`, Jolpica `active` (since `3b3b8273-…`, built from `6ce0ed6`; current `453af4fb-…`) | `data-sources-v2` since release `pm1-…1c` (2026-10-14); active `pm1-…1d` (2026-10-19) |
+| production | `data-sources-v3`, Jolpica `automatic` | `data-sources-v2`, Jolpica `active` (`62bf40e9-…`, W3, 2026-10-22) | none |
+
+**`automatic` (owner decision 2026-11-03, `data-sources-v3`)** supersedes the
+batches-only wording below for Jolpica F1: a GridView Worker may request its
+data itself, on a schedule, and publish it once it passes validation and the
+publication guard; data may still arrive as an operator-run batch, so the
+ingest admits `active` and `automatic` alike. The decision is about wording
+and is not a legal clearance. A Worker built from `data-sources-v3` publishes
+releases credited `data-sources-v3`, and refuses a batch generated under
+`data-sources-v2` as `attribution-mismatch`.
 
 `active` (O-9, DP-7; the owner accepted this meaning on 2026-10-13) means only
 that Jolpica F1-derived data is eligible for publication through
@@ -540,7 +557,7 @@ orchestration is **wired but unbound** in every deployed Worker, and
 | Environment | Orchestration | Ledger | Coordinated run outcome |
 |---|---|---|---|
 | development | `coordinated` is refused as a configuration error | none | never reached |
-| staging | wired in code and in the live version (`453af4fb-…`) | none: not declared, not deployed, not provisioned (below) | not selected (`none`, committed and live); if selected, refused as `ledger-unbound` |
+| staging | wired in code and in the live version (`453af4fb-…`) | committed since the AU-4 PR (2026-11-03); not deployed, not provisioned (below) | live: not selected (`none`); committed: selected, with the ledger bound, and no schedule (AU-4 step 1) |
 | production | wired in code; never deployed | none | not selected (`none`); if selected, refused as `ledger-unbound` |
 
 The rate-limiter note above is otherwise unchanged. Once a coordinated run
@@ -549,6 +566,16 @@ Selecting `coordinated`, adding the ledger registration and binding, and
 changing the cron are each cutover-sensitive staging changes (runbook §6).
 
 **Reconciliation ledger binding: removed, Stage B parked (2026-10-07).**
+
+> **Superseded 2026-11-03 (AU-4).** Workers Paid was bought on 2026-10-21
+> (AU-1), the demonstration Worker has bound a ledger since that day, and the
+> AU-4 PR commits a staging `exports` table restating the two top-level
+> classes and adding `ReconciliationLedger`, plus the binding. Not deployed:
+> live staging still has two namespaces. Its first deploy creates the class,
+> after which `wrangler rollback` cannot reach `453af4fb-…` or any earlier
+> version (`docs/release/automatic-updates.md` §8.3). The record below is
+> kept as written.
+
 No committed environment declares the `RECONCILIATION_LEDGER` binding or
 registers the `ReconciliationLedger` class, and none has ever been deployed
 or provisioned. The dormant ledger implementation, its class export and the
@@ -626,10 +653,10 @@ pointers, and production has never been deployed.**
 
 | Durable Object state | development | staging | production |
 |---|---|---|---|
-| `[exports]` entries (both classes) | shared, once | shared, once (a staging-only table adding `ReconciliationLedger` was committed and removed on 2026-10-07, never deployed) | shared, once |
+| `[exports]` entries (both classes) | shared, once | **committed: staging's own table** restating both and adding `ReconciliationLedger` (AU-4 PR, 2026-11-03); **live: shared** (an earlier staging-only table was committed and removed on 2026-10-07, never deployed) | shared, once |
 | `PROVIDER_RATE_LIMITER` binding declared | yes (local `wrangler dev` only) | yes | yes |
 | `SEASON_PUBLICATION_SEQUENCER` binding declared | none | yes | committed 2026-10-21 (W1); never deployed |
-| `RECONCILIATION_LEDGER` binding declared | none | **none** (committed and removed on 2026-10-07, never deployed; Stage B parked) | **none** |
+| `RECONCILIATION_LEDGER` binding declared | none | **committed** (AU-4 PR, 2026-11-03), **not deployed** | **none** |
 | Namespaces provisioned on Cloudflare | none | **rate limiter and sequencer, 2026-09-12** (version `985115b7-…`); since 2026-09-15 the sequencer is looked up, and the rate limiter still is not. **No ledger namespace** | none - never deployed |
 | Authority mode set | no | **live: yes** (`sequencer`, since 2026-09-15, version `cccdcf11-…`, kept by `c297d260-…`); **committed: yes** (`sequencer`) | committed `sequencer` (W1); never deployed |
 | Cutover control set | no | **live: yes** (`activate:2026`, since 2026-09-16, version `c297d260-…`; before it `seed:2026`, first deployed 2026-09-12 as version `00012c06-…`, absent only during the 2026-09-13 recovery window, restored as version `c35f99c0-…`, and kept by `cccdcf11-…`); **committed: yes** (`activate:2026`) | committed `genesis:2026` (W1); never deployed |

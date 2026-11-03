@@ -50,6 +50,7 @@
 | 1.17 | 2026-09-28 | **Phase 9B: standings round coherence is implemented, dormant** ([ADR 0023 A3.5](../adr/0023-multi-source-provider-coordination.md#a35---standings-publication-rules) item 1; Implementation Plan §14.0.33). No provider-evaluation conclusion changes. §8.12 keeps its dated account and gains a note; §10.1's standings note now states that the port carries the round internally, that round coherence is decided, and that the port is bundled but constructed in no committed configuration and has made no provider request. The read-only staging predecessor gate is not implemented and still blocks staging activation. The empty pre-season response is unobserved. No provider or Cloudflare resource was contacted. |
 | 1.18 | 2026-10-07 | **Phase 9B: gap M8 is identified, and the off-calendar circuit is proposed for curation** (§8.13; Implementation Plan §14.0.48). The first owner-authorised frozen-APK capture (22 `GET`s, 2026-10-07) recorded `https://api.jolpi.ca/ergast/f1/2026/circuits/?limit=100` for the first time: **24 circuit-resource rows against 23 calendar races**. The 24th row is `jeddah` (Jeddah Corniche Circuit, Saudi Arabia), which no 2026 round uses. Because it had no curated mapping, the whole `season-circuits` resource failed and the offline generator withheld the season (ADR 0022 D10). A canonical identity `jeddah-corniche` and the exact mapping are proposed for curator review, as a circuit only, with no event, round or season entry. ADR 0022 D10 is unchanged, and the 2026 dataset version is reissued as `2026.10.07.1` (O-14). **No additional provider request was made.** |
 | 1.19 | 2026-10-13 | **Phase 9B: Jolpica F1 is credited `active`, for operator-run batches only** (§7.6.2 note; Implementation Plan §14.0.52; [ADR 0021 A1](../adr/0021-hardened-provider-boundary-and-durable-object-rate-limiter.md#amendment-a1---the-operator-run-jolpica-capture), [ADR 0023 A4](../adr/0023-multi-source-provider-coordination.md#amendment-a4---operator-run-season-batches)). `data-sources-v2` changes only Jolpica's status, `dormant` to `active` (O-9, DP-7). The app and API wording say no Worker retrieves Jolpica data automatically and never claim that any is shown; a release carries it only when its content manifest's `attributionVersion` is the record's version. No provider-evaluation conclusion changes; nothing was captured, deployed or submitted. |
+| 1.20 | 2026-11-03 | **Jolpica F1 is credited `automatic`: GridView may retrieve its data on a schedule** (§7.6.2 note; Implementation Plan §14.0.62; [ADR 0028](../adr/0028-automatic-end-to-end-season-updates.md)). The owner approved describing GridView's automatic retrieval of Jolpica data accurately while keeping the source attribution. **This supersedes the batches-only wording of 1.19 (2026-10-13).** `data-sources-v3` changes only Jolpica's status, `active` to `automatic`; the credit, links, licence and notices are unchanged. The app and API wording now say that where automatic updates are enabled a GridView Worker requests the data on an hourly schedule within Jolpica F1's published rate limits and publishes it only after validation and the publication guard, that batches remain possible, and that the data is not live. **This is a wording decision, not a legal clearance:** no provider-evaluation or licensing conclusion changes, nothing beyond the evidence already recorded here is relied on, and Jolpica was not contacted. Nothing was deployed. |
 
 ---
 
@@ -742,6 +743,20 @@ documentation-only pass.
 > claims that Jolpica data is shown. The record's `version` is now what a
 > batch release publishes as `attributionVersion`, and the API notice names it
 > as the per-release signal. Element 1 (OpenF1) stays absent.
+>
+> **Note 2026-11-03 (v1.20), superseding the batches-only meaning above for
+> Jolpica F1.** The owner approved describing GridView's automatic retrieval
+> accurately while retaining the source attribution. `data-sources-v3`
+> records Jolpica F1 as `automatic`, its status alone changed: a GridView
+> Worker may request the data itself, on a schedule, and publish it without
+> an operator once it passes validation and the publication guard, and an
+> operator-run batch remains possible. Elements 2-6 and duties 7-11 are
+> unchanged. Both surfaces still claim neither live data nor that Jolpica
+> data is shown, because the record is bundled before an environment's first
+> automatic publication and in environments that publish batches only. The
+> per-release `attributionVersion` stays the signal. This is a wording
+> decision; it is not a legal clearance and rests on no evidence beyond what
+> this document records.
 
 #### 7.6.3 ShareAlike
 

@@ -3515,6 +3515,26 @@ was re-read read-only (staging runbook §2).
 | Review | Code-reviewer pass: no CRITICAL/HIGH. Two MEDIUM (beat on an all-failed run; unauthenticated internal path text in production logs) and three LOW fixed in the follow-up commit "fix: address review findings on the automatic path". |
 | Still open | AU-1 to AU-8 (`docs/release/automatic-updates.md` §7), each separately authorized; AU-D2 to AU-D4. AU-D1 and AU-D5 were accepted by the owner for 2.0.0 on 2026-10-21, with their limitations (ADR 0028 D13). |
 
+### 14.0.62 Staging automatic updates (AU-4) and the `automatic` attribution status - configuration, wording and tests, not deployed
+
+Prepared on **2026-11-03** from `master` `c1bbaa2` (PR #97). **Nothing was
+deployed, scheduled or dispatched, and no provider or Cloudflare resource was
+contacted.** Live staging is still `453af4fb-…` (`none`).
+
+| Item | Status |
+|---|---|
+| Owner decision | 2026-11-03: describe GridView's automatic retrieval of Jolpica data accurately while retaining the source attribution, **superseding the batches-only wording of 2026-10-13** (§14.0.52). Not a legal clearance beyond the evidence already recorded (Provider Evaluation v1.20). |
+| Record | `data-sources-v3`: Jolpica `active` → `automatic`, nothing else. Digest `45579bfa…cb72` appended; v1 and v2 stay issued. Schema enum gains `automatic`. |
+| App credit (EN) | "GridView's service checks this source automatically, at most once an hour, and publishes its data only after the data passes GridView's checks. GridView's operator can also publish reviewed batches of it. Either way, data from it can lag behind the source, and a published result can later be corrected." |
+| App credit (ES) | "El servicio de GridView consulta esta fuente automáticamente, como máximo una vez por hora, y solo publica sus datos después de que superen las comprobaciones de GridView. El operador de GridView también puede publicar lotes revisados de estos datos. En ambos casos, los datos de esta fuente pueden ir con retraso respecto a ella, y un resultado publicado puede corregirse más tarde." |
+| API notice | "How Jolpica F1 data reaches GridView": a Worker requests it where automatic updates are enabled (hourly schedule, bounded `GET`s through one paced client within the published rate limits, published only through verification and the guard), an operator-run batch elsewhere; neither path is live; a published result can be corrected. The stale "Production accepts no batch" sentence is gone. |
+| Ingest | Admits `active` and `automatic` (both cover a batch), so a fallback to `none` is admitted again. A batch generated under `data-sources-v2` is refused by a v3 Worker as `attribution-mismatch`. |
+| Staging configuration | `PROVIDER_MODE = "coordinated"`, staging `exports` restating `ProviderRateLimiter` and `SeasonPublicationSequencer` plus `ReconciliationLedger`, the `RECONCILIATION_LEDGER` binding, `crons = []`. Production and `env.e2e` resolve unchanged. |
+| Tests | `ledger-binding-absent.test.ts` → `ledger-binding.test.ts`; new `staging-automatic-updates.test.ts`; the staging pins in `staging-season-batch-ingest`, `wrangler-config`, `production-worker-config`, `provider-mode-admission`, `inertness`, `dormancy` and `not-attempted-accounting` reframed to allow staging and the demonstration Worker only (`withoutAutomatic`); the licence-notice test now requires a source to be `automatic` exactly when an environment other than the demonstration Worker selects `coordinated` against the network, and production to stay `none`. Flutter: the shipped record is v3 `automatic`, both locale strings, every status parses, golden `settings_acknowledgements_sources` regenerated. |
+| Rehearsal | Opt-in `test/e2e/automatic-updates/staging-first-run-rehearsal.test.ts` over the 2026-10-19 capture behind `…1d`: run 1 sends 1 request and publishes nothing; run 2 sends 23 and publishes a release whose only content change is `attributionVersion` v2 → v3. At today's instant, with rounds 18-19 answered as unpublished, run 2 sends 25 and is withheld (`classification-unavailable`). |
+| Rollback | The first deploy creates the ledger class: `wrangler rollback` can never again reach `453af4fb-…` or earlier (`docs/release/automatic-updates.md` §8.3). |
+| **Still open** | AU-4 steps 1-3, each separately authorized; a staging APK with the new wording and its installation; AU-5 (the monitor schedule, drafted separately). |
+
 ## 14.1 Objective
 
 Replace the mock backend provider with production data sources used in
