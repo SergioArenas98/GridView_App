@@ -25,12 +25,14 @@
  *    logged and published, and how the release that serves afterwards
  *    differs from the starting one.
  *
- * Two instants are rehearsed: right after the capture, when Jolpica served
- * exactly the captured bodies, and today, when rounds 18 and 19 have raced.
- * Their results are not in the capture and nothing may ask Jolpica for them,
- * so today's run sees them as not yet published - an empty race list, as
- * Jolpica answers - which is the one difference from the real step 2, where
- * Jolpica will serve them.
+ * Three scenarios are rehearsed. Right after the capture, Jolpica served
+ * exactly the captured bodies. Today, rounds 18 and 19 have raced, but their
+ * results are not in the capture and nothing may ask Jolpica for them, so one
+ * scenario answers them as not yet published - an empty race list, as Jolpica
+ * answers - and the other answers both with results synthesized from the
+ * capture (`withRoundsClassified`), the shape the real step 2 will see. The
+ * synthesized content is not the real classification, so the real run's
+ * mapping of rounds 18 and 19 stays untested here.
  *
  * Nothing here reaches Jolpica, Cloudflare or staging: the global `fetch` is
  * stubbed to throw, and every answer comes from the local capture.
@@ -102,6 +104,62 @@ function readCapture(dir: string): Capture {
     byPath.set(path, JSON.parse(new TextDecoder().decode(bytes)) as unknown);
   }
   return { manifest, bodies, byPath };
+}
+
+/** The rounds that have raced since the capture, by 2026-11-04. */
+const RACED_SINCE_CAPTURE = [18, 19] as const;
+
+/**
+ * What Jolpica serves once `rounds` are classified, built from the capture
+ * because nothing may ask Jolpica for them: each round answers with the
+ * capture's last classification under that round's own calendar entry, and
+ * both standings tables are restated at the last of them. The shape is
+ * Jolpica's; the content is not a real result - the order is the last
+ * captured round's and the standings totals are unchanged - so it shows that
+ * a run which finds the results publishes them, not what they will say.
+ */
+function withRoundsClassified(
+  capture: Capture,
+  rounds: readonly number[],
+): ReadonlyMap<string, unknown> {
+  if (rounds.length === 0) return capture.byPath;
+  const answers = new Map(capture.byPath);
+  const calendar = capture.byPath.get('/races/') as {
+    MRData: { RaceTable: { Races: Json[] } };
+  };
+  const lastCaptured = Math.max(
+    ...[...capture.byPath.keys()]
+      .map((path) => /^\/(\d+)\/results\/$/.exec(path)?.[1])
+      .filter((round) => round !== undefined)
+      .map(Number),
+  );
+  const template = capture.byPath.get(`/${lastCaptured}/results/`);
+  for (const round of rounds) {
+    const entry = calendar.MRData.RaceTable.Races.find(
+      (race) => race.round === String(round),
+    )!;
+    const body = structuredClone(template) as {
+      MRData: { RaceTable: { round: string; Races: Json[] } };
+    };
+    body.MRData.RaceTable.round = String(round);
+    const [race] = body.MRData.RaceTable.Races;
+    for (const key of ['round', 'url', 'raceName', 'Circuit', 'date', 'time']) {
+      race![key] = structuredClone(entry[key]);
+    }
+    answers.set(`/${round}/results/`, body);
+  }
+  const at = String(Math.max(...rounds));
+  for (const path of ['/driverstandings/', '/constructorstandings/']) {
+    const body = structuredClone(capture.byPath.get(path)) as {
+      MRData: { StandingsTable: { round: string; StandingsLists: Json[] } };
+    };
+    body.MRData.StandingsTable.round = at;
+    for (const list of body.MRData.StandingsTable.StandingsLists) {
+      list.round = at;
+    }
+    answers.set(path, body);
+  }
+  return answers;
 }
 
 /** JSON with object keys sorted, so key order never reads as a change. */
@@ -185,7 +243,14 @@ class Rehearsal {
     readonly env: Env,
   ) {}
 
-  static async create(capture: Capture): Promise<Rehearsal> {
+  /**
+   * Staging as it serves the capture's release, with Jolpica answering
+   * `jolpica` by path (the capture itself unless given).
+   */
+  static async create(
+    capture: Capture,
+    jolpica: ReadonlyMap<string, unknown> = capture.byPath,
+  ): Promise<Rehearsal> {
     const batch = await generateSeasonBatch({
       capture: capture.manifest,
       bodies: capture.bodies,
@@ -204,13 +269,13 @@ class Rehearsal {
       seedTransform: () =>
         generateSnapshotSet(source, STAGING_PUBLISHED_AT, SEED_VERSION),
     });
-    for (const [path, body] of capture.byPath) {
+    for (const [path, body] of jolpica) {
       harness.server.answers.set(path, () => ({ kind: 'json', body }));
     }
-    // A round the capture does not hold has not been published by Jolpica.
+    // A round Jolpica is not answering has not been published by it.
     for (let round = 1; round <= 24; round += 1) {
       const path = `/${round}/results/`;
-      if (!capture.byPath.has(path)) {
+      if (!jolpica.has(path)) {
         harness.server.answers.set(path, () => ({
           kind: 'json',
           body: emptyResultsEnvelope(),
@@ -351,15 +416,22 @@ describe.skipIf(captureDir === undefined)(
   () => {
     const scenarios = [
       // Right after the capture: Jolpica served exactly these bodies.
-      ['after the capture', '2026-10-19T19:00:00.000Z'],
+      ['after the capture', '2026-10-19T19:00:00.000Z', []],
       // Today: rounds 18 and 19 have raced and are answered as unpublished.
-      ['today', '2026-11-04T10:00:00.000Z'],
+      ['today', '2026-11-04T10:00:00.000Z', []],
+      // Today, with Jolpica answering both results (synthesized).
+      [
+        'today with both results',
+        '2026-11-04T10:00:00.000Z',
+        RACED_SINCE_CAPTURE,
+      ],
     ] as const;
 
-    for (const [name, at] of scenarios) {
+    for (const [name, at, classified] of scenarios) {
       it(`runs the bootstrap and the publication run ${name}`, async () => {
         const capture = readCapture(captureDir!);
-        const rehearsal = await Rehearsal.create(capture);
+        const jolpica = withRoundsClassified(capture, classified);
+        const rehearsal = await Rehearsal.create(capture, jolpica);
         const starting = rehearsal.harness.activeVersion();
         expect(starting).not.toBeNull();
 
@@ -399,11 +471,43 @@ describe.skipIf(captureDir === undefined)(
         const raced = capture.manifest.responses.filter(({ url }) =>
           /\/\d+\/results\//.test(url),
         ).length;
-        const missing = name === 'today' ? 2 : 0;
-        expect(second.requests).toHaveLength(6 + raced + missing);
+        const sinceCapture =
+          name === 'after the capture' ? 0 : RACED_SINCE_CAPTURE.length;
+        expect(second.requests).toHaveLength(6 + raced + sinceCapture);
         expect(second.data).toMatchObject({ plan: 'publication' });
 
-        if (name === 'after the capture') {
+        if (classified.length > 0) {
+          // Both results answered: one new release that adds them, marks the
+          // two rounds classified and moves Home on, credited v3. The
+          // synthesized standings keep the captured totals, so the published
+          // tables change only in their instants.
+          expect(second.data).toMatchObject({
+            publication: { outcome: 'published' },
+          });
+          expect(diff).toMatchObject({
+            added: ['grand-prix:18:results', 'grand-prix:19:results'],
+            removed: [],
+            contentChanged: [
+              'bootstrap',
+              'calendar',
+              'circuit:circuit-of-the-americas',
+              'circuit:hermanos-rodriguez',
+              'content:manifest',
+              'grand-prix:18',
+              'grand-prix:19',
+              'home',
+              'season',
+            ],
+            attributionVersions: [LIVE_ATTRIBUTION_VERSION, 'data-sources-v3'],
+          });
+          const home = (await rehearsal.documents(serving!)).get('home')!
+            .data as {
+            latestCompletedEvent: { round: number };
+            featuredEvent: { round: number };
+          };
+          expect(home.latestCompletedEvent.round).toBe(19);
+          expect(home.featuredEvent.round).toBe(20);
+        } else if (name === 'after the capture') {
           // Jolpica unchanged: one new release whose only content change is
           // the attribution version this change issues.
           expect(second.data).toMatchObject({

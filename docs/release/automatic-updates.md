@@ -596,10 +596,20 @@ ledger over the real class, the real limiter and hardened client; no network):
 |---|---|---|
 | 2026-10-19T19:00Z (Jolpica as captured) | 1 request (`/races/`), plan `observation`, nothing published | 23 requests (6 season resources + rounds 1-17); one release published; 117 documents, none added or removed; the only content change is `content:manifest` `attributionVersion` `data-sources-v2` → `data-sources-v3`, every other document differs in instants only |
 | 2026-11-04T10:00Z (rounds 18 and 19 raced, answered as not yet published) | 1 request, nothing published | 25 requests (rounds 18 and 19 added); `withheld`, `classification-unavailable`; `…1d` keeps serving |
+| 2026-11-04T10:00Z (rounds 18 and 19 answered with synthesized results) | 1 request, nothing published | 25 requests; one release published, credited `data-sources-v3`; 119 documents: `grand-prix:18:results` and `grand-prix:19:results` added, none removed; content changes only in `bootstrap`, `calendar`, `season`, `home` (latest completed round 19, featured round 20), `grand-prix:18`, `grand-prix:19`, their two circuits and `content:manifest` |
 
-In the real step 2 Jolpica will serve rounds 18 and 19, so the second run is
-expected to publish them with the standings after round 19. That is the
-difference to review, together with the attribution version and freshness.
+The third row's results are synthesized from the capture, because nothing may
+ask Jolpica for them: each round answers round 17's classification under its
+own calendar entry, and both standings tables are restated at round 19 with
+round 17's totals. It shows that a run which finds both results passes
+mapping, the standings round-coherence check, validation and the publication
+guard, and what that release changes. It does not show the real content.
+**Untested until step 2:** the real classifications of rounds 18 and 19
+(their drivers, any new participant, DNF/DSQ shapes), real standings after
+round 19 and their coherence with those results, and any change Jolpica made
+since 2026-10-19 to rounds 1-17 or to the season resources, which the
+publication guard would judge for the first time live. In the real step 2,
+compare the release with `…1d` as listed below.
 The in-process run took 173 ms of Node wall time; Workers CPU is measured at
 step 2.
 
@@ -661,7 +671,8 @@ is its own approval.
 - **Fall back to manual batches:** deploy `PROVIDER_MODE = "none"` with the
   exports and the binding kept. The ingest is admitted again (the
   `automatic` record admits a batch). A batch generated before
-  `data-sources-v3` is refused as `attribution-mismatch`; regenerate it at
+  `data-sources-v3` is refused as `curated-metadata-mismatch` (pinned in
+  `test/config/staging-season-batch-ingest.test.ts`); regenerate it at
   the deployed commit. The calendar-horizon policy is shared, so releases
   re-stamp consistently.
 - **A bad automatic release:** under `coordinated`, a release rollback
