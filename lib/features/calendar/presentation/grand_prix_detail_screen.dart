@@ -49,7 +49,7 @@ class GrandPrixDetailScreen extends ConsumerWidget {
     ref.watch(grandPrixResultsControllerProvider(key));
 
     return GvScreenScaffold(
-      title: l10n.grandPrixTitle,
+      title: grandPrixScreenTitle(l10n, state),
       body: switch (state) {
         GrandPrixLoading() => const _DetailSkeleton(),
         GrandPrixNotFound() => GvErrorState(
@@ -70,6 +70,22 @@ class GrandPrixDetailScreen extends ConsumerWidget {
       },
     );
   }
+}
+
+/// The app-bar title: the event's own name once it is known locally, so the
+/// race stays identifiable after the header has scrolled away (for example
+/// while reading its classification).
+///
+/// Before the detail is available (loading, not found, first-load failure), or
+/// when the stored name is blank, it falls back to the generic localized
+/// "Grand Prix" label. It never derives a name from the stable identifier.
+@visibleForTesting
+String grandPrixScreenTitle(AppLocalizations l10n, GrandPrixDetailState state) {
+  if (state is GrandPrixReady) {
+    final String name = state.view.grandPrix.name.trim();
+    if (name.isNotEmpty) return name;
+  }
+  return l10n.grandPrixTitle;
 }
 
 class _DetailContent extends ConsumerWidget {
