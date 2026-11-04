@@ -244,6 +244,33 @@ describe('automatic capture: failures leave nothing behind', () => {
     expect(jolpica.calls.filter((c) => c.url === urls.drivers)).toHaveLength(1);
   });
 
+  it('a body that fails after the headers is a network failure, not an exception', async () => {
+    const broken = () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            controller.enqueue(new TextEncoder().encode('{"MRData":'));
+            controller.error(new Error('connection reset'));
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    const jolpica = mockJolpica(undefined, (url) =>
+      url === urls.drivers ? broken() : undefined,
+    );
+    const result = await captureSeason({
+      transport: jolpica.transport,
+      season: 2026,
+      now: at,
+      sleep: noSleep,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      failure: 'network-or-timeout',
+      requestsSent: 3,
+    });
+  });
+
   it('refuses before the results when the season would exceed the request cap', async () => {
     const jolpica = mockJolpica();
     const result = await captureSeason({

@@ -238,7 +238,13 @@ export async function getOnce(transport, url, now) {
     await discard(response);
     return { ok: false, failure: 'invalid-content-type', url, status };
   }
-  const bytes = await readBounded(response, maxResponseBytes);
+  let bytes;
+  try {
+    bytes = await readBounded(response, maxResponseBytes);
+  } catch {
+    // The body stream failed after the headers: no usable response.
+    return { ok: false, failure: 'network-or-timeout', url, status };
+  }
   if (bytes === null)
     return { ok: false, failure: 'response-too-large', url, status };
   let json;

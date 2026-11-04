@@ -25,6 +25,41 @@ function recording(answer: () => Response | Error) {
   return { transport, calls };
 }
 
+/** A response whose headers arrive and whose body stream then fails. */
+const broken = (status: number) =>
+  new Response(
+    new ReadableStream({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode('{"data":'));
+        controller.error(new Error('connection reset'));
+      },
+    }),
+    { status, headers: { 'content-type': 'application/json' } },
+  );
+
+describe('a body that fails after the headers (Codex P2 on #107)', () => {
+  it('makes the ingest answer ambiguous, never an exception', async () => {
+    const { transport } = recording(() => broken(200));
+    expect(
+      await submitIngest({ transport, origin, token, bodyText: '{}' }),
+    ).toEqual({
+      outcome: 'ambiguous',
+      reason: 'answer-unreadable',
+      status: 200,
+    });
+  });
+
+  it('makes the cutover read a failure, never an exception', async () => {
+    const { transport } = recording(() => broken(200));
+    expect(
+      await readActiveVersion({ transport, origin, token, season: 2026 }),
+    ).toEqual({
+      ok: false,
+      failure: 'network-or-timeout',
+    });
+  });
+});
+
 describe('the credentialed calls', () => {
   it('send nothing to an origin that is not allow-listed, or with an unusable token', async () => {
     const { transport } = recording(() => json({}, 200));

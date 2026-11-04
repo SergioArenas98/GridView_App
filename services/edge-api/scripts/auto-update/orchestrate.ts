@@ -367,6 +367,29 @@ export async function runOnce(
     return done(state, 'publishable-not-submitted');
   }
 
+  try {
+    return await submitOnce(state, generated, revisions, digest, deps, now);
+  } catch {
+    // Defence in depth: whatever escaped, the ingest may have committed, so
+    // the job stops durably and never submits again on its own.
+    return done(
+      stopFor(state, 'ingest-ambiguous', [], now),
+      'stopped:ingest-ambiguous',
+      3,
+    );
+  }
+}
+
+/** The credentialed steps: read the active release, build, submit once. */
+async function submitOnce(
+  state: AutoUpdateState,
+  generated: Extract<Generated, { ok: true }>,
+  revisions: Map<number, string>,
+  digest: string,
+  deps: RunDeps,
+  now: Date,
+): Promise<RunResult> {
+  const { log } = deps;
   const active = await readActiveVersion({
     transport: deps.worker,
     origin: deps.origin,

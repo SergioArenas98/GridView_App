@@ -78,7 +78,13 @@ export async function readActiveVersion({ transport, origin, token, season }) {
   } catch {
     return { ok: false, failure: 'network-or-timeout' };
   }
-  const body = await boundedJson(response);
+  let body;
+  try {
+    body = await boundedJson(response);
+  } catch {
+    // The headers arrived but the body stream failed: no usable answer.
+    return { ok: false, failure: 'network-or-timeout' };
+  }
   if (response.status !== 200)
     return { ok: false, failure: 'status-refused', status: response.status };
   const data = body?.data;
@@ -126,8 +132,15 @@ export async function submitIngest({ transport, origin, token, bodyText }) {
   } catch {
     return { outcome: 'ambiguous', reason: 'network-or-timeout' };
   }
-  const body = await boundedJson(response);
   const { status } = response;
+  let body;
+  try {
+    body = await boundedJson(response);
+  } catch {
+    // The headers arrived but the body stream failed. The ingest may have
+    // committed, so this is ambiguous, never a failure to retry.
+    return { outcome: 'ambiguous', reason: 'answer-unreadable', status };
+  }
   if (status === 200) {
     const version = body?.data?.publication?.version;
     if (
