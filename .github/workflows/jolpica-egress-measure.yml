@@ -1,0 +1,54 @@
+name: Jolpica egress measurement
+
+# Live-test step L1 of the GitHub Actions auto-update evaluation (AU-4
+# follow-up). It asks one question: does Jolpica refuse a GitHub-hosted runner
+# the way it refused the staging Worker (HTTP 429 after one or two requests on
+# 2026-11-03 and 2026-11-04)?
+#
+# MANUAL ONLY, and only with the confirmation input. There is deliberately no
+# `schedule:`, `push:` or `pull_request:` trigger. Each dispatch is a separate
+# owner decision: wait at least 24 hours after any other GridView request to
+# Jolpica. That wait is a precaution, not evidence that a limit has reset.
+#
+# What one run sends: the requests of one season-batch capture (six
+# season-level GETs, then one results GET per finished round; 25 for 2026 as
+# of round 19), one at a time, 2 s apart, at most 30. The first non-200
+# stops the run; nothing is retried.
+#
+# No secret is used, no artifact is uploaded, nothing is published. The log
+# and job summary show statuses, timings, sizes and allow-listed header values
+# only, never a response body. The repository is public, so they are public.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "measure-once" to send at most 30 GETs to Jolpica'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jolpica-egress-measure
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    if: github.ref == 'refs/heads/master' && inputs.confirm == 'measure-once'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          sparse-checkout: services/edge-api/scripts/jolpica-egress
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Measure (one capture's requests, stop at the first refusal)
+        run: >
+          node services/edge-api/scripts/jolpica-egress/measure.mjs
+          --season 2026
+          --summary "$GITHUB_STEP_SUMMARY"
