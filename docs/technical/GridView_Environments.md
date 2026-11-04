@@ -389,6 +389,22 @@ before genesis the season resources answer `404 SEASON_NOT_FOUND` and
 `services/edge-api/test/config/production-worker-config.test.ts` drives this
 through the real Worker with the committed variables.
 
+**Scoped season-ingest credential (`SEASON_INGEST_TOKEN`, committed
+2026-11-04, never created).**
+- **Purpose:** the optional Worker secret for an automatic season-batch
+  submitter that runs outside Cloudflare (the GitHub Actions alternative to the
+  Worker fetching Jolpica itself; `services/edge-api/scripts/auto-update/`).
+- **What it authorizes:** exactly `GET /internal/admin/publication/cutover/status`
+  and `POST /internal/admin/season/ingest`, and **only in `staging`**. Every
+  other admin route, and every other environment, still needs `ADMIN_TOKEN`
+  (`src/admin/auth.ts`, `test/admin/season-ingest-token.test.ts`).
+- **When it is ignored:** a value shorter than 32 characters or equal to
+  `ADMIN_TOKEN`.
+- **Configuration:** it is not in `[env.staging.secrets] required`, so a
+  deploy without it changes nothing. Creating it (`wrangler secret put
+  SEASON_INGEST_TOKEN --env staging`) and storing it as a GitHub environment
+  secret are separate owner actions.
+
 ## Media delivery
 
 | Environment | Media R2 bucket | Public media base URL |
