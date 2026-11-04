@@ -4,11 +4,11 @@
  * the real Worker entry points.
  *
  * `env.staging` sets `SEASON_BATCH_INGEST = "2026"` and an explicit empty
- * cron list. Since release gate AU-4 it selects `PROVIDER_MODE =
- * "coordinated"` and binds the reconciliation ledger
- * (`staging-automatic-updates.test.ts` drives that path); the `none` it
- * committed from 2026-10-13 is now its documented fallback to manual
- * batches, a deploy that changes only the mode. Production's own
+ * cron list. Release gate AU-4 selected `PROVIDER_MODE = "coordinated"`;
+ * the GitHub Actions batch path (2026-11-04) returns it to `none`, keeping
+ * the reconciliation ledger bound, so that season data reaches staging
+ * through this ingest again (`staging-automatic-updates.test.ts` still
+ * drives the coordinated path with the activation delta laid over it). Production's own
  * configuration (release plan W1) is pinned in
  * `production-worker-config.test.ts`. This file proves five things about the
  * resolved configuration:
@@ -16,8 +16,9 @@
  * - staging schedules nothing, and says so explicitly: Wrangler replaces a
  *   Worker's schedules only when `crons` is set, so an empty list removes the
  *   live one where an absent key would leave it;
- * - the committed staging ingest refuses every batch under `coordinated`,
- *   before reading it, so there is never a second provider budget;
+ * - the committed staging ingest admits a valid batch, and refuses every
+ *   batch as soon as `coordinated` is re-selected, before reading it, so
+ *   there is never a second provider budget;
  * - under the fallback, no scheduled run and no manual whole-season sync can
  *   build or publish a mock candidate;
  * - production cannot ingest without its own genesis control;
@@ -113,10 +114,10 @@ function bindingNames(environment: Environment): string[] {
 }
 
 describe('the resolved configuration', () => {
-  it('sets exactly SEASON_BATCH_INGEST "2026" and PROVIDER_MODE "coordinated" in staging', () => {
+  it('sets exactly SEASON_BATCH_INGEST "2026" and PROVIDER_MODE "none" in staging', () => {
     expect(resolved('staging').vars).toEqual({
       ENVIRONMENT: 'staging',
-      PROVIDER_MODE: 'coordinated',
+      PROVIDER_MODE: 'none',
       PUBLIC_BASE_URL: 'https://gridview-api-staging.sejuma18.workers.dev',
       SEASON_PUBLICATION_CUTOVER_CONTROL: 'activate:2026',
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',
@@ -135,10 +136,10 @@ describe('the resolved configuration', () => {
     );
   });
 
-  it('resolves staging to the coordinated mode under the unchanged sequencer and activation phase', () => {
+  it('resolves staging to the batch mode under the unchanged sequencer and activation phase', () => {
     const config = resolveRuntimeConfig(resolvedVars('staging'));
     expect(config.environment).toBe('staging');
-    expect(config.providerMode).toBe('coordinated');
+    expect(config.providerMode).toBe('none');
     expect(config.publicationAuthorityMode).toBe('sequencer');
     expect(config.publicationCutoverControl).toEqual({
       kind: 'activate',
@@ -426,13 +427,16 @@ describe('the committed production ingest needs its genesis control', () => {
   );
 });
 
-describe('the committed staging ingest under the coordinated mode', () => {
+describe('the staging ingest once coordinated is re-selected', () => {
   it('refuses a valid, authenticated submission as provider-mode-coordinated, before reading it', async () => {
     const context = await ingestContext();
     const before = await context.coordinator.readAuthority(SEASON);
     context.storage.writeLog.length = 0;
     const spies = publicationSpies();
-    const env = workerEnv(resolvedVars('staging'), context);
+    const env = workerEnv(
+      { ...resolvedVars('staging'), PROVIDER_MODE: 'coordinated' },
+      context,
+    );
     expect(env.PROVIDER_MODE).toBe('coordinated');
 
     const answer = await ingestResponse(
@@ -454,10 +458,11 @@ describe('the committed staging ingest under the coordinated mode', () => {
     expect(await context.coordinator.readAuthority(SEASON)).toEqual(before);
   });
 
-  it('is sensitive: the fallback to none admits the same submission', async () => {
+  it('is sensitive: the committed batch mode admits the same submission', async () => {
     const context = await ingestContext();
+    expect(resolvedVars('staging').PROVIDER_MODE).toBe('none');
     const answer = await ingestResponse(
-      workerEnv(fallbackVars(), context),
+      workerEnv(resolvedVars('staging'), context),
       adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
     );
     expect(answer.status).toBe(200);

@@ -64,11 +64,12 @@ afterEach(() => {
 });
 
 describe('the committed staging configuration (gate AU-4 step 1)', () => {
-  it('commits the activation delta but the cron', () => {
+  it('keeps the ledger of the activation delta, but neither its mode nor its cron', () => {
     const staging = resolved('staging');
-    expect(committedVars('staging').PROVIDER_MODE).toBe(
-      AUTOMATIC_ACTIVATION_DELTA.PROVIDER_MODE,
-    );
+    // Back on the batch path (GitHub Actions, 2026-11-04): the mode is `none`,
+    // and only re-selecting it restores the coordinated runtime.
+    expect(committedVars('staging').PROVIDER_MODE).toBe('none');
+    expect(AUTOMATIC_ACTIVATION_DELTA.PROVIDER_MODE).toBe('coordinated');
     expect(
       staging.durable_objects.bindings.map(
         (binding: { readonly name: string }) => binding.name,
@@ -101,10 +102,11 @@ describe('the committed staging configuration (gate AU-4 step 1)', () => {
 describe('the committed staging variables at run time', () => {
   it('with the ledger bound, bootstrap and publish through the coordinated path', async () => {
     const stage = await AutomaticUpdateStage.create('staging');
-    // The stage's env is the committed variables; the delta it lays over
-    // them no longer changes the mode.
+    // The stage's env is the committed variables with the activation delta
+    // laid over them; on the batch path that delta re-selects the mode.
+    expect(committedVars('staging').PROVIDER_MODE).toBe('none');
     expect(stage.env.PROVIDER_MODE).toBe(
-      committedVars('staging').PROVIDER_MODE,
+      AUTOMATIC_ACTIVATION_DELTA.PROVIDER_MODE,
     );
     const before = stage.activeVersion();
 

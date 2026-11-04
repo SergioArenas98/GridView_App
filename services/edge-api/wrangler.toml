@@ -81,27 +81,25 @@ preview_urls = false
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-# Automatic updates (ADR 0028; release gate AU-4,
-# `docs/release/automatic-updates.md` section 8.3). COMMITTED, NOT YET
-# DEPLOYED: the live version `453af4fb-…` (2026-10-19, from `d351118`) still
-# runs `none`, the interim state committed and deployed on 2026-10-13, under
-# which season data reached staging only through the guarded season-batch
-# ingest below.
+# Season data path: the GUARDED SEASON-BATCH INGEST (`none`). COMMITTED
+# 2026-11-04, NOT DEPLOYED: live staging still runs `coordinated` (AU-4 step 1,
+# version `81d87516-…`, 2026-11-03).
 #
-# `coordinated` selects the coordinated runtime against the network: staging
-# sets no `CONTROLLED_PROVIDER_SOURCE`, so its Jolpica transport is the
-# hardened HTTP client behind the global `ProviderRateLimiter`. A run needs the
-# reconciliation ledger bound below and sends nothing without it. The guarded
-# ingest refuses every batch under this mode (`provider-mode-coordinated`). The
-# schedule stays empty (triggers below), so until AU-4 step 3 nothing runs
-# unless the operator sends an authenticated `POST /internal/admin/sync/full`.
+# Why `none`: from the Worker, Jolpica answered 429 after one or two requests
+# (AU-4 step 2 and its repeat, 2026-11-03/04; `docs/release/automatic-updates.md`
+# §8.3.1). A GitHub-hosted runner completed a full capture without one
+# (2026-11-04, one sample). Automatic updates therefore move to a GitHub
+# Actions job that fetches Jolpica and submits through the ingest below
+# (`services/edge-api/scripts/auto-update/`). The ingest refuses every batch
+# under `coordinated` (`provider-mode-coordinated`), so the two paths are
+# exclusive by design: one provider budget.
 #
-# Deploying this value is AU-4 step 1: cutover-sensitive (staging runbook,
-# section 6) and separately authorized. Creating the ledger class there
-# permanently blocks `wrangler rollback` to every earlier version (see the
-# ledger entry below). Falling back to manual batches is a deploy of
-# `PROVIDER_MODE = "none"` that keeps the ledger class and binding.
-PROVIDER_MODE = "coordinated"
+# Deploying this value is cutover-sensitive (staging runbook, section 6) and
+# separately authorized. It keeps the ledger class and binding below (removing
+# the class is permanent), so returning to the Worker path is a deploy that
+# changes only this mode back to `coordinated`. The schedule stays empty
+# (triggers below).
+PROVIDER_MODE = "none"
 PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
 
 # Season 2026 cutover phase (ADR 0025 D12) - ACTIVATION PHASE, LIVE IN STAGING

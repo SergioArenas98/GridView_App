@@ -36,9 +36,11 @@ apart:
   GridView's transformation, normalization and combination disclosed. GridView
   claims no exclusive ownership of it. The notice says how Jolpica F1 data
   reaches GridView (attribution record `data-sources-v3`, Jolpica
-  `automatic`): where automatic updates are enabled, a GridView Worker
-  requests it on an hourly schedule within Jolpica F1's rate limits and
-  publishes it only through verification and the publication guard;
+  `automatic`): where automatic updates are enabled, GridView requests it
+  itself on an hourly schedule within Jolpica F1's rate limits - a GridView
+  Worker, or a scheduled GridView job outside the Worker that submits it as
+  a batch - and publishes it only through verification and the publication
+  guard;
   elsewhere it arrives only as an operator-run, reviewed batch; neither is
   live. A release carries it only when its content manifest's
   `attributionVersion` is an attribution record's version

@@ -8,7 +8,7 @@
  * single licence.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
@@ -164,14 +164,22 @@ describe('the API documentation licence notice', () => {
           expect(description).toContain('can lag behind');
           break;
         case 'automatic':
-          // Owner decision 2026-11-03 (gate AU-4): a Worker requests the
-          // source itself on a schedule, and a batch is still possible. The
-          // wording must hold for either path, wherever it is enabled.
+          // Owner decision 2026-11-03 (gate AU-4): GridView requests the
+          // source itself on a schedule, and a batch is still possible.
+          // Drafted 2026-11-04 (pending owner approval): the request may
+          // come from the Worker or from a scheduled job outside it that
+          // submits a batch. The wording must hold for every path.
           expect(description).toContain(
-            `Where automatic updates are enabled, a GridView Worker requests data from ${source.name} itself, without an operator`,
+            `Where automatic updates are enabled, GridView requests data from ${source.name} itself, without an operator, by one of two paths`,
           );
           expect(description).toContain(
-            'An hourly schedule decides what is due',
+            'an hourly schedule decides what is due',
+          );
+          expect(description).toContain(
+            'a GridView job outside this service requests it on an hourly schedule',
+          );
+          expect(description).toContain(
+            'A Worker that requests Jolpica F1 itself refuses batches',
           );
           expect(description).toContain(
             `enforces ${source.name}'s published rate limits as GridView recorded them (4 requests a second, 500 an hour)`,
@@ -238,20 +246,30 @@ describe('the API documentation licence notice', () => {
     }
   });
 
-  it('keeps the record true to the committed configuration: a source is automatic exactly when an environment other than the demonstration Worker selects coordinated mode against the network', () => {
-    // The coordinated runtime is the only Worker path that requests Jolpica
-    // F1. The notice and the app may say a Worker retrieves it only if a
-    // committed environment does, and must say so once one does. The
-    // demonstration Worker (gate AU-3) is not such an environment: its
-    // Jolpica transport reads controlled documents from its own KV
-    // namespace, never the network.
+  it('keeps the record true to the committed configuration: a source is automatic exactly when a committed path requests it from the network', () => {
+    // Two committed paths request Jolpica F1 automatically: an environment
+    // other than the demonstration Worker in coordinated mode, or the
+    // committed scheduled-job workflow that submits batches to staging
+    // (GitHub Actions). The notice and the app may say GridView retrieves
+    // it only if one of them is committed, and must say so once one is.
+    // The demonstration Worker (gate AU-3) is not such a path: its Jolpica
+    // transport reads controlled documents from its own KV namespace.
     const elsewhere = withoutDemonstration(wrangler);
     expect(modesIn(elsewhere).length).toBeGreaterThan(0);
     expect(elsewhere).not.toMatch(/^\s*CONTROLLED_PROVIDER_SOURCE\s*=/m);
     const automatic = record.sources.some(
       (source) => source.status === 'automatic',
     );
-    expect(modesIn(elsewhere).includes('coordinated')).toBe(automatic);
+    const scheduledJob = existsSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        '../../../../.github/workflows/season-auto-update-staging.yml',
+      ),
+    );
+    expect(scheduledJob).toBe(true);
+    expect(modesIn(elsewhere).includes('coordinated') || scheduledJob).toBe(
+      automatic,
+    );
     const demonstration = demonstrationSection(wrangler);
     expect(modesIn(demonstration)).toEqual(['coordinated']);
     expect(demonstration).toMatch(/^CONTROLLED_PROVIDER_SOURCE = "kv"$/m);

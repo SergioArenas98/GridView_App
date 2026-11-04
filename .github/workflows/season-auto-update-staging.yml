@@ -1,0 +1,91 @@
+name: Season auto-update (staging)
+
+# Automatic season data for STAGING from outside Cloudflare
+# (`docs/release/github-actions-updates.md`). One run fetches Jolpica F1 the
+# way a season batch is captured (paced, the first non-200 ends it, never
+# retried), applies the coordinated runtime's result and correction state
+# machine, and submits at most one batch to the staging guarded ingest with
+# the scoped `SEASON_INGEST_TOKEN`, never `ADMIN_TOKEN`.
+#
+# MANUAL ONLY. There is deliberately no `schedule:` trigger: adding
+# `cron: '23 * * * *'` is a separately authorized activation step, after the
+# live staging test. Each dispatch needs the confirmation input. Without
+# `submit` a run sends nothing credentialed (a dry run).
+#
+# Before the first dispatch the owner creates the GitHub environment
+# `staging-auto-update` with deployment branches limited to `master`, and its
+# secret `STAGING_SEASON_INGEST_TOKEN`. GitHub creates a missing environment
+# without protection rules on first use; without the secret a submission is
+# refused locally (`token-unusable`) and the job stops.
+#
+# The repository is public, so the log is too: it holds closed JSON lines
+# (plan, counts, digests, revisions, closed reasons, allow-listed refusal
+# headers), never a provider body or the token. No artifact is uploaded. The
+# job's state (per-round records, digests, holds) is kept in the Actions
+# cache, outside the checkout. Every attempt saves a new entry
+# (`<run id>-<attempt>`) and restores the newest one by prefix, so a re-run
+# of an old run never resumes from a state older than the latest stop.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "run-once" to run the job once against Jolpica F1 and staging'
+        required: true
+        type: string
+      mode:
+        description: 'scheduled: an ordinary run; bootstrap: the first run (no state yet)'
+        type: choice
+        options: [scheduled, bootstrap]
+        default: scheduled
+      submit:
+        description: 'Submit an admitted batch to staging (otherwise a dry run)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: season-auto-update-staging
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: github.ref == 'refs/heads/master' && inputs.confirm == 'run-once'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: staging-auto-update
+    defaults:
+      run:
+        working-directory: services/edge-api
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/auto-update-state
+          key: season-auto-update-staging-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: season-auto-update-staging-
+      - name: Run once
+        id: run
+        env:
+          GRIDVIEW_INGEST_TOKEN: ${{ secrets.STAGING_SEASON_INGEST_TOKEN }}
+          MODE: ${{ inputs.mode }}
+          SUBMIT: ${{ inputs.submit && '--submit' || '' }}
+        run: |
+          set +e
+          node scripts/auto-update/run.mjs --state "$RUNNER_TEMP/auto-update-state/state.json" --mode "$MODE" $SUBMIT
+          code=$?
+          if [ -f "$RUNNER_TEMP/auto-update-state/state.json" ]; then echo "save=true" >> "$GITHUB_OUTPUT"; fi
+          exit $code
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: always() && steps.run.outputs.save == 'true'
+        with:
+          path: ${{ runner.temp }}/auto-update-state
+          key: season-auto-update-staging-${{ github.run_id }}-${{ github.run_attempt }}
