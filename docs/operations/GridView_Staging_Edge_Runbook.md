@@ -79,7 +79,7 @@ actually live.
 | `PROVIDER_MODE` | **Committed: `coordinated`** since the AU-4 PR (2026-11-03); `none` from 2026-10-13 (decision pack 2026-10-07 DP-6(b)), `mock` before. **Live: `none`** since 2026-10-13 (version `3b3b8273-…`), kept by `ddf551e9-…` and the current `453af4fb-…`. Committed and live differ until AU-4 step 1 is deployed. |
 | `SEASON_BATCH_INGEST` | **Committed: `2026`** since 2026-10-13 (decision pack PR-4); unset before. **Live: `2026`** since 2026-10-13. Two batches committed through it (2026-10-14 `pm1-…1c`, 2026-10-19 `pm1-…1d`). See "Guarded season-batch ingest" in section 6. |
 | `PUBLIC_BASE_URL` | `https://gridview-api-staging.sejuma18.workers.dev` |
-| Cron trigger | **Committed: none** (`crons = []`, explicitly empty) since 2026-10-13; `17 3 * * *` before. **Live: none** since the 2026-10-13 deployment removed `17 3 * * *`; the schedules API answered `[]` on 2026-10-21. The empty list is what removed the live schedule on deploy; an absent key would have kept it. See section 3. |
+| Cron trigger | **Committed: `17 * * * *`** (hourly, AU-4 step 3) once the step-3 PR merges; `crons = []` from 2026-10-13 until then, `17 3 * * *` before. **Live: none** since the 2026-10-13 deployment removed `17 3 * * *`; the schedules API answered `[]` on 2026-10-21 and in the 2026-11-04 preflight. The hourly cron goes live only through step 3's own `triggers deploy` (section 6, "Automatic updates on staging (AU-4)"). See section 3. |
 | Observability | enabled, `head_sampling_rate = 1`, persisted logs |
 | Required secret | `ADMIN_TOKEN` |
 | Durable Object bindings | `PROVIDER_RATE_LIMITER`, `SEASON_PUBLICATION_SEQUENCER` — both provisioned 2026-09-12 (version `985115b7-abb3-4346-8845-d8ff41c80cf6`); since 2026-09-15 (version `cccdcf11-0eb0-44cf-8854-1ceb0eb30e2c`) the sequencer is looked up, and the rate limiter still is not. Stage A (2026-10-07, version `cc8d9a54-e2ed-4475-8696-d2e5ec66b275`) and every later version, through the current `453af4fb-…`, kept both; the account holds exactly these two namespaces (read 2026-10-21). **`RECONCILIATION_LEDGER`: committed, not live.** The AU-4 PR (2026-11-03) commits the binding and a staging `exports` table adding `ReconciliationLedger`; live staging has no ledger. An earlier staging-only declaration (2026-10-07) was removed the same day before any deployment. Deploying the class blocks `wrangler rollback` to every earlier version. See "Automatic updates on staging (AU-4)" in section 6 and `../technical/GridView_Environments.md` |
@@ -132,11 +132,15 @@ ever edited, redeploy and re-confirm it with:
 npm exec -- wrangler deployments list --env staging
 ```
 
-**No schedule, committed and live (since 2026-10-13).** The season-batch ingest
-configuration sets `[env.staging.triggers] crons = []`. Under
-`PROVIDER_MODE = none` a nightly run could only record `sync.failed` and
-rewrite the season's failure state, so it is removed rather than left
-running. Three Wrangler facts govern this (checked in the pinned Wrangler
+**Live: no schedule since 2026-10-13. Committed: hourly at minute 17 from
+AU-4 step 3.** The season-batch ingest configuration set
+`[env.staging.triggers] crons = []`, because under `PROVIDER_MODE = none` a
+nightly run could only record `sync.failed` and rewrite the season's failure
+state. The step-3 PR commits `crons = ["17 * * * *"]` for the coordinated
+runtime. Once it is on `master`, **every** `wrangler deploy --env staging`
+from `master` installs the hourly schedule, a code-only forward fix
+included; a deploy that must not schedule needs `crons = []` in its own
+commit. Three Wrangler facts govern this (checked in the pinned Wrangler
 4.112 source and the 2026-10-07 trigger test):
 
 - **`wrangler deploy` replaces the schedules only when `crons` is set.** An
@@ -1730,9 +1734,39 @@ compare the new release with `…1d` document by document; differences other
 than `attributionVersion`, instants and what Jolpica published since
 2026-10-19 are a stop.
 
-**Step 3, the schedule.** A PR committing `crons = ["17 * * * *"]`, then
-`npm exec -- wrangler triggers deploy --env staging`, then the dashboard
-(Worker → Settings → Triggers) and the schedules read.
+**Step 3, the schedule.** The PR commits `crons = ["17 * * * *"]` for
+staging only; production and the demonstration Worker keep `crons = []`.
+Nothing schedules a run until the triggers deploy below.
+
+- **Preconditions.** Step 2's repeat (`automatic-updates.md` §8.3.1) ran
+  with no `429`, and the owner has reviewed its result: the release
+  compared with `…1d`, its CPU and its `sync.coordinated.observation` line.
+  Until then the PR stays a draft, unmerged and undeployed. A `429`, a
+  withheld run or an unexplained difference keeps step 3 blocked.
+- **[approval] Merge**, then from a clean checkout of the merged commit,
+  the same day:
+
+  ```text
+  npm ci
+  npm exec -- wrangler triggers deploy --env staging
+  ```
+
+  `triggers deploy` uploads no version: the code and variables stay
+  `81d87516-…` (or whatever step 2's repeat ran on).
+- **Check at once:** the dashboard (Worker → Settings → Triggers) and the
+  schedules API show exactly `17 * * * *`; `wrangler deployments status`
+  shows the same version as before; production and `gridview-api-e2e`
+  still show `[]`.
+- **Check at the first minute 17** with `wrangler tail --env staging
+  --format json` open: one `scheduled` invocation, one
+  `sync.coordinated.observation` line (`syncTrigger: scheduled`), and
+  `/v1/status.lastSuccessfulSyncAt` moved to that run's instant. The run
+  sends only what the ledger has due, possibly nothing, at the pacer's one
+  request a second. That beat is what AU-5 (the monitor's schedule) waits
+  for.
+- **If a scheduled run meets a `429`**, the hold (§8.3.1) defers every
+  caller and the run is withheld. Stop the schedule ("Stop and fall back"
+  below) the same hour, and treat it as §8.3.1 item 5.
 
 **Stop and fall back.** `crons = []` with `triggers deploy` stops the
 schedule without a version. Removing only the binding (exports kept) stops

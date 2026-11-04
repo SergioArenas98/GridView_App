@@ -42,6 +42,7 @@ import { SynchronizationService } from '../../src/sync/sync-service';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
 import { ADMIN_TOKEN, OP, call, paths } from '../admin/reconciliation-support';
 import { SEASON, sequencedContext } from '../publication/sequenced/support';
+import { STAGING_CRONS } from './demonstration-environment';
 
 const configPath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -124,15 +125,15 @@ describe('the committed configuration declares the reconciliation ledger in stag
     expect(production.migrations).toEqual([]);
   });
 
-  it('selects coordinated in staging, keeps production on none, and schedules nothing anywhere', () => {
+  it('selects coordinated in staging, keeps production on none, and schedules staging alone', () => {
     const staging = resolved('staging');
     const production = resolved('production');
     expect(staging.vars.PROVIDER_MODE).toBe('coordinated');
     expect(production.vars.PROVIDER_MODE).toBe('none');
     expect(JSON.stringify(production.vars)).not.toMatch(/RECONCILIATION/);
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
-    // Explicitly empty: the hourly schedule is AU-4 step 3, its own change.
-    expect(staging.triggers.crons).toEqual([]);
+    // Staging hourly (AU-4 step 3); every other environment explicitly empty.
+    expect(staging.triggers.crons).toEqual(STAGING_CRONS);
     expect(production.triggers.crons).toEqual([]);
     expect(resolved('e2e').triggers.crons).toEqual([]);
     expect(resolved('').triggers.crons).toBeUndefined();

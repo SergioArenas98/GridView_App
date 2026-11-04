@@ -733,7 +733,13 @@ started with full burst headroom whatever Jolpica was enforcing.
    every 2-3 s) and asking Jolpica about the shared Cloudflare egress
    addresses. A `429` on the **first** request of a run means GridView's
    pacing is not the cause, and step 3 stays blocked.
-6. Step 3 (the schedule) only after a run with no `429`.
+6. Step 3 (the schedule) only after a run with no `429`, and after the
+   owner has reviewed that run's result (items 3 and 4). The step-3 PR
+   commits `crons = ["17 * * * *"]` for staging only and stays a draft
+   until then: merging it, and its `wrangler triggers deploy --env
+   staging`, both wait. Once it is on `master`, any staging deploy from
+   `master` installs the schedule. The commands and checks are in the staging
+   runbook §6, "Automatic updates on staging (AU-4)", step 3.
 
 ### 8.4 Production (AU-7)
 

@@ -81,6 +81,21 @@ export function withoutDemonstration(toml: string): string {
   return withoutEnvironments(toml, [DEMONSTRATION_ENVIRONMENT]);
 }
 
+/**
+ * The one committed schedule: live staging, hourly at minute 17 (gate AU-4
+ * step 3, `docs/release/automatic-updates.md` §8.3). Production, the
+ * demonstration Worker and development schedule nothing.
+ */
+export const STAGING_CRONS: readonly string[] = ['17 * * * *'];
+
+/** The committed staging line, exactly. */
+export const STAGING_CRONS_LINE = `crons = ["${STAGING_CRONS.join('", "')}"]`;
+
+/** Every line of the file except the staging section. */
+export function withoutStaging(toml: string): string {
+  return withoutEnvironments(toml, ['staging']);
+}
+
 /** Every line of the file except the sections allowed the automatic path. */
 export function withoutAutomatic(toml: string): string {
   return withoutEnvironments(toml, AUTOMATIC_ENVIRONMENTS);
