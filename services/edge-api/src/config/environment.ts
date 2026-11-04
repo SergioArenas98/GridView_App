@@ -114,6 +114,16 @@ export interface Env extends TestOnlyBindings {
   PUBLIC_BASE_URL?: string;
   ADMIN_TOKEN?: string;
   /**
+   * A narrowly scoped credential for an automatic season-batch submitter
+   * outside Cloudflare (`scripts/auto-update/`). It authorizes exactly two
+   * requests - `GET /internal/admin/publication/cutover/status` and
+   * `POST /internal/admin/season/ingest` - and only in `staging`; every other
+   * admin route still needs `ADMIN_TOKEN`. Ignored when shorter than 32
+   * characters or equal to `ADMIN_TOKEN`, so it can never stand in for it.
+   * Unset (every environment today), nothing changes.
+   */
+  SEASON_INGEST_TOKEN?: string;
+  /**
    * The one season the guarded staging ingest of a reviewed season batch
    * accepts (`POST /internal/admin/season/ingest`). Unset, the route is
    * disabled: it refuses before reading a body. Even when set, it admits

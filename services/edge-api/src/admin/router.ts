@@ -19,7 +19,7 @@ import type {
   SnapshotStorage,
   SyncJobCategory,
 } from '../storage/types';
-import { adminAuthOk, unauthorized } from './auth';
+import { adminAuthOk, seasonIngestAuthOk, unauthorized } from './auth';
 import { handleCutoverRequest, isCutoverPath } from './cutover-routes';
 import {
   handleCoordinatedRollback,
@@ -102,7 +102,12 @@ export async function handleAdminRequest(
   request: Request,
   context: AdminContext,
 ): Promise<Response> {
-  if (!adminAuthOk(request, context.env)) {
+  // `ADMIN_TOKEN` opens every route; `SEASON_INGEST_TOKEN` opens only the
+  // cutover-status read and the season ingest, in staging (`auth.ts`).
+  if (
+    !adminAuthOk(request, context.env) &&
+    !seasonIngestAuthOk(request, context.env)
+  ) {
     return unauthorized(context.requestId);
   }
 
