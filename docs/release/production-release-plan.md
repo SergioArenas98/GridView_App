@@ -570,8 +570,9 @@ Steps (each owner-run; only step 3 changes Play Console):
 Pausing the track, or any other Play step, stops **distribution** only. It
 does not stop 1.x copies that are already installed from requesting ads. They
 keep requesting them until the device updates to 2.0.0 or the app is
-uninstalled. Stopping ad serving to them is a separate AdMob decision (PR #82
-`data-safety.md` §3.6).
+uninstalled. Stopping ad serving to them is a separate AdMob step: D-A,
+archiving the eight 1.x ad units listed in PR #82 `data-safety.md` §3.6
+(versionCode 2 uses one that versionCode 7 does not). It is not done yet.
 
 Not used: promoting 2.0.0 to Alpha to replace versionCode 2. That would make a
 closed test of 2.0.0, which §7 does not need.
@@ -633,6 +634,17 @@ Remove-Item Env:ORG_GRADLE_PROJECT_gridviewCrashlyticsUploadMapping
 The variable authorizes the Crashlytics mapping upload for this one
 invocation, as `play-store-baseline.md` requires. Keep the Gradle output as the
 upload record.
+
+**Use a fresh clone or a new worktree, never the everyday checkout.** On
+2026-11-04 a production profile build in the everyday checkout packaged a
+stale `libapp.so` from 2026-10-20, with no API URL in it. Gradle's
+`merged_jni_libs` and `stripped_native_libs` outputs kept the old library,
+and the fresh Dart snapshot stopped at `intermediates/flutter/…/jniLibs`. The
+same build from a new worktree of the same commit was correct. Only the
+endpoint check below caught the difference. A2 does not proceed unless
+every check below passes. The offline kit's `verify-aab.py`
+(`~/.gridview/evidence/release-candidate-offline-kit-2026-11-04/`) runs them
+all.
 
 Artifact checks before upload:
 - **Identity:** versionCode 8, versionName 2.0.0, `com.sejuma.gridview`,

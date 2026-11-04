@@ -265,7 +265,7 @@ They were inspected without being installed or run:
 |---|---|---|
 | `.aab` SHA-256 | `560f5634…e3cd` | `1ef7d378…e9cf` |
 | min / target SDK (Play Console) | 21 / 35 | 21 / 35 |
-| Google Mobile Ads SDK | `play-services-ads` 23.6.0; seven banner ad unit IDs | 23.6.0; two ad unit IDs |
+| Google Mobile Ads SDK | `play-services-ads` 23.6.0; seven banner ad unit IDs (§3.6) | 23.6.0; two ad unit IDs, one of them not among versionCode 7's seven (§3.6) |
 | AdMob app ID (manifest) | `ca-app-pub-4763306780710624~5227286262` | the same |
 | Consent SDK | User Messaging Platform 3.1.0, packaged by the ads plugin, never called | the same |
 | Firebase | Cloud Messaging 24.1.0 and Installations 18.0.0 (BoM 33.9.0); project `gridview-fb20f`, the same Android app as 2.0.0's production `google-services.json` | the same |
@@ -485,7 +485,9 @@ new installs and updates:
   - The snapshot is obfuscated, so which code calls these, in what order and
     how often cannot be read.
 - **versionCode 2 (1.0.0):**
-  - The snapshot holds two ad unit IDs, not seven.
+  - The snapshot holds two ad unit IDs, not seven: `/8267618237`, which
+    versionCode 7 also uses, and `/8806674289`, which it does not (D-A
+    inventory below).
   - Its unobfuscated names show a separate `_loadBannerAd` in four libraries
     and a `_loadAds` in one. This looks like banners loaded page by page.
     It does not match versionCode 7's splash-time sequence.
@@ -538,13 +540,73 @@ change was made:
   recommends it for "legacy apps" that cannot be updated. The current AdMob
   interface may call it "remove", so check the current help before acting.
 - **Before archiving**, check in AdMob (read-only) that these units belong
-  only to GridView 1.x and that no other app uses them.
+  only to GridView 1.x and that no other app uses them (the steps are in
+  the D-A inventory below).
 - **Effect:** banners stop showing, and 1.x ad revenue ends. 2.0.0 contains
   no ads code, so it is not affected.
 - **What it does not do:** the SDK still initializes and still sends
   requests. The sources read do not say whether requests for an archived
   unit still reach Google, or what they carry. Archiving limits ad serving.
   It does not end data flow to Google; only the update or uninstall does.
+
+**D-A inventory: the units to archive (read 2026-11-04, nothing changed).**
+All eight belong to publisher `pub-4763306780710624` and were shipped with
+AdMob app ID `ca-app-pub-4763306780710624~5227286262`.
+
+| Ad unit ID (`ca-app-pub-4763306780710624/…`) | versionCode 7 (1.2.1) | versionCode 2 (1.0.0, Alpha) | Page key in the imported tree |
+|---|---|---|---|
+| `8267618237` | yes | yes | `standings` |
+| `1331614142` | yes | no | `listPage` |
+| `8550433073` | yes | no | `driverPage` |
+| `8304813072` | yes | no | `teamPage` |
+| `8079659788` | yes | no | `grandprixPage` |
+| `9249271222` | yes | no | `calendarPage` |
+| `9753702098` | yes | no | `grandprixlistPage` |
+| `8806674289` | no | yes | none: not in the imported tree |
+
+- **Sources.**
+  - versionCode 2: a read-only scan of the owner's copy of the upload
+    (SHA-256 `1ef7d378…e9cf`, the same bytes as the Play upload, §3.5). Each
+    ABI's `libapp.so` holds exactly these two unit IDs. The manifest holds the
+    app ID.
+  - versionCode 7: the 2026-10-22 reading of the Play download found exactly
+    seven unit IDs, the same seven as the imported tree's
+    `lib/services/ad_provider.dart` (`git show 7524998^:…`). The IDs listed
+    here are copied from that file. The downloaded copy was not kept, so they
+    were not re-read from the bundle on 2026-11-04.
+- **Not covered.** Bundles 1, 3, 5 and 6 are in the App bundle explorer but
+  were never inspected. No track serves them now, but a device that never
+  updated could still run one. Any unit they use appears in AdMob under the
+  same app, so step 3 below finds it.
+- **Account needed.** The Google account that owns, or has been given a
+  role in, the AdMob account for `pub-4763306780710624`. On 2026-10-22 both
+  Google accounts signed in to Chrome (the Play Console account and the
+  other default account) landed on AdMob's sign-up page, so neither has
+  access. On 2026-11-04 the browser could not be reached, so that was not
+  re-checked. No record names the owning account. The Play listing's
+  contact address is only a candidate. **Do not sign up** from another
+  account: that creates a second, empty AdMob account, not access to this
+  one. If the owning account cannot be used directly, its owner can add an
+  existing account under AdMob's user management, with a role that can edit
+  ad units (check AdMob's current help for the role names).
+- **Verification (read-only, before the archive):**
+  1. Account information shows publisher ID `pub-4763306780710624`.
+  2. Apps: the GridView Android app shows app ID
+     `ca-app-pub-4763306780710624~5227286262`. Record its store link, if
+     any (`com.sejuma.gridview`).
+  3. That app's ad units: record each one's name, ID and format. All eight
+     IDs above must be there. Record any extra unit and bring it to the
+     owner before acting: it is GridView's (2.0.0 has no ads), but the
+     owner's D-A covered the units known then.
+  4. No other app in the account lists any of the eight. Any mediation
+     group naming one is recorded, since removing the unit changes the
+     group.
+  5. Reports, by ad unit, over the last 28 days: record requests and
+     impressions per unit as the before-state. Units with no traffic are
+     still archived.
+  6. Save the screenshots or exports in a dated evidence folder. Only then,
+     with the owner's separate go-ahead, archive (remove) the units one by
+     one. Afterwards, re-read the ad-unit list and record each unit's state.
 
 The Ads declaration still follows distribution, not serving. State F (Ads
 **No**) waits until no 1.x artifact is distributed (§1.3), whether or not
