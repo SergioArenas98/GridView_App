@@ -179,7 +179,47 @@ verified that delivery on 2026-10-22 (§7). Known limits:
 - GitHub can delay scheduled runs;
 - GitHub disables scheduled workflows in a public repository after 60 days
   without repository activity. Check the workflow is enabled whenever the
-  monthly Cloudflare invoice arrives.
+  monthly Cloudflare invoice arrives;
+- GitHub sends a scheduled run's notifications to the user who last changed
+  the workflow's `cron` line, not to whoever dispatched it. AU-6 verified a
+  dispatched run's e-mail; the first failed scheduled run is the first
+  delivery of that kind.
+
+**What the hourly check sees** (the heartbeat rules are in
+`src/sync/coordinated/heartbeat.ts`). The monitor reads only GridView's
+public API. It never calls Jolpica, so it cannot cause a `429` or trigger a
+run.
+
+- **Missed heartbeat.** A scheduled run beats when nothing was due, or when
+  at least one of its checks succeeded and the season is not held, blocked
+  or stopped. Manual runs never beat. With the Worker at minute 17 and the
+  check at minute 47, the beat is 30 min old at each healthy check. One or
+  two missed beats stay under 3 h and do not alert. The check after the
+  third missed beat finds it 3 h 30 min old and fails with
+  `heartbeat-stale`. Every later hourly check fails, and is e-mailed, until
+  a scheduled run beats again. The failed run's log shows the instant and
+  age; the cause is in `sync.coordinated.observation`.
+- **Provider `429`.** The refused check counts as failed, and the hold
+  (§5) defers the rest of that run and every caller until it ends. A run
+  that observed nothing records a failed observation, and the idle ticks
+  after it cannot beat until a check succeeds again.
+  - **Between races**, only the calendar falls due, every 6 h. A `429` on
+    it stops the beat until the next calendar check, so the check 3 h 30
+    min later alerts, and the alert clears itself if that next check
+    succeeds. This is by design: idle ticks must not make a refused
+    provider look healthy.
+  - **During a race window**, checks are hourly. After a short hold (the
+    60 s minimum), the next tick asks again and a successful check beats,
+    so no alert. An alert means three hours without a successful check,
+    for example a long `Retry-After` (up to 6 h) or repeated `429`s.
+  - A run in which some checks succeeded before the `429` can still beat.
+    If the refused check was the race result, `results-late` catches it
+    12 h after the race start.
+  - **Response.** Read the run lines in Workers Logs, including the hold's
+    `retryAt` (the admin Inspect view does not show it). Do not send manual
+    runs to "unstick" it: they ask the same
+    limiter and send nothing while the hold lasts. Repeated `429`s are the
+    §8.3.1 item 5 decision (slower pacer, or ask Jolpica).
 
 **Diagnosis**, not delivery, uses the persisted Workers Logs (7 days):
 
@@ -197,7 +237,7 @@ verified that delivery on 2026-10-22 (§7). Known limits:
 | AU-2 | The isolated demonstration Worker `gridview-api-e2e`: create its KV namespace, commit `[env.e2e]` (§8.1) with the real id, deploy it, run its genesis. **Done 2026-10-21:** all four steps (§8.1) | **[approval]** each, **[PR]** | AU-0, AU-1 |
 | AU-3 | **The end-to-end demonstration with controlled data** (§8.2): asynchronous, in persistent phases, passed on its acceptance criteria A1–A6. Also on the release commit: the in-process gate in CI and the app half locally. **Passed 2026-11-03:** one bounded asynchronous run from `F` = 2026-11-02 20:17Z published the result at the 22:17Z run and its correction at the 00:17Z run with nobody acting on GridView, and the installed app showed both; A1–A6 evidenced, the operator's record accepted by the owner (§8.2, "Result"). The e2e schedule is stopped. The two parts on the release commit stay due with it (AU-8) | **[approval]** each source load and the schedule, which one bounded approval may cover; **[record]** the evidence | AU-2 |
 | AU-4 | Live staging becomes automatic (§8.3): ledger class and binding plus `coordinated`, then the first provider requests, then the hourly schedule. CPU measured on the first runs (RB-7 check 2). **Prepared 2026-11-03:** step 1's configuration, the `automatic` attribution record (`data-sources-v3`, owner decision of that day) and the app and API wording committed; the first runs rehearsed in process against `…1d`; nothing deployed | **[approval]** each of the three; cutover-sensitive | AU-3 |
-| AU-5 | The monitor's hourly `schedule:` for staging. **Drafted 2026-11-03** on its own PR, stacked on AU-4's: `47 * * * *`, staging, heartbeat checked; merge only after AU-4 step 3 and a first scheduled heartbeat | **[approval]**, **[PR]** | AU-4, AU-6 |
+| AU-5 | The monitor's hourly `schedule:` for staging (§8.3 step 4). **Drafted** on its own PR: `47 * * * *`, staging, heartbeat checked. Merged only after AU-4 step 3, once a scheduled run has beaten and a local monitor run answers `ok: true` | **[approval]**, **[PR]** | AU-4 step 3, AU-6 |
 | AU-6 | Alert drill: run the workflow with `simulate_failure`; the owner confirms the e-mail arrived (closes OD-1). **Passed 2026-10-22:** one owner-authorised dispatch against staging (`skip_heartbeat`, `simulate_failure`), [run 39852057415](https://github.com/SergioArenas98/GridView_App/actions/runs/39852057415) on `master` at `09e0686`, failed as expected with the single finding `simulated-failure` (pendingRound 18); the owner confirmed, with a screenshot, that GitHub's failure e-mail for it arrived at 21:49 Irish time (20:49Z) the same day. OD-1 is closed. The workflow is still manual-only: no monitor schedule was enabled (that is AU-5), and no Worker schedule changed | **[approval]**, **[record]** | AU-0 |
 | AU-7 | Production automatic (§8.4): W2/W3 with the production delta, genesis, the first automatic release, persisted logs verified free of app traffic, the monitor scheduled for production | **[approval]** each | AU-4 soak (one race weekend published automatically), AU-6, D-A (§9) |
 | AU-8 | Release-candidate check: on the exact commit A2 builds, `gate.test.ts` and the app half pass, and staging and production heartbeats are fresh | **[record]** | AU-7, before R5 |
@@ -657,7 +697,29 @@ commands and checks).
    and `wrangler triggers deploy --env staging`. Soak through one race
    weekend; the next are São Paulo (R20, 2026-11-08 17:00Z, first check
    19:17Z), Las Vegas (R21, 2026-11-22 04:00Z) and Qatar (R22, 2026-11-29
-   16:00Z). Then AU-5 schedules the monitor.
+   16:00Z). The monitor (step 4) watches the soak; it does not wait for it.
+4. **[approval] AU-5, the monitor's schedule:** merge the AU-5 PR
+   (`47 * * * *`, staging, heartbeat checked) as soon as the first scheduled
+   run has succeeded:
+   - A scheduled run at minute 17 has beaten: `/v1/status`
+     `lastSuccessfulSyncAt` equals that run's instant. A manual run never
+     beats, so step 2 cannot satisfy this.
+   - Run the monitor locally with the heartbeat check on, read-only (three
+     public GETs): `node scripts/monitor/automation-monitor.mjs --base-url
+     https://gridview-api-staging.sejuma18.workers.dev`. It must answer
+     `ok: true`. `results-late` must be clear too: staging served round 18
+     as pending (raced 2026-10-25) until a release published rounds 18 and
+     19. Merging while either finding stands e-mails a failure every hour.
+   - Rebase the PR on `master` and wait for CI on its final head. Merge it
+     before the next minute 47 you want covered. GitHub runs schedules
+     only from the default branch, so nothing runs before the merge.
+   - Confirm the first scheduled run (event `schedule`, minute 47 or a
+     little later) passes on staging. If it fails, read its findings
+     before anything else; to pause the monitor, disable the workflow in
+     the Actions tab rather than reverting.
+
+   Before step 4, a heartbeat is checked only by hand with the command
+   above.
 
 The staging app needs a build with the new wording (`data-sources-v3`)
 before an installed staging app describes the automatic path; installing it

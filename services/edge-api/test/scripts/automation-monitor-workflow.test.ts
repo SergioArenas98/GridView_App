@@ -30,6 +30,7 @@ interface Workflow {
       readonly inputs: Record<string, { readonly default: unknown }>;
     };
   };
+  readonly permissions: Record<string, string>;
   readonly concurrency: { readonly group: string };
   readonly jobs: {
     readonly check: {
@@ -56,6 +57,14 @@ const env =
 describe('the automation monitor workflow (gate AU-5)', () => {
   it('runs once an hour, thirty minutes after the Worker tick', () => {
     expect(workflow.on.schedule).toEqual([{ cron: '47 * * * *' }]);
+  });
+
+  it('has no trigger beyond the schedule and manual dispatch, and reads only', () => {
+    expect(Object.keys(workflow.on).sort()).toEqual([
+      'schedule',
+      'workflow_dispatch',
+    ]);
+    expect(workflow.permissions).toEqual({ contents: 'read' });
   });
 
   it('keeps the manual checks and their defaults', () => {

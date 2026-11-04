@@ -5,17 +5,16 @@ name: Automation monitor
 # heartbeat is stale or a race result is late, so GitHub notifies the owner of
 # the failed run.
 #
-# SCHEDULED FOR STAGING (release gate AU-5, `docs/release/automatic-updates.md`
-# §7). DRAFT: merge only once AU-4 step 3 has scheduled staging and a scheduled
-# run has written a heartbeat, so the first scheduled check can pass; AU-6
-# (the alert drill) passed on 2026-10-22. The hourly run checks staging with
-# the heartbeat check on; `workflow_dispatch` keeps the manual checks,
-# production included. Production's schedule is AU-7's own change.
+# SCHEDULED FOR STAGING: release gate AU-5 (`docs/release/automatic-updates.md`
+# §7, activated as §8.3 step 4 describes). The hourly run checks staging with
+# the heartbeat check on and no simulated failure; `workflow_dispatch` keeps
+# the manual checks, production included. Production's schedule is AU-7's own
+# change.
 #
 # Minute 47: thirty minutes after the Worker's `17 * * * *` tick, so a slow
 # run has finished. GitHub can delay a scheduled run, and disables scheduled
 # workflows in a public repository after 60 days without repository activity;
-# the runbook covers both.
+# the runbook (§6) covers both.
 #
 # No secret is used, and the job can read nothing a user of the app could not.
 
