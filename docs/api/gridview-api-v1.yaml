@@ -44,21 +44,26 @@ info:
     correctness of its data.
 
     **How Jolpica F1 data reaches GridView.** Where automatic updates are
-    enabled, a GridView Worker requests data from Jolpica F1 itself, without an
-    operator. An hourly schedule decides what is due: a race's result from 90
-    minutes after its scheduled start, and the calendar, standings,
-    participants and circuits less often, and GridView's operator can start
-    a run by hand under the same rules. Each run sends a bounded number of
-    `GET` requests through one paced client that enforces Jolpica F1's
-    published rate limits as GridView recorded them (4 requests a second, 500
-    an hour). What it receives is validated, mapped to GridView's
+    enabled, GridView requests data from Jolpica F1 itself, without an
+    operator, by one of two paths. On the Worker path a GridView Worker
+    requests it, and an hourly schedule decides what is due: a race's result
+    from 90 minutes after its scheduled start, and the calendar, standings,
+    participants and circuits less often; GridView's operator can start a
+    run by hand under the same rules. On the scheduled-job path a GridView
+    job outside this service requests it on an hourly schedule, under the
+    same rules for what is due and for accepting and correcting a result,
+    a race's result from five hours after its scheduled start, and submits
+    it to this service as a batch. Each run sends a bounded number of `GET`
+    requests through one paced client that enforces Jolpica F1's published
+    rate limits as GridView recorded them (4 requests a second, 500 an
+    hour). What it receives is validated, mapped to GridView's
     curated identities and published only if it passes verification and the
     publication guard; otherwise nothing changes and the last published
     release keeps serving. Where automatic updates are not enabled, Jolpica
     F1-derived data reaches this service only as an operator-run batch:
     GridView's operator captures the responses, reviews them offline and
     submits the batch, which is published under the same verification and
-    guard. A Worker with automatic updates enabled refuses batches. Neither path updates in real time: a release changes only when a
+    guard. A Worker that requests Jolpica F1 itself refuses batches. Neither path updates in real time: a release changes only when a
     newer one is published, so it can lag behind Jolpica F1, and a published
     result can be corrected later. Whether a given environment's release
     carries Jolpica F1-derived data at all is stated by its attribution version

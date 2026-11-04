@@ -237,9 +237,9 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
     );
   });
 
-  it('keeps production on none and commits staging to coordinated (mock until the ingest configuration, then none until AU-4)', () => {
+  it('keeps production on none and staging on the batch path (mock, then none, coordinated at AU-4, none again for GitHub Actions)', () => {
     expect(wrangler).toMatch(
-      /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\n(?:#.*\n)*PROVIDER_MODE = "coordinated"\n/,
+      /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\n(?:#.*\n)*PROVIDER_MODE = "none"\n/,
     );
     expect(wrangler).not.toMatch(/^PROVIDER_MODE = "mock"/m);
     expect(wrangler).toMatch(

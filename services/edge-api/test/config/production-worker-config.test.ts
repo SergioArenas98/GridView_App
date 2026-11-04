@@ -202,11 +202,11 @@ describe('the resolved production configuration', () => {
     expect(demonstration.triggers).toEqual({ crons: [] });
   });
 
-  it('leaves the staging configuration as gate AU-4 commits it, the mode its only variable change', () => {
+  it('leaves the staging configuration on the batch path, the mode its only variable change', () => {
     const staging = resolved('staging');
     expect(staging.vars).toEqual({
       ENVIRONMENT: 'staging',
-      PROVIDER_MODE: 'coordinated',
+      PROVIDER_MODE: 'none',
       PUBLIC_BASE_URL: 'https://gridview-api-staging.sejuma18.workers.dev',
       SEASON_PUBLICATION_CUTOVER_CONTROL: 'activate:2026',
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',

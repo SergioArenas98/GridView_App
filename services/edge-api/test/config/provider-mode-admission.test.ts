@@ -94,7 +94,7 @@ describe('PROVIDER_MODE admission', () => {
     }
   });
 
-  it('is selected by no committed environment but the demonstration Worker and staging', () => {
+  it('is selected by no committed environment but the demonstration Worker', () => {
     const wrangler = readFileSync(
       join(__dirname, '..', '..', 'wrangler.toml'),
       'utf8',
@@ -107,11 +107,10 @@ describe('PROVIDER_MODE admission', () => {
     const elsewhere = withoutAutomatic(wrangler);
     expect(modesIn(elsewhere)).toEqual(['none']);
     expect(elsewhere).not.toContain('coordinated');
-    // The demonstration Worker (AU-2) selects it, with its controlled source,
-    // and staging (AU-4) against the network.
+    // The demonstration Worker (AU-2) selects it, with its controlled source.
+    // Staging selected it for AU-4 and is back on `none` for the GitHub
+    // Actions batch path (2026-11-04).
     expect(modesIn(demonstrationSection(wrangler))).toEqual(['coordinated']);
-    expect(modesIn(environmentSection(wrangler, 'staging'))).toEqual([
-      'coordinated',
-    ]);
+    expect(modesIn(environmentSection(wrangler, 'staging'))).toEqual(['none']);
   });
 });

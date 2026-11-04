@@ -124,10 +124,12 @@ describe('the committed configuration declares the reconciliation ledger in stag
     expect(production.migrations).toEqual([]);
   });
 
-  it('selects coordinated in staging, keeps production on none, and schedules nothing anywhere', () => {
+  it('keeps staging on the batch path (none), production on none, and schedules nothing anywhere', () => {
     const staging = resolved('staging');
     const production = resolved('production');
-    expect(staging.vars.PROVIDER_MODE).toBe('coordinated');
+    // The GitHub Actions batch path (2026-11-04) returned staging to `none`;
+    // the ledger stays bound, so `coordinated` needs only the mode again.
+    expect(staging.vars.PROVIDER_MODE).toBe('none');
     expect(production.vars.PROVIDER_MODE).toBe('none');
     expect(JSON.stringify(production.vars)).not.toMatch(/RECONCILIATION/);
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });

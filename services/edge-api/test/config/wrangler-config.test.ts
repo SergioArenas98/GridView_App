@@ -34,7 +34,7 @@ describe('wrangler staging configuration', () => {
     );
     expect(config).toMatch(/\[env\.staging\][\s\S]*workers_dev = true/);
     expect(config).toMatch(
-      /\[env\.staging\.vars\][\s\S]*ENVIRONMENT = "staging"[\s\S]*\nPROVIDER_MODE = "coordinated"\n[\s\S]*PUBLIC_BASE_URL = "https:\/\/gridview-api-staging\.sejuma18\.workers\.dev"/,
+      /\[env\.staging\.vars\][\s\S]*ENVIRONMENT = "staging"[\s\S]*\nPROVIDER_MODE = "none"\n[\s\S]*PUBLIC_BASE_URL = "https:\/\/gridview-api-staging\.sejuma18\.workers\.dev"/,
     );
     expect(config).toMatch(
       /\[\[env\.staging\.kv_namespaces\]\][\s\S]*binding = "GRIDVIEW_DATA"[\s\S]*id = "1d0fb55486a745a1ad12e03d9f04942b"/,
@@ -130,10 +130,11 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     // `PROVIDER_MODE` moved from `mock` to `none`, and `SEASON_BATCH_INGEST`
     // was added, by the staging season-batch ingest configuration
     // (`staging-season-batch-ingest.test.ts`); gate AU-4 moved the mode to
-    // `coordinated`. The cutover values did not move.
+    // `coordinated`, and the GitHub Actions batch path (2026-11-04) moved it
+    // back to `none`. The cutover values did not move.
     expect(assignments(stagingVarsBlock(config))).toEqual([
       'ENVIRONMENT = "staging"',
-      'PROVIDER_MODE = "coordinated"',
+      'PROVIDER_MODE = "none"',
       'PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"',
       'SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"',
       'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
@@ -179,7 +180,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
   it('resolves the staging variables to the season 2026 activation phase under the sequencer authority', () => {
     const resolved = resolvedVars(stagingVarsBlock(config));
     expect(resolved.environment).toBe('staging');
-    expect(resolved.providerMode).toBe('coordinated');
+    expect(resolved.providerMode).toBe('none');
     expect(resolved.publicationAuthorityMode).toBe('sequencer');
     expect(resolved.publicationCutoverControl).toEqual({
       kind: 'activate',

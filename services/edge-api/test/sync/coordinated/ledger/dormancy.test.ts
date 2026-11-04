@@ -82,12 +82,14 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     }
   });
 
-  it('keeps every committed provider mode but the demonstration Worker and staging off the coordinated path, and schedules nothing', () => {
+  it('keeps every committed provider mode but the demonstration Worker off the coordinated path, and schedules nothing', () => {
     const declared = declarations();
     // Staging: `mock`, then `none` from the season-batch ingest
-    // configuration, then `coordinated` at gate AU-4. Production stays off.
+    // configuration, `coordinated` at gate AU-4, and `none` again for the
+    // GitHub Actions batch path (it keeps the ledger bound). Production
+    // stays off.
     expect(declared).toMatch(
-      /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\nPROVIDER_MODE = "coordinated"\n/,
+      /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\nPROVIDER_MODE = "none"\n/,
     );
     expect(declared).toMatch(
       /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
