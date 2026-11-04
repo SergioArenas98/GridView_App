@@ -174,6 +174,23 @@ describe('the staging workflow', () => {
       expect(use).toMatch(/^actions\/[a-z-]+(\/[a-z]+)?@[0-9a-f]{40}$/);
   });
 
+  it('restores the newest state on every attempt and never reuses a cache key (Codex P2 on #107)', () => {
+    const caches = job.steps.filter((s) =>
+      s.uses?.startsWith('actions/cache/'),
+    );
+    expect(caches).toHaveLength(2);
+    for (const step of caches) {
+      expect(step.with!.key).toBe(
+        'season-auto-update-staging-${{ github.run_id }}-${{ github.run_attempt }}',
+      );
+    }
+    // Restore: the exact key never exists (one attempt saves it at its end),
+    // so the newest entry by prefix is restored.
+    expect(caches[0]!.with!['restore-keys']).toBe(
+      'season-auto-update-staging-',
+    );
+  });
+
   it('keeps the state outside the checkout', () => {
     expect(text).toContain(
       '--state "$RUNNER_TEMP/auto-update-state/state.json"',

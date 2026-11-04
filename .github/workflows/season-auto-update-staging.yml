@@ -22,7 +22,9 @@ name: Season auto-update (staging)
 # (plan, counts, digests, revisions, closed reasons, allow-listed refusal
 # headers), never a provider body or the token. No artifact is uploaded. The
 # job's state (per-round records, digests, holds) is kept in the Actions
-# cache, outside the checkout.
+# cache, outside the checkout. Every attempt saves a new entry
+# (`<run id>-<attempt>`) and restores the newest one by prefix, so a re-run
+# of an old run never resumes from a state older than the latest stop.
 
 on:
   workflow_dispatch:
@@ -68,7 +70,7 @@ jobs:
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/auto-update-state
-          key: season-auto-update-staging-${{ github.run_id }}
+          key: season-auto-update-staging-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: season-auto-update-staging-
       - name: Run once
         id: run
@@ -86,4 +88,4 @@ jobs:
         if: always() && steps.run.outputs.save == 'true'
         with:
           path: ${{ runner.temp }}/auto-update-state
-          key: season-auto-update-staging-${{ github.run_id }}
+          key: season-auto-update-staging-${{ github.run_id }}-${{ github.run_attempt }}

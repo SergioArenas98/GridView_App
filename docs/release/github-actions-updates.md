@@ -139,7 +139,7 @@ All steps run on staging only, after the PRs are reviewed and merged.
 
 ## 9. Recovery for a stopped job
 
-The job's state is in the Actions cache (`season-auto-update-staging-<run id>`). To act on it:
+The job's state is in the Actions cache (`season-auto-update-staging-<run id>-<attempt>`; a run restores the newest). To act on it:
 1. Download it with `gh cache list`.
 2. Fix it locally.
 3. Restore it, or delete the entries and re-bootstrap.
