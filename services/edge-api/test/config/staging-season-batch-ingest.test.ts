@@ -57,6 +57,8 @@ import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validato
 import type { SequencedContext } from '../publication/sequenced/support';
 import {
   ingestContext,
+  reanchored,
+  rehashDocuments,
   SEASON,
   SEED_VERSION,
   submissionFor,
@@ -459,6 +461,129 @@ describe('the committed staging ingest under the coordinated mode', () => {
       adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
     );
     expect(answer.status).toBe(200);
+  });
+});
+
+/**
+ * A reconciliation ledger namespace that records every call and answers none,
+ * so a test can show that a Worker with it bound never used it.
+ */
+function recordingLedger(): {
+  readonly calls: string[];
+  readonly namespace: DurableObjectNamespace;
+} {
+  const calls: string[] = [];
+  const refuse = (name: string) => (): never => {
+    calls.push(name);
+    throw new Error(`the ledger was used: ${name}`);
+  };
+  const namespace = {
+    idFromName: refuse('idFromName'),
+    idFromString: refuse('idFromString'),
+    newUniqueId: refuse('newUniqueId'),
+    get: refuse('get'),
+    getByName: refuse('getByName'),
+    jurisdiction: refuse('jurisdiction'),
+  } as unknown as DurableObjectNamespace;
+  return { calls, namespace };
+}
+
+/**
+ * `batch` as the generator wrote it before `data-sources-v3`: credited
+ * `data-sources-v2` throughout, every digest consistent, so only a check of
+ * the attribution version can refuse it.
+ */
+function creditedV2(fresh: Batch): Batch {
+  const rewrite = (value: Json): Json =>
+    JSON.parse(
+      JSON.stringify(value).replaceAll('data-sources-v3', 'data-sources-v2'),
+    ) as Json;
+  const manifest = rewrite(fresh.manifest);
+  const artifact = rewrite(fresh.artifact);
+  rehashDocuments(manifest, artifact);
+  return reanchored(manifest, artifact);
+}
+
+describe('the forward fallback to manual batches, the ledger kept', () => {
+  // AU-4's recovery (`docs/release/automatic-updates.md` §8.3): once a deploy
+  // has created the ledger class, staging returns to manual batches only by a
+  // forward deploy of `PROVIDER_MODE = "none"` that keeps the ledger's exports
+  // and binding. The bound ledger must change nothing there, and a batch
+  // generated before `data-sources-v3` must be regenerated.
+  function fallbackEnv(
+    context: SequencedContext,
+    ledger: DurableObjectNamespace,
+    logger = new CapturingLogger(),
+  ): Env {
+    return {
+      ...workerEnv(fallbackVars(), context, logger),
+      RECONCILIATION_LEDGER: ledger,
+    };
+  }
+
+  it('publishes a current batch, and runs nothing automatic, without using the bound ledger', async () => {
+    const context = await ingestContext();
+    const ledger = recordingLedger();
+    const logger = new CapturingLogger();
+    const env = fallbackEnv(context, ledger.namespace, logger);
+    expect(env.PROVIDER_MODE).toBe('none');
+
+    const ingested = await ingestResponse(
+      env,
+      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+    );
+    expect(ingested.status).toBe(200);
+    expect(ingested.data.publication).toMatchObject({ status: 'applied' });
+    const committed = (ingested.data.publication as Json).version;
+
+    await worker.scheduled?.({} as ScheduledController, env);
+    const manual = await worker.fetch(adminPost(SYNC, {}), env);
+    expect(((await manual.json()) as { data: Json }).data).toMatchObject({
+      status: 'failed',
+      failureCategory: 'provider-unavailable',
+      providerCallCount: 0,
+    });
+
+    expect(ledger.calls).toEqual([]);
+    expect(globalFetch).not.toHaveBeenCalled();
+    expect(
+      logger.events.find((event) => event.operation === 'sync.failed'),
+    ).toMatchObject({ failureCategory: 'provider-unavailable' });
+    expect(await context.coordinator.readAuthority(SEASON)).toMatchObject({
+      activeVersion: committed,
+    });
+  });
+
+  it('refuses a batch generated under data-sources-v2 until it is regenerated', async () => {
+    const context = await ingestContext();
+    const ledger = recordingLedger();
+    const env = fallbackEnv(context, ledger.namespace);
+    const stale = creditedV2(batch);
+    expect(stale.artifact).not.toEqual(batch.artifact);
+    context.storage.writeLog.length = 0;
+
+    const refused = await ingestResponse(
+      env,
+      adminPost(INGEST, submissionFor(stale, SEED_VERSION)),
+    );
+    // The release's attribution version is checked against this Worker's
+    // curated metadata before the credit itself, so that check refuses it.
+    expect(refused).toMatchObject({
+      status: 422,
+      data: {
+        outcome: 'refused',
+        stage: 'verification',
+        reason: 'curated-metadata-mismatch',
+      },
+    });
+    expect(context.storage.writeLog).toEqual([]);
+
+    const regenerated = await ingestResponse(
+      env,
+      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+    );
+    expect(regenerated.status).toBe(200);
+    expect(ledger.calls).toEqual([]);
   });
 });
 

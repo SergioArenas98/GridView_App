@@ -1388,7 +1388,7 @@ submitting a batch are each separate, explicitly authorized steps.
 | `environment-not-permitted` | `ENVIRONMENT` is neither `staging` nor `production`. Production ingests only under its `genesis:` control (`genesis-control-required` otherwise). |
 | `provider-mode-coordinated` | `PROVIDER_MODE = coordinated`: never a second provider budget. |
 | `authority-not-sequenced` | The publication authority is not a reachable sequencer. |
-| `attribution-not-active` | The Worker's bundled `content/attribution/data-sources.json` does not credit Jolpica exactly once as `active` or `automatic`. The committed record is `data-sources-v3`, `automatic` (owner decision 2026-11-03), which admits a batch; `data-sources-v2`, `active` (DP-7, O-9) did too; a Worker bundling `data-sources-v1`, `dormant`, refuses every batch. A batch generated under another record version is refused at verification as `attribution-mismatch`. |
+| `attribution-not-active` | The Worker's bundled `content/attribution/data-sources.json` does not credit Jolpica exactly once as `active` or `automatic`. The committed record is `data-sources-v3`, `automatic` (owner decision 2026-11-03), which admits a batch; `data-sources-v2`, `active` (DP-7, O-9) did too; a Worker bundling `data-sources-v1`, `dormant`, refuses every batch. A batch generated under another record version is refused at verification as `curated-metadata-mismatch` (its release names another attribution version than this Worker's curated metadata). |
 
 **Preconditions for a real submission, all separately authorized:** a Worker
 bundling an attribution record that admits a batch (`data-sources-v2`
@@ -1738,7 +1738,7 @@ than `attributionVersion`, instants and what Jolpica published since
 schedule without a version. Removing only the binding (exports kept) stops
 every coordinated run at `ledger-unbound`. `PROVIDER_MODE = "none"` with the
 exports and binding kept re-admits the ingest; regenerate any batch made
-before `data-sources-v3`, which is refused as `attribution-mismatch`. A bad
+before `data-sources-v3`, which is refused as `curated-metadata-mismatch`. A bad
 release is rolled back under a hold ("Reconciliation operator routes"
 above).
 

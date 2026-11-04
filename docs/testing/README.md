@@ -1774,8 +1774,11 @@ proves that `none` - production's, and staging's fallback to manual batches
 - never looks a bound namespace up. `test/config/staging-automatic-updates.test.ts`
 drives the committed staging variables through the coordinated path, and the
 opt-in `test/e2e/automatic-updates/staging-first-run-rehearsal.test.ts`
-replays AU-4 step 2 over an operator capture. The tests keep the states
-apart.
+replays AU-4 step 2 over an operator capture, including a scenario with
+rounds 18 and 19 synthesized from it. `test/config/staging-season-batch-ingest.test.ts`
+pins the forward fallback: `none` with the ledger bound publishes a current
+batch without calling the ledger, and a batch generated under
+`data-sources-v2` must be regenerated. The tests keep the states apart.
 
 **Wired: the orchestration through the real entry points.** These are in
 `services/edge-api/test/sync/coordinated/entry-points/`. They run over both

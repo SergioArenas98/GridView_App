@@ -161,13 +161,16 @@ describe('the resolved production configuration', () => {
     expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
   });
 
-  it('persists the Worker lines, never the invocation logs (ADR 0028 D8)', () => {
-    // Every sampled run of the automatic path is kept; invocation logs, the
-    // platform's per-request records, are never stored.
+  it('persists the Worker lines, never the invocation logs or traces (ADR 0028 D8)', () => {
+    // Every sampled run of the automatic path is kept; invocation logs and
+    // traces, the platform's per-request records, are never stored. Traces
+    // are pinned off rather than left to the dashboard default (PR #82
+    // `data-safety.md` section 3.4).
     expect(resolved('production').observability).toEqual({
       enabled: true,
       head_sampling_rate: 1,
       logs: { enabled: true, persist: true, invocation_logs: false },
+      traces: { enabled: false },
     });
     expect(rawConfig).toMatch(
       /\[env\.production\.observability\]\nenabled = true\nhead_sampling_rate = 1\n\n\[env\.production\.observability\.logs\]\nenabled = true\npersist = true\ninvocation_logs = false/,
@@ -217,6 +220,7 @@ describe('the resolved production configuration', () => {
       enabled: true,
       head_sampling_rate: 1,
       logs: { enabled: true, persist: true, invocation_logs: false },
+      traces: { enabled: false },
     });
   });
 });

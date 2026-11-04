@@ -116,7 +116,7 @@ The operator path for a staged correction is in the staging runbook, section
 
 | Budget | Limit | GridView's use |
 |---|---|---|
-| Jolpica burst | 4 requests/s | Pacer at least 260 ms apart (≤ 3.85/s); the global limiter enforces 4/s for all callers |
+| Jolpica burst | 4 requests/s published; **not reached from staging** (AU-4 step 2, §8.3) | Pacer one request a second by default (a starting hypothesis, not a verified safe rate; never under 260 ms); the global limiter enforces 4/s for all callers, and a provider `429` holds every caller (§5) |
 | Jolpica sustained | 500 requests/h | At most 6 + classified rounds per run, so ≤ 29 an hour. A missing result adds up to ten hourly runs per race, still one an hour; seeing a first result twice adds one run per race. The gate measured ≤ 9 per run and < 200 a day across two race weekends with one result that never appeared (asked 12 times in its first 30 h) |
 | Cron CPU | 15 min for an hourly trigger | A publication run does the generation, validation and guard the ingest measured at 362 ms on staging, plus ≤ 29 response parses; a nothing-due tick takes milliseconds. Measured at AU-4 before relying on it |
 | Cron wall time | 15 min | Coordination aborts at 240 s; publication starts only within 300 s and with 300 s of the 10-minute lease left |
@@ -133,7 +133,8 @@ visible until the sequencer's `finalize` commits.
 | Failure | Effect | Retry |
 |---|---|---|
 | Result not yet published by Jolpica (empty race list), incomplete page, delayed start, long race | The check fails; the run is withheld | The next hourly tick through + 10 h 30 min, then + 15 h, + 24 h, daily to day 14 |
-| Jolpica 5xx, timeout, 429, block | The check is counted as failed; the run is withheld; the heartbeat stops if no check succeeded, and idle ticks do not restart it until an observation succeeds | Next hourly run; a 429's `Retry-After` is honoured |
+| Jolpica 5xx, timeout, block | The check is counted as failed; the run is withheld; the heartbeat stops if no check succeeded, and idle ticks do not restart it until an observation succeeds | Next hourly run |
+| Jolpica 429 | The refused check is counted as failed. The limiter object then holds Jolpica for every caller until `Retry-After`, at least 60 s and at most 6 h after the `429`; the rest of the run is deferred and sends nothing; the run is withheld | Scheduled ticks plan nothing while a round's deferral runs; a manual run asks the limiter and sends nothing; the first run after the hold asks again |
 | Limiter deferral | Not a check; withheld | At the limiter's `retryAt` |
 | Invalid payload, unmapped identity | Withheld; the mapping needs curation | Next check, after curation |
 | D14/D15 guard refusal | Blocked; the heartbeat stops | Operator |
@@ -598,10 +599,20 @@ ledger over the real class, the real limiter and hardened client; no network):
 |---|---|---|
 | 2026-10-19T19:00Z (Jolpica as captured) | 1 request (`/races/`), plan `observation`, nothing published | 23 requests (6 season resources + rounds 1-17); one release published; 117 documents, none added or removed; the only content change is `content:manifest` `attributionVersion` `data-sources-v2` → `data-sources-v3`, every other document differs in instants only |
 | 2026-11-04T10:00Z (rounds 18 and 19 raced, answered as not yet published) | 1 request, nothing published | 25 requests (rounds 18 and 19 added); `withheld`, `classification-unavailable`; `…1d` keeps serving |
+| 2026-11-04T10:00Z (rounds 18 and 19 answered with synthesized results) | 1 request, nothing published | 25 requests; one release published, credited `data-sources-v3`; 119 documents: `grand-prix:18:results` and `grand-prix:19:results` added, none removed; content changes only in `bootstrap`, `calendar`, `season`, `home` (latest completed round 19, featured round 20), `grand-prix:18`, `grand-prix:19`, their two circuits and `content:manifest` |
 
-In the real step 2 Jolpica will serve rounds 18 and 19, so the second run is
-expected to publish them with the standings after round 19. That is the
-difference to review, together with the attribution version and freshness.
+The third row's results are synthesized from the capture, because nothing may
+ask Jolpica for them: each round answers round 17's classification under its
+own calendar entry, and both standings tables are restated at round 19 with
+round 17's totals. It shows that a run which finds both results passes
+mapping, the standings round-coherence check, validation and the publication
+guard, and what that release changes. It does not show the real content.
+**Untested until step 2:** the real classifications of rounds 18 and 19
+(their drivers, any new participant, DNF/DSQ shapes), real standings after
+round 19 and their coherence with those results, and any change Jolpica made
+since 2026-10-19 to rounds 1-17 or to the season resources, which the
+publication guard would judge for the first time live. In the real step 2,
+compare the release with `…1d` as listed below.
 The in-process run took 173 ms of Node wall time; Workers CPU is measured at
 step 2.
 
@@ -663,7 +674,8 @@ is its own approval.
 - **Fall back to manual batches:** deploy `PROVIDER_MODE = "none"` with the
   exports and the binding kept. The ingest is admitted again (the
   `automatic` record admits a batch). A batch generated before
-  `data-sources-v3` is refused as `attribution-mismatch`; regenerate it at
+  `data-sources-v3` is refused as `curated-metadata-mismatch` (pinned in
+  `test/config/staging-season-batch-ingest.test.ts`); regenerate it at
   the deployed commit. The calendar-horizon policy is shared, so releases
   re-stamp consistently.
 - **A bad automatic release:** under `coordinated`, a release rollback
@@ -674,6 +686,56 @@ is its own approval.
   rollback replaced. Runbook §6, "Reconciliation operator routes".
 - **A code defect:** a forward fix, deployed from a commit that keeps the
   three exports.
+
+### 8.3.1 Step 2 result (2026-11-03) and the pacing fix
+
+**Result.** Step 1 deployed `b469718c` (from `ba44a9e`) at 20:08Z. Step 2's
+first run (20:17Z) behaved as rehearsed: one request, 106 ms CPU, nothing
+published. The second (20:22Z) sent 23 requests. Jolpica answered `200` to
+the calendar and rounds 1 and 12, and `429` to the other 20, from the second
+request on, at the pacer's ~260 ms spacing. Only the last three `429`s
+carried a `Retry-After` (about 10 s). The run used 115 ms CPU and 7 s wall
+time. It was withheld as `classification-unavailable`, so `…1d` kept
+serving. Evidence: `~/.gridview/evidence/au4-step2-sync-2026-11-03/`.
+
+**Why the run kept asking.** The limiter's windows count only GridView's
+own sends, inside the published 4/s and 500/h, so every reservation was
+`allowed`. The HTTP boundary parsed each `429` but told neither the pacer
+nor the limiter. The coordinator moved on to the next resource. Across
+runs, the limiter's 1-second window had long emptied after run 1, so run 2
+started with full burst headroom whatever Jolpica was enforcing.
+
+**Fix (this PR).**
+- The pacer spaces a run's requests one second apart by default.
+- Every `429` is reported to the limiter object. The object holds Jolpica
+  for every run, isolate and trigger until `Retry-After`, never less than
+  60 s and never more than 6 h after the `429`. Each held reservation is
+  `deferred` (`cause: provider-hold`) and consumes no window.
+- The run's own pacer holds too, so a lost report cannot let the rest of
+  the run through.
+- A held round keeps its `limiterDeferralUntil`. So the run is withheld,
+  and scheduled ticks plan nothing until the hold ends.
+- The publication guard, the run budget (240 s coordination deadline) and
+  the request budgets are unchanged. A full publication run now takes about
+  25 s of pacing.
+
+**Repeating step 2 (needs its own approval).**
+1. Deploy the merged fix to staging. The deploy changes code only: no
+   class, binding, var or schedule. Staging is past the step-1 rollback
+   floor, so recovery stays forward-only (preflight F5).
+2. Wait at least 24 h after 2026-11-03 20:22Z before the next request, so
+   that no Jolpica-side penalty from the step-2 burst can carry over.
+3. Send **one** manual run, with `wrangler tail` open. Do not send the
+   bootstrap run again: the ledger already holds the calendar.
+4. If it publishes, compare the release with `…1d` as above. Rounds 18 and
+   19 are new; rounds 1-17 should change only in instants.
+5. If any `429` appears, the run stops by itself after it. Do **not** send
+   another run on the same day. Record the hold's `retryAt` and whether a
+   `Retry-After` was sent. Then choose between a slower pacer (one request
+   every 2-3 s) and asking Jolpica about the shared Cloudflare egress
+   addresses. A `429` on the **first** request of a run means GridView's
+   pacing is not the cause, and step 3 stays blocked.
+6. Step 3 (the schedule) only after a run with no `429`.
 
 ### 8.4 Production (AU-7)
 

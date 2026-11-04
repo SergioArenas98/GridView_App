@@ -1,18 +1,23 @@
 /**
- * The per-run reservation pacer (runtime activation decision O-11): at least
- * 260 ms between its own reservations, one limiter question per reservation,
- * and a deferral that is final for its attempt.
+ * The per-run reservation pacer (runtime activation decision O-11): one second
+ * between its own reservations by default (never less than 260 ms), one
+ * limiter question per reservation, a deferral that is final for its attempt,
+ * and an upstream hold after a provider `429` (AU-4 step 2, 2026-11-03).
  */
 
 import { describe, expect, it } from 'vitest';
 
 import {
+  maximumUpstreamHoldMillis,
+  minimumUpstreamHoldMillis,
   ReservationCoordinator,
+  upstreamHoldUntil,
   type ProviderRateLimiterClient,
   type ReservationHost,
   type ReservationOutcome,
 } from '../../src/providers/http/provider-rate-limiter';
 import {
+  defaultReservationSpacingMillis,
   minimumReservationSpacingMillis,
   PacedReservationClient,
 } from '../../src/providers/http/reservation-pacer';
@@ -76,7 +81,7 @@ class MemoryHost implements ReservationHost {
 }
 
 describe('PacedReservationClient', () => {
-  it('asks immediately the first time and spaces every later reservation by at least 260 ms', async () => {
+  it('asks immediately the first time and spaces every later reservation by one second by default', async () => {
     const clock = new MutableClock(new Date(START));
     const limiter = new ScriptedLimiter(clock);
     const slept: number[] = [];
@@ -91,12 +96,13 @@ describe('PacedReservationClient', () => {
     }
 
     expect(minimumReservationSpacingMillis).toBe(260);
+    expect(defaultReservationSpacingMillis).toBe(1000);
     expect(limiter.askedAt).toHaveLength(5);
     expect(limiter.askedAt[0]).toBe(Date.parse(START));
     for (const gap of gaps(limiter.askedAt)) {
-      expect(gap).toBeGreaterThanOrEqual(260);
+      expect(gap).toBeGreaterThanOrEqual(1000);
     }
-    expect(slept).toEqual([260, 260, 260, 260]);
+    expect(slept).toEqual([1000, 1000, 1000, 1000]);
   });
 
   it('waits only for what remains of the spacing', async () => {
@@ -112,11 +118,14 @@ describe('PacedReservationClient', () => {
     await pacer.reserve('jolpica');
     clock.advance(200); // e.g. the request itself took 200 ms
     await pacer.reserve('jolpica');
-    clock.advance(400); // already past the spacing
+    clock.advance(400); // still inside the spacing
     await pacer.reserve('jolpica');
 
-    expect(slept).toEqual([60]);
-    expect(gaps(limiter.askedAt)).toEqual([260, 400]);
+    clock.advance(1200); // already past the spacing
+    await pacer.reserve('jolpica');
+
+    expect(slept).toEqual([800, 600]);
+    expect(gaps(limiter.askedAt)).toEqual([1000, 1000, 1200]);
   });
 
   it('serializes concurrent callers so neither skips the spacing', async () => {
@@ -134,7 +143,7 @@ describe('PacedReservationClient', () => {
       pacer.reserve('jolpica'),
     ]);
 
-    expect(gaps(limiter.askedAt)).toEqual([260, 260]);
+    expect(gaps(limiter.askedAt)).toEqual([1000, 1000]);
   });
 
   it('returns a deferral as final, asking the limiter exactly once for it', async () => {
@@ -235,5 +244,135 @@ describe('PacedReservationClient', () => {
     expect(new Set(await paced(true))).toEqual(new Set(['allowed']));
     // Non-vacuous: the same plan without the pacer defers on the burst window.
     expect(await paced(false)).toContain('deferred');
+  });
+});
+
+describe('the upstream hold after a provider 429', () => {
+  const at = (offsetMillis: number) =>
+    new Date(Date.parse(START) + offsetMillis).toISOString();
+
+  it('lasts at least a minute, honours a longer Retry-After and is capped', () => {
+    const now = new Date(START);
+    expect(minimumUpstreamHoldMillis).toBe(60_000);
+    expect(maximumUpstreamHoldMillis).toBe(6 * 60 * 60 * 1000);
+    // No header, a malformed one, or a shorter one (Jolpica sent ~10 s).
+    for (const retryAfter of [null, 'not-a-date', at(10_000)]) {
+      expect(upstreamHoldUntil(now, retryAfter)).toBe(Date.parse(at(60_000)));
+    }
+    expect(upstreamHoldUntil(now, at(5 * 60_000))).toBe(
+      Date.parse(at(5 * 60_000)),
+    );
+    expect(upstreamHoldUntil(now, at(48 * 60 * 60_000))).toBe(
+      Date.parse(at(maximumUpstreamHoldMillis)),
+    );
+  });
+
+  it('answers every later reservation of the run locally, without asking the limiter, until it ends', async () => {
+    const clock = new MutableClock(new Date(START));
+    const limiter = new ScriptedLimiter(clock);
+    const reported: (string | null)[] = [];
+    (limiter as ProviderRateLimiterClient).recordRateLimited = async (
+      _sourceId,
+      retryAfter,
+    ) => {
+      reported.push(retryAfter);
+    };
+    const slept: number[] = [];
+    const pacer = new PacedReservationClient({
+      limiter,
+      now: () => clock.now(),
+      sleep: clockSleep(clock, slept),
+    });
+
+    await pacer.reserve('jolpica');
+    await pacer.recordRateLimited('jolpica', null);
+    const held = [];
+    for (let index = 0; index < 20; index += 1) {
+      held.push(await pacer.reserve('jolpica'));
+    }
+
+    expect(reported).toEqual([null]);
+    // One question before the 429, none after it, and no spacing slept.
+    expect(limiter.askedAt).toHaveLength(1);
+    expect(slept).toEqual([]);
+    for (const outcome of held) {
+      expect(outcome).toEqual({
+        outcome: 'deferred',
+        sourceId: 'jolpica',
+        retryAt: at(60_000),
+        limitingWindows: [],
+        headroom: [],
+        cause: 'provider-hold',
+      });
+    }
+
+    clock.set(at(60_000));
+    expect((await pacer.reserve('jolpica')).outcome).toBe('allowed');
+    expect(limiter.askedAt).toHaveLength(2);
+  });
+
+  it('still holds the run when the report to the limiter throws, and only extends', async () => {
+    const clock = new MutableClock(new Date(START));
+    const limiter = new ScriptedLimiter(clock);
+    (limiter as ProviderRateLimiterClient).recordRateLimited = async () => {
+      throw new Error('limiter down');
+    };
+    const pacer = new PacedReservationClient({
+      limiter,
+      now: () => clock.now(),
+      sleep: clockSleep(clock, []),
+    });
+
+    await pacer.recordRateLimited('jolpica', at(5 * 60_000));
+    await pacer.recordRateLimited('jolpica', null); // shorter: no effect
+
+    const outcome = await pacer.reserve('jolpica');
+    expect(outcome).toMatchObject({
+      outcome: 'deferred',
+      cause: 'provider-hold',
+      retryAt: at(5 * 60_000),
+    });
+    expect(limiter.askedAt).toHaveLength(0);
+  });
+
+  it('holds every other run through the limiter object, consuming no window, then admits again', async () => {
+    const clock = new MutableClock(new Date(START));
+    const coordinator = new ReservationCoordinator(new MemoryHost(), () =>
+      clock.now(),
+    );
+    const limiter: ProviderRateLimiterClient = {
+      reserve: (sourceId) => coordinator.reserve(sourceId),
+      recordRateLimited: async (sourceId, retryAfter) => {
+        await coordinator.recordRateLimit(sourceId, retryAfter);
+      },
+    };
+    const run = () =>
+      new PacedReservationClient({
+        limiter,
+        now: () => clock.now(),
+        sleep: clockSleep(clock, []),
+      });
+
+    const first = run();
+    expect((await first.reserve('jolpica')).outcome).toBe('allowed');
+    await first.recordRateLimited('jolpica', at(90_000));
+
+    // A later run - the cron, or a manual run - starts with a fresh pacer.
+    clock.set(at(30_000));
+    const second = await run().reserve('jolpica');
+    expect(second).toMatchObject({
+      outcome: 'deferred',
+      cause: 'provider-hold',
+      retryAt: at(90_000),
+      limitingWindows: [],
+    });
+    // Headroom is reported, and the held reservation consumed none of it.
+    expect(second.outcome === 'deferred' && second.headroom).toEqual([
+      { window: 'second', limit: 4, remaining: 4 },
+      { window: 'hour', limit: 500, remaining: 499 },
+    ]);
+
+    clock.set(at(90_000));
+    expect((await run().reserve('jolpica')).outcome).toBe('allowed');
   });
 });

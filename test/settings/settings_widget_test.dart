@@ -30,19 +30,21 @@ const String _batchOnlyEs =
     'a la fuente.';
 
 /// The credit of an `automatic` source (owner decision 2026-11-03): GridView's
-/// service retrieves it on a schedule, a batch is still possible, and it is
-/// true before anything from the source is published.
+/// service retrieves it on a schedule or, while that is off, the operator
+/// publishes batches, and it is true before anything from the source is
+/// published.
 const String _automaticEn =
     "GridView's service can check this source automatically, on an hourly "
     "schedule, and publishes its data only after the data passes GridView's "
-    "checks. GridView's operator can also publish reviewed batches of it. "
-    'Either way, data from it can lag behind the source, and a published '
+    "checks. While that automatic checking is switched off, GridView's "
+    'operator can publish reviewed batches of it instead. Either way, data from it can lag behind the source, and a published '
     'result can later be corrected.';
 const String _automaticEs =
     'El servicio de GridView puede consultar esta fuente automáticamente, de '
     'forma programada cada hora, y solo publica sus datos después de que superen '
-    'las comprobaciones de GridView. El operador de GridView también puede '
-    'publicar lotes revisados de estos datos. En ambos casos, los datos de '
+    'las comprobaciones de GridView. Mientras esa consulta automática está '
+    'desactivada, el operador de GridView puede publicar en su lugar lotes '
+    'revisados de estos datos. En ambos casos, los datos de '
     'esta fuente pueden ir con retraso respecto a ella, y un resultado '
     'publicado puede corregirse más tarde.';
 

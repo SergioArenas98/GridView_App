@@ -89,8 +89,10 @@ Source retrieval → validation → guarded publication → app refresh:
 2. **Plan.** The G5 planner (ADR 0020 C2) decides what is due from the ledger
    alone; nothing due sends nothing.
 3. **Retrieve.** One coordination through the Jolpica routing port, the
-   hardened client and the global `ProviderRateLimiter` (ADR 0021), paced at
-   least 260 ms apart, under the run budget (240 s coordination deadline).
+   hardened client and the global `ProviderRateLimiter` (ADR 0021), paced
+   one second apart by default (never under 260 ms) and held after a provider
+   `429` (ADR 0021 amendment A2), under the run budget (240 s coordination
+   deadline).
 4. **Validate.** Every response is decoded, mapped through the curated
    registries (ADR 0022) and deep-validated (ADR 0024); each classification
    goes through the settling state machine (ADR 0020 §4).

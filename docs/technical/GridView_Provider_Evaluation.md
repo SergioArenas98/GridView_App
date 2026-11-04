@@ -749,8 +749,9 @@ documentation-only pass.
 > accurately while retaining the source attribution. `data-sources-v3`
 > records Jolpica F1 as `automatic`, its status alone changed: a GridView
 > Worker may request the data itself, on a schedule, and publish it without
-> an operator once it passes validation and the publication guard, and an
-> operator-run batch remains possible. Elements 2-6 and duties 7-11 are
+> an operator once it passes validation and the publication guard; where no
+> Worker does so, an operator-run batch remains the path (a Worker that
+> retrieves automatically refuses batches). Elements 2-6 and duties 7-11 are
 > unchanged. Both surfaces still claim neither live data nor that Jolpica
 > data is shown, because the record is bundled before an environment's first
 > automatic publication and in environments that publish batches only. The

@@ -6,8 +6,8 @@ import '../application/external_links.dart';
 /// the source is being shown: a `dormant` source is credited before any path
 /// for its data exists; an `active` one is published only through
 /// operator-run, reviewed batches, never retrieved automatically; an
-/// `automatic` one is retrieved by GridView's service on a schedule and may
-/// also arrive in a batch. Each is credited the same way before anything is
+/// `automatic` one is retrieved by GridView's service on a schedule or,
+/// where that is switched off, arrives in a batch. Each is credited the same way before anything is
 /// published as after.
 enum DataSourceStatus { dormant, active, automatic }
 

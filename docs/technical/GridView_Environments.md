@@ -527,11 +527,13 @@ and only the last one says whether Jolpica data is being served:
 **`automatic` (owner decision 2026-11-03, `data-sources-v3`)** supersedes the
 batches-only wording below for Jolpica F1: a GridView Worker may request its
 data itself, on a schedule, and publish it once it passes validation and the
-publication guard; data may still arrive as an operator-run batch, so the
-ingest admits `active` and `automatic` alike. The decision is about wording
+publication guard. Where the automatic path is off (`PROVIDER_MODE` other
+than `coordinated`), data may instead arrive as an operator-run batch, so the
+ingest admits `active` and `automatic` alike; under `coordinated` it refuses
+every batch (`provider-mode-coordinated`). The decision is about wording
 and is not a legal clearance. A Worker built from `data-sources-v3` publishes
 releases credited `data-sources-v3`, and refuses a batch generated under
-`data-sources-v2` as `attribution-mismatch`.
+`data-sources-v2` as `curated-metadata-mismatch`.
 
 `active` (O-9, DP-7; the owner accepted this meaning on 2026-10-13) means only
 that Jolpica F1-derived data is eligible for publication through

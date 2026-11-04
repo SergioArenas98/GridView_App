@@ -1,5 +1,6 @@
 import { quotaPolicyFor } from '../provider-source';
 import {
+  currentHeadroom,
   emptyLedger,
   isRealProviderSourceId,
   reconcileLedger,
@@ -23,13 +24,57 @@ import {
  * The object never sleeps, retries or holds a request until capacity returns:
  * it answers immediately with a decision and, when deferred, a deterministic
  * `retryAt` for a future scheduler to use.
+ *
+ * ## Upstream hold (AU-4 step 2, 2026-11-03)
+ *
+ * The windows count only GridView's own sends, so they cannot see what the
+ * provider is enforcing. On staging, Jolpica answered `429` to 20 of 23
+ * requests paced inside its published limits, and every later reservation was
+ * still `allowed`. The object therefore also keeps an **upstream hold**: the
+ * HTTP boundary reports each `429` (`recordRateLimit`), and until the hold
+ * ends every reservation for that source - from any run, isolate or trigger -
+ * is `deferred` with `cause: 'provider-hold'`. The hold honours `Retry-After`,
+ * is never shorter than `minimumUpstreamHoldMillis` (a `429` without the
+ * header is the common case) and never longer than `maximumUpstreamHoldMillis`
+ * (a provider-controlled header must not silence GridView indefinitely). A
+ * later report can only extend it.
  */
 
 /** Storage key holding the reservation ledger for this object's source. */
 const ledgerStorageKey = 'reservation-ledger';
 
+/** Storage key holding the upstream hold for this object's source. */
+const upstreamHoldStorageKey = 'upstream-hold';
+
 /** Internal URL used to address the object. Never logged, never external. */
 export const reservationRequestUrl = 'https://provider-rate-limiter/reserve';
+
+/** Internal URL a `429` is reported to. Never logged, never external. */
+export const rateLimitReportUrl = 'https://provider-rate-limiter/rate-limited';
+
+/**
+ * The shortest upstream hold. Chosen, not published: Jolpica sent no
+ * `Retry-After` on most of the observed `429`s and about 10 s on the rest.
+ */
+export const minimumUpstreamHoldMillis = 60_000;
+
+/** The longest upstream hold, whatever `Retry-After` asks for. */
+export const maximumUpstreamHoldMillis = 6 * 60 * 60 * 1000;
+
+/**
+ * When an upstream hold reported at `at` ends: the provider's `Retry-After`
+ * instant when it is a valid instant, bounded to
+ * [`minimumUpstreamHoldMillis`, `maximumUpstreamHoldMillis`] after `at`.
+ * Pure, so the object and the per-run pacer compute the same instant.
+ */
+export function upstreamHoldUntil(at: Date, retryAfter: string | null): number {
+  const atMillis = at.getTime();
+  const floor = atMillis + minimumUpstreamHoldMillis;
+  const ceiling = atMillis + maximumUpstreamHoldMillis;
+  const requested = retryAfter === null ? Number.NaN : Date.parse(retryAfter);
+  if (!Number.isFinite(requested)) return floor;
+  return Math.min(ceiling, Math.max(floor, requested));
+}
 
 export type ReservationOutcome =
   | {
@@ -41,8 +86,11 @@ export type ReservationOutcome =
       readonly outcome: 'deferred';
       readonly sourceId: RealProviderSourceId;
       readonly retryAt: string;
+      /** Empty for an upstream hold: no GridView window is exhausted. */
       readonly limitingWindows: readonly LimitingWindow[];
       readonly headroom: readonly WindowHeadroom[];
+      /** Present only when an upstream hold, not a window, defers. */
+      readonly cause?: 'provider-hold';
     }
   | {
       /** Fail closed: issue no request. */
@@ -135,6 +183,46 @@ function readLedger(
   };
 }
 
+interface StoredHold {
+  sourceId?: unknown;
+  until?: unknown;
+}
+
+type HoldRead =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'valid'; readonly until: number }
+  | { readonly kind: 'corrupt' };
+
+/**
+ * Classifies the stored upstream hold exactly as `readLedger` classifies the
+ * ledger: absence is no hold, anything present and unusable fails closed and
+ * is never rewritten, and a record for another source is never adopted.
+ */
+function readHold(
+  raw: StoredHold | undefined,
+  sourceId: RealProviderSourceId,
+): HoldRead {
+  if (raw === undefined) return { kind: 'none' };
+  if (raw === null || typeof raw !== 'object') return { kind: 'corrupt' };
+  if (raw.sourceId !== sourceId) return { kind: 'corrupt' };
+  if (!isReservationTimestamp(raw.until)) return { kind: 'corrupt' };
+  return { kind: 'valid', until: raw.until };
+}
+
+/** The answer to a `429` report. */
+export type RateLimitReportOutcome =
+  | {
+      readonly outcome: 'held';
+      readonly sourceId: RealProviderSourceId;
+      /** When the hold, after this report, ends. */
+      readonly until: string;
+    }
+  | {
+      readonly outcome: 'unavailable';
+      readonly sourceId: RealProviderSourceId;
+      readonly reason: ReservationUnavailableReason;
+    };
+
 /**
  * The reservation logic, independent of the Durable Object wrapper so it can
  * be driven directly by tests over a fake host and a fixed clock.
@@ -170,6 +258,54 @@ export class ReservationCoordinator {
     });
   }
 
+  /**
+   * Records that the provider answered `429` for `sourceId`, holding every
+   * reservation for it until `upstreamHoldUntil(now, retryAfter)` - or longer,
+   * if a hold already runs past that. Serialized like `reserve`, and equally
+   * unable to throw out of `blockConcurrencyWhile`.
+   */
+  async recordRateLimit(
+    sourceId: RealProviderSourceId,
+    retryAfter: string | null,
+  ): Promise<RateLimitReportOutcome> {
+    return this.host.blockConcurrencyWhile(async () => {
+      try {
+        const at = this.now();
+        const read = readHold(
+          await this.host.storage.get<StoredHold>(upstreamHoldStorageKey),
+          sourceId,
+        );
+        if (read.kind === 'corrupt') {
+          return {
+            outcome: 'unavailable',
+            sourceId,
+            reason: 'state-corrupt',
+          } as const;
+        }
+        const reported = upstreamHoldUntil(at, retryAfter);
+        const until =
+          read.kind === 'valid' ? Math.max(read.until, reported) : reported;
+        if (read.kind !== 'valid' || until !== read.until) {
+          await this.host.storage.put(upstreamHoldStorageKey, {
+            sourceId,
+            until,
+          });
+        }
+        return {
+          outcome: 'held',
+          sourceId,
+          until: new Date(until).toISOString(),
+        } as const;
+      } catch {
+        return {
+          outcome: 'unavailable',
+          sourceId,
+          reason: 'storage-failure',
+        } as const;
+      }
+    });
+  }
+
   private async decide(
     sourceId: RealProviderSourceId,
   ): Promise<ReservationOutcome> {
@@ -180,11 +316,30 @@ export class ReservationCoordinator {
       // Fail closed and leave the record exactly as found.
       return { outcome: 'unavailable', sourceId, reason: 'state-corrupt' };
     }
+    const hold = readHold(
+      await this.host.storage.get<StoredHold>(upstreamHoldStorageKey),
+      sourceId,
+    );
+    if (hold.kind === 'corrupt') {
+      return { outcome: 'unavailable', sourceId, reason: 'state-corrupt' };
+    }
     const ledger = reconcileLedger(
       read.kind === 'valid' ? read.ledger : emptyLedger(sourceId),
       sourceId,
       at,
     );
+    if (hold.kind === 'valid' && hold.until > at.getTime()) {
+      // The provider asked GridView to stop. No window is consumed and the
+      // ledger is not written: a held reservation is not a reservation.
+      return {
+        outcome: 'deferred',
+        sourceId,
+        retryAt: new Date(hold.until).toISOString(),
+        limitingWindows: [],
+        headroom: currentHeadroom(ledger, quotaPolicyFor(sourceId), at),
+        cause: 'provider-hold',
+      };
+    }
     const decision = reserve(ledger, quotaPolicyFor(sourceId), at);
 
     if (decision.outcome === 'allowed') {
@@ -241,15 +396,39 @@ export class ProviderRateLimiter {
       return jsonResponse({ error: 'method-not-allowed' }, 405);
     }
     let sourceId: unknown;
+    let retryAfter: unknown;
     try {
-      const body = (await request.json()) as { sourceId?: unknown };
+      const body = (await request.json()) as {
+        sourceId?: unknown;
+        retryAfter?: unknown;
+      };
       sourceId = body.sourceId;
+      retryAfter = body.retryAfter;
     } catch {
       return jsonResponse({ error: 'invalid-request' }, 400);
     }
     if (!isRealProviderSourceId(sourceId)) {
       // Source identity fails closed before any state is read or mutated.
       return jsonResponse({ error: 'invalid-source' }, 400);
+    }
+    if (
+      new URL(request.url).pathname === new URL(rateLimitReportUrl).pathname
+    ) {
+      // `null` or a canonical instant, nothing else: a malformed value is
+      // refused rather than read as "no Retry-After".
+      const instant = retryAfter === null ? null : decodeInstant(retryAfter);
+      if (retryAfter !== null && instant === null) {
+        return jsonResponse({ error: 'invalid-request' }, 400);
+      }
+      try {
+        const outcome = await this.coordinator.recordRateLimit(
+          sourceId,
+          instant,
+        );
+        return jsonResponse(outcome, 200);
+      } catch {
+        return jsonResponse({ error: 'reservation-unavailable' }, 500);
+      }
     }
     try {
       const outcome = await this.coordinator.reserve(sourceId);
@@ -394,13 +573,28 @@ export function decodeReservationOutcome(
   if (value.outcome === 'deferred') {
     const headroom = decodeHeadroom(value.headroom, sourceId);
     if (!headroom) return null;
+    const retryAt = decodeInstant(value.retryAt);
+    if (retryAt === null) return null;
+    if (value.cause === 'provider-hold') {
+      // A hold exhausts no window, so it names none.
+      if (!Array.isArray(value.limitingWindows)) return null;
+      if (value.limitingWindows.length !== 0) return null;
+      return {
+        outcome: 'deferred',
+        sourceId,
+        retryAt,
+        limitingWindows: [],
+        headroom,
+        cause: 'provider-hold',
+      };
+    }
+    // A window deferral carries no cause; any other value is version skew.
+    if (value.cause !== undefined) return null;
     const limitingWindows = decodeLimitingWindows(
       value.limitingWindows,
       sourceId,
     );
     if (!limitingWindows) return null;
-    const retryAt = decodeInstant(value.retryAt);
-    if (retryAt === null) return null;
     return {
       outcome: 'deferred',
       sourceId,
@@ -436,6 +630,16 @@ function jsonResponse(body: unknown, status: number): Response {
 /** Client seam so the HTTP boundary can be tested without a Workers runtime. */
 export interface ProviderRateLimiterClient {
   reserve(sourceId: RealProviderSourceId): Promise<ReservationOutcome>;
+  /**
+   * Reports that the provider answered `429` (`retryAfter`: its parsed
+   * `Retry-After`, or `null`). Optional: a client that cannot hold - a test
+   * double, the unbound limiter - simply has none. Must never throw; the
+   * HTTP boundary also guards the call.
+   */
+  recordRateLimited?(
+    sourceId: RealProviderSourceId,
+    retryAfter: string | null,
+  ): Promise<void>;
 }
 
 /**
@@ -471,6 +675,28 @@ export class DurableObjectRateLimiterClient implements ProviderRateLimiterClient
       );
     } catch {
       return unreachable(sourceId);
+    }
+  }
+
+  /**
+   * Reports a `429` to the source's object. Best effort and silent: a lost
+   * report leaves the per-run pacer's own hold in force for the rest of the
+   * run, and the global hold simply does not start.
+   */
+  async recordRateLimited(
+    sourceId: RealProviderSourceId,
+    retryAfter: string | null,
+  ): Promise<void> {
+    try {
+      const stub = this.namespace.get(this.namespace.idFromName(sourceId));
+      const response = await stub.fetch(rateLimitReportUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceId, retryAfter }),
+      });
+      await response.body?.cancel();
+    } catch {
+      // Nothing to surface: see above.
     }
   }
 }

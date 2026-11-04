@@ -1542,9 +1542,9 @@
   "@settingsSourceStatusActive": {
     "description": "Status of a credited data source whose data GridView publishes only through operator-run, reviewed batches. Must stay true before the first batch is published (it must not claim that data from the source is being shown) and must not imply automatic or live retrieval."
   },
-  "settingsSourceStatusAutomatic": "GridView's service can check this source automatically, on an hourly schedule, and publishes its data only after the data passes GridView's checks. GridView's operator can also publish reviewed batches of it. Either way, data from it can lag behind the source, and a published result can later be corrected.",
+  "settingsSourceStatusAutomatic": "GridView's service can check this source automatically, on an hourly schedule, and publishes its data only after the data passes GridView's checks. While that automatic checking is switched off, GridView's operator can publish reviewed batches of it instead. Either way, data from it can lag behind the source, and a published result can later be corrected.",
   "@settingsSourceStatusAutomatic": {
-    "description": "Status of a credited data source whose data GridView's service can retrieve automatically on a schedule, and may also publish in operator-run batches. Stated as a capability: an environment may not run the schedule yet. Must stay true before anything from the source is published (it must not claim that data from the source is being shown), and must not claim live or real-time data."
+    "description": "Status of a credited data source whose data GridView's service can retrieve automatically on a schedule, or, while that is switched off, publish in operator-run batches; the two never run at once, because a Worker that checks automatically refuses batches. Stated as a capability: an environment may not run the schedule yet. Must stay true before anything from the source is published (it must not claim that data from the source is being shown), and must not claim live or real-time data."
   },
   "settingsSourceStatusFrozen": "This test build contains a fixed snapshot of data from this source, captured {date}. It receives no updates.",
   "@settingsSourceStatusFrozen": {
