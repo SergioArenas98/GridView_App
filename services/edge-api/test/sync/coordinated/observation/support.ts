@@ -175,6 +175,8 @@ export type Answer =
       readonly status: number;
       /** Extra response headers, e.g. a `429`'s `Retry-After`. */
       readonly headers?: Readonly<Record<string, string>>;
+      /** The raw body; `{}` unless given (e.g. a refusal's exact body). */
+      readonly body?: string;
     }
   | { readonly kind: 'network' };
 
@@ -199,7 +201,7 @@ export class JolpicaServer {
     const answer = this.answers.get(path)?.() ?? this.defaultAnswer(path);
     if (answer.kind === 'network') throw new TypeError('network');
     if (answer.kind === 'status') {
-      return new Response('{}', {
+      return new Response(answer.body ?? '{}', {
         status: answer.status,
         headers: { 'Content-Type': 'application/json', ...answer.headers },
       });

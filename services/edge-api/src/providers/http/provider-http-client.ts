@@ -8,6 +8,13 @@ import type {
   RealProviderSourceId,
   WindowHeadroom,
 } from './reservation-engine';
+import {
+  classifyRefusalBody,
+  edgeFactsOf,
+  refusalBodyLimitBytes,
+  refusalFactsOf,
+  type ProviderRefusalBody,
+} from './refusal-evidence';
 
 /**
  * The single hardened boundary through which every future real provider
@@ -258,6 +265,24 @@ async function readBounded(
   return new TextDecoder().decode(merged);
 }
 
+/**
+ * Reads at most `refusalBodyLimitBytes` of a `429` and classifies it. Never
+ * throws: a body that cannot be read is `unreadable`, and the 429 is still
+ * answered, logged and held exactly as before.
+ */
+async function readRefusalBody(
+  response: Response,
+): Promise<ProviderRefusalBody> {
+  try {
+    return classifyRefusalBody(
+      await readBounded(response, refusalBodyLimitBytes),
+    );
+  } catch {
+    await discard(response);
+    return 'unreadable';
+  }
+}
+
 async function discard(response: Response): Promise<void> {
   try {
     await response.body?.cancel();
@@ -438,14 +463,20 @@ export class ProviderHttpClient {
           response.headers.get('Retry-After'),
           this.now(),
         );
-        await discard(response);
+        // Measured before the body is read, so it stays the provider's answer
+        // time and stays comparable with the 2026-11-03/04 records.
+        const durationMs = this.now().getTime() - startedAt;
+        const body = await readRefusalBody(response);
         this.logger.warn({
           operation: 'provider.request.rate_limited',
           providerSourceId: sourceId,
           providerRequestAttempted: true,
           status: 429,
-          durationMs: this.now().getTime() - startedAt,
+          durationMs,
           ...(retryAfter ? { providerRetryAfter: retryAfter } : {}),
+          // Which layer refused (Jolpica's application or Cloudflare's edge),
+          // in closed values only; the body itself is never logged.
+          ...refusalFactsOf(response.headers, body),
         });
         // Hold the source before answering, so no further reservation in
         // this run - or, through the limiter, in any other - reaches the
@@ -525,6 +556,8 @@ export class ProviderHttpClient {
         providerRequestAttempted: true,
         status: response.status,
         durationMs: this.now().getTime() - startedAt,
+        // A cache `HIT` never reached the provider's application limits.
+        ...edgeFactsOf(response.headers),
       });
       return {
         ok: true,

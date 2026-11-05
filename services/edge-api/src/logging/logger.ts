@@ -36,6 +36,26 @@ export interface LogEvent {
   providerRetryAt?: string;
   /** Upstream 429 instruction, already parsed to an absolute UTC instant. */
   providerRetryAfter?: string;
+  /**
+   * Closed facts about who answered a provider request
+   * (`providers/http/refusal-evidence.ts`). Never a provider string.
+   */
+  /** `cf-cache-status` from a closed set, or `absent` / `other`. */
+  providerCacheStatus?: string;
+  /** Three-letter Cloudflare data centre from a well-formed `cf-ray`. */
+  providerEdgeColo?: string;
+  /** A well-formed `cf-ray` of a 429, for the provider to look up. */
+  providerRay?: string;
+  /** Which layer refused a 429: `application`, `edge` or `unknown`. */
+  providerRefusalLayer?: string;
+  /** Closed class of a 429 body; the body itself is never logged. */
+  providerRefusalBody?: string;
+  /** `absent`, `delta`, `date` or `invalid`. */
+  providerRetryAfterForm?: string;
+  /** `cloudflare`, `other` or `absent`. */
+  providerServer?: string;
+  /** Closed media type of a 429 body. */
+  providerBodyMedia?: string;
   /** Comma-joined bounded window kinds (`second`, `minute`, `hour`). */
   providerLimitingWindow?: string;
   /** Why a reservation was deferred: `window` or `provider-hold`. */
