@@ -103,8 +103,8 @@ versionCode 7 while Play distributes it (§4).
 
 ## 4. Proposed Data safety answers
 
-These are proposals for the owner's acceptance, entered in Play Console only
-at the approved steps (release plan P0, P3, R7). Every row is **required**
+These are draft answers, entered in Play Console only at the approved
+steps (release plan P0, P3, R7). Every row is **required**
 (no in-app switch) and **not processed ephemerally**, except as noted.
 
 **Overview, all states:** collects or shares required data, **Yes**; all
@@ -128,12 +128,12 @@ this draft.
 | App activity → App interactions | Ads purposes | Ads purposes |
 | App info and performance → Crash logs | Ads purposes | Ads purposes |
 | App info and performance → Diagnostics | Ads purposes | Ads purposes |
-| Device or other IDs → Device or other IDs | Ads purposes; **Developer communications proposed for the automatic Messaging registration only (Q1a)** | Ads purposes |
+| Device or other IDs → Device or other IDs | Ads purposes; **Developer communications for the automatic Messaging registration only (Q1a)** | Ads purposes |
 
 The sharing answers are for the ads SDK. Do not select Developer
 communications under sharing: the Messaging entry concerns the
 registration with Firebase as a service provider. Use the same
-collection-only distinction for this proposed purpose in state T.
+collection-only distinction for this purpose in the draft for state T.
 
 **State T, transition (1.x and 2.0.0; `data-safety.md` §3.2 plus §3.5).
 Ads: Yes.**
@@ -144,7 +144,7 @@ Ads: Yes.**
 | App interactions | yes | yes | Analytics; Advertising or marketing; Fraud prevention, security and compliance |
 | Crash logs | yes | yes | the same |
 | Diagnostics | yes | yes | the same |
-| Device or other IDs | yes | yes | the same, **plus Developer communications (proposed, Q1a)** |
+| Device or other IDs | yes | yes | the same, **plus Developer communications for collection only (Q1a)** |
 
 **State F, final (2.0.0 only; `data-safety.md` §3.2). Ads: No.** Crash
 logs, Diagnostics, Device or other IDs and App interactions: collected, not
@@ -170,7 +170,7 @@ purpose is accurate when no 1.x feature used them?
 
 | Option | Assessment |
 |---|---|
-| **Add Developer communications to collection only (recommended draft, pending acceptance)** | The closest available option for why Firebase Messaging automatically registered the installation. Firebase describes the SDK purpose as enabling message delivery, and Play requires SDK collection to be reflected. Play's guidance does not explicitly address registration without any messages sent. The policy distinguishes registration from sending, and the purpose is dropped in state F |
+| **Add Developer communications to collection only (accepted for the 1.2.1 draft)** | The closest available option for why Firebase Messaging automatically registered the installation. Firebase describes the SDK purpose as enabling message delivery, and Play requires SDK collection to be reflected. Play's guidance does not explicitly address registration without any messages sent. The policy distinguishes registration from sending, and the purpose is dropped in state F |
 | Add no purpose for FCM | Weaker. The form would show only the ads purposes for the type, leaving the FCM collection unexplained. Play's help does not address collected-but-unused data, and can act on an inaccurate form |
 | Add App functionality | Not supported: no 1.x feature used the data |
 
@@ -178,8 +178,11 @@ The 2026-11-05 observation (§3.1) shows the automatic Messaging
 registration on versionCode 7, without identifying the transmitted data.
 It does not settle which purpose is accurate, or establish a legal basis.
 
-**Status:** proposed, awaiting the owner's acceptance. States 0 and T wait on
-it.
+**Status: accepted by the owner for the 1.2.1 draft on 2026-11-05.**
+Select Developer communications for collection of device or other IDs
+only, not for sharing. The state T draft carries this answer forward for
+1.2.1 while it is distributed. This does not approve either submission or
+settle Q1b or Q1c.
 
 ### Q1b. Legal basis for the 1.x FCM registration
 
@@ -297,9 +300,9 @@ Two obligations behave differently:
 
 | Order | What changes | Assessment |
 |---|---|---|
-| **O1, current plan:** state 0 now, state T before 2.0.0 leaves internal testing, 20 % then 100 % rollout, state F | Needs Q1a for states 0 and T | Keeps the staged rollout. Recommended |
+| **O1, current plan:** state 0 now, state T before 2.0.0 leaves internal testing, 20 % then 100 % rollout, state F | Uses the recorded Q1a answer for 1.2.1 | Keeps the staged rollout. Recommended |
 | **O2, straight to F:** skip states 0 and T; with Alpha already paused, release 2.0.0 to 100 % with versionCode 7 not retained, and submit state F with it | Avoids answering Q1a on the form | Leaves the current "No data collected" form, already inaccurate for 1.2.1, in place until then, including during internal testing. It drops the staged rollout. It depends on Data safety being published with the release, which is not confirmed (§2). Not recommended |
-| **O3, no state T:** state 0 now, then 2.0.0 straight to 100 % with state F | Shortens the period with 1.x rows | Still needs Q1a for state 0. Drops the staged rollout for a form state that costs nothing to keep. Not recommended |
+| **O3, no state T:** state 0 now, then 2.0.0 straight to 100 % with state F | Shortens the period with 1.x rows | Uses the recorded Q1a answer for state 0. Drops the staged rollout for a form state that costs nothing to keep. Not recommended |
 | **Alpha paused** (D-T2, done before P0) | The owner paused the track on 2026-11-05 (§3.2) | The form does not change because versionCode 7 remains in Production |
 
 **Conclusion:** reordering cannot answer the legal-basis questions. It can
@@ -312,7 +315,7 @@ D-A archive, and the Alpha pause already completed.
 | Step | Waits on |
 |---|---|
 | P2, publish the policy | Q1b, Q4, Q5, Q6 decided; the draft text accepted |
-| P0, state 0 | P2; Q1a accepted |
-| P3, state T | P2; Q1a; Q2 and Q3 decided |
+| P0, state 0 | P2 and submission approval; Q1a is recorded for the draft |
+| P3, state T | P2; Q2 and Q3 decided; submission approval |
 | R7, state F | R6, D-T1, Alpha paused; Q2 and Q3 decided |
 | PR #82 merge, A0 privacy item | Every item in §5 decided and recorded in `data-safety.md` §4.1 |
