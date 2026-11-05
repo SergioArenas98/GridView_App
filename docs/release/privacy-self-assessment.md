@@ -202,7 +202,7 @@ Regulation 5)?
 
 | Option | Assessment |
 |---|---|
-| **(a) State the facts and claim no basis (in the draft)** | Policy section 4 now says: the registration "served no feature, and we have not used it. Versions 1.x did not ask for consent to it, and we do not claim a legal basis for it. Version 2.0.0 removes it." Accurate and consistent with the ads paragraph. It openly records processing without a basis |
+| **(a) Disclose the observed behavior (unpublished draft)** | Sections 3.4 and 4 explain automatic registration, no push notifications sent, no consent prompt for the registration, and removal of Messaging in 2.0.0. The factual text does not state a legal basis or resolve whether the processing was permitted |
 | (b) Claim legitimate interests | Not supported by the facts. Rejected |
 | (c) Stay silent | Leaves Article 13's legal-basis element unanswered for this processing. Not recommended |
 
@@ -212,7 +212,9 @@ from now on.
 The 2026-11-05 observation (§3.1) confirms for versionCode 7 that the
 processing took place; it does not supply a basis.
 
-**Status:** open. Publishing the policy (P2) waits on the owner's choice.
+**Status:** open. The project has not identified a supportable basis on the
+current evidence. Keep the policy unpublished under P2. Accepting the
+factual wording alone does not close Q1b or approve publication.
 
 ### Q1c. Reducing the ongoing FCM processing
 

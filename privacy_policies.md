@@ -156,6 +156,10 @@ Instead:
   - **What never happened.** GridView 1.x has no notification feature, and
     we have never sent it a notification. The registration only makes
     sending one possible.
+  - **What changes in version 2.0.0.** GridView 2.0.0 no longer includes
+    Firebase Cloud Messaging, so it does not register for push notifications.
+    If you still use a 1.x version, it can continue to register until you
+    update or uninstall it.
 
   Firebase keeps the installation ID until it is deleted. Google treats a
   messaging registration that has not been used for 270 days as expired
@@ -195,10 +199,8 @@ The advertising in versions 1.x (section 3.4) is processed by Google for its
 own purposes, as described in Google's policies. Versions 1.x did not ask for
 consent to it. Version 2.0.0 removes it.
 
-The automatic Firebase Cloud Messaging registration in versions 1.x (section
-3.4) served no feature, and we have not used it. Versions 1.x did not ask
-for consent to it, and we do not claim a legal basis for it. Version 2.0.0
-removes it.
+GridView 1.x did not ask for consent to the automatic Firebase Cloud Messaging
+registration described in section 3.4. GridView never sent push notifications.
 
 ## 5. Who receives the information
 
