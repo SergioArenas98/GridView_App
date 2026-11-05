@@ -37,6 +37,19 @@ export const documentedWorkerAddress = '2a06:98c0:3600::103';
 /** A server timestamp further from GridView's clock than this is not fresh. */
 export const freshnessToleranceSeconds = 300;
 
+/**
+ * `cf-cache-status` values whose body Cloudflare fetched from the origin for
+ * this request. `HIT`, `STALE`, `UPDATING` and `REVALIDATED` serve a cached
+ * body (Cloudflare, "Cloudflare cache responses"), which may be an earlier
+ * caller's; an absent or unknown status is not trusted either.
+ */
+export const originServedCacheStatuses: ReadonlySet<string> = new Set([
+  'DYNAMIC',
+  'MISS',
+  'EXPIRED',
+  'BYPASS',
+]);
+
 export type EgressAddressClass =
   /** Exactly the documented Worker address. */
   | 'documented-worker-address'
@@ -72,7 +85,7 @@ export type EgressIdentityResult =
       readonly version: string | null;
       /** Server timestamp minus GridView's clock, read as UTC. */
       readonly timestampSkewSeconds: number | null;
-      /** The answer was generated for this request, not served from a cache. */
+      /** Origin-served for this request (`originServedCacheStatuses`) with a current timestamp. */
       readonly fresh: boolean;
       readonly cacheStatus: string;
     }
@@ -217,7 +230,7 @@ export function readEgressIdentity(
     fresh:
       skew !== null &&
       Math.abs(skew) <= freshnessToleranceSeconds &&
-      cacheStatus !== 'HIT',
+      originServedCacheStatuses.has(cacheStatus),
     cacheStatus,
   };
 }

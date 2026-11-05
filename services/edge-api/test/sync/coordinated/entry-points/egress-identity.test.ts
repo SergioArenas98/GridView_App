@@ -412,4 +412,29 @@ describe('address classes and freshness', () => {
     ).toMatchObject({ version: null, fresh: true });
     expect(readEgressIdentity([1], now, 'MISS')).toBeNull();
   });
+
+  it('trusts only an origin-served answer: every cached status, and an absent one, is not fresh', () => {
+    const now = new Date(at);
+    // A timestamp 60 s old, inside the tolerance: only the cache status decides.
+    const recent = testBody({ timestamp: '2026-11-05T08:59:00.000' });
+    for (const cached of [
+      'HIT',
+      'STALE',
+      'UPDATING',
+      'REVALIDATED',
+      'absent',
+      'other',
+      'NONE',
+    ]) {
+      expect(readEgressIdentity(recent, now, cached), cached).toMatchObject({
+        fresh: false,
+      });
+    }
+    for (const origin of ['DYNAMIC', 'MISS', 'EXPIRED', 'BYPASS']) {
+      expect(readEgressIdentity(recent, now, origin), origin).toMatchObject({
+        timestampSkewSeconds: -60,
+        fresh: true,
+      });
+    }
+  });
 });
