@@ -1,6 +1,14 @@
 // Jolpica egress measurement (AU-4 follow-up, live-test step L1).
 //
-//   node services/edge-api/scripts/jolpica-egress/measure.mjs --season 2026 [--summary <file>]
+//   node services/edge-api/scripts/jolpica-egress/measure.mjs --season 2026
+//     [--mode capture|calendar-once] [--summary <file>]
+//
+// `--mode calendar-once` (Cloudflare-to-Jolpica comparison, 2026-11-05) sends
+// exactly ONE request - the season calendar, the first request of a capture
+// and of every Worker run - and stops, whatever the answer. Its record carries
+// the same closed refusal facts and fingerprint the staging Worker records
+// (`refusal-facts.mjs`), so the two answers compare field by field. The
+// default `capture` mode is unchanged.
 //
 // Answers one question: is a GitHub-hosted runner refused by Jolpica the way
 // the staging Worker was (HTTP 429 after one or two requests on 2026-11-03 and
@@ -26,6 +34,14 @@
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+import {
+  classifyRefusalBody,
+  edgeColoOf,
+  refusalBodyLimitBytes,
+  refusalFactsOf,
+  refusalFingerprintOf,
+} from './refusal-facts.mjs';
+
 export const origin = 'https://api.jolpi.ca';
 export const userAgent =
   'GridView/1.0 (+https://github.com/SergioArenas98/GridView_App)';
@@ -33,7 +49,9 @@ export const userAgent =
 export const spacingMs = 2000;
 export const requestTimeoutMs = 10_000;
 export const maxResponseBytes = 2 * 1024 * 1024;
-export const refusalSampleBytes = 2048;
+/** As in the Worker, so a refusal's fingerprint compares. */
+export const refusalSampleBytes = refusalBodyLimitBytes;
+export const modes = ['capture', 'calendar-once'];
 export const maxRequests = 30;
 export const batchCaptureOffsetMs = 5 * 60 * 60 * 1000;
 
@@ -49,17 +67,22 @@ const seasonResources = [
 export function parseArguments(argv) {
   let season = null;
   let summary = null;
+  let mode = null;
   for (let i = 0; i < argv.length; i += 2) {
     const [name, value] = [argv[i], argv[i + 1]];
     if (value === undefined) throw new Error(`missing value for ${name}`);
     if (name === '--season' && season === null) season = Number(value);
     else if (name === '--summary' && summary === null) summary = value;
+    else if (name === '--mode' && mode === null) mode = value;
     else throw new Error(`unexpected argument ${name}`);
   }
   if (!Number.isSafeInteger(season) || season < 1950 || season > 2100) {
     throw new Error('--season must be a four-digit year');
   }
-  return { season, summary };
+  if (mode !== null && !modes.includes(mode)) {
+    throw new Error('--mode must be capture or calendar-once');
+  }
+  return { season, summary, mode: mode ?? 'capture' };
 }
 
 export function url(season, path) {
@@ -205,22 +228,40 @@ async function measureOne(transport, n, resource, target, clock) {
       failure: timedOut ? 'timeout' : 'network',
     };
   }
-  const facts = headerFacts(response.headers);
+  const facts = {
+    ...headerFacts(response.headers),
+    edgeColo: edgeColoOf(response.headers.get('cf-ray')) ?? null,
+  };
   if (response.status !== 200) {
-    let sample;
+    // Measured before the body is read, as the Worker measures it.
+    const durationMs = clock() - startedAt;
+    let sample = '';
+    let bytes = null;
+    let unreadable = false;
     try {
-      const { bytes } = await readAtMost(response, refusalSampleBytes);
-      sample = new TextDecoder().decode(bytes);
+      const read = await readAtMost(response, refusalSampleBytes);
+      bytes = read.truncated ? null : read.bytes;
+      sample = new TextDecoder().decode(read.bytes);
     } catch {
-      sample = '';
+      unreadable = true;
     }
+    const workerBody = unreadable
+      ? 'unreadable'
+      : classifyRefusalBody(
+          bytes === null ? null : new TextDecoder().decode(bytes),
+        );
     return {
       ...record,
       status: response.status,
-      durationMs: clock() - startedAt,
+      durationMs,
       ...facts,
       ...retryAfterFacts(response.headers.get('retry-after'), clock()),
       bodyClass: bodyClass(sample),
+      // The staging Worker's own vocabulary and fingerprint, for comparison.
+      worker: refusalFactsOf(response.headers, workerBody),
+      ...(unreadable
+        ? {}
+        : { fingerprint: refusalFingerprintOf(response.headers, bytes) }),
       failure: response.status === 429 ? 'rate-limited' : 'http-error',
     };
   }
@@ -280,14 +321,16 @@ const realSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 export async function measure({
   season,
+  mode = 'capture',
   transport,
   sleep = realSleep,
   clock = () => new Date(),
   emit = () => {},
 }) {
+  if (!modes.includes(mode)) throw new Error(`unknown mode ${mode}`);
   const startedAt = clock().toISOString();
   const records = [];
-  let planned = seasonResources.length;
+  let planned = mode === 'calendar-once' ? 1 : seasonResources.length;
   let outcome = null;
 
   const step = async (resource, target) => {
@@ -304,13 +347,20 @@ export async function measure({
     const visible = Object.fromEntries(
       Object.entries(record).filter(([key]) => key !== 'json'),
     );
+    if (resource === 'calendar' && record.failure === null) {
+      // A count only, never a row: shows the 200 was a real calendar.
+      const races = record.json?.MRData?.RaceTable?.Races;
+      visible.races = Array.isArray(races) ? races.length : null;
+    }
     records.push(visible);
     emit(visible);
     return record;
   };
 
   let calendar = null;
-  for (const [resource, path] of seasonResources) {
+  const resources =
+    mode === 'calendar-once' ? seasonResources.slice(0, 1) : seasonResources;
+  for (const [resource, path] of resources) {
     const record = await step(resource, url(season, path));
     if (record.failure) {
       outcome = record.failure;
@@ -318,7 +368,7 @@ export async function measure({
     }
     if (resource === 'calendar') calendar = record.json;
   }
-  if (outcome === null) {
+  if (outcome === null && mode === 'capture') {
     const rounds = eligibleRounds(calendar, clock());
     if (rounds === null) outcome = 'calendar-unusable';
     else {
@@ -339,6 +389,7 @@ export async function measure({
   const refused = records.find((r) => r.failure !== null) ?? null;
   return {
     verdict: outcome === null ? 'all-200' : outcome,
+    mode,
     season,
     planned,
     requestsSent: records.length,
@@ -361,18 +412,28 @@ export function summaryMarkdown(result) {
   const lines = [
     '## Jolpica egress measurement (L1)',
     '',
-    `**Verdict: \`${result.verdict}\`**: ${result.okResponses} × 200 of ${result.requestsSent} sent (${result.planned} planned), ${result.spacingMs} ms apart.`,
+    `**Verdict: \`${result.verdict}\`** (mode \`${result.mode}\`): ${result.okResponses} × 200 of ${result.requestsSent} sent (${result.planned} planned), ${result.spacingMs} ms apart.`,
     '',
     `Started ${result.startedAt}, ended ${result.endedAt}. User-Agent \`${result.userAgent}\`.`,
     '',
-    '| # | Resource | Status | ms | Bytes | cf-cache-status | cf-ray | Retry-After | Body class |',
-    '|---|---|---|---|---|---|---|---|---|',
+    '| # | Resource | Status | ms | Bytes | Races | cf-cache-status | cf-ray | Retry-After | Body class |',
+    '|---|---|---|---|---|---|---|---|---|---|',
     ...result.records.map(
       (r) =>
-        `| ${r.n} | ${r.resource} | ${r.status ?? r.failure} | ${r.durationMs} | ${r.bytes ?? ''} | ${r.cfCacheStatus ?? ''} | ${r.cfRay ?? ''} | ${r.retryAfterRaw ?? ''} | ${r.bodyClass ?? ''} |`,
+        `| ${r.n} | ${r.resource} | ${r.status ?? r.failure} | ${r.durationMs} | ${r.bytes ?? ''} | ${r.races ?? ''} | ${r.cfCacheStatus ?? ''} | ${r.cfRay ?? ''} | ${r.retryAfterRaw ?? ''} | ${r.bodyClass ?? ''} |`,
     ),
     '',
   ];
+  for (const r of result.records.filter((record) => record.worker)) {
+    const f = r.fingerprint;
+    lines.push(
+      `Refusal ${r.n} (Worker vocabulary): layer \`${r.worker.providerRefusalLayer}\`, body \`${r.worker.providerRefusalBody}\`, media \`${r.worker.providerBodyMedia}\`, Retry-After \`${r.worker.providerRetryAfterForm}\`, cache \`${r.worker.providerCacheStatus}\`.`,
+      f
+        ? `Fingerprint ${r.n}: title \`${f.title}\`, ${f.bodyBytes ?? 'oversize'} B, sha256 \`${f.bodySha256 ?? ''}\`, header marks \`${f.headerMarks.join(',')}\`, ${f.otherHeaders} other header name(s).`
+        : `Fingerprint ${r.n}: body unreadable.`,
+      '',
+    );
+  }
   return lines.join('\n');
 }
 
@@ -391,6 +452,7 @@ if (invokedDirectly) {
   try {
     const result = await measure({
       season: options.season,
+      mode: options.mode,
       transport: (target, init) => fetch(target, init),
       emit: (record) => process.stdout.write(`${JSON.stringify(record)}\n`),
     });
