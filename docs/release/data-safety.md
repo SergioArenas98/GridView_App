@@ -42,6 +42,12 @@ draft, R5 including Crash logs, R8 for Firebase Sessions, and R2
 conditionally, with confirmation of the complete processing scope still
 open. R9, R6's remediation and the geographic-address question (§6.1) stay
 unresolved.
+On 2026-11-05 (master `d2d6df9`) two sections were brought up to date
+without changing any answer. §3.4 records a re-check of the API's logging
+since W3. §3.6 and §4.1 record the read-only AdMob inspection of
+2026-11-04, which found the 1.x AdMob account and its units. The open
+review questions and their evidence are collected for the reviewer in
+`privacy-review-packet.md`.
 
 ## 1. Why the current declaration must change
 
@@ -242,6 +248,22 @@ include this answer.
   wording separately on 2026-10-23 (AU-D3).
 - The AU-7 deploy replaces that version, so AU-7 repeats both checks on its
   own version.
+- **Re-checked in the code on 2026-11-05 at master `d2d6df9`** (no live
+  check):
+  - `src/logging/request-log.ts` is unchanged since W3's `8347adf`, so
+    public requests still write no line.
+  - Since then, the only new log lines come from two staging-only operator
+    routes (`provider.egress_identity`, `provider.calendar_single_get`).
+  - The existing provider lines gained bounded fields about Jolpica's
+    answers: cache status, colo, ray, and a fingerprint of a `429`
+    (header names from a fixed list, a title class, a body length and
+    digest).
+  - Those lines are written only in operator or scheduled runs, never for an
+    app request, and carry no client value.
+  - Workers Traces, which would record each request, are pinned off for
+    staging and production in `wrangler.toml` (PR #101; live as
+    `enabled: false` since W3).
+  - Nothing in R2 or R8 changes.
 - If production ever persists an IP address, a header, a public request's
   ID or a line per public request, revisit this section and §3.2 (R2, R8).
 
@@ -532,7 +554,8 @@ app is uninstalled.
 2026-10-23: archive the 1.x ad units before automatic production publication,
 AU-7, accepting that it irreversibly ends 1.x ad revenue). The archiving
 itself is a separate AdMob operation. It has not been done, and no AdMob
-change was made:
+change was made. The current state of the account is in the read-only
+inspection below:
 
 - **Archive (remove) the 1.x ad units in AdMob.** Google's AdMob blog,
   *Archiving ad units* (2017-01-12), says "all ad serving and settings
@@ -578,18 +601,44 @@ AdMob app ID `ca-app-pub-4763306780710624~5227286262`.
   were never inspected. No track serves them now, but a device that never
   updated could still run one. Any unit they use appears in AdMob under the
   same app, so step 3 below finds it.
-- **Account needed.** The Google account that owns, or has been given a
-  role in, the AdMob account for `pub-4763306780710624`. On 2026-10-22 both
-  Google accounts signed in to Chrome (the Play Console account and the
-  other default account) landed on AdMob's sign-up page, so neither has
-  access. On 2026-11-04 the browser could not be reached, so that was not
-  re-checked. No record names the owning account. The Play listing's
-  contact address is only a candidate. **Do not sign up** from another
-  account: that creates a second, empty AdMob account, not access to this
-  one. If the owning account cannot be used directly, its owner can add an
-  existing account under AdMob's user management, with a role that can edit
-  ad units (check AdMob's current help for the role names).
-- **Verification (read-only, before the archive):**
+- **Account: found on 2026-11-04 (evening).** The AdMob account for
+  `pub-4763306780710624` is held by the contact address,
+  gridviewapp1@gmail.com. The Play Console account (sejuma18@gmail.com)
+  holds a different, empty AdMob account (`pub-3203861803458300`, no apps,
+  no requests), which is not GridView 1.x's. **Do not sign up** from another
+  account: that creates a further, empty account.
+**Read-only inspection, 2026-11-04 (evening).** Nothing was requested,
+archived, created or saved; the "Request review" link was not used.
+Screenshots and notes are kept outside the repository with SHA-256 sums
+(`privacy-review-packet.md`, evidence E9).
+
+| Check | Found |
+|---|---|
+| 1. Publisher ID | `pub-4763306780710624`. Status open; a "your account is being verified" notice; payments not set up |
+| 2. App | One app: GridView, Android, `ca-app-pub-4763306780710624~5227286262`, linked to `com.sejuma.gridview`. Approval status "needs review", with **limited ad serving** |
+| 3. Ad units | **Seven active units, exactly versionCode 7's seven** (all banners). `8806674289` (versionCode 2's "Calendar Native") is **already retired**, so seven units remain to archive, not eight. The retirement date was not shown. No extra unit |
+| 4. Other apps, mediation | No other app. Six of the seven units are each in one active mediation group, which archiving changes; `9753702098` is in none |
+| 5. Reports (all time, data from 2025-03-02 to 2026-10-02) | 49,983 requests, 1,607 matched, **594 impressions**, estimated revenue US$0.19. Regular serving ended in July 2025; the **last impression was on 2026-03-31**. Requests from GridView versions with SDK 23.6.0 are recorded until 2026-10-02 (a few a day), and no row exists after that date |
+
+**Reading.**
+- Ads are, in practice, no longer shown to installed 1.x copies: the last
+  impression was on 2026-03-31, and the app's serving is limited.
+- The SDK still asks for them. The absence of report rows after 2026-10-02
+  is not evidence that installed copies stopped requesting.
+- That fits Google's inactivity rule, under which an account that serves no
+  ads for six months is deactivated, and serving does not resume without a
+  per-app review (AdMob help 10491752, saved 2026-11-04). The deactivation
+  date itself was not seen; it is inferred as early October 2026.
+- **Not explained:** from March 2026 the reports show about 46,700 requests
+  labelled app version "1.56.4" or no version, with no SDK version and no
+  impressions. No GridView release is 1.56.4, and the source is not
+  identified. It is recorded here, not attributed.
+- **For D-A:** archiving the seven active units still ends serving with
+  certainty, whatever the account's state. Not requesting the review keeps
+  serving off while the units exist. Which of the two the owner treats as
+  the AU-7 gate is decision D-A′ (`privacy-review-packet.md`, section 4).
+
+- **Verification before the archive (repeat steps 3 to 5 on the day):**
   1. Account information shows publisher ID `pub-4763306780710624`.
   2. Apps: the GridView Android app shows app ID
      `ca-app-pub-4763306780710624~5227286262`. Record its store link, if
@@ -641,7 +690,7 @@ not decide R6's remediation or whether the geographic-address rules apply
 | # | Decision | Consequence |
 |---|---|---|
 | R4 | Not a decision: collection is **required**, because no in-app switch exists | No change needed. Making it optional would need a switch, a product change |
-| R6, D-A | **2026-10-23: archive the 1.x ad units in AdMob** (§3.6) before automatic production publication (AU-7, `automatic-updates.md` AU-D2). The irreversible end of 1.x ad revenue is accepted | Once archived, ads stop being served to installed copies. The SDK's requests and the Firebase registration continue until update or uninstall. The archiving is a separate AdMob operation, not done yet. Whoever holds publisher `pub-4763306780710624` must first check that the units belong only to 1.x; that account was not reachable from either Google account signed in to Chrome on 2026-10-22. Whether anything more is needed for the ads served without a consent message stays with the review (R6) |
+| R6, D-A | **2026-10-23: archive the 1.x ad units in AdMob** (§3.6) before automatic production publication (AU-7, `automatic-updates.md` AU-D2). The irreversible end of 1.x ad revenue is accepted | Once archived, ads stop being served to installed copies. The SDK's requests and the Firebase registration continue until update or uninstall. The archiving is a separate AdMob operation, not done yet. The account was found on 2026-11-04 (gridviewapp1@gmail.com). Seven active units remain, all versionCode 7's; `8806674289` is already retired. Serving is limited, and the last impression was on 2026-03-31 (§3.6). Whether anything more is needed for the ads served without a consent message stays with the review (R6) |
 | D-DEL | **2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality | Data safety answers No to deletion. The policy says no verified procedure exists and one installation's data cannot be found or deleted. The remaining privacy obligations stay with the review |
 | C4 | **2026-10-23: email (gridviewapp1@gmail.com) stays the only contact channel** | No policy change. Whether a geographic address is required by rules outside the privacy notice stays open for the review (§6.1) |
 | AU-D3 | **2026-10-23: accept the policy's current wording** on the API (sections 2 and 3.2): no record of the app's normal requests, and a 7-day technical record of the API's own internal errors | No policy change. It accepts the wording only; the classification behind it is R2 and R8. W3's log check stands, and AU-7 repeats it on its own version |
