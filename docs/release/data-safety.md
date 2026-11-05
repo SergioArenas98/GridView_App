@@ -59,8 +59,9 @@ Later on 2026-11-05 the owner recorded D-T1 (versionCode 7 is not
 retained), D-T2 (the Alpha track is paused as part of the release plan)
 and Ireland as the intended Play listing country, and kept D-A: the seven
 active ad units are archived once the AdMob account's verification clears
-(§1.4, §3.6, §4.1, §6.2). The owner paused Alpha that day (§1.2); the other
-steps remain pending. No privacy answer changed.
+(§1.4, §3.6, §4.1, §6.2). The owner paused Alpha (§1.2) and removed the seven
+remaining AdMob units that day (§3.6). The country change and release steps
+remain pending. The Data safety draft still covers the 1.2.1 SDKs.
 Also on 2026-11-05 the owner decided that no external legal or privacy
 review will be commissioned, that 2.0.0 keeps Crashlytics and Performance
 Monitoring, and that it ships no push notifications. The open items are
@@ -609,29 +610,17 @@ only when it updates to 2.0.0 or the app is uninstalled. Devices on API 21
 to 23 cannot update (2.0.0 has minSdk 24), so they keep requesting until the
 app is uninstalled.
 
-**What will stop ad serving** (owner decision **D-A**, accepted on
-2026-10-23: archive the 1.x ad units before automatic production publication,
-AU-7, accepting that it irreversibly ends 1.x ad revenue). The archiving
-itself is a separate AdMob operation. It has not been done, and no AdMob
-change was made. The current state of the account is in the read-only
-inspection below:
+**Ad serving stopped for the known units (D-A, done 2026-11-05).** The
+owner reported that AdMob verification cleared, then removed the seven
+remaining GridView ad units. The owner's screenshot shows AdMob's
+confirmation that seven units were removed and an empty GridView ad-unit
+list (screenshot SHA-256: `16aeaf090ec4a2d3ae2cbb4bb5deffc4411ea569360b185a118c71b84a747e9f`; the image is not committed).
+The eighth known unit had already been retired. [AdMob Help](https://support.google.com/admob/answer/3125713)
+explains that removal disables serving for the affected units. The
+operation does not remove the SDK or show that old copies stopped sending
+requests. This completes the AdMob action required before AU-7.
 
-- **Archive (remove) the 1.x ad units in AdMob.** Google's AdMob blog,
-  *Archiving ad units* (2017-01-12), says "all ad serving and settings
-  associated with the ad unit will be disabled". It is permanent, and Google
-  recommends it for "legacy apps" that cannot be updated. The current AdMob
-  interface may call it "remove", so check the current help before acting.
-- **Before archiving**, check in AdMob (read-only) that these units belong
-  only to GridView 1.x and that no other app uses them (the steps are in
-  the D-A inventory below).
-- **Effect:** banners stop showing, and 1.x ad revenue ends. 2.0.0 contains
-  no ads code, so it is not affected.
-- **What it does not do:** the SDK still initializes and still sends
-  requests. The sources read do not say whether requests for an archived
-  unit still reach Google, or what they carry. Archiving limits ad serving.
-  It does not end data flow to Google; only the update or uninstall does.
-
-**D-A inventory: the units to archive (read 2026-11-04, nothing changed).**
+**D-A inventory before removal (read 2026-11-04).**
 All eight belong to publisher `pub-4763306780710624` and were shipped with
 AdMob app ID `ca-app-pub-4763306780710624~5227286262`.
 
@@ -692,32 +681,9 @@ Screenshots and notes are kept outside the repository with SHA-256 sums
   labelled app version "1.56.4" or no version, with no SDK version and no
   impressions. No GridView release is 1.56.4, and the source is not
   identified. It is recorded here, not attributed.
-- **For D-A:** archiving the seven active units still ends serving with
-  certainty, whatever the account's state. Not requesting the review keeps
-  serving off while the units exist. Which of the two is the AU-7 gate
-  was decision D-A′ (`privacy-review-packet.md`, section 4). **Decided by
-  the owner on 2026-11-05: keep D-A.** The seven active units are archived
-  once the account's verification notice clears; D-A′ is not adopted.
-  The archive still needs the go-ahead in step 6 below.
-
-- **Verification before the archive (repeat steps 3 to 5 on the day):**
-  1. Account information shows publisher ID `pub-4763306780710624`.
-  2. Apps: the GridView Android app shows app ID
-     `ca-app-pub-4763306780710624~5227286262`. Record its store link, if
-     any (`com.sejuma.gridview`).
-  3. That app's ad units: record each one's name, ID and format. All eight
-     IDs above must be there. Record any extra unit and bring it to the
-     owner before acting: it is GridView's (2.0.0 has no ads), but the
-     owner's D-A covered the units known then.
-  4. No other app in the account lists any of the eight. Any mediation
-     group naming one is recorded, since removing the unit changes the
-     group.
-  5. Reports, by ad unit, over the last 28 days: record requests and
-     impressions per unit as the before-state. Units with no traffic are
-     still archived.
-  6. Save the screenshots or exports in a dated evidence folder. Only then,
-     with the owner's separate go-ahead, archive (remove) the units one by
-     one. Afterwards, re-read the ad-unit list and record each unit's state.
+- The owner confirmed D-A on 2026-11-05 and removed the seven remaining
+  units that day. The alternative D-A′ was not used. The historical
+  observations above predate the removal.
 
 The Ads declaration still follows distribution, not serving. State F (Ads
 **No**) waits until no 1.x artifact is distributed (§1.3), whether or not
@@ -737,7 +703,7 @@ the units are archived.
 | R3 | Deletion-request answer | **Settled on the facts, 2026-10-22: no verified procedure exists.** Official Firebase documentation (read 2026-10-22) gives two routes. **(a) Delete the installation** by its Firebase installation ID, in the app (`FirebaseInstallations.delete()`) or on a server (Admin SDK `deleteInstallation(fid)`). The data tied to that ID is then removed "from live and backup systems of all Firebase services" within 180 days. **(b) Crashlytics `deleteCrashReports`** works only by a user ID set with the Crashlytics SDK. GridView sets none (`lib/core/observability/firebase/firebase_observability.dart`), so (b) cannot be used. Route (a) needs the installation ID, and the app shows it to nobody. A user's description of a crash (time, device model) does not yield it, and no console route from a crash to its installation ID was found or verified. Route (a)'s 180 days are longer than Crashlytics' 90-day and Performance Monitoring's 60- and 30-day retention, so for those it is no faster than expiry. It would remove the installation ID itself, which Firebase otherwise keeps until deleted. **Done:** the policy no longer promises deletion ("or until they are deleted at your request" is removed from section 6). It says one installation's Firebase data cannot currently be found or deleted. **Data safety:** answer **No**. **Owner decision D-DEL, decided 2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality. The answer stays No, and the policy keeps saying that no verified procedure exists and one installation's data cannot be found or deleted. A control that calls `FirebaseInstallations.delete()` stays possible as a later product change. The remaining privacy obligations, such as how an erasure request is answered without a procedure, stay with the review. GridView has no accounts, so Play's separate account-deletion requirement does not apply. |
 | R4 | Is the data collection optional? | **Required. A technical fact, not a classification:** no in-app switch exists, so the user cannot turn collection off. Adding one would be a product change. |
 | R5 | The 1.x rows of states 0 and T (§3.5) | **Accepted by the owner (recorded 2026-11-02):** declare them as listed, including the 1.x **Crash logs** row (collected, shared; advertising, analytics and fraud prevention). **Evidence (§3.5):** two Internet Archive captures of Google's disclosure, taken while 23.6.0 was the latest release, say they cover version 23.6.0. Their "Diagnostic information" names crash logs, which Play's definitions place under Crash logs, and the rest under Diagnostics. **Limits:** archived copies of Google's published statement about its SDK, not observed 1.x traffic. Nothing contradicts them, so no traffic capture is required. |
-| R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7 and pausing the Alpha track, both decided by the owner on 2026-11-05) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). The owner decided on 2026-10-23 to archive the 1.x ad units in AdMob before AU-7 (D-A, §3.6). That will stop ads being served to installed copies, but not the SDK's requests. The archiving is a separate AdMob step and has not been done. |
+| R6 | 1.x can request ads with **no consent message** | The draft discloses the absence of the prompt. D-A is done: the owner removed the seven remaining AdMob units on 2026-11-05 (§3.6). Removal stops serving from those units. It does not modify installed copies or resolve any earlier processing. The planned 2.0.0 update removes the advertising SDK. |
 | R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. **C4, decided 2026-10-23:** email stays the only contact channel (§6.1). One owner step remains: the Play listing still says Spain; on 2026-11-05 the owner recorded Ireland as the intended country (§6.2). Whether rules outside the privacy notice require a geographic address stays open for the review (§6.1). |
 | R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions: accepted by the owner (recorded 2026-11-02), declare App interactions.** Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines (not part of that acceptance, §4.1):** the Worker-written fields do not require a separate row. W3 observed no event for the ordinary public requests tested. No stored error was available to inspect, and the owner chose not to run a separate test. The draft answer is limited to the fields GridView writes (§3.4). |
 | R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Partially resolved.** The owner accepted the draft purpose for 1.2.1; legal basis and remediation remain open (`privacy-self-assessment.md` Q1a-Q1c). No external review is planned. **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent. Separately, the Firebase console (read 2026-10-22) shows no campaign ever created in `gridview-fb20f` and no message in the last 90 days; it cannot show API sends or older reports. The emulator observed automatic Messaging registration on versionCode 7 but did not capture transmitted data; the SDK documentation describes the identifier and configuration upload. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. **Updated 2026-11-05:** Firebase's Data safety guidance states that purpose for the SDK's data ("to send messages to the client app"), and Play requires SDK collection to be reflected, so the owner accepted Developer communications for the 1.2.1 draft's collection purpose only. GridView never sent notifications. Play does not explicitly address this case. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy draft states the facts about the missing consent prompt, not a legal basis. Do not treat the factual wording as resolving this item or approving publication. See §4.2 for the questions and the possible outcomes. |
@@ -757,7 +723,7 @@ not decide R6's remediation or whether the geographic-address rules apply
 | # | Decision | Consequence |
 |---|---|---|
 | R4 | Not a decision: collection is **required**, because no in-app switch exists | No change needed. Making it optional would need a switch, a product change |
-| R6, D-A | **2026-10-23: archive the 1.x ad units in AdMob** (§3.6) before automatic production publication (AU-7, `automatic-updates.md` AU-D2). The irreversible end of 1.x ad revenue is accepted | Once archived, ads stop being served to installed copies. The SDK's requests and the Firebase registration continue until update or uninstall. The archiving is a separate AdMob operation, not done yet. The account was found on 2026-11-04 (gridviewapp1@gmail.com). Seven active units remain, all versionCode 7's; `8806674289` is already retired. Serving is limited, and the last impression was on 2026-03-31 (§3.6). **Confirmed 2026-11-05:** archive the seven once the account's verification clears; D-A′ is not adopted. Whether anything more is needed for the ads served without a consent message stays with the review (R6) |
+| R6, D-A | **Done 2026-11-05:** the owner removed the seven remaining 1.x AdMob units (§3.6), as required before AU-7. The eighth was already retired | The known units no longer serve ads. Installed 1.x copies can still make requests. Removal does not establish that the earlier processing was permitted |
 | D-DEL | **2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality | Data safety answers No to deletion. The policy says no verified procedure exists and one installation's data cannot be found or deleted. The remaining privacy obligations stay with the review |
 | D-T1 | **2026-11-05: versionCode 7 is not retained** in the 2.0.0 release (§1.4 step 4) | New installs on API 21 to 23 are no longer offered; installed 1.2.1 copies stay covered by policy section 3.4. The release step is separate, not done |
 | D-T2 | **Done 2026-11-05: the owner paused the closed "Alpha" track** (versionCode 2); Play Console shows the track inactive (§1.2) | Ends Alpha distribution. Existing Alpha installs keep 1.0.0, and Production still serves 1.2.1 |
@@ -774,7 +740,7 @@ not decide R6's remediation or whether the geographic-address rules apply
 | R2 | **Conditionally accepted (recorded 2026-11-02); complete scope still open.** The Worker does not store the IP; Cloudflare's full processing is not verified (§3.2, §3.4) | Holds only once that scope is confirmed, and while the deployed Worker's logs pass the check (W3 done; AU-7 repeats it) |
 | | If the scope is not confirmed | The review decides what changes. Approximate location is already declared as not ephemeral as a whole, because of Firebase's part (§3.2) |
 | R8, API lines | No separate row for the Worker-written fields in the draft (§3.4). The owner declined a separate error test on 2026-11-05 | Cloudflare-added fields were not verified. This records the draft scope, not a statement about all Cloudflare processing or approval to submit |
-| R6 | Whether more than disclosure and D-A is needed for the 1.x ads served without a consent message. Unresolved | The review decides (§4) |
+| R6 | Ad serving mitigation completed (D-A). The draft discloses that 1.x can still request ads without the consent prompt | 2.0.0 removes the SDK on upgrade. Any unresolved question about past or remaining processing is distinct from the completed removal |
 | §6.1 | Whether a geographic address is required by rules outside the privacy notice. Unresolved | The review decides (§6.1) |
 | R9 | The owner accepted Developer communications for collection only in the 1.2.1 draft. Legal basis and remediation remain open (§4.2; `privacy-self-assessment.md` Q1a-Q1c) | The policy and form submission remain pending |
 

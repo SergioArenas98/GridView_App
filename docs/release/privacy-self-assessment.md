@@ -229,7 +229,10 @@ factual wording alone does not close Q1b or approve publication.
 | Delete the 1.x registrations and installation IDs | Not possible on the current facts: GridView never stored any identifier, and deletion needs the installation ID (`data-safety.md` R3). FCM expires a registration unused for 270 days; that covers uninstalled and abandoned copies only |
 | A 1.x update for API 21-23 that removes the SDKs | The only route to devices that cannot install 2.0.0. The imported tree is not the 1.x build source (`data-safety.md` §3.5), it contradicts D-T1, and it keeps a 1.x build distributed. Not recommended |
 
-**Status:** open; no measure beyond releasing 2.0.0 is proposed.
+**Mitigation recorded:** pause Alpha (done), do not retain versionCode 7 in
+Production after the 2.0.0 rollout, and remove Messaging on upgrade. There
+is no additional test or Firebase setting change planned. Existing 1.x
+copies may still register; this does not close Q1b.
 
 ### Q2. R2, the complete processing scope of the API's IP handling
 
@@ -264,17 +267,13 @@ or approve submission.
 
 ### Q4. R6, 1.x ads requested with no consent message
 
-**Exact question:** 1.x requested ads with no consent message. Is anything
-more needed than the policy's disclosure and archiving the ad units (D-A)?
-
-**Can it be supported? No.** The same Article 5(3) reasoning as Q1b applies
-to the ads SDK, and 1.x never showed the consent form it packaged
-(`data-safety.md` §3.5). The draft discloses this plainly and claims no
-consent (policy sections 3.4 and 4).
-
-Options: disclosure plus D-A (already decided, not done); disclosure plus D-A
-and the fastest practical 2.0.0 rollout; a 1.x update for API 21-23 (as in
-Q1c, not recommended). **Status:** open.
+**Mitigation done:** on 2026-11-05 the owner removed the seven remaining
+GridView AdMob units and supplied a screenshot confirming the removal
+(`data-safety.md` §3.6). The draft discloses that 1.x did not show a consent
+prompt and installed copies may still request ads. The 2.0.0 upgrade removes
+the SDK. Removal neither changes installed code nor validates past or
+continuing processing. Keep the 1.x disclosures while that version remains
+in distribution.
 
 ### Q5. §6.1, a geographic address
 
@@ -292,12 +291,10 @@ status recorded; the separate address question remains open.
 
 ### Q6. The policy's wording on 1.x ads
 
-**Exact question:** Should the policy describe ad requests as well as
-display, now that serving has effectively ended?
-
-**Supported:** yes. The draft now says 1.x "request advertising banners …
-and show them when Google serves one", and that installed copies "still
-request them". **Status:** drafted; accepted with the policy text.
+**Draft text updated:** the policy records the date the remaining units
+were removed and distinguishes ad serving from the requests that installed
+1.x copies can still make. No additional evidence collection is planned
+for this wording.
 
 ## 6. Does changing the order of legacy retirement help?
 
@@ -320,14 +317,14 @@ Two obligations behave differently:
 **Conclusion:** reordering cannot answer the legal-basis questions. It can
 avoid the Data safety purpose question only by leaving a known-inaccurate
 form live (O2). What actually reduces the processing is releasing 2.0.0, the
-D-A archive, and the Alpha pause already completed.
+completed D-A removal, and the completed Alpha pause.
 
 ## 7. What waits on each decision
 
 | Step | Waits on |
 |---|---|
-| P2, publish the policy | Q1b, Q4, Q5, Q6 decided; the draft text accepted |
+| P2, publish the policy | Draft text ready for review. The basis for legacy registration (Q1b) and any separate address duty (Q5) are not established. AdMob removal is recorded; it does not resolve any consent or legal-basis question for past or remaining legacy requests (Q4). Publication remains separate |
 | P0, state 0 | P2 and submission approval; Q1a is recorded for the draft |
-| P3, state T | P2; Q2 and Q3 decided; submission approval |
-| R7, state F | R6, D-T1, Alpha paused; Q2 and Q3 decided |
+| P3, state T | P2 and submission approval; retain the Q2 scope limit and Q3 draft answer. No separate error test is planned |
+| R7, state F | 100% rollout, D-T1 and no 1.x artifact distributed on a non-internal track. Alpha is already paused. Apply the Q2/Q3 scope limits |
 | PR #82 merge, A0 privacy item | Every item in §5 decided and recorded in `data-safety.md` §4.1 |

@@ -122,10 +122,12 @@ Versions 1.x work differently from version 2.0.0. They contain no Firebase
 Crashlytics or Performance Monitoring, and section 3.3 does not apply to them.
 Instead:
 
-- **Advertising (Google AdMob).** Versions 1.x request advertising banners
-  through the **Google Mobile Ads SDK**, which starts when the app opens, and
-  show them when Google serves one. Google
-  collects and receives, through that SDK:
+- **Advertising (Google AdMob).** Versions 1.x can still request banners
+  through the **Google Mobile Ads SDK**, which starts when the app opens.
+  On 5 November 2026 we removed the remaining GridView ad units in AdMob, so
+  those units no longer serve ads. Removing the units does not remove the SDK
+  from installed copies or stop those copies from making requests. The SDK
+  can collect and send Google:
   - your device's **IP address**, from which an approximate location can be
     derived;
   - **app interactions** such as app launches, taps and ad views;
