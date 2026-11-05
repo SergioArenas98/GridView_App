@@ -299,6 +299,143 @@ describe('measurement: the first refusal ends the run, nothing is retried', () =
   });
 });
 
+describe('measurement: calendar-once sends exactly one GET', () => {
+  it('sends only the calendar, identified, and records its colo and race count', async () => {
+    const { transport, calls } = jolpica();
+    const sleep = vi.fn(async () => {});
+    const emitted = [];
+    const result = await measure({
+      season: 2026,
+      mode: 'calendar-once',
+      transport,
+      sleep,
+      clock,
+      emit: (record) => emitted.push(record),
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].target).toBe(
+      'https://api.jolpi.ca/ergast/f1/2026/races/?limit=100',
+    );
+    expect(calls[0].target).toBe(urls.calendar);
+    expect(calls[0].init).toMatchObject({
+      method: 'GET',
+      redirect: 'manual',
+      headers: { Accept: 'application/json', 'User-Agent': userAgent },
+    });
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      verdict: 'all-200',
+      mode: 'calendar-once',
+      planned: 1,
+      requestsSent: 1,
+      okResponses: 1,
+      firstRefusal: null,
+    });
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      resource: 'calendar',
+      status: 200,
+      edgeColo: 'DUB',
+      cfCacheStatus: 'HIT',
+    });
+    expect(Number.isInteger(emitted[0].races)).toBe(true);
+    expect(emitted[0].races).toBeGreaterThan(0);
+    expect(JSON.stringify(result)).not.toContain('MRData');
+  });
+
+  it('stops after a 429 too, and records it in the Worker vocabulary with a fingerprint', async () => {
+    const html =
+      '<!DOCTYPE html><html><head><title>429 Too Many Requests</title></head><body>Too Many Requests</body></html>';
+    const { transport, calls } = jolpica(() =>
+      refusal(429, html, {
+        'content-type': 'text/html',
+        'cf-ray': 'a55adea84dba9d4b-DUB',
+        'cf-cache-status': 'BYPASS',
+        'x-amzn-requestid': 'secret-value-never-logged',
+        'x-unlisted-thing': 'also-never-logged',
+      }),
+    );
+    const result = await measure({
+      season: 2026,
+      mode: 'calendar-once',
+      transport,
+      sleep: noSleep,
+      clock,
+    });
+    expect(calls).toHaveLength(1);
+    expect(result.verdict).toBe('rate-limited');
+    const [record] = result.records;
+    expect(record.worker).toEqual({
+      providerCacheStatus: 'BYPASS',
+      providerEdgeColo: 'DUB',
+      providerRefusalLayer: 'unknown',
+      providerRefusalBody: 'other',
+      providerRetryAfterForm: 'absent',
+      providerServer: 'cloudflare',
+      providerBodyMedia: 'html',
+      providerRay: 'a55adea84dba9d4b-DUB',
+    });
+    expect(record.fingerprint).toEqual({
+      headerMarks: [
+        'cf-cache-status',
+        'cf-ray',
+        'content-type',
+        'server',
+        'x-amzn-*',
+      ],
+      otherHeaders: 1,
+      bodyBytes: new TextEncoder().encode(html).byteLength,
+      bodySha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      title: 'too-many-requests',
+    });
+    const text = JSON.stringify(result) + summaryMarkdown(result);
+    expect(text).not.toMatch(
+      /Too Many Requests|secret-value|also-never|x-unlisted/,
+    );
+    expect(summaryMarkdown(result)).toContain('title `too-many-requests`');
+  });
+
+  it('treats a refusal body over 4 KiB as oversize, as the Worker does', async () => {
+    const { transport } = jolpica(() =>
+      refusal(429, 'x'.repeat(4097), { 'content-type': 'text/html' }),
+    );
+    const result = await measure({
+      season: 2026,
+      mode: 'calendar-once',
+      transport,
+      sleep: noSleep,
+      clock,
+    });
+    expect(result.records[0].worker.providerRefusalBody).toBe('oversize');
+    expect(result.records[0].fingerprint).toMatchObject({
+      bodyBytes: null,
+      bodySha256: null,
+      title: 'absent',
+    });
+  });
+
+  it('sends one request and nothing more on a network failure', async () => {
+    const { transport, calls } = jolpica(() => new TypeError('fetch failed'));
+    const result = await measure({
+      season: 2026,
+      mode: 'calendar-once',
+      transport,
+      sleep: noSleep,
+      clock,
+    });
+    expect(calls).toHaveLength(1);
+    expect(result).toMatchObject({ verdict: 'network', requestsSent: 1 });
+  });
+
+  it('refuses an unknown mode before sending anything', async () => {
+    const { transport, calls } = jolpica();
+    await expect(
+      measure({ season: 2026, mode: 'calendar-twice', transport, clock }),
+    ).rejects.toThrow();
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe('measurement: helpers', () => {
   it('uses the batch capture rule for rounds (race start + 5 h)', () => {
     const calendar = {
@@ -358,11 +495,28 @@ describe('measurement: helpers', () => {
     expect(bodyClass('Too Many Requests')).toBe('other');
   });
 
-  it('accepts only --season and --summary', () => {
+  it('accepts only --season, --summary and --mode', () => {
     expect(parseArguments(['--season', '2026'])).toEqual({
       season: 2026,
       summary: null,
+      mode: 'capture',
     });
+    expect(
+      parseArguments(['--season', '2026', '--mode', 'calendar-once']),
+    ).toEqual({ season: 2026, summary: null, mode: 'calendar-once' });
+    expect(() =>
+      parseArguments(['--season', '2026', '--mode', 'calendar-twice']),
+    ).toThrow();
+    expect(() =>
+      parseArguments([
+        '--season',
+        '2026',
+        '--mode',
+        'capture',
+        '--mode',
+        'capture',
+      ]),
+    ).toThrow();
     expect(() => parseArguments([])).toThrow();
     expect(() =>
       parseArguments(['--season', '2026', '--retry', '3']),
@@ -387,7 +541,7 @@ describe('the workflow', () => {
   it('can only be dispatched by hand, on master, with the confirmation', () => {
     expect(Object.keys(doc.on)).toEqual(['workflow_dispatch']);
     expect(job.if).toBe(
-      "github.ref == 'refs/heads/master' && inputs.confirm == 'measure-once'",
+      "github.ref == 'refs/heads/master' && (inputs.confirm == 'measure-once' || inputs.confirm == 'calendar-once')",
     );
     expect(doc.concurrency).toEqual({
       group: 'jolpica-egress-measure',
@@ -410,19 +564,31 @@ describe('the workflow', () => {
     for (const use of uses)
       expect(use).toMatch(/^actions\/(checkout|setup-node)@[0-9a-f]{40}$/);
     const runs = job.steps.filter((s) => s.run).map((s) => s.run.trim());
+    // The mode is one of two literals chosen by the typed confirmation; no
+    // input text reaches the command line.
     expect(runs).toEqual([
-      'node services/edge-api/scripts/jolpica-egress/measure.mjs --season 2026 --summary "$GITHUB_STEP_SUMMARY"',
+      "node services/edge-api/scripts/jolpica-egress/measure.mjs --season 2026 --mode ${{ inputs.confirm == 'calendar-once' && 'calendar-once' || 'capture' }} --summary \"$GITHUB_STEP_SUMMARY\"",
     ]);
   });
 });
 
 describe('the measurement stays self-contained', () => {
-  it('imports only Node built-ins', () => {
-    const source = readFileSync(script, 'utf8');
-    const imports = [...source.matchAll(/^import .* from '([^']+)';$/gm)].map(
+  const importsOf = (source) =>
+    [...source.matchAll(/^import [\s\S]*? from '([^']+)';$/gm)].map(
       (m) => m[1],
     );
-    expect(imports.every((name) => name.startsWith('node:'))).toBe(true);
+
+  it('imports only Node built-ins and its own refusal facts', () => {
+    const source = readFileSync(script, 'utf8');
+    expect(
+      importsOf(source).filter((name) => !name.startsWith('node:')),
+    ).toEqual(['./refusal-facts.mjs']);
     expect(source).not.toMatch(/process\.env/);
+    const facts = readFileSync(
+      resolve(dirname(script), 'refusal-facts.mjs'),
+      'utf8',
+    );
+    expect(importsOf(facts)).toEqual(['node:crypto']);
+    expect(facts).not.toMatch(/process\.env|fetch\(/);
   });
 });

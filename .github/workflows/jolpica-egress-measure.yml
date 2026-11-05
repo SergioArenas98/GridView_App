@@ -10,10 +10,15 @@ name: Jolpica egress measurement
 # owner decision: wait at least 24 hours after any other GridView request to
 # Jolpica. That wait is a precaution, not evidence that a limit has reset.
 #
-# What one run sends: the requests of one season-batch capture (six
-# season-level GETs, then one results GET per finished round; 25 for 2026 as
-# of round 19), one at a time, 2 s apart, at most 30. The first non-200
-# stops the run; nothing is retried.
+# What one run sends depends on the confirmation typed:
+# - `measure-once`: the requests of one season-batch capture (six
+#   season-level GETs, then one results GET per finished round; 25 for 2026
+#   as of round 19), one at a time, 2 s apart, at most 30. The first non-200
+#   stops the run.
+# - `calendar-once` (Cloudflare-to-Jolpica comparison, 2026-11-05): exactly
+#   ONE GET, the season calendar, whatever the answer. It records the same
+#   closed refusal facts and fingerprint as the staging Worker.
+# Nothing is retried in either mode.
 #
 # No secret is used, no artifact is uploaded, nothing is published. The log
 # and job summary show statuses, timings, sizes and allow-listed header values
@@ -23,7 +28,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type "measure-once" to send at most 30 GETs to Jolpica'
+        description: 'Type "measure-once" (one capture, at most 30 GETs) or "calendar-once" (exactly one GET)'
         required: true
         type: string
 
@@ -36,7 +41,7 @@ concurrency:
 
 jobs:
   measure:
-    if: github.ref == 'refs/heads/master' && inputs.confirm == 'measure-once'
+    if: github.ref == 'refs/heads/master' && (inputs.confirm == 'measure-once' || inputs.confirm == 'calendar-once')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -47,8 +52,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      - name: Measure (one capture's requests, stop at the first refusal)
+      - name: Measure (one capture, or one calendar GET; stop at the first refusal)
         run: >
           node services/edge-api/scripts/jolpica-egress/measure.mjs
           --season 2026
+          --mode ${{ inputs.confirm == 'calendar-once' && 'calendar-once' || 'capture' }}
           --summary "$GITHUB_STEP_SUMMARY"

@@ -64,6 +64,8 @@ import {
   type PacerSleep,
 } from '../../providers/http/reservation-pacer';
 import {
+  calendarPageLimit,
+  calendarPathFor,
   JolpicaCalendarPort,
   JolpicaCircuitsPort,
   JolpicaParticipantsPort,
@@ -81,6 +83,12 @@ import type { ReconciliationLedgerPort } from './ledger-port';
  * module stays the only runtime module that imports either package by value.
  */
 export { coordinationFor };
+
+/**
+ * The calendar port's exact request, for the staging-only one-GET comparison
+ * (`calendar-single-get.ts`), re-exported for the same reason.
+ */
+export { calendarPageLimit, calendarPathFor };
 
 /**
  * Why a coordinated run cannot start, in the fixed order they are checked.

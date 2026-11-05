@@ -109,6 +109,7 @@ Cloudflare Access remains a Phase 5B+ hardening option.
 - `POST /internal/admin/reconciliation/disposition`
 - `POST /internal/admin/reconciliation/verification`
 - `POST /internal/admin/provider/jolpica/egress-identity`: staging and `coordinated` only. It sends one `GET https://api.jolpi.ca/test/` through the coordinated runtime's limiter and hold. It writes nothing, and answers closed facts about the address Jolpica F1 saw (2026-11-05 investigation).
+- `POST /internal/admin/provider/jolpica/calendar-once?season=YYYY`: staging and `coordinated` only. It sends one `GET https://api.jolpi.ca/ergast/f1/{season}/races/?limit=100` (the first request of every run) through the same limiter and hold, then stops: no other resource, and no change to the ledger, releases, KV or public data, so never a publication. Like any provider request it counts against the rate limiter, and a `429` persists the limiter's existing upstream hold as intended (at least 60 s, longer under `Retry-After`). It answers closed facts (status, cache status, colo, ray, race count; for a 429 the refusal layer and fingerprint) for comparison with the GitHub runner's `calendar-once` measurement (2026-11-05).
 
 No state-changing route uses `GET`. None of these appears in the public
 OpenAPI document, and every response is `Cache-Control: no-store`.
@@ -1088,7 +1089,17 @@ operator can find the entity to curate
 ([mapping guide](../operations/GridView_Provider_Mapping_Guide.md)), and it
 never enters a public response, an OpenAPI example, a fixture, a published
 snapshot or a client-visible cache key. No mapping record, registry dump,
-upstream payload or exception body is ever logged. Authorization headers,
+upstream payload or exception body is ever logged. A provider `429` (`provider.request.rate_limited`, 2026-11-05) adds bounded
+diagnostic fields: the refusal layer, body class, `Retry-After` form, server
+class, body media type and cache status (closed enum members), the colo and a
+well-formed `cf-ray`, and a fingerprint (`providerRefusalHeaderMarks`: response
+header *names* from a fixed list, comma-joined; `providerRefusalOtherHeaders`:
+the count of other names, never the names; `providerRefusalTitle`: a closed
+`<title>` class; `providerRefusalBodyBytes` and `providerRefusalBodySha256`:
+the length and SHA-256 digest of at most 4 KiB read). No header value, body
+text or address is logged; the digest identifies a refusal template without
+revealing it. `test/providers/refusal-logging-policy.test.mjs` holds these
+fields to that and runs the staging tail checker over them. Authorization headers,
 tokens, provider bodies, full public responses and stack traces are not logged;
 the logger redacts sensitive keys (`authorization`, `adminToken`, `token`,
 `secret`, `providerKey`, `apiKey`, `password`) to `[redacted]`.
