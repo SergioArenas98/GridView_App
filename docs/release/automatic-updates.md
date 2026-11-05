@@ -116,7 +116,7 @@ The operator path for a staged correction is in the staging runbook, section
 
 | Budget | Limit | GridView's use |
 |---|---|---|
-| Jolpica burst | 4 requests/s published; **not reached from staging** (AU-4 step 2, §8.3) | Pacer one request a second by default (a starting hypothesis, not a verified safe rate; never under 260 ms); the global limiter enforces 4/s for all callers, and a provider `429` holds every caller (§5) |
+| Jolpica burst | 4 requests/s published; about 20 a minute stated by Jolpica's maintainer (unpublished; GitHub discussions #243 and #251, 2025); **not reached from staging** (AU-4 step 2, §8.3) | Pacer one request every 3.5 s by default, at most 18 a minute (never under 260 ms); the global limiter enforces 4/s for all callers, a provider `429` holds every caller (§5), and each `429` records which layer refused it (Jolpica's application or Cloudflare's edge). Spacing does not avoid refusals caused by other Workers sharing GridView's address at Jolpica (2026-11-05 investigation) |
 | Jolpica sustained | 500 requests/h | At most 6 + classified rounds per run, so ≤ 29 an hour. A missing result adds up to ten hourly runs per race, still one an hour; seeing a first result twice adds one run per race. The gate measured ≤ 9 per run and < 200 a day across two race weekends with one result that never appeared (asked 12 times in its first 30 h) |
 | Cron CPU | 15 min for an hourly trigger | A publication run does the generation, validation and guard the ingest measured at 362 ms on staging, plus ≤ 29 response parses; a nothing-due tick takes milliseconds. Measured at AU-4 before relying on it |
 | Cron wall time | 15 min | Coordination aborts at 240 s; publication starts only within 300 s and with 300 s of the 10-minute lease left |

@@ -21,7 +21,11 @@
 export { JolpicaResourcePort } from './resource-port';
 export type { JolpicaResourcePorts } from './resource-port';
 
-export { JolpicaCalendarPort, calendarPageLimit } from './calendar-port';
+export {
+  JolpicaCalendarPort,
+  calendarPageLimit,
+  calendarPathFor,
+} from './calendar-port';
 export type { JolpicaCalendarPortOptions } from './calendar-port';
 
 export { decodeSeasonCalendar, jolpicaSessionBlocks } from './calendar-payload';
