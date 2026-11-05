@@ -309,8 +309,8 @@ Two obligations behave differently:
 
 | Order | What changes | Assessment |
 |---|---|---|
-| **O1, current plan:** state 0 now, state T before 2.0.0 leaves internal testing, 20 % then 100 % rollout, state F | Uses the recorded Q1a answer for 1.2.1 | Keeps the staged rollout. Recommended |
-| **O2, straight to F:** skip states 0 and T; with Alpha already paused, release 2.0.0 to 100 % with versionCode 7 not retained, and submit state F with it | Avoids answering Q1a on the form | Leaves the current "No data collected" form, already inaccurate for 1.2.1, in place until then, including during internal testing. It drops the staged rollout. It depends on Data safety being published with the release, which is not confirmed (§2). Not recommended |
+| **O1, current plan:** state 0 now, state T before the first 2.0.0 Production rollout, 20 % then 100 % rollout, state F | Uses the recorded Q1a answer for 1.2.1 | Keeps the staged rollout. Recommended |
+| **O2, straight to F:** skip states 0 and T; with Alpha already paused, release 2.0.0 to 100 % with versionCode 7 not retained, and submit state F with it | Avoids answering Q1a on the form | Leaves the current "No data collected" form, already inaccurate for 1.2.1, in place until then. It drops the staged rollout. It depends on Data safety being published with the release, which is not confirmed (§2). Not recommended |
 | **O3, no state T:** state 0 now, then 2.0.0 straight to 100 % with state F | Shortens the period with 1.x rows | Uses the recorded Q1a answer for state 0. Drops the staged rollout for a form state that costs nothing to keep. Not recommended |
 | **Alpha paused** (D-T2, done before P0) | The owner paused the track on 2026-11-05 (§3.2) | The form does not change because versionCode 7 remains in Production |
 
@@ -327,4 +327,4 @@ completed D-A removal, and the completed Alpha pause.
 | P0, state 0 | P2 and submission approval; Q1a is recorded for the draft |
 | P3, state T | P2 and submission approval; retain the Q2 scope limit and Q3 draft answer. No separate error test is planned |
 | R7, state F | 100% rollout, D-T1 and no 1.x artifact distributed on a non-internal track. Alpha is already paused. Apply the Q2/Q3 scope limits |
-| PR #82 merge, A0 privacy item | Every item in §5 decided and recorded in `data-safety.md` §4.1 |
+| PR #82 merge | The owner approved merging the documentation on 2026-11-05. Merging does not publish the policy, submit the form, or resolve the open items above |
