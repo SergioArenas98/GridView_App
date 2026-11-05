@@ -20,7 +20,10 @@ import {
   defaultReservationSpacingMillis,
   minimumReservationSpacingMillis,
   PacedReservationClient,
+  statedJolpicaRequestsPerMinute,
 } from '../../src/providers/http/reservation-pacer';
+import { providerRequestTimeoutMillis } from '../../src/providers/http/provider-http-client';
+import { COORDINATION_DEADLINE_MS } from '../../src/sync/coordinated/run-budget';
 import type { RealProviderSourceId } from '../../src/providers/http/reservation-engine';
 import { MutableClock } from '../publication/sequencer/support';
 
@@ -96,13 +99,13 @@ describe('PacedReservationClient', () => {
     }
 
     expect(minimumReservationSpacingMillis).toBe(260);
-    expect(defaultReservationSpacingMillis).toBe(1000);
+    expect(defaultReservationSpacingMillis).toBe(3500);
     expect(limiter.askedAt).toHaveLength(5);
     expect(limiter.askedAt[0]).toBe(Date.parse(START));
     for (const gap of gaps(limiter.askedAt)) {
-      expect(gap).toBeGreaterThanOrEqual(1000);
+      expect(gap).toBeGreaterThanOrEqual(3500);
     }
-    expect(slept).toEqual([1000, 1000, 1000, 1000]);
+    expect(slept).toEqual([3500, 3500, 3500, 3500]);
   });
 
   it('waits only for what remains of the spacing', async () => {
@@ -121,11 +124,11 @@ describe('PacedReservationClient', () => {
     clock.advance(400); // still inside the spacing
     await pacer.reserve('jolpica');
 
-    clock.advance(1200); // already past the spacing
+    clock.advance(3700); // already past the spacing
     await pacer.reserve('jolpica');
 
-    expect(slept).toEqual([800, 600]);
-    expect(gaps(limiter.askedAt)).toEqual([1000, 1000, 1200]);
+    expect(slept).toEqual([3300, 3100]);
+    expect(gaps(limiter.askedAt)).toEqual([3500, 3500, 3700]);
   });
 
   it('serializes concurrent callers so neither skips the spacing', async () => {
@@ -143,7 +146,7 @@ describe('PacedReservationClient', () => {
       pacer.reserve('jolpica'),
     ]);
 
-    expect(gaps(limiter.askedAt)).toEqual([1000, 1000]);
+    expect(gaps(limiter.askedAt)).toEqual([3500, 3500]);
   });
 
   it('returns a deferral as final, asking the limiter exactly once for it', async () => {
@@ -374,5 +377,52 @@ describe('the upstream hold after a provider 429', () => {
 
     clock.set(at(90_000));
     expect((await run().reserve('jolpica')).outcome).toBe('allowed');
+  });
+});
+
+describe('the default spacing against the stated per-minute limit and the run budget', () => {
+  // 6 season resources plus one classification per round; 24 rounds is more
+  // than any calendar GridView has recorded, so this is an upper bound.
+  const largestRunRequests = 6 + 24;
+
+  it('never puts more than the stated per-minute limit inside any minute', () => {
+    // Starts at least `spacing` apart: a half-open minute holds
+    // ceil(60 000 / spacing) of them at most.
+    const perMinute = Math.ceil(60_000 / defaultReservationSpacingMillis);
+    expect(perMinute).toBeLessThan(statedJolpicaRequestsPerMinute);
+  });
+
+  it('lets the largest run finish its spacing well inside the coordination deadline', () => {
+    const spacingOnly =
+      (largestRunRequests - 1) * defaultReservationSpacingMillis;
+    // Leaves room for ordinary answer times (observed 7-711 ms each).
+    expect(spacingOnly).toBeLessThan(COORDINATION_DEADLINE_MS / 2);
+    // The deadline, not the spacing, is what bounds a run of slow answers:
+    // a run aborts there whatever the provider does.
+    expect(providerRequestTimeoutMillis).toBeLessThan(COORDINATION_DEADLINE_MS);
+  });
+
+  it('spaces a 25-request run by the default in fake time', async () => {
+    const clock = new MutableClock(new Date(START));
+    const limiter = new ScriptedLimiter(clock);
+    const pacer = new PacedReservationClient({
+      limiter,
+      now: () => clock.now(),
+      sleep: clockSleep(clock, []),
+    });
+
+    for (let index = 0; index < 25; index += 1) {
+      await pacer.reserve('jolpica');
+    }
+
+    const asked = limiter.askedAt;
+    expect(asked).toHaveLength(25);
+    for (let first = 0; first < asked.length; first += 1) {
+      const inMinute = asked.filter(
+        (at) => at >= asked[first]! && at < asked[first]! + 60_000,
+      ).length;
+      expect(inMinute).toBeLessThan(statedJolpicaRequestsPerMinute);
+    }
+    expect(asked[24]! - asked[0]!).toBe(24 * defaultReservationSpacingMillis);
   });
 });

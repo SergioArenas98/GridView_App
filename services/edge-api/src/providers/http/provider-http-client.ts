@@ -8,6 +8,14 @@ import type {
   RealProviderSourceId,
   WindowHeadroom,
 } from './reservation-engine';
+import {
+  cacheStatusOf,
+  classifyRefusalBody,
+  edgeFactsOf,
+  refusalBodyLimitBytes,
+  refusalFactsOf,
+  type ProviderRefusalBody,
+} from './refusal-evidence';
 
 /**
  * The single hardened boundary through which every future real provider
@@ -47,6 +55,12 @@ interface ProviderEndpoint {
   readonly pathPrefix: string;
   /** Only Jolpica documents a mandatory identifying User-Agent. */
   readonly sendUserAgent: boolean;
+  /**
+   * Exact paths outside `pathPrefix` that may be requested, without a query.
+   * Jolpica's `/test/` echoes the address its throttles key on (one-request
+   * egress identity probe, `providers/jolpica/egress-identity.ts`).
+   */
+  readonly diagnosticPaths: readonly string[];
 }
 
 const providerEndpoints: Record<RealProviderSourceId, ProviderEndpoint> = {
@@ -54,11 +68,13 @@ const providerEndpoints: Record<RealProviderSourceId, ProviderEndpoint> = {
     origin: 'https://api.jolpi.ca',
     pathPrefix: '/ergast/f1/',
     sendUserAgent: true,
+    diagnosticPaths: ['/test/'],
   },
   openf1: {
     origin: 'https://api.openf1.org',
     pathPrefix: '/v1/',
     sendUserAgent: false,
+    diagnosticPaths: [],
   },
 };
 
@@ -93,6 +109,8 @@ export interface ProviderHttpSuccess<T> {
   readonly data: T;
   /** Always true: a success implies a request left GridView. */
   readonly requestAttempted: true;
+  /** Closed `cf-cache-status` (`refusal-evidence.ts`): `HIT` never reached the origin. */
+  readonly cacheStatus?: string;
 }
 
 export interface ProviderHttpFailure {
@@ -193,7 +211,10 @@ export function buildProviderUrl(
   if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return null;
   if (!path.startsWith('/')) return null;
   if (path.split('/').includes('..')) return null;
-  if (!path.startsWith(endpoint.pathPrefix)) return null;
+  const diagnostic = endpoint.diagnosticPaths.includes(path);
+  if (!diagnostic && !path.startsWith(endpoint.pathPrefix)) return null;
+  // A diagnostic path is requested exactly as listed, never with a query.
+  if (diagnostic && query && Object.keys(query).length > 0) return null;
 
   let url: URL;
   try {
@@ -207,7 +228,13 @@ export function buildProviderUrl(
   if (url.username !== '' || url.password !== '') return null;
   if (url.port !== '') return null;
   if (url.hash !== '') return null;
-  if (!url.pathname.startsWith(endpoint.pathPrefix)) return null;
+  if (
+    diagnostic
+      ? url.pathname !== path
+      : !url.pathname.startsWith(endpoint.pathPrefix)
+  ) {
+    return null;
+  }
 
   if (query) {
     for (const [key, value] of Object.entries(query)) {
@@ -256,6 +283,24 @@ async function readBounded(
     offset += chunk.byteLength;
   }
   return new TextDecoder().decode(merged);
+}
+
+/**
+ * Reads at most `refusalBodyLimitBytes` of a `429` and classifies it. Never
+ * throws: a body that cannot be read is `unreadable`, and the 429 is still
+ * answered, logged and held exactly as before.
+ */
+async function readRefusalBody(
+  response: Response,
+): Promise<ProviderRefusalBody> {
+  try {
+    return classifyRefusalBody(
+      await readBounded(response, refusalBodyLimitBytes),
+    );
+  } catch {
+    await discard(response);
+    return 'unreadable';
+  }
 }
 
 async function discard(response: Response): Promise<void> {
@@ -438,19 +483,26 @@ export class ProviderHttpClient {
           response.headers.get('Retry-After'),
           this.now(),
         );
-        await discard(response);
+        // Measured before the body is read, so it stays the provider's answer
+        // time and stays comparable with the 2026-11-03/04 records.
+        const durationMs = this.now().getTime() - startedAt;
+        // Hold the source first, so no further reservation in this run - or,
+        // through the limiter, in any other - reaches the provider until the
+        // hold ends (AU-4 step 2, 2026-11-03). Reading the diagnostic body
+        // comes after: a slow body must never delay the hold.
+        await this.reportRateLimit(sourceId, retryAfter);
+        const body = await readRefusalBody(response);
         this.logger.warn({
           operation: 'provider.request.rate_limited',
           providerSourceId: sourceId,
           providerRequestAttempted: true,
           status: 429,
-          durationMs: this.now().getTime() - startedAt,
+          durationMs,
           ...(retryAfter ? { providerRetryAfter: retryAfter } : {}),
+          // Which layer refused (Jolpica's application or Cloudflare's edge),
+          // in closed values only; the body itself is never logged.
+          ...refusalFactsOf(response.headers, body),
         });
-        // Hold the source before answering, so no further reservation in
-        // this run - or, through the limiter, in any other - reaches the
-        // provider until the hold ends (AU-4 step 2, 2026-11-03).
-        await this.reportRateLimit(sourceId, retryAfter);
         return {
           ok: false,
           sourceId,
@@ -525,6 +577,8 @@ export class ProviderHttpClient {
         providerRequestAttempted: true,
         status: response.status,
         durationMs: this.now().getTime() - startedAt,
+        // A cache `HIT` never reached the provider's application limits.
+        ...edgeFactsOf(response.headers),
       });
       return {
         ok: true,
@@ -532,6 +586,7 @@ export class ProviderHttpClient {
         status: response.status,
         data,
         requestAttempted: true,
+        cacheStatus: cacheStatusOf(response.headers.get('cf-cache-status')),
       };
     } catch {
       // A transport rejection is never surfaced or logged: it can embed the

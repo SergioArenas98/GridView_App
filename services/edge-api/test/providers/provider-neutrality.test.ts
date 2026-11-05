@@ -486,8 +486,11 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     // compose), the orchestration it hands every run to, and the operator
     // verification (PR-E3), which composes through the same gate for its one
     // request. The orchestration's mapping reads the coordinator's answer
-    // through helpers the composition exports.
+    // through helpers the composition exports. The staging-only egress
+    // identity probe (2026-11-05) composes its one `GET /test/` through the
+    // same gate, as the verification does.
     expect(importersOf(graph, compositionModule)).toEqual([
+      'src/sync/coordinated/egress-identity.ts',
       'src/sync/coordinated/observation/observe.ts',
       'src/sync/coordinated/observation/outcomes.ts',
       'src/sync/coordinated/operator/verification.ts',

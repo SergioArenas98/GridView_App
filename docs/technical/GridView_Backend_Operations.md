@@ -108,6 +108,7 @@ Cloudflare Access remains a Phase 5B+ hardening option.
 - `POST /internal/admin/reconciliation/clear-block`
 - `POST /internal/admin/reconciliation/disposition`
 - `POST /internal/admin/reconciliation/verification`
+- `POST /internal/admin/provider/jolpica/egress-identity`: staging and `coordinated` only. It sends one `GET https://api.jolpi.ca/test/` through the coordinated runtime's limiter and hold. It writes nothing, and answers closed facts about the address Jolpica F1 saw (2026-11-05 investigation).
 
 No state-changing route uses `GET`. None of these appears in the public
 OpenAPI document, and every response is `Cache-Control: no-store`.

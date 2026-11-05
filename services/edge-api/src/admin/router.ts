@@ -20,6 +20,10 @@ import type {
   SyncJobCategory,
 } from '../storage/types';
 import { adminAuthOk, unauthorized } from './auth';
+import {
+  egressIdentityPath,
+  handleEgressIdentityRequest,
+} from './egress-identity-route';
 import { handleCutoverRequest, isCutoverPath } from './cutover-routes';
 import {
   handleCoordinatedRollback,
@@ -116,6 +120,16 @@ export async function handleAdminRequest(
       context.cutover,
       context.requestId,
     );
+  }
+  // Staging-only, one request to Jolpica's `/test/`, no season, no writes.
+  if (url.pathname === egressIdentityPath) {
+    return handleEgressIdentityRequest(request, {
+      environment: context.env.ENVIRONMENT,
+      coordinated: context.reconciliation.coordinated,
+      dependencies: context.reconciliation.verification.dependencies,
+      logger: context.logger,
+      requestId: context.requestId,
+    });
   }
   // Also names its season explicitly, and is read-only.
   if (url.pathname === standingsPredecessorPath) {
