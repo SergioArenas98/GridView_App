@@ -215,11 +215,32 @@ run.
   - A run in which some checks succeeded before the `429` can still beat.
     If the refused check was the race result, `results-late` catches it
     12 h after the race start.
-  - **Response.** Read the run lines in Workers Logs, including the hold's
-    `retryAt` (the admin Inspect view does not show it). Do not send manual
-    runs to "unstick" it: they ask the same
-    limiter and send nothing while the hold lasts. Repeated `429`s are the
-    §8.3.1 item 5 decision (slower pacer, or ask Jolpica).
+  - **On the direct Worker path this is the usual shape, not an edge case**
+    (staging, 2026-11-05):
+    - Jolpica's calendar was served from Cloudflare's cache (`HIT`) on all
+      three Worker requests that day, so a run's first check usually
+      succeeds without reaching Jolpica's origin.
+    - The next uncached resource reached the origin and was refused with an
+      HTML `429` from Jolpica's nginx, at GridView's near-zero volume.
+    - Such a run publishes nothing but beats. `heartbeat.test.ts` pins this
+      ("still beats when the calendar succeeds and a later check is refused
+      with a 429").
+    - So refusals during a race window surface only as `results-late`, and
+      only when the refused check was a result; a fresh heartbeat does not
+      mean the season is being published.
+    - Between races nothing waits to be published, so nothing is lost.
+  - **Response.**
+    - Read the run lines in Workers Logs, including the hold's `retryAt`
+      (the admin Inspect view does not show it).
+    - Read the 429's fingerprint. `providerRefusalBodySha256`
+      `3405b784…10ef` (169 bytes, title `too-many-requests`) is nginx
+      1.27.5's built-in page: Jolpica's origin limit, not its application
+      (`jolpica-throttled`) and not Cloudflare (`cloudflare-1015`).
+    - Do not send manual runs to "unstick" it: they ask the same limiter
+      and send nothing while the hold lasts.
+    - A slower pacer does not help an origin refusal at near-zero volume.
+      The remedy is Jolpica's answer to discussion #412, or a route with
+      GridView's own address (§8.3.1 item 5).
 
 **Diagnosis**, not delivery, uses the persisted Workers Logs (7 days):
 
