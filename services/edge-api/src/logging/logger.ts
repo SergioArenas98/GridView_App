@@ -56,6 +56,12 @@ export interface LogEvent {
   providerServer?: string;
   /** Closed media type of a 429 body. */
   providerBodyMedia?: string;
+  /** Egress identity probe: closed class of the address Jolpica saw. */
+  providerEgressAddressClass?: string;
+  /** Egress identity probe: number of `X-Forwarded-For` entries Jolpica saw. */
+  providerEgressForwardedHops?: number;
+  /** Egress identity probe: the answer was generated for this request. */
+  providerEgressFresh?: boolean;
   /** Comma-joined bounded window kinds (`second`, `minute`, `hour`). */
   providerLimitingWindow?: string;
   /** Why a reservation was deferred: `window` or `provider-hold`. */

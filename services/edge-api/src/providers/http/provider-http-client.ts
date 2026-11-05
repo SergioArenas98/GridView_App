@@ -9,6 +9,7 @@ import type {
   WindowHeadroom,
 } from './reservation-engine';
 import {
+  cacheStatusOf,
   classifyRefusalBody,
   edgeFactsOf,
   refusalBodyLimitBytes,
@@ -54,6 +55,12 @@ interface ProviderEndpoint {
   readonly pathPrefix: string;
   /** Only Jolpica documents a mandatory identifying User-Agent. */
   readonly sendUserAgent: boolean;
+  /**
+   * Exact paths outside `pathPrefix` that may be requested, without a query.
+   * Jolpica's `/test/` echoes the address its throttles key on (one-request
+   * egress identity probe, `providers/jolpica/egress-identity.ts`).
+   */
+  readonly diagnosticPaths: readonly string[];
 }
 
 const providerEndpoints: Record<RealProviderSourceId, ProviderEndpoint> = {
@@ -61,11 +68,13 @@ const providerEndpoints: Record<RealProviderSourceId, ProviderEndpoint> = {
     origin: 'https://api.jolpi.ca',
     pathPrefix: '/ergast/f1/',
     sendUserAgent: true,
+    diagnosticPaths: ['/test/'],
   },
   openf1: {
     origin: 'https://api.openf1.org',
     pathPrefix: '/v1/',
     sendUserAgent: false,
+    diagnosticPaths: [],
   },
 };
 
@@ -100,6 +109,8 @@ export interface ProviderHttpSuccess<T> {
   readonly data: T;
   /** Always true: a success implies a request left GridView. */
   readonly requestAttempted: true;
+  /** Closed `cf-cache-status` (`refusal-evidence.ts`): `HIT` never reached the origin. */
+  readonly cacheStatus?: string;
 }
 
 export interface ProviderHttpFailure {
@@ -200,7 +211,10 @@ export function buildProviderUrl(
   if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return null;
   if (!path.startsWith('/')) return null;
   if (path.split('/').includes('..')) return null;
-  if (!path.startsWith(endpoint.pathPrefix)) return null;
+  const diagnostic = endpoint.diagnosticPaths.includes(path);
+  if (!diagnostic && !path.startsWith(endpoint.pathPrefix)) return null;
+  // A diagnostic path is requested exactly as listed, never with a query.
+  if (diagnostic && query && Object.keys(query).length > 0) return null;
 
   let url: URL;
   try {
@@ -214,7 +228,13 @@ export function buildProviderUrl(
   if (url.username !== '' || url.password !== '') return null;
   if (url.port !== '') return null;
   if (url.hash !== '') return null;
-  if (!url.pathname.startsWith(endpoint.pathPrefix)) return null;
+  if (
+    diagnostic
+      ? url.pathname !== path
+      : !url.pathname.startsWith(endpoint.pathPrefix)
+  ) {
+    return null;
+  }
 
   if (query) {
     for (const [key, value] of Object.entries(query)) {
@@ -565,6 +585,7 @@ export class ProviderHttpClient {
         status: response.status,
         data,
         requestAttempted: true,
+        cacheStatus: cacheStatusOf(response.headers.get('cf-cache-status')),
       };
     } catch {
       // A transport rejection is never surfaced or logged: it can embed the
