@@ -278,11 +278,11 @@ controller to publish a geographic address?
 **Rules reviewed; application to GridView remains open.** Keep the draft
 privacy contact as email (C4). That does not decide separate obligations
 under Play's trader and identity rules or Irish e-commerce rules
-(`data-safety.md` §6.1). The next step is a read-only check of the account's
-Play trader status and confirmation of the commercial activity facts. Do
-not infer non-trader status from the personal account, the download count,
-or the planned removal of ads alone. No address or declaration has been
-changed. **Status:** open.
+(`data-safety.md` §6.1). On 2026-11-05 the owner reported that Play Console
+shows **Non-trader** (Spanish: **No operador**). This records the account's
+current declaration; it does not determine whether separate address duties
+apply. No address or declaration was changed. **Status:** Play account
+status recorded; the separate address question remains open.
 
 ### Q6. The policy's wording on 1.x ads
 

@@ -889,7 +889,8 @@ page 35. **No home address is assumed to be publishable.**
   the nature and regularity of commercial activity, including ad funding;
   using a personal account or distributing a free app does not settle it.
   For a trader on a personal account, Play displays the address and contact
-  phone number. The account's actual declaration has not been checked.
+  phone number. The owner reported on 2026-11-05 that Play Console shows
+  **Non-trader** (Spanish: **No operador**). No setting was changed.
 - [Play's account identity rules](https://support.google.com/googleplay/android-developer/answer/13628312)
   also distinguish the verified address Google holds from the public
   developer details. The documented [country-change process](https://support.google.com/googleplay/android-developer/answer/16260648)
@@ -903,10 +904,10 @@ page 35. **No home address is assumed to be publishable.**
   The ad-supported 1.2.1 and planned ad-free 2.0.0 must be considered
   separately. Applicability to GridView is not concluded.
 
-C4 remains the draft privacy contact decision. Next: read the trader status
-in Play Console (Manage account → Account details → About you) and establish
-the facts about commercial activity before choosing any declaration. Do not
-add or publish a private address from this assessment.
+C4 remains the draft privacy contact decision. The recorded Play status
+settles what the account displays, not whether the separate e-commerce
+address duty applies to GridView. Do not add or publish a private address
+from this assessment.
 
 ### 6.2 Inconsistencies left for owner steps
 
