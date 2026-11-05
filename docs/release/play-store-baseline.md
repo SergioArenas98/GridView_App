@@ -224,7 +224,7 @@ Tracked, with their approval gates, in `production-release-plan.md`:
    is in PR #82, which is not merged. It must be published at
    https://gridview.netlify.app.
 3. **Play Data safety declaration.** It must be resubmitted from PR #82's
-   `data-safety.md` after privacy review, starting with state 0 for 1.x, then:
+   `data-safety.md` after the owner's privacy decisions (`privacy-self-assessment.md`; no external review is planned), starting with state 0 for 1.x, then:
    - **Transition state T**, with Ads still **Yes**, while any 1.x build is
      distributed.
    - **Final state F**, with Ads **No**, once only 2.0.0 is distributed.

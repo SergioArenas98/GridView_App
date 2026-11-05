@@ -54,6 +54,13 @@ and Ireland as the intended Play listing country, and kept D-A: the seven
 active ad units are archived once the AdMob account's verification clears
 (§1.4, §3.6, §4.1, §6.2). None of these steps is done, and none of them
 answers a review question.
+Also on 2026-11-05 the owner decided that no external legal or privacy
+review will be commissioned, that 2.0.0 keeps Crashlytics and Performance
+Monitoring, and that it ships no push notifications. The open items are
+now the owner's decisions, set out with their options in `privacy-self-assessment.md`.
+That change settles none of them. The 1.x FCM row now has a proposed
+purpose, Developer communications, awaiting the owner's acceptance
+(§3.5, §4).
 
 ## 1. Why the current declaration must change
 
@@ -438,7 +445,7 @@ Firebase Cloud Messaging adds this row:
 
 | Play category → type | Collected | Shared | Purposes |
 |---|---|---|---|
-| Device or other IDs → **Device or other IDs** (Firebase installation ID, FCM registration token) | yes | no (Google processes it for GridView) | **Blocked: privacy review R9.** No purpose is supported by the evidence yet |
+| Device or other IDs → **Device or other IDs** (Firebase installation ID, FCM registration token) | yes | no (Google processes it for GridView) | **Proposed 2026-11-05: Developer communications**, the purpose Firebase states for the SDK's data ("to send messages to the client app"). Not yet accepted by the owner; the alternative is open (`privacy-self-assessment.md` Q1a) |
 
 - These rows are **required**: 1.x has no switch, and it starts the SDK before
   showing anything. They are **not processed ephemerally**: Play says data
@@ -672,6 +679,11 @@ the units are archived.
 
 ## 4. Review items for the privacy review
 
+> **2026-11-05: no external review is planned** (owner decision). In §4,
+> §4.1 and §4.2, "the review" now means the owner's decision on the
+> evidence, recorded with its options in `privacy-self-assessment.md`.
+> Dropping the external review settles none of the open items.
+
 | # | Question | Engineering recommendation |
 |---|---|---|
 | R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | **Accepted by the owner for the draft (recorded 2026-11-02): declare Approximate location.** Firebase's own disclosure lists it for Performance Monitoring. Country-level location is coarser than Play's 3 km² threshold, and Play's "Approximate location" type covers that. Play requires the declaration to be accurate and complete and may act on any discrepancy, in either direction. The answer must therefore follow the review's finding, not a preference for declaring more. |
@@ -682,7 +694,7 @@ the units are archived.
 | R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7 and pausing the Alpha track, both decided by the owner on 2026-11-05) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). The owner decided on 2026-10-23 to archive the 1.x ad units in AdMob before AU-7 (D-A, §3.6). That will stop ads being served to installed copies, but not the SDK's requests. The archiving is a separate AdMob step and has not been done. |
 | R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. **C4, decided 2026-10-23:** email stays the only contact channel (§6.1). One owner step remains: the Play listing still says Spain; on 2026-11-05 the owner recorded Ireland as the intended country (§6.2). Whether rules outside the privacy notice require a geographic address stays open for the review (§6.1). |
 | R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions: accepted by the owner (recorded 2026-11-02), declare App interactions.** Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines (not part of that acceptance, §4.1):** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. W3 verified it on the deployed Worker on 2026-10-22, and AU-7 repeats the check (§3.4). |
-| R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Blocked: specific privacy review. Not an owner choice, and not engineering-settled.** **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent. Separately, the Firebase console (read 2026-10-22) shows no campaign ever created in `gridview-fb20f` and no message in the last 90 days; it cannot show API sends or older reports. The SDK still registered every install and sent an installation ID and a token to Google. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. No other Play purpose fits. The evidence supports no purpose. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy's section 4 therefore states no basis for it. It must not be published with one chosen to complete it. See §4.2 for the questions and the possible outcomes. |
+| R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Open. No external review is planned (2026-11-05), so this is now the owner's decision on the evidence; it is not engineering-settled** (`privacy-self-assessment.md` Q1a-Q1c). **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent. Separately, the Firebase console (read 2026-10-22) shows no campaign ever created in `gridview-fb20f` and no message in the last 90 days; it cannot show API sends or older reports. The SDK still registered every install and sent an installation ID and a token to Google. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. **Updated 2026-11-05:** Firebase's Data safety guidance states that purpose for the SDK's data ("to send messages to the client app"), and Play requires SDK collection to be reflected, so Developer communications is now the proposed answer, with the caveat that 1.x never used it. No other Play purpose fits. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy's section 4 therefore states no basis for it. It must not be published with one chosen to complete it. See §4.2 for the questions and the possible outcomes. |
 
 ### 4.1 Owner decisions and their options
 
@@ -718,7 +730,7 @@ not decide R6's remediation or whether the geographic-address rules apply
 | R8, API lines | No row for the API's persisted lines (engineering recommendation, §3.4). The acceptance above does not name them | If the review wants a row, it carries the API source and the App functionality purpose (release plan P3) |
 | R6 | Whether more than disclosure and D-A is needed for the 1.x ads served without a consent message. Unresolved | The review decides (§4) |
 | §6.1 | Whether a geographic address is required by rules outside the privacy notice. Unresolved | The review decides (§6.1) |
-| R9 | Not an owner option. A privacy-review blocker (§4.2) | Data safety states 0 and T, and the policy's publication, wait for it |
+| R9 | Was a privacy-review blocker (§4.2). With no external review planned (2026-11-05), it is the owner's decision: the purpose has a proposed answer, Developer communications; the legal basis has no supportable answer (`privacy-self-assessment.md` Q1a-Q1c). Unresolved | Data safety states 0 and T, and the policy's publication, wait for it |
 
 ### 4.2 R9 privacy-review blocker: 1.x Firebase Cloud Messaging
 
@@ -752,7 +764,8 @@ is known.
    This is a question for the review, not a finding.
 3. **Remediation.** Is disclosure enough, or is more needed?
 
-**Possible outcomes and their consequences.** The review chooses. Nothing
+**Possible outcomes and their consequences.** The owner chooses (no external
+review is planned); the proposed answers are in `privacy-self-assessment.md` §5. Nothing
 here is selected.
 
 | Outcome | Consequence |
@@ -768,8 +781,10 @@ here is selected.
 
 - Data safety states 0 and T: the FCM part of the Device or other IDs
   purposes.
-- Publishing the policy: section 4's silence on the FCM registration must be
-  confirmed or replaced.
+- Publishing the policy: section 4 now says, in the draft, that 1.x did not
+  ask for consent to the FCM registration and that no legal basis is claimed
+  for it (2026-11-05). The owner must accept that wording or choose another
+  option (`privacy-self-assessment.md` Q1b).
 - Merging PR #82.
 
 **What the console check did not settle.** The Messaging campaign history of

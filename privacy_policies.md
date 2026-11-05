@@ -1,6 +1,6 @@
 # GridView Privacy Policy
 
-Last updated: 23 October 2026
+Last updated: 5 November 2026
 
 This policy explains what information the GridView Android application
 ("GridView", "the app") processes, why, for how long, and what choices you
@@ -27,13 +27,15 @@ Contact: **gridviewapp1@gmail.com**
   phone number, contacts, photos, files or precise location.
 - From version 2.0.0, GridView shows **no advertising** and contains no
   advertising or marketing SDK. Versions 1.x showed advertising banners from
-  Google AdMob (section 3.4).
+  Google AdMob, and installed copies still request them (section 3.4).
+- Version 2.0.0 sends **no notifications** and contains no messaging SDK.
 - From version 2.0.0, GridView does **not** track which screens you open or
   what you tap. Firebase records when a session starts (section 3.3). The
   GridView API keeps no record of the app's requests, only a short record of
   its own errors (section 3.2). In versions 1.x, the advertising SDK collects
-  app launches, taps and ad views, and Firebase registers each installation
-  for messaging (section 3.4).
+  app launches, taps and ad views, and Firebase automatically registers each
+  installation for messaging, although no message was ever sent (section
+  3.4).
 - Your language and theme choices and the Formula 1 data the app downloads are
   stored **on your device**.
 - To fix crashes and keep the app fast, GridView sends **crash reports and
@@ -120,8 +122,9 @@ Versions 1.x work differently from version 2.0.0. They contain no Firebase
 Crashlytics or Performance Monitoring, and section 3.3 does not apply to them.
 Instead:
 
-- **Advertising (Google AdMob).** Versions 1.x show advertising banners through
-  the **Google Mobile Ads SDK**, which starts when the app opens. Google
+- **Advertising (Google AdMob).** Versions 1.x request advertising banners
+  through the **Google Mobile Ads SDK**, which starts when the app opens, and
+  show them when Google serves one. Google
   collects and receives, through that SDK:
   - your device's **IP address**, from which an approximate location can be
     derived;
@@ -135,15 +138,25 @@ Instead:
   settings allow, personalised ads), analytics and fraud prevention, under its
   own policies: https://policies.google.com/technologies/partner-sites.
   Versions 1.x **do not show a consent message** before ads are requested.
-- **Firebase Cloud Messaging.** Versions 1.x include Google's **Firebase Cloud
-  Messaging** and **Firebase Installations** SDKs, in the same Firebase
-  project as version 2.0.0. GridView 1.x has no notification feature, and we
-  have never sent it notifications. The SDKs start when the app opens even
-  so. They create a random **Firebase installation
-  ID** and a messaging registration token for the installation and send them
-  to Google, with the app version and technical details of the Firebase SDK.
-  Google receives your device's **IP address** with that connection, as with
-  any connection. Firebase keeps the installation ID until it is deleted.
+- **Firebase Cloud Messaging: automatic registration, no notifications.**
+  Versions 1.x include Google's **Firebase Cloud Messaging** and **Firebase
+  Installations** SDKs, in the same Firebase project as version 2.0.0. Two
+  things must be kept apart:
+  - **What happens automatically.** When the app opens, the SDKs create a
+    random **Firebase installation ID** and register the installation with
+    Google's messaging service, which issues a messaging registration token
+    for it. They send the installation ID, the app version and technical
+    details of the Firebase SDK to Google, and keep the registration up to
+    date while the app is used. Google receives your device's **IP
+    address** with that connection, as with any connection. This happens on
+    every installation, whether or not a message is ever sent.
+  - **What never happened.** GridView 1.x has no notification feature, and
+    we have never sent it a notification. The registration only makes
+    sending one possible.
+
+  Firebase keeps the installation ID until it is deleted. Google treats a
+  messaging registration that has not been used for 270 days as expired
+  and removes it.
 - **Unity Ads SDK.** Version 1.2.1 also includes the Unity Ads SDK. The app's
   own code never starts it.
 - **The 1.x data server.** Versions 1.x downloaded Formula 1 data from a
@@ -178,6 +191,11 @@ above.
 The advertising in versions 1.x (section 3.4) is processed by Google for its
 own purposes, as described in Google's policies. Versions 1.x did not ask for
 consent to it. Version 2.0.0 removes it.
+
+The automatic Firebase Cloud Messaging registration in versions 1.x (section
+3.4) served no feature, and we have not used it. Versions 1.x did not ask
+for consent to it, and we do not claim a legal basis for it. Version 2.0.0
+removes it.
 
 ## 5. Who receives the information
 

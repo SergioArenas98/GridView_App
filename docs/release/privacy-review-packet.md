@@ -1,5 +1,10 @@
 # Privacy review packet: GridView 2.0.0 and the 1.x transition
 
+> **2026-11-05: not to be sent.** The owner decided not to commission an
+> external review. This packet is kept as the record of the questions.
+> Their proposed answers, options and status are in `privacy-self-assessment.md`,
+> and dropping the review settles none of them.
+
 Prepared 2026-11-05 at master `d2d6df9`, and updated the same day with the
 owner's release decisions of 2026-11-05 (sections 3 and 4). This packet is
 for the qualified privacy reviewer.

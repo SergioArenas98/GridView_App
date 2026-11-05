@@ -482,7 +482,10 @@ The details are in PR #82, `data-safety.md` §1.
   - `docs/release/data-safety.md`.
 
   Its review items (data-safety R1–R9) need the owner's privacy review, P-R,
-  before **any** Data safety submission (P0, P3, R7). Data-safety item R7 is
+  before **any** Data safety submission (P0, P3, R7). **No external review
+  is planned (owner, 2026-11-05):** P-R is the owner's decision on each open
+  item, on the evidence and official guidance in PR #82 `privacy-self-assessment.md`.
+  None of those items is settled by that change. Data-safety item R7 is
   the controller naming. The owner confirmed it on 2026-10-20: Sergio Arenas
   del Amo, an individual in Ireland, publishing as Sejuma, with no registered
   business. The Play listing still shows Spain (PR #82 `data-safety.md` §6).
@@ -513,15 +516,16 @@ The details are in PR #82, `data-safety.md` §1.
 - **P3 [approval]:** submit Data safety in **state T**: the 2.0.0 Firebase
   rows plus the 1.x rows (AdMob and Firebase Cloud Messaging), with Ads
   **Yes**.
-  - **Prerequisites:** P-R is done (R1–R9; R9 blocks the FCM part of the
-    Device or other IDs purposes). The owner accepted the Worker-log
+  - **Prerequisites:** P-R is done: the owner has decided each open item in
+    `privacy-self-assessment.md` §5 (no external review is planned; Q1a
+    blocks the FCM part of the Device or other IDs purposes). The owner accepted the Worker-log
     wording on 2026-10-23 (AU-D3). The log verification is done: W3,
     2026-10-22, above.
     If P3 is submitted after the AU-7 deploy, AU-7's repeat of the check
     must have passed too.
   - D-L's engineering side is resolved by ADR 0028 D8, so the Worker's logs
     add no Data safety row (PR #82 `data-safety.md` §3.4, R8). If the
-    privacy review of R8 still wants an App interactions row for
+    owner's decision on R8 still wants an App interactions row for
     them, the row carries the API source and the App functionality purpose
     (PR #82 `data-safety.md` §3.2, §3.4).
   - Play counts closed, open and production tracks, and exempts only apps that
@@ -624,7 +628,7 @@ merged commit** A2 builds, never a branch head or an older run.
 | Production AAB build; internal Play installation | A0b | A2 and R2 |
 | Performance targets | A0b | The Performance traces from R3's controlled upgrade against the targets in Implementation Plan §15.4 |
 | Security review | A0 | CodeQL and the secret scan green on that commit, plus a recorded review of the release diff |
-| Privacy review | A0 | PR #82's R1–R8 answered in the owner's privacy review, and R9 resolved by the specific privacy review it needs (`data-safety.md` §4.2) |
+| Privacy review | A0 | Every open privacy item in PR #82 `privacy-self-assessment.md` §5 (R2 scope, R6, R8 API lines, R9 as Q1a-Q1c, §6.1, Q6) decided by the owner and recorded in `data-safety.md` §4.1. **No external review is planned (owner, 2026-11-05)**; an item still open blocks A2 |
 | Provider legal gate | A0 | ADR 0019 and Implementation Plan §14.2, re-confirmed for automatic publication of race results (ADR 0028 D11, D12); Jolpica's terms and rate limits re-read from its public repository, without contacting the API |
 
 A failing, missing or stale A0 item blocks A2. A failing A0b item blocks R5.
@@ -815,7 +819,8 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | D-L | Production persisted application logs. **Engineering resolved 2026-10-21 by ADR 0028 D8:** persisted, invocation logs off, no public-request line and no client data or credential stored. The privacy wording was accepted by the owner on 2026-10-23 (AU-D3, PR #82) | — |
 | D-U | Approve the replacements for the upgrade-matrix rows the single pass does not cover: slow network, older Android, and populated and corrupted legacy cache (§8). Or supply devices for them. **Accepted by the owner on 2026-11-05:** the emulator, slow-network and legacy-cache replacements in §8; the final upgrade test stays the single Play-delivered pass | R3 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
-| P-R | Privacy review of PR #82 `data-safety.md` review items R1–R9 (not the R-track gates). **Recorded 2026-11-02:** R1 accepted for the draft, R5 accepted, R8 accepted for Firebase Sessions, R2 conditionally accepted. **Still open:** R2's complete processing scope, R8's API lines, R6's remediation, the geographic-address question (§6.1 there) and R9 | P0 |
+| P-R | Privacy review of PR #82 `data-safety.md` review items R1–R9 (not the R-track gates). **2026-11-05: no external review is planned (owner).** P-R is now the owner's own decision on each open item, on the evidence and official guidance in PR #82 `privacy-self-assessment.md`. **Recorded 2026-11-02:** R1 accepted for the draft, R5 accepted, R8 accepted for Firebase Sessions, R2 conditionally accepted. **Still open, and not settled by dropping the review:** R9 (Q1a, the FCM purpose: Developer communications proposed, not accepted; Q1b, the legal basis, which the evidence cannot support; Q1c, reducing the ongoing registration), R2's complete processing scope, R8's API lines, R6's remediation, the geographic-address question (§6.1 there) and the policy's ads wording (Q6, drafted) | P0 |
+| S-0 | 2.0.0 keeps Firebase Crashlytics and Performance Monitoring and ships no push notifications (no Messaging SDK; the build's dependency check forbids it). **Decided by the owner on 2026-11-05** | — |
 | M | Ship 2.0.0 with placeholder media (no R2, no approved media). **Decided by the owner on 2026-11-05:** ship with placeholder images if approved images are not ready | R5 |
 | O | **Changed 2026-10-21:** nobody runs D1/D3 each race weekend (automatic). Who answers alerts and staged corrections (ADR 0028 D6, D9), and the 2027 dataset work. **Decided by the owner on 2026-11-05:** the owner handles the alerts and the staged corrections that need a decision, through GitHub e-mail alerts (AU-D4), and their delivery is verified before they are relied on. The 2027 dataset work is not part of this decision and stays open | R5 |
 | AU-D1, AU-D5 | **Accepted by the owner for 2.0.0 on 2026-10-21, including their documented limitations** (ADR 0028 D13; `automatic-updates.md` §9): AU-D1, O-5(a), a staged correction freezes the season until an operator acts; AU-D5, a first race result inside the window is seen twice before it is published, which reduces but does not remove the risk of a short classification shown as "Final". The acceptance authorises no merge, purchase, provisioning, deployment or activation | — |
