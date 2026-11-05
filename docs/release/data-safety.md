@@ -267,13 +267,12 @@ separate user-data row. This conclusion is limited to the fields the code
 writes. [Cloudflare's query API](https://developers.cloudflare.com/api/resources/workers/subresources/observability/subresources/telemetry/methods/query/)
 also describes platform event metadata that can include request and Ray IDs.
 That schema does not show which fields are populated for this Worker with
-invocation logs off. Inspect one full, stored public `request.failed`
-event before closing R8. Check nested metadata for IP, request or Ray IDs,
-raw URLs, headers or other linkable values. Compare any request or Ray ID
-with identifiers the caller can see; a platform event ID alone is not
-evidence of linkage. If no existing event is available, leave this open
-until a controlled isolated check can be done. Do not force a failure in
-Production. Record field names and linkage findings only, not raw values.
+invocation logs off. The owner's 2026-11-05 read-only dashboard check found
+no retained events in the seven-day window, including no public
+`request.failed` event. The owner chose not to run a separate error test.
+The draft adds no separate row for the technical fields GridView writes.
+Cloudflare-added metadata for a stored error was not verified and the
+public policy makes no guarantee about those fields.
 
 **Conditions before submitting state T or F.** State 0 (1.x only) does not
 include this answer.
@@ -308,8 +307,8 @@ include this answer.
   ID or a line per public request, revisit this section and §3.2 (R2, R8).
 
 A live `wrangler tail` session streams request metadata to the operator.
-It cannot establish what Cloudflare stores. Use the persisted Workers Logs
-event for the R8 check; do not retain raw identifiers in evidence.
+It cannot establish what Cloudflare stores. The draft conclusion above
+is limited to the application payload.
 
 ### 3.5 Versions 1.x (states 0 and T)
 
@@ -740,7 +739,7 @@ the units are archived.
 | R5 | The 1.x rows of states 0 and T (§3.5) | **Accepted by the owner (recorded 2026-11-02):** declare them as listed, including the 1.x **Crash logs** row (collected, shared; advertising, analytics and fraud prevention). **Evidence (§3.5):** two Internet Archive captures of Google's disclosure, taken while 23.6.0 was the latest release, say they cover version 23.6.0. Their "Diagnostic information" names crash logs, which Play's definitions place under Crash logs, and the rest under Diagnostics. **Limits:** archived copies of Google's published statement about its SDK, not observed 1.x traffic. Nothing contradicts them, so no traffic capture is required. |
 | R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7 and pausing the Alpha track, both decided by the owner on 2026-11-05) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). The owner decided on 2026-10-23 to archive the 1.x ad units in AdMob before AU-7 (D-A, §3.6). That will stop ads being served to installed copies, but not the SDK's requests. The archiving is a separate AdMob step and has not been done. |
 | R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. **C4, decided 2026-10-23:** email stays the only contact channel (§6.1). One owner step remains: the Play listing still says Spain; on 2026-11-05 the owner recorded Ireland as the intended country (§6.2). Whether rules outside the privacy notice require a geographic address stays open for the review (§6.1). |
-| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions: accepted by the owner (recorded 2026-11-02), declare App interactions.** Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines (not part of that acceptance, §4.1):** the Worker-written fields do not require a separate row. W3 observed no event for the ordinary public requests tested. The stored error event's Cloudflare-added metadata still needs checking before the final answer (§3.4). |
+| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions: accepted by the owner (recorded 2026-11-02), declare App interactions.** Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines (not part of that acceptance, §4.1):** the Worker-written fields do not require a separate row. W3 observed no event for the ordinary public requests tested. No stored error was available to inspect, and the owner chose not to run a separate test. The draft answer is limited to the fields GridView writes (§3.4). |
 | R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Partially resolved.** The owner accepted the draft purpose for 1.2.1; legal basis and remediation remain open (`privacy-self-assessment.md` Q1a-Q1c). No external review is planned. **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent. Separately, the Firebase console (read 2026-10-22) shows no campaign ever created in `gridview-fb20f` and no message in the last 90 days; it cannot show API sends or older reports. The emulator observed automatic Messaging registration on versionCode 7 but did not capture transmitted data; the SDK documentation describes the identifier and configuration upload. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. **Updated 2026-11-05:** Firebase's Data safety guidance states that purpose for the SDK's data ("to send messages to the client app"), and Play requires SDK collection to be reflected, so the owner accepted Developer communications for the 1.2.1 draft's collection purpose only. GridView never sent notifications. Play does not explicitly address this case. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy draft states the facts about the missing consent prompt, not a legal basis. Do not treat the factual wording as resolving this item or approving publication. See §4.2 for the questions and the possible outcomes. |
 
 ### 4.1 Owner decisions and their options
@@ -774,7 +773,7 @@ not decide R6's remediation or whether the geographic-address rules apply
 |---|---|---|
 | R2 | **Conditionally accepted (recorded 2026-11-02); complete scope still open.** The Worker does not store the IP; Cloudflare's full processing is not verified (§3.2, §3.4) | Holds only once that scope is confirmed, and while the deployed Worker's logs pass the check (W3 done; AU-7 repeats it) |
 | | If the scope is not confirmed | The review decides what changes. Approximate location is already declared as not ephemeral as a whole, because of Firebase's part (§3.2) |
-| R8, API lines | No separate row for the Worker-written fields (engineering recommendation, §3.4). The acceptance above does not name them | Check the full stored event before classifying the Cloudflare-added fields and finalizing the answer |
+| R8, API lines | No separate row for the Worker-written fields in the draft (§3.4). The owner declined a separate error test on 2026-11-05 | Cloudflare-added fields were not verified. This records the draft scope, not a statement about all Cloudflare processing or approval to submit |
 | R6 | Whether more than disclosure and D-A is needed for the 1.x ads served without a consent message. Unresolved | The review decides (§4) |
 | §6.1 | Whether a geographic address is required by rules outside the privacy notice. Unresolved | The review decides (§6.1) |
 | R9 | The owner accepted Developer communications for collection only in the 1.2.1 draft. Legal basis and remediation remain open (§4.2; `privacy-self-assessment.md` Q1a-Q1c) | The policy and form submission remain pending |

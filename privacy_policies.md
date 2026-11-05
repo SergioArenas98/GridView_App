@@ -31,9 +31,9 @@ Contact: **gridviewapp1@gmail.com**
   (section 3.4).
 - Version 2.0.0 sends **no notifications** and contains no messaging SDK.
 - From version 2.0.0, GridView does **not** track which screens you open or
-  what you tap. Firebase records when a session starts (section 3.3). The
-  GridView API keeps no record of the app's requests, only a short record of
-  its own errors (section 3.2). In versions 1.x, the advertising SDK collects
+  what you tap. Firebase records when a session starts (section 3.3). GridView
+  logs only technical details of internal API errors, rather than keeping
+  an access log (section 3.2). In versions 1.x, the advertising SDK collects
   app launches, taps and ad views, and Firebase automatically registers the
   app for messaging when it starts, although no message was ever sent
   (section 3.4).
@@ -75,12 +75,11 @@ request). Apart from the IP address and those request details, requests
 contain no account, device identifier or other personal information.
 
 We use this only to deliver the data and to keep the service working and
-secure. We do not use it to identify you or to build a profile. The API keeps
-no record of the app's requests. If the API itself fails with an internal
-error while answering one, it keeps a short technical record of that error
-for 7 days: the type of error, how long the request took and, where known,
-which kind of data was requested. That record does not include your IP
-address, the request number, or any account or device identifier.
+secure. We do not use it to identify you or to build a profile. GridView does
+not keep an API access log. If the API encounters an internal error, GridView
+records only technical details of the failure: the error type, how long the
+request took and, where known, the type of data requested. These GridView logs
+are kept for 7 days.
 
 ### 3.3 Crash reports and performance measurements (Firebase)
 

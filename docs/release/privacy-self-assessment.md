@@ -253,13 +253,14 @@ the final classification of any additional use.
 **Exact question:** Do the API's persisted internal-error lines need a Data
 safety row?
 
-**Supported for Worker-written fields:** no extra row. The application
-payload omits request ID, IP address and device identifier. Cloudflare's
-API schema permits separate metadata, so the complete stored error event
-has to be checked for populated and linkable values (`data-safety.md` §3.4).
-Use an existing event if available; otherwise leave it pending until an
-isolated test is arranged. Do not force a Production error. **Status:**
-engineering payload reviewed; final stored-event check open.
+**Draft answer:** no extra row for the fields GridView writes. The
+application payload omits request ID, IP address and device identifier.
+The 2026-11-05 read-only production check found no stored error to inspect,
+and the owner declined a separate error test. The public draft describes
+only GridView's technical error logs; it makes no assurance about metadata
+Cloudflare may add (`data-safety.md` §3.4). **Status:** recorded for the draft;
+Cloudflare-added error metadata was not verified. This does not settle Q2
+or approve submission.
 
 ### Q4. R6, 1.x ads requested with no consent message
 
