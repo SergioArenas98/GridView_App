@@ -13,6 +13,9 @@ Prepared 2026-11-05 on PR #82, after master `d2d6df9`. **Draft.**
 - Nothing here is published or submitted. The policy draft
   (`privacy_policies.md`, "Last updated: 5 November 2026") is unpublished.
   No Play Console, AdMob, Firebase or Netlify setting was changed.
+- **Updated later on 2026-11-05** with an emulator observation of the
+  Play-signed versionCode 7 APK (§3.1) and the owner's Play Console
+  screenshots (§3.2). Neither changes an answer or settles a question.
 - `data-safety.md` holds the engineering facts. `privacy-review-packet.md`
   holds the questions as prepared for a reviewer; it was never sent.
 
@@ -49,12 +52,52 @@ document applies the guidance to the facts. It is not legal advice.
 
 | | What happened | How it is known |
 |---|---|---|
-| **Automatic registration** | On every 1.x install, at launch, the packaged FCM and Installations SDKs created a Firebase installation ID, registered the installation for messaging (Google issues a registration token for it), and uploaded the identifier and configuration data to Firebase project `gridview-fb20f`. The registration is refreshed while the app is used. It ran whether or not anything was ever sent | Inferred from the packaged SDKs (versions, manifests, no auto-init opt-out) and Firebase's documentation; not observed on a device (`data-safety.md` §3.5) |
+| **Automatic registration** | At launch, the packaged Firebase Messaging SDK initiates a messaging registration for Firebase project `gridview-fb20f`, with no feature using it and whether or not anything is ever sent. Per Firebase's documentation, it uses a Firebase installation ID, Google issues a registration token for the installation, the identifier and configuration data are uploaded to Firebase, and the registration is refreshed while the app is used | **versionCode 7: observed** on a clean first launch (§3.1): registration initiated automatically, and Google Play services logged success; the app exited before receiving the reply. **versionCode 2: not tested**; inferred from the same packaged SDKs. **What was transmitted: not captured**; the identifiers come from Firebase's documentation (`data-safety.md` §3.5) |
 | **Sending notifications** | **Never happened.** 1.x had no notification feature and no code that used FCM. The owner never sent a notification | No-feature: observed in the bundles. Never sent: the owner's statement, consistent with the Firebase console (no campaign ever created; nothing in the last 90 days). The console cannot show API sends or older reports (`data-safety.md` §3.5) |
 
 The policy draft (section 3.4) now presents these as two bullets, "What
 happens automatically" and "What never happened", and adds the 270-day
 expiry.
+
+### 3.1 Emulator observation of versionCode 7 (2026-11-05)
+
+- **Build:** the Play-signed 1.2.1 APK, versionCode 7, from Play Console's
+  App bundle explorer. Signer certificate SHA-256 `98bd6c76…c3b5`, the app
+  signing key.
+- **Device:** the R3 test emulator, Android 16 (API 36), with Google Play
+  services and no Google account. Clean install by adb; one launch from
+  the launcher; nothing tapped; observed for two minutes.
+- **Not done:** no registration call by the tester, no notification sent,
+  no Firebase or Play Console change. Tokens and installation IDs were
+  redacted before any log was written.
+
+| Time (UTC) | Process | Redacted log line |
+|---|---|---|
+| 22:07:49.101 | GridView | `FirebaseInitProvider: FirebaseApp initialization successful` |
+| 22:07:49.161 | GridView | `FirebaseMessaging: Making new request for: <sender ID>` |
+| 22:07:50.397 | Google Play services | `c2dm: [19,com.sejuma.gridview:…,0,0]` (register request for GridView) |
+| 22:07:51.228 | GridView | `System.exit called` (Google Play's licence check; the copy was not installed from Play) |
+| 22:07:51.837 | Google Play services | `c2dm: [-19,SUCCESSFUL,0,0]`, the only response before its next request |
+
+- **Why it is Messaging, not Firebase Installations:** the lines come from
+  the Messaging SDK and from Google Play services' messaging registration
+  log for GridView's package. In the same log, the Play Store app's
+  identical request and `SUCCESSFUL` pair is followed by its own "Token
+  successfully retrieved" and "FCM registered".
+- **Limits:** one launch of one build on one emulator. The app exited
+  before receiving the reply. The packet capture recorded only boot
+  traffic, so what was transmitted is not known from the test. versionCode
+  2 was not tested.
+- **Evidence:** `fcm-1x-registration-check-2026-11-05/` in the owner's evidence store (redacted logcat excerpt; manifest `SHA256SUMS` = `235a973825fb5094c33459f49b5689c03913fb4c3bc34034e1708bb4bb331554`).
+
+### 3.2 Play Console status (2026-11-05)
+
+**Confirmed 2026-11-05 from the owner's Play Console screenshots** (kept by
+the owner, not in this repository): Production shows 1.2.1 (versionCode 7)
+available on Google Play, and closed testing "Alpha" shows 1.0.0
+(versionCode 2) as active and available to selected testers.
+Both 1.x builds are therefore distributed now. This changes no proposed
+answer: states 0 and T already cover both (§4).
 
 ## 4. Proposed Data safety answers
 
@@ -115,6 +158,9 @@ purpose is accurate when no 1.x feature used them?
 | Add no purpose for FCM | Weaker. The form would show only the ads purposes for the type, leaving the FCM collection unexplained. Play's help does not address collected-but-unused data, and can act on an inaccurate form |
 | Add App functionality | Not supported: no 1.x feature used the data |
 
+The 2026-11-05 observation (§3.1) shows that the collection happens on
+versionCode 7. It does not bear on which purpose is accurate.
+
 **Status:** proposed, awaiting the owner's acceptance. States 0 and T wait on
 it.
 
@@ -142,6 +188,9 @@ Regulation 5)?
 
 Options (a) and (c) do not cure the past processing; only Q1c reduces it
 from now on.
+
+The 2026-11-05 observation (§3.1) confirms for versionCode 7 that the
+processing took place; it does not supply a basis.
 
 **Status:** open. Publishing the policy (P2) waits on the owner's choice.
 
@@ -234,7 +283,7 @@ Two obligations behave differently:
 | **O1, current plan:** state 0 now, state T before 2.0.0 leaves internal testing, 20 % then 100 % rollout, state F | Needs Q1a for states 0 and T | Keeps the staged rollout. Recommended |
 | **O2, straight to F:** skip states 0 and T; pause Alpha; release 2.0.0 to 100 % with versionCode 7 not retained, and submit state F with it | Avoids answering Q1a on the form | Leaves the current "No data collected" form, already inaccurate for 1.2.1, in place until then, including during internal testing. It drops the staged rollout. It depends on Data safety being published with the release, which is not confirmed (§2). Not recommended |
 | **O3, no state T:** state 0 now, then 2.0.0 straight to 100 % with state F | Shortens the period with 1.x rows | Still needs Q1a for state 0. Drops the staged rollout for a form state that costs nothing to keep. Not recommended |
-| **Pause Alpha now** (D-T2, before P0) | Ends versionCode 2's distribution earlier | Helps a little and depends on nothing. Same SDKs as versionCode 7, so the form's content does not change |
+| **Pause Alpha now** (D-T2, before P0) | Ends versionCode 2's distribution earlier; the track is active (§3.2) | Helps a little and depends on nothing. Same SDKs as versionCode 7, so the form's content does not change |
 
 **Conclusion:** reordering cannot answer the legal-basis questions. It can
 avoid the Data safety purpose question only by leaving a known-inaccurate

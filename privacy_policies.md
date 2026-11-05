@@ -27,15 +27,16 @@ Contact: **gridviewapp1@gmail.com**
   phone number, contacts, photos, files or precise location.
 - From version 2.0.0, GridView shows **no advertising** and contains no
   advertising or marketing SDK. Versions 1.x showed advertising banners from
-  Google AdMob, and installed copies still request them (section 3.4).
+  Google AdMob, and copies still installed can keep requesting them
+  (section 3.4).
 - Version 2.0.0 sends **no notifications** and contains no messaging SDK.
 - From version 2.0.0, GridView does **not** track which screens you open or
   what you tap. Firebase records when a session starts (section 3.3). The
   GridView API keeps no record of the app's requests, only a short record of
   its own errors (section 3.2). In versions 1.x, the advertising SDK collects
-  app launches, taps and ad views, and Firebase automatically registers each
-  installation for messaging, although no message was ever sent (section
-  3.4).
+  app launches, taps and ad views, and Firebase automatically registers the
+  app for messaging when it starts, although no message was ever sent
+  (section 3.4).
 - Your language and theme choices and the Formula 1 data the app downloads are
   stored **on your device**.
 - To fix crashes and keep the app fast, GridView sends **crash reports and
@@ -142,14 +143,16 @@ Instead:
   Versions 1.x include Google's **Firebase Cloud Messaging** and **Firebase
   Installations** SDKs, in the same Firebase project as version 2.0.0. Two
   things must be kept apart:
-  - **What happens automatically.** When the app opens, the SDKs create a
-    random **Firebase installation ID** and register the installation with
-    Google's messaging service, which issues a messaging registration token
-    for it. They send the installation ID, the app version and technical
-    details of the Firebase SDK to Google, and keep the registration up to
-    date while the app is used. Google receives your device's **IP
-    address** with that connection, as with any connection. This happens on
-    every installation, whether or not a message is ever sent.
+  - **What happens automatically.** When the app starts, the Firebase
+    Cloud Messaging SDK registers it with Google's messaging service,
+    without any action by you. According to Google's documentation for
+    these SDKs, this uses a random **Firebase installation ID**, Google
+    issues a messaging registration token for the installation, the SDKs
+    send the installation ID, the app version and technical details of the
+    Firebase SDK to Google, and they keep the registration up to date while
+    the app is used. Google receives your device's **IP address** with
+    that connection, as with any connection. The registration happens
+    whether or not a message is ever sent.
   - **What never happened.** GridView 1.x has no notification feature, and
     we have never sent it a notification. The registration only makes
     sending one possible.

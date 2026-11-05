@@ -48,6 +48,13 @@ since W3. §3.6 and §4.1 record the read-only AdMob inspection of
 2026-11-04, which found the 1.x AdMob account and its units. The open
 review questions and their evidence are collected for the reviewer in
 `privacy-review-packet.md`.
+Last on 2026-11-05, §3.5 and §4.2 record an emulator observation of the
+Play-signed versionCode 7 APK: on a clean first launch, Firebase Messaging
+initiated registration automatically and Google Play services logged
+success. It replaces "inferred, not observed" for versionCode 7 only;
+versionCode 2 was not tested. §1.2 records the owner's Play Console
+screenshots of the same day. No answer, purpose or legal-basis question
+changed.
 Later on 2026-11-05 the owner recorded D-T1 (versionCode 7 is not
 retained), D-T2 (the Alpha track is paused as part of the release plan)
 and Ireland as the intended Play listing country, and kept D-A: the seven
@@ -102,6 +109,13 @@ Play Console Help, *Provide information for Google Play's Data safety section*
 | versionCode 7, 1.2.1 | Production, full rollout | 21 | Google Mobile Ads SDK; Firebase Cloud Messaging and Installations; Unity Ads packaged, never started (§3.5) |
 | versionCode 2, 1.0.0 | Closed testing "Alpha" | 21 | Inspected 2026-10-22: the same Google Mobile Ads and Firebase SDKs as versionCode 7, and no Unity Ads (§3.5) |
 | versionCode 8, 2.0.0 | not yet uploaded | **24** (Flutter 3.44 default, `flutter.minSdkVersion`) | Firebase (§3.2) |
+
+**Confirmed 2026-11-05 from the owner's Play Console screenshots** (kept by
+the owner, not in this repository): Production shows 1.2.1 (versionCode 7)
+available on Google Play, and closed testing "Alpha" shows 1.0.0
+(versionCode 2) as active and available to selected testers. So versionCode 2
+is distributed today, and states 0 and T cover it until the Alpha track is
+paused (D-T2).
 
 1.x builds stay distributed in any of these cases:
 
@@ -172,6 +186,7 @@ or publishing step.
 | Firebase, *Set up a Firebase Cloud Messaging client app on Android* (https://firebase.google.com/docs/cloud-messaging/android/client, updated 2026-10-22) | FCM auto-initialization uploads "the identifier and configuration data to Firebase" (§3.5) |
 | `firebase-messaging` 24.1.0 `.aar` from Google's Maven repository, its `AndroidManifest.xml` | The SDK itself declares `POST_NOTIFICATIONS`, `WAKE_LOCK` and `c2dm.permission.RECEIVE` (§3.5) |
 | Play Console Help, *Provide information for Google Play's Data safety section* (support.google.com/googleplay/android-developer/answer/10787469, read 2026-10-22 and 2026-10-23) | The purpose definitions used for R9: App functionality is "Used for features that are available in the app"; Developer communications is "Used to send news or notifications about the app or the developer". The data types used for R5: Crash logs is "Crash log data from your app. For example, the number of times your app has crashed, stack traces"; Diagnostics is "Information about the performance of your app. For example battery life, loading time, latency, framerate". Collection includes data "transmitted off device from your app by libraries and/or SDKs used in your app" |
+| Emulator check, 2026-11-05: `fcm-1x-registration-check-2026-11-05/` in the owner's evidence store (redacted logcat excerpt; manifest `SHA256SUMS` = `235a973825fb5094c33459f49b5689c03913fb4c3bc34034e1708bb4bb331554`) | One clean first launch of the Play-signed versionCode 7 APK on an Android 16 (API 36) emulator with Google Play services, no Google account, installed by adb. What it observed and its limits are in §3.5 |
 | Owner statement, 2026-10-22 | No push-notification feature was implemented, and no push notification was sent to 1.x users. Firebase was configured, but FCM was not intentionally used for any feature (§3.5) |
 
 ## 3. Proposed answers
@@ -342,8 +357,25 @@ They were inspected without being installed or run:
     a Firebase plugin channel, and versionCode 2's lists no `package:firebase_*`
     source. So the plugins were declared in the build, and the Dart compiler
     dropped their unused Dart code.
-  - **This is inferred from the packaged SDKs and their documented behaviour.
-    It was not observed on a device.**
+  - **Observed for versionCode 7 (2026-11-05).** One clean first launch of
+    the Play-signed 1.2.1 APK (versionCode 7) on an Android 16 emulator
+    with Google Play services, no Google account, nothing tapped and no
+    registration call made by the tester:
+    - Firebase started, and 60 ms later the app logged
+      `FirebaseMessaging: Making new request for: <sender ID>`.
+    - Google Play services logged a register request for
+      `com.sejuma.gridview`, then `SUCCESSFUL`, the only response it
+      logged before its next request.
+    - The app exited about 2.4 s after launch, at Google Play's licence
+      check for a copy not installed from Play, before it received the
+      reply.
+    - No notification was sent. The test did not capture what data was
+      transmitted: the identifiers named in this section come from
+      Firebase's documentation and the packaged SDKs, not from the test.
+    - Evidence: `fcm-1x-registration-check-2026-11-05/` in the owner's evidence store (redacted logcat excerpt; manifest `SHA256SUMS` = `235a973825fb5094c33459f49b5689c03913fb4c3bc34034e1708bb4bb331554`).
+  - **Not tested for versionCode 2.** It packages the same SDK versions, so
+    the same behaviour is expected, but for it this remains inferred from
+    the packaged SDKs and their documented behaviour.
 
 **Notifications in 1.x.** The question is whether 1.x ever offered or used
 notifications.
@@ -400,10 +432,13 @@ notifications.
   - On Android 12 and earlier, the permission is granted at install.
 - **Conclusion:**
   - 1.x offered no notification feature. Its code never used FCM.
-  - The SDK's automatic registration still ran on every install. It
-    processed a Firebase installation ID and a registration token, sent to
-    Google, whether or not anything was ever sent. This is inferred from the
-    packaged SDK, as above.
+  - The SDK's automatic registration ran with no feature using it. For
+    versionCode 7 this was observed on 2026-11-05: registration was
+    initiated at first launch, and Google Play services logged success.
+    For versionCode 2 it is inferred from the same packaged SDKs. What
+    was transmitted was not captured; per Firebase's documentation it
+    involves a Firebase installation ID, and Google issues a registration
+    token for the installation.
   - "No notification was ever sent" rests on the owner's statement. The
     console is consistent with it: no campaign was ever created in
     `gridview-fb20f`, and no message was sent in the last 90 days. The
@@ -740,9 +775,15 @@ is known.
 - **Observed:** the bundles package FCM, Firebase Installations, the Android
   side of FlutterFire messaging and `POST_NOTIFICATIONS`. No GridView code
   uses any of them, and no notification UI exists.
-- **Inferred:** FCM auto-initializes at startup, so every 1.x install sends a
-  Firebase installation ID, an FCM registration token and the IP address to
-  Google, for project `gridview-fb20f`. That project is also 2.0.0's.
+- **Observed for versionCode 7, 2026-11-05:** on a clean first launch,
+  Firebase Messaging initiated registration automatically and Google Play
+  services logged success. The app exited before receiving the reply
+  (§3.5).
+- **Inferred:** the same for versionCode 2 (same SDKs, not tested); and what
+  is transmitted, which the test did not capture. Per Firebase's
+  documentation it is a Firebase installation ID and an FCM registration
+  token issued for it, with the IP address, for project `gridview-fb20f`.
+  That project is also 2.0.0's.
 - **Owner statement:** no feature was implemented, and no notification was
   sent.
 - **Observed in the Firebase console, read-only, 2026-10-22:** no campaign

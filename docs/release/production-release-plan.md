@@ -556,12 +556,17 @@ Facts (Play Console Help, *Set up an open, closed, or internal test*, read
   app bundles on the track serve users, as all users receive an app bundle
   from the fallback track." versionCode 2 is below production's versionCode 7,
   so the Alpha track is probably Superseded already. That has not been read in
-  the Console.
+  the Console. **The owner's Play Console screenshots of 2026-11-05 show
+  otherwise:** the Alpha track is active, with 1.0.0 (versionCode 2)
+  available to selected testers (step 1).
 
 Steps (each owner-run; only step 3 changes Play Console):
 
 1. **Read the Alpha track's status** in Play Console, read-only: Superseded,
-   Active or Paused. Record it.
+   Active or Paused. Record it. **Done 2026-11-05 from the owner's
+   screenshots:** active, 1.0.0 (versionCode 2) available to selected
+   testers; Production shows 1.2.1 (versionCode 7) available on Google
+   Play (PR #82 `data-safety.md` §1.2).
 2. **Settle what versionCode 2 contains: done 2026-10-22.** It was
    downloaded read-only from the App bundle explorer. It is 1.0.0, with the
    same Google Mobile Ads and Firebase SDKs as versionCode 7 and no Unity Ads
