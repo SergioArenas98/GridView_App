@@ -110,13 +110,29 @@ describe('a 429 from Jolpica records which layer refused', () => {
 
     const result = await run.get();
 
-    // Exactly the result and the hold the client answered before.
-    expect(result).toEqual({
+    // Exactly the result and the hold the client answered before, plus the
+    // additive closed refusal facts (2026-11-05 comparison).
+    const { refusal, ...before } = result as typeof result & {
+      refusal?: unknown;
+    };
+    expect(before).toEqual({
       ok: false,
       sourceId: 'jolpica',
       kind: 'provider-rate-limited',
       requestAttempted: true,
       status: 429,
+    });
+    expect(refusal).toMatchObject({
+      fields: {
+        providerRefusalLayer: 'application',
+        providerRefusalBody: 'jolpica-throttled',
+      },
+      fingerprint: {
+        headerMarks: ['cf-cache-status', 'cf-ray', 'content-type', 'server'],
+        otherHeaders: 0,
+        bodyBytes: 35,
+        title: 'absent',
+      },
     });
     expect(run.reports).toEqual([['jolpica', null]]);
     expect(run.sent()).toBe(1);

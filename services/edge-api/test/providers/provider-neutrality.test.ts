@@ -488,8 +488,10 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     // request. The orchestration's mapping reads the coordinator's answer
     // through helpers the composition exports. The staging-only egress
     // identity probe (2026-11-05) composes its one `GET /test/` through the
-    // same gate, as the verification does.
+    // same gate, as the verification does, and so does the staging-only
+    // one-GET calendar comparison (2026-11-05) for its single calendar GET.
     expect(importersOf(graph, compositionModule)).toEqual([
+      'src/sync/coordinated/calendar-single-get.ts',
       'src/sync/coordinated/egress-identity.ts',
       'src/sync/coordinated/observation/observe.ts',
       'src/sync/coordinated/observation/outcomes.ts',

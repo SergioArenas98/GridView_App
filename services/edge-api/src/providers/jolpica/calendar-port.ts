@@ -61,8 +61,12 @@ import { curatedEventNames, type CuratedEventNames } from './curated-events';
  */
 export const calendarPageLimit = 100;
 
-/** The documented Ergast-compatible path prefix the hardened boundary pins. */
-const calendarPathFor = (season: number): string =>
+/**
+ * The documented Ergast-compatible path the hardened boundary pins. Exported
+ * so the one-GET staging comparison (`sync/coordinated/calendar-single-get.ts`)
+ * sends exactly the request this port sends.
+ */
+export const calendarPathFor = (season: number): string =>
   `/ergast/f1/${season}/races/`;
 
 export interface JolpicaCalendarPortOptions {

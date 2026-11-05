@@ -12,10 +12,16 @@ import {
   cacheStatusOf,
   classifyRefusalBody,
   edgeFactsOf,
+  rayOf,
   refusalBodyLimitBytes,
   refusalFactsOf,
   type ProviderRefusalBody,
 } from './refusal-evidence';
+import {
+  refusalFingerprintFields,
+  refusalFingerprintOf,
+  type RefusalFingerprint,
+} from './refusal-fingerprint';
 
 /**
  * The single hardened boundary through which every future real provider
@@ -111,6 +117,20 @@ export interface ProviderHttpSuccess<T> {
   readonly requestAttempted: true;
   /** Closed `cf-cache-status` (`refusal-evidence.ts`): `HIT` never reached the origin. */
   readonly cacheStatus?: string;
+  /** Cloudflare data centre from a well-formed `cf-ray`. */
+  readonly edgeColo?: string;
+  /** A well-formed `cf-ray`, so a single diagnostic answer can be looked up. */
+  readonly ray?: string;
+}
+
+/**
+ * Closed facts about a `429`, all from fixed vocabularies
+ * (`refusal-evidence.ts`, `refusal-fingerprint.ts`). Never a provider string.
+ */
+export interface ProviderRefusalEvidence {
+  readonly fields: Readonly<Record<string, string>>;
+  /** Absent when the fingerprint could not be computed. */
+  readonly fingerprint?: RefusalFingerprint;
 }
 
 export interface ProviderHttpFailure {
@@ -128,6 +148,8 @@ export interface ProviderHttpFailure {
   readonly limitingWindows?: readonly LimitingWindow[];
   /** Upstream instruction parsed from a 429 `Retry-After`, when present. */
   readonly retryAfter?: string;
+  /** A 429's closed refusal facts. */
+  readonly refusal?: ProviderRefusalEvidence;
 }
 
 export type ProviderHttpResult<T> =
@@ -256,8 +278,17 @@ async function readBounded(
   response: Response,
   limit: number,
 ): Promise<string | null> {
+  const bytes = await readBoundedBytes(response, limit);
+  return bytes === null ? null : new TextDecoder().decode(bytes);
+}
+
+/** `readBounded` without the decoding: the bytes exactly as received. */
+async function readBoundedBytes(
+  response: Response,
+  limit: number,
+): Promise<Uint8Array | null> {
   const body = response.body;
-  if (!body) return '';
+  if (!body) return new Uint8Array(0);
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -282,24 +313,36 @@ async function readBounded(
     merged.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(merged);
+  return merged;
 }
 
 /**
- * Reads at most `refusalBodyLimitBytes` of a `429` and classifies it. Never
- * throws: a body that cannot be read is `unreadable`, and the 429 is still
- * answered, logged and held exactly as before.
+ * Reads at most `refusalBodyLimitBytes` of a `429`, classifies it and takes
+ * its fingerprint. Never throws: a body that cannot be read is `unreadable`
+ * with no fingerprint, and the 429 is still answered, logged and held exactly
+ * as before.
  */
-async function readRefusalBody(
-  response: Response,
-): Promise<ProviderRefusalBody> {
+async function readRefusalBody(response: Response): Promise<{
+  readonly body: ProviderRefusalBody;
+  readonly fingerprint?: RefusalFingerprint;
+}> {
+  let bytes: Uint8Array | null;
   try {
-    return classifyRefusalBody(
-      await readBounded(response, refusalBodyLimitBytes),
-    );
+    bytes = await readBoundedBytes(response, refusalBodyLimitBytes);
   } catch {
     await discard(response);
-    return 'unreadable';
+    return { body: 'unreadable' };
+  }
+  const body = classifyRefusalBody(
+    bytes === null ? null : new TextDecoder().decode(bytes),
+  );
+  try {
+    return {
+      body,
+      fingerprint: await refusalFingerprintOf(response.headers, bytes),
+    };
+  } catch {
+    return { body };
   }
 }
 
@@ -491,7 +534,10 @@ export class ProviderHttpClient {
         // hold ends (AU-4 step 2, 2026-11-03). Reading the diagnostic body
         // comes after: a slow body must never delay the hold.
         await this.reportRateLimit(sourceId, retryAfter);
-        const body = await readRefusalBody(response);
+        const { body, fingerprint } = await readRefusalBody(response);
+        // Which layer refused (Jolpica's application or Cloudflare's edge),
+        // in closed values only; the body itself is never logged.
+        const fields = refusalFactsOf(response.headers, body);
         this.logger.warn({
           operation: 'provider.request.rate_limited',
           providerSourceId: sourceId,
@@ -499,9 +545,8 @@ export class ProviderHttpClient {
           status: 429,
           durationMs,
           ...(retryAfter ? { providerRetryAfter: retryAfter } : {}),
-          // Which layer refused (Jolpica's application or Cloudflare's edge),
-          // in closed values only; the body itself is never logged.
-          ...refusalFactsOf(response.headers, body),
+          ...fields,
+          ...(fingerprint ? refusalFingerprintFields(fingerprint) : {}),
         });
         return {
           ok: false,
@@ -510,6 +555,7 @@ export class ProviderHttpClient {
           requestAttempted: true,
           status: 429,
           ...(retryAfter ? { retryAfter } : {}),
+          refusal: { fields, ...(fingerprint ? { fingerprint } : {}) },
         };
       }
 
@@ -571,6 +617,8 @@ export class ProviderHttpClient {
         );
       }
 
+      const edge = edgeFactsOf(response.headers);
+      const ray = rayOf(response.headers.get('cf-ray'));
       this.logger.info({
         operation: 'provider.request.completed',
         providerSourceId: sourceId,
@@ -578,7 +626,7 @@ export class ProviderHttpClient {
         status: response.status,
         durationMs: this.now().getTime() - startedAt,
         // A cache `HIT` never reached the provider's application limits.
-        ...edgeFactsOf(response.headers),
+        ...edge,
       });
       return {
         ok: true,
@@ -587,6 +635,8 @@ export class ProviderHttpClient {
         data,
         requestAttempted: true,
         cacheStatus: cacheStatusOf(response.headers.get('cf-cache-status')),
+        ...(edge.providerEdgeColo ? { edgeColo: edge.providerEdgeColo } : {}),
+        ...(ray ? { ray } : {}),
       };
     } catch {
       // A transport rejection is never surfaced or logged: it can embed the

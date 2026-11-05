@@ -56,6 +56,18 @@ export interface LogEvent {
   providerServer?: string;
   /** Closed media type of a 429 body. */
   providerBodyMedia?: string;
+  /**
+   * A 429's fingerprint (`providers/http/refusal-fingerprint.ts`): comma-joined
+   * header-name marks from a fixed list, the count of other header names, a
+   * closed `<title>` class, and the length and SHA-256 of the bytes read.
+   */
+  providerRefusalHeaderMarks?: string;
+  providerRefusalOtherHeaders?: number;
+  providerRefusalTitle?: string;
+  providerRefusalBodyBytes?: number;
+  providerRefusalBodySha256?: string;
+  /** One-GET comparison: the closed outcome of its single request. */
+  providerSingleGetOutcome?: string;
   /** Egress identity probe: closed class of the address Jolpica saw. */
   providerEgressAddressClass?: string;
   /** Egress identity probe: number of `X-Forwarded-For` entries Jolpica saw. */

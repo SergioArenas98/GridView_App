@@ -21,6 +21,10 @@ import type {
 } from '../storage/types';
 import { adminAuthOk, unauthorized } from './auth';
 import {
+  calendarSingleGetPath,
+  handleCalendarSingleGetRequest,
+} from './calendar-single-get-route';
+import {
   egressIdentityPath,
   handleEgressIdentityRequest,
 } from './egress-identity-route';
@@ -124,6 +128,16 @@ export async function handleAdminRequest(
   // Staging-only, one request to Jolpica's `/test/`, no season, no writes.
   if (url.pathname === egressIdentityPath) {
     return handleEgressIdentityRequest(request, {
+      environment: context.env.ENVIRONMENT,
+      coordinated: context.reconciliation.coordinated,
+      dependencies: context.reconciliation.verification.dependencies,
+      logger: context.logger,
+      requestId: context.requestId,
+    });
+  }
+  // Staging-only, one season-calendar GET to Jolpica, then stops; no writes.
+  if (url.pathname === calendarSingleGetPath) {
+    return handleCalendarSingleGetRequest(request, url, {
       environment: context.env.ENVIRONMENT,
       coordinated: context.reconciliation.coordinated,
       dependencies: context.reconciliation.verification.dependencies,
