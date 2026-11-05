@@ -275,10 +275,14 @@ Q1c, not recommended). **Status:** open.
 **Exact question:** Does any rule outside the privacy notice require the
 controller to publish a geographic address?
 
-**Not assessed.** Email meets the privacy-notice requirement (`data-safety.md`
-§6.1). Options: keep email only (C4, decided 2026-10-23) and record the
-question as unassessed; or assess the rules that might apply before
-publication. **Status:** open.
+**Rules reviewed; application to GridView remains open.** Keep the draft
+privacy contact as email (C4). That does not decide separate obligations
+under Play's trader and identity rules or Irish e-commerce rules
+(`data-safety.md` §6.1). The next step is a read-only check of the account's
+Play trader status and confirmation of the commercial activity facts. Do
+not infer non-trader status from the personal account, the download count,
+or the planned removal of ads alone. No address or declaration has been
+changed. **Status:** open.
 
 ### Q6. The policy's wording on 1.x ads
 

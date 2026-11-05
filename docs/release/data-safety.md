@@ -882,10 +882,31 @@ page 35. **No home address is assumed to be publishable.**
 | Art. 12(2) and (3): facilitate the exercise of rights; answer within one month | A mailbox the owner uses | **Met for receiving requests**, given the owner's confirmation. Fulfilling a deletion request is still open (R3). |
 | Art. 13(2)(d) with Art. 77: the right to complain, "in particular in the Member State of his or her habitual residence, place of work or of an alleged infringement" (WP260 Annex) | That wording, and the Irish Data Protection Commission as the controller's authority | **Met.** The policy no longer names only the Spanish AEPD. |
 
-**Not assessed here:** information duties outside the privacy notice, such
-as the e-commerce rules on a service provider's "geographic address". C4
-does not settle them. They
-are for the privacy review.
+**Separate checks, reviewed 2026-11-05 (Q5 remains open):**
+
+- [Google Play's trader-status declaration](https://support.google.com/googleplay/android-developer/answer/17594752)
+  is account-wide and due by 2027-02-01 for active accounts. Play considers
+  the nature and regularity of commercial activity, including ad funding;
+  using a personal account or distributing a free app does not settle it.
+  For a trader on a personal account, Play displays the address and contact
+  phone number. The account's actual declaration has not been checked.
+- [Play's account identity rules](https://support.google.com/googleplay/android-developer/answer/13628312)
+  also distinguish the verified address Google holds from the public
+  developer details. The documented [country-change process](https://support.google.com/googleplay/android-developer/answer/16260648)
+  requires the owner to verify and link a payments profile for the new
+  country; no change has been made.
+- Ireland's e-commerce rules ([S.I. No. 68/2003, Regulation 7](https://www.irishstatutebook.ie/eli/2003/si/68/made/en/print))
+  require a geographic address for a relevant service provider. The EU
+  court's [Papasavvas decision (C-291/13)](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A62013CJ0291)
+  shows why an ad-funded service can be economic even when free to the
+  user. That decision concerned a website; it does not classify GridView.
+  The ad-supported 1.2.1 and planned ad-free 2.0.0 must be considered
+  separately. Applicability to GridView is not concluded.
+
+C4 remains the draft privacy contact decision. Next: read the trader status
+in Play Console (Manage account → Account details → About you) and establish
+the facts about commercial activity before choosing any declaration. Do not
+add or publish a private address from this assessment.
 
 ### 6.2 Inconsistencies left for owner steps
 
