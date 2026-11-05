@@ -211,6 +211,58 @@ describe('a 429 from Jolpica records which layer refused', () => {
     }
   });
 
+  it('holds the source before reading the refusal body, so a slow body never delays the hold', async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const limiter: ProviderRateLimiterClient = {
+      async reserve(sourceId) {
+        return { outcome: 'allowed', sourceId, headroom: [] };
+      },
+      async recordRateLimited() {
+        order.push('hold');
+        // The body can only finish once the hold has been reported.
+        release();
+      },
+    };
+    const encoder = new TextEncoder();
+    const client = new ProviderHttpClient({
+      transport: async () =>
+        new Response(
+          new ReadableStream({
+            async pull(controller) {
+              order.push('body-read');
+              await gate;
+              controller.enqueue(
+                encoder.encode('{"detail":"Request was throttled."}'),
+              );
+              controller.close();
+              order.push('body-done');
+            },
+          }),
+          { status: 429, headers: { 'Content-Type': 'application/json' } },
+        ),
+      limiter,
+      logger: new CapturingLogger(),
+      now: () => now,
+    });
+
+    const result = await client.getJson({
+      sourceId: 'jolpica',
+      path: '/ergast/f1/2026/races/',
+    });
+
+    expect(!result.ok && result.kind).toBe('provider-rate-limited');
+    // The body could only complete after the hold; had the client awaited the
+    // body first, it would have waited for the timeout instead.
+    expect(order.filter((step) => step !== 'body-read')).toEqual([
+      'hold',
+      'body-done',
+    ]);
+  });
+
   it('never logs a provider header or body value it did not recognise', async () => {
     const hostile = 'evil-value\u0000<script>';
     const run = harness(

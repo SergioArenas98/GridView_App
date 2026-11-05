@@ -486,6 +486,11 @@ export class ProviderHttpClient {
         // Measured before the body is read, so it stays the provider's answer
         // time and stays comparable with the 2026-11-03/04 records.
         const durationMs = this.now().getTime() - startedAt;
+        // Hold the source first, so no further reservation in this run - or,
+        // through the limiter, in any other - reaches the provider until the
+        // hold ends (AU-4 step 2, 2026-11-03). Reading the diagnostic body
+        // comes after: a slow body must never delay the hold.
+        await this.reportRateLimit(sourceId, retryAfter);
         const body = await readRefusalBody(response);
         this.logger.warn({
           operation: 'provider.request.rate_limited',
@@ -498,10 +503,6 @@ export class ProviderHttpClient {
           // in closed values only; the body itself is never logged.
           ...refusalFactsOf(response.headers, body),
         });
-        // Hold the source before answering, so no further reservation in
-        // this run - or, through the limiter, in any other - reaches the
-        // provider until the hold ends (AU-4 step 2, 2026-11-03).
-        await this.reportRateLimit(sourceId, retryAfter);
         return {
           ok: false,
           sourceId,
