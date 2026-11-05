@@ -6,11 +6,17 @@
  * reservations by `spacingMillis` **before** asking the limiter, and stops the
  * run's requests once the provider has said `429`:
  *
- * - **Spacing.** The default is `defaultReservationSpacingMillis`, one request
- *   per second. Jolpica publishes four per second, but on 2026-11-03 it
- *   answered `429` to staging at that pace (AU-4 step 2), so one per second is
- *   a conservative starting point, not a verified safe rate. Anything at or
- *   above `minimumReservationSpacingMillis` is accepted.
+ * - **Spacing.** The default is `defaultReservationSpacingMillis`, 3.5 s.
+ *   Jolpica publishes four per second and 500 an hour, but its maintainer has
+ *   also stated an unpublished limit of about 20 requests a minute in front of
+ *   the API (GitHub discussions #243, 2025-06-04, and #251, 2025-07), and on
+ *   2026-11-03 Cloudflare's edge refused staging after 20 requests in 5.4 s.
+ *   At 3.5 s a run sends at most 18 in any minute, and a full run (6 season
+ *   resources plus every round) still ends far inside the coordination
+ *   deadline. Spacing keeps GridView inside that limit; it does not by itself
+ *   avoid refusals caused by other clients that share GridView's address at
+ *   the provider. Anything at or above `minimumReservationSpacingMillis` is
+ *   accepted.
  * - **Upstream hold.** `recordRateLimited` (called by the HTTP boundary on a
  *   `429`) holds this pacer until `upstreamHoldUntil(now, retryAfter)` and
  *   forwards the report to the limiter, whose own hold then covers every other
@@ -38,8 +44,14 @@ import type { RealProviderSourceId } from './reservation-engine';
 /** The smallest spacing the pacer accepts: just above 1000 ms / 4 requests. */
 export const minimumReservationSpacingMillis = 260;
 
-/** The spacing a run uses unless told otherwise: one request per second. */
-export const defaultReservationSpacingMillis = 1000;
+/**
+ * The spacing a run uses unless told otherwise: 3.5 s, so at most 18 requests
+ * in any minute, under the about 20 a minute Jolpica's maintainer stated.
+ */
+export const defaultReservationSpacingMillis = 3500;
+
+/** Jolpica's per-minute limit as its maintainer stated it (not published). */
+export const statedJolpicaRequestsPerMinute = 20;
 
 export type PacerSleep = (millis: number) => Promise<void>;
 
