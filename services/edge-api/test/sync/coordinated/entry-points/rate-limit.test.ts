@@ -26,7 +26,13 @@ import {
 } from '../../../../src/providers/http/provider-rate-limiter';
 import type { ReconciliationLedgerPort } from '../../../../src/sync/coordinated/ledger-port';
 import { sequencerTransports } from '../../../publication/sequenced/support';
-import { paced, paths, seasonPaths, tickAfter } from '../observation/support';
+import {
+  paced,
+  paths,
+  seasonPaths,
+  tickAfter,
+  type Answer,
+} from '../observation/support';
 import {
   EntryPointHarness,
   HOUR,
@@ -229,5 +235,81 @@ describe.each(sequencerTransports)(
       );
       expect(harness.activeVersion()).toBe(release);
     });
+
+    // 2026-11-05 investigation: the two layers that can refuse, each with the
+    // exact shape its source produces, as the third request of a run - the
+    // 2026-11-04 shape (calendar 200, circuits 200, drivers 429).
+    it.each([
+      {
+        layer: 'application',
+        refusal: 'jolpica-throttled',
+        retryAfterForm: 'absent',
+        answer: {
+          kind: 'status',
+          status: 429,
+          body: '{"detail":"Request was throttled."}',
+          headers: { server: 'cloudflare', 'cf-ray': '0123456789abcdef-DUB' },
+        },
+      },
+      {
+        layer: 'edge',
+        refusal: 'cloudflare-1015',
+        retryAfterForm: 'delta',
+        answer: {
+          kind: 'status',
+          status: 429,
+          body: '{"status":429,"error_code":1015,"retry_after":10}',
+          headers: {
+            'Content-Type': 'application/problem+json',
+            'Retry-After': '10',
+            server: 'cloudflare',
+            'cf-ray': '0123456789abcdef-DUB',
+          },
+        },
+      },
+    ] as const)(
+      'records a $layer refusal, withholds the incomplete run and sends nothing after it',
+      async ({ layer, refusal, retryAfterForm, answer }) => {
+        const harness = await EntryPointHarness.create(transport, bind);
+        const limiter = realLimiter(harness);
+        (
+          harness.env as { __PROVIDER_RATE_LIMITER?: unknown }
+        ).__PROVIDER_RATE_LIMITER = limiter.client;
+        const release = await harness.published();
+        harness.server.results.set(1, 'A');
+        harness.server.answers.set(paths.drivers, () => answer as Answer);
+        const at = tickAfter(1, 6);
+
+        const refused = await harness.manual(at);
+
+        expect(refused.requests).toEqual(seasonPaths.slice(0, 3));
+        const lines = linesOf(refused, 'provider.request.rate_limited');
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toMatchObject({
+          providerRefusalLayer: layer,
+          providerRefusalBody: refusal,
+          providerRetryAfterForm: retryAfterForm,
+          providerEdgeColo: 'DUB',
+        });
+        expect(JSON.stringify(refused)).not.toContain('Request was throttled');
+        expect(refused.body.data).toMatchObject({
+          providerRequests: 3,
+          publication: { outcome: 'withheld', publishCalls: 0 },
+        });
+        // Every reservation after the refusal is held, none is sent, and the
+        // hold is the limiter's floor (an edge Retry-After of 10 s is shorter).
+        for (const line of linesOf(refused, 'provider.reservation.deferred')) {
+          expect(line).toMatchObject({
+            providerDeferralCause: 'provider-hold',
+            providerRequestAttempted: false,
+          });
+        }
+        expect([refused.prepares, refused.storageWrites]).toEqual([0, 0]);
+        expect(harness.activeVersion()).toBe(release);
+        expect((await harness.round(1))?.limiterDeferralUntil).toBe(
+          later(paced(at, 3), MINUTE),
+        );
+      },
+    );
   },
 );

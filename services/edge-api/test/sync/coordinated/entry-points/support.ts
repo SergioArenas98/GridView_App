@@ -229,6 +229,19 @@ export class EntryPointHarness {
     return { ...record, ...answer! };
   }
 
+  /** Any one Worker request at `at`, recorded like `manual`. */
+  async admin(
+    at: string,
+    request: Request,
+  ): Promise<CallRecord & { status: number; body: unknown }> {
+    let answer: { status: number; body: unknown } | null = null;
+    const record = await this.record(at, async () => {
+      const response = await worker.fetch(request, this.env);
+      answer = { status: response.status, body: await response.json() };
+    });
+    return { ...record, ...answer! };
+  }
+
   /** The version the sequencer serves, read from its committed record. */
   activeVersion(): string | null {
     return this.harness.activeVersion();
