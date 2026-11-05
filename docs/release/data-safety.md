@@ -59,8 +59,8 @@ Later on 2026-11-05 the owner recorded D-T1 (versionCode 7 is not
 retained), D-T2 (the Alpha track is paused as part of the release plan)
 and Ireland as the intended Play listing country, and kept D-A: the seven
 active ad units are archived once the AdMob account's verification clears
-(§1.4, §3.6, §4.1, §6.2). None of these steps is done, and none of them
-answers a review question.
+(§1.4, §3.6, §4.1, §6.2). The owner paused Alpha that day (§1.2); the other
+steps remain pending. No privacy answer changed.
 Also on 2026-11-05 the owner decided that no external legal or privacy
 review will be commissioned, that 2.0.0 keeps Crashlytics and Performance
 Monitoring, and that it ships no push notifications. The open items are
@@ -107,23 +107,23 @@ Play Console Help, *Provide information for Google Play's Data safety section*
 | Artifact | Track (Play Console, read 2026-10-20) | minSdk | Data practices |
 |---|---|---|---|
 | versionCode 7, 1.2.1 | Production, full rollout | 21 | Google Mobile Ads SDK; Firebase Cloud Messaging and Installations; Unity Ads packaged, never started (§3.5) |
-| versionCode 2, 1.0.0 | Closed testing "Alpha" | 21 | Inspected 2026-10-22: the same Google Mobile Ads and Firebase SDKs as versionCode 7, and no Unity Ads (§3.5) |
+| versionCode 2, 1.0.0 | Closed testing "Alpha" (paused 2026-11-05) | 21 | Inspected 2026-10-22: the same Google Mobile Ads and Firebase SDKs as versionCode 7, and no Unity Ads (§3.5) |
 | versionCode 8, 2.0.0 | not yet uploaded | **24** (Flutter 3.44 default, `flutter.minSdkVersion`) | Firebase (§3.2) |
 
 **Confirmed 2026-11-05 from the owner's Play Console screenshots** (kept by
 the owner, not in this repository): Production shows 1.2.1 (versionCode 7)
-available on Google Play, and closed testing "Alpha" shows 1.0.0
-(versionCode 2) as active and available to selected testers. So versionCode 2
-is distributed today, and states 0 and T cover it until the Alpha track is
-paused (D-T2).
+available on Google Play. Closed testing "Alpha" initially showed 1.0.0
+(versionCode 2) as available to selected testers; after the owner paused the
+track (D-T2), the track banner said it was paused and the summary showed
+Inactive. The release card still shows its availability label. This changes
+no proposed Data safety answer: versionCode 7 remains in Production.
 
 1.x builds stay distributed in any of these cases:
 
 - a **staged rollout** of 2.0.0 below 100%, which keeps serving versionCode 7
   to the rest;
 - versionCode 7 **retained** in the 2.0.0 production release, for Android 5.0
-  to 6.0 (API 21 to 23) devices that cannot install 2.0.0;
-- the closed "Alpha" track still serving versionCode 2.
+  to 6.0 (API 21 to 23) devices that cannot install 2.0.0.
 
 ### 1.3 Three declaration states
 
@@ -135,15 +135,15 @@ paused (D-T2).
 
 ### 1.4 Order of the store steps
 
-None of these steps is done; each is a separate, owner-authorized Play Console
-or publishing step.
+Except where marked done, these are separate Play Console or publishing
+steps that need owner authorization.
 
 0. **The Alpha build: done 2026-10-22.** versionCode 2 was downloaded
    read-only from the App bundle explorer and inspected (§3.5). It has the
    same ads and Firebase SDKs as versionCode 7 and no Unity Ads, so the
    policy's section 3.4 and §3.5 here are true of it. Steps 1 and 2 no
-   longer wait on it. Pausing the Alpha track (D-T2) was decided by the
-   owner on 2026-11-05; it shortens state T.
+   longer wait on it. The owner paused the Alpha track on 2026-11-05
+   (D-T2, §1.2).
 1. **Publish the transition policy** (`privacy_policies.md` and `.html` in this
    PR) at https://gridview.netlify.app. It covers 1.x (section 3.4) and 2.0.0.
    Publish it **before** the 2.0.0 Data safety change and before the release is
@@ -159,8 +159,8 @@ or publishing step.
    verified free of app traffic (§3.4).
 4. **Release 2.0.0.** Owner decision D-T1 (2026-11-05): do **not** retain
    versionCode 7. The legacy backend is dead, so on API 21 to 23 1.2.1 can show
-   ads but no Formula 1 data. Pause the closed "Alpha" track (owner decision
-   D-T2, 2026-11-05).
+   ads but no Formula 1 data. The closed "Alpha" track was already paused
+   on 2026-11-05 (D-T2).
 5. **Once the rollout reaches 100%** and no 1.x artifact remains on any
    non-internal track, submit Data safety in state F and set Ads to **No**.
 6. **Keep section 3.4 in the policy.** Devices that never update still run 1.x
@@ -749,7 +749,7 @@ not decide R6's remediation or whether the geographic-address rules apply
 | R6, D-A | **2026-10-23: archive the 1.x ad units in AdMob** (§3.6) before automatic production publication (AU-7, `automatic-updates.md` AU-D2). The irreversible end of 1.x ad revenue is accepted | Once archived, ads stop being served to installed copies. The SDK's requests and the Firebase registration continue until update or uninstall. The archiving is a separate AdMob operation, not done yet. The account was found on 2026-11-04 (gridviewapp1@gmail.com). Seven active units remain, all versionCode 7's; `8806674289` is already retired. Serving is limited, and the last impression was on 2026-03-31 (§3.6). **Confirmed 2026-11-05:** archive the seven once the account's verification clears; D-A′ is not adopted. Whether anything more is needed for the ads served without a consent message stays with the review (R6) |
 | D-DEL | **2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality | Data safety answers No to deletion. The policy says no verified procedure exists and one installation's data cannot be found or deleted. The remaining privacy obligations stay with the review |
 | D-T1 | **2026-11-05: versionCode 7 is not retained** in the 2.0.0 release (§1.4 step 4) | New installs on API 21 to 23 are no longer offered; installed 1.2.1 copies stay covered by policy section 3.4. The release step is separate, not done |
-| D-T2 | **2026-11-05: pause the closed "Alpha" track** (versionCode 2) as part of the release plan | Ends Alpha distribution, which shortens state T. Existing Alpha installs keep 1.0.0. The pause is a separate Play Console step, not done |
+| D-T2 | **Done 2026-11-05: the owner paused the closed "Alpha" track** (versionCode 2); Play Console shows the track inactive (§1.2) | Ends Alpha distribution. Existing Alpha installs keep 1.0.0, and Production still serves 1.2.1 |
 | C4 | **2026-10-23: email (gridviewapp1@gmail.com) stays the only contact channel** | No policy change. Whether a geographic address is required by rules outside the privacy notice stays open for the review (§6.1) |
 | AU-D3 | **2026-10-23: accept the policy's current wording** on the API (sections 2 and 3.2): no record of the app's normal requests, and a 7-day technical record of the API's own internal errors | No policy change. It accepts the wording only; the classification behind it is R2 and R8. W3's log check stands, and AU-7 repeats it on its own version |
 | R1 | **Accepted for the draft (recorded 2026-11-02): declare Approximate location** for Performance Monitoring's IP-to-country mapping | The listing shows location collected. Matches Firebase's own disclosure |

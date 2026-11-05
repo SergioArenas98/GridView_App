@@ -471,8 +471,9 @@ closed and open tracks included. 1.2.1 shows Google AdMob ads with no consent
 message, and 1.x builds stay distributed in any of these cases:
 
 - during a staged rollout below 100%;
-- if versionCode 7 is retained for API 21–23;
-- while the closed "Alpha" track serves versionCode 2.
+- if versionCode 7 is retained for API 21–23.
+
+Closed Alpha (versionCode 2) was paused on 2026-11-05 (§5.1).
 
 The details are in PR #82, `data-safety.md` §1.
 
@@ -554,11 +555,9 @@ Facts (Play Console Help, *Set up an open, closed, or internal test*, read
 - **Superseded tracks.** When every bundle on a track is outranked by a higher
   versionCode on the fallback track, the track is **Superseded**: "None of the
   app bundles on the track serve users, as all users receive an app bundle
-  from the fallback track." versionCode 2 is below production's versionCode 7,
-  so the Alpha track is probably Superseded already. That has not been read in
-  the Console. **The owner's Play Console screenshots of 2026-11-05 show
-  otherwise:** the Alpha track is active, with 1.0.0 (versionCode 2)
-  available to selected testers (step 1).
+  from the fallback track." The owner's Play Console screenshots initially
+  showed Alpha as active, then paused and inactive after the owner paused it
+  on 2026-11-05 (steps 1, 3 and 4).
 
 Steps (each owner-run; only step 3 changes Play Console):
 
@@ -570,14 +569,12 @@ Steps (each owner-run; only step 3 changes Play Console):
 2. **Settle what versionCode 2 contains: done 2026-10-22.** It was
    downloaded read-only from the App bundle explorer. It is 1.0.0, with the
    same Google Mobile Ads and Firebase SDKs as versionCode 7 and no Unity Ads
-   (PR #82 `data-safety.md` §3.5, §1.4 step 0). App bundle explorer lists the
-   bundle as active. The track's own status was not read.
-3. **Pause the Alpha track** (Manage track → Pause track). This ends the
-   test whatever step 1 found. It must happen before R7. **D-T2, decided
-   by the owner on 2026-11-05:** the track is paused as part of this plan.
-   The pause itself is an owner-run Play Console step, not done.
-4. **Verify:** the track shows Paused, and no release on any closed or open
-   track names versionCode 1–7.
+   (PR #82 `data-safety.md` §3.5, §1.4 step 0).
+3. **Pause the Alpha track: done by the owner on 2026-11-05** (D-T2).
+4. **Verify:** the owner's follow-up screenshot on 2026-11-05 shows the
+   paused banner and Inactive track summary. The release card still lists
+   1.0.0 with its tester-availability label. Before R7, verify that no other
+   open or closed track is distributing versionCode 1–7.
 5. Existing Alpha installs keep whatever they have (Play says so). They are
    covered by the policy's 1.x section, which stays published (PR #82 policy
    §9).
@@ -738,7 +735,7 @@ reasons that could justify one:
   window (48 hours or a race weekend) is the mitigation.
 
   No remaining risk needs closed testing, so no closed gate is kept.
-  Retiring the old Alpha artefact is planned separately (§5.1).
+  The old Alpha track was paused separately on 2026-11-05 (§5.1).
 
 ## 8. The upgrade check (R3): one controlled, Play-delivered upgrade
 
@@ -816,7 +813,7 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 | W0 | Production genesis design (ADR 0025 O-16 amendment): **done**, PR #84 merged as `527444b` | — |
 | W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). **Bought 2026-10-21** (AU-1; Workers Paid is the current plan of the Wrangler account) | — |
 | D-T1 | Retain versionCode 7 for API 21–23 or not. **Decided by the owner on 2026-11-05: not retained** (§5, R4). The release step itself is separate | R4, R7 |
-| D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned. **Decided by the owner on 2026-11-05: pause it as part of this plan.** The pause is a separate owner-run Play Console step, not done | R7 |
+| D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned. **Done by the owner on 2026-11-05.** Play Console shows the track paused and inactive | R7 |
 | D-A | Archive the 1.x ad units in AdMob, or not. It stops ads being served to installed 1.x copies, which pausing a track does not, but not the SDK's requests (PR #82 `data-safety.md` §3.6). Irreversible; ends 1.x ad revenue. **Decided by the owner on 2026-10-23: archive, before AU-7** (AU-D2), accepting the loss of 1.x ad revenue. The AdMob operation itself is separate and not done. **Confirmed by the owner on 2026-11-05:** archive the seven active units (PR #82 `data-safety.md` §3.6) once the account's verification clears; D-A′ (treating deactivated serving as the gate) is not adopted | AU-7 |
 | D-DEL | Add an in-app control that deletes the installation's Firebase data (`FirebaseInstallations.delete()`), or not. **Decided by the owner on 2026-10-23: no control.** 2.0.0 keeps its current functionality, Data safety answers **No** to deletion requests, and the policy says no verified procedure exists and one installation's data cannot be found or deleted (PR #82 `data-safety.md` R3). The remaining privacy obligations stay with P-R | — |
 | D-R | Confirm no closed-testing stage: one controlled Play-delivered upgrade (R3), then the staged rollout (§7) | R5 |

@@ -94,10 +94,12 @@ expiry.
 
 **Confirmed 2026-11-05 from the owner's Play Console screenshots** (kept by
 the owner, not in this repository): Production shows 1.2.1 (versionCode 7)
-available on Google Play, and closed testing "Alpha" shows 1.0.0
-(versionCode 2) as active and available to selected testers.
-Both 1.x builds are therefore distributed now. This changes no proposed
-answer: states 0 and T already cover both (§4).
+available on Google Play. The closed "Alpha" track initially showed 1.0.0
+(versionCode 2) as available to selected testers. The owner then paused
+Alpha on the same day. The follow-up screenshot shows the track paused and
+inactive, although the release card still displays its availability label.
+The pause changes no proposed answer: states 0 and T still account for
+versionCode 7 while Play distributes it (§4).
 
 ## 4. Proposed Data safety answers
 
@@ -281,14 +283,14 @@ Two obligations behave differently:
 | Order | What changes | Assessment |
 |---|---|---|
 | **O1, current plan:** state 0 now, state T before 2.0.0 leaves internal testing, 20 % then 100 % rollout, state F | Needs Q1a for states 0 and T | Keeps the staged rollout. Recommended |
-| **O2, straight to F:** skip states 0 and T; pause Alpha; release 2.0.0 to 100 % with versionCode 7 not retained, and submit state F with it | Avoids answering Q1a on the form | Leaves the current "No data collected" form, already inaccurate for 1.2.1, in place until then, including during internal testing. It drops the staged rollout. It depends on Data safety being published with the release, which is not confirmed (§2). Not recommended |
+| **O2, straight to F:** skip states 0 and T; with Alpha already paused, release 2.0.0 to 100 % with versionCode 7 not retained, and submit state F with it | Avoids answering Q1a on the form | Leaves the current "No data collected" form, already inaccurate for 1.2.1, in place until then, including during internal testing. It drops the staged rollout. It depends on Data safety being published with the release, which is not confirmed (§2). Not recommended |
 | **O3, no state T:** state 0 now, then 2.0.0 straight to 100 % with state F | Shortens the period with 1.x rows | Still needs Q1a for state 0. Drops the staged rollout for a form state that costs nothing to keep. Not recommended |
-| **Pause Alpha now** (D-T2, before P0) | Ends versionCode 2's distribution earlier; the track is active (§3.2) | Helps a little and depends on nothing. Same SDKs as versionCode 7, so the form's content does not change |
+| **Alpha paused** (D-T2, done before P0) | The owner paused the track on 2026-11-05 (§3.2) | The form does not change because versionCode 7 remains in Production |
 
 **Conclusion:** reordering cannot answer the legal-basis questions. It can
 avoid the Data safety purpose question only by leaving a known-inaccurate
 form live (O2). What actually reduces the processing is releasing 2.0.0, the
-D-A archive, and pausing Alpha early.
+D-A archive, and the Alpha pause already completed.
 
 ## 7. What waits on each decision
 
