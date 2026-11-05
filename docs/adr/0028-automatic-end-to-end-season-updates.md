@@ -381,7 +381,8 @@ released:
   Jolpica data, but the listing that distributes it earns ad revenue meanwhile.
   ADR 0019 forbids indirect monetisation, so **D-A should precede automatic
   publication of Jolpica data in production**. Recorded as an owner decision,
-  not taken here.
+  not taken here. *(The owner accepted it on 2026-10-23, as AU-D2: archive
+  before AU-7. The AdMob operation is separate and not done.)*
 
 ### D12. Product scope of the first Google Play release: race results only
 
@@ -424,6 +425,9 @@ documented limitations:
 This records product decisions only. It authorises no merge, purchase,
 provisioning, deployment or activation; each stays a separately authorised
 step (`automatic-updates.md` §7, §8). AU-D2, AU-D3 and AU-D4 remain open.
+*(On 2026-10-23 the owner accepted AU-D2 and AU-D3 in PR #82, and on
+2026-11-05 AU-D4: GitHub e-mail, with delivery verified before the alerts
+are relied on.)*
 
 ## Consequences
 

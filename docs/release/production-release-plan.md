@@ -60,18 +60,18 @@ Steps marked **[PR]** are reviewable repository changes.
 | AU-0…AU-8 | Automatic updates: code (AU-0), Workers Paid (AU-1), the isolated demonstration Worker (AU-2), **the end-to-end demonstration with controlled data (AU-3)**, live staging automatic (AU-4), monitor schedule (AU-5), alert drill (AU-6), production automatic (AU-7), release-candidate check (AU-8) — `automatic-updates.md` §7 | W1, W-P; AU-7 also D2 and D-A |
 | P1 | **[PR]** Privacy policy (covering 1.x and 2.0.0) and Data safety evidence (PR #82) | — |
 | P2 | **[approval]** Publish the policy at https://gridview.netlify.app | P1 |
-| P0 | **[approval]** Correct the live Data safety form now: state 0 (1.x AdMob rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2, P-R, §5.1 step 2 or step 3 (Alpha inspected or paused) |
-| P3 | **[approval]** Data safety in transition state T, Ads = **Yes**, including the App interactions row D-L requires | P2, P-R, D-L, W3 (the deployed observability setting matches D-L); before R2 |
+| P0 | **[approval]** Correct the live Data safety form now: state 0 (the 1.x AdMob and Firebase rows), Ads = **Yes** (PR #82 `data-safety.md` §1.3) | P2, P-R (the Alpha build was inspected on 2026-10-22, §5.1 step 2) |
+| P3 | **[approval]** Data safety in transition state T, Ads = **Yes** | P2, P-R, W3 and AU-7 verification; before Production rollout R5 |
 | A1 | **[PR]** 2.0.0+8 and the production build configuration (this change) | — |
 | A0 | **[record]** Release-candidate gate, pre-build part (Implementation Plan §15.8) on the exact merged commit A2 builds | A1, P1, AU-3, every W/D/AU PR merged |
-| A0b | **[record]** Release-candidate gate, post-build part: the AAB, the internal installation and performance | A2, R2, R3 |
+| A0b | **[record]** Signed AAB and artifact checks before upload; Play installation and live performance after rollout starts | Artifact: A2, before R5; live checks: R5 and R3, before R6 |
 | A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A0, A1, P2, AU-7 (production live and holding its first automatic release; D3 is superseded) |
-| R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
-| R2 | **[approval]** Upload the AAB to internal testing and release it | A2, R1, P3 |
-| R3 | **[approval]** The controlled upgrade (§8): one Play-delivered upgrade of the final candidate, plus the owner's approval (D-U) of the replacements for the matrix rows one pass cannot cover | R2 |
-| R4 | **[approval]** Release notes, which describe race results only (ADR 0028 D12); decide D-T1 (retain versionCode 7 or not) | P3 |
-| R5 | **[approval]** Promote the same release to production at 20 % | R3, R4, A0, A0b (every §15.8 item recorded as passed), AU-7, AU-8 |
-| R6 | **[approval]** Increase to 100 % after the monitoring window | R5 |
+| R1 | **Not used:** no internal tester list (owner decision, 2026-11-05) | — |
+| R2 | **Not used:** no internal testing release (owner decision, 2026-11-05) | — |
+| R3 | **[record]** Owner checks the Play-delivered upgrade on the live Production release (§8) | R5 and availability to the owner's account; before R6 |
+| R4 | **[approval]** Release notes, which describe race results only (ADR 0028 D12); D-T1 **decided 2026-11-05: versionCode 7 is not retained** | P3 |
+| R5 | **[approval]** Submit the signed AAB directly to Production and start the planned 20% rollout after Google review | A2, A0, A0b artifact checks, P3, R4, AU-7, AU-8 |
+| R6 | **[approval]** Increase to 100% after the owner checks the live update and the monitoring window passes | R5, R3 and live A0b checks |
 | R7 | **[approval]** Data safety final state F, Ads = **No**, once no 1.x artifact is distributed on any non-internal track | R6, D-T1, Alpha retired (§5.1) |
 
 ## 3. Track W — production Worker
@@ -182,7 +182,8 @@ The amendment must decide:
     Worker writes no `request.completed` line for a public request, keeps
     `request.failed` without the request ID, and logs refused internal paths
     as `/internal/*`. App traffic is not stored, so no App interactions row
-    is needed for Worker logs. The privacy wording stays with PR #82 (AU-D3).
+    is needed for Worker logs. The owner accepted PR #82's privacy wording
+    for it on 2026-10-23 (AU-D3).
 
 ### W-P. Cost of genesis and submissions, and the submission path (decision)
 
@@ -470,8 +471,9 @@ closed and open tracks included. 1.2.1 shows Google AdMob ads with no consent
 message, and 1.x builds stay distributed in any of these cases:
 
 - during a staged rollout below 100%;
-- if versionCode 7 is retained for API 21–23;
-- while the closed "Alpha" track serves versionCode 2.
+- if versionCode 7 is retained for API 21–23.
+
+Closed Alpha (versionCode 2) was paused on 2026-11-05 (§5.1).
 
 The details are in PR #82, `data-safety.md` §1.
 
@@ -480,46 +482,47 @@ The details are in PR #82, `data-safety.md` §1.
     and 2.0.0 everywhere else;
   - `docs/release/data-safety.md`.
 
-  Its review items (data-safety R1–R8) need the owner's privacy review, P-R,
-  before **any** Data safety submission (P0, P3, R7). Data-safety item R7 is
+  Its review items (data-safety R1–R9) need the owner's privacy review, P-R,
+  before **any** Data safety submission (P0, P3, R7). **No external review
+  is planned (owner, 2026-11-05):** P-R is the owner's decision on each open
+  item, on the evidence and official guidance in PR #82 `privacy-self-assessment.md`.
+  None of those items is settled by that change. Data-safety item R7 is
   the controller naming. The owner confirmed it on 2026-10-20: Sergio Arenas
   del Amo, an individual in Ireland, publishing as Sejuma, with no registered
   business. The Play listing still shows Spain (PR #82 `data-safety.md` §6).
+  **Recorded 2026-11-05:** Ireland is the intended country for the Play
+  listing. Changing it is a separate Play Console step, not done.
 - **P2 [approval]:** publish `privacy_policies.html` at https://gridview.netlify.app,
   the URL already on the listing and in `config/dart_defines/production.json`.
   - It must be live before P3 and A2.
   - Publish only the version that covers 1.x. A 2.0.0-only text must never
     replace the live page while 1.x is distributed.
-- **P3 precondition.** The Data safety answer that API traffic is processed
-  ephemerally (`data-safety.md` §3.4, data-safety review item R2) holds only
-  while production stores no record of a public request. Under ADR 0028 D8
-  production logs stay persisted, with `invocation_logs = false` and no
-  `request.completed` line for a public request. W3 verified this on
-  the deployed Worker on 2026-10-22 (W3 above): the settings show
-  `invocation_logs = false`, and the public-request log check passed. This is
-  an engineering verification only. It does not approve PR #82's privacy
-  wording (AU-D3), which stays an owner decision.
+- **P3 precondition.** W3 verified the deployed Worker logging settings and
+  the absence of logs for the ordinary public requests tested. AU-7 repeats
+  that check on its deployed version. The draft makes no blanket claim
+  that Cloudflare's IP processing is ephemeral and no assertion about
+  metadata on an unobserved error. The owner declined a separate error
+  test (`privacy-self-assessment.md` Q2 and Q3).
 - **P0 [approval]:** in Play Console, correct the live form now to **state
-  0**: the 1.x AdMob rows only, with Ads **Yes**. The live "No data collected"
-  is already inaccurate for 1.2.1. State 0 does not depend on 2.0.0 or on the
-  production Worker.
+  0**: the 1.x rows only (AdMob and Firebase Cloud Messaging), with Ads
+  **Yes**. The live "No data collected" is already inaccurate for 1.2.1.
+  State 0 does not depend on 2.0.0 or on the production Worker.
 - **P3 [approval]:** submit Data safety in **state T**: the 2.0.0 Firebase
-  rows plus the 1.x AdMob rows, with Ads **Yes**.
-  - **Prerequisites:** P-R is done, and D-L is decided.
-  - D-L's engineering side is resolved by ADR 0028 D8. Logs persist, but no
-    line records a public request, and W3 verified that on the deployed
-    version. If PR #82's wording review (AU-D3) still wants an App
-    interactions row for Worker logs, the row carries the API source and
-    the App functionality purpose (PR #82 `data-safety.md` §3.2, §3.4).
-  - Play counts closed, open and production tracks, and exempts only apps that
-    are active exclusively on internal testing. GridView is not internal-only,
-    so this plan takes the conservative reading and submits state T before
-    the internal upload (R2), not just before production (R5).
+  rows plus the 1.x rows (AdMob and Firebase Cloud Messaging), with Ads
+  **Yes**.
+  - Submit before the first Production rollout (R5). No testing-track
+    submission is planned for 2.0.0. Keep the 1.x disclosures until no 1.x
+    artifact is distributed on a non-internal track.
+  - Apply the draft scopes for Cloudflare IP processing and technical error
+    logs (`privacy-self-assessment.md` Q2 and Q3); the existing W3/AU-7
+    deployment check still applies. No separate error test is planned.
 - **R4 [approval]:**
   - English and Spanish release notes. They name race results only, never
     practice, qualifying or sprint results (ADR 0028 D12).
-  - **D-T1:** do not retain versionCode 7 for API 21–23 (recommended). The
-    legacy backend is dead, so 1.2.1 shows ads but no data.
+  - **D-T1, decided by the owner on 2026-11-05:** versionCode 7 is not
+    retained for API 21–23. The legacy backend is dead, so 1.2.1 shows ads
+    but no data. Installed 1.2.1 copies there stay as they are (policy
+    section 3.4), and new installs there are no longer offered (§1).
 
 ### 5.1 Retiring the old Alpha artefact (versionCode 2)
 
@@ -535,23 +538,26 @@ Facts (Play Console Help, *Set up an open, closed, or internal test*, read
 - **Superseded tracks.** When every bundle on a track is outranked by a higher
   versionCode on the fallback track, the track is **Superseded**: "None of the
   app bundles on the track serve users, as all users receive an app bundle
-  from the fallback track." versionCode 2 is below production's versionCode 7,
-  so the Alpha track is probably Superseded already. That has not been read in
-  the Console.
+  from the fallback track." The owner's Play Console screenshots initially
+  showed Alpha as active, then paused and inactive after the owner paused it
+  on 2026-11-05 (steps 1, 3 and 4).
 
 Steps (each owner-run; only step 3 changes Play Console):
 
 1. **Read the Alpha track's status** in Play Console, read-only: Superseded,
-   Active or Paused. Record it.
-2. **Settle what versionCode 2 contains** before any declaration relies on it.
-   Either inspect it in the App bundle explorer against PR #82
-   `data-safety.md` §3.5, or skip the inspection because step 3 runs first.
-   This is PR #82 §1.4 step 0.
-3. **Pause the Alpha track** (Manage track → Pause track). This ends the
-   test whatever step 1 found. It must happen before P0 if versionCode 2 was
-   not inspected, and in any case before R7.
-4. **Verify:** the track shows Paused, and no release on any closed or open
-   track names versionCode 1–7.
+   Active or Paused. Record it. **Done 2026-11-05 from the owner's
+   screenshots:** active, 1.0.0 (versionCode 2) available to selected
+   testers; Production shows 1.2.1 (versionCode 7) available on Google
+   Play (PR #82 `data-safety.md` §1.2).
+2. **Settle what versionCode 2 contains: done 2026-10-22.** It was
+   downloaded read-only from the App bundle explorer. It is 1.0.0, with the
+   same Google Mobile Ads and Firebase SDKs as versionCode 7 and no Unity Ads
+   (PR #82 `data-safety.md` §3.5, §1.4 step 0).
+3. **Pause the Alpha track: done by the owner on 2026-11-05** (D-T2).
+4. **Verify:** the owner's follow-up screenshot on 2026-11-05 shows the
+   paused banner and Inactive track summary. The release card still lists
+   1.0.0 with its tester-availability label. Before R7, verify that no other
+   open or closed track is distributing versionCode 1–7.
 5. Existing Alpha installs keep whatever they have (Play says so). They are
    covered by the policy's 1.x section, which stays published (PR #82 policy
    §9).
@@ -559,8 +565,11 @@ Steps (each owner-run; only step 3 changes Play Console):
 Pausing the track, or any other Play step, stops **distribution** only. It
 does not stop 1.x copies that are already installed from requesting ads. They
 keep requesting them until the device updates to 2.0.0 or the app is
-uninstalled. Stopping ad serving to them is a separate AdMob decision (PR #82
-`data-safety.md` §3.6).
+uninstalled. Stopping ad serving to them is a separate AdMob step: D-A,
+archiving the 1.x ad units listed in PR #82 `data-safety.md` §3.6. The
+2026-11-04 inspection found seven active, all versionCode 7's; versionCode
+2's extra unit was already retired. On 2026-11-05 the owner removed all
+seven remaining units and provided a screenshot confirming the removal.
 
 Not used: promoting 2.0.0 to Alpha to replace versionCode 2. That would make a
 closed test of 2.0.0, which §7 does not need.
@@ -592,21 +601,25 @@ lists what the candidate must pass. Record each item against the **exact
 merged commit** A2 builds, never a branch head or an older run.
 
 - **A0 (before A2):** every item that does not need the AAB.
-- **A0b (after R3, before R5):** the three items that do: the production AAB
-  build, the internal installation and the performance targets.
+- **A0b:** verify the signed production AAB before R5. Record the Play
+  installation and live performance after R5, before increasing to 100%
+  at R6. This release-specific sequence supersedes the internal-installation
+  and testing-track steps in Implementation Plan §§15.8 and 16.2.
 
 | §15.8 item | Part | Evidence for that commit |
 |---|---|---|
 | Formatting and static analysis; unit, widget, database and migration tests; golden tests | A0 | The green `Flutter quality gates` CI run on that commit (`flutter analyze`, format, the full `flutter test`) |
 | Backend and contract tests | A0 | The green `Edge API quality gates` and `Canonical golden freshness` runs (typecheck, lint, format, the full vitest suite, `npm run validate`) |
 | Integration tests | A0 | The same edge suite's Worker-level tests. Any Flutter integration test is run locally on that commit and recorded. |
-| Production AAB build; internal Play installation | A0b | A2 and R2 |
+| Production AAB build and artifact checks | A0b, before R5 | A2 and artifact checks below |
+| Production Play installation | A0b, before R6 | The owner's live upgrade check (R3) |
 | Performance targets | A0b | The Performance traces from R3's controlled upgrade against the targets in Implementation Plan §15.4 |
 | Security review | A0 | CodeQL and the secret scan green on that commit, plus a recorded review of the release diff |
-| Privacy review | A0 | PR #82's R1–R8 answered by the owner |
+| Privacy review | A0 | Every open privacy item in PR #82 `privacy-self-assessment.md` §5 (R2 scope, R6, R8 API lines, R9 as Q1a-Q1c, §6.1, Q6) decided by the owner and recorded in `data-safety.md` §4.1. **No external review is planned (owner, 2026-11-05)**; an item still open blocks A2 |
 | Provider legal gate | A0 | ADR 0019 and Implementation Plan §14.2, re-confirmed for automatic publication of race results (ADR 0028 D11, D12); Jolpica's terms and rate limits re-read from its public repository, without contacting the API |
 
-A failing, missing or stale A0 item blocks A2. A failing A0b item blocks R5.
+A failing, missing or stale A0 item blocks A2. A failing artifact check
+blocks R5; a failing or missing live A0b check blocks R6.
 
 **A2 [approval]: build and sign.** Run from a clean checkout of the merged
 commit, in PowerShell, with the API live and holding data (W3, D2, then the
@@ -623,6 +636,17 @@ The variable authorizes the Crashlytics mapping upload for this one
 invocation, as `play-store-baseline.md` requires. Keep the Gradle output as the
 upload record.
 
+**Use a fresh clone or a new worktree, never the everyday checkout.** On
+2026-11-04 a production profile build in the everyday checkout packaged a
+stale `libapp.so` from 2026-10-20, with no API URL in it. Gradle's
+`merged_jni_libs` and `stripped_native_libs` outputs kept the old library,
+and the fresh Dart snapshot stopped at `intermediates/flutter/…/jniLibs`. The
+same build from a new worktree of the same commit was correct. Only the
+endpoint check below caught the difference. A2 does not proceed unless
+every check below passes. The offline kit's `verify-aab.py`
+(`~/.gridview/evidence/release-candidate-offline-kit-2026-11-04/`) runs them
+all.
+
 Artifact checks before upload:
 - **Identity:** versionCode 8, versionName 2.0.0, `com.sejuma.gridview`,
   target 36, min 24, not debuggable.
@@ -635,18 +659,18 @@ Artifact checks before upload:
 
 ## 7. Track R — Google Play
 
-1. **R1 [approval].** Create an email list, *GridView upgrade check*, containing
-   only the owner's test account. Select it on internal testing and deselect
-   the existing *Testers* list (19 users) so no one else receives the
-   candidate.
-2. **R2 [approval].** Create the internal testing release with the A2 AAB
-   (versionCode 8) and roll it out.
-3. **R3 [approval].** The upgrade check in §8.
-4. **R4 [approval].** The store declarations in §5. They are reviewed with
-   the production submission.
-5. **R5 [approval].** Promote the **same** release to production, a
-   staged rollout at **20 %**. This goes through Google review.
-6. **R6 [approval].** Increase to 100 % once the monitoring window passes.
+**Owner decision, 2026-11-05:** no tester list or testing-track release for
+2.0.0. R1 and R2 are not used. Submit the signed AAB directly to Production.
+This does not start a release or change the planned staged percentages.
+
+1. **R4 [approval].** Prepare the store declarations and release notes (§5).
+2. **R5 [approval].** Create the Production release with the verified A2 AAB,
+   submit it for Google review, and start the staged rollout at **20%**.
+3. **R3 [record].** The owner checks the live Play-delivered upgrade (§8)
+   once the update is offered to their account. Do not increase the rollout
+   before this check; a staged rollout may not reach that account immediately.
+
+4. **R6 [approval].** Increase to 100 % once the monitoring window passes.
    - **Window:** at least 48 hours, or a race weekend.
    - **Pass criteria** (the Implementation Plan §16.3 signals that apply to
      2.0.0):
@@ -673,45 +697,22 @@ Artifact checks before upload:
      Console. Play cannot lower a versionCode, so the fix ships forward as
      2.0.1 (9).
 
-**No closed-testing stage (owner decision, 2026-10-20).** Between internal
-testing and production there is **one controlled, Play-delivered upgrade of
-the final candidate** (R3). Implementation Plan §16.2's closed-testing and
-monitoring stage is not used. A closed stage was considered against the two
-reasons that could justify one:
-
-- **Play Console requirement: none applies.** Play's closed-testing rule (12
-  testers for 14 days, *App testing requirements for new personal developer
-  accounts*) applies to personal accounts created after 13 November 2023,
-  before production access. GridView has had production access since 2025.
-  The owner should still confirm that the Console shows no such requirement
-  when R5 is created.
-- **Risks the controlled upgrade cannot test:**
-  - device and OS diversity;
-  - crash, ANR and API-error rates across many users;
-  - real-network variety.
-
-  A closed track of about 19 testers samples these weakly. The **staged
-  production rollout** samples them better, with a halt: R5 starts at 20 %,
-  R6 gates 100 % on the §16.3 signals, and Play can halt a rollout. One risk
-  neither covers is a failure that appears only after days of use; the R6
-  window (48 hours or a race weekend) is the mitigation.
-
-  No remaining risk needs closed testing, so no closed gate is kept.
-  Retiring the old Alpha artefact is planned separately (§5.1).
+If the owner does not receive the staged update immediately, keep the rollout
+at its initial percentage until the check is possible. Do not create an
+internal or closed track. The old Alpha track is already paused (§5.1).
 
 ## 8. The upgrade check (R3): one controlled, Play-delivered upgrade
 
-One device, one pass, about 30 minutes, on the exact candidate R5 promotes,
-delivered by Play from internal testing.
+One device, one pass, about 30 minutes, on the exact AAB released in R5,
+delivered by Google Play from the live Production rollout.
 
 **Preconditions:**
 - A Play Store device on **API 36** (the current Android version, a matrix
-  row), with 4 KB memory pages, signed in with the upgrade-check tester
-  account.
+  row), with 4 KB memory pages, signed in with the owner's ordinary Play account.
 - GridView **1.2.1 installed from Play production**, with Spanish and dark
   mode chosen in 1.2.1. 1.2.1's own backend no longer answers, so its cache
   stays empty, which 2.0.0 never reads anyway.
-- The tester has not yet opted in to internal testing.
+- The 2.0.0 update is visible for that account in the public Play listing.
 
 **Steps:**
 
@@ -720,7 +721,7 @@ delivered by Play from internal testing.
      `com.android.vending`;
    - `apksigner verify --print-certs` on the pulled base APK shows the
      app-signing certificate.
-2. Opt in through the internal-testing link and update from the Play Store.
+2. Update from the public Google Play listing when 2.0.0 is offered.
    **Do not open the app.**
 3. **After the update** (still unopened):
    - versionCode 8 and installer `com.android.vending`;
@@ -744,23 +745,12 @@ delivered by Play from internal testing.
 8. After 30 minutes, Crashlytics shows no fatal or non-fatal for 2.0.0 (8),
    and `gv_sync_run` appears in Performance.
 
-**Pass:** every step holds. **Fail:** stop before R5, record the failure, and
-fix forward with a new versionCode.
+**Pass:** record the live result before R6. **Fail:** halt the staged
+rollout, record the failure, and fix forward with a new versionCode.
 
-**Coverage of the §15.3 upgrade matrix** (Implementation Plan §15.3;
-`GridView_Legacy_Migration.md` §5). The single pass covers five rows. The
-rest are not Play-delivered passes. They are named replacements that the owner
-approves, or not, as D-U. R3 is a release gate only with both.
-
-| Matrix row | Coverage |
-|---|---|
-| Empty legacy cache; dark theme; alternate language | The pass (steps 4–6) |
-| No network | The pass (step 4: first launch offline) |
-| Current Android version | The pass, on an API 36 device |
-| Slow network | **Replacement (D-U):** the same candidate as a **Play-signed universal APK** (Play Console → App bundle explorer → versionCode 8 → "Download signed universal APK", a read-only download). Install it on an emulator with throttled network ("EDGE" profile) and do the first launch. Not Play-delivered; it tests the app's timeouts, not the upgrade path, which the pass covers. |
-| Older supported Android version | **Replacement (D-U):** the same Play-signed universal APK, installed over the Play-signed 1.2.1 universal APK (versionCode 7, same download) on an **API 24** emulator (the new minSdk), with the pass's steps 4–6. Both carry the app-signing key, so the update installs. An APK extracted with `bundletool` would carry the upload or debug key and fail with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. A pass on a physical API 24–26 Play device can be added if one is available. |
-| **Populated legacy cache** | **Not reproducible through Play.** 1.2.1's backend is dead, so a Play-installed 1.2.1 cannot fill its Hive cache; only a device or backup from before the shutdown could. Proposed replacement: the unit tests over the genuine Hive fixture (`test/fixtures/legacy/`, `GridView_Legacy_Migration.md` §4), plus a populated pass if a pre-shutdown device exists. **Needs D-U.** |
-| **Corrupted legacy cache** | **Not reproducible on a Play build**, which is not debuggable, so its files cannot be altered. Proposed replacement: the corrupt-key and failed-read unit tests from PR #81. **Needs D-U.** |
+**Coverage:** R3 is the owner's live check, not a testing-track phase.
+The automated legacy-cache and migration checks remain part of the
+release-candidate verification. No extra Play testing track is required.
 
 This check does not prove that the 1.x Hive files were deleted. A Play build is
 not debuggable, so they cannot be inspected; the unit tests cover the cleanup
@@ -772,16 +762,18 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 |---|---|---|
 | W0 | Production genesis design (ADR 0025 O-16 amendment): **done**, PR #84 merged as `527444b` | — |
 | W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). **Bought 2026-10-21** (AU-1; Workers Paid is the current plan of the Wrangler account) | — |
-| D-T1 | Retain versionCode 7 for API 21–23 or not (recommended: not) | R4, R7 |
-| D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | P0 or R7 |
-| D-A | Archive the 1.x ad units in AdMob, or not. It stops ads being served to installed 1.x copies, which pausing a track does not, but not the SDK's requests (PR #82 `data-safety.md` §3.6). Irreversible; ends 1.x ad revenue | — (owner's choice of timing) |
-| D-R | Confirm no closed-testing stage: one controlled Play-delivered upgrade (R3), then the staged rollout (§7) | R5 |
+| D-T1 | Retain versionCode 7 for API 21–23 or not. **Decided by the owner on 2026-11-05: not retained** (§5, R4). The release step itself is separate | R4, R7 |
+| D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned. **Done by the owner on 2026-11-05.** Play Console shows the track paused and inactive | R7 |
+| D-A | **Done by the owner on 2026-11-05.** AdMob confirmed that the seven remaining GridView ad units were removed. The eighth known unit was already retired. This disables serving for those units without removing the advertising SDK from installed copies (PR #82 `data-safety.md` §3.6) | AU-7 |
+| D-DEL | Add an in-app control that deletes the installation's Firebase data (`FirebaseInstallations.delete()`), or not. **Decided by the owner on 2026-10-23: no control.** 2.0.0 keeps its current functionality, Data safety answers **No** to deletion requests, and the policy says no verified procedure exists and one installation's data cannot be found or deleted (PR #82 `data-safety.md` R3). The remaining privacy obligations stay with P-R | — |
+| D-R | **Owner decision 2026-11-05:** direct Production submission, without internal or closed testing or a tester list. The owner verifies the Play-delivered update on the live rollout (§§7–8) | R5, R6 |
 | D-C | Commit a reviewed Jolpica capture tool to the repository, or keep the private operator script | D1 |
-| D-L | Production persisted application logs. **Engineering resolved 2026-10-21 by ADR 0028 D8:** persisted, invocation logs off, no public-request line and no client data or credential stored. The privacy wording stays an owner decision in PR #82 (AU-D3) | P3 |
-| D-U | Approve the replacements for the upgrade-matrix rows the single pass does not cover: slow network, older Android, and populated and corrupted legacy cache (§8). Or supply devices for them | R3 |
+| D-L | Production persisted application logs. **Engineering resolved 2026-10-21 by ADR 0028 D8:** persisted, invocation logs off, no public-request line and no client data or credential stored. The privacy wording was accepted by the owner on 2026-10-23 (AU-D3, PR #82) | — |
+| D-U | The previously agreed automated legacy-cache coverage remains. The owner moved the Play-delivered check to the live Production rollout and removed the prerelease testing-track gate on 2026-11-05 (§8) | R3, R6 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
-| P-R | Privacy review of PR #82 `data-safety.md` review items R1–R8 (not the R-track gates) | P0 |
-| M | Ship 2.0.0 with placeholder media (no R2, no approved media) | R5 |
-| O | **Changed 2026-10-21:** nobody runs D1/D3 each race weekend (automatic). Who answers alerts and staged corrections (ADR 0028 D6, D9), and the 2027 dataset work | R5 |
+| P-R | Privacy review of PR #82 `data-safety.md` (see `privacy-self-assessment.md` §5). **Draft work recorded:** the owner accepted the 1.2.1 Firebase collection purpose, declined additional error-log tests, paused Alpha, confirmed the Play non-trader status and removed the seven remaining AdMob units. The policy draft reflects these facts. **No external review is planned.** The legacy registration basis, the remaining legacy-processing and address questions, and the limits of Cloudflare processing remain documented. Draft completion is not approval to publish the policy or submit a declaration | P0 |
+| S-0 | 2.0.0 keeps Firebase Crashlytics and Performance Monitoring and ships no push notifications (no Messaging SDK; the build's dependency check forbids it). **Decided by the owner on 2026-11-05** | — |
+| M | Ship 2.0.0 with placeholder media (no approved media). **Decided by the owner on 2026-11-05:** ship with placeholder images if approved images are not ready | R5 |
+| O | **Changed 2026-10-21:** nobody runs D1/D3 each race weekend (automatic). Who answers alerts and staged corrections (ADR 0028 D6, D9), and the 2027 dataset work. **Decided by the owner on 2026-11-05:** the owner handles the alerts and the staged corrections that need a decision, through GitHub e-mail alerts (AU-D4), and their delivery is verified before they are relied on. The 2027 dataset work is not part of this decision and stays open | R5 |
 | AU-D1, AU-D5 | **Accepted by the owner for 2.0.0 on 2026-10-21, including their documented limitations** (ADR 0028 D13; `automatic-updates.md` §9): AU-D1, O-5(a), a staged correction freezes the season until an operator acts; AU-D5, a first race result inside the window is seen twice before it is published, which reduces but does not remove the risk of a short classification shown as "Final". The acceptance authorises no merge, purchase, provisioning, deployment or activation | — |
-| AU-D2…AU-D4 | D-A before AU-7; privacy wording for Worker logs; alert channel (`automatic-updates.md` §9) | AU-7 |
+| AU-D2…AU-D4 | D-A before AU-7 and the privacy wording for Worker logs: **both accepted by the owner on 2026-10-23** (AU-D2, AU-D3). The alert channel (AU-D4): **GitHub e-mail, accepted by the owner on 2026-11-05**, with delivery verified before the alerts are relied on (`automatic-updates.md` §9) | AU-7 |

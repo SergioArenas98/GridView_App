@@ -765,14 +765,15 @@ Then:
 
 On 2026-10-21 the owner explicitly accepted **AU-D1** and **AU-D5** for
 version 2.0.0, including their documented limitations (ADR 0028 D13).
-AU-D2, AU-D3 and AU-D4 remain open. Accepting a decision authorises no merge,
+On 2026-10-23 the owner accepted **AU-D2** and **AU-D3** (PR #82), and on
+2026-11-05 **AU-D4** (PR #82). Accepting a decision authorises no merge,
 purchase, provisioning, deployment or activation; those stay the separately
 authorised steps of §7 and §8.
 
 | # | Decision | Status / recommendation |
 |---|---|---|
 | AU-D1 | O-5(a): a staged correction withholds the whole season until an operator acts | **Accepted by the owner for 2.0.0 on 2026-10-21, with its limitation:** keep O-5(a), with the 3 h heartbeat alert; a staged correction holds every later change, a new race result included, until an operator disposes of it. O-5(b) (per-round carry-over) is a later design change |
-| AU-D2 | D-A, archive the 1.x AdMob units, before Jolpica data is published automatically in production (ADR 0028 D11) | Yes, before AU-7 |
-| AU-D3 | Privacy wording for production Worker logs (PR #82, still open; D-L engineering resolved by ADR 0028 D8) | Say that Worker logs store no app-user data and are kept 7 days |
-| AU-D4 | The alert channel: GitHub e-mail (committed) or an additional Cloudflare custom alert (beta, webhook) | GitHub e-mail first; revisit when the beta ends |
+| AU-D2 | D-A, remove the 1.x AdMob units before automatic publication in Production (ADR 0028 D11) | **Done by the owner on 2026-11-05.** AdMob confirmed removal of the seven remaining GridView units; the eighth known unit was already retired. This gate is complete (PR #82 `data-safety.md` §3.6) |
+| AU-D3 | Privacy wording for production Worker logs (PR #82; D-L engineering resolved by ADR 0028 D8) | **Accepted by the owner on 2026-10-23:** the policy's current wording in PR #82 (sections 2 and 3.2). The API keeps no record of the app's normal requests, and keeps a technical record of its own internal errors for 7 days, without the IP address, the request number or any device identifier |
+| AU-D4 | The alert channel: GitHub e-mail (committed) or an additional Cloudflare custom alert (beta, webhook) | **Accepted by the owner on 2026-11-05: GitHub e-mail.** The owner handles the alerts and the staged corrections that need a decision (release-plan decision O). Delivery is verified before the alerts are relied on. AU-6 verified one failure e-mail, for a manual staging run, on 2026-10-22; it does not cover a scheduled monitor or production. A Cloudflare custom alert can be revisited when the beta ends |
 | AU-D5 | A short but self-consistent race classification cannot be told from a complete one (curator decision C-1), and the API serves it as `final`. Options: keep publishing a first result at once (documented limitation); publish it as `provisional` and confirm it later (a contract change: the revision hashes `status`, and `provisional` means the provisional source); or see it twice before the first publication | **Accepted by the owner for 2.0.0 on 2026-10-21, with the limitation below** (implemented on PR #86): see a first result twice inside the window (§2 item 5, ADR 0028 D5 item 5). One hour of latency, no contract, API or app change. **Limitation:** Two matching observations reduce the risk of publishing a transient short classification; they do not prove that a classification is complete, and a short result Jolpica serves unchanged for an hour or more may still appear as "Final" until it is corrected (§3). A field-size completeness rule stays out: it can wrongly withhold a legitimately smaller field |
