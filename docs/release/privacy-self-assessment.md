@@ -111,15 +111,29 @@ at the approved steps (release plan P0, P3, R7). Every row is **required**
 data encrypted in transit, **Yes**; a way to request deletion, **No**
 (D-DEL).
 
-**State 0, now (1.x only; `data-safety.md` §3.5). Ads: Yes.**
+**State 0, now (Production 1.2.1, versionCode 7; `data-safety.md` §3.5).**
+Alpha is paused. This worksheet is for review; do not submit it before
+the approval steps below. In App content, the separate Ads declaration is
+**Yes** for 1.2.1. In Data safety, use the overview answers above.
 
-| Type | Collected | Shared | Purposes |
-|---|---|---|---|
-| Approximate location | yes | yes | Advertising or marketing; Analytics; Fraud prevention, security and compliance |
-| App interactions | yes | yes | the same |
-| Crash logs | yes | yes | the same |
-| Diagnostics | yes | yes | the same |
-| Device or other IDs | yes | yes | the same, **plus Developer communications (proposed, Q1a)** |
+Play asks for the purposes of collection and sharing separately. In this
+table, **ads purposes** means Advertising or marketing; Analytics; Fraud
+prevention, security and compliance. Every listed type is collected and
+shared, is not processed ephemerally, and its collection is required in
+this draft.
+
+| Play category → type | Why collected? | Why shared? |
+|---|---|---|
+| Location → Approximate location | Ads purposes | Ads purposes |
+| App activity → App interactions | Ads purposes | Ads purposes |
+| App info and performance → Crash logs | Ads purposes | Ads purposes |
+| App info and performance → Diagnostics | Ads purposes | Ads purposes |
+| Device or other IDs → Device or other IDs | Ads purposes; **Developer communications proposed for the automatic Messaging registration only (Q1a)** | Ads purposes |
+
+The sharing answers are for the ads SDK. Do not select Developer
+communications under sharing: the Messaging entry concerns the
+registration with Firebase as a service provider. Use the same
+collection-only distinction for this proposed purpose in state T.
 
 **State T, transition (1.x and 2.0.0; `data-safety.md` §3.2 plus §3.5).
 Ads: Yes.**
@@ -149,19 +163,20 @@ and the guidance in §2 support the answer; it is not a legal opinion.
 
 ### Q1a. Data safety purpose for the 1.x FCM registration
 
-**Exact question:** Device or other IDs is already declared for the ads SDK.
-Must its purposes also cover the Firebase installation ID and registration
+**Exact question:** The draft already includes Device or other IDs for the
+ads SDK. Must its collection purposes also cover the Firebase installation ID and registration
 token that the FCM and Installations SDKs collect, and if so, which Play
 purpose is accurate when no 1.x feature used them?
 
 | Option | Assessment |
 |---|---|
-| **Add Developer communications (proposed)** | Supported. Play requires SDK collection to be reflected. Firebase states the purpose of the SDK's data as "to send messages to the client app", which is Play's Developer communications. The capability was packaged and live, even though it was never used. The policy explains that no notification was sent. Drawback: the listing shows a purpose that 1.x never exercised. It is dropped in state F |
+| **Add Developer communications to collection only (recommended draft, pending acceptance)** | The closest available option for why Firebase Messaging automatically registered the installation. Firebase describes the SDK purpose as enabling message delivery, and Play requires SDK collection to be reflected. Play's guidance does not explicitly address registration without any messages sent. The policy distinguishes registration from sending, and the purpose is dropped in state F |
 | Add no purpose for FCM | Weaker. The form would show only the ads purposes for the type, leaving the FCM collection unexplained. Play's help does not address collected-but-unused data, and can act on an inaccurate form |
 | Add App functionality | Not supported: no 1.x feature used the data |
 
-The 2026-11-05 observation (§3.1) shows that the collection happens on
-versionCode 7. It does not bear on which purpose is accurate.
+The 2026-11-05 observation (§3.1) shows the automatic Messaging
+registration on versionCode 7, without identifying the transmitted data.
+It does not settle which purpose is accurate, or establish a legal basis.
 
 **Status:** proposed, awaiting the owner's acceptance. States 0 and T wait on
 it.
