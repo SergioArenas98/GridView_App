@@ -210,7 +210,7 @@ ephemerally** = no, **required** (the user cannot turn it off in the app).
 | App info and performance → **Crash logs** | Crashlytics stack traces and app state at crash | Analytics |
 | App info and performance → **Diagnostics** | Performance Monitoring (start time, trace durations, CPU and memory); Sessions metrics | Analytics |
 | Device or other IDs → **Device or other IDs** | Firebase installation ID; Crashlytics installation UUID | Analytics |
-| Location → **Approximate location** | Performance Monitoring maps IP addresses to countries. The GridView API also receives the IP address with each request, to serve it; that part is ephemeral (§3.4), but Firebase's part is not, so the type as a whole is not | Analytics; **App functionality** (the API) — **R1 accepted for the draft; R2 conditionally accepted (§4.1)** |
+| Location → **Approximate location** | Performance Monitoring maps IP addresses to countries. That collection is not ephemeral. The Worker does not derive a location from the connection IP (§3.4) | Analytics — **R1 accepted for the draft.** Do not add App functionality to this type based only on the connection IP; the separate Cloudflare classification remains open (R2) |
 | App activity → **App interactions** | Firebase Sessions records when the app is foregrounded to start a session ("application metrics", Firebase disclosure). The API's persisted logs add nothing here (§3.4) | Analytics — **R8 accepted for Sessions (§4.1)** |
 
 "Analytics" is Play's purpose for monitoring app performance and diagnosing
@@ -227,21 +227,25 @@ and the build forbids the Analytics SDK.
 
 ### 3.4 GridView API traffic
 
-Requests to the GridView API (Cloudflare Workers) expose the device IP address
-to Cloudflare, as any network request does. GridView does not store or use it
-beyond serving the request, so this is ephemeral processing (**R2,
-conditionally accepted, with the complete processing scope still to be
-confirmed; §4.1**). It holds only while no persisted record carries the IP
-address or anything that links a request to an installation.
+Requests to the GridView API expose the connection IP to Cloudflare.
+The Worker does not read it for app features, derive a location from it,
+or put it in its application logs. These facts do not show how Cloudflare
+handles the IP outside the Worker. [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/)
+describes processing of IP addresses and other network data from customer
+APIs, but does not establish the retention for this particular Worker.
+[Play's ephemeral standard](https://support.google.com/googleplay/android-developer/answer/10787469)
+requires in-memory processing no longer than needed for the live request.
+Do not assume that standard is met for Cloudflare's full processing scope
+(R2). A connection IP alone is not evidence that the API derives location.
 
 **What production persists (ADR 0028 D8, deployed and verified in W3 on
 2026-10-22).**
 `services/edge-api/wrangler.toml` `[env.production.observability]` has
 `enabled = true` and `logs.persist = true`, with
 `logs.invocation_logs = false`. Cloudflare's automatic invocation records,
-which carry request metadata, are therefore off. Only the Worker's own lines
-persist, for Cloudflare's 7-day retention. `src/logging/request-log.ts`
-restricts those lines in production:
+which carry request metadata, are therefore off. Persisted application
+logs have a 7-day retention, separate from any Cloudflare platform
+processing. `src/logging/request-log.ts` restricts what the Worker writes:
 
 - A **public request the Worker answers** writes **no line**, whatever the
   status (`200`, `304`, `404`, `503` and so on). That covers all ordinary app
@@ -258,10 +262,18 @@ restricts those lines in production:
 - A caller's `X-Request-ID` is adopted only as an opaque token
   (`[0-9A-Za-z-]{1,64}`), so no free text reaches a response or a line.
 
-**Consequence for the form.** No persisted line can be linked to a user, a
-device or an installation, so the Worker's logs add no Data safety row (ADR
-0028 D8). An internal-error line's route template is operational data about
-the service and is not collected about the user (**review item R8**).
+**Consequence for the form.** The Worker-written fields do not justify a
+separate user-data row. This conclusion is limited to the fields the code
+writes. [Cloudflare's query API](https://developers.cloudflare.com/api/resources/workers/subresources/observability/subresources/telemetry/methods/query/)
+also describes platform event metadata that can include request and Ray IDs.
+That schema does not show which fields are populated for this Worker with
+invocation logs off. Inspect one full, stored public `request.failed`
+event before closing R8. Check nested metadata for IP, request or Ray IDs,
+raw URLs, headers or other linkable values. Compare any request or Ray ID
+with identifiers the caller can see; a platform event ID alone is not
+evidence of linkage. If no existing event is available, leave this open
+until a controlled isolated check can be done. Do not force a failure in
+Production. Record field names and linkage findings only, not raw values.
 
 **Conditions before submitting state T or F.** State 0 (1.x only) does not
 include this answer.
@@ -295,9 +307,9 @@ include this answer.
 - If production ever persists an IP address, a header, a public request's
   ID or a line per public request, revisit this section and §3.2 (R2, R8).
 
-A live `wrangler tail` session, opened by the operator, streams request
-metadata in real time and stores nothing. That is also ephemeral processing.
-The release plan's W3 step notes that tail cannot prove what is persisted.
+A live `wrangler tail` session streams request metadata to the operator.
+It cannot establish what Cloudflare stores. Use the persisted Workers Logs
+event for the R8 check; do not retain raw identifiers in evidence.
 
 ### 3.5 Versions 1.x (states 0 and T)
 
@@ -722,13 +734,13 @@ the units are archived.
 | # | Question | Engineering recommendation |
 |---|---|---|
 | R1 | Does Performance Monitoring's IP-to-country mapping count as **Approximate location**? | **Accepted by the owner for the draft (recorded 2026-11-02): declare Approximate location.** Firebase's own disclosure lists it for Performance Monitoring. Country-level location is coarser than Play's 3 km² threshold, and Play's "Approximate location" type covers that. Play requires the declaration to be accurate and complete and may act on any discrepancy, in either direction. The answer must therefore follow the review's finding, not a preference for declaring more. |
-| R2 | Is Cloudflare's handling of the IP address ephemeral? It is still declared, under Approximate location with the App functionality purpose (§3.2) | **Conditionally accepted by the owner (recorded 2026-11-02): confirmation of the complete processing scope is still open.** The engineering answer is yes. The production logging condition in §3.4 is committed (W1, PR #85, then ADR 0028 D8, PR #86). W3 verified it on the deployed Worker on 2026-10-22 (§3.4), and AU-7 repeats the check on the version it deploys. Do not submit state T or F until the check has passed for the version deployed at the time. |
+| R2 | Is Cloudflare's handling of the connection IP ephemeral? | **Worker scope reviewed; Cloudflare platform scope open.** The owner accepted the earlier answer conditionally on 2026-11-02. No IP storage or location inference is implemented by the Worker. W3's log evidence does not establish Cloudflare's complete handling or retention. Do not rely on a blanket ephemeral exemption or classify the IP as Approximate location based only on routing (§3.2, §3.4). |
 | R3 | Deletion-request answer | **Settled on the facts, 2026-10-22: no verified procedure exists.** Official Firebase documentation (read 2026-10-22) gives two routes. **(a) Delete the installation** by its Firebase installation ID, in the app (`FirebaseInstallations.delete()`) or on a server (Admin SDK `deleteInstallation(fid)`). The data tied to that ID is then removed "from live and backup systems of all Firebase services" within 180 days. **(b) Crashlytics `deleteCrashReports`** works only by a user ID set with the Crashlytics SDK. GridView sets none (`lib/core/observability/firebase/firebase_observability.dart`), so (b) cannot be used. Route (a) needs the installation ID, and the app shows it to nobody. A user's description of a crash (time, device model) does not yield it, and no console route from a crash to its installation ID was found or verified. Route (a)'s 180 days are longer than Crashlytics' 90-day and Performance Monitoring's 60- and 30-day retention, so for those it is no faster than expiry. It would remove the installation ID itself, which Firebase otherwise keeps until deleted. **Done:** the policy no longer promises deletion ("or until they are deleted at your request" is removed from section 6). It says one installation's Firebase data cannot currently be found or deleted. **Data safety:** answer **No**. **Owner decision D-DEL, decided 2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality. The answer stays No, and the policy keeps saying that no verified procedure exists and one installation's data cannot be found or deleted. A control that calls `FirebaseInstallations.delete()` stays possible as a later product change. The remaining privacy obligations, such as how an erasure request is answered without a procedure, stay with the review. GridView has no accounts, so Play's separate account-deletion requirement does not apply. |
 | R4 | Is the data collection optional? | **Required. A technical fact, not a classification:** no in-app switch exists, so the user cannot turn collection off. Adding one would be a product change. |
 | R5 | The 1.x rows of states 0 and T (§3.5) | **Accepted by the owner (recorded 2026-11-02):** declare them as listed, including the 1.x **Crash logs** row (collected, shared; advertising, analytics and fraud prevention). **Evidence (§3.5):** two Internet Archive captures of Google's disclosure, taken while 23.6.0 was the latest release, say they cover version 23.6.0. Their "Diagnostic information" names crash logs, which Play's definitions place under Crash logs, and the rest under Diagnostics. **Limits:** archived copies of Google's published statement about its SDK, not observed 1.x traffic. Nothing contradicts them, so no traffic capture is required. |
 | R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7 and pausing the Alpha track, both decided by the owner on 2026-11-05) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). The owner decided on 2026-10-23 to archive the 1.x ad units in AdMob before AU-7 (D-A, §3.6). That will stop ads being served to installed copies, but not the SDK's requests. The archiving is a separate AdMob step and has not been done. |
 | R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. **C4, decided 2026-10-23:** email stays the only contact channel (§6.1). One owner step remains: the Play listing still says Spain; on 2026-11-05 the owner recorded Ireland as the intended country (§6.2). Whether rules outside the privacy notice require a geographic address stays open for the review (§6.1). |
-| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions: accepted by the owner (recorded 2026-11-02), declare App interactions.** Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines (not part of that acceptance, §4.1):** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. W3 verified it on the deployed Worker on 2026-10-22, and AU-7 repeats the check (§3.4). |
+| R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions: accepted by the owner (recorded 2026-11-02), declare App interactions.** Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines (not part of that acceptance, §4.1):** the Worker-written fields do not require a separate row. W3 observed no event for the ordinary public requests tested. The stored error event's Cloudflare-added metadata still needs checking before the final answer (§3.4). |
 | R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Partially resolved.** The owner accepted the draft purpose for 1.2.1; legal basis and remediation remain open (`privacy-self-assessment.md` Q1a-Q1c). No external review is planned. **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent. Separately, the Firebase console (read 2026-10-22) shows no campaign ever created in `gridview-fb20f` and no message in the last 90 days; it cannot show API sends or older reports. The emulator observed automatic Messaging registration on versionCode 7 but did not capture transmitted data; the SDK documentation describes the identifier and configuration upload. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. **Updated 2026-11-05:** Firebase's Data safety guidance states that purpose for the SDK's data ("to send messages to the client app"), and Play requires SDK collection to be reflected, so the owner accepted Developer communications for the 1.2.1 draft's collection purpose only. GridView never sent notifications. Play does not explicitly address this case. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy draft states the facts about the missing consent prompt, not a legal basis. Do not treat the factual wording as resolving this item or approving publication. See §4.2 for the questions and the possible outcomes. |
 
 ### 4.1 Owner decisions and their options
@@ -760,9 +772,9 @@ not decide R6's remediation or whether the geographic-address rules apply
 
 | # | Option | Consequence |
 |---|---|---|
-| R2 | **Conditionally accepted (recorded 2026-11-02):** the API's handling of the IP address is ephemeral (§3.2, §3.4). **Confirmation of the complete processing scope is still open** | Holds only once that scope is confirmed, and while the deployed Worker's logs pass the check (W3 done; AU-7 repeats it) |
+| R2 | **Conditionally accepted (recorded 2026-11-02); complete scope still open.** The Worker does not store the IP; Cloudflare's full processing is not verified (§3.2, §3.4) | Holds only once that scope is confirmed, and while the deployed Worker's logs pass the check (W3 done; AU-7 repeats it) |
 | | If the scope is not confirmed | The review decides what changes. Approximate location is already declared as not ephemeral as a whole, because of Firebase's part (§3.2) |
-| R8, API lines | No row for the API's persisted lines (engineering recommendation, §3.4). The acceptance above does not name them | If the review wants a row, it carries the API source and the App functionality purpose (release plan P3) |
+| R8, API lines | No separate row for the Worker-written fields (engineering recommendation, §3.4). The acceptance above does not name them | Check the full stored event before classifying the Cloudflare-added fields and finalizing the answer |
 | R6 | Whether more than disclosure and D-A is needed for the 1.x ads served without a consent message. Unresolved | The review decides (§4) |
 | §6.1 | Whether a geographic address is required by rules outside the privacy notice. Unresolved | The review decides (§6.1) |
 | R9 | The owner accepted Developer communications for collection only in the 1.2.1 draft. Legal basis and remediation remain open (§4.2; `privacy-self-assessment.md` Q1a-Q1c) | The policy and form submission remain pending |

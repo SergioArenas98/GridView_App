@@ -140,7 +140,7 @@ Ads: Yes.**
 
 | Type | Collected | Shared | Purposes |
 |---|---|---|---|
-| Approximate location | yes | yes | Analytics; App functionality (the API, R2 conditional); Advertising or marketing; Fraud prevention, security and compliance |
+| Approximate location | yes | yes | Analytics; Advertising or marketing; Fraud prevention, security and compliance (no location derived by the GridView API; see Q2) |
 | App interactions | yes | yes | Analytics; Advertising or marketing; Fraud prevention, security and compliance |
 | Crash logs | yes | yes | the same |
 | Diagnostics | yes | yes | the same |
@@ -149,7 +149,8 @@ Ads: Yes.**
 **State F, final (2.0.0 only; `data-safety.md` §3.2). Ads: No.** Crash
 logs, Diagnostics, Device or other IDs and App interactions: collected, not
 shared, Analytics. Approximate location: collected, not shared, Analytics
-and App functionality. No Developer communications: 2.0.0 has no messaging
+from Firebase Performance Monitoring (Q2 does not establish an additional
+API location purpose). No Developer communications: 2.0.0 has no messaging
 SDK.
 
 "Shared" on a type comes from the 1.x ads SDK. Firebase's part is not
@@ -235,26 +236,30 @@ factual wording alone does not close Q1b or approve publication.
 **Exact question:** Is the GridView API's handling of the IP address
 ephemeral across its complete processing scope?
 
-**Supported in part.** The code, the W3 log check and the 2026-11-05
-re-check show no persisted line for an app request (`data-safety.md` §3.4).
-Not inspected: Cloudflare's own platform processing under its terms, beyond
-the Worker's logs.
+**Worker scope reviewed.** The code does not store the connection IP or
+derive location from it. W3 saw no persisted event for the ordinary public
+requests tested. Cloudflare's own platform handling and retention for this
+Worker are not established by those checks (`data-safety.md` §3.4).
 
-Options: accept R2 on the engineering evidence, recording that limit; or
-keep it open and declare the API's IP use as not ephemeral. The type is
-already declared as not ephemeral because of Firebase (§4), so the visible
-form does not change either way. **Status:** conditionally accepted
-(2026-11-02); scope still open.
+**Draft recommendation:** do not rely on the ephemeral exemption for
+Cloudflare's full scope or claim the API collects Approximate location based
+on routing alone. Keep the non-ephemeral Approximate location declaration for
+Firebase Performance Monitoring. **Status:** the earlier conditional
+acceptance (2026-11-02) does not settle Cloudflare's processing scope or
+the final classification of any additional use.
 
 ### Q3. R8, a Data safety row for the API's persisted lines
 
 **Exact question:** Do the API's persisted internal-error lines need a Data
 safety row?
 
-**Supported:** no row. The lines carry no request ID, IP address or device
-identifier (`data-safety.md` §3.4, ADR 0028 D8). Options: accept "no row";
-or add App interactions with the App functionality purpose (release plan
-P3). **Status:** open.
+**Supported for Worker-written fields:** no extra row. The application
+payload omits request ID, IP address and device identifier. Cloudflare's
+API schema permits separate metadata, so the complete stored error event
+has to be checked for populated and linkable values (`data-safety.md` §3.4).
+Use an existing event if available; otherwise leave it pending until an
+isolated test is arranged. Do not force a Production error. **Status:**
+engineering payload reviewed; final stored-event check open.
 
 ### Q4. R6, 1.x ads requested with no consent message
 
