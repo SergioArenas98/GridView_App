@@ -425,8 +425,9 @@ documented limitations:
 This records product decisions only. It authorises no merge, purchase,
 provisioning, deployment or activation; each stays a separately authorised
 step (`automatic-updates.md` §7, §8). AU-D2, AU-D3 and AU-D4 remain open.
-*(On 2026-10-23 the owner accepted AU-D2 and AU-D3 in PR #82; AU-D4 remains
-open.)*
+*(On 2026-10-23 the owner accepted AU-D2 and AU-D3 in PR #82, and on
+2026-11-05 AU-D4: GitHub e-mail, with delivery verified before the alerts
+are relied on.)*
 
 ## Consequences
 

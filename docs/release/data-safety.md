@@ -48,6 +48,12 @@ since W3. §3.6 and §4.1 record the read-only AdMob inspection of
 2026-11-04, which found the 1.x AdMob account and its units. The open
 review questions and their evidence are collected for the reviewer in
 `privacy-review-packet.md`.
+Later on 2026-11-05 the owner recorded D-T1 (versionCode 7 is not
+retained), D-T2 (the Alpha track is paused as part of the release plan)
+and Ireland as the intended Play listing country, and kept D-A: the seven
+active ad units are archived once the AdMob account's verification clears
+(§1.4, §3.6, §4.1, §6.2). None of these steps is done, and none of them
+answers a review question.
 
 ## 1. Why the current declaration must change
 
@@ -115,8 +121,8 @@ or publishing step.
    read-only from the App bundle explorer and inspected (§3.5). It has the
    same ads and Firebase SDKs as versionCode 7 and no Unity Ads, so the
    policy's section 3.4 and §3.5 here are true of it. Steps 1 and 2 no
-   longer wait on it. Pausing the Alpha track (D-T2) is still recommended,
-   because it shortens state T.
+   longer wait on it. Pausing the Alpha track (D-T2) was decided by the
+   owner on 2026-11-05; it shortens state T.
 1. **Publish the transition policy** (`privacy_policies.md` and `.html` in this
    PR) at https://gridview.netlify.app. It covers 1.x (section 3.4) and 2.0.0.
    Publish it **before** the 2.0.0 Data safety change and before the release is
@@ -130,10 +136,10 @@ or publishing step.
    open or production). State T includes the 2.0.0 API answer (§3.4), so it
    also waits until the deployed production Worker's persisted logs are
    verified free of app traffic (§3.4).
-4. **Release 2.0.0.** Recommendation (owner decision D-T1): do **not** retain
+4. **Release 2.0.0.** Owner decision D-T1 (2026-11-05): do **not** retain
    versionCode 7. The legacy backend is dead, so on API 21 to 23 1.2.1 can show
-   ads but no Formula 1 data. Also deactivate the closed "Alpha" track or
-   replace its build (D-T2).
+   ads but no Formula 1 data. Pause the closed "Alpha" track (owner decision
+   D-T2, 2026-11-05).
 5. **Once the rollout reaches 100%** and no 1.x artifact remains on any
    non-internal track, submit Data safety in state F and set Ads to **No**.
 6. **Keep section 3.4 in the policy.** Devices that never update still run 1.x
@@ -635,8 +641,11 @@ Screenshots and notes are kept outside the repository with SHA-256 sums
   identified. It is recorded here, not attributed.
 - **For D-A:** archiving the seven active units still ends serving with
   certainty, whatever the account's state. Not requesting the review keeps
-  serving off while the units exist. Which of the two the owner treats as
-  the AU-7 gate is decision D-A′ (`privacy-review-packet.md`, section 4).
+  serving off while the units exist. Which of the two is the AU-7 gate
+  was decision D-A′ (`privacy-review-packet.md`, section 4). **Decided by
+  the owner on 2026-11-05: keep D-A.** The seven active units are archived
+  once the account's verification notice clears; D-A′ is not adopted.
+  The archive still needs the go-ahead in step 6 below.
 
 - **Verification before the archive (repeat steps 3 to 5 on the day):**
   1. Account information shows publisher ID `pub-4763306780710624`.
@@ -670,8 +679,8 @@ the units are archived.
 | R3 | Deletion-request answer | **Settled on the facts, 2026-10-22: no verified procedure exists.** Official Firebase documentation (read 2026-10-22) gives two routes. **(a) Delete the installation** by its Firebase installation ID, in the app (`FirebaseInstallations.delete()`) or on a server (Admin SDK `deleteInstallation(fid)`). The data tied to that ID is then removed "from live and backup systems of all Firebase services" within 180 days. **(b) Crashlytics `deleteCrashReports`** works only by a user ID set with the Crashlytics SDK. GridView sets none (`lib/core/observability/firebase/firebase_observability.dart`), so (b) cannot be used. Route (a) needs the installation ID, and the app shows it to nobody. A user's description of a crash (time, device model) does not yield it, and no console route from a crash to its installation ID was found or verified. Route (a)'s 180 days are longer than Crashlytics' 90-day and Performance Monitoring's 60- and 30-day retention, so for those it is no faster than expiry. It would remove the installation ID itself, which Firebase otherwise keeps until deleted. **Done:** the policy no longer promises deletion ("or until they are deleted at your request" is removed from section 6). It says one installation's Firebase data cannot currently be found or deleted. **Data safety:** answer **No**. **Owner decision D-DEL, decided 2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality. The answer stays No, and the policy keeps saying that no verified procedure exists and one installation's data cannot be found or deleted. A control that calls `FirebaseInstallations.delete()` stays possible as a later product change. The remaining privacy obligations, such as how an erasure request is answered without a procedure, stay with the review. GridView has no accounts, so Play's separate account-deletion requirement does not apply. |
 | R4 | Is the data collection optional? | **Required. A technical fact, not a classification:** no in-app switch exists, so the user cannot turn collection off. Adding one would be a product change. |
 | R5 | The 1.x rows of states 0 and T (§3.5) | **Accepted by the owner (recorded 2026-11-02):** declare them as listed, including the 1.x **Crash logs** row (collected, shared; advertising, analytics and fraud prevention). **Evidence (§3.5):** two Internet Archive captures of Google's disclosure, taken while 23.6.0 was the latest release, say they cover version 23.6.0. Their "Diagnostic information" names crash logs, which Play's definitions place under Crash logs, and the rest under Diagnostics. **Limits:** archived copies of Google's published statement about its SDK, not observed 1.x traffic. Nothing contradicts them, so no traffic capture is required. |
-| R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7, and deactivating or replacing the Alpha build) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). The owner decided on 2026-10-23 to archive the 1.x ad units in AdMob before AU-7 (D-A, §3.6). That will stop ads being served to installed copies, but not the SDK's requests. The archiving is a separate AdMob step and has not been done. |
-| R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. **C4, decided 2026-10-23:** email stays the only contact channel (§6.1). One owner step remains: the Play listing still says Spain (§6.2). Whether rules outside the privacy notice require a geographic address stays open for the review (§6.1). |
+| R6 | 1.x requests ads with **no consent message** | This is a past and ongoing exposure for EEA and UK users. The policy now says so plainly (section 3.4) and does not claim a legal basis for it. The privacy review decides whether more is needed. Stopping 1.x distribution (§1.4 step 4: not retaining versionCode 7 and pausing the Alpha track, both decided by the owner on 2026-11-05) limits new installs only. Installed copies keep requesting ads until they update or are uninstalled (§3.6). The owner decided on 2026-10-23 to archive the 1.x ad units in AdMob before AU-7 (D-A, §3.6). That will stop ads being served to installed copies, but not the SDK's requests. The archiving is a separate AdMob step and has not been done. |
+| R7 | Controller identity (§6) | **Confirmed by the owner on 2026-10-20:** Sergio Arenas del Amo, an individual in Ireland, publishing as Sejuma, with no registered business. The contact address is gridviewapp1@gmail.com. **C4, decided 2026-10-23:** email stays the only contact channel (§6.1). One owner step remains: the Play listing still says Spain; on 2026-11-05 the owner recorded Ireland as the intended country (§6.2). Whether rules outside the privacy notice require a geographic address stays open for the review (§6.1). |
 | R8 | Does Firebase Sessions' session-start time count as **App interactions**? Do the API's persisted lines (§3.4)? | **Sessions: accepted by the owner (recorded 2026-11-02), declare App interactions.** Firebase's disclosure lists it as application metrics, and it records the app coming to the foreground. As for R1, the answer must follow the review's finding: Play does not exempt over-declaration. **API lines (not part of that acceptance, §4.1):** no row. Production writes no line for a public request the Worker answers, and the line for one that hits an internal error carries no request ID, IP address or device identifier (ADR 0028 D8). This replaces the earlier keep-or-disable choice D-L. W3 verified it on the deployed Worker on 2026-10-22, and AU-7 repeats the check (§3.4). |
 | R9 | 1.x Firebase Cloud Messaging (§3.5): the Data safety purpose for the FCM registration, and the legal basis | **Blocked: specific privacy review. Not an owner choice, and not engineering-settled.** **Facts (§3.5):** 1.x had no notification feature. Its code never used FCM, and the owner states nothing was ever sent. Separately, the Firebase console (read 2026-10-22) shows no campaign ever created in `gridview-fb20f` and no message in the last 90 days; it cannot show API sends or older reports. The SDK still registered every install and sent an installation ID and a token to Google. **Purpose:** the earlier recommendation, App functionality, is **withdrawn**. Play defines it as "Used for features that are available in the app", and no 1.x feature used this data. Developer communications ("news or notifications") describes what FCM is for, but not what 1.x did. No other Play purpose fits. The evidence supports no purpose. **Legal basis:** none can be substantiated from the facts. Legitimate interests needs an identified interest and necessity, and there was no purpose to be necessary for. The policy's section 4 therefore states no basis for it. It must not be published with one chosen to complete it. See §4.2 for the questions and the possible outcomes. |
 
@@ -690,8 +699,10 @@ not decide R6's remediation or whether the geographic-address rules apply
 | # | Decision | Consequence |
 |---|---|---|
 | R4 | Not a decision: collection is **required**, because no in-app switch exists | No change needed. Making it optional would need a switch, a product change |
-| R6, D-A | **2026-10-23: archive the 1.x ad units in AdMob** (§3.6) before automatic production publication (AU-7, `automatic-updates.md` AU-D2). The irreversible end of 1.x ad revenue is accepted | Once archived, ads stop being served to installed copies. The SDK's requests and the Firebase registration continue until update or uninstall. The archiving is a separate AdMob operation, not done yet. The account was found on 2026-11-04 (gridviewapp1@gmail.com). Seven active units remain, all versionCode 7's; `8806674289` is already retired. Serving is limited, and the last impression was on 2026-03-31 (§3.6). Whether anything more is needed for the ads served without a consent message stays with the review (R6) |
+| R6, D-A | **2026-10-23: archive the 1.x ad units in AdMob** (§3.6) before automatic production publication (AU-7, `automatic-updates.md` AU-D2). The irreversible end of 1.x ad revenue is accepted | Once archived, ads stop being served to installed copies. The SDK's requests and the Firebase registration continue until update or uninstall. The archiving is a separate AdMob operation, not done yet. The account was found on 2026-11-04 (gridviewapp1@gmail.com). Seven active units remain, all versionCode 7's; `8806674289` is already retired. Serving is limited, and the last impression was on 2026-03-31 (§3.6). **Confirmed 2026-11-05:** archive the seven once the account's verification clears; D-A′ is not adopted. Whether anything more is needed for the ads served without a consent message stays with the review (R6) |
 | D-DEL | **2026-10-23: no in-app deletion control.** 2.0.0 keeps its current functionality | Data safety answers No to deletion. The policy says no verified procedure exists and one installation's data cannot be found or deleted. The remaining privacy obligations stay with the review |
+| D-T1 | **2026-11-05: versionCode 7 is not retained** in the 2.0.0 release (§1.4 step 4) | New installs on API 21 to 23 are no longer offered; installed 1.2.1 copies stay covered by policy section 3.4. The release step is separate, not done |
+| D-T2 | **2026-11-05: pause the closed "Alpha" track** (versionCode 2) as part of the release plan | Ends Alpha distribution, which shortens state T. Existing Alpha installs keep 1.0.0. The pause is a separate Play Console step, not done |
 | C4 | **2026-10-23: email (gridviewapp1@gmail.com) stays the only contact channel** | No policy change. Whether a geographic address is required by rules outside the privacy notice stays open for the review (§6.1) |
 | AU-D3 | **2026-10-23: accept the policy's current wording** on the API (sections 2 and 3.2): no record of the app's normal requests, and a 7-day technical record of the API's own internal errors | No policy change. It accepts the wording only; the classification behind it is R2 and R8. W3's log check stands, and AU-7 repeats it on its own version |
 | R1 | **Accepted for the draft (recorded 2026-11-02): declare Approximate location** for Performance Monitoring's IP-to-country mapping | The listing shows location collected. Matches Firebase's own disclosure |
@@ -823,7 +834,8 @@ are for the privacy review.
 ### 6.2 Inconsistencies left for owner steps
 
 - **The Play listing says Spain**, and the policy now says Ireland. Changing
-  the developer account's country or address is a Play Console step. It was
-  not done, and it was not authorised.
+  the developer account's country or address is a Play Console step. On
+  2026-11-05 the owner recorded that Ireland is the intended country. The
+  change itself was not done, and it was not authorised.
 - **The live policy** (2025-02-19) still says Spain until P2 publishes this
   version.

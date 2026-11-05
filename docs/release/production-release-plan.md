@@ -68,8 +68,8 @@ Steps marked **[PR]** are reviewable repository changes.
 | A2 | **[approval]** Build and sign the release AAB (uploads the R8 mapping) | A0, A1, P2, AU-7 (production live and holding its first automatic release; D3 is superseded) |
 | R1 | **[approval]** Play Console: dedicated upgrade-check tester list on internal testing | — |
 | R2 | **[approval]** Upload the AAB to internal testing and release it | A2, R1, P3 |
-| R3 | **[approval]** The controlled upgrade (§8): one Play-delivered upgrade of the final candidate, plus the owner's approval (D-U) of the replacements for the matrix rows one pass cannot cover | R2 |
-| R4 | **[approval]** Release notes, which describe race results only (ADR 0028 D12); decide D-T1 (retain versionCode 7 or not) | P3 |
+| R3 | **[approval]** The controlled upgrade (§8): one Play-delivered upgrade of the final candidate, plus the owner's approval (D-U, **accepted 2026-11-05**) of the replacements for the matrix rows one pass cannot cover | R2 |
+| R4 | **[approval]** Release notes, which describe race results only (ADR 0028 D12); D-T1 **decided 2026-11-05: versionCode 7 is not retained** | P3 |
 | R5 | **[approval]** Promote the same release to production at 20 % | R3, R4, A0, A0b (every §15.8 item recorded as passed), AU-7, AU-8 |
 | R6 | **[approval]** Increase to 100 % after the monitoring window | R5 |
 | R7 | **[approval]** Data safety final state F, Ads = **No**, once no 1.x artifact is distributed on any non-internal track | R6, D-T1, Alpha retired (§5.1) |
@@ -486,6 +486,8 @@ The details are in PR #82, `data-safety.md` §1.
   the controller naming. The owner confirmed it on 2026-10-20: Sergio Arenas
   del Amo, an individual in Ireland, publishing as Sejuma, with no registered
   business. The Play listing still shows Spain (PR #82 `data-safety.md` §6).
+  **Recorded 2026-11-05:** Ireland is the intended country for the Play
+  listing. Changing it is a separate Play Console step, not done.
 - **P2 [approval]:** publish `privacy_policies.html` at https://gridview.netlify.app,
   the URL already on the listing and in `config/dart_defines/production.json`.
   - It must be live before P3 and A2.
@@ -529,8 +531,10 @@ The details are in PR #82, `data-safety.md` §1.
 - **R4 [approval]:**
   - English and Spanish release notes. They name race results only, never
     practice, qualifying or sprint results (ADR 0028 D12).
-  - **D-T1:** do not retain versionCode 7 for API 21–23 (recommended). The
-    legacy backend is dead, so 1.2.1 shows ads but no data.
+  - **D-T1, decided by the owner on 2026-11-05:** versionCode 7 is not
+    retained for API 21–23. The legacy backend is dead, so 1.2.1 shows ads
+    but no data. Installed 1.2.1 copies there stay as they are (policy
+    section 3.4), and new installs there are no longer offered (§1).
 
 ### 5.1 Retiring the old Alpha artefact (versionCode 2)
 
@@ -560,7 +564,9 @@ Steps (each owner-run; only step 3 changes Play Console):
    (PR #82 `data-safety.md` §3.5, §1.4 step 0). App bundle explorer lists the
    bundle as active. The track's own status was not read.
 3. **Pause the Alpha track** (Manage track → Pause track). This ends the
-   test whatever step 1 found. It must happen before R7.
+   test whatever step 1 found. It must happen before R7. **D-T2, decided
+   by the owner on 2026-11-05:** the track is paused as part of this plan.
+   The pause itself is an owner-run Play Console step, not done.
 4. **Verify:** the track shows Paused, and no release on any closed or open
    track names versionCode 1–7.
 5. Existing Alpha installs keep whatever they have (Play says so). They are
@@ -571,8 +577,11 @@ Pausing the track, or any other Play step, stops **distribution** only. It
 does not stop 1.x copies that are already installed from requesting ads. They
 keep requesting them until the device updates to 2.0.0 or the app is
 uninstalled. Stopping ad serving to them is a separate AdMob step: D-A,
-archiving the eight 1.x ad units listed in PR #82 `data-safety.md` §3.6
-(versionCode 2 uses one that versionCode 7 does not). It is not done yet.
+archiving the 1.x ad units listed in PR #82 `data-safety.md` §3.6. The
+2026-11-04 inspection found seven active, all versionCode 7's; versionCode
+2's extra unit is already retired. On 2026-11-05 the owner confirmed that
+the seven are archived once the AdMob account's verification clears. It is
+not done yet.
 
 Not used: promoting 2.0.0 to Alpha to replace versionCode 2. That would make a
 closed test of 2.0.0, which §7 does not need.
@@ -773,17 +782,19 @@ fix forward with a new versionCode.
 **Coverage of the §15.3 upgrade matrix** (Implementation Plan §15.3;
 `GridView_Legacy_Migration.md` §5). The single pass covers five rows. The
 rest are not Play-delivered passes. They are named replacements that the owner
-approves, or not, as D-U. R3 is a release gate only with both.
+approves, or not, as D-U. R3 is a release gate only with both. **D-U was
+accepted by the owner on 2026-11-05:** the replacements below stand, and the
+final upgrade test stays the single Play-delivered pass above.
 
 | Matrix row | Coverage |
 |---|---|
 | Empty legacy cache; dark theme; alternate language | The pass (steps 4–6) |
 | No network | The pass (step 4: first launch offline) |
 | Current Android version | The pass, on an API 36 device |
-| Slow network | **Replacement (D-U):** the same candidate as a **Play-signed universal APK** (Play Console → App bundle explorer → versionCode 8 → "Download signed universal APK", a read-only download). Install it on an emulator with throttled network ("EDGE" profile) and do the first launch. Not Play-delivered; it tests the app's timeouts, not the upgrade path, which the pass covers. |
-| Older supported Android version | **Replacement (D-U):** the same Play-signed universal APK, installed over the Play-signed 1.2.1 universal APK (versionCode 7, same download) on an **API 24** emulator (the new minSdk), with the pass's steps 4–6. Both carry the app-signing key, so the update installs. An APK extracted with `bundletool` would carry the upload or debug key and fail with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. A pass on a physical API 24–26 Play device can be added if one is available. |
-| **Populated legacy cache** | **Not reproducible through Play.** 1.2.1's backend is dead, so a Play-installed 1.2.1 cannot fill its Hive cache; only a device or backup from before the shutdown could. Proposed replacement: the unit tests over the genuine Hive fixture (`test/fixtures/legacy/`, `GridView_Legacy_Migration.md` §4), plus a populated pass if a pre-shutdown device exists. **Needs D-U.** |
-| **Corrupted legacy cache** | **Not reproducible on a Play build**, which is not debuggable, so its files cannot be altered. Proposed replacement: the corrupt-key and failed-read unit tests from PR #81. **Needs D-U.** |
+| Slow network | **Replacement (D-U, accepted 2026-11-05):** the same candidate as a **Play-signed universal APK** (Play Console → App bundle explorer → versionCode 8 → "Download signed universal APK", a read-only download). Install it on an emulator with throttled network ("EDGE" profile) and do the first launch. Not Play-delivered; it tests the app's timeouts, not the upgrade path, which the pass covers. |
+| Older supported Android version | **Replacement (D-U, accepted 2026-11-05):** the same Play-signed universal APK, installed over the Play-signed 1.2.1 universal APK (versionCode 7, same download) on an **API 24** emulator (the new minSdk), with the pass's steps 4–6. Both carry the app-signing key, so the update installs. An APK extracted with `bundletool` would carry the upload or debug key and fail with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. A pass on a physical API 24–26 Play device can be added if one is available. |
+| **Populated legacy cache** | **Not reproducible through Play.** 1.2.1's backend is dead, so a Play-installed 1.2.1 cannot fill its Hive cache; only a device or backup from before the shutdown could. **Accepted replacement (D-U, 2026-11-05):** the unit tests over the genuine Hive fixture (`test/fixtures/legacy/`, `GridView_Legacy_Migration.md` §4), plus a populated pass if a pre-shutdown device exists. |
+| **Corrupted legacy cache** | **Not reproducible on a Play build**, which is not debuggable, so its files cannot be altered. **Accepted replacement (D-U, 2026-11-05):** the corrupt-key and failed-read unit tests from PR #81. |
 
 This check does not prove that the 1.x Hive files were deleted. A Play build is
 not debuggable, so they cannot be inspected; the unit tests cover the cleanup
@@ -795,17 +806,17 @@ not debuggable, so they cannot be inspected; the unit tests cover the cleanup
 |---|---|---|
 | W0 | Production genesis design (ADR 0025 O-16 amendment): **done**, PR #84 merged as `527444b` | — |
 | W-P | Submission path (`submission-path-decision.md`): **decided 2026-10-20, A, Workers Paid** (USD 5/month before tax, existing ingest). **Bought 2026-10-21** (AU-1; Workers Paid is the current plan of the Wrangler account) | — |
-| D-T1 | Retain versionCode 7 for API 21–23 or not (recommended: not) | R4, R7 |
-| D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned | R7 |
-| D-A | Archive the 1.x ad units in AdMob, or not. It stops ads being served to installed 1.x copies, which pausing a track does not, but not the SDK's requests (PR #82 `data-safety.md` §3.6). Irreversible; ends 1.x ad revenue. **Decided by the owner on 2026-10-23: archive, before AU-7** (AU-D2), accepting the loss of 1.x ad revenue. The AdMob operation itself is separate and not done | AU-7 |
+| D-T1 | Retain versionCode 7 for API 21–23 or not. **Decided by the owner on 2026-11-05: not retained** (§5, R4). The release step itself is separate | R4, R7 |
+| D-T2 | Retire the Alpha artefact (versionCode 2) by pausing the track (§5.1). Promoting 2.0.0 to Alpha is not planned. **Decided by the owner on 2026-11-05: pause it as part of this plan.** The pause is a separate owner-run Play Console step, not done | R7 |
+| D-A | Archive the 1.x ad units in AdMob, or not. It stops ads being served to installed 1.x copies, which pausing a track does not, but not the SDK's requests (PR #82 `data-safety.md` §3.6). Irreversible; ends 1.x ad revenue. **Decided by the owner on 2026-10-23: archive, before AU-7** (AU-D2), accepting the loss of 1.x ad revenue. The AdMob operation itself is separate and not done. **Confirmed by the owner on 2026-11-05:** archive the seven active units (PR #82 `data-safety.md` §3.6) once the account's verification clears; D-A′ (treating deactivated serving as the gate) is not adopted | AU-7 |
 | D-DEL | Add an in-app control that deletes the installation's Firebase data (`FirebaseInstallations.delete()`), or not. **Decided by the owner on 2026-10-23: no control.** 2.0.0 keeps its current functionality, Data safety answers **No** to deletion requests, and the policy says no verified procedure exists and one installation's data cannot be found or deleted (PR #82 `data-safety.md` R3). The remaining privacy obligations stay with P-R | — |
 | D-R | Confirm no closed-testing stage: one controlled Play-delivered upgrade (R3), then the staged rollout (§7) | R5 |
 | D-C | Commit a reviewed Jolpica capture tool to the repository, or keep the private operator script | D1 |
 | D-L | Production persisted application logs. **Engineering resolved 2026-10-21 by ADR 0028 D8:** persisted, invocation logs off, no public-request line and no client data or credential stored. The privacy wording was accepted by the owner on 2026-10-23 (AU-D3, PR #82) | — |
-| D-U | Approve the replacements for the upgrade-matrix rows the single pass does not cover: slow network, older Android, and populated and corrupted legacy cache (§8). Or supply devices for them | R3 |
+| D-U | Approve the replacements for the upgrade-matrix rows the single pass does not cover: slow network, older Android, and populated and corrupted legacy cache (§8). Or supply devices for them. **Accepted by the owner on 2026-11-05:** the emulator, slow-network and legacy-cache replacements in §8; the final upgrade test stays the single Play-delivered pass | R3 |
 | W-D | API host: `*.workers.dev` (committed) or a custom domain | A2 |
 | P-R | Privacy review of PR #82 `data-safety.md` review items R1–R9 (not the R-track gates). **Recorded 2026-11-02:** R1 accepted for the draft, R5 accepted, R8 accepted for Firebase Sessions, R2 conditionally accepted. **Still open:** R2's complete processing scope, R8's API lines, R6's remediation, the geographic-address question (§6.1 there) and R9 | P0 |
-| M | Ship 2.0.0 with placeholder media (no R2, no approved media) | R5 |
-| O | **Changed 2026-10-21:** nobody runs D1/D3 each race weekend (automatic). Who answers alerts and staged corrections (ADR 0028 D6, D9), and the 2027 dataset work | R5 |
+| M | Ship 2.0.0 with placeholder media (no R2, no approved media). **Decided by the owner on 2026-11-05:** ship with placeholder images if approved images are not ready | R5 |
+| O | **Changed 2026-10-21:** nobody runs D1/D3 each race weekend (automatic). Who answers alerts and staged corrections (ADR 0028 D6, D9), and the 2027 dataset work. **Decided by the owner on 2026-11-05:** the owner handles the alerts and the staged corrections that need a decision, through GitHub e-mail alerts (AU-D4), and their delivery is verified before they are relied on. The 2027 dataset work is not part of this decision and stays open | R5 |
 | AU-D1, AU-D5 | **Accepted by the owner for 2.0.0 on 2026-10-21, including their documented limitations** (ADR 0028 D13; `automatic-updates.md` §9): AU-D1, O-5(a), a staged correction freezes the season until an operator acts; AU-D5, a first race result inside the window is seen twice before it is published, which reduces but does not remove the risk of a short classification shown as "Final". The acceptance authorises no merge, purchase, provisioning, deployment or activation | — |
-| AU-D2…AU-D4 | D-A before AU-7 and the privacy wording for Worker logs: **both accepted by the owner on 2026-10-23** (AU-D2, AU-D3). The alert channel (AU-D4) is still open (`automatic-updates.md` §9) | AU-7 |
+| AU-D2…AU-D4 | D-A before AU-7 and the privacy wording for Worker logs: **both accepted by the owner on 2026-10-23** (AU-D2, AU-D3). The alert channel (AU-D4): **GitHub e-mail, accepted by the owner on 2026-11-05**, with delivery verified before the alerts are relied on (`automatic-updates.md` §9) | AU-7 |

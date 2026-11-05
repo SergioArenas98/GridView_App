@@ -1,7 +1,8 @@
 # Privacy review packet: GridView 2.0.0 and the 1.x transition
 
-Prepared 2026-11-05 at master `d2d6df9`. This packet is for the qualified
-privacy reviewer.
+Prepared 2026-11-05 at master `d2d6df9`, and updated the same day with the
+owner's release decisions of 2026-11-05 (sections 3 and 4). This packet is
+for the qualified privacy reviewer.
 - It collects what the review must answer, what is already decided, and the
   evidence each answer rests on.
 - It adds no new finding about how the app handles data. The engineering
@@ -43,19 +44,22 @@ the owner's choice.
 | R7, C4 | Controller identity as above; email as the only channel (2026-10-20, 2026-10-23) | §6 |
 | R8 (Sessions) | Declare App interactions for Firebase Sessions (2026-11-02) | §4 |
 | AU-D3 | The policy's wording on the API's records (2026-10-23) | §4.1 |
-| D-A | Archive the 1.x ad units before automatic production publication; the end of 1.x ad revenue is accepted (2026-10-23). **Not yet done** | §3.6 |
+| D-A | Archive the 1.x ad units before automatic production publication; the end of 1.x ad revenue is accepted (2026-10-23). **Confirmed 2026-11-05:** archive the seven active units once the AdMob account's verification clears (section 4). **Not yet done** | §3.6 |
+| D-T1 | versionCode 7 is not retained in the 2.0.0 release, so new installs on API 21-23 are no longer offered (2026-11-05). **Not yet done** (a release step) | §1.4 step 4, §4.1 |
+| D-T2 | The closed "Alpha" track (versionCode 2) is paused as part of the release plan (2026-11-05). **Not yet done** | §1.4, §4.1 |
+| Country | Ireland is the intended country on the Play listing, which still shows Spain (2026-11-05). **Not yet changed** | §6.2 |
 | R2 | Conditionally accepted: the API's handling of the IP address is ephemeral, **subject to the review confirming the complete processing scope** (2026-11-02) | §3.2, §3.4 |
 
 ## 4. Owner decision outside the review that affects it
 
-**D-A′ (open).** On 2026-11-04 the AdMob account was found in a reduced
-state:
+**D-A′: decided 2026-11-05, D-A kept.** On 2026-11-04 the AdMob account
+was found in a reduced state:
 - serving is limited;
 - the last ad impression was on 2026-03-31;
 - the account is being re-verified after an inactivity deactivation.
 
 The owner has said they will not request the per-app review that would
-restart serving (`data-safety.md` §3.6). The question is what counts as the
+restart serving (`data-safety.md` §3.6). The question was what counts as the
 D-A gate before automatic production publication (AU-7):
 
 | Option | What it means | Consequence |
@@ -63,10 +67,11 @@ D-A gate before automatic production publication (AU-7):
 | Keep D-A as decided: archive the seven active units before AU-7 | Ends serving with certainty, whatever the account's state | Needs the gridviewapp1@gmail.com session and a separate go-ahead. It is irreversible. Six of the seven units sit in a mediation group, which the archive changes |
 | D-A′: treat "serving deactivated, no review requested" as the gate, and archive later | Relies on Google's rule that serving does not restart without a review | Faster. It depends on the owner never requesting the review and on Google's current rule; it is weaker evidence than an archive |
 
-**Engineering recommendation:** keep D-A, and archive once the account's
-verification notice has cleared. The archive gives a recorded end state that
-the review can rely on for R6. D-A′ is a fallback only if access to the
-account is lost.
+**Owner decision (2026-11-05):** keep D-A. The seven active units are
+archived once the account's verification notice has cleared. The archive
+gives a recorded end state that the review can rely on for R6. It still
+needs the gridviewapp1@gmail.com session and a separate go-ahead, and it
+is not done.
 
 ## 5. Questions for the reviewer
 
@@ -77,7 +82,7 @@ Each question names what waits on its answer.
 | Q1 (R9, **blocker**) | 1.x Firebase Cloud Messaging: (a) which Data safety purpose, if any, describes an SDK registration no feature used; (b) what legal basis, if any, covered it for EEA, UK and Swiss users, including whether the ePrivacy rules required consent to store and read the installation ID; (c) is disclosure enough, or is remediation needed? | Facts and possible outcomes in `data-safety.md` §4.2. No purpose or basis is supported by the evidence; nothing has been chosen | States 0 and T (the FCM part of Device or other IDs), publishing the policy (section 4), merging PR #82 |
 | Q2 (R2 scope) | Is the complete processing scope of the API's IP handling confirmed as ephemeral? | `data-safety.md` §3.4: no persisted line for an app request; re-checked in code on 2026-11-05; live checks in W3 and repeated at AU-7 | States T and F |
 | Q3 (R8, API lines) | Do the API's persisted lines need a Data safety row? | No row recommended. Production persists only the API's own internal-error lines, with no request ID, IP address or device identifier (§3.4) | States T and F |
-| Q4 (R6) | 1.x requested ads with no consent message. Is more needed than the policy's disclosure and D-A? | Exposure is past and ongoing for installed copies. In practice serving has ended (last impression 2026-03-31), but the SDK still sends requests until each copy updates or is uninstalled (§3.6) | Publishing the policy |
+| Q4 (R6) | 1.x requested ads with no consent message. Is more needed than the policy's disclosure and D-A? | Exposure is past and ongoing for installed copies. In practice serving has ended (last impression 2026-03-31), but the SDK still sends requests until each copy updates or is uninstalled (§3.6). D-T1 and D-T2 (2026-11-05) end 1.x distribution through Play; D-A ends serving once done | Publishing the policy |
 | Q5 (§6.1) | Does any rule outside the privacy notice require a geographic address? | Email meets the notice's contact requirement; a home address is not proposed (§6.1) | Publishing the policy |
 | Q6 (wording, new) | The policy says 1.x "show advertising banners" (section 3.4). Serving has effectively ended, while the SDK still requests ads. Should the wording describe requests as well as display? | The collection list is accurate either way. Changing the wording is a policy edit, so it is the owner's choice after the review | Publishing the policy |
 
