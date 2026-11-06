@@ -82,19 +82,19 @@ preview_urls = false
 [env.staging.vars]
 ENVIRONMENT = "staging"
 # Automatic updates (ADR 0028; release gate AU-4,
-# `docs/release/automatic-updates.md` section 8.3). COMMITTED, NOT YET
-# DEPLOYED: the live version `453af4fb-…` (2026-10-19, from `d351118`) still
-# runs `none`, the interim state committed and deployed on 2026-10-13, under
-# which season data reached staging only through the guarded season-batch
-# ingest below.
+# `docs/release/automatic-updates.md` section 8.3). LIVE IN STAGING since AU-4
+# step 1 (2026-11-03, version `b469718c-…` from `ba44a9e`; then `81d87516-…`
+# from `16ad1da`, the 429 hold). It replaced `none`, the interim state of
+# 2026-10-13 under which season data reached staging only through the guarded
+# season-batch ingest below.
 #
 # `coordinated` selects the coordinated runtime against the network: staging
 # sets no `CONTROLLED_PROVIDER_SOURCE`, so its Jolpica transport is the
 # hardened HTTP client behind the global `ProviderRateLimiter`. A run needs the
 # reconciliation ledger bound below and sends nothing without it. The guarded
-# ingest refuses every batch under this mode (`provider-mode-coordinated`). The
-# schedule stays empty (triggers below), so until AU-4 step 3 nothing runs
-# unless the operator sends an authenticated `POST /internal/admin/sync/full`.
+# ingest refuses every batch under this mode (`provider-mode-coordinated`).
+# Runs are manual (`POST /internal/admin/sync/full`) until AU-4 step 3 puts
+# the hourly schedule (triggers below) live.
 #
 # Deploying this value is AU-4 step 1: cutover-sensitive (staging runbook,
 # section 6) and separately authorized. Creating the ledger class there
@@ -210,23 +210,26 @@ required = ["ADMIN_TOKEN"]
 binding = "GRIDVIEW_DATA"
 id = "1d0fb55486a745a1ad12e03d9f04942b"
 
-# No scheduled trigger. LIVE since 2026-10-13: that deployment removed the
-# nightly `17 3 * * *` the Stage A version had, and the schedules API has
-# answered `[]` since (re-read 2026-10-21). Under
-# `PROVIDER_MODE = "none"` a nightly run could only record `sync.failed` and
-# rewrite the season's failure state every night, so the season-batch ingest
-# configuration removes it. The hourly schedule of automatic updates is a
-# separate, separately authorized change.
+# Hourly at minute 17: AU-4 step 3 (`docs/release/automatic-updates.md`
+# §8.3), the same cron the demonstration Worker passed AU-3 with. NOT LIVE:
+# staging's schedules API has answered `[]` since the 2026-10-13 deployment
+# removed the nightly `17 3 * * *` (re-read 2026-11-04), and every run so far
+# was manual.
 #
-# The empty list is deliberate and must stay explicit. Wrangler replaces the
-# Worker's schedules on deploy only when `crons` is set: an empty list removes
-# every schedule, while an absent key leaves the live one in place. Schedules
-# are script settings, not part of a version, so neither this deploy nor a
-# later `wrangler rollback` to an earlier version restores
-# `17 3 * * *`; restoring it is a separate `wrangler triggers deploy`
-# (staging runbook, section 6, "Guarded season-batch ingest").
+# This value takes effect only through `wrangler triggers deploy --env
+# staging`, or any later `wrangler deploy --env staging` of a commit that
+# carries it. So merging it waits, like the triggers deploy, until step 2's
+# repeat has run without a `429` and its result has been reviewed (§8.3.1
+# item 6). Then merge, and run the triggers deploy from the merged commit
+# as its own approval, the same day.
+#
+# Schedules are script settings, not part of a version, so `wrangler
+# rollback` neither adds nor removes them. To stop the schedule, set
+# `crons = []` and run `wrangler triggers deploy --env staging` (§8.3,
+# "Recovery"). The key must stay explicit: an absent key leaves the live
+# schedule in place on deploy.
 [env.staging.triggers]
-crons = []
+crons = ["17 * * * *"]
 
 [env.staging.observability]
 enabled = true

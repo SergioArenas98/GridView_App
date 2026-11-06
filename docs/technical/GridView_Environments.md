@@ -491,12 +491,15 @@ staging commits `coordinated`, under which the ingest refuses every batch
 (`provider-mode-coordinated`); `SEASON_BATCH_INGEST` stays set, so falling
 back to `none` re-admits it.**
 
-**Staging cron, committed and live (2026-10-13; re-read 2026-10-21).**
-Committed: none (`[env.staging.triggers] crons = []`). Live: none; the
+**Staging cron, committed and live (re-read 2026-11-04).** Committed:
+hourly, `[env.staging.triggers] crons = ["17 * * * *"]` (AU-4 step 3), once
+its PR merges; `crons = []` from 2026-10-13 until then. Live: none; the
 2026-10-13 deployment removed Stage A's `17 3 * * *`, and the schedules API
-answers `[]`. The empty list is deliberate: `wrangler deploy` replaces a
-Worker's schedules only when `crons` is set, so an absent key would have kept
-the old schedule.
+answers `[]`. The hourly cron goes live only through step 3's own `wrangler
+triggers deploy` (staging runbook §6), or any later staging deploy of a
+commit that carries it. The key stays explicit: `wrangler deploy` replaces a
+Worker's schedules only when `crons` is set, so an absent key would keep
+whatever is live.
 Schedules are script settings, not part of a version, so a `wrangler
 rollback` to `cc8d9a54-…` would not bring `17 3 * * *` back. That takes a
 separate `wrangler triggers deploy` (staging runbook, section 3). Development

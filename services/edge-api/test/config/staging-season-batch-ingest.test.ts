@@ -66,6 +66,11 @@ import {
   type Batch,
   type Json,
 } from '../ingest/support';
+import {
+  STAGING_CRONS,
+  STAGING_CRONS_LINE,
+  withoutStaging,
+} from './demonstration-environment';
 
 const configPath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -150,13 +155,16 @@ describe('the resolved configuration', () => {
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
   });
 
-  it('gives staging, production and the demonstration Worker an explicitly empty cron list and leaves development unscheduled', () => {
-    // Empty, not absent: `wrangler deploy` PUTs the schedules only when
-    // `crons` is set, so `[]` removes the live `17 3 * * *` and an absent key
-    // would silently keep it.
-    expect(resolved('staging').triggers).toEqual({ crons: [] });
-    expect(rawConfig).toMatch(/^\[env\.staging\.triggers\]\ncrons = \[\]\n/m);
-    expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
+  it('schedules staging hourly, gives production and the demonstration Worker an explicitly empty cron list and leaves development unscheduled', () => {
+    // Explicit, never absent: `wrangler deploy` PUTs the schedules only when
+    // `crons` is set, so an absent key would silently keep whatever is live.
+    // Staging's hourly cron is AU-4 step 3; it is live only after its own
+    // triggers deploy.
+    expect(resolved('staging').triggers).toEqual({ crons: STAGING_CRONS });
+    expect(rawConfig).toContain(
+      `[env.staging.triggers]\n${STAGING_CRONS_LINE}\n`,
+    );
+    expect(withoutStaging(rawConfig)).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
     // Production (W1) schedules nothing, explicitly too. Development declared
     // no trigger before and still does not.
     expect(resolved('production').triggers).toEqual({ crons: [] });
