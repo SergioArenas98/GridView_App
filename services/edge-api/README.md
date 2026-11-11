@@ -52,8 +52,9 @@ Use a disposable local `ADMIN_TOKEN` in `.dev.vars`. Do not commit `.dev.vars`.
 The coordinated runtime supports an optional transport wrapper at
 `src/index.ts:providerTransport`. With `JOLPICA_TRANSPORT` absent or `direct`,
 the original runtime fetch is used; no proxy origin or credential is needed.
-The committed Wrangler environments remain unchanged. This phase provisions
-and activates nothing; the standalone proxy is not implemented yet.
+The committed Wrangler environments remain unchanged. The standalone service
+and offline tests are now in [jolpica-proxy](../jolpica-proxy/README.md).
+Neither phase provisions or activates anything.
 
 After the proxy and a deployment are separately approved, select
 `JOLPICA_TRANSPORT=proxy` and set `JOLPICA_PROXY_ORIGIN` to its canonical HTTPS

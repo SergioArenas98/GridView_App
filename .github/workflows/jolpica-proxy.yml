@@ -1,0 +1,32 @@
+name: Jolpica proxy offline checks
+
+on:
+  pull_request:
+    paths:
+      - "services/jolpica-proxy/**"
+      - ".github/workflows/jolpica-proxy.yml"
+  push:
+    branches: [master]
+    paths:
+      - "services/jolpica-proxy/**"
+      - ".github/workflows/jolpica-proxy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  proxy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/jolpica-proxy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/jolpica-proxy/package-lock.json
+      - run: npm install --global npm@10.9.9
+      - run: npm ci
+      - run: npm run validate
