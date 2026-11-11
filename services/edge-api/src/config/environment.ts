@@ -76,6 +76,12 @@ interface TestOnlyBindings {
 export interface Env extends TestOnlyBindings {
   ENVIRONMENT?: string;
   PROVIDER_MODE?: string;
+  /** Optional egress only; unset selects the original direct transport. */
+  JOLPICA_TRANSPORT?: string;
+  /** HTTPS origin of the temporary proxy, without a path or query. */
+  JOLPICA_PROXY_ORIGIN?: string;
+  /** Proxy-only bearer credential. Supply as a Worker secret, never a var. */
+  JOLPICA_PROXY_TOKEN?: string;
   /**
    * Selects the season publication authority (ADR 0025). Only the exact string
    * `sequencer` selects the two-phase protocol; anything else - including an
@@ -200,6 +206,57 @@ export class ConfigurationError extends Error {
     super(message);
     this.name = 'ConfigurationError';
   }
+}
+
+export type JolpicaTransportConfig =
+  | { readonly mode: 'direct' }
+  | { readonly mode: 'proxy'; readonly origin: string; readonly token: string };
+
+/**
+ * Resolve only at the provider transport seam, never into logged runtime
+ * configuration. Direct mode ignores leftover proxy settings for reversibility.
+ * Errors deliberately contain no supplied values (including URLs or secrets).
+ */
+export function resolveJolpicaTransport(env: Env): JolpicaTransportConfig {
+  const mode = env.JOLPICA_TRANSPORT;
+  if (mode === undefined || mode === 'direct') return { mode: 'direct' };
+  if (mode !== 'proxy') {
+    throw new ConfigurationError('JOLPICA_TRANSPORT must be direct or proxy.');
+  }
+  if (env.CONTROLLED_PROVIDER_SOURCE === 'kv') {
+    throw new ConfigurationError(
+      'Proxy transport cannot be combined with the controlled provider source.',
+    );
+  }
+  let origin: URL;
+  try {
+    origin = new URL(env.JOLPICA_PROXY_ORIGIN ?? '');
+  } catch {
+    throw new ConfigurationError(
+      'JOLPICA_PROXY_ORIGIN must be an HTTPS origin.',
+    );
+  }
+  // Require a canonical origin spelling (optionally one trailing slash).
+  // This also rejects credentials, paths, queries, fragments, backslashes,
+  // whitespace and URL parser normalization tricks, including empty ? or #.
+  if (
+    origin.protocol !== 'https:' ||
+    origin.port !== '' ||
+    ![origin.origin, `${origin.origin}/`].includes(
+      env.JOLPICA_PROXY_ORIGIN ?? '',
+    ) ||
+    /(^|\.)jolpi\.ca\.?$/.test(origin.hostname)
+  ) {
+    throw new ConfigurationError(
+      'JOLPICA_PROXY_ORIGIN must be a separate canonical HTTPS origin on port 443.',
+    );
+  }
+  const token = env.JOLPICA_PROXY_TOKEN;
+  // RFC 6750 bearer syntax; reject whitespace/header injection and bound size.
+  if (!token || token.length > 4096 || !/^[A-Za-z0-9._~+/-]+=*$/.test(token)) {
+    throw new ConfigurationError('JOLPICA_PROXY_TOKEN must be a bearer token.');
+  }
+  return { mode: 'proxy', origin: origin.origin, token };
 }
 
 /**

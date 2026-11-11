@@ -47,6 +47,51 @@ Use a disposable local `ADMIN_TOKEN` in `.dev.vars`. Do not commit `.dev.vars`.
 
 ## Local Workflow
 
+### Optional Jolpica egress (Phase 1)
+
+The coordinated runtime supports an optional transport wrapper at
+`src/index.ts:providerTransport`. With `JOLPICA_TRANSPORT` absent or `direct`,
+the original runtime fetch is used; no proxy origin or credential is needed.
+The committed Wrangler environments remain unchanged. This phase provisions
+and activates nothing; the standalone proxy is not implemented yet.
+
+After the proxy and a deployment are separately approved, select
+`JOLPICA_TRANSPORT=proxy` and set `JOLPICA_PROXY_ORIGIN` to its canonical HTTPS
+origin on port 443 (for example `https://egress.example.test`, optionally with
+one trailing slash). Paths, queries, credentials and Jolpica's own domain are
+rejected. Supply `JOLPICA_PROXY_TOKEN` as a separate Worker secret, never a
+Wrangler variable or an admin token. It must be a non-empty bearer token using
+letters, digits, `-._~+/` and optional trailing `=`, at most 4096 characters.
+Use a high-entropy secret when the later deployment phase is authorized.
+
+The wrapper changes only canonical Jolpica GET destinations and adds
+`Authorization: Bearer <proxy token>` to the proxy request. It keeps the path,
+query, identifying headers, linked abort signal and manual redirect policy,
+and returns the original response without consuming or rewriting it. Other
+providers receive no proxy credential. Canonical URL validation, reservations,
+pacing, deadlines, 429 evidence/holds and publication safeguards stay in their
+existing layers. Invalid proxy configuration fails before provider traffic;
+an unavailable proxy has no automatic direct fallback. The existing test
+transport override remains first; controlled KV and proxy mode cannot be
+combined. Direct mode leaves controlled KV behaviour unchanged.
+
+Disable by removing `JOLPICA_TRANSPORT` or setting it to `direct` in a separately
+authorized deployment. Proxy origin and token settings are ignored in direct
+mode and can then be removed; no proxy process needs to be reachable. Existing
+limiter holds and publication state survive the switch. Eventual deletion of
+the wrapper and its configuration needs no adapter, synchronization,
+reconciliation or publication changes.
+
+The future proxy is a trusted credential recipient: it must strip proxy auth
+before forwarding to Jolpica, never follow redirects, and preserve upstream
+response status/body/diagnostic headers. It must forward upstream 429s without
+using 429 for its own authentication or overload failures. Worker-side tests cannot establish
+those server-side guarantees. No live provider test or activation is part of
+Phase 1. All transport tests use in-process mocks, including the runtime-fetch
+path through the real Worker entry points.
+
+### Running locally
+
 Start the Worker:
 
 ```text

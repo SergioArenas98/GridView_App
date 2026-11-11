@@ -7,6 +7,7 @@ import {
 } from './cache/purge';
 import {
   ConfigurationError,
+  resolveJolpicaTransport,
   resolveRuntimeConfig,
   type Env,
   type RuntimeConfig,
@@ -46,6 +47,7 @@ import {
   resolveProviderRateLimiter,
   unboundRateLimiter,
 } from './providers/http/factory';
+import { jolpicaTransport } from './providers/http/jolpica-transport';
 import { systemClock } from './runtime/clock';
 import { handleStatus } from './routes/status';
 import { resolveStorage } from './storage/factory';
@@ -461,9 +463,9 @@ function coordinatedDependencies(
 /**
  * The transport a composed runtime hands its hardened client: the test hook,
  * else the controlled KV source a coordinated staging Worker selected (ADR
- * 0028 D10), else `undefined` - the runtime `fetch`. The controlled source
- * makes no request until the composed runtime calls it, and it reads only
- * the Worker's own namespace.
+ * 0028 D10), else optional Jolpica egress or `undefined` (direct runtime fetch).
+ * The controlled source makes no request until the composed runtime calls it,
+ * and it reads only the Worker's own namespace.
  */
 function providerTransport(
   env: Env,
@@ -478,7 +480,12 @@ function providerTransport(
     config.environment,
     config.providerMode,
   );
-  if (source !== 'kv') return undefined;
+  const transportConfig = resolveJolpicaTransport(env);
+  if (source !== 'kv') {
+    return transportConfig.mode === 'direct'
+      ? undefined
+      : jolpicaTransport(transportConfig, (request) => fetch(request));
+  }
   if (!env.GRIDVIEW_DATA) {
     throw new ConfigurationError(
       'The controlled provider source needs the GRIDVIEW_DATA KV binding.',
