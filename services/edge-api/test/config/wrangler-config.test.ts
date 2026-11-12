@@ -42,12 +42,15 @@ describe('wrangler staging configuration', () => {
     expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
   });
 
-  it('declares ADMIN_TOKEN as a required staging secret without committing its value', () => {
+  it('requires both staging secrets without committing their values', () => {
     expect(config).toMatch(
-      /\[env\.staging\.secrets\][\s\S]*required = \["ADMIN_TOKEN"\]/,
+      /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN"\]/,
     );
     expect(config).not.toContain('Bearer ');
     expect(config).not.toContain('replace-with-disposable-local-token');
+    expect(config).not.toMatch(/^\s*JOLPICA_PROXY_TOKEN\s*=/m);
+    expect(config.match(/^JOLPICA_TRANSPORT\s*=/gm)).toHaveLength(1);
+    expect(config.match(/^JOLPICA_PROXY_ORIGIN\s*=/gm)).toHaveLength(1);
   });
 
   it('adds no account ID and binds production only to its own KV namespace', () => {
@@ -135,6 +138,8 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
       'ENVIRONMENT = "staging"',
       'PROVIDER_MODE = "coordinated"',
       'PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"',
+      'JOLPICA_TRANSPORT = "proxy"',
+      'JOLPICA_PROXY_ORIGIN = "https://gridviewjol.vps.webdock.cloud"',
       'SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"',
       'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
       'SEASON_BATCH_INGEST = "2026"',
@@ -222,7 +227,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
       /\[\[env\.staging\.kv_namespaces\]\]\nbinding = "GRIDVIEW_DATA"\nid = "1d0fb55486a745a1ad12e03d9f04942b"/,
     );
     expect(config).toMatch(
-      /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN"\]/,
+      /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN"\]/,
     );
     expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
     expect(config).toMatch(

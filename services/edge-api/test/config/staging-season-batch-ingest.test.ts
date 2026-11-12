@@ -118,6 +118,8 @@ describe('the resolved configuration', () => {
       ENVIRONMENT: 'staging',
       PROVIDER_MODE: 'coordinated',
       PUBLIC_BASE_URL: 'https://gridview-api-staging.sejuma18.workers.dev',
+      JOLPICA_TRANSPORT: 'proxy',
+      JOLPICA_PROXY_ORIGIN: 'https://gridviewjol.vps.webdock.cloud',
       SEASON_PUBLICATION_CUTOVER_CONTROL: 'activate:2026',
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',
       SEASON_BATCH_INGEST: '2026',
@@ -253,6 +255,8 @@ function workerEnv(
   return {
     ...vars,
     ADMIN_TOKEN,
+    // Disposable fixture only; these cases issue no upstream requests.
+    JOLPICA_PROXY_TOKEN: 'offline-proxy-test-token',
     __LOCAL_STORAGE: context.storage,
     __SEASON_PUBLICATION_SEQUENCER: context.port,
     __CLOCK: context.clock,

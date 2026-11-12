@@ -104,6 +104,11 @@ ENVIRONMENT = "staging"
 PROVIDER_MODE = "coordinated"
 PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
 
+# Prepared for staging only; activation requires a separately authorized deploy.
+# The token is a Cloudflare secret supplied alongside code, never a plain var.
+JOLPICA_TRANSPORT = "proxy"
+JOLPICA_PROXY_ORIGIN = "https://gridviewjol.vps.webdock.cloud"
+
 # Season 2026 cutover phase (ADR 0025 D12) - ACTIVATION PHASE, LIVE IN STAGING
 # since 2026-09-16 (version `c297d260-c81b-4110-bdf2-7572e1206af3`). DO NOT
 # DEPLOY THIS FILE AS ROUTINE WORK.
@@ -204,7 +209,7 @@ name = "RECONCILIATION_LEDGER"
 class_name = "ReconciliationLedger"
 
 [env.staging.secrets]
-required = ["ADMIN_TOKEN"]
+required = ["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN"]
 
 [[env.staging.kv_namespaces]]
 binding = "GRIDVIEW_DATA"

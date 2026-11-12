@@ -78,6 +78,9 @@ export const AUTOMATIC_ACTIVATION_DELTA = Object.freeze({
  * by genesis, it reads the controlled source, and it ingests nothing.
  */
 export const DEMONSTRATION_DELTA = Object.freeze({
+  // Staging's temporary egress must not enter the controlled-source fixture.
+  JOLPICA_TRANSPORT: undefined,
+  JOLPICA_PROXY_ORIGIN: undefined,
   SEASON_PUBLICATION_CUTOVER_CONTROL: 'genesis:2026',
   CONTROLLED_PROVIDER_SOURCE: 'kv',
   SEASON_BATCH_INGEST: '',
