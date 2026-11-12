@@ -54,18 +54,27 @@ chat, environment variable, repository file, or command-line argument.
 
 ### 1. Prepare a private copy on the VPS
 
-Use Windows OpenSSH `ssh.exe` and `scp.exe`, your existing non-root SSH admin
-account, and the already verified host key for `193.180.210.75`. Do not disable
-host-key checking or accept a changed key. Unlock your existing SSH key in the
-local agent beforehand if necessary; the transfer uses batch authentication.
-No root SSH login, new key or change to sudo policy is needed. The admin must
-already be authorized to read the root-owned token with sudo. Substitute the
-actual account and SSH port (22 below) in both Windows blocks.
+Use Windows OpenSSH `ssh.exe` and `scp.exe` as `gridviewadmin`, with the
+already verified ED25519 host key for `gridviewjol.vps.webdock.cloud`. All
+connections use that hostname, IPv4 and the existing private key at
+`$env:USERPROFILE\.ssh\gridview_webdock`. Do not substitute the IPv4 address
+as the SSH destination, disable host-key checking, or accept a changed key.
+
+No SSH agent is required: `IdentityAgent=none` disables agent use,
+`IdentitiesOnly=yes` selects configured identities, and `BatchMode=no` allows
+OpenSSH's normal hidden key-passphrase prompt. Enter the **SSH key passphrase**
+only at that prompt, never into a command, variable or chat. The prompt may
+appear separately for terminal A, SCP and each cleanup connection. Keep terminal
+B interactive; do not redirect its input, pipe the script, or run it unattended.
+Only public-key authentication is enabled; there is no server-password fallback.
+No root SSH login, new key or sudo policy change is needed. The existing admin
+must already be authorized to read the root-owned token with sudo.
 
 In **terminal A**, connect to the VPS:
 
 ```powershell
-ssh.exe -o StrictHostKeyChecking=yes -o ForwardAgent=no -p 22 YOUR_SSH_ADMIN@193.180.210.75
+$sshKey = Join-Path $env:USERPROFILE '.ssh\gridview_webdock'
+ssh.exe -4 -i $sshKey -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=no -o PreferredAuthentications=publickey -o ForwardAgent=no -p 22 gridviewadmin@gridviewjol.vps.webdock.cloud
 ```
 
 Start a dedicated `bash` shell there, then paste this Bash block. Keep this
@@ -102,8 +111,9 @@ the token. SCP transports file bytes over encrypted SSH without terminal output.
 ### 2. Transfer, remove the VPS copy, and deploy from Windows
 
 In **terminal B**, use PowerShell in the isolated worktree's `services/edge-api`.
-Set `$sshAdmin` and `$sshPort` to the same connection used above. At the prompt,
-enter only the temporary directory path printed in terminal A, not a token.
+The account, hostname, key and port below match terminal A. At the path prompt,
+enter only the temporary directory printed in terminal A, not a token or key
+passphrase. Subsequent key-passphrase prompts come directly from OpenSSH.
 The JSON will contain only `JOLPICA_PROXY_TOKEN`, not `ADMIN_TOKEN`.
 
 The following block **deploys and uploads a secret**. Do not run it until that
@@ -117,17 +127,21 @@ protected machine. File deletion is not guaranteed secure erasure on an SSD.
 $ErrorActionPreference = 'Stop'
 $env:WRANGLER_SEND_METRICS = 'false'
 $env:WRANGLER_LOG = 'warn'
-$sshAdmin = 'YOUR_SSH_ADMIN'
+$sshAdmin = 'gridviewadmin'
 $sshPort = 22
+$sshKey = Join-Path $env:USERPROFILE '.ssh\gridview_webdock'
 if ($sshAdmin -cnotmatch '^[a-z_][a-z0-9_-]*$' -or $sshPort -lt 1 -or $sshPort -gt 65535) {
     throw 'Set the actual SSH admin and port before continuing.'
 }
-$sshTarget = $sshAdmin + '@193.180.210.75'
+$sshTarget = $sshAdmin + '@gridviewjol.vps.webdock.cloud'
 $remoteDir = Read-Host 'Temporary VPS directory printed in terminal A (not the token)'
 if ($remoteDir -cnotmatch '^/tmp/gridview-jolpica-transfer\.[A-Za-z0-9]{8}$') {
     throw 'Unexpected transfer directory; clean up terminal A and stop.'
 }
-$sshOptions = @('-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
+$sshOptions = @('-4', '-i', $sshKey,
+    '-o', 'BatchMode=no', '-o', 'StrictHostKeyChecking=yes',
+    '-o', 'IdentitiesOnly=yes', '-o', 'IdentityAgent=none',
+    '-o', 'PreferredAuthentications=publickey',
     '-o', 'ForwardAgent=no', '-o', 'ClearAllForwardings=yes', '-o', 'LogLevel=ERROR',
     '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=3')
 $remoteCleanup = "rm -f -- '$remoteDir/token' && { [ ! -d '$remoteDir' ] || rmdir -- '$remoteDir'; }"
@@ -156,7 +170,7 @@ try {
             [System.Security.Principal.SecurityIdentifier]).Value -ne $sid.Value) {
         throw 'Private directory ACL verification failed.'
     }
-    & scp.exe -q -B @sshOptions -P $sshPort ($sshTarget + ':' + $remoteDir + '/token') $tokenFile
+    & scp.exe -q @sshOptions -P $sshPort ($sshTarget + ':' + $remoteDir + '/token') $tokenFile
     if ($LASTEXITCODE -ne 0) { throw 'SCP failed; no deployment attempted.' }
     & ssh.exe -T @sshOptions -p $sshPort $sshTarget $remoteCleanup
     if ($LASTEXITCODE -ne 0) { throw 'VPS cleanup failed; no deployment attempted.' }
@@ -211,13 +225,17 @@ cleanup path targets `/etc/gridview-jolpica-proxy/token`.
 If SCP fails, the script never deploys; it removes partial local files and
 attempts remote cleanup. If remote cleanup cannot be confirmed, deployment is
 blocked even if SCP succeeded. Do not retry until both copies are cleaned up.
+If a key passphrase is wrong or cancelled, the connection fails closed. Cleanup
+in `finally` may ask for the passphrase again. If that also fails or is cancelled,
+use the still-open terminal A to run `cleanup_transfer`; deployment must not
+proceed. Never enable batch mode or weaken host-key verification to bypass this.
 
 After Ctrl+C, a lost connection, PowerShell termination or reboot, `finally`
 and the Bash trap are best-effort only. Perform these checks manually:
 
 - In terminal A, run `cleanup_transfer`, then `exit`. If the session was lost,
-  reconnect using the same verified SSH host/account. Set `transferDir` to the
-  exact previously printed `/tmp/gridview-jolpica-transfer.XXXXXXXX` path and
+  reconnect using terminal A's exact hostname/IPv4/key command above. Set
+  `transferDir` to the previously printed `/tmp/gridview-jolpica-transfer.XXXXXXXX` path and
   run `rm -f -- "$transferDir/token"` followed by `rmdir -- "$transferDir"` if
   the directory still exists. Verify with `test ! -e "$transferDir"`. Never
   delete the original `/etc/gridview-jolpica-proxy/token` or use wildcards.
