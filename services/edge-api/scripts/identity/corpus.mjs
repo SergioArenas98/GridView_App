@@ -11,13 +11,26 @@ const pendingNovember = new Set([
 ]);
 
 const root = resolve(import.meta.dirname, '../../../..');
+/**
+ * The repository commit the R0 corpus was reviewed against (U3 correction;
+ * every `baseCommit` in `docs/operations/identity-seed-r0/manifest.json`).
+ * Sources are compared with this exact commit, never a floating `HEAD`: once
+ * the reviewed work is itself committed, `HEAD` contains the pending November
+ * evidence and would no longer be the historical baseline, and the manifest's
+ * provenance would silently change.
+ */
+export const R0_REVIEWED_BASE_COMMIT =
+  '027da5da59bf6b8c75a3fc432ef4fdc691772528';
 const sha = (bytes) =>
   'sha256:' + createHash('sha256').update(bytes).digest('hex');
 export function loadCorpus() {
-  const head = execFileSync('git', ['rev-parse', 'HEAD'], {
+  const head = R0_REVIEWED_BASE_COMMIT;
+  // Refuses a checkout that does not descend from the reviewed baseline,
+  // including a shallow clone that lacks it.
+  execFileSync('git', ['merge-base', '--is-ancestor', head, 'HEAD'], {
     cwd: root,
-    encoding: 'utf8',
-  }).trim();
+    stdio: 'ignore',
+  });
   return Object.entries(spec)
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([path]) => {
