@@ -4,8 +4,11 @@
 # by environment and is recorded in docs/technical/GridView_Environments.md -
 # a declaration in this file is not evidence that anything is provisioned:
 # - `env.staging` is deployed to Cloudflare (first in Phase 5B, 2026-07-20).
-#   The 2026-09-12 staging deployment provisioned both Durable Object bindings
-#   declared for it below; no code path in that configuration looks either up.
+#   Read-only check of 2026-11-17: version `1d858d56-…` (2026-11-12, a
+#   secret-only version over the code of `027da5d`) runs the automatic-updates
+#   runtime over the Jolpica proxy transport, with three Durable Object
+#   namespaces (rate limiter, publication sequencer, reconciliation ledger).
+#   The identity catalog declared for it below is PROPOSED, NOT PROVISIONED.
 # - `env.production` has never been deployed: no production Worker, Durable
 #   Object namespace, R2 bucket, route, domain or secret exists. Only its KV
 #   namespace exists (release plan W2); see the section itself.
@@ -28,10 +31,10 @@ ENVIRONMENT = "development"
 # provisioning is not use: the staging namespace was provisioned by the
 # 2026-09-12 staging deployment. Only the automatic-updates runtime constructs
 # the provider HTTP client, which reserves through this binding: the
-# demonstration Worker (controlled source, never the network) and, once
-# AU-4 step 1 is deployed, staging. Live staging (`none`) and production
-# (`none`) build no provider. Wherever the namespace is absent, the resolver
-# fails closed and no provider request is issued.
+# demonstration Worker (controlled source, never the network) and staging
+# (live as read on 2026-11-17). Production (`none`) builds no
+# provider. Wherever the namespace is absent, the resolver fails closed and
+# no provider request is issued.
 [[durable_objects.bindings]]
 name = "PROVIDER_RATE_LIMITER"
 class_name = "ProviderRateLimiter"
@@ -82,11 +85,10 @@ preview_urls = false
 [env.staging.vars]
 ENVIRONMENT = "staging"
 # Automatic updates (ADR 0028; release gate AU-4,
-# `docs/release/automatic-updates.md` section 8.3). COMMITTED, NOT YET
-# DEPLOYED: the live version `453af4fb-…` (2026-10-19, from `d351118`) still
-# runs `none`, the interim state committed and deployed on 2026-10-13, under
-# which season data reached staging only through the guarded season-batch
-# ingest below.
+# `docs/release/automatic-updates.md` section 8.3). LIVE IN STAGING: the
+# read-only check of 2026-11-17 found `coordinated` in the deployed version
+# `1d858d56-…`. The earlier interim value `none` (2026-10-13) let season data
+# reach staging only through the guarded season-batch ingest below.
 #
 # `coordinated` selects the coordinated runtime against the network: staging
 # sets no `CONTROLLED_PROVIDER_SOURCE`, so its Jolpica transport is the
@@ -104,8 +106,8 @@ ENVIRONMENT = "staging"
 PROVIDER_MODE = "coordinated"
 PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
 
-# Prepared for staging only; activation requires a separately authorized deploy.
-# The token is a Cloudflare secret supplied alongside code, never a plain var.
+# Staging only. LIVE as read on 2026-11-17 (deployed 2026-11-12, version
+# `1d858d56-…`). The token is a Cloudflare secret, never a plain var.
 JOLPICA_TRANSPORT = "proxy"
 JOLPICA_PROXY_ORIGIN = "https://gridviewjol.vps.webdock.cloud"
 
@@ -141,8 +143,8 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 
 # The one season the guarded season-batch ingest accepts
 # (`POST /internal/admin/season/ingest`, decision pack 2026-10-07 PR-4).
-# STAGING ONLY; LIVE since 2026-10-13 (version `3b3b8273-…`), kept by
-# `453af4fb-…`; two batches have committed through it (2026-10-14 and
+# STAGING ONLY; LIVE since 2026-10-13 (version `3b3b8273-…`), still set in
+# `1d858d56-…` (2026-11-17); two batches have committed through it (2026-10-14 and
 # 2026-10-19). The value must be exactly the
 # four-digit season `2026`, which has curated season metadata; anything else
 # (`2026 `, `2099`, `abcd`) is refused as `ingest-misconfigured`. Setting it
@@ -157,6 +159,25 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 # separately authorized (staging runbook, section 6, "Guarded season-batch
 # ingest"). Development and production do not set it.
 SEASON_BATCH_INGEST = "2026"
+
+# Identity catalog (ADRs 0029-0031; identity U11). PROPOSED, NOT PROVISIONED,
+# NOT DEPLOYED. Deploying this configuration needs the owner's explicit U11
+# approval (docs/operations/GridView_Identity_Catalog_U11.md).
+#
+# Inert: catalog `bundled` keeps the bundled mappings authoritative; discovery
+# `off` builds no collector; admin `off` answers every identity route 404.
+# The inventory-mode variable is deliberately absent, which resolves to
+# `strict`; no committed configuration may name it (inventory-policy
+# acceptance 37), so the optional-driver policy cannot be selected here.
+#
+# The installation ID is a fresh random UUID v4 proposed on 2026-11-17 for
+# staging alone, never derived from `ENVIRONMENT` (E2E shares that value) and
+# never to be reused by E2E or production. It binds the catalog object
+# `identity:<id>`; a different persisted ID refuses initialization.
+IDENTITY_INSTALLATION_ID = "c45d60b8-a723-4b6e-8530-750592af2b94"
+IDENTITY_CATALOG_MODE = "bundled"
+IDENTITY_DISCOVERY_MODE = "off"
+IDENTITY_ADMIN_MODE = "off"
 
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.staging.durable_objects.bindings]]
@@ -177,7 +198,8 @@ class_name = "SeasonPublicationSequencer"
 
 # The reconciliation ledger (ADR 0020, ADR 0028 D2): the coordinated runtime's
 # durable record of what it observed, what is due and what it published.
-# COMMITTED FOR AU-4 STEP 1, NOT YET DEPLOYED.
+# LIVE IN STAGING: namespace `f4ebd45f0745433488c0ec90585796dd`, bound in the
+# deployed version as read on 2026-11-17.
 #
 # A named environment's exports table replaces the top-level one, so staging
 # restates both top-level classes (unchanged: the namespaces the 2026-09-12
@@ -207,6 +229,26 @@ storage = "sqlite"
 [[env.staging.durable_objects.bindings]]
 name = "RECONCILIATION_LEDGER"
 class_name = "ReconciliationLedger"
+
+# The identity catalog class (identity U11). PROPOSED, NOT PROVISIONED.
+#
+# Staging only: production and E2E declare nothing for it, and the top-level
+# exports table is unchanged. All three exports above are kept.
+#
+# IRREVERSIBLE FOR ROLLBACK, like the ledger. The first deploy of this class
+# creates a fourth staging namespace and permanently blocks `wrangler rollback`
+# to every earlier version (including `1d858d56-…`). Recovery from then on is
+# a forward deploy of a commit that keeps all four exports, with the identity
+# variables above restored to bundled/off/off. Removing only the binding below
+# stops every catalog lookup while keeping the data. Never remove the exports
+# entry: a deleted class and its data are gone permanently.
+[env.staging.exports.IdentityCatalog]
+type = "durable-object"
+storage = "sqlite"
+
+[[env.staging.durable_objects.bindings]]
+name = "IDENTITY_CATALOG"
+class_name = "IdentityCatalog"
 
 [env.staging.secrets]
 required = ["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN"]

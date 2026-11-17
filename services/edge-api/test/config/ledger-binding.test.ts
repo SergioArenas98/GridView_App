@@ -72,6 +72,13 @@ const ledgerBindings = [
   },
   { name: 'RECONCILIATION_LEDGER', class_name: 'ReconciliationLedger' },
 ];
+// Identity U11: staging alone adds the proposed identity catalog class and its
+// binding after the ledger. The demonstration Worker keeps the ledger set.
+const stagingExports = { ...ledgerExports, IdentityCatalog: sqlite };
+const stagingBindings = [
+  ...ledgerBindings,
+  { name: 'IDENTITY_CATALOG', class_name: 'IdentityCatalog' },
+];
 
 function bindingNames(config: ReturnType<typeof resolved>): string[] {
   return config.durable_objects.bindings.map(
@@ -80,10 +87,10 @@ function bindingNames(config: ReturnType<typeof resolved>): string[] {
 }
 
 describe('the committed configuration declares the reconciliation ledger in staging and the demonstration Worker only, as Wrangler resolves it', () => {
-  it('resolves staging to the three registrations and bindings, the ledger included, with no migration', () => {
+  it('resolves staging to the four registrations and bindings, the ledger and identity catalog included, with no migration', () => {
     const staging = resolved('staging');
-    expect(staging.exports).toEqual(ledgerExports);
-    expect(staging.durable_objects.bindings).toEqual(ledgerBindings);
+    expect(staging.exports).toEqual(stagingExports);
+    expect(staging.durable_objects.bindings).toEqual(stagingBindings);
     expect(staging.migrations).toEqual([]);
   });
 
@@ -93,7 +100,8 @@ describe('the committed configuration declares the reconciliation ledger in stag
     // exactly as declared above it; dropping one would need a deletion.
     const restated = Object.fromEntries(
       Object.entries(resolved('staging').exports).filter(
-        ([name]) => name !== 'ReconciliationLedger',
+        ([name]) =>
+          name !== 'ReconciliationLedger' && name !== 'IdentityCatalog',
       ),
     );
     expect(restated).toEqual(resolved('').exports);
@@ -105,7 +113,15 @@ describe('the committed configuration declares the reconciliation ledger in stag
       [...rawConfig.matchAll(/^\[env\.([a-z0-9]+)\.exports/gm)].map(
         (match) => match[1],
       ),
-    ).toEqual(['staging', 'staging', 'staging', 'e2e', 'e2e', 'e2e']);
+    ).toEqual([
+      'staging',
+      'staging',
+      'staging',
+      'staging',
+      'e2e',
+      'e2e',
+      'e2e',
+    ]);
   });
 
   it('leaves development without the season binding, and production with the same two as before', () => {

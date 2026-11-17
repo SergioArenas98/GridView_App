@@ -81,6 +81,12 @@ export const DEMONSTRATION_DELTA = Object.freeze({
   // Staging's temporary egress must not enter the controlled-source fixture.
   JOLPICA_TRANSPORT: undefined,
   JOLPICA_PROXY_ORIGIN: undefined,
+  // Staging's identity installation is staging's alone (ADR 0031 D5): the
+  // demonstration Worker declares no catalog, so none of it may carry over.
+  IDENTITY_INSTALLATION_ID: undefined,
+  IDENTITY_CATALOG_MODE: undefined,
+  IDENTITY_DISCOVERY_MODE: undefined,
+  IDENTITY_ADMIN_MODE: undefined,
   SEASON_PUBLICATION_CUTOVER_CONTROL: 'genesis:2026',
   CONTROLLED_PROVIDER_SOURCE: 'kv',
   SEASON_BATCH_INGEST: '',
