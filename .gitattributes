@@ -28,3 +28,10 @@
 *.ico binary
 *.pdf binary
 *.hive binary
+
+# Identity-catalog evidence artifacts are byte-exact: preservation records
+# hash these files, so Git must neither convert their line endings nor flag
+# the trailing-space context lines that patches legitimately contain.
+docs/operations/identity-*.json -text -whitespace
+docs/operations/identity-*.patch -text -whitespace
+docs/operations/GridView_Identity_Catalog_Staging_Proposal.diff -text -whitespace

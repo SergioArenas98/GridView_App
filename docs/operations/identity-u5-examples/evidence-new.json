@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "installationId": "33333333-3333-4333-8333-333333333333",
+  "operationId": "66666666-6666-4666-8666-000000000014",
+  "expectedActiveRevisionId": "44444444-4444-4444-8444-444444444444",
+  "expectedActivationSequence": 1,
+  "reason": "Synthetic template only; replace all pointers after an actual isolated review.",
+  "payload": {
+    "candidate": {
+      "candidateId": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "expectedCandidateVersion": 1,
+      "expectedEvidenceHead": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "kind": "review-dossier",
+    "claims": [
+      {
+        "field": "fullName",
+        "value": "Synthetic New Driver",
+        "sourceField": null
+      },
+      {
+        "field": "canonical-association",
+        "value": {
+          "key": {
+            "season": 2026,
+            "source": "jolpica",
+            "entity": "driver",
+            "providerField": "driverId",
+            "providerValue": "synthetic_u5_alias"
+          },
+          "targetId": "synthetic-new-person"
+        },
+        "sourceField": null
+      }
+    ],
+    "references": [
+      {
+        "kind": "citation",
+        "httpsUrl": "https://example.invalid/synthetic-new-review",
+        "claimSummary": "Synthetic local example, no external retrieval."
+      }
+    ],
+    "duplicateReview": null
+  }
+}

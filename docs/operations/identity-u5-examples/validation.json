@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "installationId": "33333333-3333-4333-8333-333333333333",
+  "operationId": "66666666-6666-4666-8666-000000000009",
+  "expectedActiveRevisionId": "44444444-4444-4444-8444-444444444444",
+  "expectedActivationSequence": 1,
+  "reason": "Synthetic template only; replace all pointers after an actual isolated review.",
+  "payload": {
+    "catalogHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "expectedValidatorVersion": "gridview-identity-validator/u4.1"
+  }
+}
